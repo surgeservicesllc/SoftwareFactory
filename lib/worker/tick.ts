@@ -36,25 +36,37 @@ export class WorkerNotConfiguredError extends Error {
 
 const MIN_SECRET_BYTES = 32;
 
+function acceptedSecrets(): string[] {
+  // CRON_SECRET is the credential Vercel Cron presents automatically. Accepting
+  // both lets the platform scheduler and an external one share this endpoint
+  // without weakening the check.
+  return [process.env.WORKER_TICK_SECRET, process.env.CRON_SECRET]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value) && Buffer.byteLength(value!, "utf8") >= MIN_SECRET_BYTES);
+}
+
+export function isWorkerTickConfigured(): boolean {
+  return acceptedSecrets().length > 0;
+}
+
 /**
- * Constant-time bearer comparison. A length mismatch is reported without
- * comparing, since the length itself is not the secret.
+ * Constant-time bearer comparison. A length mismatch short-circuits, since the
+ * length of a credential is not itself secret.
  */
 export function isAuthorizedWorkerRequest(request: Request): boolean {
-  const configured = process.env.WORKER_TICK_SECRET?.trim();
-  if (!configured) throw new WorkerNotConfiguredError();
-  if (Buffer.byteLength(configured, "utf8") < MIN_SECRET_BYTES) {
-    throw new WorkerNotConfiguredError();
-  }
+  const secrets = acceptedSecrets();
+  if (secrets.length === 0) throw new WorkerNotConfiguredError();
 
   const header = request.headers.get("authorization") ?? "";
   const presented = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
   if (!presented) return false;
 
-  const expectedBuffer = Buffer.from(configured, "utf8");
   const presentedBuffer = Buffer.from(presented, "utf8");
-  if (expectedBuffer.length !== presentedBuffer.length) return false;
-  return timingSafeEqual(expectedBuffer, presentedBuffer);
+  return secrets.some((secret) => {
+    const expectedBuffer = Buffer.from(secret, "utf8");
+    if (expectedBuffer.length !== presentedBuffer.length) return false;
+    return timingSafeEqual(expectedBuffer, presentedBuffer);
+  });
 }
 
 export type TickRunOutcome = {
