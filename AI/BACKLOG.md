@@ -78,7 +78,7 @@ Claude, auto merge, deployment automation, and rollback automation are **Not Con
 - [x] Delete `components/project-form.tsx`, dead since the projects console superseded it.
 - [x] Remove the seeded event stream that sat directly beneath the live stream on Activity in identical styling; the labeled example remains on the dashboard.
 - [x] Add `tests/e2e/pages.spec.ts`: heading, horizontal-overflow, and axe assertions for 12 routes at three viewports. Local Playwright is now 48/48.
-- [ ] Recapture production evidence for the interface change once it is deployed; the recorded deployment/E2E/probe results describe tree `e0ca6e7`, which predates it.
+- [ ] Recapture production evidence for the interface change once it is deployed; the recorded deployment/E2E/probe results describe tree `e0ca6e7`, which predates it. The PR preview deployment is READY but sits behind Vercel deployment protection (every route answers `302` to `vercel.com/sso-api`), so `PLAYWRIGHT_BASE_URL` runs against it need an owner-supplied protection-bypass token. Do not work around that protection.
 
 ## Maintenance
 
