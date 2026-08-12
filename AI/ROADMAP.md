@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **Hardening passes all current local gates; publication/deployment, hosted migrations `011`-`019`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
+Status: **Hardening passes local gates, CI, and exact-tree production hosting; hosted migrations `011`-`019`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
 
 Implemented in source:
 
@@ -24,10 +24,9 @@ Implemented in source:
 
 Exit work:
 
-1. Push the locally verified tree, pass CI, and verify the resulting exact production deployment.
-2. Obtain exact owner approval and apply/verify migrations `011`-`019` on the hosted Supabase project (hosted ledger currently ends at `010`; last clean linked lint ends at `009`).
-3. Verify hosted two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
-4. Complete production Auth/onboarding and the real GitHub installation -> tenant connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss journey.
+1. Obtain exact owner approval and apply/verify migrations `011`-`019` on the hosted Supabase project (hosted ledger currently ends at `010`; last clean linked lint ends at `009`).
+2. Verify hosted two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
+3. Complete production Auth/onboarding and the real GitHub installation -> tenant connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss journey.
 
 No merge or production deployment autonomy is implied. GitHub remains **Not Connected** until the live journey passes.
 

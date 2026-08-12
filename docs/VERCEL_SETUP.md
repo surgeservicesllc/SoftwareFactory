@@ -4,18 +4,20 @@ Hosting project: `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4Syaq
 
 Vercel hosts the Next.js application and server routes. The in-product Vercel deployment/rollback adapter remains **Not Connected**; CI has no deploy or merge credentials.
 
-## Last independently verified release evidence
+## Verified application release evidence
 
-- Commit `f12814bd94001e5c9fe9637e0350e14816de8d13` was pushed to `origin/main` and independently verified before this hardening increment.
-- Production deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju` was verified READY at `softwarefactory-3fg568r3j-surgeservices-projects.vercel.app` and served at the stable alias. Playwright against that baseline passed 12/12.
-- Production HTTP checks returned 200 for `/`, `/activity`, and `/connections`; unauthenticated `/api/activity` returned 401; removed `/api/files` returned 404.
+- Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, authored `NewWorldVenture`, is on GitHub `main`; CI run `31649243266` passed 2/2.
+- The automatic Git-triggered deployment `dpl_H6SvxkXj3LKiLoCjZ1PWarQs3umq` was blocked by the Vercel Hobby commit-author access rule. The supported detached, tracked-files-only, owner-authenticated deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` is READY Production and stores the exact application SHA in metadata field `softwarefactoryGitCommitSha`.
+- The verified deployment URL is `https://softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app`, served by stable alias `https://softwarefactory-tan.vercel.app`.
+- Production checks passed: five public routes returned 200 and the expected title, representative authenticated APIs returned 401, removed `/api/files` returned 404, and Playwright passed 12/12.
+- All nine deployed JavaScript assets were scanned without privileged environment-name, key-marker, or `service_role` findings. Recent Vercel error and HTTP-500 log counts were zero.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
 - GitHub App server-only variable names are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`).
 - GitHub provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. The authenticated in-product callback/tenant connection remains pending, and the provider webhook remains blank/inactive with App-authenticated hook configuration returning `404`/no hook object.
 - Preview Supabase variables are not independently verified.
 - The live authenticated GitHub acceptance journey is still required before Phase 1B can be called complete.
 
-The release identity, HTTP boundaries, and public E2E above are historical baseline evidence. They do not prove provider acceptance or validate the pending hardening tree. Record a new exact commit/deployment and rerun production checks after this tree is published.
+The application-release evidence is resolved from Vercel deployment metadata, not inferred from the latest Git tip. Documentation-only successor commits therefore do not make the recorded runtime SHA stale unless they change application behavior or trigger a separately promoted runtime. Hosting evidence does not prove Supabase migration/Auth or GitHub provider acceptance.
 
 ## Project configuration
 

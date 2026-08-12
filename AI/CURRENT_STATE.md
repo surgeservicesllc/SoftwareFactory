@@ -4,7 +4,7 @@ Last reviewed: 2026-08-12
 
 Phase: 1B - Production GitHub App Integration
 
-Overall status: **Phase 1B hardening passes all current local quality gates, but publication, deployment, hosted migrations `011`-`019`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
+Overall status: **Phase 1B hardening passes local gates, CI, and exact-tree production hosting; hosted migrations `011`-`019`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
 
 "Implemented" below means code/schema exists in the working tree. It does not mean the provider workflow was observed or the schema is hosted.
 
@@ -49,7 +49,7 @@ Overall status: **Phase 1B hardening passes all current local quality gates, but
 | GitHub provider installation | Installed; repository-scoped | Installation `153286187` exists on `surgeservicesllc`, selected only for `surgeservicesllc/SoftwareFactory`. |
 | GitHub App connection | **Not Connected** | Authenticated SoftwareFactory callback/tenant persistence, live repo/project/file/draft-PR journey, and signed webhook delivery are not verified. |
 | GitHub webhook | **Not Connected** | Route exists; active provider hook and valid signed production delivery are not verified. |
-| Vercel UI hosting | Historical baseline verified | Pre-hardening commit `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju` passed public Playwright 12/12. This does not validate the working tree. |
+| Vercel UI hosting | Exact application release verified | READY production deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` stores `softwarefactoryGitCommitSha=427190d050796e3f5ff5cf6154adc2c34e2e5694`, serves the stable alias, and passes production Playwright 12/12. |
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -59,14 +59,15 @@ Overall status: **Phase 1B hardening passes all current local quality gates, but
 
 - Current working tree: lint and typecheck pass; full Vitest passes 38 files/263 tests (unit 23/145, integration 15/118); coverage passes 38 files/263 tests at 66.08% statements, 65.13% branches, 58.62% functions, and 67.16% lines with required risk/constants thresholds satisfied; the full migration-chain RLS behavioral matrix passes 5/5 through migration `019`; the production build passes with 34 routes; and local Playwright passes 12/12 across desktop/tablet/mobile including axe checks after relocating an ignored stale OneDrive coverage cache.
 - Source/client secret gates pass: tracked and untracked non-fixture source contained no credential/private-key marker; the only source pattern hits were explicit fake detector fixtures in `github-repository-grants` and `github-rls-behavior`; rebuilt `.next/static` contained no privileged environment name, key marker, or `service_role` marker.
-- Prior stable-production Playwright 12/12 is historical baseline evidence only.
+- GitHub `main` application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694` (author `NewWorldVenture`) passed CI run `31649243266` with 2/2 jobs green.
+- The supported detached, tracked-files-only, owner-authenticated production deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` is READY at `https://softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app` and the stable alias `https://softwarefactory-tan.vercel.app`; provider metadata resolves it to the exact application SHA above. Documentation-only successors need not replace this application-tree evidence.
+- Production validation passed: five public routes returned 200 with the expected title, representative authenticated APIs returned 401, removed `/api/files` returned 404, Playwright passed 12/12, all nine deployed JavaScript assets were clean of privileged markers, and recent error/HTTP-500 log counts were zero.
 - No hosted or live-provider evidence has been produced for migrations `011`-`019` or the new application hardening.
 
 ## Release blockers
 
-1. Publish the exact locally verified tree and verify its exact Vercel deployment, CI, aliases, HTTP boundaries, public E2E, logs, and client artifacts.
-2. Obtain exact owner approval for production migrations `011`-`019` and webhook secret/provider activation; apply only to `qpuofpmagrmyamahqwxw` and run every post-apply check.
-3. Complete real production sign-in, email confirmation, onboarding, active-organization, and caller-session acceptance.
-4. Complete the authenticated GitHub callback, tenant connection/repository sync, project link, branch/commit/PR/check views, file read, safe edit/draft PR, stale/protected/idempotent/recovery cases, and disconnect/loss handling.
-5. Configure/verify the active GitHub webhook and observe valid, invalid, duplicate, out-of-order, deletion, and restore behavior in production.
-6. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.
+1. Obtain exact owner approval for production migrations `011`-`019` and webhook secret/provider activation; apply only to `qpuofpmagrmyamahqwxw` and run every post-apply check.
+2. Complete real production sign-in, email confirmation, onboarding, active-organization, and caller-session acceptance.
+3. Complete the authenticated GitHub callback, tenant connection/repository sync, project link, branch/commit/PR/check views, file read, safe edit/draft PR, stale/protected/idempotent/recovery cases, and disconnect/loss handling.
+4. Configure/verify the active GitHub webhook and observe valid, invalid, duplicate, out-of-order, deletion, and restore behavior in production.
+5. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.

@@ -4,7 +4,7 @@ Last updated: 2026-08-12
 
 ## Mission and boundary
 
-Finish Phase 1B end to end. The current working tree contains a new fail-closed GitHub/Supabase hardening increment, but it is not yet final-gated, published, deployed, or promoted to hosted Supabase. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
+Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening increment passes local gates, is published to GitHub, passes CI, and is verified on an exact-tree production deployment. It is not promoted to hosted Supabase and the live provider journey is incomplete. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
 
 ## Current repository work
 
@@ -38,7 +38,9 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Last successful linked public-schema lint ends at `009`; a later CLI attempt received account `403`.
 - Provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. It has not completed the authenticated SoftwareFactory callback/tenant journey.
 - The GitHub webhook is **Not Connected**: no active hook and valid signed production delivery have been verified.
-- Last independently verified pre-hardening release: commit `f12814bd94001e5c9fe9637e0350e14816de8d13`, Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
+- Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, authored `NewWorldVenture`, is on GitHub `main`; CI run `31649243266` passed 2/2.
+- The automatic Git-triggered deployment `dpl_H6SvxkXj3LKiLoCjZ1PWarQs3umq` was blocked by Vercel Hobby commit-author access. The supported detached, tracked-files-only, owner-authenticated deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` is READY Production and stores the exact application SHA in `softwarefactoryGitCommitSha` metadata.
+- Deployment URL `https://softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app` pass production validation: five public routes 200 with expected title, representative authenticated APIs 401, removed `/api/files` 404, Playwright 12/12, nine deployed JavaScript assets clean, and recent error/HTTP-500 logs zero.
 - Current tree: lint/typecheck pass; full Vitest passes 38 files/263 tests (unit 23/145, integration 15/118); full-chain RLS behavior passes 5/5 through migration `019`; production build passes with 34 routes.
 - Current coverage passes 38 files/263 tests: 66.08% statements, 65.13% branches, 58.62% functions, and 67.16% lines; required risk/constants thresholds pass.
 - Current Playwright passes 12/12 across desktop/tablet/mobile including axe checks after relocating an ignored stale OneDrive coverage cache.
@@ -46,11 +48,10 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 
 ## Immediate sequence
 
-1. Review/stage/commit/push the exact locally verified tree; pass CI and verify the exact resulting Vercel deployment, alias, HTTP boundaries, public E2E, logs, and rebuilt client artifacts.
-2. Obtain exact owner approval for hosted migrations `011`-`019` and webhook activation; apply/verify only the exact production targets.
-3. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
-4. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
-5. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
+1. Obtain exact owner approval for hosted migrations `011`-`019` and webhook activation; apply/verify only the exact production targets.
+2. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
+3. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
+4. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
 
 ## Safe operating notes
 
@@ -67,7 +68,7 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - [x] Current-tree lint/typecheck/full Vitest/migration-chain RLS/build gates pass and exact results are recorded.
 - [x] Current-tree coverage and E2E/responsive/accessibility gates pass and exact results are recorded.
 - [x] Current-tree secret/client gate passes and its exact result is recorded.
-- [ ] Exact tree is pushed, CI passes, and matching production deployment is verified.
+- [x] Application tree is pushed, CI passes 2/2, and provider metadata resolves the READY production deployment to its exact SHA.
 - [ ] Migrations `011`-`019` are explicitly owner-approved, hosted, and fully verified.
 - [ ] Real Supabase authenticated/two-tenant/anonymous/RPC behavior passes.
 - [ ] Real GitHub callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect journey passes.

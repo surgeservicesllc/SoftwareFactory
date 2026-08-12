@@ -4,7 +4,7 @@ Last reviewed: 2026-08-12
 
 Phase 1B decision: **Not release-ready yet**
 
-Reason: all current local quality gates pass, but publication/deployment, hosted migrations `011`-`019`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
+Reason: local gates, GitHub publication/CI, and exact-tree production hosting pass, but hosted migrations `011`-`019`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
@@ -29,28 +29,29 @@ Reason: all current local quality gates pass, but publication/deployment, hosted
 | GitHub real connection | Authenticated SoftwareFactory callback/tenant connection/token/repository sync | **Not Connected** |
 | GitHub webhook | Route implemented; active hook/valid signed production delivery absent | **Not Connected** |
 | Project/repository and file-to-draft-PR flow | Code/tests exist; real journey absent | Pending live acceptance |
-| Git/main provenance for this increment | Working tree not yet committed/pushed | Pending |
-| Vercel production for this increment | No exact matching verified deployment yet | Pending |
+| Git/main provenance for this increment | Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, author `NewWorldVenture`; CI run `31649243266` | Pass - commit on `main`, 2/2 CI green |
+| Vercel production for this increment | READY deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu`; metadata `softwarefactoryGitCommitSha=427190d050796e3f5ff5cf6154adc2c34e2e5694` | Pass - exact application tree, production alias, HTTP/E2E/assets/log checks verified |
 | OpenAI/Codex | No live worker; Phase 1C not started | **Not Connected** |
 | Anthropic/Claude | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
 | Phase 1D observation scaffold | Autonomous Mode OFF, GREEN-only observation, global kill switch ON | Execution remains blocked |
 
-## Historical baseline (not current-tree proof)
+## Recorded local and release evidence
 
 ```text
 Review date: 2026-08-12
-Prior local baseline before migrations 014-019:
-  Vitest: PASS - 25 files / 208 tests
-  production build: PASS - 34 routes
-  local Playwright: PASS - 12/12
-
-Last independently verified pre-hardening production release:
-  commit: f12814bd94001e5c9fe9637e0350e14816de8d13
-  deployment: dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju
-  deployment URL: softwarefactory-3fg568r3j-surgeservices-projects.vercel.app
+Verified hardening application release:
+  commit: 427190d050796e3f5ff5cf6154adc2c34e2e5694
+  author: NewWorldVenture
+  CI: run 31649243266 - PASS, 2/2
+  deployment: dpl_9oqg94scmdn5X86r7yyrgmsVtmBu - READY Production
+  deployment metadata: softwarefactoryGitCommitSha=427190d050796e3f5ff5cf6154adc2c34e2e5694
+  deployment URL: softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app
   stable alias: https://softwarefactory-tan.vercel.app
   public Playwright: PASS - 12/12
+  HTTP: five public routes 200; authenticated APIs 401; removed /api/files 404; expected title
+  deployed JS: 9 assets scanned, no privileged markers
+  recent logs: 0 errors; 0 HTTP 500
 
 Hosted Supabase baseline:
   project: qpuofpmagrmyamahqwxw
@@ -59,7 +60,7 @@ Hosted Supabase baseline:
   post-010 linked lint: NOT VERIFIED - CLI account returned 403
 ```
 
-Historical baseline evidence remains useful for regression comparison but cannot be relabeled as verification of the working tree, migrations `011`-`019`, or a future deployment.
+Application-release evidence is provider-resolved through deployment metadata rather than inferred from the latest Git tip, so a documentation-only successor does not make the runtime SHA claim stale. It does not verify hosted migrations `011`-`019` or the live GitHub workflow.
 
 ## Security and production acceptance still required
 
@@ -68,7 +69,7 @@ Historical baseline evidence remains useful for regression comparison but cannot
 - Complete a real authenticated production session and the entire GitHub callback/token/repository/project/read/edit/draft-PR/disconnect journey.
 - Observe valid, invalid, duplicate, stale, out-of-order, deletion, and restore webhook deliveries in production.
 - Verify stale SHA, protected path, likely secret, wrong tenant, revoked installation, insufficient permission, rate limit, stable retry, and ambiguous completion recovery.
-- Record exact commit, CI run, Vercel deployment/alias, production HTTP/E2E/log checks, and provider acceptance.
+- Complete and record hosted migration/Auth/GitHub provider acceptance separately from the already verified application release.
 
 ## Release-blocking invariants
 

@@ -1,5 +1,6 @@
 .git/
 .next/
+.next-*/
 .vercel/
 node_modules/
 coverage/

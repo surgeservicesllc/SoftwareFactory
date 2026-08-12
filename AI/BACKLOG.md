@@ -22,7 +22,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [x] Pass current-tree coverage at 66.08% statements, 65.13% branches, 58.62% functions, and 67.16% lines with required risk/constants thresholds.
 - [x] Pass current-tree Playwright 12/12 across desktop/tablet/mobile including axe checks after relocating an ignored stale OneDrive coverage cache.
 - [x] Pass source/client secret gates: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.
-- [ ] Commit/push the exact reviewed hardening tree to `origin/main`, verify CI, record exact provenance, and verify the resulting Vercel production deployment/alias/HTTP/E2E evidence.
+- [x] Publish application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694` to `origin/main`; CI run `31649243266` passed 2/2; verify READY production deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu`, exact SHA metadata, stable alias, HTTP boundaries/title, Playwright 12/12, nine deployed-JS assets clean, and zero recent error/HTTP-500 logs.
 - [ ] Obtain exact owner approval for hosted migrations `011`-`019`; apply to `qpuofpmagrmyamahqwxw` and verify ledger, lint, RLS/FORCE RLS, table/function/helper grants, actor/tenant/resource checks, immutable/redacted activity, provider-ingress CHECK evaluation, ordering/terminal behavior, recovery behavior, and health.
 - [ ] Restore authorized Supabase CLI access and rerun linked public-schema lint after `010`; the last successful hosted lint is through `009`.
 - [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test.
@@ -39,7 +39,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 - Hosted Supabase migrations through `010` and prior fail-closed observation-control checks.
 - Provider installation `153286187`, scoped only to `surgeservicesllc/SoftwareFactory`.
-- Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
+- Verified hardening application release: `427190d050796e3f5ff5cf6154adc2c34e2e5694` on READY Vercel deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu`, provider-resolved exact SHA and production Playwright 12/12.
 - Prior local baseline before migrations `014`-`019`: 25 files/208 tests, 34-route build, local Playwright 12/12. Historical only.
 
 ## Explicitly deferred
