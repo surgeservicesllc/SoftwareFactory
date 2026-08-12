@@ -9,9 +9,16 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 describe("live activity route contract", () => {
   const route = readFileSync(resolve(repositoryRoot, "app/api/activity/route.ts"), "utf8");
+  const tenantBoundary = readFileSync(
+    resolve(repositoryRoot, "lib/server/tenant-route.ts"),
+    "utf8",
+  );
 
   it("is scoped to the authenticated active organization", () => {
-    expect(route).toMatch(/requireActiveOrganization\(\)/);
+    // The route resolves its tenant through the shared boundary, so the
+    // guarantee is asserted in both places rather than assumed in either.
+    expect(route).toMatch(/withTenant\(/);
+    expect(tenantBoundary).toMatch(/requireActiveOrganization\(\)/);
     expect(route).toMatch(/\.eq\("organization_id", activeOrganization\.id\)/);
   });
 
