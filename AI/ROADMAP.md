@@ -27,7 +27,7 @@ Exit work:
 
 - verify hosted authenticated RLS allow/deny and privileged-RPC behavior (migration history through `009` and linked schema lint are green);
 - [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
-- deploy exact commit to Vercel; and
+- record the exact source commit for READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`; and
 - pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.
 
 No merge or production deployment autonomy is implied.
@@ -45,9 +45,11 @@ Do not begin without explicit instruction after Phase 1B exits.
 
 ## Phase 1D — autonomous-loop controls
 
-Status: **Not started; controls remain OFF.**
+Status: **Observation-only scaffold and hosted locked controls implemented; execution not started and controls remain OFF.**
 
-- Observation-only policy decisions and prerequisite evidence.
+- [x] Add a fail-closed GREEN-only observation evaluator, Autonomous Mode OFF constraint, locked global kill switch, truthful UI/API boundary, and schema hardening migration.
+- [x] Apply/verify hosted migration `010`: zero unsafe rows at preflight/after application, kill-switch default true, both constraints validated, authenticated RPC execute only, anonymous denied.
+- [ ] Restore authorized post-`010` CLI lint and run observation against trustworthy non-production evidence.
 - No auto approve/merge/deploy/rollback until separate policy, provider, branch protection, validation, health, and rollback drills pass.
 
 ## Phase 2 — Claude and governed delivery

@@ -10,13 +10,13 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Governance / Settings"
         title="Autonomy & safety"
-        description="Review the project-level controls that will bound future automation. Phase 1A exposes policy intent without granting execution authority."
-        action={<StatusBadge tone="safe">Guardrails active</StatusBadge>}
+        description="Review the observation-only Phase 1D safety boundary. It evaluates prerequisites without granting execution authority."
+        action={<StatusBadge tone="danger">Kill switch ON</StatusBadge>}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="p-5 sm:p-6">
-          <SectionTitle title="Autonomous controls" description="All potentially destructive capabilities start OFF and require trusted server enforcement." />
+          <SectionTitle title="Autonomous controls" description="GREEN-only observation is scaffolded; every externally mutating capability is locked OFF." />
           <div className="mt-5">
             <SafetyControls />
           </div>
@@ -56,7 +56,7 @@ export default function SettingsPage() {
               <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[#30401e] bg-[#18210f] text-[#c6f135]"><Shield className="size-4" aria-hidden="true" /></span>
               <div>
                 <p className="text-xs font-semibold text-[#d5dbe2]">Global safety boundary</p>
-                <p className="mt-1 text-[10px] leading-5 text-[#6a7787]">No client control can override organization policy, owner approval, a protected-resource rule, or the Phase 1 execution lock.</p>
+                <p className="mt-1 text-[10px] leading-5 text-[#6a7787]">No client control can override organization policy, owner approval, a protected-resource rule, the global kill switch, or the disconnected executor boundary.</p>
               </div>
             </div>
           </Panel>
@@ -65,7 +65,7 @@ export default function SettingsPage() {
 
       <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#423824] bg-[#221c11] px-4 py-3 text-[10px] leading-5 text-[#b6a77f]">
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-[#ffbe55]" aria-hidden="true" />
-        Controls shown here are local policy previews. Operational settings are organization- and project-owned records protected by Supabase RLS.
+        This page shows the enforced Phase 1D ceiling. Project control writes are owner-scoped and audited in Supabase, while observation mode remains locked OFF and execution remains unavailable.
         <Settings2 className="ml-auto hidden size-4 text-[#665c41] sm:block" aria-hidden="true" />
       </div>
     </>

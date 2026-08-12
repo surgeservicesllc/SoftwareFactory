@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { evaluateAutonomyObservation } from "@/lib/autonomy";
+import { PHASE_1D_SAFETY_DEFAULTS } from "@/lib/constants";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -7,18 +9,19 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { SupabaseConfigurationError } from "@/lib/supabase/env";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
+import { assertSameOriginRequest } from "@/lib/supabase/request";
+import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
 
 const controlsRequestSchema = z.object({
-  autonomousMode: z.boolean().optional(),
-  maximumAutonomousRisk: z.enum(["green", "yellow", "red"]).optional(),
-  autoApprove: z.boolean().optional(),
-  autoMerge: z.boolean().optional(),
-  autoDeploy: z.boolean().optional(),
-  autoRollback: z.boolean().optional(),
+  autonomousMode: z.literal(false).optional(),
+  maximumAutonomousRisk: z.literal("green").optional(),
+  autoApprove: z.literal(false).optional(),
+  autoMerge: z.literal(false).optional(),
+  autoDeploy: z.literal(false).optional(),
+  autoRollback: z.literal(false).optional(),
   expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 }).strict().refine(
   (value) => [
@@ -35,7 +38,7 @@ const controlsRequestSchema = z.object({
 type ProjectControlsResult = {
   project_id: string;
   autonomous_mode: boolean;
-  maximum_autonomous_risk: "green" | "yellow" | "red";
+  maximum_autonomous_risk: "green";
   auto_approve: boolean;
   auto_merge: boolean;
   auto_deploy: boolean;
@@ -43,17 +46,103 @@ type ProjectControlsResult = {
   updated_at: string;
 };
 
-export async function PATCH(
-  request: Request,
+type ProjectControlsRow = {
+  id: string;
+  autonomous_mode: boolean;
+  maximum_autonomous_risk: "green";
+  auto_approve: boolean;
+  auto_merge: boolean;
+  auto_deploy: boolean;
+  auto_rollback: boolean;
+  updated_at: string;
+};
+
+function safetyEnvelope(autonomousMode: boolean) {
+  return {
+    phase: "1D_OBSERVATION_ONLY",
+    ...PHASE_1D_SAFETY_DEFAULTS,
+    observation: evaluateAutonomyObservation({
+      autonomousMode,
+      risk: "GREEN",
+      protectedResourceTouched: false,
+      evidenceFresh: false,
+      requiredChecksPassing: false,
+      ownerAttentionRequired: false,
+    }),
+  } as const;
+}
+
+function controlsResponse(row: ProjectControlsRow | ProjectControlsResult) {
+  return {
+    projectId: "project_id" in row ? row.project_id : row.id,
+    controls: {
+      autonomousMode: row.autonomous_mode,
+      maximumAutonomousRisk: row.maximum_autonomous_risk,
+      autoApprove: row.auto_approve,
+      autoMerge: row.auto_merge,
+      autoDeploy: row.auto_deploy,
+      autoRollback: row.auto_rollback,
+      updatedAt: row.updated_at,
+    },
+    safety: safetyEnvelope(row.autonomous_mode),
+  };
+}
+
+function invalidProjectIdResponse() {
+  return jsonNoStore(
+    { error: { code: "invalid_project_id", message: "Project id must be a UUID." } },
+    { status: 400 },
+  );
+}
+
+export async function GET(
+  _request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   try {
     const { projectId } = await params;
     if (!z.string().uuid().safeParse(projectId).success) {
+      return invalidProjectIdResponse();
+    }
+
+    const { activeOrganization, client } = await requireActiveOrganization();
+    const { data, error } = await client
+      .from("projects")
+      .select(
+        "id,autonomous_mode,maximum_autonomous_risk,auto_approve,auto_merge,auto_deploy,auto_rollback,updated_at",
+      )
+      .eq("id", projectId)
+      .eq("organization_id", activeOrganization.id)
+      .maybeSingle();
+
+    if (error) return databaseErrorResponse(error);
+    if (!data) {
       return jsonNoStore(
-        { error: { code: "invalid_project_id", message: "Project id must be a UUID." } },
-        { status: 400 },
+        { error: { code: "project_not_found", message: "Project not found." } },
+        { status: 404 },
       );
+    }
+
+    return jsonNoStore(controlsResponse(data as ProjectControlsRow));
+  } catch (error) {
+    const boundaryResponse = supabaseBoundaryErrorResponse(error);
+    if (boundaryResponse) return boundaryResponse;
+    return jsonNoStore(
+      { error: { code: "controls_unavailable", message: "Project controls could not be loaded." } },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  try {
+    assertSameOriginRequest(request);
+    const { projectId } = await params;
+    if (!z.string().uuid().safeParse(projectId).success) {
+      return invalidProjectIdResponse();
     }
 
     const rawBody = await readBoundedJson(request, 8 * 1024);
@@ -71,16 +160,34 @@ export async function PATCH(
       );
     }
 
-    const supabase = await createSupabaseServerClient();
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
+    const { activeOrganization, client } = await requireActiveOrganization();
+    if (activeOrganization.role !== "owner") {
       return jsonNoStore(
-        { error: { code: "unauthorized", message: "Authentication is required." } },
-        { status: 401 },
+        {
+          error: {
+            code: "owner_required",
+            message: "Only the organization owner may change autonomy observation controls.",
+          },
+        },
+        { status: 403 },
       );
     }
 
-    const { data, error } = await supabase.rpc("update_project_controls", {
+    const { data: project, error: projectError } = await client
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("organization_id", activeOrganization.id)
+      .maybeSingle();
+    if (projectError) return databaseErrorResponse(projectError);
+    if (!project) {
+      return jsonNoStore(
+        { error: { code: "project_not_found", message: "Project not found." } },
+        { status: 404 },
+      );
+    }
+
+    const { data, error } = await client.rpc("update_project_controls", {
       p_project_id: projectId,
       p_autonomous_mode: parsed.data.autonomousMode ?? null,
       p_maximum_autonomous_risk: parsed.data.maximumAutonomousRisk ?? null,
@@ -96,37 +203,13 @@ export async function PATCH(
     }
 
     const result = data as ProjectControlsResult;
-    return jsonNoStore({
-      projectId: result.project_id,
-      controls: {
-        autonomousMode: result.autonomous_mode,
-        maximumAutonomousRisk: result.maximum_autonomous_risk,
-        autoApprove: result.auto_approve,
-        autoMerge: result.auto_merge,
-        autoDeploy: result.auto_deploy,
-        autoRollback: result.auto_rollback,
-        updatedAt: result.updated_at,
-      },
-      safety: {
-        redExecutionAlwaysRequiresOwnerApproval: true,
-        executionStarted: false,
-      },
-    });
+    return jsonNoStore(controlsResponse(result));
   } catch (error) {
     if (error instanceof ApiRequestError) {
       return requestErrorResponse(error);
     }
-    if (error instanceof SupabaseConfigurationError) {
-      return jsonNoStore(
-        {
-          error: {
-            code: "supabase_not_configured",
-            message: "Project controls are unavailable because Supabase is not configured.",
-          },
-        },
-        { status: 503 },
-      );
-    }
+    const boundaryResponse = supabaseBoundaryErrorResponse(error);
+    if (boundaryResponse) return boundaryResponse;
 
     return jsonNoStore(
       { error: { code: "internal_error", message: "Project controls were not changed." } },
@@ -134,4 +217,3 @@ export async function PATCH(
     );
   }
 }
-

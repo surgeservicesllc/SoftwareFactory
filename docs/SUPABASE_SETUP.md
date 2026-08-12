@@ -2,7 +2,7 @@
 
 Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Provider health was verified as `ACTIVE_HEALTHY` on 2026-08-12.
 
-Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` have been applied. Linked migration history matches local history. `009` serializes external-installation synchronization and makes synchronized GitHub default-branch state authoritative for project links. `supabase db lint --linked --schema public --level warning --fail-on error` reports no schema errors (`[]`). This makes migration application and static linked lint green; authenticated cross-tenant, anonymous-denial, privileged-RPC, and real application-session verification against the hosted service remain pending.
+Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` have been applied, and the hosted ledger includes `010_phase1d_observation_controls`. Migration `010` was applied transactionally after `unsafe_project_rows=0`; hosted checks confirmed kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated controls-RPC execute, and anonymous execute denied. The last successful linked lint through `009` reported no schema errors (`[]`); a post-`010` CLI attempt was blocked by account `403`, so no post-`010` lint result is claimed. Authenticated cross-tenant, broader privileged-RPC, and real application-session verification remain pending.
 
 ## Hosted Auth configuration
 

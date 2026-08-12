@@ -1,18 +1,43 @@
 # Autonomous mode
 
-Phase 1B does not authorize autonomous execution. Controls express future policy ceilings only; they do not grant a browser, model, GitHub App, or unconnected provider permission to act.
+SoftwareFactory now contains a **Phase 1D observation-only scaffold**. It can describe whether a freshly evidenced GREEN candidate would satisfy policy, but it cannot execute or authorize an external action. The current product phase remains Phase 1B until its live acceptance gates pass.
 
-| Control | Phase 1B state/effect |
+| Control | Enforced state/effect |
 | --- | --- |
-| Autonomous Mode | OFF; no live AI worker or unattended executor |
-| Maximum Autonomous Risk | GREEN ceiling only; not an execution grant |
-| Auto Approve | OFF; RED/protected actions require current owner approval |
-| Auto Merge | OFF; no merge endpoint/workflow |
+| Global Kill Switch | **ON** and database-locked ON by migration `010` |
+| Autonomous Mode | OFF and database-constrained; zero end-to-end worker runs are verified |
+| Maximum Autonomous Risk | GREEN, database-constrained |
+| Auto Approve | OFF and database-constrained |
+| Auto Merge | OFF; no merge endpoint, permission, or workflow |
 | Auto Deploy | OFF; Vercel control-plane adapter **Not Connected** |
 | Auto Rollback | OFF; no rollback executor |
+| Execution Worker | **Not Connected** |
 
-The GitHub file editor is an authenticated, owner/admin-initiated YELLOW workflow. It creates only an isolated branch, commit, and draft pull request. It does not constitute autonomous mode and cannot merge or deploy.
+## Observation decision
 
-An action is eligible only at the intersection of authenticated actor/tenant rights, project policy, fresh risk classification, protected-resource rules, exact provider scope, current approval, validation evidence, absence of kill switches/freezes, and an implemented server-side executor. Missing, stale, ambiguous, OFF, or **Not Connected** means no execution.
+`lib/autonomy.ts` is a pure testable prerequisite function; it is not exposed as a runtime executor. A hypothetical candidate can report `WOULD_BE_ELIGIBLE` only when all of the following explicit inputs are true:
 
-Phase 1C may introduce bounded Codex execution only after explicit instruction and separate worker/sandbox/budget/cancellation evidence. Claude/Anthropic logical agents are deferred to Phase 2 and remain **Not Connected**. Enabling auto merge/deploy/rollback requires future policy decisions, non-production observation, exact owner approval, and operational drills.
+- a future observation input explicitly represents enabled mode; the current persisted project flag remains OFF;
+- the fresh classification is GREEN;
+- no protected resource is touched;
+- required evidence is current;
+- required checks are passing; and
+- no owner-attention condition exists.
+
+This result is not an approval. The response separately reports `executionAllowed: false` with three hard blockers: `GLOBAL_KILL_SWITCH_ACTIVE`, `OBSERVATION_ONLY`, and `EXECUTOR_NOT_CONNECTED`. Missing or stale evidence produces `BLOCKED`.
+
+## Control API and persistence
+
+`GET /api/projects/:projectId/controls` returns tenant-scoped control state plus the hard safety envelope. `PATCH` is same-origin, authenticated, active-tenant scoped, owner-only, bounded, validated, and optimistic-concurrency capable. It accepts only:
+
+- only the literal `false` autonomous-mode value;
+- the literal GREEN ceiling; and
+- explicit `false` values for auto approve, merge, deploy, and rollback.
+
+Migration `010_phase1d_observation_controls` adds the organization kill-switch column, locks it ON, constrains project rows to autonomous mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only RPC and immutable audit metadata. It is applied to the hosted database: preflight found zero unsafe projects, both constraints are validated, zero organizations have the switch OFF, zero unsafe projects remain, authenticated RPC execute is present, and anonymous execute is absent. This evidence does not make execution available. Post-`010` CLI lint remains unverified because the current Supabase CLI account returned `403`; the last clean linked lint is through `009`.
+
+## What is not built
+
+There is no closed autonomous execution loop. Codex/OpenAI worker execution is **Not Connected**, and there is no durable leasing worker, isolated workspace, approval executor, merge adapter, deployment adapter, post-deploy monitor, or rollback executor. The existing GitHub editor remains an authenticated owner/admin-initiated workflow that creates only an isolated branch, commit, and draft pull request.
+
+Any future execution rollout requires Phase 1B acceptance, Phase 1C worker evidence, non-production observation, exact allowlists, independent validation, owner approval for the precise authority, and a separate migration/decision that deliberately changes the locked interlocks.

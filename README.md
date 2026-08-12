@@ -2,7 +2,7 @@
 
 SoftwareFactory is a server-first software-engineering control plane for tenant-scoped projects, GitHub App connections, repository inspection, guarded file changes, approvals, and auditable operational state.
 
-The repository is implementing **Phase 1B: Production GitHub App Integration**. The code now includes Supabase authentication/onboarding, GitHub App installation and synchronization boundaries, live project/repository views, and a controlled file-to-draft-PR workflow. The real GitHub App installation and full production journey have not yet been verified, so GitHub remains **Not Connected** until that acceptance run succeeds.
+The repository is implementing **Phase 1B: Production GitHub App Integration**. The code includes Supabase authentication/onboarding, GitHub App installation and synchronization boundaries, live project/repository views, and a controlled file-to-draft-PR workflow. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, and the current Vercel deployment is READY, but the authenticated SoftwareFactory callback/tenant connection, webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
 
 Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for which release is live and which Phase 1B checks remain.
 

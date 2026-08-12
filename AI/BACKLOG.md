@@ -18,7 +18,9 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [x] Add expected-SHA/idempotent protected file editing that creates only a controlled branch, commit, and draft PR; fail closed for repository memory/policies, Supabase, every application API route, GitHub/server/Supabase libraries, Auth/session boundaries, deployment/environment/infrastructure files, and other sensitive subject paths.
 - [x] Add Phase 1B unit/integration/contract coverage; the hardened tree currently passes 58 unit tests and 88 integration tests.
 - [x] Create/configure GitHub App `Surge SoftwareFactory` and add protected GitHub variables to the exact Vercel project.
-- [x] Apply hosted Supabase migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` to `qpuofpmagrmyamahqwxw`; verify local/remote history matches.
+- [x] Rotate/promote the Vercel App private key to the sole remaining GitHub key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`) without exposing key material.
+- [x] Verify provider installation `153286187` on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`.
+- [x] Apply hosted Supabase migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` to `qpuofpmagrmyamahqwxw`; the hosted ledger includes `010`.
 
 ## Phase 1B release blockers
 
@@ -28,12 +30,13 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [x] Remove SQL wildcard semantics from normalized repository full-name matching.
 - [x] Verify hosted RLS/FORCE RLS catalog inventory: 22/22 RLS, 22/22 FORCE RLS, 43 policies, and 22 row-secret guards. Linked migration history separately confirms eight expected migrations through `009`.
 - [ ] Verify hosted two-tenant allow/deny paths, anonymous denial, privileged RPC authorization, and immutable audit events with real authenticated sessions.
-- [x] Rerun final lint, typecheck, full Vitest (16 files/146 tests), build (34 routes), and Playwright at desktop/tablet/mobile with accessibility/browser-error/overflow gates (12/12) after `009` and the repository-write hardening.
+- [x] Rerun final lint, typecheck, full Vitest (157 tests on the latest tree), build (34 routes), and Playwright at desktop/tablet/mobile with accessibility/browser-error/overflow gates (12/12) after the Phase 1B hardening and Phase 1D observation scaffold.
 - [x] Rerun final secret and built-client privileged-variable scans on the exact hardened tree; no credential patterns or built-client privileged server names were found.
-- [ ] Commit/push the exact validated tree to `main` and deploy that commit to `surgeservices-projects/softwarefactory`; record exact commit/deployment ID/state.
+- [x] Verify Vercel deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` READY at the stable production alias and pass stable-production Playwright 12/12.
+- [ ] Record/verify the READY deployment's exact source commit and ensure the final repository tree is pushed to `main`.
 - [ ] Verify production Supabase sign-up/confirmation/sign-in/onboarding/session paths.
-- [ ] Configure and verify the GitHub App webhook endpoint: the provider General page still shows it blank/inactive after attempted saves; then observe a correctly signed production delivery.
-- [ ] Install the App on the intended account/repository through SoftwareFactory; verify callback, identity, permissions, repository count, freshness, and audit evidence.
+- [ ] Configure and verify the GitHub App webhook endpoint: the provider General page is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; then observe a correctly signed production delivery.
+- [ ] Complete the authenticated SoftwareFactory owner callback for existing provider installation `153286187`; persist the tenant connection and verify identity, permissions, repository count, freshness, and audit evidence.
 - [ ] Link the real `SoftwareFactory` repository as a project and verify live branch/commit/PR/check views.
 - [ ] Read/edit a safe real file, verify isolated branch + commit + draft PR, stale-SHA conflict, protected-path rejection, and no merge/deploy.
 - [ ] Verify revocation/permission/rate-limit/provider-error states and explicit disconnect/history preservation.
@@ -50,7 +53,10 @@ Codex/OpenAI is **Not Connected**. Do not begin Phase 1C without explicit instru
 
 ## Phase 1D/2 — explicitly deferred
 
-- [ ] Observation-only autonomy prerequisite evaluator.
+- [x] Implement the local observation-only autonomy prerequisite evaluator and locked control surface: Autonomous Mode OFF, GREEN only, global kill switch ON, execution false, and no automatic action adapters.
+- [x] Apply hosted migration `010` transactionally after `unsafe_project_rows=0`; verify kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated RPC execute, and anonymous execute denied. Applying it does not enable execution.
+- [ ] Restore authorized Supabase CLI access and rerun linked public-schema lint after `010`; the last successful lint was clean through `009`, while the post-`010` attempt returned account `403`.
+- [ ] Run an evidence-backed non-production observation pilot with execution remaining impossible.
 - [ ] Separate, owner-approved non-production pilots before any auto approve/merge/deploy/rollback.
 - [ ] Supported Anthropic API/logical Claude agents in Phase 2; never browser-automate multiple consumer accounts.
 

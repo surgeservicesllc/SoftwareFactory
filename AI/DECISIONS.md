@@ -106,3 +106,10 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: Commit a fail-closed `.vercelignore` that excludes dependencies, build/test caches, local CLI metadata, environment files, private-key files, and ignored work artifacts from Vercel source uploads.
 - Consequence: Production receives the reviewed repository source without unrelated local artifacts or credential-bearing file classes.
+
+## ADR-016 — Phase 1D begins as an execution-inert observation boundary
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: The first Phase 1D increment may evaluate only explicit hypothetical GREEN inputs. Persisted Autonomous Mode remains constrained OFF, the organization kill switch is locked ON, automatic approval/merge/deploy/rollback are constrained OFF, and the evaluator always reports `executionAllowed: false` while no worker exists.
+- Consequence: `WOULD_BE_ELIGIBLE` is hypothetical policy evidence, never approval or proof of execution. Enabling external action requires a separate owner-approved decision, non-production evidence, provider controls, and a forward migration that deliberately changes the interlocks.

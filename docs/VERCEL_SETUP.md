@@ -6,13 +6,14 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 
 ## Current evidence
 
-- The Phase 1A production UI deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` was previously verified READY and reachable at the stable alias.
+- Production deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` is verified READY and reachable at the stable alias. Playwright against the stable production URL passed 12/12.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
-- GitHub App server-only variables are configured for Production and Preview; App permissions/events are configured, but installation is absent and the GitHub provider webhook endpoint still appears blank/inactive.
+- GitHub App server-only variables are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`) and promoted in the READY deployment.
+- GitHub provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. The authenticated in-product callback/tenant connection remains pending, and the provider webhook remains blank/inactive with App-authenticated hook configuration returning `404`/no hook object.
 - Preview Supabase variables are not independently verified.
-- A production deployment of the final Phase 1B commit, its deployment ID, and its live authenticated/GitHub acceptance journey are still required before Phase 1B can be called production-ready.
+- Exact source-commit provenance for the READY deployment and the live authenticated GitHub acceptance journey are still required before Phase 1B can be called complete.
 
-Do not assume that the stable alias contains the current working tree. Record the exact commit, deployment ID, state, and smoke/acceptance evidence after promotion.
+The deployment identity/state/public E2E are recorded above. Do not assume that this proves the exact current working tree or provider acceptance; record the exact source commit and remaining authenticated evidence.
 
 ## Project configuration
 

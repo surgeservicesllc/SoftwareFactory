@@ -23,13 +23,15 @@ npm run build
 | `npm run test:integration` | Pass — 88 tests after migration `009` |
 | `npm run lint` | Pass on the hardened tree |
 | `npm run typecheck` | Pass on the hardened tree |
-| `npm test` | Pass — 16 files, 146 tests |
+| `npm test` | Pass — 157 tests on the latest tree after the Phase 1D observation scaffold |
 | `npm run build` | Pass — 34 pages/routes |
-| Hosted Supabase migration push | Pass — local=remote for `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009` |
-| Hosted Supabase lint | Pass — public schema, warning level, fail-on-error; no schema errors (`[]`) |
+| Hosted Supabase migration application | Pass through `010`; transactional preflight `unsafe_project_rows=0` and hosted safety checks passed |
+| Hosted Supabase lint | Pass through `009` — no schema errors (`[]`); post-`010` CLI attempt blocked by account `403`, so not claimed |
 | Playwright E2E | Pass — 12/12 across desktop, tablet, and mobile, including navigation, overflow, browser-error, and axe gates |
+| Stable-production Playwright | Pass — 12/12 at `https://softwarefactory-tan.vercel.app` on READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` |
 | Secret/client-bundle scan | Pass on the hardened tree — no credential patterns or built-client privileged server names |
-| Real GitHub App acceptance | Pending; App is **Not Connected** |
+| GitHub provider installation | Pass — installation `153286187`, `surgeservicesllc/SoftwareFactory` only |
+| Real in-product GitHub acceptance | Pending; App connection/webhook remain **Not Connected** |
 
 The local shell used Node 20 and emitted Supabase's future-support warning. The repository and intended production/CI runtime require Node 22 or newer. The warning does not invalidate the recorded local pass, but release evidence should prefer Node 22.
 
@@ -70,7 +72,7 @@ The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
 ## Hosted Supabase evidence
 
-Linked migration list and public-schema lint are green through `009`. A hosted catalog query returned 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 enabled row-secret guards; the subsequent linked list independently confirms all eight expected migrations through `009`. Next, test two authenticated tenants plus anonymous denial without service role as the user-under-test. Test privileged RPCs with authorized and unauthorized actors and confirm immutable/redacted audit evidence.
+Hosted migration `010` is in the ledger. Its transactional preflight/application checks returned zero unsafe projects, kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated RPC execute true, and anonymous execute false. The last successful linked public-schema lint is green through `009`; the post-`010` CLI attempt received account `403`, so no post-`010` lint result is claimed. A prior hosted catalog query returned 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 enabled row-secret guards. Next, restore authorized CLI lint and test two authenticated tenants plus anonymous denial without service role as the user-under-test.
 
 ## Real GitHub acceptance
 

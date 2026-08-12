@@ -54,6 +54,7 @@ Important operations append actor, tenant, target, event type, timestamp, reques
 - Review dependencies, workflows, migrations, Auth/RLS, and provider-permission changes as protected work.
 - Never run untrusted pull-request code with protected secrets.
 - Auto approve/merge/deploy/rollback remain OFF.
+- The Phase 1D global kill switch is ON, the observation ceiling is GREEN, and the execution worker is **Not Connected**. A `WOULD_BE_ELIGIBLE` observation is never an execution grant.
 
 ## Incident response
 

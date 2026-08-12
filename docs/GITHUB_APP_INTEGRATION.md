@@ -1,8 +1,8 @@
 # Production GitHub App integration
 
-Status: **Implemented; permissions/events/environment configured; Not Connected pending installation, webhook endpoint, and end-to-end verification.**
+Status: **Implemented with a repository-scoped provider installation; in-product connection and webhook remain Not Connected pending authenticated callback and end-to-end verification.**
 
-The GitHub App exists and its server-only values are configured in Vercel. That does not satisfy the product definition of Connected: no real installation has yet completed the SoftwareFactory callback, repository synchronization, project linking, file read/change, draft pull request, and webhook acceptance journey.
+The GitHub App exists, its server-only values are configured in Vercel, and provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. That provider-side fact does not satisfy the product definition of Connected: the installation has not completed the authenticated SoftwareFactory callback, tenant connection persistence, repository synchronization, project linking, file read/change, draft pull request, or webhook acceptance journey.
 
 ## Registered App
 
@@ -21,8 +21,11 @@ The GitHub App exists and its server-only values are configured in Vercel. That 
 | Expiring user authorization tokens | Enabled |
 | Device flow | Disabled |
 | Redirect on installation update | Enabled |
+| Verified provider installation | `153286187` on `surgeservicesllc` |
+| Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
+| Sole remaining App key fingerprint | `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` |
 
-The application webhook route and Vercel secret configuration exist, and the App permissions/events are configured. However, after attempted saves the GitHub App General page still appears to show a blank/inactive webhook endpoint. Treat the provider webhook configuration as unverified/not active until the exact URL is visibly retained and a signed delivery is accepted.
+The application webhook route and Vercel secret configuration exist, and the App permissions/events are configured. However, the GitHub App General form remains blank/inactive and App-authenticated hook configuration returns `404` with no hook object. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
 
 ## Repository permissions
 
@@ -69,7 +72,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The production/preview GitHub variables have been added to the Vercel project without printing their values. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
+The production/preview GitHub variables have been added to the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key and promoted in READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`; only its public fingerprint is recorded above. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
 
 ## Connection flow
 
@@ -157,7 +160,7 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - [ ] Production release contains the current routes and migrations.
 - [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
 - [ ] An authenticated SoftwareFactory owner/admin starts the installation flow.
-- [ ] GitHub installs the App on the intended account with only the intended repository/repositories.
+- [x] GitHub provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
 - [ ] Callback verifies the installation and returns to Connections.
 - [ ] Connection shows the real account, installation ID, repository count, and fresh sync time.
 - [ ] Manual sync handles success and revoked/insufficient-permission failure.
@@ -178,6 +181,6 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - **Connection lost:** check installation revocation/suspension, selected repositories, and current permissions; then reconnect or sync.
 - **Permission denied:** compare the exact App settings above. Do not add administration/workflow permissions as a shortcut.
 - **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
-- **Webhook blank/inactive:** enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible before sending/observing a delivery.
+- **Webhook blank/inactive or App-auth configuration `404`:** no hook object currently exists. Enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible/available through App authentication before sending or observing a delivery.
 - **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
 - **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.

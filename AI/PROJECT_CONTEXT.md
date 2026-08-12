@@ -24,6 +24,8 @@ Phase 1B extends the Phase 1A foundation with:
 
 The code/configuration existing is not the same as a verified connection. GitHub remains **Not Connected** until the real installation and complete production acceptance journey pass.
 
+An inert Phase 1D observation-only scaffold may be developed while Phase 1B acceptance is pending. It does not change the current phase or authorize execution: the global kill switch stays ON, the ceiling is GREEN, automatic approval/merge/deploy/rollback stay OFF, and the worker remains **Not Connected**.
+
 ## Truthful status language
 
 - **Demo Data** means seeded/static presentation data, not live telemetry.

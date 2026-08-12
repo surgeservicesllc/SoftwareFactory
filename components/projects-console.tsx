@@ -226,7 +226,7 @@ export function ProjectsConsole() {
             <Field label="Project name"><input value={name} onChange={(event) => setName(event.target.value)} required minLength={1} maxLength={160} className="form-control" /></Field>
             <Field label="Description" className="md:col-span-2"><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} className="form-control h-auto py-2.5" placeholder="What this software system does" /></Field>
             <div className="flex flex-col gap-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="flex items-center gap-2 text-[10px] text-[#798697]"><ShieldCheck className="size-4 text-[#c6f135]" aria-hidden="true" />Autonomous Mode, Auto Approve, Auto Merge, Auto Deploy, and Auto Rollback all start OFF.</p>
+              <p className="flex items-center gap-2 text-[10px] text-[#798697]"><ShieldCheck className="size-4 text-[#c6f135]" aria-hidden="true" />Autonomous Mode and every automatic action start OFF; the global kill switch starts ON.</p>
               <button type="submit" disabled={saving || !selectedRepository || !name.trim()} className="primary-action justify-center">{saving ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}Connect project</button>
             </div>
           </form>
@@ -325,7 +325,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
             <div className="flex items-center gap-2"><CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" aria-hidden="true" /><h2 className="truncate text-base font-semibold text-white">{project.name}</h2></div>
             <p className="mt-2 text-xs leading-5 text-[#748191]">{project.description || "GitHub-backed SoftwareFactory project"}</p>
           </div>
-          <div className="flex flex-wrap gap-2"><StatusBadge tone={isConnected ? "safe" : "danger"}>{isConnected ? "GitHub Connected" : "GitHub Connection Lost"}</StatusBadge><StatusBadge tone="neutral">Autonomy OFF</StatusBadge></div>
+          <div className="flex flex-wrap gap-2"><StatusBadge tone={isConnected ? "safe" : "danger"}>{isConnected ? "GitHub Connected" : "GitHub Connection Lost"}</StatusBadge><StatusBadge tone="neutral">{project.autonomousMode ? "Observation mode ON" : "Autonomy OFF"}</StatusBadge><StatusBadge tone="danger">Kill switch ON</StatusBadge></div>
         </div>
 
         <dl className="mt-5 grid gap-3 text-[11px] sm:grid-cols-2 xl:grid-cols-4">

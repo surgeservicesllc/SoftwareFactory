@@ -4,30 +4,36 @@ Last updated: 2026-08-12
 
 ## Mission and boundary
 
-Finish Phase 1B end to end. The hardened implementation, hosted migration chain through `009`, linked schema lint, and final code/browser/secret gates are in place, but hosted authenticated tenant behavior and the real production acceptance journey are incomplete. Do not describe GitHub as Connected or Phase 1B as complete yet.
+Finish Phase 1B end to end. The hardened implementation, hosted migration chain through `009`, linked schema lint, final code/browser/secret gates, READY Vercel deployment, and repository-scoped provider installation are in place. Hosted authenticated tenant behavior, the in-product GitHub callback/connection, webhook delivery, and remaining production acceptance are incomplete. Do not describe GitHub as Connected or Phase 1B as complete yet.
 
 Do not begin Phase 1C Codex, Phase 1D autonomy, or Phase 2 Claude. Auto approve, merge, deploy, and rollback remain OFF.
+
+An execution-inert Phase 1D observation scaffold now exists by explicit request. It does not begin execution autonomy: migration `010` is hosted, Autonomous Mode is constrained OFF, the global kill switch is ON, only hypothetical GREEN inputs may be evaluated, automatic actions are OFF, and the worker is **Not Connected**.
 
 ## Current evidence
 
 - Supabase project `qpuofpmagrmyamahqwxw` is `ACTIVE_HEALTHY`.
-- Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` are applied; local/remote history matches.
-- Linked public-schema lint with warning level/fail-on-error reports no schema errors (`[]`). Hosted catalog verification returned 22/22 RLS, 22/22 FORCE RLS, 43 policies, and 22 row-secret guards; the linked migration list separately confirms eight expected migrations through `009`. Authenticated cross-tenant/RPC behavior remains pending.
+- Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` are applied; the hosted ledger includes `010`.
+- Migration `010` was applied transactionally after `unsafe_project_rows=0`. Hosted checks show kill-switch default true, both constraints validated, zero organizations with the switch OFF, zero unsafe projects, authenticated controls-RPC execute, and anonymous execute denied.
+- The last successful linked public-schema lint reported no errors (`[]`) through `009`. A post-`010` CLI lint attempt was blocked by a Supabase CLI account `403`; do not infer a post-`010` lint result. Broader authenticated cross-tenant/RPC behavior remains pending.
 - Migration `009` serializes sync by external installation ID, re-resolves the authoritative installation binding after upsert, and makes the synchronized GitHub default branch authoritative for project links. Repository full-name authorization now uses literal normalized comparison, and the standard editor's protected-path classifier covers control-plane, API, provider/server, Auth, data, deployment, environment, infrastructure, and security-sensitive subject paths.
-- GitHub App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists with expected permissions/events, and server-only values are configured in Vercel.
-- GitHub permissions/events/environment values are configured. No real installation/callback/repository/file/draft-PR acceptance run has passed; the provider webhook endpoint still appears blank/inactive and no signed delivery is verified. Status remains **Not Connected**.
-- Final hardened-tree gates: lint and typecheck pass; full Vitest passes 16 files/146 tests; integration passes 6 files/88 tests; build passes 34 pages/routes; Playwright passes 12/12 across desktop/tablet/mobile with accessibility, browser-error, and overflow checks; secret/client scans pass with no credential patterns or built-client privileged server names.
-- Exact Phase 1B Vercel deployment, hosted authenticated RLS behavior, and live provider acceptance remain.
+- GitHub App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists with expected permissions/events. Installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
+- The sole remaining GitHub App key has public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`; the corresponding protected Vercel value was rotated and promoted. No private key material belongs in repository memory.
+- The provider installation does not yet have an authenticated SoftwareFactory owner callback, tenant connection record, repository sync, project/file/draft-PR acceptance run, or signed webhook delivery. The provider General form is blank/inactive and App-authenticated hook configuration returns `404` with no hook object. In-product status remains **Not Connected**.
+- Final current-tree gates: lint and typecheck pass; full Vitest passes 157 tests; integration passes 6 files/88 tests; build passes 34 pages/routes; Playwright passes 12/12 across desktop/tablet/mobile with accessibility, browser-error, and overflow checks; secret/client scans pass with no credential patterns or built-client privileged server names.
+- Vercel deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` is READY at `https://softwarefactory-tan.vercel.app`; stable-production Playwright passed 12/12. Exact source-commit provenance, hosted authenticated RLS behavior, and remaining provider acceptance still require evidence.
+- Phase 1D scaffold adds the pure prerequisite evaluator, truthful static controls, same-origin tenant/owner controls API hardening, and hosted locked observation controls. No action executor exists.
 - Vercel project is `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`), stable alias `https://softwarefactory-tan.vercel.app`.
 
 ## Immediate sequence
 
 1. Verify hosted cross-tenant/anonymous denial, privileged RPC authorization, audit immutability/redaction, and a real authenticated application session (catalog RLS/FORCE RLS is already green).
-2. Commit/push the exact validated tree to `main` and deploy that commit to the exact Vercel project.
-3. Record commit, deployment ID/state, stable-alias identity, and smoke results.
-4. Complete production Supabase Auth/onboarding.
-5. Configure/verify the blank/inactive GitHub webhook endpoint, install the App through SoftwareFactory, sync repositories, link the project, inspect live repository state, create one safe controlled draft PR, observe webhook/audit reconciliation, and test disconnect/loss paths.
+2. Record/verify the exact source commit for READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` and ensure the final repository tree is pushed to `main`.
+3. Complete production Supabase Auth/onboarding.
+4. Complete the authenticated owner callback for existing provider installation `153286187`, persist/sync the tenant connection, link the project, inspect live repository state, create one safe controlled draft PR, and test disconnect/loss paths.
+5. Configure/verify the blank/inactive GitHub webhook endpoint (App-authenticated configuration currently returns `404`/no hook object), then observe signed webhook/audit reconciliation.
 6. Update this memory/scorecard with exact evidence; only then issue the Phase 1B completion report.
+7. Restore authorized Supabase CLI access and rerun linked lint after `010`; preserve the verified locked kill switch, GREEN/OFF constraints, RPC grants, and absence of action executors.
 
 ## Safe operating notes
 
