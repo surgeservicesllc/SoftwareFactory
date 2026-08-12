@@ -4,7 +4,7 @@ Last reviewed: 2026-08-12
 
 Phase: 1B — Production GitHub App Integration
 
-Overall status: **Post-review Phase 1B hardening is implemented locally; hosted migrations `011`-`013`, a matching production deployment, authenticated in-product connection, webhook, and remaining tenant acceptance are pending**
+Overall status: **Phase 1B hardening is pushed to `main` and deployed; hosted migrations `011`-`013`, authenticated in-product connection, webhook, and remaining tenant acceptance are pending**
 
 “Implemented” below means code/schema exists in the current tree. It does not mean the real provider workflow was observed.
 
@@ -30,7 +30,7 @@ Overall status: **Post-review Phase 1B hardening is implemented locally; hosted 
 
 - Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was verified `ACTIVE_HEALTHY`.
 - Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` were applied successfully; the hosted migration ledger includes `010`.
-- Local additive migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` are present but **not applied to hosted Supabase**. They respectively close direct authenticated connection/member mutations and align `github_pat_` detection, add actor-attributed terminal change-request evidence, and reconcile newly granted repository metadata. Production promotion is pending exact owner approval and post-apply verification.
+- Additive migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` are committed on `main` but **not applied to hosted Supabase**. They respectively close direct authenticated connection/member mutations and align `github_pat_` detection, add actor-attributed terminal change-request evidence, and reconcile newly granted repository metadata. Hosted promotion is pending exact owner approval and post-apply verification.
 - Migration `010` was applied transactionally after preflight returned `unsafe_project_rows=0`. Hosted checks confirmed organization kill-switch default `true`, both new constraints validated, zero organizations with the switch OFF, zero unsafe projects, authenticated execute on the controls RPC, and no anonymous execute grant.
 - The last successful linked public-schema CLI lint was clean through `009` (`[]`). A post-`010` CLI lint attempt was blocked by a Supabase CLI account `403`, so no post-`010` CLI-lint claim is made. Authenticated cross-tenant, broader privileged-RPC/audit, and real application-session checks remain pending.
 - Migration `009_harden_github_project_and_sync` serializes synchronization by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, and forces project links to use the synchronized GitHub default branch.
@@ -50,7 +50,7 @@ Overall status: **Post-review Phase 1B hardening is implemented locally; hosted 
 | GitHub App object/secrets | Configured and rotated | `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists; its sole remaining key fingerprint is `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`, and the corresponding server-only key is promoted in Vercel. |
 | GitHub provider installation | Installed; repository-scoped | Installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. This does not establish a SoftwareFactory tenant connection. |
 | GitHub App connection | **Not Connected** | The authenticated SoftwareFactory owner callback, organization connection record, repository synchronization, project/file/draft-PR journey, and signed webhook delivery remain pending. The provider General form is blank/inactive, and App-authenticated hook configuration returns `404` with no hook object. |
-| Vercel UI hosting | Production deployment verified | Deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` is READY/Current at `https://softwarefactory-tan.vercel.app`; stable-production Playwright passed 12/12. This is hosting evidence, not an in-product deploy/rollback adapter or full provider acceptance. |
+| Vercel UI hosting | Production deployment verified | Deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` is READY at `softwarefactory-fbho4i38o-surgeservices-projects.vercel.app` and current at `https://softwarefactory-tan.vercel.app`; production Playwright passed 12/12. It builds the application tree from implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` through owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`. This is hosting evidence, not an in-product deploy/rollback adapter or full provider acceptance. |
 | Vercel deployment/rollback adapter | **Not Connected** | Hosting does not create an in-product deploy or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -59,7 +59,7 @@ Overall status: **Post-review Phase 1B hardening is implemented locally; hosted 
 
 ## Verification evidence and current-tree status
 
-The current local hardening gates pass. Existing stable-production evidence still describes deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve`; it does not deploy or validate this working tree in production.
+The hardening gates pass locally and the exact application tree is now deployed. Hosted database and authenticated provider acceptance remain separate evidence layers.
 
 | Gate | Evidence | Result |
 | --- | --- | --- |
@@ -73,9 +73,11 @@ The current local hardening gates pass. Existing stable-production evidence stil
 | Hosted migration application | Supabase SQL Editor + hosted ledger | Pass through `010`; transactional preflight/application and safety checks recorded |
 | Local migration promotion | `011`, `012`, `013` | Pending exact owner approval; no hosted application/lint/RPC claim |
 | Hosted database lint | linked CLI | Pass through `009` — no schema errors (`[]`); post-`010` attempt blocked by CLI-account `403`, not claimed |
-| Stable production Playwright | `PLAYWRIGHT_BASE_URL=https://softwarefactory-tan.vercel.app npm run test:e2e` | Pass — 12/12 against deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` |
+| Git/main provenance | GitHub `origin/main` | Pass — implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` pushed; owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` is current `main` and preserves the implementation authorship/tree |
+| Stable production Playwright | `PLAYWRIGHT_BASE_URL=https://softwarefactory-tan.vercel.app npm run test:e2e` | Pass — 12/12 against deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` |
+| Production HTTP probes | `/`, `/activity`, `/connections`, `/api/activity`, `/api/files` | Pass — public pages return 200; unauthenticated `/api/activity` returns 401; removed `/api/files` returns 404 |
 | Live GitHub acceptance | production checklist | Pending; **Not Connected** |
-| Phase 1B/1D Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_436vwUxUAuypnRmCstgptQa2qfve`, READY/Current from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`, stable alias 12/12 |
+| Phase 1B/1D Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, READY/current for the `e0ca6e7` application tree via marker `7bd9d30`, stable alias 12/12 |
 
 The local shell used Node 20 and emitted Supabase's future-support warning. The repository, CI, and intended production runtime target Node 22 or newer.
 
@@ -83,8 +85,7 @@ The local shell used Node 20 and emitted Supabase's future-support warning. The 
 
 - Verify hosted authenticated RLS/FORCE RLS, cross-tenant/anonymous denial, privileged-RPC authorization, audit behavior, and a real application session.
 - Obtain exact owner approval to apply hosted migrations `011`-`013`; then verify ledger, lint, grants, RLS, actor-attributed immutable activity, webhook repository-grant reconciliation, and application health.
-- Deploy the exact reviewed hardening commit and rerun public/production validation; the current READY deployment predates these local changes.
-- Preserve prior runtime provenance: application code commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` is the verified READY/Current production source, while the current application/schema hardening is not deployed yet.
+- Preserve current provenance: implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` contains the application changes; owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` is current `main` and deployed because Vercel Hobby rejected the private-repository deployment directly from the non-member implementation author. The marker changes no application files.
 - Complete real Supabase sign-in/onboarding.
 - Complete the authenticated owner callback for provider installation `153286187`, persist the organization connection, and verify repository sync, project link, reads, safe edit/draft PR, audit, error/revocation paths, and disconnect.
 - Configure and verify the GitHub webhook endpoint. The provider General form is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; observe a valid signed production delivery before changing its status.

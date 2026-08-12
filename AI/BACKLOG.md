@@ -37,9 +37,9 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [ ] Obtain exact owner approval and apply local migrations `011`, `012`, and `013` to hosted project `qpuofpmagrmyamahqwxw`; then verify ledger, lint, grants, RLS, immutable actor-attributed audit events, webhook repository-grant reconciliation, and application health.
 - [x] Rerun current local gates: the lint/typecheck/test phases of `npm run check` pass with 24 files/205 tests; its build phase hit only a stale OneDrive `.next` cache `EPERM`, then standalone `npm run build` passed 34 routes after recoverable cache relocation. Final coverage passes 25 files/208 tests; focused `013` tests pass 44; local Playwright passes 12/12.
 - [x] Rerun final secret and built-client scans on the current hardening tree; only the synthetic `github_pat_` fixture matched, and `.next/static` contains no server-secret markers.
-- [x] Verify Vercel deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` READY/Current at the stable production alias and pass stable-production Playwright 12/12.
-- [x] Verify exact runtime source commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` and push it to `main`.
-- [ ] Push the exact post-review hardening commit to `main`, deploy that commit to the same Vercel project, and rerun production public/E2E checks. The verified READY deployment predates the local hardening.
+- [x] Push implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` to `origin/main`; preserve its authorship with owner-authored empty deployment marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`, now current `main`.
+- [x] Verify Vercel deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` READY/current at `softwarefactory-fbho4i38o-surgeservices-projects.vercel.app` and the stable alias; it builds the exact `e0ca6e7` application tree through marker `7bd9d30`.
+- [x] Rerun production Playwright 12/12 and HTTP probes: `/`, `/activity`, and `/connections` return 200; unauthenticated `/api/activity` returns 401; removed `/api/files` returns 404.
 - [ ] Verify production Supabase sign-up/confirmation/sign-in/onboarding/session paths.
 - [ ] Configure and verify the GitHub App webhook endpoint: the provider General page is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; then observe a correctly signed production delivery.
 - [ ] Complete the authenticated SoftwareFactory owner callback for existing provider installation `153286187`; persist the tenant connection and verify identity, permissions, repository count, freshness, and audit evidence.

@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B — Production GitHub App Integration
 
-Status: **Local implementation/hardening gates pass; hosted promotion of `011`-`013`, authenticated tenant behavior, deployment, and live acceptance pending.**
+Status: **Implementation/hardening gates, `main` publication, and production deployment pass; hosted promotion of `011`-`013`, authenticated tenant behavior, and live acceptance remain pending.**
 
 Implemented:
 
@@ -29,7 +29,7 @@ Exit work:
 - obtain exact owner approval and apply/verify local migrations `011`-`013` on hosted Supabase (hosted ledger currently ends at `010`; linked lint is green only through `009`);
 - verify hosted authenticated RLS allow/deny and privileged-RPC behavior;
 - [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
-- preserve the verified runtime provenance for READY deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; and
+- [x] Push implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278`, preserve its authorship through owner-authored empty marker/current main `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`, and verify READY deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, production Playwright 12/12, and expected HTTP status boundaries; and
 - pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.
 
 No merge or production deployment autonomy is implied.

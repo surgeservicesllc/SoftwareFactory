@@ -4,7 +4,7 @@ Last reviewed: 2026-08-12
 
 Phase 1B decision: **Not release-ready yet**
 
-Reason: local review hardening and its local gates pass, but hosted migrations `011`-`013`, a matching production deployment, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending. Hosted migration `010` safety checks, linked lint through `009`, the prior READY Vercel deployment, and repository-scoped provider installation remain valid only for their recorded scope.
+Reason: review hardening, local gates, `main` publication, READY production deployment, public HTTP checks, and production Playwright pass. Hosted migrations `011`-`013`, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
@@ -29,7 +29,9 @@ Reason: local review hardening and its local gates pass, but hosted migrations `
 | GitHub webhook | Route tested locally; provider General form blank/inactive and App-auth hook config returns `404`/no hook object | **Not Connected** / no real delivery |
 | Project/repository flow | Code implemented; real selected repo/project | Pending live acceptance |
 | File-to-draft-PR | Guarded implementation/tests; real branch/commit/draft PR | Pending live acceptance |
-| Vercel production deployment | `dpl_436vwUxUAuypnRmCstgptQa2qfve`, READY/Current at stable alias from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; production Playwright 12/12 | Pass for hosting/public E2E and exact runtime provenance; full provider acceptance pending |
+| Git/main provenance | implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278`; owner marker/current main `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` | Pass — implementation authorship preserved; empty marker changes no application files |
+| Vercel production deployment | `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, READY/current at deployment URL and stable alias, exact `e0ca6e7` application tree via marker `7bd9d30`; production Playwright 12/12 | Pass for hosting/public E2E and exact runtime provenance; full provider acceptance pending |
+| Production HTTP probes | `/`, `/activity`, `/connections` 200; unauthenticated `/api/activity` 401; removed `/api/files` 404 | Pass |
 | Codex/OpenAI | No live worker | **Not Connected** |
 | Claude/Anthropic | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback endpoints/workflows; controls OFF | Pass |
@@ -37,7 +39,7 @@ Reason: local review hardening and its local gates pass, but hosted migrations `
 
 ## Recorded local and hosted evidence
 
-The current local hardening gates are recorded first. The hosted schema/runtime/provider observations below still describe hosted migration `010` and deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve`; neither includes local migrations `011`-`013` or the current application code.
+The hardening gates and current production deployment are recorded first. Hosted Supabase still ends at `010`; source migrations `011`-`013` are present in the deployed tree but are not applied to the database.
 
 ```text
 Review date: 2026-08-12
@@ -80,8 +82,14 @@ final secret/client scan:
   PASS — no credential patterns or built-client privileged server names; only .env.example tracked
 
 Vercel production:
-  deployment dpl_436vwUxUAuypnRmCstgptQa2qfve — READY/Current at stable alias
-  exact runtime source — 3dfdbf35daeff7a79e09a41e5070e521b23d83f9
+  implementation — e0ca6e7fe62234817e24273fb8ba3f6a12ffd278, pushed to origin/main
+  current main / owner-authored empty deployment marker — 7bd9d30e67bf018aba32f28d235d4a2f1232d65c
+  deployment — dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY, READY/current
+  deployment URL — softwarefactory-fbho4i38o-surgeservices-projects.vercel.app
+  stable alias — https://softwarefactory-tan.vercel.app
+  production Playwright — PASS, 12/12
+  HTTP — / 200; /activity 200; /connections 200; /api/activity unauthenticated 401; /api/files 404
+  provenance note — direct e0ca deployment was blocked by Vercel Hobby private-repo author membership; empty marker changes no application files and builds the exact e0ca application tree
 
 GitHub App provider state:
   installation 153286187 — installed on surgeservicesllc
@@ -104,7 +112,6 @@ hosted Supabase:
 
 pending:
   exact owner approval and hosted application/verification of migrations 011, 012, and 013
-  reviewed hardening commit on main and matching Vercel deployment/production checks
   authenticated production Supabase journey
   authenticated SoftwareFactory callback/tenant connection/repository/project/file/draft-PR/webhook/disconnect acceptance
   authorized post-010 CLI lint and broader hosted tenant/RPC/audit verification
