@@ -1,0 +1,80 @@
+// @vitest-environment node
+
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { extname, resolve } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+const repositoryRoot = resolve(import.meta.dirname, "../..");
+const secretNamePattern =
+  /(?:SERVICE_ROLE|PASSWORD|PRIVATE_KEY|SECRET|TOKEN|API_KEY|CREDENTIAL)/i;
+const publicNonSecretVariables = new Set(["NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+
+function readRepositoryFile(relativePath: string): string {
+  return readFileSync(resolve(repositoryRoot, relativePath), "utf8");
+}
+
+function sourceFiles(relativeDirectory: string): string[] {
+  const directory = resolve(repositoryRoot, relativeDirectory);
+
+  return readdirSync(directory).flatMap((entry) => {
+    const absolutePath = resolve(directory, entry);
+
+    if (statSync(absolutePath).isDirectory()) {
+      return sourceFiles(`${relativeDirectory}/${entry}`);
+    }
+
+    return [".ts", ".tsx"].includes(extname(entry)) ? [absolutePath] : [];
+  });
+}
+
+describe("secret handling boundaries", () => {
+  it("keeps sensitive example environment values empty", () => {
+    const assignments = readRepositoryFile(".env.example")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#") && line.includes("="))
+      .map((line) => {
+        const separator = line.indexOf("=");
+        return {
+          name: line.slice(0, separator),
+          value: line.slice(separator + 1),
+        };
+      });
+
+    for (const { name, value } of assignments) {
+      if (secretNamePattern.test(name) && !publicNonSecretVariables.has(name)) {
+        expect(value, `${name} must be an empty placeholder`).toBe("");
+      }
+    }
+  });
+
+  it("never gives sensitive variables a NEXT_PUBLIC_ prefix", () => {
+    const envTemplate = readRepositoryFile(".env.example");
+
+    expect(envTemplate).not.toMatch(
+      /^NEXT_PUBLIC_.*(?:SERVICE_ROLE|PASSWORD|PRIVATE_KEY|SECRET|TOKEN|API_KEY|CREDENTIAL).*=/im,
+    );
+  });
+
+  it("does not read server-only environment variables in Client Components", () => {
+    const clientFiles = ["app", "components", "lib"]
+      .flatMap(sourceFiles)
+      .filter((file) =>
+        /^\s*["']use client["'];/.test(readFileSync(file, "utf8")),
+      );
+
+    for (const file of clientFiles) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(
+        /process\.env\.(?!NEXT_PUBLIC_)[A-Z0-9_]+/,
+      );
+    }
+  });
+
+  it("ignores local environment files while allowing the empty template", () => {
+    const gitignore = readRepositoryFile(".gitignore");
+
+    expect(gitignore).toMatch(/^\.env\*\s*$/m);
+    expect(gitignore).toMatch(/^!\.env\.example\s*$/m);
+  });
+});
