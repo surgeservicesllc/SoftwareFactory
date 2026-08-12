@@ -20,6 +20,7 @@ const sensitiveKeys = new Set([
 const likelySecretPatterns = [
   /-----BEGIN\s+[A-Z ]*PRIVATE KEY-----/i,
   /gh[pousr]_[A-Za-z0-9_]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/i,
   /sk-[A-Za-z0-9_-]{20,}/,
   /sb_secret_[A-Za-z0-9_-]{20,}/i,
   /vercel_[A-Za-z0-9_-]{20,}/i,

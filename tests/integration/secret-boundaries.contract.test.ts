@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -76,5 +76,11 @@ describe("secret handling boundaries", () => {
 
     expect(gitignore).toMatch(/^\.env\*\s*$/m);
     expect(gitignore).toMatch(/^!\.env\.example\s*$/m);
+  });
+
+  it("has no environment-gated HTTP endpoint for direct workspace writes", () => {
+    expect(existsSync(resolve(repositoryRoot, "app/api/files/route.ts"))).toBe(false);
+    expect(existsSync(resolve(repositoryRoot, "components/file-manager.tsx"))).toBe(false);
+    expect(readRepositoryFile(".env.example")).not.toContain("SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES");
   });
 });

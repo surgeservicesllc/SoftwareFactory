@@ -27,6 +27,7 @@ type Repository = {
   defaultBranch: string;
   private: boolean;
   archived: boolean;
+  disabled: boolean;
   htmlUrl: string;
   selected: boolean;
 };
@@ -34,8 +35,10 @@ type GithubConnection = {
   id: string;
   name: string;
   status: string;
-  account: { login: string; type: string };
-  installation: { id: number; repositorySelection: string; suspendedAt: string | null; lastSyncedAt: string | null };
+  statusLabel: "Connected" | "Not Connected";
+  statusReason: string | null;
+  account: { login: string; type: string | null } | null;
+  installation: { id: number; repositorySelection: string; suspendedAt: string | null; lastSyncedAt: string | null } | null;
   repositories: Repository[];
 };
 
@@ -168,6 +171,7 @@ export function ConnectionsConsole() {
   }
 
   async function disconnectConnection(connection: GithubConnection) {
+    if (!connection.installation) return;
     const confirmation = window.prompt(
       `Disconnect installation #${connection.installation.id} from SoftwareFactory? Project history will be preserved.\n\nType DISCONNECT GITHUB to continue.`,
     );
@@ -244,18 +248,19 @@ export function ConnectionsConsole() {
             <Panel key={connection.id} className="overflow-hidden">
               <div className="flex flex-col gap-4 border-b border-[#202a36] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
                 <div>
-                  <div className="flex items-center gap-2"><GitFork className="size-4 text-[#c6f135]" /><h2 className="text-base font-semibold text-white">{connection.account.login}</h2><StatusBadge tone={connection.status === "connected" ? "safe" : "warning"}>{connection.status}</StatusBadge></div>
+                  <div className="flex items-center gap-2"><GitFork className="size-4 text-[#c6f135]" /><h2 className="text-base font-semibold text-white">{connection.account?.login ?? connection.name}</h2><StatusBadge tone={connection.status === "connected" ? "safe" : "warning"}>{connection.statusLabel}</StatusBadge></div>
+                  {connection.statusReason ? <p className="mt-2 text-[10px] text-[#d7b96d]">{connection.statusReason}</p> : null}
                   <dl className="mt-4 grid grid-cols-[110px_1fr] gap-x-4 gap-y-2 text-[11px]">
-                    <dt className="text-[#667485]">Type</dt><dd className="text-[#c5cdd6]">GitHub App · {connection.account.type}</dd>
-                    <dt className="text-[#667485]">Installation</dt><dd className="font-mono text-[#c5cdd6]">#{connection.installation.id}</dd>
+                    <dt className="text-[#667485]">Type</dt><dd className="text-[#c5cdd6]">GitHub App{connection.account?.type ? ` · ${connection.account.type}` : ""}</dd>
+                    <dt className="text-[#667485]">Installation</dt><dd className="font-mono text-[#c5cdd6]">{connection.installation ? `#${connection.installation.id}` : "Not Connected"}</dd>
                     <dt className="text-[#667485]">Repositories</dt><dd className="text-[#c5cdd6]">{connection.repositories.length}</dd>
-                    <dt className="text-[#667485]">Last sync</dt><dd className="text-[#c5cdd6]">{formatDate(connection.installation.lastSyncedAt)}</dd>
+                    <dt className="text-[#667485]">Last sync</dt><dd className="text-[#c5cdd6]">{formatDate(connection.installation?.lastSyncedAt ?? null)}</dd>
                   </dl>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="secondary-action"><RefreshCw className={`size-3.5 ${pending === "sync" ? "animate-spin" : ""}`} />Sync</button>
+                  {connection.installation ? <><button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="secondary-action"><RefreshCw className={`size-3.5 ${pending === "sync" ? "animate-spin" : ""}`} />Sync</button>
                   <a href={`https://github.com/settings/installations/${connection.installation.id}`} target="_blank" rel="noreferrer" className="secondary-action">Manage<ExternalLink className="size-3.5" /></a>
-                  <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="secondary-action border-[#4a292e] text-[#ff9da3]">{pending === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}Disconnect</button>
+                  <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="secondary-action border-[#4a292e] text-[#ff9da3]">{pending === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}Disconnect</button></> : null}
                 </div>
               </div>
               <div className="p-5 sm:p-6">
@@ -268,6 +273,7 @@ export function ConnectionsConsole() {
                       <ExternalLink className="size-3.5 text-[#617080]" />
                     </a>
                   ))}
+                  {!connection.repositories.length ? <p className="text-xs text-[#748191]">No active selected repositories.</p> : null}
                 </div>
               </div>
             </Panel>

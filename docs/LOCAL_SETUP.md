@@ -33,10 +33,6 @@ Prefer a separate development App and disposable repository/account. The callbac
 
 For UI/unit work without real providers, mock at the server/provider boundary and preserve **Not Connected** labels. Mocks do not satisfy production acceptance.
 
-## Local file switch
-
-`SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES=true` enables the legacy allowlisted local Markdown writer only in a trusted single-user process. It is unrelated to the GitHub-backed editor and must remain false in shared, preview, and production environments.
-
 ## Quality checks
 
 ```bash

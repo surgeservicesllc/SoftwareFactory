@@ -28,8 +28,14 @@ export async function prepareGitHubRepositoryRequest(
   const owner = validateRepositoryCoordinate(coordinates.owner, "Repository owner");
   const repository = validateRepositoryCoordinate(coordinates.repo, "Repository name");
   const fullName = `${owner}/${repository}`;
-  const { supabase, user } = await requireGitHubUser();
-  const context = await requireGitHubConnection(supabase, user.id, connectionId!, fullName);
+  const { activeOrganization, supabase, user } = await requireGitHubUser();
+  const context = await requireGitHubConnection(
+    supabase,
+    user.id,
+    activeOrganization.id,
+    connectionId!,
+    fullName,
+  );
   if (!context.repository) throw new Error("repository_context_missing");
   if (managerOnly && !["owner", "admin"].includes(context.role)) {
     throw new GitHubAuthorizationError(

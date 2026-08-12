@@ -37,6 +37,30 @@ type ProjectRow = {
   project_connections?: Array<{ connection_id: string; is_primary: boolean }> | null;
 };
 
+type GitHubConnectionRow = {
+  id: string;
+  organization_id: string;
+  provider: string;
+  status: string;
+};
+
+type GitHubInstallationRow = {
+  id: string;
+  connection_id: string;
+  organization_id: string;
+  status: string;
+  suspended_at: string | null;
+};
+
+type GitHubRepositoryRow = {
+  installation_id: string;
+  organization_id: string;
+  full_name: string;
+  selected: boolean;
+  archived: boolean;
+  disabled: boolean;
+};
+
 export async function GET() {
   try {
     const { activeOrganization, client } = await requireActiveOrganization();
@@ -52,24 +76,106 @@ export async function GET() {
 
     if (error) return databaseErrorResponse(error);
 
-    const projects = ((data ?? []) as ProjectRow[]).map((project) => ({
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      status: project.status,
-      githubRepository: project.github_repository,
-      defaultBranch: project.default_branch,
-      healthStatus: project.health_status,
-      autonomousMode: project.autonomous_mode,
-      maximumAutonomousRisk: project.maximum_autonomous_risk,
-      connectionId:
-        project.project_connections?.find((connection) => connection.is_primary)
-          ?.connection_id ?? project.project_connections?.[0]?.connection_id ?? null,
-    }));
+    const projectRows = (data ?? []) as ProjectRow[];
+    const primaryConnectionIds = Array.from(new Set(
+      projectRows.flatMap((project) => {
+        const primary = project.project_connections?.find(
+          (connection) => connection.is_primary,
+        );
+        return primary ? [primary.connection_id] : [];
+      }),
+    ));
+
+    const { data: connectionData, error: connectionError } = primaryConnectionIds.length
+      ? await client
+        .from("connections")
+        .select("id,organization_id,provider,status")
+        .eq("organization_id", activeOrganization.id)
+        .eq("provider", "github")
+        .in("id", primaryConnectionIds)
+      : { data: [], error: null };
+    if (connectionError) return databaseErrorResponse(connectionError);
+
+    const connections = (connectionData ?? []) as GitHubConnectionRow[];
+    const liveConnectionIds = connections.map((connection) => connection.id);
+    const { data: installationData, error: installationError } = liveConnectionIds.length
+      ? await client
+        .from("github_installations")
+        .select("id,connection_id,organization_id,status,suspended_at")
+        .eq("organization_id", activeOrganization.id)
+        .in("connection_id", liveConnectionIds)
+      : { data: [], error: null };
+    if (installationError) return databaseErrorResponse(installationError);
+
+    const installations = (installationData ?? []) as GitHubInstallationRow[];
+    const installationIds = installations.map((installation) => installation.id);
+    const { data: repositoryData, error: repositoryError } = installationIds.length
+      ? await client
+        .from("github_repositories")
+        .select("installation_id,organization_id,full_name,selected,archived,disabled")
+        .eq("organization_id", activeOrganization.id)
+        .in("installation_id", installationIds)
+      : { data: [], error: null };
+    if (repositoryError) return databaseErrorResponse(repositoryError);
+
+    const connectionById = new Map(
+      connections.map((connection) => [connection.id, connection]),
+    );
+    const installationByConnectionId = new Map(
+      installations.map((installation) => [installation.connection_id, installation]),
+    );
+    const repositories = (repositoryData ?? []) as GitHubRepositoryRow[];
+
+    const projects = projectRows.map((project) => {
+      const primaryConnectionId = project.project_connections?.find(
+        (connection) => connection.is_primary,
+      )?.connection_id ?? null;
+      const connection = primaryConnectionId
+        ? connectionById.get(primaryConnectionId)
+        : undefined;
+      const installation = primaryConnectionId
+        ? installationByConnectionId.get(primaryConnectionId)
+        : undefined;
+      const normalizedRepository = project.github_repository?.toLowerCase() ?? null;
+      const repository = installation && normalizedRepository
+        ? repositories.find(
+          (candidate) => candidate.installation_id === installation.id
+            && candidate.full_name.toLowerCase() === normalizedRepository,
+        )
+        : undefined;
+      const connected = Boolean(
+        connection?.status === "connected"
+        && connection.organization_id === activeOrganization.id
+        && installation?.status === "active"
+        && installation.organization_id === activeOrganization.id
+        && !installation.suspended_at
+        && repository?.organization_id === activeOrganization.id
+        && repository.selected
+        && !repository.archived
+        && !repository.disabled,
+      );
+
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        status: project.status,
+        githubRepository: project.github_repository,
+        defaultBranch: project.default_branch,
+        healthStatus: project.health_status,
+        autonomousMode: project.autonomous_mode,
+        maximumAutonomousRisk: project.maximum_autonomous_risk,
+        connectionId: primaryConnectionId,
+        connectionStatus: connected ? "connected" : "not_connected",
+        connectionStatusLabel: connected ? "Connected" : "Not Connected",
+      };
+    });
 
     return jsonNoStore({
       activeOrganizationId: activeOrganization.id,
-      connectedCount: projects.filter((project) => project.githubRepository && project.connectionId).length,
+      connectedCount: projects.filter(
+        (project) => project.connectionStatus === "connected",
+      ).length,
       projects,
     });
   } catch (error) {
@@ -145,6 +251,8 @@ export async function POST(request: Request) {
           defaultBranch: row.default_branch,
           status: row.project_status,
           connectionId: row.connection_id,
+          connectionStatus: "connected",
+          connectionStatusLabel: "Connected",
           autonomousMode: false,
           maximumAutonomousRisk: "green",
         },

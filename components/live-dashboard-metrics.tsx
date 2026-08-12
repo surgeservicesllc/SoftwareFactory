@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MetricCard, Panel, StatusBadge } from "@/components/ui";
 
-type Project = { id: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null };
+type Project = { id: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
 type PullRequest = { id: number; state: string };
 type State = "loading" | "signed-out" | "setup" | "ready" | "error";
 
@@ -40,9 +40,21 @@ export function LiveDashboardMetrics() {
       if (response.status === 409) { setState("setup"); return; }
       const body = (await response.json()) as { projects?: Project[]; connectedCount?: number; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Live project metrics could not be loaded.");
-      const liveProjects = (body.projects ?? []).filter((project) => project.githubRepository && project.connectionId);
+      const liveProjects = (body.projects ?? []).filter(
+        (project) => project.connectionStatus === "connected"
+          && project.githubRepository
+          && project.connectionId,
+      );
+      const reportedConnectedCount = body.connectedCount;
+      if (
+        typeof reportedConnectedCount !== "number"
+        || !Number.isSafeInteger(reportedConnectedCount)
+        || reportedConnectedCount !== liveProjects.length
+      ) {
+        throw new Error("Live project connection status was inconsistent.");
+      }
       setProjects(liveProjects);
-      setConnectedCount(body.connectedCount ?? liveProjects.length);
+      setConnectedCount(reportedConnectedCount);
       if (!liveProjects.length) {
         setOpenPullRequests(0);
         setState("ready");

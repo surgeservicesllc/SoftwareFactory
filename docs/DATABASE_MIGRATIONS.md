@@ -15,6 +15,9 @@ Supabase migrations under `supabase/migrations/` are immutable schema history af
 | `008_fix_github_sync_ambiguity` | Additive qualification fix for hosted lint ambiguity in `sync_github_installation` | Applied and linked lint clean |
 | `009_harden_github_project_and_sync` | Serialize external-installation sync, re-resolve authoritative binding, and force synchronized-default-branch project linking | Applied and linked lint clean |
 | `010_phase1d_observation_controls` | Lock the global kill switch ON and constrain Phase 1D to GREEN observation with all automatic actions OFF | Applied transactionally; hosted safety checks pass |
+| `011_harden_direct_mutation_boundaries` | Remove direct authenticated connection/member mutations and align database secret detection with `github_pat_` | Local only; hosted promotion pending exact owner approval |
+| `012_github_change_audit` | Add actor-attributed immutable completed/failed GitHub change-request evidence, including bounded branch/commit failure evidence | Local only; hosted promotion pending exact owner approval |
+| `013_reconcile_github_repository_grants` | Add service-role-only bounded upsert of repositories newly granted through a verified webhook | Local only; hosted promotion pending exact owner approval |
 
 There is no `006` in the current Phase 1B chain. Do not rename applied migrations to close the numeric gap; ordering is determined by the full timestamp filename.
 
@@ -25,6 +28,8 @@ Project `qpuofpmagrmyamahqwxw` is `ACTIVE_HEALTHY`. Hosted migration history inc
 `20260812001000_phase1d_observation_controls.sql` was applied transactionally through the Supabase SQL Editor after preflight returned `unsafe_project_rows=0`. Post-application hosted queries confirmed the organization kill-switch default is true, both constraints are validated, zero organizations have the switch OFF, zero unsafe projects exist, authenticated users have execute on the owner-only controls RPC, and anonymous users do not. This applies locked observation controls only; it does not connect an executor.
 
 The last successful `supabase db lint --linked --schema public --level warning --fail-on error` was clean through `009` (`[]`). A post-`010` CLI lint attempt was blocked by a Supabase CLI account `403`, so the repository does not claim post-`010` CLI-lint evidence. Authenticated cross-tenant and broader RPC/audit verification remain pending.
+
+Migrations `011`, `012`, and `013` exist only in the local working tree. They have not been applied to project `qpuofpmagrmyamahqwxw`, do not appear in its hosted ledger, and have no hosted lint/RLS/RPC evidence. Because they change authorization, grants, audit behavior, and a privileged webhook workflow, promotion requires exact current owner approval for that production target, followed by ledger, lint, grant, RLS, activity-immutability, and application health checks.
 
 ## Creating a migration
 

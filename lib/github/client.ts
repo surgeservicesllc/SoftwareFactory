@@ -13,7 +13,7 @@ import type {
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
-const MAX_GITHUB_RESPONSE_BYTES = 8 * 1024 * 1024;
+export const MAX_GITHUB_RESPONSE_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const installationSchema = z.object({
@@ -97,19 +97,75 @@ function safeGitHubUrl(path: string) {
 
 async function readBoundedResponse(response: Response) {
   const declaredLength = response.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > MAX_GITHUB_RESPONSE_BYTES) {
-    throw new GitHubApiError(502, "github_response_too_large", "GitHub returned an oversized response.");
+  if (declaredLength !== null) {
+    if (!/^(0|[1-9]\d*)$/.test(declaredLength)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new GitHubApiError(502, "github_invalid_response", "GitHub returned an invalid response.");
+    }
+    const parsedLength = Number(declaredLength);
+    if (!Number.isSafeInteger(parsedLength) || parsedLength < 0) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new GitHubApiError(502, "github_invalid_response", "GitHub returned an invalid response.");
+    }
+    if (parsedLength > MAX_GITHUB_RESPONSE_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new GitHubApiError(502, "github_response_too_large", "GitHub returned an oversized response.");
+    }
   }
-  const raw = await response.text();
-  if (Buffer.byteLength(raw, "utf8") > MAX_GITHUB_RESPONSE_BYTES) {
-    throw new GitHubApiError(502, "github_response_too_large", "GitHub returned an oversized response.");
+
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+      if (receivedBytes > MAX_GITHUB_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new GitHubApiError(502, "github_response_too_large", "GitHub returned an oversized response.");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof GitHubApiError) throw error;
+    throw new GitHubApiError(502, "github_invalid_response", "GitHub returned an invalid response.");
   }
-  if (!raw) return null;
+
+  if (receivedBytes === 0) return null;
+  const bytes = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  let raw: string;
+  try {
+    raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new GitHubApiError(502, "github_invalid_response", "GitHub returned an invalid response.");
+  }
   try {
     return JSON.parse(raw) as unknown;
   } catch {
     throw new GitHubApiError(502, "github_invalid_response", "GitHub returned an invalid response.");
   }
+}
+
+function safeResetTimestamp(value: string | null) {
+  if (!value || !/^(0|[1-9]\d{0,11})$/.test(value)) return null;
+  const resetSeconds = Number(value);
+  if (!Number.isSafeInteger(resetSeconds) || resetSeconds <= 0) return null;
+  const resetDate = new Date(resetSeconds * 1000);
+  return Number.isNaN(resetDate.getTime()) ? null : resetDate.toISOString();
+}
+
+function safeRetryAfterSeconds(value: string | null) {
+  if (!value || !/^(0|[1-9]\d{0,9})$/.test(value)) return null;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) ? seconds : null;
 }
 
 export async function githubApiRequest(
@@ -141,19 +197,27 @@ export async function githubApiRequest(
     const upstreamStatus = response.status;
     const remaining = response.headers.get("x-ratelimit-remaining");
     const resetValue = response.headers.get("x-ratelimit-reset");
-    const resetSeconds = resetValue ? Number(resetValue) : Number.NaN;
     const retryAfter = response.headers.get("retry-after");
-    if (upstreamStatus === 429 || remaining === "0") {
-      const resetAt = Number.isSafeInteger(resetSeconds) && resetSeconds > 0
-        ? new Date(resetSeconds * 1000).toISOString()
-        : null;
+    const providerMessage = typeof body === "object" && body !== null && "message" in body
+      && typeof body.message === "string"
+      ? body.message
+      : "";
+    const isRateLimited = upstreamStatus === 429
+      || (upstreamStatus === 403 && (
+        remaining === "0"
+        || retryAfter !== null
+        || /(?:secondary|primary|api)\s+rate\s+limit|rate\s+limit\s+(?:exceeded|reached)|abuse\s+detection/i.test(providerMessage)
+      ));
+    if (isRateLimited) {
+      const resetAt = safeResetTimestamp(resetValue);
+      const retryAfterSeconds = safeRetryAfterSeconds(retryAfter);
       throw new GitHubApiError(
         429,
         "github_rate_limited",
         resetAt
           ? `GitHub rate limit reached. Try again after ${resetAt}.`
-          : retryAfter
-            ? `GitHub rate limit reached. Try again in approximately ${retryAfter} seconds.`
+          : retryAfterSeconds !== null
+            ? `GitHub rate limit reached. Try again in approximately ${retryAfterSeconds} seconds.`
             : "GitHub rate limit reached. Try again later.",
       );
     }
@@ -388,7 +452,50 @@ export async function fetchGitHubInstallationSnapshot(
   installationId: number,
 ): Promise<GitHubInstallationSnapshot> {
   const installation = await getGitHubInstallation(configuration, installationId);
-  const installationToken = await createGitHubInstallationToken(configuration, installationId);
+  const requiredPermissions = {
+    actions: "read",
+    checks: "read",
+    contents: "write",
+    metadata: "read",
+    pull_requests: "write",
+    statuses: "read",
+  } as const;
+  for (const [permission, minimum] of Object.entries(requiredPermissions)) {
+    const actual = installation.permissions[permission];
+    const sufficient = minimum === "read"
+      ? actual === "read" || actual === "write"
+      : actual === "write";
+    if (!sufficient) {
+      throw new GitHubApiError(
+        403,
+        "github_permission_denied",
+        "The GitHub App installation is missing a required repository permission.",
+      );
+    }
+  }
+  const requiredEvents = [
+    "check_run",
+    "check_suite",
+    "installation",
+    "installation_repositories",
+    "pull_request",
+    "push",
+    "repository",
+    "status",
+    "workflow_run",
+  ];
+  if (requiredEvents.some((eventName) => !installation.events.includes(eventName))) {
+    throw new GitHubApiError(
+      403,
+      "github_permission_denied",
+      "The GitHub App installation is missing a required webhook subscription.",
+    );
+  }
+  const installationToken = await createGitHubInstallationToken(
+    configuration,
+    installationId,
+    { permissions: { metadata: "read" } },
+  );
   const repositories = await listGitHubInstallationRepositories(installationToken.token);
   return {
     account: {

@@ -25,10 +25,11 @@ export async function POST(
       );
     }
     const configuration = getGitHubAppConfiguration();
-    const { supabase, user } = await requireGitHubUser();
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
     const context = await requireGitHubConnection(
       supabase,
       user.id,
+      activeOrganization.id,
       connectionId,
       undefined,
       { allowInactive: true },
@@ -56,7 +57,15 @@ export async function POST(
     ) {
       try {
         const { connectionId } = await params;
-        const { user } = await requireGitHubUser();
+        const { activeOrganization, supabase, user } = await requireGitHubUser();
+        await requireGitHubConnection(
+          supabase,
+          user.id,
+          activeOrganization.id,
+          connectionId,
+          undefined,
+          { allowInactive: true },
+        );
         await createSupabaseGitHubWebhookClient().rpc("mark_github_connection_lost", {
           p_actor_user_id: user.id,
           p_connection_id: connectionId,

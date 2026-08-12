@@ -15,11 +15,17 @@ export async function GET(request: Request) {
         { status: 400 },
       );
     }
-    const { supabase, user } = await requireGitHubUser();
-    const context = await requireGitHubConnection(supabase, user.id, connectionId!);
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
+    const context = await requireGitHubConnection(
+      supabase,
+      user.id,
+      activeOrganization.id,
+      connectionId!,
+    );
     const { data, error } = await supabase
       .from("github_repositories")
       .select("external_repository_id,full_name,default_branch,private,visibility,archived,disabled,html_url,selected,github_updated_at,pushed_at,last_synced_at")
+      .eq("organization_id", activeOrganization.id)
       .eq("installation_id", context.internalInstallationId)
       .eq("selected", true)
       .order("full_name", { ascending: true });

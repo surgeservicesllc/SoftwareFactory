@@ -2,7 +2,7 @@
 
 SoftwareFactory is a server-first software-engineering control plane for tenant-scoped projects, GitHub App connections, repository inspection, guarded file changes, approvals, and auditable operational state.
 
-The repository is implementing **Phase 1B: Production GitHub App Integration**. The code includes Supabase authentication/onboarding, GitHub App installation and synchronization boundaries, live project/repository views, and a controlled file-to-draft-PR workflow. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, and the current Vercel deployment is READY, but the authenticated SoftwareFactory callback/tenant connection, webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
+The repository is implementing **Phase 1B: Production GitHub App Integration**. The current working tree includes Supabase authentication/onboarding, active-organization-scoped GitHub routes, truthful live connection/project/file views, a tenant-scoped activity stream, and a controlled file-to-draft-PR workflow. Local forward migrations `011`-`013` further close direct database mutation paths, attribute terminal GitHub change events, and reconcile newly granted repositories from signed webhooks. Those migrations are not hosted yet, and this hardening is not the verified production runtime. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, and the existing Vercel deployment is READY, but the authenticated SoftwareFactory callback/tenant connection, active webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
 
 Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for which release is live and which Phase 1B checks remain.
 
@@ -11,7 +11,10 @@ Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-
 - Seeded or static presentation values are labeled **Demo Data**.
 - A provider without a verified live installation/session is labeled **Not Connected**.
 - GitHub installation and repository tokens are minted server-side, scoped to one installation/repository, short-lived, and never returned to the browser.
+- Every interactive GitHub request is bound to the authenticated user's active organization, and a project is counted as connected only while its connection, installation, and selected repository are all live.
 - File saves create an isolated `softwarefactory/*` branch, commit, and draft pull request. They never write directly to the default branch, merge, or deploy.
+- The Activity page reads immutable tenant events through a no-store server API and excludes event metadata from browser responses.
+- No HTTP route writes directly to the local repository; the legacy local file writer and its environment switch have been removed.
 - Protected paths and likely credential content are rejected by the standard file-change route.
 - Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
 - OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**.

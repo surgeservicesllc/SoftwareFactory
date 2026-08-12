@@ -75,6 +75,8 @@ export async function POST(
 ) {
   let reservedRequestId: string | null = null;
   let prepared: Awaited<ReturnType<typeof prepareGitHubRepositoryRequest>> | null = null;
+  let headBranchEvidence: string | null = null;
+  let commitEvidence: { sha: string; url: string } | null = null;
   try {
     assertSameOriginRequest(request);
     const parsed = changeSchema.safeParse(await readBoundedJson(request, 1100 * 1024));
@@ -263,6 +265,7 @@ export async function POST(
       headBranch,
       baseReference.object.sha,
     );
+    headBranchEvidence = headBranch;
     const commit = await updateGitHubFileOnBranch(prepared.token, {
       branch: headBranch,
       content: parsed.data.content,
@@ -272,6 +275,10 @@ export async function POST(
       path: normalizedPath,
       repository: prepared.repository,
     });
+    commitEvidence = {
+      sha: commit.commit.sha,
+      url: commit.commit.html_url,
+    };
     const pullRequest = await createGitHubDraftPullRequest(prepared.token, {
       baseBranch: parsed.data.baseBranch,
       body: [
@@ -322,11 +329,15 @@ export async function POST(
     if (reservedRequestId && prepared) {
       const errorCode = error instanceof GitHubApiError ? error.code : "change_failed";
       try {
-        await createSupabaseGitHubWebhookClient().rpc("fail_github_change_request", {
+        const failure = await createSupabaseGitHubWebhookClient().rpc("fail_github_change_request_with_evidence", {
           p_actor_user_id: prepared.user.id,
+          p_commit_sha: commitEvidence?.sha ?? null,
+          p_commit_url: commitEvidence?.url ?? null,
           p_error_code: /^[a-z][a-z0-9_]{0,62}$/.test(errorCode) ? errorCode : "change_failed",
+          p_head_branch: headBranchEvidence,
           p_request_id: reservedRequestId,
         });
+        if (failure.error) throw failure.error;
       } catch {
         // Preserve the primary failure; the immutable provider evidence remains
         // external and operators can reconcile the reserved record manually.

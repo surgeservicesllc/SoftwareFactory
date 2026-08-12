@@ -48,7 +48,7 @@ describe("LiveDashboardMetrics", () => {
       if (url === "/api/projects") {
         return jsonResponse({
           connectedCount: 1,
-          projects: [{ id: "project-1", githubRepository: "example/repository", defaultBranch: "main", connectionId: "connection-1" }],
+          projects: [{ id: "project-1", githubRepository: "example/repository", defaultBranch: "main", connectionId: "connection-1", connectionStatus: "connected" }],
         });
       }
       return jsonResponse({
@@ -79,8 +79,8 @@ describe("LiveDashboardMetrics", () => {
         return jsonResponse({
           connectedCount: 2,
           projects: [
-            { id: "project-1", githubRepository: "example/one", defaultBranch: "main", connectionId: "connection-1" },
-            { id: "project-2", githubRepository: "example/two", defaultBranch: "main", connectionId: "connection-2" },
+            { id: "project-1", githubRepository: "example/one", defaultBranch: "main", connectionId: "connection-1", connectionStatus: "connected" },
+            { id: "project-2", githubRepository: "example/two", defaultBranch: "main", connectionId: "connection-2", connectionStatus: "connected" },
           ],
         });
       }
@@ -94,5 +94,31 @@ describe("LiveDashboardMetrics", () => {
     await waitFor(() => expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("Incomplete"));
     expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("—");
     expect(screen.getByText(/1 live repository source is unavailable/)).toBeInTheDocument();
+  });
+
+  it("does not call a historically linked but Not Connected project live", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/projects") {
+        return jsonResponse({
+          connectedCount: 0,
+          projects: [{
+            id: "project-lost",
+            githubRepository: "example/lost",
+            defaultBranch: "main",
+            connectionId: "connection-lost",
+            connectionStatus: "not_connected",
+          }],
+        });
+      }
+      throw new Error("A lost project must not trigger GitHub reads.");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveDashboardMetrics />);
+
+    expect(await screen.findByText(/Live .* Supabase \+ GitHub/)).toBeInTheDocument();
+    expect(screen.getByText("Connected projects").closest("article")).toHaveTextContent("0");
+    expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("0");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

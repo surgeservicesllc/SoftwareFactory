@@ -6,11 +6,12 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const { supabase } = await requireGitHubUser();
+    const { activeOrganization, supabase } = await requireGitHubUser();
     const { data: connections, error: connectionsError } = await supabase
       .from("connections")
       .select("id,name,organization_id,status,external_account_label,last_verified_at,error_message")
       .eq("provider", "github")
+      .eq("organization_id", activeOrganization.id)
       .order("created_at", { ascending: true });
     if (connectionsError) throw connectionsError;
 
@@ -20,6 +21,7 @@ export async function GET() {
     const { data: installations, error: installationsError } = await supabase
       .from("github_installations")
       .select("id,connection_id,external_installation_id,account_login,account_type,account_avatar_url,target_type,repository_selection,status,permissions,subscribed_events,suspended_at,installed_at,last_synced_at")
+      .eq("organization_id", activeOrganization.id)
       .in("connection_id", connectionIds);
     if (installationsError) throw installationsError;
 
@@ -28,6 +30,7 @@ export async function GET() {
       ? await supabase
         .from("github_repositories")
         .select("id,installation_id,external_repository_id,full_name,default_branch,private,visibility,archived,disabled,html_url,selected,github_updated_at,pushed_at,last_synced_at")
+        .eq("organization_id", activeOrganization.id)
         .in("installation_id", installationIds)
         .order("full_name", { ascending: true })
       : { data: [], error: null };
@@ -38,7 +41,18 @@ export async function GET() {
         const installation = (installations ?? []).find(
           (candidate) => candidate.connection_id === connection.id,
         );
-        const active = connection.status === "connected" && installation?.status === "active";
+        const active = connection.status === "connected"
+          && installation?.status === "active"
+          && !installation.suspended_at;
+        const statusReason = active
+          ? null
+          : installation?.suspended_at
+            ? "The GitHub App installation is suspended."
+            : connection.status === "disabled"
+              ? "This connection was disconnected in SoftwareFactory."
+              : connection.status === "error"
+                ? "GitHub access could not be verified. Reconnect or synchronize the installation."
+                : "No active GitHub App installation is available.";
         return {
           account: installation
             ? {
@@ -65,7 +79,10 @@ export async function GET() {
           name: connection.name,
           repositories: installation
             ? (repositories ?? [])
-              .filter((repository) => repository.installation_id === installation.id)
+              .filter((repository) => repository.installation_id === installation.id
+                && repository.selected
+                && !repository.archived
+                && !repository.disabled)
               .map((repository) => ({
                 archived: repository.archived,
                 defaultBranch: repository.default_branch,
@@ -82,6 +99,7 @@ export async function GET() {
             : [],
           status: active ? "connected" : "not_connected",
           statusLabel: active ? "Connected" : "Not Connected",
+          statusReason,
         };
       }),
     });

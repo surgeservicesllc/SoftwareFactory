@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { requireGitHubUser, requireOrganizationManager } from "@/lib/github/access";
+import {
+  requireGitHubUser,
+  requireMatchingActiveOrganization,
+  requireOrganizationManager,
+} from "@/lib/github/access";
 import {
   exchangeGitHubUserCode,
   fetchGitHubInstallationSnapshot,
@@ -52,7 +56,7 @@ export async function GET(request: Request) {
     }
 
     const configuration = getGitHubAppConfiguration();
-    const { supabase, user } = await requireGitHubUser();
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
     const cookieStore = await cookies();
     const nonce = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
     cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
@@ -62,6 +66,7 @@ export async function GET(request: Request) {
       user.id,
       configuration.stateSecret,
     );
+    requireMatchingActiveOrganization(activeOrganization.id, state.organizationId);
     await requireOrganizationManager(supabase, user.id, state.organizationId);
 
     userToken = await exchangeGitHubUserCode(configuration, parsed.data.code);

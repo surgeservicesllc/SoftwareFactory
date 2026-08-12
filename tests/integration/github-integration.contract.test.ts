@@ -18,6 +18,9 @@ const ambiguityRepairMigration = source(
 const syncAndProjectHardeningMigration = source(
   "supabase/migrations/20260812000900_harden_github_project_and_sync.sql",
 );
+const repositoryGrantMigration = source(
+  "supabase/migrations/20260812001300_reconcile_github_repository_grants.sql",
+);
 
 describe("Phase 1B GitHub App schema contract", () => {
   const tables = [
@@ -164,7 +167,7 @@ describe("GitHub App server/API contract", () => {
     expect(parsePosition).toBeGreaterThan(signaturePosition);
     expect(webhook).toContain('request.headers.get("x-github-delivery")');
     expect(webhook).toContain('insertResult.error?.code === "23505"');
-    expect(webhook).toContain('"repository"');
+    expect(webhook).toMatch(/(?:"repository"|repository):/);
     expect(webhook).toContain('"status"');
     expect(webhook).toContain('"workflow_run"');
     expect(webhook).not.toMatch(/console\.(log|error|warn)/);
@@ -183,6 +186,58 @@ describe("GitHub App server/API contract", () => {
     const access = source("lib/github/access.ts");
     expect(access).not.toContain('.ilike("full_name"');
     expect(access).toContain("candidate.full_name.toLowerCase() === normalizedFullName");
+  });
+
+  it("uses metadata-only tokens for installation synchronization", () => {
+    const client = source("lib/github/client.ts");
+    expect(client).toContain('{ permissions: { metadata: "read" } }');
+    expect(client).toContain('"github_permission_denied"');
+    expect(client).toContain('"installation_repositories"');
+    expect(client).toContain('!installation.events.includes(eventName)');
+  });
+
+  it("reconciles newly granted repositories through a service-role-only metadata RPC", () => {
+    expect(repositoryGrantMigration).toContain("create or replace function public.reconcile_github_repository_grants(");
+    expect(repositoryGrantMigration).toContain("on conflict on constraint github_repositories_external_unique do update set");
+    expect(repositoryGrantMigration).toMatch(/revoke all on function public\.reconcile_github_repository_grants[\s\S]*from public, anon, authenticated/i);
+    expect(repositoryGrantMigration).toMatch(/grant execute on function public\.reconcile_github_repository_grants[\s\S]*to service_role/i);
+    expect(repositoryGrantMigration).not.toMatch(/\b(access_token|refresh_token|private_key|webhook_secret)\b/i);
+  });
+
+  it("binds every interactive GitHub resource lookup to the current active organization", () => {
+    const access = source("lib/github/access.ts");
+    const repositoryRoute = source("lib/github/route.ts");
+    const connections = source("app/api/github/connections/route.ts");
+    const installStart = source("app/api/github/install/start/route.ts");
+    const installCallback = source("app/api/github/install/callback/route.ts");
+
+    expect(access).toContain("requireActiveOrganization(supabase)");
+    expect(access).toContain('.eq("organization_id", activeOrganizationId)');
+    expect(repositoryRoute).toContain("activeOrganization.id,");
+    expect(connections).toContain('.eq("organization_id", activeOrganization.id)');
+    expect(installStart).toContain("requireMatchingActiveOrganization(");
+    expect(installCallback).toContain(
+      "requireMatchingActiveOrganization(activeOrganization.id, state.organizationId)",
+    );
+  });
+
+  it("reports project connectivity only from active live GitHub metadata", () => {
+    const projects = source("app/api/projects/route.ts");
+    const projectConsole = source("components/projects-console.tsx");
+    const fileManager = source("components/github-file-manager.tsx");
+    const dashboard = source("components/live-dashboard-metrics.tsx");
+
+    expect(projects).toContain('.eq("organization_id", activeOrganization.id)');
+    expect(projects).toContain('connection?.status === "connected"');
+    expect(projects).toContain('installation?.status === "active"');
+    expect(projects).toContain("repository.selected");
+    expect(projects).toContain("!repository.archived");
+    expect(projects).toContain("!repository.disabled");
+    expect(projects).toContain('connectionStatus: connected ? "connected" : "not_connected"');
+    expect(projectConsole).toContain('project.connectionStatus === "connected"');
+    expect(fileManager).toContain('project.connectionStatus === "connected"');
+    expect(dashboard).toContain('project.connectionStatus === "connected"');
+    expect(dashboard).not.toContain("body.connectedCount ?? liveProjects.length");
   });
 
   it("offers safe file changes but no merge or default-branch mutation endpoint", () => {

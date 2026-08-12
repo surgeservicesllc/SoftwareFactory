@@ -4,7 +4,10 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import type { GitHubConnectionContext } from "@/lib/github/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireAuthenticatedUser } from "@/lib/supabase/auth";
+import {
+  requireActiveOrganization,
+  type OrganizationMembership,
+} from "@/lib/supabase/tenant";
 
 export class GitHubAuthorizationError extends Error {
   readonly code: string;
@@ -19,12 +22,26 @@ export class GitHubAuthorizationError extends Error {
 }
 
 export async function requireGitHubUser(): Promise<{
+  activeOrganization: OrganizationMembership;
   supabase: SupabaseClient;
   user: User;
 }> {
   const supabase = await createSupabaseServerClient();
-  const { user } = await requireAuthenticatedUser(supabase);
-  return { supabase, user };
+  const { activeOrganization, user } = await requireActiveOrganization(supabase);
+  return { activeOrganization, supabase, user };
+}
+
+export function requireMatchingActiveOrganization(
+  activeOrganizationId: string,
+  requestedOrganizationId: string,
+) {
+  if (activeOrganizationId.toLowerCase() !== requestedOrganizationId.toLowerCase()) {
+    throw new GitHubAuthorizationError(
+      403,
+      "active_organization_mismatch",
+      "The GitHub request does not belong to the active organization.",
+    );
+  }
 }
 
 export async function requireOrganizationManager(
@@ -54,6 +71,7 @@ export async function requireOrganizationManager(
 export async function requireGitHubConnection(
   supabase: SupabaseClient,
   userId: string,
+  activeOrganizationId: string,
   connectionId: string,
   repositoryFullName?: string,
   options: { allowInactive?: boolean } = {},
@@ -63,6 +81,7 @@ export async function requireGitHubConnection(
     .select("id,organization_id,provider,status")
     .eq("id", connectionId)
     .eq("provider", "github")
+    .eq("organization_id", activeOrganizationId)
     .maybeSingle();
   if (connectionError) {
     throw new GitHubAuthorizationError(500, "connection_lookup_failed", "GitHub connection access could not be verified.");
@@ -74,7 +93,7 @@ export async function requireGitHubConnection(
   const { data: membership, error: membershipError } = await supabase
     .from("organization_members")
     .select("role")
-    .eq("organization_id", connection.organization_id)
+    .eq("organization_id", activeOrganizationId)
     .eq("user_id", userId)
     .maybeSingle();
   if (membershipError || !membership) {
@@ -84,6 +103,7 @@ export async function requireGitHubConnection(
   const { data: installation, error: installationError } = await supabase
     .from("github_installations")
     .select("id,external_installation_id,status")
+    .eq("organization_id", activeOrganizationId)
     .eq("connection_id", connection.id)
     .maybeSingle();
   if (installationError) {
@@ -100,6 +120,7 @@ export async function requireGitHubConnection(
     const { data: repositories, error } = await supabase
       .from("github_repositories")
       .select("id,external_repository_id,full_name,default_branch,selected,archived,disabled")
+      .eq("organization_id", activeOrganizationId)
       .eq("installation_id", installation.id);
     if (error) {
       throw new GitHubAuthorizationError(500, "repository_lookup_failed", "Repository access could not be verified.");

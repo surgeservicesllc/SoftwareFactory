@@ -15,21 +15,20 @@ npm run test:e2e
 npm run build
 ```
 
-## Current hardened-tree evidence (2026-08-12)
+## Current local hardening evidence (2026-08-12)
 
 | Gate | Result |
 | --- | --- |
-| `npm run test:unit` | Pass — 58 tests after repository-write hardening |
-| `npm run test:integration` | Pass — 88 tests after migration `009` |
-| `npm run lint` | Pass on the hardened tree |
-| `npm run typecheck` | Pass on the hardened tree |
-| `npm test` | Pass — 157 tests on the latest tree after the Phase 1D observation scaffold |
-| `npm run build` | Pass — 34 pages/routes |
+| `npm run check` | Lint, typecheck, and 24 files/205 tests passed; its build phase hit only a stale OneDrive `.next` cache filesystem `EPERM` |
+| `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
+| `npm run test:coverage` | Pass — 25 files/208 tests after the final `013` ordering/contracts; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
+| Focused migration `013` chain | Pass — 3 files/44 tests |
+| `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe checks |
+| Secret/client scan | Pass — only the synthetic `github_pat_` test fixture matched; `.next/static` contained no server-secret markers |
 | Hosted Supabase migration application | Pass through `010`; transactional preflight `unsafe_project_rows=0` and hosted safety checks passed |
+| Local migrations `011`-`013` | Not hosted; exact owner approval and post-apply ledger/lint/grant/RLS/RPC checks pending |
 | Hosted Supabase lint | Pass through `009` — no schema errors (`[]`); post-`010` CLI attempt blocked by account `403`, so not claimed |
-| Playwright E2E | Pass — 12/12 across desktop, tablet, and mobile, including navigation, overflow, browser-error, and axe gates |
 | Stable-production Playwright | Pass — 12/12 at `https://softwarefactory-tan.vercel.app` on READY/Current deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` |
-| Secret/client-bundle scan | Pass on the hardened tree — no credential patterns or built-client privileged server names |
 | GitHub provider installation | Pass — installation `153286187`, `surgeservicesllc/SoftwareFactory` only |
 | Real in-product GitHub acceptance | Pending; App connection/webhook remain **Not Connected** |
 
@@ -50,6 +49,11 @@ Phase 1B tests cover or must continue to cover:
 - literal normalized repository-name matching with no SQL wildcard expansion;
 - serialized first/existing installation synchronization, authoritative post-upsert binding, and synchronized-default-branch project linking;
 - expanded protected-resource path and likely-secret rejection;
+- exact active-organization enforcement across interactive GitHub routes and truthful connection status derived from live installation/repository evidence;
+- caller-RLS Activity reads that omit metadata from browser responses;
+- removal of the legacy HTTP local-file writer and direct authenticated connection/member mutation paths;
+- actor-attributed terminal GitHub change-request evidence and immutable failure events; and
+- signed-webhook repository-grant reconciliation through a service-role-only bounded RPC;
 - controlled branch + expected SHA + draft-PR-only mutation and idempotency; and
 - schema/RPC/RLS/FORCE RLS/audit contracts for migrations.
 

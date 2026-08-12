@@ -24,8 +24,10 @@ import {
   createGitHubInstallationToken,
   GitHubApiError,
   githubApiRequest,
+  MAX_GITHUB_RESPONSE_BYTES,
 } from "@/lib/github/client";
 import { sha256Hex, verifyGitHubWebhookSignature } from "@/lib/github/webhook";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 
 const stateSecret = "s".repeat(48);
 const now = Date.UTC(2026, 7, 12, 12, 0, 0);
@@ -115,6 +117,10 @@ describe("GitHub webhook signatures", () => {
 });
 
 describe("GitHub repository write safety", () => {
+  it("rejects modern GitHub fine-grained personal access tokens", () => {
+    expect(containsLikelySecret(`github_pat_${"A".repeat(82)}`)).toBe(true);
+  });
+
   it("rejects traversal, dangerous refs, and protected resources", () => {
     expect(normalizeRepositoryPath("AI/BACKLOG.md")).toBe("AI/BACKLOG.md");
     expect(() => normalizeRepositoryPath("../.env")).toThrow();
@@ -129,6 +135,19 @@ describe("GitHub repository write safety", () => {
     expect(isProtectedGitHubWritePath("lib/supabase/tenant.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("lib/github/config.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("app/api/projects/route.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/AGENTS.md")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/CLAUDE.md")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/CODEOWNERS")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/auth/login.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/authorization/check.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/session/store.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/crypto/aes.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/deploy/app.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/billing/stripe.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("config/.env.production")).toBe(true);
+    expect(isProtectedGitHubWritePath(".npmrc")).toBe(true);
+    expect(isProtectedGitHubWritePath("services/api/Dockerfile")).toBe(true);
+    expect(isProtectedGitHubWritePath("next.config.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("proxy.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("vercel.json")).toBe(true);
     expect(isProtectedGitHubWritePath("README.md")).toBe(false);
@@ -298,5 +317,97 @@ describe("GitHub provider boundaries", () => {
     expect(caught).toMatchObject({ code: "github_installation_revoked", status: 503 });
     expect(String((caught as Error).message)).not.toContain("secret-token");
     expect(String((caught as Error).message)).not.toContain("Bad credentials");
+  });
+
+  it.each([
+    {
+      body: { message: "You have exceeded a secondary rate limit. Please wait before retrying." },
+      headers: new Headers({ "x-ratelimit-remaining": "4999" }),
+      label: "secondary limit provider message",
+    },
+    {
+      body: { message: "Request temporarily refused" },
+      headers: new Headers({ "retry-after": "60", "x-ratelimit-remaining": "4999" }),
+      label: "Retry-After header",
+    },
+  ])("maps a 403 $label to a retryable rate-limit error", async ({ body, headers }) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body, { headers, status: 403 })));
+
+    await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
+      .rejects.toMatchObject({ code: "github_rate_limited", status: 429 });
+  });
+
+  it("keeps an ordinary 403 distinct from a rate limit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(
+      { message: "Resource not accessible by integration" },
+      { headers: { "x-ratelimit-remaining": "4999" }, status: 403 },
+    )));
+
+    await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
+      .rejects.toMatchObject({ code: "github_permission_denied", status: 403 });
+  });
+
+  it("maps a 429 response to a stable rate-limit error without forwarding provider detail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(
+      { message: "provider detail containing secret-token" },
+      { status: 429 },
+    )));
+
+    let caught: unknown;
+    try {
+      await githubApiRequest("/installation/repositories", { token: "secret-token" });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code: "github_rate_limited", status: 429 });
+    expect(String((caught as Error).message)).not.toContain("secret-token");
+    expect(String((caught as Error).message)).not.toContain("provider detail");
+  });
+
+  it("rejects an oversized declared response before reading its stream", async () => {
+    const pull = vi.fn(() => undefined);
+    const cancel = vi.fn(() => undefined);
+    const body = new ReadableStream<Uint8Array>({ cancel, pull }, { highWaterMark: 0 });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, {
+      headers: { "content-length": String(MAX_GITHUB_RESPONSE_BYTES + 1) },
+      status: 200,
+    })));
+
+    await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
+      .rejects.toMatchObject({ code: "github_response_too_large", status: 502 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(pull).not.toHaveBeenCalled();
+  });
+
+  it("stops buffering an undeclared response as soon as the byte bound is crossed", async () => {
+    const cancel = vi.fn(() => undefined);
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel,
+      pull(controller) {
+        if (sent) return;
+        sent = true;
+        controller.enqueue(new Uint8Array(MAX_GITHUB_RESPONSE_BYTES));
+        controller.enqueue(new Uint8Array([0x7b]));
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200 })));
+
+    await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
+      .rejects.toMatchObject({ code: "github_response_too_large", status: 502 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects malformed Content-Length without consuming the response", async () => {
+    const cancel = vi.fn(() => undefined);
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, {
+      headers: { "content-length": "not-a-number" },
+      status: 200,
+    })));
+
+    await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
+      .rejects.toMatchObject({ code: "github_invalid_response", status: 502 });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

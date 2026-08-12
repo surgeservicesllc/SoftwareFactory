@@ -26,7 +26,7 @@ import remarkGfm from "remark-gfm";
 import { Panel, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
-type Project = { id: string; name: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null };
+type Project = { id: string; name: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
 type TreeEntry = { name: string; path: string; type: "directory" | "file" | "symlink" | "submodule"; sha: string; size: number; url: string };
 type RepositoryFile = { path: string; sha: string; size: number; encoding: "utf-8"; content: string; url: string; ref: string };
 type Commit = { sha: string; message: string; author: { name: string; githubLogin: string | null }; date: string | null; url: string };
@@ -64,7 +64,11 @@ export function GitHubFileManager() {
       if (response.status === 409) { setState("setup"); return; }
       const body = (await response.json()) as { projects?: Project[]; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Projects could not be loaded.");
-      const liveProjects = (body.projects ?? []).filter((project) => project.githubRepository && project.connectionId);
+      const liveProjects = (body.projects ?? []).filter(
+        (project) => project.connectionStatus === "connected"
+          && project.githubRepository
+          && project.connectionId,
+      );
       setProjects(liveProjects);
       setState("ready");
     } catch (error) {
@@ -260,7 +264,7 @@ export function GitHubFileManager() {
 
   if (state === "loading") return <Panel className="grid min-h-[520px] place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" aria-label="Loading live repository" /></Panel>;
   if (state === "signed-out") return <FilesNotice title="Sign in to browse GitHub" description="Real repository files are available only to authenticated organization members." href="/sign-in?next=/files" label="Sign in" />;
-  if (state === "setup" || (state === "ready" && !projects.length)) return <FilesNotice title="Connect a project first" description="Authorize the GitHub App and connect a repository as a SoftwareFactory project." href="/projects" label="Open projects" />;
+  if (state === "setup" || (state === "ready" && !projects.length)) return <FilesNotice title="No connected GitHub project" description="Authorize or restore the GitHub App, then connect an active selected repository before browsing files." href="/projects" label="Open projects" />;
   if (state === "error" || !project) return <FilesNotice title="Repository unavailable" description={message || "The live repository could not be loaded."} href="/connections" label="Review connections" />;
 
   const parentPath = directoryPath.includes("/") ? directoryPath.slice(0, directoryPath.lastIndexOf("/")) : "";

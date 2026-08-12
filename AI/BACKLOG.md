@@ -15,8 +15,12 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [x] Add signed, bounded, idempotent, redacted webhook ingestion and reconciliation for Phase 1B events.
 - [x] Add authenticated transactional project linking from an active selected repository with safe autonomy defaults.
 - [x] Add live Connections, Projects, Files, and dashboard data surfaces with truthful disconnected/demo states.
+- [x] Bind interactive GitHub routes to the exact active organization and derive connected project/file/dashboard state only from a live connection, active unsuspended installation, and selected healthy repository.
+- [x] Add a live tenant-scoped Activity API/UI that uses caller-session RLS, excludes event metadata from browser responses, and keeps seeded examples labeled **Demo Data**.
+- [x] Remove the legacy HTTP local-repository writer, its UI component, and its environment switch.
 - [x] Add expected-SHA/idempotent protected file editing that creates only a controlled branch, commit, and draft PR; fail closed for repository memory/policies, Supabase, every application API route, GitHub/server/Supabase libraries, Auth/session boundaries, deployment/environment/infrastructure files, and other sensitive subject paths.
-- [x] Add Phase 1B unit/integration/contract coverage; the hardened tree currently passes 58 unit tests and 88 integration tests.
+- [x] Add local forward migrations `011`-`013` for audited-only connection/member mutation, `github_pat_` detection, actor-attributed terminal GitHub change evidence, and bounded webhook repository-grant reconciliation.
+- [x] Add Phase 1B unit/integration/contract coverage for the review hardening. The final coverage run passes 25 files/208 tests; the focused `013` chain passes 3 files/44 tests.
 - [x] Create/configure GitHub App `Surge SoftwareFactory` and add protected GitHub variables to the exact Vercel project.
 - [x] Rotate/promote the Vercel App private key to the sole remaining GitHub key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`) without exposing key material.
 - [x] Verify provider installation `153286187` on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`.
@@ -30,10 +34,12 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [x] Remove SQL wildcard semantics from normalized repository full-name matching.
 - [x] Verify hosted RLS/FORCE RLS catalog inventory: 22/22 RLS, 22/22 FORCE RLS, 43 policies, and 22 row-secret guards. Linked migration history separately confirms eight expected migrations through `009`.
 - [ ] Verify hosted two-tenant allow/deny paths, anonymous denial, privileged RPC authorization, and immutable audit events with real authenticated sessions.
-- [x] Rerun final lint, typecheck, full Vitest (157 tests on the latest tree), build (34 routes), and Playwright at desktop/tablet/mobile with accessibility/browser-error/overflow gates (12/12) after the Phase 1B hardening and Phase 1D observation scaffold.
-- [x] Rerun final secret and built-client privileged-variable scans on the exact hardened tree; no credential patterns or built-client privileged server names were found.
+- [ ] Obtain exact owner approval and apply local migrations `011`, `012`, and `013` to hosted project `qpuofpmagrmyamahqwxw`; then verify ledger, lint, grants, RLS, immutable actor-attributed audit events, webhook repository-grant reconciliation, and application health.
+- [x] Rerun current local gates: the lint/typecheck/test phases of `npm run check` pass with 24 files/205 tests; its build phase hit only a stale OneDrive `.next` cache `EPERM`, then standalone `npm run build` passed 34 routes after recoverable cache relocation. Final coverage passes 25 files/208 tests; focused `013` tests pass 44; local Playwright passes 12/12.
+- [x] Rerun final secret and built-client scans on the current hardening tree; only the synthetic `github_pat_` fixture matched, and `.next/static` contains no server-secret markers.
 - [x] Verify Vercel deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` READY/Current at the stable production alias and pass stable-production Playwright 12/12.
 - [x] Verify exact runtime source commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` and push it to `main`.
+- [ ] Push the exact post-review hardening commit to `main`, deploy that commit to the same Vercel project, and rerun production public/E2E checks. The verified READY deployment predates the local hardening.
 - [ ] Verify production Supabase sign-up/confirmation/sign-in/onboarding/session paths.
 - [ ] Configure and verify the GitHub App webhook endpoint: the provider General page is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; then observe a correctly signed production delivery.
 - [ ] Complete the authenticated SoftwareFactory owner callback for existing provider installation `153286187`; persist the tenant connection and verify identity, permissions, repository count, freshness, and audit evidence.

@@ -1,5 +1,6 @@
-import { Activity, Filter, Fingerprint, Search } from "lucide-react";
+import { Fingerprint } from "lucide-react";
 
+import { ActivityConsole } from "@/components/activity-console";
 import { DemoBadge, DemoNotice, PageHeader, Panel, StatusBadge } from "@/components/ui";
 import { demoActivity } from "@/lib/demo-data";
 
@@ -10,20 +11,16 @@ export default function ActivityPage() {
         eyebrow="Evidence / Activity"
         title="Activity & audit trail"
         description="A chronological evidence surface for material actions, actors, targets, correlation identifiers, and redacted metadata."
-        action={<DemoBadge />}
       />
-      <DemoNotice>These entries are illustrative UI records. They were not emitted by a live provider, agent, deployment, or production audit system.</DemoNotice>
+      <ActivityConsole />
+
+      <div className="mt-6">
+        <DemoNotice>The separate entries below are illustrative UI records. They were not emitted by a live provider, agent, deployment, or production audit system.</DemoNotice>
+      </div>
 
       <Panel className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-[#212b37] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="size-4 text-[#95a83a]" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-[#e1e6ea]">Event stream</h2>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[#293442] bg-[#10161e] px-2.5 text-[9px] text-[#798696]"><Search className="size-3" aria-hidden="true" />Search events</button>
-            <button type="button" className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[#293442] bg-[#10161e] px-2.5 text-[9px] text-[#798696]"><Filter className="size-3" aria-hidden="true" />Filter</button>
-          </div>
+          <div className="flex items-center gap-2"><Fingerprint className="size-4 text-[#95a83a]" aria-hidden="true" /><h2 className="text-sm font-semibold text-[#e1e6ea]">Illustrative event stream</h2><DemoBadge /></div>
         </div>
 
         <div className="divide-y divide-[#202a36]">

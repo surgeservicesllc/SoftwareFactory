@@ -20,9 +20,10 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 
 - Server Components are preferred for data-bearing views; client boundaries are narrow interactive forms/editors.
 - Auth/onboarding resolves the user and active tenant before live control-plane views.
-- Connections shows real Supabase/GitHub metadata only after tenant-scoped reads; otherwise it says **Not Connected**.
-- Projects derives repository/default-branch state from an active selected GitHub installation through an audited transaction.
-- Files reads the real repository tree/content at explicit refs and turns owner/admin intent into a controlled draft-PR flow.
+- Connections shows real Supabase/GitHub metadata only after exact active-organization reads; otherwise it says **Not Connected**.
+- Projects derives repository/default-branch state from an active unsuspended installation and selected healthy repository through an audited transaction. Retained rows alone do not count as connected.
+- Files reads the real repository tree/content at explicit refs only for projects whose live connection evidence remains valid, and turns owner/admin intent into a controlled draft-PR flow.
+- Activity reads immutable tenant events through caller-session RLS and returns a bounded browser shape without raw metadata.
 - Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
 
 ## Persistence
@@ -35,6 +36,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
+- Local migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` remove direct authenticated connection/member mutations, align database/server `github_pat_` detection, make terminal GitHub changes actor-attributed and auditable, and add a bounded service-role webhook repository-grant upsert. They are not hosted yet and require exact owner approval plus post-apply verification.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -62,6 +64,7 @@ Write flow:
 9. Complete or fail the audited request record.
 
 There is no merge or deployment step.
+There is also no HTTP local-repository write path; the legacy route, UI, and environment switch are removed.
 
 ## Webhook boundary
 
@@ -70,7 +73,7 @@ There is no merge or deployment step.
 - Validate delivery/event headers and payload schema.
 - Hash the raw payload; store only an allowlisted redacted subset.
 - Deduplicate delivery ID and reject conflicting payload reuse.
-- Reconcile installation/repository/PR/check/status events through bounded database functions.
+- Reconcile installation/repository/PR/check/status events through bounded database functions. Newly granted repository metadata uses the service-role-only `013` function after hosted promotion.
 - Unknown events/installations are ignored safely, not used to create tenant ownership.
 
 ## Security invariants

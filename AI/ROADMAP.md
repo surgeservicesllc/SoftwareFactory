@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B — Production GitHub App Integration
 
-Status: **Implementation and hosted schema gates pass; authenticated tenant behavior and live acceptance pending.**
+Status: **Local implementation/hardening gates pass; hosted promotion of `011`-`013`, authenticated tenant behavior, deployment, and live acceptance pending.**
 
 Implemented:
 
@@ -22,10 +22,12 @@ Implemented:
 - Signed/idempotent/redacted webhook ingestion.
 - Transactional project linking and live metrics/views.
 - Controlled branch + commit + draft-PR file changes.
+- Exact active-organization enforcement, truthful live connection/project/file state, live tenant Activity reads, no local HTTP writer, and local forward migrations `011`-`013` for mutation/audit/webhook hardening.
 
 Exit work:
 
-- verify hosted authenticated RLS allow/deny and privileged-RPC behavior (migration history through `009` and linked schema lint are green);
+- obtain exact owner approval and apply/verify local migrations `011`-`013` on hosted Supabase (hosted ledger currently ends at `010`; linked lint is green only through `009`);
+- verify hosted authenticated RLS allow/deny and privileged-RPC behavior;
 - [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
 - preserve the verified runtime provenance for READY deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; and
 - pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.

@@ -4,6 +4,8 @@ Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Provider health 
 
 Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` have been applied, and the hosted ledger includes `010_phase1d_observation_controls`. Migration `010` was applied transactionally after `unsafe_project_rows=0`; hosted checks confirmed kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated controls-RPC execute, and anonymous execute denied. The last successful linked lint through `009` reported no schema errors (`[]`); a post-`010` CLI attempt was blocked by account `403`, so no post-`010` lint result is claimed. Authenticated cross-tenant, broader privileged-RPC, and real application-session verification remain pending.
 
+Local forward migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` are not in that hosted ledger. Because they alter authorization/grants, audit behavior, and a privileged webhook workflow, do not apply them to `qpuofpmagrmyamahqwxw` without exact current owner approval. After application, verify the ledger, linked lint, direct table grants, function grants/search paths, caller/tenant checks, immutable activity evidence, repository-grant reconciliation, and application health before promotion.
+
 ## Hosted Auth configuration
 
 The linked Auth configuration uses:

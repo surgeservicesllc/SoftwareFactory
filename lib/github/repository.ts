@@ -140,9 +140,17 @@ export function isProtectedGitHubWritePath(path: string) {
   const segments = normalized.split("/");
   const fileName = segments.at(-1) ?? "";
   const protectedSubject = /(^|[._-])(auth|authorization|access|permission|role|rls|session|cookie|crypto|encrypt|secret|credential|private[-_]?key|webhook|deploy|deployment|release|rollback|dns|billing)([._-]|$)/;
-  return normalized === "agents.md"
-    || normalized === "claude.md"
-    || normalized === "codeowners"
+  return fileName === "agents.md"
+    || fileName === "claude.md"
+    || fileName === "codeowners"
+    || fileName === ".npmrc"
+    || fileName === ".yarnrc"
+    || fileName === ".yarnrc.yml"
+    || fileName === ".pnpmfile.cjs"
+    || fileName.startsWith(".env")
+    || fileName.startsWith("dockerfile")
+    || fileName.startsWith("docker-compose")
+    || /^(next|nuxt|webpack|vite)\.config\.[a-z0-9]+$/.test(fileName)
     || normalized === ".github/codeowners"
     || normalized === "docs/codeowners"
     || normalized.startsWith(".github/")
@@ -165,11 +173,8 @@ export function isProtectedGitHubWritePath(path: string) {
     || normalized === "netlify.toml"
     || normalized === "fly.toml"
     || normalized === "wrangler.toml"
-    || normalized.startsWith("dockerfile")
-    || normalized.startsWith("docker-compose")
-    || normalized.startsWith(".env")
-    || protectedSubject.test(fileName)
-    || segments.some((segment) => /(^|[._-])(secret|credential|private[-_]?key)([._-]|$)/.test(segment));
+    || segments.includes("config")
+    || segments.some((segment) => protectedSubject.test(segment));
 }
 
 function encodedPath(path: string) {

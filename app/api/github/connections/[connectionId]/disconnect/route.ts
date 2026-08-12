@@ -38,10 +38,11 @@ export async function POST(
         { status: 400 },
       );
     }
-    const { supabase, user } = await requireGitHubUser();
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
     const context = await requireGitHubConnection(
       supabase,
       user.id,
+      activeOrganization.id,
       connectionId,
       undefined,
       { allowInactive: true },

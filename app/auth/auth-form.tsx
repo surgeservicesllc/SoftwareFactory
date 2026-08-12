@@ -70,12 +70,11 @@ export function AuthForm({
     setPending(true);
 
     const form = new FormData(event.currentTarget);
-    const body = {
-      displayName: mode === "sign-up" ? String(form.get("displayName") ?? "") : undefined,
-      email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
-      returnTo: mode === "sign-in" ? returnTo : undefined,
-    };
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    const body = mode === "sign-up"
+      ? { displayName: String(form.get("displayName") ?? ""), email, password }
+      : { email, password, returnTo };
 
     try {
       const response = await fetch(`/api/auth/${mode}`, {

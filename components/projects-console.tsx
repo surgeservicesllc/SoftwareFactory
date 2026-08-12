@@ -56,6 +56,7 @@ type Project = {
   autonomousMode: boolean;
   maximumAutonomousRisk: string;
   connectionId: string | null;
+  connectionStatus: "connected" | "not_connected";
 };
 
 type Branch = { name: string; sha: string; protected: boolean };
@@ -87,8 +88,6 @@ export function ProjectsConsole() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionId, setConnectionId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [branch, setBranch] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
@@ -145,24 +144,13 @@ export function ProjectsConsole() {
 
   useEffect(() => {
     if (!selectedRepository || !selectedConnection) return;
-    const [owner, repository] = selectedRepository.fullName.split("/");
-    if (!owner || !repository) return;
-    const controller = new AbortController();
+    const repository = selectedRepository.fullName.split("/")[1];
+    if (!repository) return;
     const timer = window.setTimeout(() => {
       setRepositoryId(String(selectedRepository.id));
       setName((current) => current || repository);
-      setBranch(selectedRepository.defaultBranch);
-      void fetch(
-        `/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/branches?connectionId=${encodeURIComponent(selectedConnection.id)}`,
-        { cache: "no-store", signal: controller.signal },
-      )
-        .then(async (response) => {
-          const body = (await response.json()) as { branches?: Branch[] };
-          if (response.ok) setBranches(body.branches ?? []);
-        })
-        .catch(() => undefined);
     }, 0);
-    return () => { window.clearTimeout(timer); controller.abort(); };
+    return () => window.clearTimeout(timer);
   }, [selectedConnection, selectedRepository]);
 
   async function createProject(event: React.FormEvent<HTMLFormElement>) {
@@ -179,7 +167,7 @@ export function ProjectsConsole() {
           repositoryId: selectedRepository.id,
           name,
           description,
-          defaultBranch: branch || selectedRepository.defaultBranch,
+          defaultBranch: selectedRepository.defaultBranch,
         }),
       });
       const body = (await response.json()) as { error?: { message?: string } };
@@ -222,7 +210,7 @@ export function ProjectsConsole() {
           <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
             <Field label="GitHub connection"><select value={activeConnectionId} onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }} className="form-control">{connectedConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.account?.login ?? connection.name ?? "GitHub"}</option>)}</select></Field>
             <Field label="Repository"><select value={repositoryId} onChange={(event) => { setRepositoryId(event.target.value); const repo = unconnectedRepositories.find((item) => String(item.id) === event.target.value); setName(repo?.fullName.split("/")[1] ?? ""); }} className="form-control">{unconnectedRepositories.map((repository) => <option key={repository.id} value={repository.id}>{repository.fullName}</option>)}</select></Field>
-            <Field label="Default branch"><select value={branch} onChange={(event) => setBranch(event.target.value)} className="form-control">{(branches.length ? branches : [{ name: selectedRepository?.defaultBranch ?? "main", sha: "", protected: false }]).map((item) => <option key={item.name} value={item.name}>{item.name}{item.protected ? " (protected)" : ""}</option>)}</select></Field>
+            <Field label="Verified default branch"><input value={selectedRepository?.defaultBranch ?? ""} readOnly className="form-control" /></Field>
             <Field label="Project name"><input value={name} onChange={(event) => setName(event.target.value)} required minLength={1} maxLength={160} className="form-control" /></Field>
             <Field label="Description" className="md:col-span-2"><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} className="form-control h-auto py-2.5" placeholder="What this software system does" /></Field>
             <div className="flex flex-col gap-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
@@ -244,7 +232,11 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const repository = connection?.repositories.find((item) => item.fullName.toLowerCase() === project.githubRepository?.toLowerCase());
-  const isConnected = connection?.status === "connected" && Boolean(connection.installation) && !connection.installation?.suspendedAt && Boolean(repository);
+  const isConnected = project.connectionStatus === "connected"
+    && connection?.status === "connected"
+    && Boolean(connection.installation)
+    && !connection.installation?.suspendedAt
+    && Boolean(repository);
   const coordinates = project.githubRepository?.split("/") ?? [];
   const owner = coordinates[0] ?? "";
   const repo = coordinates[1] ?? "";
@@ -322,10 +314,10 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
       <div className="border-b border-[#202b38] p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2"><CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" aria-hidden="true" /><h2 className="truncate text-base font-semibold text-white">{project.name}</h2></div>
+            <div className="flex items-center gap-2">{isConnected ? <CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" aria-hidden="true" /> : <AlertTriangle className="size-4 shrink-0 text-[#ff7d84]" aria-hidden="true" />}<h2 className="truncate text-base font-semibold text-white">{project.name}</h2></div>
             <p className="mt-2 text-xs leading-5 text-[#748191]">{project.description || "GitHub-backed SoftwareFactory project"}</p>
           </div>
-          <div className="flex flex-wrap gap-2"><StatusBadge tone={isConnected ? "safe" : "danger"}>{isConnected ? "GitHub Connected" : "GitHub Connection Lost"}</StatusBadge><StatusBadge tone="neutral">{project.autonomousMode ? "Observation mode ON" : "Autonomy OFF"}</StatusBadge><StatusBadge tone="danger">Kill switch ON</StatusBadge></div>
+          <div className="flex flex-wrap gap-2"><StatusBadge tone={isConnected ? "safe" : "danger"}>{isConnected ? "GitHub Connected" : "Not Connected"}</StatusBadge><StatusBadge tone="neutral">{project.autonomousMode ? "Observation mode ON" : "Autonomy OFF"}</StatusBadge><StatusBadge tone="danger">Kill switch ON</StatusBadge></div>
         </div>
 
         <dl className="mt-5 grid gap-3 text-[11px] sm:grid-cols-2 xl:grid-cols-4">
@@ -340,7 +332,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
         </dl>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Link href={`/files?project=${project.id}`} className="primary-action">Browse real files<FolderTree className="size-4" aria-hidden="true" /></Link>
+          {isConnected ? <Link href={`/files?project=${project.id}`} className="primary-action">Browse real files<FolderTree className="size-4" aria-hidden="true" /></Link> : <Link href="/connections" className="primary-action">Restore connection<ArrowRight className="size-4" aria-hidden="true" /></Link>}
           {repository?.htmlUrl ? <a href={repository.htmlUrl} target="_blank" rel="noreferrer" className="secondary-action">Open GitHub<ExternalLink className="size-3.5" aria-hidden="true" /></a> : null}
           <button type="button" onClick={() => void refresh()} disabled={loading || !isConnected} className="secondary-action">{loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}Refresh live data</button>
         </div>

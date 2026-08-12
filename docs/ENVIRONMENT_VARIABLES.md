@@ -43,12 +43,11 @@ Configure exactly one private-key representation. The application prefers `GITHU
 
 | Variable | Purpose | Status |
 | --- | --- | --- |
-| `SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES` | Trusted single-user local Markdown writes | Defaults `false`; never enable in hosted environments |
 | `VERCEL_TOKEN` | Future in-product Vercel API adapter | **Not Connected**; not required to host the UI |
 | `OPENAI_API_KEY` | Future Codex/OpenAI worker | **Not Connected**; Phase 1C |
 | `ANTHROPIC_API_KEY` | Future Claude worker | **Not Connected**; Phase 2 |
 
-The GitHub-backed editor does not use the local file-write switch. It uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR.
+The GitHub-backed editor uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR. No HTTP route can write directly to the local repository or protected memory/policy files.
 
 ## CLI-only Supabase values
 

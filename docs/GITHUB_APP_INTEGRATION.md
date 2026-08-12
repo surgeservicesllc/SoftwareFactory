@@ -122,6 +122,8 @@ Migration `20260812000700_github_project_linking.sql` adds a transactional funct
 
 Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
 
+Local forward migrations `20260812001100_harden_direct_mutation_boundaries.sql`, `20260812001200_github_change_audit.sql`, and `20260812001300_reconcile_github_repository_grants.sql` close direct authenticated connection/member mutations, add actor-attributed terminal change-request evidence, and add bounded service-role reconciliation for newly granted repositories. They are not hosted yet; exact owner approval and post-apply verification are required before production claims use them.
+
 All four GitHub tables use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
 
 ## Controlled file edits
@@ -148,9 +150,11 @@ Successful writes create `softwarefactory/*` branch state, commit to that branch
 - Verify HMAC-SHA256 over the unparsed body with constant-time comparison.
 - Reject missing/invalid signatures and bodies over 2 MiB.
 - Require syntactically valid GitHub delivery/event headers.
+- Apply an event-specific schema before reconciliation; accepted `installation_repositories` additions require full bounded repository metadata.
 - Deduplicate by delivery ID; reject reuse of an ID with different payload bytes.
 - Store a SHA-256 hash plus an allowlisted/redacted payload subset, not the raw payload.
 - Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
+- After migration `013` is hosted, upsert newly granted repository metadata through its service-role-only RPC before recording the repository-selection reconciliation.
 - Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
 
 ## Production acceptance checklist

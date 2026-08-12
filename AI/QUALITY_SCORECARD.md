@@ -4,26 +4,25 @@ Last reviewed: 2026-08-12
 
 Phase 1B decision: **Not release-ready yet**
 
-Reason: hosted migration `010` safety checks, prior linked lint through `009`, final code/browser/secret gates, the READY Vercel deployment, and repository-scoped GitHub provider installation pass. A post-`010` CLI lint is unavailable due account `403`; hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance remain.
+Reason: local review hardening and its local gates pass, but hosted migrations `011`-`013`, a matching production deployment, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending. Hosted migration `010` safety checks, linked lint through `009`, the prior READY Vercel deployment, and repository-scoped provider installation remain valid only for their recorded scope.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Scope/implementation | Auth/onboarding, GitHub install/token/sync/read/write/webhook boundaries, project link, and live UI are present | Pass for implementation; live acceptance pending |
-| Unit | `npm run test:unit`: 58 tests on the hardened tree | Pass |
-| Integration | `npm run test:integration`: 88 tests after `009` | Pass |
-| Lint | `npm run lint` | Pass |
-| Type safety | `npm run typecheck` | Pass |
-| Full Vitest | Latest current-tree `npm test`: 157 tests after the Phase 1D observation scaffold | Pass |
-| Production build | `npm run build`: 34 pages/routes | Pass |
-| E2E/responsive/accessibility | Desktop/tablet/mobile Playwright/axe: 12/12 | Pass; navigation, viewport overflow, browser-error, and accessibility gates green |
-| Secret safety | Credential-pattern and built-client privileged-name scans on the hardened tree | Pass; no matches, and `.env.example` is the only tracked environment file |
+| Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; truthful connection/project/file state; live Activity; guarded GitHub writes; local migrations `011`-`013` | Implemented locally; live acceptance pending |
+| Current-tree check phases | `npm run check` | Lint, typecheck, and 24 files/205 tests pass; build phase hit only a stale OneDrive `.next` cache `EPERM` |
+| Current-tree production build | standalone `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
+| Full coverage suite | `npm run test:coverage` after final `013` ordering/contracts | Pass — 25 files/208 tests; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
+| Focused `013` chain | 3 files/44 tests | Pass |
+| Local E2E/responsive/accessibility | `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe |
+| Secret safety | Current source/tracked and `.next/static` scan | Pass; only the synthetic `github_pat_` fixture matched, and no built static server-secret markers were found |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, `ACTIVE_HEALTHY` | Pass |
 | Hosted migrations | Hosted ledger through `010`; transactional application after `unsafe_project_rows=0` | Pass through `010` |
+| Local migrations `011`-`013` | Authorization/grant, audit, and webhook-reconciliation forward migrations | Local implementation only; exact owner approval, hosted application, and post-apply checks pending |
 | Phase 1D hosted interlocks | Kill-switch default true; both constraints validated; 0 switch-off organizations; 0 unsafe projects; authenticated RPC execute true; anon false | Pass; execution still unavailable |
 | Hosted database lint | Last successful public-schema linked lint through `009`: no errors (`[]`); post-`010` attempt received CLI-account `403` | Pass through `009`; post-`010` not verified |
 | Hosted RLS | SQL Editor catalog: 22 public tables, 22 RLS, 22 FORCE RLS, 43 policies, 22 row-secret guards; linked history separately confirms 8 migrations through `009` | Catalog/history pass; authenticated behavior pending |
 | GitHub sync/project hardening | `009` serializes external-installation sync and forces synchronized default branch; repository full-name matching is literal | Implementation/contract and hosted migration pass; live behavior pending |
-| Protected-resource writes | Classifier blocks repository memory/policies, Supabase, every app API route, GitHub/server/Supabase libraries, Auth/session, deployment/environment/infrastructure, and sensitive subject paths | Pass in current full gate |
+| Protected-resource writes | Classifier additionally blocks nested ownership/memory files, config/dependency-manager files, and security-sensitive path segments; no local HTTP writer remains | Pass in current local gates |
 | GitHub App configuration | App/permissions/events configured; sole key fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` promoted in Vercel | Pass for App/key configuration |
 | GitHub provider installation | Installation `153286187` on `surgeservicesllc`, selected repository only `surgeservicesllc/SoftwareFactory` | Pass for provider installation scope |
 | GitHub real connection | Provider installation exists; authenticated SoftwareFactory callback/tenant connection/token/repository sync | **Not Connected** / pending in-product acceptance |
@@ -36,13 +35,31 @@ Reason: hosted migration `010` safety checks, prior linked lint through `009`, f
 | Automation safety | No merge/deploy/rollback endpoints/workflows; controls OFF | Pass |
 | Phase 1D observation scaffold | Autonomous Mode OFF; GREEN-only pure evaluator; static locked UI; same-origin tenant/owner API; hosted migration `010` kill switch/constraints | Local lint/typecheck, focused tests (51), full tests (157), 34-route build, and hosted safety checks pass; execution remains blocked |
 
-## Recorded hardened-tree evidence
+## Recorded local and hosted evidence
+
+The current local hardening gates are recorded first. The hosted schema/runtime/provider observations below still describe hosted migration `010` and deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve`; neither includes local migrations `011`-`013` or the current application code.
 
 ```text
 Review date: 2026-08-12
 Local shell: Node 20 (Supabase future-support warning)
 Target runtime: Node >=22
 
+npm run check (current local hardening):
+  PASS — lint, typecheck, 24 files / 205 tests
+  BUILD PHASE — stale OneDrive .next cache EPERM only
+npm run build after recoverable cache relocation:
+  PASS — 34 pages/routes
+npm run test:coverage (after final 013 ordering/contracts):
+  PASS — 25 files / 208 tests
+  COVERAGE — 50.44 statements / 52.99 branches / 45.07 functions / 51.24 lines
+focused 013 chain:
+  PASS — 3 files / 44 tests
+npm run test:e2e (current local hardening):
+  PASS — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, axe
+current secret/client scan:
+  PASS — only synthetic github_pat_ fixture matched; no .next/static server-secret markers
+
+Prior baseline detail:
 npm run test:unit:
   PASS — 58 tests after repository-write hardening
 npm run test:integration:
@@ -52,7 +69,7 @@ npm run lint:
 npm run typecheck:
   PASS
 npm test:
-  PASS — 157 tests on the latest current tree after the Phase 1D observation scaffold
+  PASS — 157 tests on the prior Phase 1D observation-scaffold baseline
 npm run build:
   PASS — 34 pages/routes
 npm run test:e2e:
@@ -86,7 +103,8 @@ hosted Supabase:
   required — hosted authenticated RLS/tenant/RPC/audit behavior checks
 
 pending:
-  final evidence-only documentation commit on main (runtime provenance is already verified)
+  exact owner approval and hosted application/verification of migrations 011, 012, and 013
+  reviewed hardening commit on main and matching Vercel deployment/production checks
   authenticated production Supabase journey
   authenticated SoftwareFactory callback/tenant connection/repository/project/file/draft-PR/webhook/disconnect acceptance
   authorized post-010 CLI lint and broader hosted tenant/RPC/audit verification
@@ -96,7 +114,7 @@ pending:
 
 - prove two-tenant and anonymous denial with user sessions;
 - verify RLS and FORCE RLS on every exposed hosted table;
-- verify security-definer search paths/grants/actor checks after `009`;
+- verify security-definer search paths/grants/actor checks after hosted promotion of `011`-`013`;
 - verify App token scope/expiry and no token leakage in responses/logs;
 - observe valid/invalid/duplicate webhook behavior in production;
 - verify protected path, likely-secret, stale SHA, wrong tenant, revoked installation, and insufficient permission failures; and

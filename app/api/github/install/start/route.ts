@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { requireGitHubUser, requireOrganizationManager } from "@/lib/github/access";
+import {
+  requireGitHubUser,
+  requireMatchingActiveOrganization,
+  requireOrganizationManager,
+} from "@/lib/github/access";
 import { getGitHubAppConfiguration } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import {
@@ -31,7 +35,11 @@ export async function POST(request: Request) {
     }
 
     const configuration = getGitHubAppConfiguration();
-    const { supabase, user } = await requireGitHubUser();
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
+    requireMatchingActiveOrganization(
+      activeOrganization.id,
+      parsed.data.organizationId,
+    );
     await requireOrganizationManager(supabase, user.id, parsed.data.organizationId);
     const state = createGitHubInstallState(
       {

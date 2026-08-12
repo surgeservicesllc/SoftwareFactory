@@ -7,7 +7,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 ## Authentication and tenant authorization
 
 - Supabase Auth sessions are resolved server-side and refreshed through the narrow proxy boundary.
-- Sensitive routes require an authenticated user and active organization membership.
+- Sensitive routes require an authenticated user and active organization membership; interactive GitHub routes reject an organization, connection, installation, or repository outside that exact active organization.
 - Installation/sync/disconnect/project creation/file changes require owner/admin where appropriate.
 - Repository calls verify the connection, installation, selected repository, and tenant before minting a token.
 - Hidden/disabled UI controls are never authorization.
@@ -29,6 +29,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 - Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
 - Store only a redacted subset plus hash/status metadata.
 - Unknown events/installations are ignored safely and cannot mutate another tenant.
+- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. The required forward migration `013` is local and not hosted yet.
 
 ## Repository mutations
 
@@ -38,6 +39,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 - Create a new `softwarefactory/*` branch, update with the expected blob SHA, and require GitHub to return an open draft PR.
 - Never write directly to the default branch, merge, modify workflows, or deploy.
 - Record completed/failed mutation evidence without file content or secrets.
+- No HTTP local-repository writer or local-write environment switch remains as an alternate mutation path.
 
 ## Secrets
 
@@ -45,7 +47,9 @@ Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_
 
 ## Audit and privacy
 
-Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Webhook payloads and change records deliberately avoid raw credentials and full file bodies.
+Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Local migration `012` makes completed and failed GitHub change requests explicitly actor-attributed and retains only bounded branch/commit failure evidence; it is not hosted yet. Webhook payloads and change records deliberately avoid raw credentials and full file bodies. The live Activity API uses the caller's RLS session and does not return event metadata to the browser.
+
+Local migration `011` removes direct authenticated `connections` deletion and direct `organization_members` mutation grants/policies so the audited server workflows remain the intended mutation path. Until `011` is explicitly approved and applied to hosted Supabase, that hosted hardening is pending rather than assumed.
 
 ## Supply chain and delivery
 

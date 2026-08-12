@@ -34,7 +34,7 @@ See [Environment variables](ENVIRONMENT_VARIABLES.md) and [GitHub App integratio
 - Preview should use separate Supabase data/credentials before authenticated preview testing.
 - Production secrets must not be available to untrusted fork builds.
 - GitHub private key/client/webhook/state secrets remain server-only.
-- `SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES` stays false in all hosted scopes.
+- No local-repository write switch or HTTP file-write route is deployed.
 
 ## Manual production promotion
 
