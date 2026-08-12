@@ -20,7 +20,7 @@ const routes = [
   { path: "/agents", heading: "Agents" },
   { path: "/backlog", heading: "Backlog" },
   { path: "/runs", heading: "Runs" },
-  { path: "/reports", heading: "Daily report" },
+  { path: "/reports", heading: "Reports" },
   { path: "/auth/sign-in", heading: "Sign in" },
   { path: "/auth/sign-up", heading: "Create your account" },
 ] as const;

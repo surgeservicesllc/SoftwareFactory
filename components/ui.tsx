@@ -122,6 +122,11 @@ const noticeStyles = {
 /**
  * One notice per page. Repeating the same disclaimer on every card trains
  * people to ignore it, which makes the product less truthful, not more.
+ *
+ * Nothing currently renders `DemoNotice` or `DemoBadge`: every surface reads
+ * live tenant records, so there is no seeded content left to label. They stay
+ * exported because AGENTS.md fixes **Demo Data** as the exact required wording,
+ * and any future seeded content must reuse it rather than invent a phrasing.
  */
 export function Notice({
   children,
@@ -158,7 +163,7 @@ export function MetricCard({
   detail,
   icon: Icon,
   tone = "neutral",
-  demo = true,
+  demo = false,
   className,
 }: {
   label: string;
@@ -166,6 +171,10 @@ export function MetricCard({
   detail: string;
   icon: LucideIcon;
   tone?: "neutral" | "safe" | "warning" | "danger" | "info";
+  /**
+   * Opt in only for seeded values. This defaults to false so a live metric can
+   * never be mislabelled as demo data by forgetting to pass it.
+   */
   demo?: boolean;
   className?: string;
 }) {

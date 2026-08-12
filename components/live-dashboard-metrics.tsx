@@ -4,20 +4,11 @@ import { FolderGit2, GitPullRequestArrow, Loader2, RefreshCw } from "lucide-reac
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MetricCard, SetupSteps, StatusBadge, type SetupStep } from "@/components/ui";
+import { isBrowserSupabaseConfigured } from "@/lib/supabase/browser-config";
 
 type Project = { id: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
 type PullRequest = { id: number; state: string };
 type State = "loading" | "signed-out" | "setup" | "ready" | "error";
-
-function isBrowserSupabaseConfigured() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-    && (
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim()
-      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
-    ),
-  );
-}
 
 export function LiveDashboardMetrics() {
   const supabaseConfigured = isBrowserSupabaseConfigured();
@@ -149,7 +140,7 @@ export function LiveDashboardMetrics() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 id="live-metrics-title" className="text-lg font-semibold text-foreground">Live numbers</h2>
-            <p className="mt-1 text-sm text-muted">Read from your own Supabase records and GitHub, never from demo data.</p>
+            <p className="mt-1 text-sm text-muted">Read from your own Supabase records and from GitHub.</p>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge tone={state === "ready" ? "safe" : state === "error" ? "danger" : "neutral"}>{statusLabel}</StatusBadge>

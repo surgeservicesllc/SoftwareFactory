@@ -36,7 +36,11 @@ test("loads the truthful control-plane dashboard without browser errors", async 
   await expect(page).toHaveTitle(/SoftwareFactory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
-  await expect(page.getByText(/Demo Data/i).first()).toBeVisible();
+  // Every surface now reads live tenant records, so there is no seeded
+  // content left to label. The truthfulness contract is stronger this way:
+  // rather than labelling fake rows, the dashboard shows none at all.
+  await expect(page.getByText(/Demo Data/i)).toHaveCount(0);
+  // Provider state is still stated explicitly wherever it is not live.
   await expect(page.getByText(/Not Connected/i).first()).toBeVisible();
   expect(browserErrors, browserErrors.join("\n")).toEqual([]);
 });

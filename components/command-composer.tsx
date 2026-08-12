@@ -43,7 +43,7 @@ const riskToneClass = {
   danger: "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]",
 } as const;
 
-export function CommandComposer() {
+export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   const [instruction, setInstruction] = useState("");
   const [riskLevel, setRiskLevel] = useState<RiskTier>("GREEN");
   const [state, setState] = useState<SubmissionState>({ kind: "idle" });
@@ -119,6 +119,7 @@ export function CommandComposer() {
       const id = body.command?.id ?? body.commandId ?? "queued";
       setState({ kind: "success", id });
       setInstruction("");
+      onSaved?.();
     } catch (error) {
       setState({
         kind: "error",

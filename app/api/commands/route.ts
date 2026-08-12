@@ -8,6 +8,7 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
+import { lookupNames, tenantListResponse } from "@/lib/server/tenant-list";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -131,3 +132,45 @@ export async function POST(request: Request) {
   }
 }
 
+
+type CommandRow = {
+  id: string;
+  project_id: string | null;
+  prompt: string;
+  requested_risk: string;
+  status: string;
+  submitted_at: string;
+  completed_at: string | null;
+};
+
+/**
+ * Lists the commands the caller's organization has saved. `parameters` is
+ * excluded: it is caller-supplied and screened for secrets on write, but it
+ * has no reason to travel back to the browser in a list view.
+ */
+export async function GET(request: Request) {
+  return tenantListResponse<CommandRow>({
+    request,
+    table: "commands",
+    columns: "id,project_id,prompt,requested_risk,status,submitted_at,completed_at",
+    orderColumn: "submitted_at",
+    unavailableCode: "commands_unavailable",
+    unavailableMessage: "Saved requests could not be loaded.",
+    shape: async (rows, context) => {
+      const projects = await lookupNames(context, "projects", rows.map((row) => row.project_id));
+      return {
+        commands: rows.map((row) => ({
+          id: row.id,
+          prompt: row.prompt,
+          risk: row.requested_risk,
+          status: row.status,
+          submittedAt: row.submitted_at,
+          completedAt: row.completed_at,
+          project: row.project_id
+            ? { id: row.project_id, name: projects.get(row.project_id) ?? "Project" }
+            : null,
+        })),
+      };
+    },
+  });
+}

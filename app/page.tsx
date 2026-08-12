@@ -2,8 +2,8 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
-import { Card, DemoBadge, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
-import { demoActivity } from "@/lib/demo-data";
+import { RecentActivityCard } from "@/components/recent-activity-card";
+import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 
 /** The three facts about safety that people actually need, stated plainly. */
 const safetyFacts = [
@@ -23,12 +23,12 @@ export default function DashboardPage() {
       <LiveDashboardMetrics />
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <Card className="p-5">
+        <Card className="flex flex-col p-5">
           <SectionTitle
             title="Safety"
             description="These limits are enforced on the server. No switch on this page can widen them."
           />
-          <dl className="mt-4 space-y-2">
+          <dl className="mt-4 flex-1 space-y-2">
             {safetyFacts.map((fact) => (
               <div
                 key={fact.label}
@@ -41,34 +41,13 @@ export default function DashboardPage() {
               </div>
             ))}
           </dl>
-          <Link href="/settings" className="btn btn-secondary btn-sm mt-4">
+          <Link href="/settings" className="btn btn-secondary btn-sm mt-4 self-start">
             See all safety settings
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
         </Card>
 
-        <Card className="p-5">
-          <SectionTitle
-            title="What a busy day looks like"
-            description="A preview of the activity feed once agents are connected."
-            action={<DemoBadge />}
-          />
-          <ul className="mt-4 space-y-2">
-            {demoActivity.slice(0, 3).map((event) => (
-              <li key={event.id} className="rounded-lg border border-line px-3 py-2.5">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <p className="text-sm font-medium text-foreground">{event.action}</p>
-                  <time className="text-xs text-faint">{event.time}</time>
-                </div>
-                <p className="mt-1 text-sm text-muted">{event.detail}</p>
-              </li>
-            ))}
-          </ul>
-          <Link href="/activity" className="btn btn-secondary btn-sm mt-4">
-            Open your real activity
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </Card>
+        <RecentActivityCard />
       </div>
 
       <p className="mt-6 flex items-start gap-2.5 text-sm text-muted">

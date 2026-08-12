@@ -1,5 +1,5 @@
-import { CommandComposer } from "@/components/command-composer";
-import { Card, EmptyState, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
+import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 
 const lifecycle = [
   ["You describe what you want", "In plain words, against one project."],
@@ -18,19 +18,7 @@ export default function BotManagerPage() {
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          <CommandComposer />
-
-          <Card className="p-5 sm:p-6">
-            <SectionTitle title="Your requests" description="Saved requests for this organization appear here." />
-            <div className="mt-4">
-              <EmptyState
-                title="No requests yet"
-                description="Sign in and connect a project to save your first one. Demo examples are deliberately kept out of this list."
-              />
-            </div>
-          </Card>
-        </div>
+        <BotManagerWorkspace />
 
         <Card className="h-fit p-5">
           <SectionTitle title="What happens next" />

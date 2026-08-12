@@ -80,6 +80,17 @@ Claude, auto merge, deployment automation, and rollback automation are **Not Con
 - [x] Add `tests/e2e/pages.spec.ts`: heading, horizontal-overflow, and axe assertions for 12 routes at three viewports. Local Playwright is now 48/48.
 - [ ] Recapture production evidence for the interface change once it is deployed; the recorded deployment/E2E/probe results describe tree `e0ca6e7`, which predates it. The PR preview deployment is READY but sits behind Vercel deployment protection (every route answers `302` to `vercel.com/sso-api`), so `PLAYWRIGHT_BASE_URL` runs against it need an owner-supplied protection-bypass token. Do not work around that protection.
 
+## Live Supabase wiring
+
+- [x] Add `GET /api/agents`, `/api/tasks`, `/api/runs`, `/api/reports`, and `/api/commands` over the existing tables through one server-only tenant boundary (`lib/server/tenant-list.ts`): caller session, exact active organization, explicit column lists, 100-row bound, no-store. See ADR-020.
+- [x] Convert Agents, Backlog, Runs, Reports, and the Bot Manager request list from seeded arrays to live reads, each with loading, signed-out, setup, empty, and error states.
+- [x] Replace the dashboard's seeded activity preview with live recent activity, and delete `lib/demo-data.ts`.
+- [x] Skip the request entirely when the browser bundle has no Supabase configuration, so an unconfigured environment shows "sign in required" instead of a page of failed calls.
+- [x] Remove the "Demo only" navigation group, which became false once those pages read live records.
+- [x] Add 26 tests covering the shared boundary's tenant scoping and withheld columns, plus the console loading/signed-out/setup/empty/error/live states.
+- [ ] Supply browser and server Supabase values for local and preview environments (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and the server-only `SUPABASE_SERVICE_ROLE_KEY`). These are owner-held secrets and must never enter source control; production already holds them in Vercel.
+- [ ] Exercise the five new routes against hosted `qpuofpmagrmyamahqwxw` with a real authenticated session, and confirm cross-tenant denial on each.
+
 ## Maintenance
 
 - [x] Run local gates on Node 22+; the Supabase future-support warning no longer appears. Final release verification against hosted Supabase still pending.

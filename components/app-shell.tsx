@@ -25,10 +25,9 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * Navigation is grouped so the difference between pages backed by live data
- * and pages that only illustrate a future capability is obvious at a glance.
- * That grouping is the truthfulness contract doing real work: people should
- * not have to read a badge on every card to know what is real.
+ * Grouped by what you are trying to do. Every destination now reads live
+ * tenant records, so there is no longer a "demo only" section to separate —
+ * an empty page says it is empty rather than showing illustrative rows.
  */
 const navigationGroups = [
   {
@@ -37,24 +36,24 @@ const navigationGroups = [
       { label: "Dashboard", href: "/", icon: CircleGauge },
       { label: "Projects", href: "/projects", icon: FolderKanban },
       { label: "Files", href: "/files", icon: FileText },
+    ],
+  },
+  {
+    heading: "Work",
+    items: [
       { label: "Bot Manager", href: "/bot-manager", icon: Bot },
-    ],
-  },
-  {
-    heading: "Setup & evidence",
-    items: [
-      { label: "Connections", href: "/connections", icon: PlugZap },
-      { label: "Activity", href: "/activity", icon: Activity },
-      { label: "Settings", href: "/settings", icon: Settings },
-    ],
-  },
-  {
-    heading: "Demo only",
-    items: [
-      { label: "Agents", href: "/agents", icon: Boxes },
       { label: "Backlog", href: "/backlog", icon: ClipboardList },
       { label: "Runs", href: "/runs", icon: GitBranch },
+      { label: "Agents", href: "/agents", icon: Boxes },
+    ],
+  },
+  {
+    heading: "Evidence & setup",
+    items: [
       { label: "Reports", href: "/reports", icon: ScrollText },
+      { label: "Activity", href: "/activity", icon: Activity },
+      { label: "Connections", href: "/connections", icon: PlugZap },
+      { label: "Settings", href: "/settings", icon: Settings },
     ],
   },
 ] as const;

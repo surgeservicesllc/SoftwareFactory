@@ -17,6 +17,8 @@ A GREEN interface simplification (ADR-018, ADR-019) now sits on top of that hard
 | Focused `013` chain | 3 files/44 tests | Pass |
 | Local E2E/responsive/accessibility | `npm run test:e2e` | Pass — 48/48 desktop/tablet/mobile. Dashboard depth checks (12) plus `tests/e2e/pages.spec.ts` (36) asserting heading, no horizontal overflow, and axe on 12 routes. |
 | Interface simplification (GREEN) | Design tokens with a 12px type floor (ADR-018), plain-language copy (ADR-019), grouped navigation, guided dashboard path, dead `project-form` removed | Pass locally on Node 22 — `npm run check` green in one run; presentation only, no route/schema/policy/provider change |
+| Live Supabase wiring (ADR-020) | Five tenant read routes over existing tables through one server-only boundary; five surfaces converted from seeded arrays; `lib/demo-data.ts` deleted | Pass locally — 27 files/234 tests. Read-only application change: no hosted schema change, no credential set, no provider capability added |
+| Withheld-column contract | Run `input`/`output`, report `content`, and command `parameters` are excluded from every list select; no `select("*")` | Pass — asserted by `tests/integration/tenant-list-routes.contract.test.ts` |
 | Interface accessibility repairs | axe across every route at three viewports | Pass — two real WCAG AA defects fixed: anchor primary buttons at 1.21:1 caused by an unlayered `a { color: inherit }` outranking `@layer components`, and a keyboard-unreachable horizontal scroll region on the backlog. Both predate this change; gradient panel backgrounds had made axe report contrast "incomplete" rather than failing. |
 | Secret safety | Current source/tracked and `.next/static` scan | Pass; only the synthetic `github_pat_` fixture matched, and no built static server-secret markers were found |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, `ACTIVE_HEALTHY` | Pass |
@@ -46,6 +48,19 @@ A GREEN interface simplification (ADR-018, ADR-019) now sits on top of that hard
 The hardening gates and current production deployment are recorded first. Hosted Supabase still ends at `010`; source migrations `011`-`013` are present in the deployed tree but are not applied to the database.
 
 ```text
+Live Supabase wiring re-run (ADR-020, read-only application change):
+Local shell: Node 22
+  npm run check                 PASS — lint, typecheck, 27 files / 234 tests, build in one run
+  build route table             46 entries, including the 4 new /api/agents|tasks|runs|reports routes
+                                (/api/commands already existed and gained a GET)
+  npm run test:e2e              PASS — 48/48 across desktop/tablet/mobile
+  wiring check                  0 references to lib/demo-data remain; the module is deleted
+  boundary check                every list select enumerates columns; no select("*"); run input/output,
+                                report content, and command parameters are never selected
+  NOT DONE                      no Supabase credential was set (owner-held, never in source control),
+                                so local and preview still render signed-out states
+  NOT DONE                      hosted migrations 011-013 remain unapplied and RED
+
 Interface simplification re-run (GREEN, presentation only):
 Local shell: Node 22 (no Supabase future-support warning)
   npm run check                 PASS — lint, typecheck, 25 files / 208 tests, 34-route build in one run
