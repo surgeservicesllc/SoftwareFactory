@@ -21,7 +21,8 @@ Overall status: **Phase 1B hardening is pushed to `main` and deployed; hosted mi
 - Repository authorization compares normalized GitHub full names literally rather than through SQL wildcard matching. Project creation persists only the synchronized GitHub default branch; a caller-supplied branch is a freshness expectation and cannot override provider state.
 - GitHub webhook route with 2 MiB bound, raw-body HMAC verification, event-specific payload schemas, delivery-ID/payload-hash replay protection, redacted storage, and bounded database reconciliation. Newly granted repository metadata uses the service-role-only RPC introduced by local migration `013`, so that path is not available in hosted production yet.
 - Connections, Projects, Files, and dashboard surfaces consume live tenant records when configured; demo records remain labeled **Demo Data**.
-- Activity now has a live no-store tenant API/UI backed by caller-session RLS. Browser responses omit activity metadata; the separate seeded illustration remains labeled **Demo Data**.
+- Activity now has a live no-store tenant API/UI backed by caller-session RLS. Browser responses omit activity metadata. The page previously rendered a seeded example stream directly beneath the live stream in identical styling; that duplicate was removed because two visually identical feeds on one page invite exactly the confusion the **Demo Data** label exists to prevent. The seeded example now appears only on the dashboard, still labeled.
+- The interface uses a semantic design-token system with a 12px minimum type size (ADR-018) and plain-language copy that keeps exact policy terms as secondary labels (ADR-019). Navigation is grouped so live surfaces are separated from a "Demo only" section. The dashboard leads with the real product path — connect GitHub, add a project, open your files — derived from the single `/api/projects` read the live metrics already perform.
 - The legacy HTTP local-file writer, its component, and its environment switch are removed. Repository changes have only the authenticated GitHub isolated-branch/draft-PR route.
 - Phase 1D observation-only scaffolding is present: a pure GREEN prerequisite evaluator, tenant-scoped GET/owner-only same-origin PATCH controls, a locked static safety surface, and hosted migration `010` that keeps Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF. No evaluator result can execute work.
 - No merge, deploy, rollback, Codex, or Claude executor is present.
@@ -64,11 +65,13 @@ The hardening gates pass locally and the exact application tree is now deployed.
 | Gate | Evidence | Result |
 | --- | --- | --- |
 | Current local Phase 1B review hardening | Active-tenant routes, truthful live status, Activity API/UI, direct-write removal, migrations `011`-`013`, expanded contracts | Implemented locally; validation below passes |
-| Check phases | `npm run check` | Lint, typecheck, and 24 files/205 tests passed; its build phase hit only a stale OneDrive `.next` cache `EPERM`. |
-| Production build | `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
+| Interface simplification (GREEN) | Design tokens, 12px type floor, plain-language copy, grouped navigation, guided dashboard setup path | Implemented locally; gates below rerun on Node 22 |
+| Check phases | `npm run check` on Node 22 after the interface work | Pass — lint, typecheck, 25 files/208 tests, and the production build all pass in one run |
+| Production build | `npm run build` | Pass — 34 pages/routes |
 | Full coverage suite | `npm run test:coverage` after final `013` ordering/contracts | Pass — 25 files/208 tests; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
 | Focused `013` chain | 3 test files | Pass — 44 tests |
-| Local Playwright | `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe checks |
+| Local Playwright | `npm run test:e2e` | Pass — 48/48 across desktop/tablet/mobile. Dashboard depth checks (12) plus a new per-page suite (36) asserting heading, no horizontal overflow, and axe on 12 routes. |
+| Interface accessibility repairs | axe on every route at three viewports | Two real WCAG AA defects found and fixed: anchor primary buttons rendered at 1.21:1 because an unlayered `a { color: inherit }` outranked the layered component class, and the backlog table was a keyboard-unreachable horizontal scroll region. Both predate this change and were previously masked. |
 | Secret/client scan | tracked/source and `.next/static` review | Pass — only the synthetic `github_pat_` fixture matched; no built static server-secret markers |
 | Hosted migration application | Supabase SQL Editor + hosted ledger | Pass through `010`; transactional preflight/application and safety checks recorded |
 | Local migration promotion | `011`, `012`, `013` | Pending exact owner approval; no hosted application/lint/RPC claim |
@@ -79,7 +82,9 @@ The hardening gates pass locally and the exact application tree is now deployed.
 | Live GitHub acceptance | production checklist | Pending; **Not Connected** |
 | Phase 1B/1D Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, READY/current for the `e0ca6e7` application tree via marker `7bd9d30`, stable alias 12/12 |
 
-The local shell used Node 20 and emitted Supabase's future-support warning. The repository, CI, and intended production runtime target Node 22 or newer.
+The interface gates above ran on Node 22, which the repository, CI, and intended production runtime target; Supabase's future-support warning no longer appears. Vitest still emits the Vite native config-loader warning tracked in the backlog.
+
+Every deployment row in this section — deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, its production Playwright 12/12, and its HTTP probes — describes application tree `e0ca6e7`. The interface simplification is **not** in that tree. Its production evidence must be recaptured after the change is deployed; no deployment, provider, or phase claim changes because of it.
 
 ## Known limitations and release blockers
 

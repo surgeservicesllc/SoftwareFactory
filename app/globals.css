@@ -1,149 +1,258 @@
 @import "tailwindcss";
 
-@layer components {
-  .primary-action {
-    @apply inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#c6f135] px-4 text-xs font-bold text-[#0b1003] transition-colors hover:bg-[#d8ff52] disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .secondary-action {
-    @apply inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#2d3947] bg-[#111821] px-3 text-[10px] font-semibold text-[#aab5c1] transition-colors hover:border-[#435163] hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .form-control {
-    @apply h-10 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-[#dce2e8] placeholder:text-[#4f5b69] focus:border-[#647f29] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
-  }
-}
+/*
+ * SoftwareFactory design tokens.
+ *
+ * Every colour and elevation in the product comes from this file. Components
+ * reference semantic names (surface, text-muted, accent) instead of raw hex
+ * values so contrast and hierarchy stay consistent across pages.
+ *
+ * Type rule: nothing in the interface is smaller than 12px. Labels use 12px,
+ * body copy uses 14px, and headings scale up from there.
+ */
 
 :root {
-  --background: #080b10;
-  --surface: #0d1118;
-  --surface-raised: #111722;
-  --surface-soft: #151c28;
-  --line: #202a38;
-  --line-strong: #2b3747;
-  --text: #f2f5f7;
-  --muted: #8d99a8;
-  --subtle: #5e6a79;
-  --signal: #c6f135;
-  --signal-ink: #0c1102;
-  --cyan: #60d8ff;
-  --warning: #ffbe55;
-  --danger: #ff6b72;
+  /* Surfaces, from furthest back to closest to the reader. */
+  --bg: #0b0f14;
+  --surface: #131920;
+  --surface-raised: #1a222c;
+  --surface-inset: #0e131a;
+
+  /* Borders. */
+  --border: #26313d;
+  --border-strong: #3a4855;
+
+  /* Text. All three pass WCAG AA on --surface. */
+  --text: #f4f7fa;
+  --text-muted: #a9b5c3;
+  --text-faint: #808e9d;
+
+  /* Brand accent, used for the primary action and healthy status only. */
+  --accent: #c6f135;
+  --accent-ink: #10160a;
+  --accent-text: #d5f96a;
+  --accent-border: #4c5f22;
+  --accent-surface: rgba(198, 241, 53, 0.09);
+
+  /* Status colours. Each pairs a readable text tone with a quiet fill. */
+  --info: #79ddff;
+  --info-surface: rgba(121, 221, 255, 0.09);
+  --info-border: #2b4d5c;
+
+  --warning: #ffc978;
+  --warning-surface: rgba(255, 201, 120, 0.09);
+  --warning-border: #5c4726;
+
+  --danger: #ff9aa1;
+  --danger-surface: rgba(255, 154, 161, 0.09);
+  --danger-border: #5c2f35;
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-background: var(--bg);
   --color-foreground: var(--text);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-inset: var(--surface-inset);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
 }
 
-* {
-  box-sizing: border-box;
-}
+/*
+ * Element resets belong in @layer base. Unlayered rules outrank every cascade
+ * layer, so an unlayered `a { color: inherit }` would silently defeat the
+ * component classes below and render link-buttons in the inherited body
+ * colour — including white text on the lime primary button.
+ */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  min-width: 320px;
-  background: var(--background);
-  scroll-behavior: smooth;
-}
+  html {
+    min-width: 320px;
+    background: var(--bg);
+    scroll-behavior: smooth;
+  }
 
-body {
-  min-height: 100vh;
-  margin: 0;
-  background:
-    linear-gradient(rgba(96, 216, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(96, 216, 255, 0.025) 1px, transparent 1px),
-    var(--background);
-  background-size: 40px 40px;
-  color: var(--text);
-  font-family:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  text-rendering: optimizeLegibility;
-}
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+      Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* 15px base: comfortable for dense control-plane data without zooming. */
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
+  }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
-}
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-::selection {
-  background: rgba(198, 241, 53, 0.28);
-  color: #ffffff;
-}
+  ::selection {
+    background: rgba(198, 241, 53, 0.3);
+    color: #ffffff;
+  }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
 
-::-webkit-scrollbar-track {
-  background: #090d13;
-}
+  ::-webkit-scrollbar-track {
+    background: var(--bg);
+  }
 
-::-webkit-scrollbar-thumb {
-  border: 3px solid #090d13;
-  border-radius: 999px;
-  background: #2a3544;
-}
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid var(--bg);
+    border-radius: 999px;
+    background: var(--border-strong);
+  }
 
-:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 3px;
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 .text-balance {
   text-wrap: balance;
 }
 
-.panel {
-  border: 1px solid var(--line);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 42%),
-    var(--surface);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
-}
-
-.panel-grid {
-  background-image:
-    linear-gradient(rgba(96, 216, 255, 0.032) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(96, 216, 255, 0.032) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-.eyebrow {
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.data-value {
+.tabular {
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.045em;
 }
 
 .safe-area-bottom {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
+@layer components {
+  /* ---------------------------------------------------------------- cards */
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .card-inset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+  }
+
+  /* -------------------------------------------------------------- buttons */
+
+  /* 40px minimum height keeps every action comfortably tappable. */
+  .btn {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: #d5fb52;
+  }
+
+  .btn-secondary {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-raised);
+    color: var(--text-muted);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--text-faint);
+    color: var(--text);
+  }
+
+  .btn-danger {
+    border: 1px solid var(--danger-border);
+    background: var(--danger-surface);
+    color: var(--danger);
+  }
+
+  .btn-sm {
+    @apply min-h-9 px-3 text-sm;
+  }
+
+  /* --------------------------------------------------------------- inputs */
+
+  .input {
+    @apply min-h-10 w-full rounded-lg px-3 text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-inset);
+    color: var(--text);
+  }
+
+  .input::placeholder {
+    color: var(--text-faint);
+  }
+
+  .input:focus {
+    border-color: var(--accent);
+  }
+
+  textarea.input {
+    @apply py-2.5;
+    min-height: 5rem;
+    line-height: 1.6;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium;
+    color: var(--text-muted);
+  }
+
+  .field-hint {
+    @apply mt-1.5 block text-xs;
+    color: var(--text-faint);
+  }
+
+  /* --------------------------------------------------------------- labels */
+
+  /* Section labels. 12px, no letter-spacing gimmicks — just readable. */
+  .label {
+    @apply text-xs font-semibold uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+}
+
+/* ------------------------------------------------------------- markdown */
+
 .prose-dark {
-  color: #9ca8b6;
-  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
   line-height: 1.75;
 }
 
@@ -151,15 +260,15 @@ a {
 .prose-dark h2,
 .prose-dark h3,
 .prose-dark h4 {
-  margin: 1.6em 0 0.65em;
-  color: #eef2f5;
+  margin: 1.6em 0 0.6em;
+  color: var(--text);
   font-weight: 650;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
-.prose-dark h1 { font-size: 1.65rem; }
-.prose-dark h2 { font-size: 1.25rem; }
-.prose-dark h3 { font-size: 1rem; }
+.prose-dark h1 { font-size: 1.6rem; }
+.prose-dark h2 { font-size: 1.3rem; }
+.prose-dark h3 { font-size: 1.05rem; }
 .prose-dark p,
 .prose-dark ul,
 .prose-dark ol,
@@ -170,17 +279,30 @@ a {
 .prose-dark ol { padding-left: 1.4rem; }
 .prose-dark ul { list-style: disc; }
 .prose-dark ol { list-style: decimal; }
-.prose-dark a { color: #b9d75d; text-decoration: underline; text-underline-offset: 3px; }
-.prose-dark strong { color: #dce2e8; }
-.prose-dark code { border: 1px solid #2a3543; border-radius: 0.25rem; background: #111821; padding: 0.12rem 0.32rem; color: #bfd260; font-size: 0.9em; }
-.prose-dark pre { overflow-x: auto; border: 1px solid #26313e; border-radius: 0.6rem; background: #080c12; padding: 1rem; }
-.prose-dark pre code { border: 0; background: transparent; padding: 0; color: #aeb9c4; }
-.prose-dark blockquote { border-left: 2px solid #5c7228; padding-left: 1rem; color: #8793a2; }
-.prose-dark table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.prose-dark a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+.prose-dark strong { color: var(--text); }
+.prose-dark code {
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: var(--surface-raised);
+  padding: 0.12rem 0.32rem;
+  color: var(--accent-text);
+  font-size: 0.9em;
+}
+.prose-dark pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  padding: 1rem;
+}
+.prose-dark pre code { border: 0; background: transparent; padding: 0; color: var(--text-muted); }
+.prose-dark blockquote { border-left: 2px solid var(--accent-border); padding-left: 1rem; color: var(--text-faint); }
+.prose-dark table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .prose-dark th,
-.prose-dark td { border: 1px solid #293442; padding: 0.55rem 0.7rem; text-align: left; }
-.prose-dark th { background: #121923; color: #d7dde4; }
-.prose-dark hr { margin: 2rem 0; border-color: #26313e; }
+.prose-dark td { border: 1px solid var(--border); padding: 0.55rem 0.7rem; text-align: left; }
+.prose-dark th { background: var(--surface-raised); color: var(--text); }
+.prose-dark hr { margin: 2rem 0; border-color: var(--border); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

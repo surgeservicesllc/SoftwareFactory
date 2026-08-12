@@ -1,41 +1,40 @@
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  DatabaseZap,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Check, Info, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@/lib/cn";
+
+/**
+ * Shared presentation primitives.
+ *
+ * Everything here uses the design tokens in globals.css. Text never drops
+ * below 12px, and each primitive has exactly one job so pages stay readable.
+ */
+
+/* ------------------------------------------------------------------ labels */
 
 export function DemoBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded border border-[#324050] bg-[#141b25] px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.13em] text-[#8290a1]",
+        "inline-flex items-center rounded border border-line px-1.5 py-0.5 text-xs font-semibold text-faint",
         className,
       )}
     >
-      Demo data
+      Demo Data
     </span>
   );
 }
 
 export function NotConnectedBadge({ label = "Not Connected" }: { label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3a3033] bg-[#25191c] px-2 py-1 text-[10px] font-semibold text-[#e7969d]">
-      <span className="size-1.5 rounded-full bg-[#ff6b72]" aria-hidden="true" />
-      {label}
-    </span>
-  );
+  return <StatusBadge tone="danger">{label}</StatusBadge>;
 }
 
 const statusStyles = {
-  safe: "border-[#31421d] bg-[#17210e] text-[#c6f135]",
-  info: "border-[#233f4a] bg-[#10232b] text-[#60d8ff]",
-  warning: "border-[#4b3c23] bg-[#2c2112] text-[#ffbe55]",
-  danger: "border-[#4a292e] bg-[#2b171b] text-[#ff7d84]",
-  neutral: "border-[#303a47] bg-[#171d26] text-[#9aa7b7]",
+  safe: "border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-text)]",
+  info: "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]",
+  warning: "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
+  danger: "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]",
+  neutral: "border-line-strong bg-surface-raised text-muted",
 } as const;
 
 export function StatusBadge({
@@ -50,46 +49,45 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
         statusStyles[tone],
       )}
     >
-      {dot ? <span className="size-1.5 rounded-full bg-current opacity-90" aria-hidden="true" /> : null}
+      {dot ? <span className="size-1.5 rounded-full bg-current" aria-hidden="true" /> : null}
       {children}
     </span>
   );
 }
 
+/* ------------------------------------------------------------- page layout */
+
 export function PageHeader({
-  eyebrow,
   title,
   description,
   action,
 }: {
-  eyebrow: string;
   title: string;
   description: string;
   action?: React.ReactNode;
 }) {
   return (
-    <header className="mb-6 flex flex-col gap-4 border-b border-[#1b2430] pb-6 sm:flex-row sm:items-end sm:justify-between">
-      <div className="max-w-3xl">
-        <p className="eyebrow mb-2">{eyebrow}</p>
-        <h1 className="text-balance text-2xl font-semibold tracking-[-0.04em] text-white sm:text-[30px]">
+    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="max-w-2xl">
+        <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
           {title}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#7f8b9a]">{description}</p>
+        <p className="mt-2 text-muted">{description}</p>
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
     </header>
   );
 }
 
-export function Panel({
+export function Card({
   children,
   className,
 }: Readonly<{ children: React.ReactNode; className?: string }>) {
-  return <section className={cn("panel rounded-xl", className)}>{children}</section>;
+  return <section className={cn("card", className)}>{children}</section>;
 }
 
 export function SectionTitle({
@@ -102,15 +100,57 @@ export function SectionTitle({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-[#eef2f5]">{title}</h2>
-        {description ? <p className="mt-1 text-xs leading-5 text-[#6f7c8c]">{description}</p> : null}
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
       </div>
       {action}
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ notices */
+
+const noticeStyles = {
+  info: "border-line-strong bg-surface-raised text-muted",
+  demo: "border-line-strong bg-surface-raised text-muted",
+  warning: "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
+  danger: "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]",
+} as const;
+
+/**
+ * One notice per page. Repeating the same disclaimer on every card trains
+ * people to ignore it, which makes the product less truthful, not more.
+ */
+export function Notice({
+  children,
+  tone = "info",
+  icon: Icon = Info,
+}: {
+  children: React.ReactNode;
+  tone?: keyof typeof noticeStyles;
+  icon?: LucideIcon;
+}) {
+  return (
+    <div className={cn("mb-6 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm", noticeStyles[tone])}>
+      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** A page whose content is entirely illustrative says so once, at the top. */
+export function DemoNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <Notice tone="demo">
+      <DemoBadge className="mr-2 align-middle" />
+      {children}
+    </Notice>
+  );
+}
+
+/* -------------------------------------------------------------- data views */
 
 export function MetricCard({
   label,
@@ -130,26 +170,24 @@ export function MetricCard({
   className?: string;
 }) {
   const toneClass = {
-    neutral: "text-[#9aa7b7] bg-[#19212c] border-[#283342]",
-    safe: "text-[#c6f135] bg-[#17210e] border-[#2d3e1b]",
-    warning: "text-[#ffbe55] bg-[#2a2113] border-[#463821]",
-    danger: "text-[#ff7d84] bg-[#29181d] border-[#43272c]",
-    info: "text-[#60d8ff] bg-[#10232b] border-[#213d48]",
+    neutral: "text-muted",
+    safe: "text-[var(--accent)]",
+    warning: "text-[var(--warning)]",
+    danger: "text-[var(--danger)]",
+    info: "text-[var(--info)]",
   }[tone];
 
   return (
-    <article className={cn("panel group relative min-h-[148px] overflow-hidden rounded-xl p-4 transition-colors hover:border-[#303c4c]", className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className={cn("grid size-8 place-items-center rounded-lg border", toneClass)}>
-          <Icon className="size-4" strokeWidth={1.8} aria-hidden="true" />
-        </div>
+    <article className={cn("card p-4", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium text-muted">
+          <Icon className={cn("size-4 shrink-0", toneClass)} aria-hidden="true" />
+          {label}
+        </span>
         {demo ? <DemoBadge /> : null}
       </div>
-      <div className="mt-5">
-        <p className="data-value text-[26px] font-semibold leading-none text-[#f6f8fa]">{value}</p>
-        <p className="mt-2 text-xs font-medium text-[#aab4c0]">{label}</p>
-        <p className="mt-1 text-[10px] leading-4 text-[#5e6a79]">{detail}</p>
-      </div>
+      <p className="tabular mt-3 text-3xl font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-sm text-faint">{detail}</p>
     </article>
   );
 }
@@ -159,27 +197,24 @@ export function EmptyState({
   description,
   actionHref,
   actionLabel,
+  icon: Icon,
 }: {
   title: string;
   description: string;
   actionHref?: string;
   actionLabel?: string;
+  icon?: LucideIcon;
 }) {
   return (
-    <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-[#2a3544] bg-[#0b1017] px-5 py-10 text-center">
+    <div className="grid place-items-center rounded-lg border border-dashed border-line-strong px-5 py-12 text-center">
       <div className="max-w-sm">
-        <div className="mx-auto grid size-10 place-items-center rounded-lg border border-[#2b3746] bg-[#151c27] text-[#7e8b9b]">
-          <DatabaseZap className="size-[18px]" aria-hidden="true" />
-        </div>
-        <h3 className="mt-4 text-sm font-semibold text-[#e7ebef]">{title}</h3>
-        <p className="mt-2 text-xs leading-5 text-[#6f7c8c]">{description}</p>
+        {Icon ? <Icon className="mx-auto size-7 text-faint" aria-hidden="true" /> : null}
+        <h3 className={cn("font-semibold text-foreground", Icon && "mt-3")}>{title}</h3>
+        <p className="mt-2 text-sm text-muted">{description}</p>
         {actionHref && actionLabel ? (
-          <Link
-            href={actionHref}
-            className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#34411c] bg-[#c6f135]/[0.07] px-3 text-xs font-semibold text-[#dffb7b]"
-          >
+          <Link href={actionHref} className="btn btn-primary mt-5">
             {actionLabel}
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
         ) : null}
       </div>
@@ -187,14 +222,94 @@ export function EmptyState({
   );
 }
 
-export function DemoNotice({ children }: { children: React.ReactNode }) {
+/**
+ * Full-panel state for "you cannot use this page yet, here is the one thing
+ * to do next". Used by every console so blocked states look the same.
+ */
+export function BlockedState({
+  title,
+  description,
+  href,
+  label,
+  icon: Icon,
+}: {
+  title: string;
+  description: string;
+  href?: string;
+  label?: string;
+  icon?: LucideIcon;
+}) {
   return (
-    <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#34414f] bg-[#111822] px-4 py-3 text-xs leading-5 text-[#8e9bab]">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[#ffbe55]" aria-hidden="true" />
-      <div>
-        <DemoBadge className="mr-2 align-middle" />
-        {children}
+    <Card className="grid min-h-64 place-items-center p-8 text-center">
+      <div className="max-w-md">
+        {Icon ? <Icon className="mx-auto size-8 text-faint" aria-hidden="true" /> : null}
+        <h2 className={cn("text-lg font-semibold text-foreground", Icon && "mt-4")}>{title}</h2>
+        <p className="mt-2 text-muted">{description}</p>
+        {href && label ? (
+          <Link href={href} className="btn btn-primary mt-5">
+            {label}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        ) : null}
       </div>
-    </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------- setup steps */
+
+export type SetupStep = {
+  title: string;
+  description: string;
+  href: string;
+  action: string;
+  done: boolean;
+};
+
+/**
+ * The product's real path: connect GitHub, add a project, open its files.
+ * Showing it as numbered steps means a new owner never has to guess.
+ */
+export function SetupSteps({ steps, current }: { steps: SetupStep[]; current: number }) {
+  return (
+    <ol className="grid gap-3 md:grid-cols-3">
+      {steps.map((step, index) => {
+        const isCurrent = index === current;
+        return (
+          <li
+            key={step.title}
+            className={cn(
+              "flex flex-col rounded-lg border p-4",
+              isCurrent ? "border-[var(--accent-border)] bg-[var(--accent-surface)]" : "border-line bg-surface",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "tabular grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold",
+                  step.done
+                    ? "bg-[var(--accent)] text-[var(--accent-ink)]"
+                    : isCurrent
+                      ? "bg-[var(--accent)] text-[var(--accent-ink)]"
+                      : "border border-line-strong text-faint",
+                )}
+                aria-hidden="true"
+              >
+                {step.done ? <Check className="size-3.5" strokeWidth={3} /> : index + 1}
+              </span>
+              <h3 className="font-semibold text-foreground">{step.title}</h3>
+            </div>
+            <p className="mt-2 flex-1 text-sm text-muted">{step.description}</p>
+            <Link
+              href={step.href}
+              className={cn("mt-4 self-start", isCurrent ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm")}
+            >
+              {step.done ? "Review" : step.action}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

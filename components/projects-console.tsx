@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  ArrowRight,
   CheckCircle2,
   CircleDotDashed,
   ExternalLink,
@@ -14,13 +13,12 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  ShieldCheck,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Panel, StatusBadge } from "@/components/ui";
+import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 type Repository = {
@@ -171,57 +169,135 @@ export function ProjectsConsole() {
         }),
       });
       const body = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be connected.");
-      setMessage(`${name} is now backed by live GitHub and Supabase data.`);
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be added.");
+      setMessage(`${name} is connected. Its live GitHub data is below.`);
       setName("");
       setDescription("");
       setRepositoryId("");
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The project could not be connected.");
+      setMessage(error instanceof Error ? error.message : "The project could not be added.");
     } finally {
       setSaving(false);
     }
   }
 
-  if (state === "loading") return <Panel className="grid min-h-64 place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" aria-label="Loading projects" /></Panel>;
-  if (state === "signed-out") return <ProjectNotice title="Sign in to load live projects" description="Projects are scoped to your authenticated SoftwareFactory organization." href="/sign-in?next=/projects" label="Sign in" />;
-  if (state === "setup") return <ProjectNotice title="Complete organization setup" description="Create or select an organization before linking a repository." href="/connections" label="Open connections" />;
-  if (state === "error") return <ProjectNotice title="Projects are unavailable" description={message || "The live project service could not be reached."} href="/connections" label="Review connections" />;
+  if (state === "loading") {
+    return (
+      <Card className="grid min-h-64 place-items-center">
+        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading projects" />
+      </Card>
+    );
+  }
+  if (state === "signed-out") return <BlockedState icon={FolderTree} title="Sign in to see your projects" description="Projects belong to your organization." href="/auth/sign-in?next=/projects" label="Sign in" />;
+  if (state === "setup") return <BlockedState icon={FolderTree} title="Finish setting up" description="Create or choose a workspace before linking a repository." href="/connections" label="Open connections" />;
+  if (state === "error") return <BlockedState icon={FolderTree} title="Projects are unavailable" description={message || "Your projects could not be loaded."} href="/connections" label="Check connections" />;
 
   return (
-    <div className="space-y-5">
-      {projects.length ? (
-        <div className="space-y-4">
-          {projects.map((project) => (
-            <ProjectInspector key={project.id} project={project} connection={connections.find((item) => item.id === project.connectionId) ?? null} />
-          ))}
-        </div>
-      ) : null}
+    <div className="space-y-4">
+      {projects.map((project) => (
+        <ProjectInspector
+          key={project.id}
+          project={project}
+          connection={connections.find((item) => item.id === project.connectionId) ?? null}
+        />
+      ))}
 
       {!connectedConnections.length ? (
-        <ProjectNotice title="Connect GitHub first" description="A verified GitHub App installation is required before a repository can become a managed project." href="/connections" label="Connect GitHub" />
+        <BlockedState
+          icon={GitFork}
+          title="Connect GitHub first"
+          description="A repository becomes a project only after you have authorized GitHub."
+          href="/connections"
+          label="Connect GitHub"
+        />
       ) : unconnectedRepositories.length || !projects.length ? (
-        <Panel className="p-5 sm:p-6">
-          <div className="flex items-start gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[#304020] bg-[#17210e] text-[#c6f135]"><Plus className="size-4" aria-hidden="true" /></span>
-            <div><h2 className="text-sm font-semibold text-white">Add a GitHub-backed project</h2><p className="mt-1 text-xs leading-5 text-[#748191]">Repository and branch choices come from the verified GitHub App installation. The tenant relationship is stored transactionally in Supabase.</p></div>
-          </div>
+        <Card className="p-5 sm:p-6">
+          <SectionTitle
+            title="Add a project"
+            description="Pick one of the repositories you authorized. The branch comes straight from GitHub."
+          />
+
           <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
-            <Field label="GitHub connection"><select value={activeConnectionId} onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }} className="form-control">{connectedConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.account?.login ?? connection.name ?? "GitHub"}</option>)}</select></Field>
-            <Field label="Repository"><select value={repositoryId} onChange={(event) => { setRepositoryId(event.target.value); const repo = unconnectedRepositories.find((item) => String(item.id) === event.target.value); setName(repo?.fullName.split("/")[1] ?? ""); }} className="form-control">{unconnectedRepositories.map((repository) => <option key={repository.id} value={repository.id}>{repository.fullName}</option>)}</select></Field>
-            <Field label="Verified default branch"><input value={selectedRepository?.defaultBranch ?? ""} readOnly className="form-control" /></Field>
-            <Field label="Project name"><input value={name} onChange={(event) => setName(event.target.value)} required minLength={1} maxLength={160} className="form-control" /></Field>
-            <Field label="Description" className="md:col-span-2"><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} className="form-control h-auto py-2.5" placeholder="What this software system does" /></Field>
-            <div className="flex flex-col gap-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="flex items-center gap-2 text-[10px] text-[#798697]"><ShieldCheck className="size-4 text-[#c6f135]" aria-hidden="true" />Autonomous Mode and every automatic action start OFF; the global kill switch starts ON.</p>
-              <button type="submit" disabled={saving || !selectedRepository || !name.trim()} className="primary-action justify-center">{saving ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}Connect project</button>
+            <div>
+              <label htmlFor="project-connection" className="field-label">GitHub account</label>
+              <select
+                id="project-connection"
+                value={activeConnectionId}
+                onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
+                className="input"
+              >
+                {connectedConnections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.account?.login ?? connection.name ?? "GitHub"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="project-repository" className="field-label">Repository</label>
+              <select
+                id="project-repository"
+                value={repositoryId}
+                onChange={(event) => {
+                  setRepositoryId(event.target.value);
+                  const repo = unconnectedRepositories.find((item) => String(item.id) === event.target.value);
+                  setName(repo?.fullName.split("/")[1] ?? "");
+                }}
+                className="input"
+              >
+                {unconnectedRepositories.map((repository) => (
+                  <option key={repository.id} value={repository.id}>{repository.fullName}</option>
+                ))}
+              </select>
+              <span className="field-hint">
+                Branch: {selectedRepository?.defaultBranch ?? "—"} (set by GitHub)
+              </span>
+            </div>
+
+            <div>
+              <label htmlFor="project-name" className="field-label">Name it</label>
+              <input
+                id="project-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+                minLength={1}
+                maxLength={160}
+                className="input"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="project-description" className="field-label">
+                What is it? <span className="font-normal text-faint">(optional)</span>
+              </label>
+              <input
+                id="project-description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                maxLength={2000}
+                className="input"
+                placeholder="Customer-facing web app"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <button type="submit" disabled={saving || !selectedRepository || !name.trim()} className="btn btn-primary">
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Add project
+              </button>
+              <p className="mt-3 text-sm text-muted">
+                New projects start with everything automatic switched off.
+              </p>
             </div>
           </form>
-          {message ? <p className="mt-4 text-xs text-[#d7b96d]" aria-live="polite">{message}</p> : null}
-        </Panel>
+
+          {message ? <p className="mt-4 text-sm text-[var(--warning)]" aria-live="polite">{message}</p> : null}
+        </Card>
       ) : (
-        <Panel className="p-4 text-center text-xs text-[#718091]">Every selected repository in this installation is already connected to a project.</Panel>
+        <p className="text-sm text-muted">Every repository you authorized is already a project.</p>
       )}
     </div>
   );
@@ -283,17 +359,17 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
         if (key === "pullRequests") next.pullRequests = (body.pullRequests as PullRequest[] | undefined) ?? [];
         if (key === "checkRuns") next.checkRuns = (body.checkRuns as CheckRun[] | undefined) ?? [];
       }
-      if (repository?.archived) warnings.push("Repository is archived in GitHub.");
-      if (repository?.disabled) warnings.push("Repository is disabled in GitHub.");
-      if (!next.branches.some((item) => item.name === project.defaultBranch)) warnings.push("Configured default branch was not returned by GitHub.");
+      if (repository?.archived) warnings.push("This repository is archived in GitHub.");
+      if (repository?.disabled) warnings.push("This repository is disabled in GitHub.");
+      if (!next.branches.some((item) => item.name === project.defaultBranch)) warnings.push("GitHub did not return the branch this project points at.");
       const failingChecks = next.checkRuns.filter((check) => check.status === "completed" && !["success", "neutral", "skipped"].includes(check.conclusion ?? ""));
-      if (failingChecks.length) warnings.push(`${failingChecks.length} default-branch check${failingChecks.length === 1 ? " is" : "s are"} failing.`);
+      if (failingChecks.length) warnings.push(`${failingChecks.length} check${failingChecks.length === 1 ? " is" : "s are"} failing on the main branch.`);
       const conflictingPullRequests = next.pullRequests.filter((pullRequest) => pullRequest.state === "open" && pullRequest.mergeability === "conflicting");
-      if (conflictingPullRequests.length) warnings.push(`${conflictingPullRequests.length} open pull request${conflictingPullRequests.length === 1 ? " reports" : "s report"} a merge conflict.`);
+      if (conflictingPullRequests.length) warnings.push(`${conflictingPullRequests.length} open pull request${conflictingPullRequests.length === 1 ? " has" : "s have"} a merge conflict.`);
       setData(next);
-      if (warnings.length >= results.length) setError("GitHub repository details could not be fully refreshed.");
+      if (warnings.length >= results.length) setError("Live GitHub data could not be fully refreshed.");
     } catch {
-      setError("GitHub repository details could not be refreshed.");
+      setError("Live GitHub data could not be refreshed.");
     } finally {
       setLoading(false);
     }
@@ -307,99 +383,190 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
   const openPullRequests = data.pullRequests.filter((pullRequest) => pullRequest.state === "open");
   const latestCommit = data.commits[0];
   const checkSummary = summarizeChecks(data.checkRuns);
-  const lastSynced = connection?.installation?.lastSyncedAt ?? repository?.lastSyncedAt ?? null;
 
   return (
-    <Panel className="overflow-hidden">
-      <div className="border-b border-[#202b38] p-5 sm:p-6">
+    <Card className="overflow-hidden">
+      <div className="p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">{isConnected ? <CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" aria-hidden="true" /> : <AlertTriangle className="size-4 shrink-0 text-[#ff7d84]" aria-hidden="true" />}<h2 className="truncate text-base font-semibold text-white">{project.name}</h2></div>
-            <p className="mt-2 text-xs leading-5 text-[#748191]">{project.description || "GitHub-backed SoftwareFactory project"}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground">{project.name}</h2>
+              <StatusBadge tone={isConnected ? "safe" : "danger"}>
+                {isConnected ? "Connected" : "Not Connected"}
+              </StatusBadge>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              {project.githubRepository ?? "No repository linked"} · {project.defaultBranch}
+            </p>
+            {project.description ? <p className="mt-2 text-sm text-muted">{project.description}</p> : null}
           </div>
-          <div className="flex flex-wrap gap-2"><StatusBadge tone={isConnected ? "safe" : "danger"}>{isConnected ? "GitHub Connected" : "Not Connected"}</StatusBadge><StatusBadge tone="neutral">{project.autonomousMode ? "Observation mode ON" : "Autonomy OFF"}</StatusBadge><StatusBadge tone="danger">Kill switch ON</StatusBadge></div>
+          <div className="flex flex-wrap gap-2 sm:shrink-0">
+            {isConnected ? (
+              <Link href={`/files?project=${project.id}`} className="btn btn-primary btn-sm">
+                <FolderTree className="size-4" aria-hidden="true" />
+                Browse files
+              </Link>
+            ) : (
+              <Link href="/connections" className="btn btn-primary btn-sm">Reconnect</Link>
+            )}
+            {repository?.htmlUrl ? (
+              <a href={repository.htmlUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                GitHub
+                <ExternalLink className="size-4" aria-hidden="true" />
+              </a>
+            ) : null}
+            <button type="button" onClick={() => void refresh()} disabled={loading || !isConnected} className="btn btn-secondary btn-sm">
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              Refresh
+            </button>
+          </div>
         </div>
 
-        <dl className="mt-5 grid gap-3 text-[11px] sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Repository" value={project.githubRepository ?? "Not linked"} mono />
-          <Metric label="Visibility" value={repository ? (repository.private ? "Private" : "Public") : "Unavailable"} />
-          <Metric label="Default branch" value={project.defaultBranch} mono />
-          <Metric label="Last synchronized" value={lastSynced ? formatDate(lastSynced) : "Never"} />
-          <Metric label="Latest commit" value={latestCommit ? shortSha(latestCommit.sha) : loading ? "Loading…" : "Unavailable"} detail={latestCommit?.message.split("\n")[0]} mono />
-          <Metric label="Branches" value={loading ? "…" : String(data.branches.length)} />
-          <Metric label="Open pull requests" value={loading ? "…" : String(openPullRequests.length)} />
-          <Metric label="Default-branch checks" value={loading ? "Loading…" : checkSummary.label} tone={checkSummary.tone} />
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Stat label="Latest commit" value={latestCommit ? shortSha(latestCommit.sha) : loading ? "…" : "—"} detail={latestCommit?.message.split("\n")[0]} />
+          <Stat label="Branches" value={loading ? "…" : String(data.branches.length)} />
+          <Stat label="Open pull requests" value={loading ? "…" : String(openPullRequests.length)} />
+          <Stat label="Checks" value={loading ? "…" : checkSummary.label} tone={checkSummary.tone} />
         </dl>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {isConnected ? <Link href={`/files?project=${project.id}`} className="primary-action">Browse real files<FolderTree className="size-4" aria-hidden="true" /></Link> : <Link href="/connections" className="primary-action">Restore connection<ArrowRight className="size-4" aria-hidden="true" /></Link>}
-          {repository?.htmlUrl ? <a href={repository.htmlUrl} target="_blank" rel="noreferrer" className="secondary-action">Open GitHub<ExternalLink className="size-3.5" aria-hidden="true" /></a> : null}
-          <button type="button" onClick={() => void refresh()} disabled={loading || !isConnected} className="secondary-action">{loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}Refresh live data</button>
-        </div>
       </div>
 
-      {!isConnected ? <WarningStrip text="GitHub Connection Lost. Repository operations are blocked until the installation is restored and synchronized." danger /> : null}
+      {!isConnected ? <WarningStrip text="GitHub access was lost. Nothing can be read from this repository until you reconnect." danger /> : null}
       {error ? <WarningStrip text={error} danger /> : null}
       {data.warnings.map((warning, index) => <WarningStrip key={`${index}-${warning}`} text={warning} />)}
 
-      <div className="grid divide-y divide-[#202b38] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
-        <InspectorSection title="Branches" icon={GitBranch} empty="No branch data available.">
-          {data.branches.slice(0, 6).map((item) => (
-            <div key={item.name} className="flex items-center gap-2 py-2 text-[10px]"><GitBranch className="size-3.5 shrink-0 text-[#71802c]" /><span className="min-w-0 flex-1 truncate font-mono text-[#aeb8c3]">{item.name}</span>{item.name === project.defaultBranch ? <StatusBadge tone="info" dot={false}>Default</StatusBadge> : null}{item.protected ? <StatusBadge tone="safe" dot={false}>Protected</StatusBadge> : null}<span className="font-mono text-[#536070]">{shortSha(item.sha)}</span></div>
-          ))}
-        </InspectorSection>
-        <InspectorSection title="Recent commits" icon={GitCommitHorizontal} empty="No commit data available.">
-          {data.commits.slice(0, 5).map((item) => (
-            <a key={item.sha} href={item.url} target="_blank" rel="noreferrer" className="block rounded-md py-2 hover:bg-[#111821]"><p className="truncate text-[10px] font-medium text-[#b7c0ca]">{item.message.split("\n")[0]}</p><p className="mt-1 flex justify-between gap-2 font-mono text-[8px] text-[#566271]"><span>{shortSha(item.sha)} · {item.author.githubLogin ?? item.author.name}</span><span>{item.date ? formatDate(item.date) : "Date unavailable"}</span></p></a>
-          ))}
-        </InspectorSection>
-        <InspectorSection title="Pull requests" icon={GitPullRequestArrow} empty="No pull requests returned by GitHub.">
-          {data.pullRequests.slice(0, 6).map((item) => (
-            <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="block rounded-md py-2 hover:bg-[#111821]"><div className="flex items-start gap-2"><GitPullRequestArrow className="mt-0.5 size-3.5 shrink-0 text-[#60d8ff]" /><p className="min-w-0 flex-1 truncate text-[10px] font-medium text-[#b7c0ca]">#{item.number} {item.title}</p><StatusBadge tone={item.state === "open" ? "info" : "neutral"} dot={false}>{item.draft ? "Draft" : item.state}</StatusBadge></div><p className="mt-1 truncate pl-5 font-mono text-[8px] text-[#566271]">{item.headBranch} → {item.baseBranch} · {item.author?.login ?? "Unknown author"} · {item.mergeability ?? "unknown"}</p></a>
-          ))}
-        </InspectorSection>
-      </div>
+      {isConnected ? (
+        <div className="grid border-t border-line lg:grid-cols-3">
+          <InspectorSection title="Branches" icon={GitBranch} empty="No branches returned.">
+            {data.branches.slice(0, 6).map((item) => (
+              <li key={item.name} className="flex items-center gap-2 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-muted">{item.name}</span>
+                {item.name === project.defaultBranch ? <StatusBadge tone="info" dot={false}>Main</StatusBadge> : null}
+              </li>
+            ))}
+          </InspectorSection>
 
-      <div className="border-t border-[#202b38] bg-[#0a0f16] p-4">
-        <div className="flex items-center gap-2"><CircleDotDashed className="size-4 text-[#7d8a99]" aria-hidden="true" /><h3 className="text-[11px] font-semibold text-[#c9d0d8]">GitHub Actions / checks</h3></div>
-        {data.checkRuns.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}</div> : <p className="mt-2 text-[10px] text-[#657283]">{loading ? "Loading live check data…" : "No check data available."}</p>}
-      </div>
-    </Panel>
+          <InspectorSection title="Recent commits" icon={GitCommitHorizontal} empty="No commits returned.">
+            {data.commits.slice(0, 5).map((item) => (
+              <li key={item.sha}>
+                <a href={item.url} target="_blank" rel="noreferrer" className="block py-2">
+                  <p className="truncate text-sm text-foreground">{item.message.split("\n")[0]}</p>
+                  <p className="mt-0.5 text-sm text-faint">
+                    {item.author.githubLogin ?? item.author.name} · {item.date ? formatDate(item.date) : "unknown date"}
+                  </p>
+                </a>
+              </li>
+            ))}
+          </InspectorSection>
+
+          <InspectorSection title="Pull requests" icon={GitPullRequestArrow} empty="No pull requests returned.">
+            {data.pullRequests.slice(0, 6).map((item) => (
+              <li key={item.id}>
+                <a href={item.url} target="_blank" rel="noreferrer" className="block py-2">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm text-foreground">#{item.number} {item.title}</p>
+                    <StatusBadge tone={item.state === "open" ? "info" : "neutral"} dot={false}>
+                      {item.draft ? "Draft" : item.state}
+                    </StatusBadge>
+                  </div>
+                  <p className="mt-0.5 truncate text-sm text-faint">{item.headBranch} → {item.baseBranch}</p>
+                </a>
+              </li>
+            ))}
+          </InspectorSection>
+        </div>
+      ) : null}
+
+      {isConnected && data.checkRuns.length ? (
+        <div className="border-t border-line p-5">
+          <p className="label">Checks on {project.defaultBranch}</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}
+          </ul>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
-function Metric({ label, value, detail, mono, tone = "neutral" }: { label: string; value: string; detail?: string; mono?: boolean; tone?: "neutral" | "safe" | "warning" | "danger" }) {
-  return <div className="rounded-lg border border-[#25303d] bg-[#0a0f16] p-3"><dt className="font-mono text-[8px] uppercase tracking-[0.12em] text-[#687586]">{label}</dt><dd className={cn("mt-2 truncate text-xs font-semibold", mono && "font-mono", tone === "safe" ? "text-[#c6f135]" : tone === "warning" ? "text-[#ffbe55]" : tone === "danger" ? "text-[#ff7d84]" : "text-[#d2d8df]")}>{value}</dd>{detail ? <p className="mt-1 truncate text-[9px] text-[#566271]" title={detail}>{detail}</p> : null}</div>;
+function Stat({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail?: string; tone?: "neutral" | "safe" | "warning" | "danger" }) {
+  return (
+    <div className="card-inset p-3">
+      <dt className="text-sm text-faint">{label}</dt>
+      <dd
+        className={cn(
+          "mt-1 truncate font-semibold",
+          tone === "safe" ? "text-accent" : tone === "warning" ? "text-[var(--warning)]" : tone === "danger" ? "text-[var(--danger)]" : "text-foreground",
+        )}
+      >
+        {value}
+      </dd>
+      {detail ? <p className="mt-1 truncate text-sm text-faint" title={detail}>{detail}</p> : null}
+    </div>
+  );
 }
 
 function InspectorSection({ title, icon: Icon, empty, children }: { title: string; icon: typeof GitBranch; empty: string; children: React.ReactNode }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
-  return <section className="min-w-0 p-4 sm:p-5"><div className="flex items-center gap-2"><Icon className="size-4 text-[#82952e]" aria-hidden="true" /><h3 className="text-[11px] font-semibold text-[#d2d8df]">{title}</h3></div><div className="mt-3 divide-y divide-[#1d2631]">{hasChildren ? children : <p className="py-4 text-[10px] text-[#596675]">{empty}</p>}</div></section>;
+  return (
+    <section className="min-w-0 border-b border-line p-5 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 text-faint" aria-hidden="true" />
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      </div>
+      {hasChildren ? (
+        <ul className="mt-2 divide-y divide-[var(--border)]">{children}</ul>
+      ) : (
+        <p className="mt-2 py-2 text-sm text-faint">{empty}</p>
+      )}
+    </section>
+  );
 }
 
 function CheckItem({ check }: { check: CheckRun }) {
   const passed = check.status === "completed" && ["success", "neutral", "skipped"].includes(check.conclusion ?? "");
   const failed = check.status === "completed" && !passed;
   const Icon = passed ? CheckCircle2 : failed ? XCircle : CircleDotDashed;
-  const content = <><Icon className={cn("size-3.5 shrink-0", passed ? "text-[#c6f135]" : failed ? "text-[#ff7d84]" : "text-[#ffbe55]")} /><span className="min-w-0 flex-1 truncate">{check.name}</span><span className="font-mono text-[8px] uppercase text-[#647182]">{check.conclusion ?? check.status}</span></>;
-  return check.url ? <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-[#26313e] bg-[#0d131c] p-3 text-[10px] text-[#aeb8c3]">{content}</a> : <div className="flex items-center gap-2 rounded-lg border border-[#26313e] bg-[#0d131c] p-3 text-[10px] text-[#aeb8c3]">{content}</div>;
+  const content = (
+    <>
+      <Icon
+        className={cn("size-4 shrink-0", passed ? "text-accent" : failed ? "text-[var(--danger)]" : "text-[var(--warning)]")}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1 truncate">{check.name}</span>
+    </>
+  );
+  return (
+    <li>
+      {check.url ? (
+        <a href={check.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm text-muted transition-colors hover:border-line-strong">
+          {content}
+        </a>
+      ) : (
+        <div className="flex items-center gap-2 rounded-lg border border-line p-3 text-sm text-muted">{content}</div>
+      )}
+    </li>
+  );
 }
 
 function WarningStrip({ text, danger = false }: { text: string; danger?: boolean }) {
-  return <div className={cn("flex items-start gap-2 border-b border-[#3e351e] bg-[#231c10] px-5 py-3 text-[10px] leading-5 text-[#d8ba75]", danger && "border-[#492b31] bg-[#26161a] text-[#e6a0a6]")}><AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{text}</div>;
-}
-
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-  return <label className={`block ${className}`}><span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">{label}</span>{children}</label>;
-}
-
-function ProjectNotice({ title, description, href, label }: { title: string; description: string; href: string; label: string }) {
-  return <Panel className="grid min-h-64 place-items-center p-6 text-center"><div className="max-w-md"><GitBranch className="mx-auto size-7 text-[#71802c]" /><h2 className="mt-4 text-base font-semibold text-white">{title}</h2><p className="mt-2 text-xs leading-5 text-[#748191]">{description}</p><Link href={href} className="primary-action mt-4 justify-center">{label}<ArrowRight className="size-4" /></Link></div></Panel>;
+  return (
+    <p
+      className={cn(
+        "flex items-start gap-2 border-t px-5 py-3 text-sm",
+        danger
+          ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]"
+          : "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
+      )}
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      {text}
+    </p>
+  );
 }
 
 function summarizeChecks(checkRuns: CheckRun[]): { label: string; tone: "neutral" | "safe" | "warning" | "danger" } {
-  if (!checkRuns.length) return { label: "No check data", tone: "neutral" };
-  if (checkRuns.some((check) => check.status !== "completed")) return { label: "Pending", tone: "warning" };
+  if (!checkRuns.length) return { label: "None", tone: "neutral" };
+  if (checkRuns.some((check) => check.status !== "completed")) return { label: "Running", tone: "warning" };
   if (checkRuns.some((check) => !["success", "neutral", "skipped"].includes(check.conclusion ?? ""))) return { label: "Failing", tone: "danger" };
   return { label: "Passing", tone: "safe" };
 }

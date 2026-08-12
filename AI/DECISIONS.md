@@ -120,3 +120,19 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted for local implementation; hosted migration/deployment evidence pending
 - Decision: Bind every interactive GitHub route to the caller's exact active organization. Treat a project as connected only while its connection is connected, installation is active and unsuspended, and synchronized repository is selected, non-archived, and enabled. Expose immutable activity through a bounded caller-RLS API that omits metadata from browser responses. Remove the legacy HTTP local-repository writer, and route terminal GitHub change evidence and newly granted repository reconciliation through narrowly granted audited database workflows.
 - Consequence: Retained connection/project rows cannot create a false Connected state or authorize repository access after loss. Local migrations `011`-`013` must receive exact owner approval and hosted verification before their authorization/audit/webhook guarantees are claimed in production; the Activity UI, route hardening, and webhook reconciliation also require a matching deployed commit and real authenticated acceptance.
+
+## ADR-018 — Semantic design tokens and a 12px minimum type size
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: All interface colour comes from semantic CSS custom properties declared once in `app/globals.css` (`--surface`, `--text-muted`, `--accent`, status families) and surfaced to Tailwind through `@theme inline`. Components reference token-backed utilities instead of literal hex values. No interface text is smaller than 12px: 12px for labels and metadata, 14px for secondary copy, 15px body, and headings above that.
+- Rationale: The prior interface set body copy at 10-11px and metadata at 7-9px across 133 declarations, with roughly 500 literal hex values and nine competing grey text tones. Several of those tones (for example `#566271` on `#0b1017`, about 3.1:1) failed WCAG AA, and the failures were invisible to automated checks because gradient panel backgrounds made axe return "incomplete" rather than "violation" for contrast.
+- Consequence: Contrast is a property of the token set rather than of each call site, so a token change is auditable in one place. Element resets live in `@layer base` so component classes can win the cascade; adding an unlayered element rule that competes with a component class is a regression. Reintroducing literal hex values or sub-12px type in application code contradicts this decision.
+
+## ADR-019 — Plain language first, with the technical term kept alongside
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: User-facing copy leads with what a control does in ordinary words and keeps the exact technical or policy term as a secondary label rather than replacing it. Autonomy controls read "Merge pull requests / Auto merge", and command risk reads "Low / Medium / High" while still submitting `green`/`yellow`/`red`. Navigation is grouped, and destinations whose content is entirely seeded sit under a "Demo only" heading.
+- Rationale: Truthfulness obligations under ADR-009 were being met by repeating the same **Demo Data** and **Not Connected** badges three to five times per page. Repetition produces banner blindness, which weakens the very contract it is meant to serve, while phase vocabulary ("Phase 1D observation ceiling", "declared maximum risk") left readers unable to tell which screens did anything real.
+- Consequence: Structure carries the truthfulness contract — a grouped navigation heading and one notice per page — so exact labels stay meaningful where they appear. Precise terms are never deleted, only demoted next to their plain-language equivalent, and API values are unaffected by presentation wording.

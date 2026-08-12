@@ -6,6 +6,8 @@ Phase 1B decision: **Not release-ready yet**
 
 Reason: review hardening, local gates, `main` publication, READY production deployment, public HTTP checks, and production Playwright pass. Hosted migrations `011`-`013`, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending.
 
+A GREEN interface simplification (ADR-018, ADR-019) now sits on top of that hardening. It is presentation-only and does not move any release blocker: no provider became Connected, no phase advanced, and every production row below still describes tree `e0ca6e7`, which predates it.
+
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; truthful connection/project/file state; live Activity; guarded GitHub writes; local migrations `011`-`013` | Implemented locally; live acceptance pending |
@@ -13,7 +15,9 @@ Reason: review hardening, local gates, `main` publication, READY production depl
 | Current-tree production build | standalone `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
 | Full coverage suite | `npm run test:coverage` after final `013` ordering/contracts | Pass — 25 files/208 tests; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
 | Focused `013` chain | 3 files/44 tests | Pass |
-| Local E2E/responsive/accessibility | `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe |
+| Local E2E/responsive/accessibility | `npm run test:e2e` | Pass — 48/48 desktop/tablet/mobile. Dashboard depth checks (12) plus `tests/e2e/pages.spec.ts` (36) asserting heading, no horizontal overflow, and axe on 12 routes. |
+| Interface simplification (GREEN) | Design tokens with a 12px type floor (ADR-018), plain-language copy (ADR-019), grouped navigation, guided dashboard path, dead `project-form` removed | Pass locally on Node 22 — `npm run check` green in one run; presentation only, no route/schema/policy/provider change |
+| Interface accessibility repairs | axe across every route at three viewports | Pass — two real WCAG AA defects fixed: anchor primary buttons at 1.21:1 caused by an unlayered `a { color: inherit }` outranking `@layer components`, and a keyboard-unreachable horizontal scroll region on the backlog. Both predate this change; gradient panel backgrounds had made axe report contrast "incomplete" rather than failing. |
 | Secret safety | Current source/tracked and `.next/static` scan | Pass; only the synthetic `github_pat_` fixture matched, and no built static server-secret markers were found |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, `ACTIVE_HEALTHY` | Pass |
 | Hosted migrations | Hosted ledger through `010`; transactional application after `unsafe_project_rows=0` | Pass through `010` |
@@ -42,7 +46,21 @@ Reason: review hardening, local gates, `main` publication, READY production depl
 The hardening gates and current production deployment are recorded first. Hosted Supabase still ends at `010`; source migrations `011`-`013` are present in the deployed tree but are not applied to the database.
 
 ```text
-Review date: 2026-08-12
+Interface simplification re-run (GREEN, presentation only):
+Local shell: Node 22 (no Supabase future-support warning)
+  npm run check                 PASS — lint, typecheck, 25 files / 208 tests, 34-route build in one run
+  npm run test:e2e              PASS — 48/48 (12 dashboard + 36 per-page) across desktop/tablet/mobile
+  axe, all 12 routes x 3 widths PASS — no serious or critical violations
+  secret scan                   PASS — no credential values in tracked source or .next/static;
+                                matches are env-var names in docs/config only
+  scope check                   0 sub-12px type declarations remain in app/ and components/ (was 133).
+                                1 literal hex remains, the themeColor meta value in app/layout.tsx,
+                                which must be a literal and is commented to track --bg; every other
+                                colour (~500 previously) now resolves through a token. No route,
+                                schema, policy, token, or provider behaviour changed.
+  NOT deployed                  every production row below describes tree e0ca6e7, which predates this
+
+Prior review date: 2026-08-12
 Local shell: Node 20 (Supabase future-support warning)
 Target runtime: Node >=22
 

@@ -68,8 +68,20 @@ Codex/OpenAI is **Not Connected**. Do not begin Phase 1C without explicit instru
 
 Claude, auto merge, deployment automation, and rollback automation are **Not Connected**/OFF.
 
+## Interface simplification
+
+- [x] Replace ~500 literal hex values and nine competing grey text tones with one semantic design-token set, and raise the minimum interface type size to 12px (133 declarations previously sat between 7px and 11px). See ADR-018.
+- [x] Rewrite user-facing copy in plain language, keeping exact policy terms as secondary labels, and reduce per-page **Demo Data** repetition to a single notice. See ADR-019.
+- [x] Group navigation so live surfaces are visibly separate from a "Demo only" section, without changing any destination label.
+- [x] Lead the dashboard with the real product path — connect GitHub, add a project, open your files — derived from the existing `/api/projects` read with no extra request.
+- [x] Fix two real WCAG AA defects surfaced by the new coverage: anchor primary buttons rendering at 1.21:1 (an unlayered `a { color: inherit }` outranked the layered component class) and the backlog table forming a keyboard-unreachable horizontal scroll region.
+- [x] Delete `components/project-form.tsx`, dead since the projects console superseded it.
+- [x] Remove the seeded event stream that sat directly beneath the live stream on Activity in identical styling; the labeled example remains on the dashboard.
+- [x] Add `tests/e2e/pages.spec.ts`: heading, horizontal-overflow, and axe assertions for 12 routes at three viewports. Local Playwright is now 48/48.
+- [ ] Recapture production evidence for the interface change once it is deployed; the recorded deployment/E2E/probe results describe tree `e0ca6e7`, which predates it.
+
 ## Maintenance
 
-- [ ] Run final release verification on Node 22+ (local Node 20 currently emits the Supabase future-support warning).
+- [x] Run local gates on Node 22+; the Supabase future-support warning no longer appears. Final release verification against hosted Supabase still pending.
 - [ ] Resolve the Vitest/Vite future native config-loader warning before it becomes breaking.
 - [ ] Expand authenticated E2E coverage once a safe disposable provider acceptance fixture exists.
