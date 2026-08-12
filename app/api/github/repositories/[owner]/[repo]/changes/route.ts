@@ -77,6 +77,7 @@ export async function POST(
   let prepared: Awaited<ReturnType<typeof prepareGitHubRepositoryRequest>> | null = null;
   let headBranchEvidence: string | null = null;
   let commitEvidence: { sha: string; url: string } | null = null;
+  let pullRequestEvidence: { id: number; number: number; state: string; title: string; url: string } | null = null;
   try {
     assertSameOriginRequest(request);
     const parsed = changeSchema.safeParse(await readBoundedJson(request, 1100 * 1024));
@@ -188,22 +189,22 @@ export async function POST(
       repository_id: prepared.context.repository.id,
       title: parsed.data.title,
     };
-    let { data: changeRecord, error: changeError } = await prepared.supabase
-      .from("github_change_requests")
-      .insert(requestedRecord)
-      .select("*")
+    const { data: changeRecord, error: changeError } = await prepared.supabase
+      .rpc("reserve_github_change_request", {
+        p_base_branch: requestedRecord.base_branch,
+        p_commit_message: requestedRecord.commit_message,
+        p_connection_id: requestedRecord.connection_id,
+        p_content_sha256: requestedRecord.content_sha256,
+        p_execution_nonce: requestedRecord.execution_nonce,
+        p_expected_blob_sha: requestedRecord.expected_blob_sha,
+        p_idempotency_key: requestedRecord.idempotency_key,
+        p_organization_id: requestedRecord.organization_id,
+        p_path: requestedRecord.path,
+        p_project_id: requestedRecord.project_id,
+        p_repository_id: requestedRecord.repository_id,
+        p_title: requestedRecord.title,
+      })
       .single();
-    if (changeError?.code === "23505") {
-      const replay = await prepared.supabase
-        .from("github_change_requests")
-        .select("*")
-        .eq("organization_id", prepared.context.organizationId)
-        .eq("idempotency_key", parsed.data.idempotencyKey)
-        .maybeSingle();
-      if (replay.error) throw replay.error;
-      changeRecord = replay.data;
-      changeError = null;
-    }
     if (changeError || !changeRecord) throw changeError ?? new Error("change_reservation_failed");
     const typedRecord = changeRecord as ChangeRecord;
     const requestMatches = typedRecord.project_id === requestedRecord.project_id
@@ -293,6 +294,13 @@ export async function POST(
       repository: prepared.repository,
       title: parsed.data.title,
     });
+    pullRequestEvidence = {
+      id: pullRequest.id,
+      number: pullRequest.number,
+      state: pullRequest.state,
+      title: pullRequest.title,
+      url: pullRequest.html_url,
+    };
 
     const privilegedClient = createSupabaseGitHubWebhookClient();
     const completion = await privilegedClient.rpc("complete_github_change_request", {
@@ -328,6 +336,44 @@ export async function POST(
   } catch (error) {
     if (reservedRequestId && prepared) {
       const errorCode = error instanceof GitHubApiError ? error.code : "change_failed";
+      if (headBranchEvidence && commitEvidence && pullRequestEvidence) {
+        try {
+          const recovery = await createSupabaseGitHubWebhookClient().rpc("recover_github_change_request_with_provider_evidence", {
+            p_actor_user_id: prepared.user.id,
+            p_commit_sha: commitEvidence.sha,
+            p_commit_url: commitEvidence.url,
+            p_head_branch: headBranchEvidence,
+            p_pull_request_id: pullRequestEvidence.id,
+            p_pull_request_number: pullRequestEvidence.number,
+            p_pull_request_title: pullRequestEvidence.title,
+            p_pull_request_url: pullRequestEvidence.url,
+            p_recovery_reason: "completion_persistence_failed",
+            p_request_id: reservedRequestId,
+          });
+          if (recovery.error || recovery.data !== true) throw recovery.error ?? new Error("change_recovery_failed");
+          reservedRequestId = null;
+          return jsonNoStore(
+            {
+              branch: { name: headBranchEvidence, sha: commitEvidence.sha },
+              commit: commitEvidence,
+              idempotentReplay: false,
+              recovered: true,
+              pullRequest: {
+                draft: true,
+                id: pullRequestEvidence.id,
+                number: pullRequestEvidence.number,
+                state: pullRequestEvidence.state,
+                title: pullRequestEvidence.title,
+                url: pullRequestEvidence.url,
+              },
+            },
+            { status: 201 },
+          );
+        } catch {
+          // If the recovery boundary is unavailable, retain the branch and
+          // commit through the older failure RPC and preserve the primary error.
+        }
+      }
       try {
         const failure = await createSupabaseGitHubWebhookClient().rpc("fail_github_change_request_with_evidence", {
           p_actor_user_id: prepared.user.id,

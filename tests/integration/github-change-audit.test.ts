@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const auditMigrationPath = "supabase/migrations/20260812001200_github_change_audit.sql";
+const providerEvidenceMigrationPath = "supabase/migrations/20260812001500_recover_draft_pr_completion.sql";
 const migrationFiles = [
   "20260812000100_control_plane_schema.sql",
   "20260812000200_row_level_security.sql",
@@ -21,6 +22,9 @@ const migrationFiles = [
   "20260812001000_phase1d_observation_controls.sql",
   "20260812001100_harden_direct_mutation_boundaries.sql",
   "20260812001200_github_change_audit.sql",
+  "20260812001300_reconcile_github_repository_grants.sql",
+  "20260812001400_sync_linked_project_repository_metadata.sql",
+  "20260812001500_recover_draft_pr_completion.sql",
 ];
 
 async function source(path: string) {
@@ -30,6 +34,7 @@ async function source(path: string) {
 describe("GitHub change audit hardening", () => {
   it("keeps both terminal RPCs server-only and actor-attributed", async () => {
     const migration = await source(auditMigrationPath);
+    const providerEvidenceMigration = await source(providerEvidenceMigrationPath);
 
     expect(migration).not.toMatch(/alter type public\.activity_event_type/i);
     expect(migration).toMatch(
@@ -45,6 +50,13 @@ describe("GitHub change audit hardening", () => {
       /grant execute on function public\.fail_github_change_request_with_evidence[\s\S]*?to service_role/i,
     );
     expect(migration).not.toMatch(/disable\s+row\s+level\s+security|drop\s+table/i);
+    expect(providerEvidenceMigration).toMatch(
+      /revoke all on function public\.recover_github_change_request_with_provider_evidence[\s\S]*?from public, anon, authenticated/i,
+    );
+    expect(providerEvidenceMigration).toMatch(
+      /grant execute on function public\.recover_github_change_request_with_provider_evidence[\s\S]*?to service_role/i,
+    );
+    expect(providerEvidenceMigration).not.toMatch(/disable\s+row\s+level\s+security|drop\s+table/i);
   });
 
   it("retains only provider state proven before a failed request", async () => {
@@ -58,10 +70,15 @@ describe("GitHub change audit hardening", () => {
 
     expect(branchCreated).toBeGreaterThan(branchCall);
     expect(commitRecorded).toBeGreaterThan(commitCall);
+    expect(route).toContain('rpc("recover_github_change_request_with_provider_evidence"');
     expect(route).toContain('rpc("fail_github_change_request_with_evidence"');
     expect(route).toContain("p_head_branch: headBranchEvidence");
     expect(route).toContain("p_commit_sha: commitEvidence?.sha ?? null");
     expect(route).toContain("p_commit_url: commitEvidence?.url ?? null");
+    expect(route).toContain("p_pull_request_id: pullRequestEvidence.id");
+    expect(route).toContain("p_pull_request_number: pullRequestEvidence.number");
+    expect(route).toContain("p_pull_request_title: pullRequestEvidence.title");
+    expect(route).toContain("p_pull_request_url: pullRequestEvidence.url");
     expect(route).toContain("if (failure.error) throw failure.error");
   });
 
@@ -92,6 +109,34 @@ describe("GitHub change audit hardening", () => {
           await source(`supabase/migrations/${migrationFile}`),
         );
       }
+
+      const providerEvidencePrivileges = await db.query<{
+        anon_execute: boolean;
+        authenticated_execute: boolean;
+        service_execute: boolean;
+      }>(`
+        select
+          has_function_privilege(
+            'anon',
+            'public.recover_github_change_request_with_provider_evidence(uuid,uuid,text,text,text,text,bigint,integer,text,text)',
+            'EXECUTE'
+          ) as anon_execute,
+          has_function_privilege(
+            'authenticated',
+            'public.recover_github_change_request_with_provider_evidence(uuid,uuid,text,text,text,text,bigint,integer,text,text)',
+            'EXECUTE'
+          ) as authenticated_execute,
+          has_function_privilege(
+            'service_role',
+            'public.recover_github_change_request_with_provider_evidence(uuid,uuid,text,text,text,text,bigint,integer,text,text)',
+            'EXECUTE'
+          ) as service_execute
+      `);
+      expect(providerEvidencePrivileges.rows[0]).toEqual({
+        anon_execute: false,
+        authenticated_execute: false,
+        service_execute: true,
+      });
 
       const ownerId = "00000000-0000-4000-8000-000000000101";
       await db.exec(`
@@ -218,6 +263,65 @@ describe("GitHub change audit hardening", () => {
         status: "failed",
       });
 
+      const providerRecoveredRequestId = await reserve("audit-provider-recovery-001");
+      const providerCommitSha = "e".repeat(40);
+      const providerCommitUrl = `https://github.com/owner/repository/commit/${providerCommitSha}`;
+      const providerPullRequestUrl = "https://github.com/owner/repository/pull/42";
+      const providerFailureArguments = [
+        ownerId,
+        providerRecoveredRequestId,
+        "completion_persistence_failed",
+        "softwarefactory/provider-failure",
+        providerCommitSha,
+        providerCommitUrl,
+        700001,
+        42,
+        "Provider-side draft pull request",
+        providerPullRequestUrl,
+      ] as const;
+      await expect(db.query(
+        "select public.recover_github_change_request_with_provider_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        ["00000000-0000-4000-8000-000000000999", ...providerFailureArguments.slice(1)],
+      )).rejects.toMatchObject({ code: "42501" });
+      await db.query(
+        "select public.recover_github_change_request_with_provider_evidence($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        [...providerFailureArguments],
+      );
+
+      const providerRecoveredRecord = await db.query<{
+        commit_sha: string;
+        external_pull_request_id: number;
+        pull_request_number: number;
+        pull_request_url: string;
+        status: string;
+      }>(`
+        select status, commit_sha, external_pull_request_id, pull_request_number, pull_request_url
+        from public.github_change_requests
+        where id = '${providerRecoveredRequestId}'
+      `);
+      expect(providerRecoveredRecord.rows[0]).toEqual({
+        commit_sha: providerCommitSha,
+        external_pull_request_id: 700001,
+        pull_request_number: 42,
+        pull_request_url: providerPullRequestUrl,
+        status: "completed",
+      });
+
+      const recoveredPullRequest = await db.query<{
+        external_number: number;
+        status: string;
+        url: string;
+      }>(`
+        select external_number, status::text, url
+        from public.pull_requests
+        where project_id = '${projectId}' and external_number = 42
+      `);
+      expect(recoveredPullRequest.rows).toEqual([{
+        external_number: 42,
+        status: "draft",
+        url: providerPullRequestUrl,
+      }]);
+
       const terminalEvents = await db.query<{
         actor_user_id: string | null;
         entity_id: string;
@@ -239,8 +343,13 @@ describe("GitHub change audit hardening", () => {
           entity_id: failedRequestId,
           event_type: "project.updated",
         },
+        {
+          actor_user_id: ownerId,
+          entity_id: providerRecoveredRequestId,
+          event_type: "project.updated",
+        },
       ]));
-      expect(terminalEvents.rows).toHaveLength(2);
+      expect(terminalEvents.rows).toHaveLength(3);
 
       const pullRequestAudit = await db.query<{ actor_user_id: string | null }>(`
         select actor_user_id
@@ -248,7 +357,10 @@ describe("GitHub change audit hardening", () => {
         where event_type = 'pull_request.created'
           and entity_type = 'pull_request'
       `);
-      expect(pullRequestAudit.rows).toEqual([{ actor_user_id: ownerId }]);
+      expect(pullRequestAudit.rows).toEqual([
+        { actor_user_id: ownerId },
+        { actor_user_id: ownerId },
+      ]);
 
       await expect(
         db.query(

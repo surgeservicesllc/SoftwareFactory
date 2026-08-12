@@ -72,7 +72,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The production/preview GitHub variables have been added to the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key and is present in READY/Current deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; only its public fingerprint is recorded above. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
+The production/preview GitHub variable names are configured in the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key; only its public fingerprint is recorded above. The last independently verified pre-hardening release was `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`; that historical deployment does not validate this working tree. Production Supabase public/runtime variables are configured. Preview Supabase configuration is not independently verified.
 
 ## Connection flow
 
@@ -122,7 +122,7 @@ Migration `20260812000700_github_project_linking.sql` adds a transactional funct
 
 Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
 
-Local forward migrations `20260812001100_harden_direct_mutation_boundaries.sql`, `20260812001200_github_change_audit.sql`, and `20260812001300_reconcile_github_repository_grants.sql` close direct authenticated connection/member mutations, add actor-attributed terminal change-request evidence, and add bounded service-role reconciliation for newly granted repositories. They are not hosted yet; exact owner approval and post-apply verification are required before production claims use them.
+Local forward migrations `011`-`019` form one unhosted hardening chain. `011`-`013` close initial direct mutation paths, add actor-attributed terminal evidence, and reconcile newly granted repositories. `014` propagates a provider-authoritative rename/default branch only to exact connection-linked projects. `015` recovers a provider-created draft PR after an ambiguous completion response. `016` makes installation deletion terminal and orders installation lifecycle changes by provider time. `017` closes remaining direct authenticated connection/project/link/change-request writes and reserves exact live change intent through an authenticated RPC. `018` orders repository events by provider time and preserves terminal repository deletion until an explicit newer restore, which remains unselected pending access synchronization. `019` grants service role only the SECURITY DEFINER sensitive-JSON wrapper required when provider-ingress table CHECK constraints run, while leaving recursive and text classifiers inaccessible. None is hosted; exact owner approval and complete post-apply verification are required before production claims use them.
 
 All four GitHub tables use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
 
@@ -143,7 +143,7 @@ It refuses:
 - security-sensitive subject paths whose names identify authorization, permissions, roles, RLS, sessions/cookies, cryptography/encryption, secrets/credentials/private keys, webhooks, deployments/releases/rollback, DNS, or billing; and
 - likely credentials in content, title, or commit message.
 
-Successful writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Nothing is merged or deployed.
+Successful writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing is merged or deployed.
 
 ## Webhook guarantees
 
@@ -155,6 +155,7 @@ Successful writes create `softwarefactory/*` branch state, commit to that branch
 - Store a SHA-256 hash plus an allowlisted/redacted payload subset, not the raw payload.
 - Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
 - After migration `013` is hosted, upsert newly granted repository metadata through its service-role-only RPC before recording the repository-selection reconciliation.
+- After migrations `014`, `016`, and `018` are hosted, propagate repository rename/default-branch metadata only through the exact linked connection; order installation/repository transitions by provider timestamps; keep deletion terminal; and audit ignored stale or terminal events.
 - Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
 
 ## Production acceptance checklist
@@ -175,6 +176,7 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - [ ] A safe test edit creates only a controlled branch, commit, and draft PR.
 - [ ] A stale SHA, SQL-wildcard-like repository name, and representative paths from every protected-resource class fail closed.
 - [ ] Pull request/webhook updates reconcile and create immutable activity evidence.
+- [ ] Delayed installation/repository events are ignored by provider time, deleted installation IDs stay terminal, and a newer explicit repository restore remains unselected until access sync.
 - [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.
 
 ## Troubleshooting

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 
 import {
+  GitHubAuthorizationError,
   requireGitHubUser,
   requireMatchingActiveOrganization,
   requireOrganizationManager,
@@ -26,21 +27,64 @@ const callbackSchema = z.object({
   state: z.string().min(32).max(4096),
 });
 
+const CALLBACK_ERROR_CODE = /^[a-z][a-z0-9_]{0,62}$/;
+const CALLBACK_ERROR_MESSAGE_LIMIT = 240;
+
+function acceptsJson(request: Request) {
+  return request.headers.get("accept")?.toLowerCase().includes("application/json") ?? false;
+}
+
+function callbackRedirect(url: URL) {
+  return new Response(null, {
+    headers: {
+      "Cache-Control": "private, no-store, max-age=0",
+      Location: url.toString(),
+      Pragma: "no-cache",
+      "Referrer-Policy": "no-referrer",
+    },
+    status: 303,
+  });
+}
+
+async function callbackErrorResponse(request: Request, error: unknown) {
+  const apiResponse = githubRouteErrorResponse(error);
+  if (acceptsJson(request)) return apiResponse;
+
+  let code = "github_callback_failed";
+  let message = "GitHub authorization could not be completed safely.";
+  try {
+    const body = await apiResponse.clone().json() as {
+      error?: { code?: unknown; message?: unknown };
+    };
+    if (typeof body.error?.code === "string" && CALLBACK_ERROR_CODE.test(body.error.code)) {
+      code = body.error.code;
+    }
+    if (typeof body.error?.message === "string" && body.error.message.trim()) {
+      message = body.error.message.trim().slice(0, CALLBACK_ERROR_MESSAGE_LIMIT);
+    }
+  } catch {
+    // The redirect always falls back to a fixed, client-safe failure notice.
+  }
+
+  const redirect = new URL("/connections", request.url);
+  redirect.searchParams.set("github", "error");
+  redirect.searchParams.set("githubError", code);
+  redirect.searchParams.set("githubMessage", message);
+  return callbackRedirect(redirect);
+}
+
 export async function GET(request: Request) {
   let userToken: string | null = null;
   try {
     const url = new URL(request.url);
+    const cookieStore = await cookies();
+    const nonce = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
+    cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
     if (url.searchParams.has("error") || url.searchParams.get("setup_action") === "request") {
-      const cookieStore = await cookies();
-      cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
-      return jsonNoStore(
-        {
-          error: {
-            code: "github_installation_cancelled",
-            message: "GitHub installation was cancelled or is awaiting organization approval.",
-          },
-        },
-        { status: 400 },
+      throw new GitHubAuthorizationError(
+        400,
+        "github_installation_cancelled",
+        "GitHub installation was cancelled or is awaiting organization approval.",
       );
     }
     const parsed = callbackSchema.safeParse({
@@ -49,17 +93,15 @@ export async function GET(request: Request) {
       state: url.searchParams.get("state"),
     });
     if (!parsed.success) {
-      return jsonNoStore(
-        { error: { code: "invalid_github_callback", message: "GitHub returned an invalid installation callback." } },
-        { status: 400 },
+      throw new GitHubAuthorizationError(
+        400,
+        "invalid_github_callback",
+        "GitHub returned an invalid installation callback.",
       );
     }
 
     const configuration = getGitHubAppConfiguration();
     const { activeOrganization, supabase, user } = await requireGitHubUser();
-    const cookieStore = await cookies();
-    const nonce = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
-    cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
     const state = verifyGitHubInstallState(
       parsed.data.state,
       nonce,
@@ -75,9 +117,10 @@ export async function GET(request: Request) {
       parsed.data.installationId,
     );
     if (userInstallation.app_id !== configuration.appId) {
-      return jsonNoStore(
-        { error: { code: "wrong_github_app", message: "The installation belongs to a different GitHub App." } },
-        { status: 403 },
+      throw new GitHubAuthorizationError(
+        403,
+        "wrong_github_app",
+        "The installation belongs to a different GitHub App.",
       );
     }
 
@@ -92,7 +135,7 @@ export async function GET(request: Request) {
       snapshot,
     );
 
-    if (request.headers.get("accept")?.includes("application/json")) {
+    if (acceptsJson(request)) {
       return jsonNoStore({
         connectionId: result.connection_id,
         installation: {
@@ -108,11 +151,9 @@ export async function GET(request: Request) {
     redirect.searchParams.set("github", "connected");
     redirect.searchParams.set("connectionId", result.connection_id);
     redirect.searchParams.set("repositories", String(result.repository_count));
-    const response = Response.redirect(redirect, 303);
-    response.headers.set("Cache-Control", "private, no-store, max-age=0");
-    return response;
+    return callbackRedirect(redirect);
   } catch (error) {
-    return githubRouteErrorResponse(error);
+    return callbackErrorResponse(request, error);
   } finally {
     if (userToken) {
       try {

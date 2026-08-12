@@ -14,7 +14,7 @@ export async function GET(
     const prepared = await prepareGitHubRepositoryRequest(
       request,
       coordinates,
-      { contents: "read", pull_requests: "read" },
+      { pull_requests: "read" },
     );
     return jsonNoStore({
       pullRequests: await listGitHubPullRequests(

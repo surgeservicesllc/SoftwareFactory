@@ -36,7 +36,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
-- Local migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` remove direct authenticated connection/member mutations, align database/server `github_pat_` detection, make terminal GitHub changes actor-attributed and auditable, and add a bounded service-role webhook repository-grant upsert. They are not hosted yet and require exact owner approval plus post-apply verification.
+- Local migrations `011`-`019` are one pending hardening chain. `011`-`013` close initial direct mutation paths, align `github_pat_` detection, add actor-attributed terminal change evidence, and reconcile repository grants. `014` propagates provider-authoritative repository names/default branches to exact linked projects. `015` recovers an already-created draft PR after an ambiguous database-completion response. `016` makes installation deletion terminal and orders installation lifecycle events by provider time. `017` removes remaining direct authenticated connection/project/link/change-request writes and introduces a narrow authenticated reservation RPC. `018` orders repository metadata events by provider time and preserves terminal deletion until an explicit newer restore. `019` grants the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed for table CHECK evaluation; recursive and text classifiers remain inaccessible. None is hosted yet; the complete chain requires exact owner approval and post-apply verification.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -56,12 +56,12 @@ Write flow:
 1. Same-origin, authenticated owner/admin request.
 2. Verify active connection, selected non-archived repository, project mapping, and synchronized default branch. Repository full names are normalized and compared literally, without SQL wildcard semantics.
 3. Reject likely secrets and protected resource classes including repository memory/policies, Supabase, all application API routes, server-side provider/data libraries, Auth/session boundaries, and deployment/environment/infrastructure files; validate expected blob SHA and idempotency key.
-4. Reserve `github_change_requests` evidence.
+4. Reserve `github_change_requests` evidence through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository binding.
 5. Read current default-branch reference/file state.
 6. Create a unique `softwarefactory/*` branch.
 7. Commit using the expected blob SHA.
 8. Require an open draft pull request.
-9. Complete or fail the audited request record.
+9. Complete or fail the audited request record. If GitHub created the draft PR but database completion was ambiguous, recover that same provider evidence rather than create a second PR.
 
 There is no merge or deployment step.
 There is also no HTTP local-repository write path; the legacy route, UI, and environment switch are removed.
@@ -74,6 +74,8 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - Hash the raw payload; store only an allowlisted redacted subset.
 - Deduplicate delivery ID and reject conflicting payload reuse.
 - Reconcile installation/repository/PR/check/status events through bounded database functions. Newly granted repository metadata uses the service-role-only `013` function after hosted promotion.
+- After `016`/`018` promotion, provider timestamps order lifecycle metadata, deletion is terminal for an installation ID, stale events are recorded as ignored, and a restored repository remains unselected until access is resynchronized.
+- Repository rename/default-branch updates reach only projects linked through the same tenant connection and emit redacted immutable evidence through `014`.
 - Unknown events/installations are ignored safely, not used to create tenant ownership.
 
 ## Security invariants

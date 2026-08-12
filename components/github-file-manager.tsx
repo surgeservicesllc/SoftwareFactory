@@ -33,6 +33,7 @@ type Commit = { sha: string; message: string; author: { name: string; githubLogi
 type PullRequestResult = { number: number; title: string; url: string; draft: boolean; state: string };
 type LoadState = "loading" | "signed-out" | "setup" | "ready" | "error";
 type SaveState = "idle" | "saving" | "conflict" | "error" | "saved";
+type PendingSaveIntent = { fingerprint: string; idempotencyKey: string };
 
 const preferredPathPrefixes = ["AI/", "agents/", "policies/", "prompts/", "checklists/", "playbooks/", "docs/"];
 
@@ -56,6 +57,7 @@ export function GitHubFileManager() {
   const [createdPullRequest, setCreatedPullRequest] = useState<PullRequestResult | null>(null);
   const fileRef = useRef<RepositoryFile | null>(null);
   const dirtyRef = useRef(false);
+  const pendingSaveIntentRef = useRef<PendingSaveIntent | null>(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -140,6 +142,7 @@ export function GitHubFileManager() {
       setEntries(sortEntries(body.entries ?? []));
       setDirectoryPath(nextPath);
       if (!options.preserveFile) {
+        pendingSaveIntentRef.current = null;
         setFile(null);
         setContent("");
         setLastCommit(null);
@@ -178,6 +181,7 @@ export function GitHubFileManager() {
       if (!contentResponse.ok || !body.file) throw new Error(body.error?.message ?? "The GitHub file could not be loaded.");
       const commitBody = (await commitResponse.json()) as { commits?: Commit[] };
       setFile(body.file);
+      pendingSaveIntentRef.current = null;
       setContent(body.file.content);
       setLastCommit(commitResponse.ok ? commitBody.commits?.[0] ?? null : null);
     } catch (error) {
@@ -200,6 +204,22 @@ export function GitHubFileManager() {
     setMessage("");
     try {
       const title = `Update ${file.path} via SoftwareFactory`;
+      const fingerprint = githubSaveIntentFingerprint({
+        baseBranch: project.defaultBranch,
+        commitMessage: title,
+        connectionId: project.connectionId,
+        content,
+        expectedBlobSha: file.sha,
+        path: file.path,
+        projectId: project.id,
+        repository: project.githubRepository ?? "",
+        title,
+      });
+      const pendingIntent = pendingSaveIntentRef.current;
+      const idempotencyKey = pendingIntent?.fingerprint === fingerprint
+        ? pendingIntent.idempotencyKey
+        : `sf:${project.id}:${crypto.randomUUID()}`;
+      pendingSaveIntentRef.current = { fingerprint, idempotencyKey };
       const response = await fetch(`/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/changes?connectionId=${encodeURIComponent(project.connectionId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -211,7 +231,7 @@ export function GitHubFileManager() {
           baseBranch: project.defaultBranch,
           title,
           commitMessage: title,
-          idempotencyKey: `sf:${project.id}:${Date.now()}:${crypto.randomUUID()}`,
+          idempotencyKey,
         }),
       });
       const body = (await response.json()) as { pullRequest?: PullRequestResult; error?: { code?: string; message?: string } };
@@ -234,6 +254,7 @@ export function GitHubFileManager() {
         }
         throw new Error(body.error?.message ?? "The draft pull request could not be created.");
       }
+      pendingSaveIntentRef.current = null;
       setCreatedPullRequest(body.pullRequest);
       setSaveState("saved");
       setMessage("Change committed on an isolated softwarefactory/* branch and opened as a draft pull request. Nothing was merged or deployed.");
@@ -246,6 +267,7 @@ export function GitHubFileManager() {
   function changeProject(projectId: string) {
     if (isDirty && !window.confirm("Switch projects and discard unsaved file changes?")) return;
     setSelectedProjectId(projectId);
+    pendingSaveIntentRef.current = null;
     setDirectoryPath("");
     setEntries([]);
     setFile(null);
@@ -313,7 +335,7 @@ export function GitHubFileManager() {
 
           {loadingFile ? <div className="grid min-h-[560px] place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" /></div> : file ? (
             <div>
-              {mode === "edit" ? <textarea value={content} onChange={(event) => { setContent(event.target.value); setCreatedPullRequest(null); setSaveState("idle"); setMessage(""); }} spellCheck className="min-h-[540px] w-full resize-y border-0 bg-[#090e14] p-4 font-mono text-[12px] leading-6 text-[#b7c2cd] focus:outline-none sm:p-6" aria-label={`Edit ${file.path}`} /> : <article className="prose-dark min-h-[540px] overflow-auto bg-[#0b1017] p-5 sm:p-8"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></article>}
+              {mode === "edit" ? <textarea value={content} onChange={(event) => { pendingSaveIntentRef.current = null; setContent(event.target.value); setCreatedPullRequest(null); setSaveState("idle"); setMessage(""); }} spellCheck className="min-h-[540px] w-full resize-y border-0 bg-[#090e14] p-4 font-mono text-[12px] leading-6 text-[#b7c2cd] focus:outline-none sm:p-6" aria-label={`Edit ${file.path}`} /> : <article className="prose-dark min-h-[540px] overflow-auto bg-[#0b1017] p-5 sm:p-8"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></article>}
               <footer className="flex min-h-12 flex-col gap-2 border-t border-[#202b38] bg-[#0d131c] px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <p className={cn("flex items-start gap-1.5 text-[9px]", saveState === "error" || saveState === "conflict" ? "text-[#e59399]" : "text-[#718091]")} aria-live="polite">{message ? <ShieldAlert className="mt-0.5 size-3 shrink-0" /> : <CheckCircle2 className="size-3 shrink-0 text-[#829d29]" />}{message || (isDirty ? "Unsaved changes are protected during navigation and window close." : "Reads are live. Saves create an isolated branch and draft pull request.")}</p>
                 <div className="flex items-center gap-2">{lastCommit ? <a href={lastCommit.url} target="_blank" rel="noreferrer" className="secondary-action"><GitCommitHorizontal className="size-3.5" />Commit {shortSha(lastCommit.sha)}<ExternalLink className="size-3" /></a> : null}{createdPullRequest ? <a href={createdPullRequest.url} target="_blank" rel="noreferrer" className="secondary-action"><GitPullRequestArrow className="size-3.5" />Draft PR #{createdPullRequest.number}<ExternalLink className="size-3" /></a> : null}</div>
@@ -341,3 +363,27 @@ function sortEntries(entries: TreeEntry[]) { return [...entries].sort((left, rig
 function shortSha(sha: string) { return sha.slice(0, 7); }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function formatBytes(bytes: number) { if (bytes < 1_024) return `${bytes} B`; if (bytes < 1_024 * 1_024) return `${Math.round(bytes / 1_024)} KB`; return `${(bytes / (1_024 * 1_024)).toFixed(1)} MB`; }
+
+export function githubSaveIntentFingerprint(intent: {
+  baseBranch: string;
+  commitMessage: string;
+  connectionId: string;
+  content: string;
+  expectedBlobSha: string;
+  path: string;
+  projectId: string;
+  repository: string;
+  title: string;
+}) {
+  return JSON.stringify([
+    intent.projectId,
+    intent.connectionId,
+    intent.repository,
+    intent.baseBranch,
+    intent.path,
+    intent.expectedBlobSha,
+    intent.content,
+    intent.title,
+    intent.commitMessage,
+  ]);
+}
