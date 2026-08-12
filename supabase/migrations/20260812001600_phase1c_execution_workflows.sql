@@ -825,7 +825,10 @@ begin
       lease_owner = btrim(p_worker_id),
       lease_expires_at = now() + make_interval(secs => bounded_lease),
       heartbeat_at = now(),
-      attempt = case when candidate.status = 'queued'::public.run_status then attempt + 1 else attempt end,
+      -- An attempt is counted once when the run first starts. A run that is
+      -- released mid-flight between ticks resumes without spending its retry
+      -- budget; a genuine retry is counted by finish_agent_run instead.
+      attempt = case when started_at is null then attempt + 1 else attempt end,
       started_at = coalesce(started_at, now()),
       next_attempt_at = null
     where id = candidate.id
@@ -932,6 +935,7 @@ begin
       when should_retry then 'queued'::public.run_status
       else p_status
     end,
+    attempt = case when should_retry then attempt + 1 else attempt end,
     failure_kind = case
       when should_retry then null
       when p_status in ('failed'::public.run_status, 'cancelled'::public.run_status) then p_failure_kind

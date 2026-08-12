@@ -1,17 +1,12 @@
 import "server-only";
 
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/lib/server/service-role";
 
-import { getSupabaseServiceRoleKey } from "@/lib/github/config";
-import { getSupabasePublicEnvironment } from "@/lib/supabase/env";
-
+/**
+ * The signed GitHub webhook boundary's service-role client. It shares one
+ * implementation with the durable worker boundary so there is a single place
+ * where the service-role credential is resolved.
+ */
 export function createSupabaseGitHubWebhookClient() {
-  const { url } = getSupabasePublicEnvironment();
-  return createClient(url, getSupabaseServiceRoleKey(), {
-    auth: {
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: false,
-    },
-  });
+  return createSupabaseServiceRoleClient();
 }

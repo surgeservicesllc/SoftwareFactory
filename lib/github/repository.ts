@@ -77,6 +77,19 @@ const referenceSchema = z.object({
   object: z.object({ sha: z.string().regex(shaPattern) }),
 });
 
+const recursiveTreeSchema = z.object({
+  sha: z.string().regex(shaPattern),
+  truncated: z.boolean().default(false),
+  tree: z.array(
+    z.object({
+      path: z.string(),
+      type: z.enum(["blob", "tree", "commit"]),
+      sha: z.string().regex(shaPattern).optional(),
+      size: z.number().int().nonnegative().optional(),
+    }),
+  ),
+});
+
 const contentMutationSchema = z.object({
   content: z.object({ html_url: z.string().url().nullable() }).nullable(),
   commit: z.object({ sha: z.string().regex(shaPattern), html_url: z.string().url() }),
@@ -299,6 +312,37 @@ export async function listGitHubTree(
   }));
 }
 
+const MAX_TREE_ENTRIES = 20_000;
+
+/**
+ * Reads the full repository tree at one commit so the worker can select the few
+ * files relevant to a task. Entries are bounded, and a provider-truncated tree
+ * is reported rather than silently treated as complete.
+ */
+export async function listGitHubRecursiveTree(
+  token: string,
+  owner: string,
+  repository: string,
+  commitSha: string,
+) {
+  if (!shaPattern.test(commitSha)) {
+    throw new GitHubApiError(400, "invalid_sha", "The tree commit SHA is invalid.");
+  }
+  const raw = await githubApiRequest(
+    `${repositoryPath(owner, repository)}/git/trees/${commitSha}?recursive=1`,
+    { token },
+  );
+  const parsed = parseOrThrow(recursiveTreeSchema, raw, "GitHub returned invalid tree metadata.");
+
+  return {
+    truncated: parsed.truncated,
+    entries: parsed.tree
+      .filter((entry) => entry.type === "blob")
+      .slice(0, MAX_TREE_ENTRIES)
+      .map((entry) => ({ path: entry.path, sha: entry.sha ?? null, size: entry.size ?? 0 })),
+  };
+}
+
 export async function getGitHubFile(
   token: string,
   owner: string,
@@ -369,14 +413,15 @@ export async function updateGitHubFileOnBranch(
   input: {
     branch: string;
     content: string;
-    expectedBlobSha: string;
+    /** Required to replace an existing blob; null creates a new file. */
+    expectedBlobSha: string | null;
     message: string;
     owner: string;
     path: string;
     repository: string;
   },
 ) {
-  if (!shaPattern.test(input.expectedBlobSha)) {
+  if (input.expectedBlobSha !== null && !shaPattern.test(input.expectedBlobSha)) {
     throw new GitHubApiError(400, "invalid_sha", "The expected file SHA is invalid.");
   }
   if (Buffer.byteLength(input.content, "utf8") > MAX_FILE_BYTES) {
@@ -389,7 +434,9 @@ export async function updateGitHubFileOnBranch(
         branch: input.branch,
         content: Buffer.from(input.content, "utf8").toString("base64"),
         message: input.message,
-        sha: input.expectedBlobSha,
+        // Omitting `sha` tells GitHub to create the file; sending one requires
+        // it to match, which is what keeps an update from silently overwriting.
+        ...(input.expectedBlobSha === null ? {} : { sha: input.expectedBlobSha }),
       },
       method: "PUT",
       token,
