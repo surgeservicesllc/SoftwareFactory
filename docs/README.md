@@ -1,28 +1,29 @@
 # Documentation index
 
-SoftwareFactory is in **Phase 1A: control-plane foundation**. These guides describe the current safe operating model and the intended path to live integrations. They do not imply that a provider is connected.
+SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. The repository contains the Phase 1B application and database boundaries, while the real GitHub App installation and complete production workflow remain unverified. Until that acceptance run succeeds, the UI and memory must continue to say **Not Connected**.
 
 ## Developer and operator guides
 
 - [Local setup](LOCAL_SETUP.md) — install, configure, and run the application.
-- [Architecture](ARCHITECTURE.md) — system boundaries, layers, data flow, and deployment shape.
+- [Architecture](ARCHITECTURE.md) — server, database, GitHub, and trust boundaries.
 - [Environment variables](ENVIRONMENT_VARIABLES.md) — public versus server-only configuration.
-- [Supabase setup](SUPABASE_SETUP.md) — local/cloud project configuration and RLS expectations.
-- [Database migrations](DATABASE_MIGRATIONS.md) — create, verify, and safely promote schema changes.
-- [Vercel setup](VERCEL_SETUP.md) — preview/production configuration without CI auto-deploy.
-- [Testing](TESTING.md) — quality layers and release evidence.
-- [Security guide](SECURITY.md) and [security model](SECURITY_MODEL.md) — trust boundaries, tenant isolation, secrets, audit, and incident handling.
-- [Autonomous mode](AUTONOMOUS_MODE.md) — control semantics and Phase 1 restrictions.
-- [Future GitHub App integration](GITHUB_APP_INTEGRATION.md) — proposed least-privilege repository connection.
-
-## Repository governance
-
-Agents must read `AGENTS.md`, all files under `AI/`, and the five required files under `policies/` before material work. The repository-memory files describe current state and intent; the policies are enforceable constraints. Authoritative implementation and test evidence must be used to correct stale memory.
+- [Supabase setup](SUPABASE_SETUP.md) — hosted/local configuration, Auth redirects, and RLS expectations.
+- [Database migrations](DATABASE_MIGRATIONS.md) — migration inventory, verification, and promotion rules.
+- [GitHub App integration](GITHUB_APP_INTEGRATION.md) — exact App registration, routes, permissions, secret handling, and acceptance checks.
+- [Vercel setup](VERCEL_SETUP.md) — project identity, environment scopes, and manual promotion.
+- [Testing](TESTING.md) — Phase 1B quality and live-integration evidence.
+- [Security guide](SECURITY.md) and [security model](SECURITY_MODEL.md) — tenant isolation, GitHub tokens/webhooks, audit, and incident handling.
+- [Autonomous mode](AUTONOMOUS_MODE.md) — controls remain OFF; Phase 1B does not merge or deploy.
 
 ## Status vocabulary
 
 - **Demo Data:** seeded/static information, not production telemetry.
-- **Not Connected:** no verified live integration is available.
+- **Not Connected:** no end-to-end verified provider installation/session is available.
+- **Configured:** required code or secret references exist, but connectivity is not necessarily verified.
 - **Queued:** intent was persisted; no worker execution is implied.
 
-Any guide that discusses a future integration should be read as a design contract until `AI/CURRENT_STATE.md` records verified connectivity evidence.
+Configuration, a successful build, or a provider object existing in an account does not prove an end-to-end connection. `AI/CURRENT_STATE.md` is the evidence-based status record.
+
+## Repository governance
+
+Agents must read `AGENTS.md`, its required `AI/` memory files, and required `policies/` before material work. Authoritative code, migrations, provider configuration, and current test output take precedence over stale documentation.

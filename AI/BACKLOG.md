@@ -2,54 +2,62 @@
 
 Last triaged: 2026-08-12
 
-Checked items have repository/test evidence. They describe Phase 1A foundations, not live provider connectivity.
+Checked items have repository or provider evidence. “Implemented” does not mean the real GitHub workflow passed.
 
-## Phase 1A completion record
+## Phase 1B implementation
 
-- [x] Implement the responsive command-center shell and all required primary destinations.
-- [x] Provide truthful dashboard, project, Bot Manager, Files, Agents, Backlog, Runs, Reports, Connections, Activity, and Settings foundations.
-- [x] Label seeded metrics/activity/report examples **Demo Data** and unavailable providers/workers **Not Connected**.
-- [x] Define project fields and GREEN/YELLOW/RED safety controls with destructive settings OFF by default.
-- [x] Persist authenticated commands/tasks/audit events transactionally when Supabase is configured; keep worker execution disconnected and RED owner-gated.
-- [x] Provide repository file tree/search/open/edit/preview/save foundations, unsaved-change protection, and labeled history placeholder.
-- [x] Define all required provider-neutral entities in ordered migrations with ownership, keys, constraints, indexes, RLS/FORCE RLS, policies, audit functions, and secret-shape rejection.
-- [x] Establish unit, integration, E2E, responsive, and accessibility test foundations plus read-only non-deploying CI.
-- [x] Run final lint, typecheck, unit/integration tests, production build, secret/client-bundle scan, RLS/workflow verification, and desktop/tablet/mobile browser tests; record evidence in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`.
-- [x] Create repository memory, policies, local/Supabase/Vercel/migration/testing/security/autonomy/GitHub App documentation, `.env.example`, and security reporting guidance.
-- [x] Deploy the Phase 1A UI to verified Vercel project `surgeservices-projects/softwarefactory`; production deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` is READY at `https://softwarefactory-tan.vercel.app`.
-- [ ] Deliver the owner-facing final Phase 1A implementation report (completed functionality, exact tests, limitations, outstanding work, and Phase 1B recommendation).
+- [x] Add Supabase Auth sign-up/sign-in/magic-link/sign-out/callback flows.
+- [x] Add organization onboarding, membership resolution, active-organization selection, and tenant-scoped request helpers.
+- [x] Add GitHub App configuration validation, App JWTs, short-lived installation token exchange, and server-only secret handling.
+- [x] Add signed time-bound installation state, user authorization verification, callback handling, and ephemeral user-token revocation.
+- [x] Add connection/install/repository persistence, synchronization, loss handling, explicit disconnect, and history preservation.
+- [x] Add tenant-authorized branch, commit, pull request, check, tree, and file APIs.
+- [x] Add signed, bounded, idempotent, redacted webhook ingestion and reconciliation for Phase 1B events.
+- [x] Add authenticated transactional project linking from an active selected repository with safe autonomy defaults.
+- [x] Add live Connections, Projects, Files, and dashboard data surfaces with truthful disconnected/demo states.
+- [x] Add expected-SHA/idempotent protected file editing that creates only a controlled branch, commit, and draft PR; fail closed for repository memory/policies, Supabase, every application API route, GitHub/server/Supabase libraries, Auth/session boundaries, deployment/environment/infrastructure files, and other sensitive subject paths.
+- [x] Add Phase 1B unit/integration/contract coverage; the hardened tree currently passes 58 unit tests and 88 integration tests.
+- [x] Create/configure GitHub App `Surge SoftwareFactory` and add protected GitHub variables to the exact Vercel project.
+- [x] Apply hosted Supabase migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` to `qpuofpmagrmyamahqwxw`; verify local/remote history matches.
 
-## P1 — Phase 1B: connect the control plane
+## Phase 1B release blockers
 
-- [ ] Configure a hosted Supabase project, apply the migration chain, and repeat RLS allow/deny and transactional workflow tests against the real service.
-- [ ] Add Supabase Auth onboarding, organization selection, membership administration, and authenticated project CRUD.
-- [ ] Replace the project form and Settings policy preview with tenant-scoped live reads/mutations while preserving safe defaults and conflict handling.
-- [ ] Implement the GitHub App installation, short-lived token exchange, repository selection, signed/idempotent webhooks, and reconciliation described in `docs/GITHUB_APP_INTEGRATION.md`.
-- [ ] Build a durable job dispatcher/worker lease protocol with budgets, idempotency, cancellation, timeouts, redacted evidence, and a global kill switch; begin read-only.
-- [ ] Add approval inbox, expiration, denial/revocation reasons, and visible policy-decision traces.
-- [ ] Add connection health checks and freshness/source labels without returning credential material.
-- [ ] Connect and verify the in-product Vercel adapter and repository/continuous-deployment linkage; keep deploy and rollback automation OFF until their separate policies and validation gates are satisfied.
-- [ ] Add durable repository-file version history and authenticated repository-scoped write adapters; keep the local write switch development-only.
-- [ ] Replace demo metrics/reports with tenant-scoped live records only after source and freshness are verified.
+- [x] Add and locally verify migration `008_fix_github_sync_ambiguity`; PGlite reproduced the `004` ambiguity and passed the repaired create/resync/audit/grant paths.
+- [x] Apply migration `008` to the hosted project; linked public-schema lint reports no schema errors.
+- [x] Add and apply migration `009_harden_github_project_and_sync`; serialize external-installation sync, re-resolve the authoritative binding, and persist only the synchronized repository default branch. Verify exact local/remote history through `009` and clean hosted lint (`[]`).
+- [x] Remove SQL wildcard semantics from normalized repository full-name matching.
+- [x] Verify hosted RLS/FORCE RLS catalog inventory: 22/22 RLS, 22/22 FORCE RLS, 43 policies, and 22 row-secret guards. Linked migration history separately confirms eight expected migrations through `009`.
+- [ ] Verify hosted two-tenant allow/deny paths, anonymous denial, privileged RPC authorization, and immutable audit events with real authenticated sessions.
+- [x] Rerun final lint, typecheck, full Vitest (16 files/146 tests), build (34 routes), and Playwright at desktop/tablet/mobile with accessibility/browser-error/overflow gates (12/12) after `009` and the repository-write hardening.
+- [x] Rerun final secret and built-client privileged-variable scans on the exact hardened tree; no credential patterns or built-client privileged server names were found.
+- [ ] Commit/push the exact validated tree to `main` and deploy that commit to `surgeservices-projects/softwarefactory`; record exact commit/deployment ID/state.
+- [ ] Verify production Supabase sign-up/confirmation/sign-in/onboarding/session paths.
+- [ ] Configure and verify the GitHub App webhook endpoint: the provider General page still shows it blank/inactive after attempted saves; then observe a correctly signed production delivery.
+- [ ] Install the App on the intended account/repository through SoftwareFactory; verify callback, identity, permissions, repository count, freshness, and audit evidence.
+- [ ] Link the real `SoftwareFactory` repository as a project and verify live branch/commit/PR/check views.
+- [ ] Read/edit a safe real file, verify isolated branch + commit + draft PR, stale-SHA conflict, protected-path rejection, and no merge/deploy.
+- [ ] Verify revocation/permission/rate-limit/provider-error states and explicit disconnect/history preservation.
+- [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
+- [ ] Publish the owner-facing Phase 1B final report only after all acceptance items pass.
 
-## P2 — delivery safety
+## Phase 1C — explicitly deferred
 
-- [ ] Implement isolated execution workspaces and repository-scoped installation tokens for bounded GREEN draft-PR creation.
-- [ ] Add preview deployment integration and the post-deploy validation evidence contract.
-- [ ] Discover and enforce branch protection, required checks, head SHA, approvals, and protected-resource exclusions before any merge eligibility decision.
-- [ ] Run rollback drills and record recovery-time evidence before enabling automated rollback anywhere.
-- [ ] Add cost/time/token budgets, provider rate-limit handling, incident alerts, and owner notifications.
-- [ ] Define retention/redaction rules for run traces, reports, webhook payloads, and audit metadata.
+- [ ] Design a durable Codex/OpenAI worker with leases, heartbeats, cancellation, idempotency, budgets, timeouts, sandboxing, redaction, and global kill switch.
+- [ ] Pilot bounded GREEN work in a disposable/non-production repository and keep human review.
+- [ ] Add approval inbox and visible policy-decision/evidence traces before expanding execution.
 
-## Maintenance debt
+Codex/OpenAI is **Not Connected**. Do not begin Phase 1C without explicit instruction after Phase 1B exits.
 
-- [ ] Run local development and verification on Node 22+ to remove the Supabase Node 20 deprecation warning.
-- [ ] Resolve the Vitest/Vite future native config-loader ESM warning before it becomes a breaking default.
-- [ ] Expand E2E coverage beyond the dashboard/navigation foundation to authenticated command, project-control, approval, and file-save workflows once live test services exist.
+## Phase 1D/2 — explicitly deferred
 
-## Deliberately deferred
+- [ ] Observation-only autonomy prerequisite evaluator.
+- [ ] Separate, owner-approved non-production pilots before any auto approve/merge/deploy/rollback.
+- [ ] Supported Anthropic API/logical Claude agents in Phase 2; never browser-automate multiple consumer accounts.
 
-- Unrestricted production execution.
-- Automatic RED-risk approval.
-- Production auto-merge, auto-deploy, or auto-rollback without separately approved policy and operational evidence.
-- Plaintext provider credentials in Supabase, repository files, logs, or browser storage.
+Claude, auto merge, deployment automation, and rollback automation are **Not Connected**/OFF.
+
+## Maintenance
+
+- [ ] Run final release verification on Node 22+ (local Node 20 currently emits the Supabase future-support warning).
+- [ ] Resolve the Vitest/Vite future native config-loader warning before it becomes breaking.
+- [ ] Expand authenticated E2E coverage once a safe disposable provider acceptance fixture exists.

@@ -1,57 +1,64 @@
 # Roadmap
 
-Roadmap ordering reflects safety dependencies, not target dates. A later phase must not be pulled forward without satisfying the policy and verification gates that make it safe.
+Roadmap order follows safety dependencies. A later phase cannot inherit authority from an earlier phase.
 
 ## Phase 1A — trustworthy control-plane foundation
 
-Status: **Release candidate; final audit/report pending**
+Status: **Complete baseline; deployed UI evidence retained.**
 
-- Professional responsive application shell and required navigation.
-- Dashboard, Projects, Bot Manager, Files, Agents, Backlog, Runs, Reports, Connections, Activity, and Settings foundations.
-- Clear **Demo Data** and **Not Connected** states.
-- Project safety controls defaulting to OFF.
-- GREEN/YELLOW/RED risk model with owner approval for RED.
-- Provider-neutral domain model and Supabase migrations with RLS.
-- Command persistence without fictional worker execution.
-- Audit events for important operations.
-- Repository-memory, policies, operating documentation, tests, and CI quality gates.
+- Responsive shell, truthful demo/disconnected states, provider-neutral domain model, Supabase/RLS/audit foundations, risk/approval controls, tests, CI, documentation, and safe OFF defaults.
+- No unrestricted production execution, merge, deployment, or rollback.
 
-Exit evidence is defined in `AI/QUALITY_SCORECARD.md`.
+## Phase 1B — Production GitHub App Integration
 
-## Phase 1B — authenticated control plane and GitHub read integration
+Status: **Implementation and hosted schema gates pass; authenticated tenant behavior and live acceptance pending.**
 
-- Supabase Auth, organization onboarding, and membership administration.
-- Live project CRUD and scoped repository-memory editing.
-- GitHub App registration, installation flow, encrypted secret storage/reference, signed webhooks, and installation-token exchange.
-- Repository discovery, branch/PR/check read models, webhook reconciliation, and audit evidence.
-- Durable job dispatch with idempotency and cancellation; begin with read-only/audit commands.
-- Owner approval inbox and policy-decision trace.
-- Live dashboard metrics labeled by provider and freshness.
+Implemented:
 
-No merge or production deployment autonomy is implied by this phase.
+- Supabase Auth/onboarding/active organization.
+- Hosted schema through migration `009`, including serialized installation synchronization and authoritative synchronized-default-branch project linking.
+- GitHub App install/callback/token/sync/disconnect boundaries.
+- Repository/branch/commit/PR/check/file reads.
+- Signed/idempotent/redacted webhook ingestion.
+- Transactional project linking and live metrics/views.
+- Controlled branch + commit + draft-PR file changes.
 
-## Phase 1C — sandboxed agent execution
+Exit work:
 
-- Isolated workspaces and least-privilege repository access.
-- Provider-neutral AI model adapters with budgets, timeouts, retry limits, and redacted traces.
-- Agent task leasing, heartbeats, evidence collection, and resumable runs.
-- GREEN-risk branch changes, deterministic validation, and draft PR creation.
-- Security scanning and supply-chain controls.
-- Human-reviewed promotion from draft PR to merge readiness.
+- verify hosted authenticated RLS allow/deny and privileged-RPC behavior (migration history through `009` and linked schema lint are green);
+- [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
+- deploy exact commit to Vercel; and
+- pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.
 
-## Phase 2 — governed delivery automation
+No merge or production deployment autonomy is implied.
 
-- Staged GREEN auto-merge eligibility with branch protection and required checks.
-- Preview deployment integration and post-deploy validation.
-- Explicitly authorized YELLOW workflows with enhanced testing and observation windows.
-- Automated rollback recommendations, then narrowly scoped rollback execution after drills prove safety.
-- SLOs, incident workflows, and operator alerts.
+## Phase 1C — Codex execution
 
-## Phase 3 — measured autonomy
+Status: **Not Connected; not started.**
 
-- Policy-bounded multi-agent planning and execution across multiple projects.
-- Risk-based budgets, change windows, escalation paths, and kill switches.
-- Autonomous GREEN work only where historical evidence demonstrates acceptable outcomes.
-- Continuous evaluation of quality, security, cost, rollback rate, and owner intervention.
+- Durable provider-neutral worker, leasing/heartbeat/cancellation/idempotency.
+- Isolated workspaces, budgets/timeouts, sandbox/network restrictions, redacted traces.
+- Bounded GREEN tasks, deterministic validation, and human-reviewed draft PRs.
+- Kill switch, approval inbox, incident evidence, and observed non-production pilot.
 
-RED actions remain owner-controlled unless a future, explicit policy revision creates a narrower and independently reviewed authorization model.
+Do not begin without explicit instruction after Phase 1B exits.
+
+## Phase 1D — autonomous-loop controls
+
+Status: **Not started; controls remain OFF.**
+
+- Observation-only policy decisions and prerequisite evidence.
+- No auto approve/merge/deploy/rollback until separate policy, provider, branch protection, validation, health, and rollback drills pass.
+
+## Phase 2 — Claude and governed delivery
+
+Status: **Not Connected; not started.**
+
+- Use supported Anthropic API connections and logical roles, not browser automation of consumer accounts.
+- Provider-neutral Bot Manager routing between Codex, Claude, and automation capabilities.
+- Preview deployment/validation before any separately approved delivery automation.
+
+## Later measured autonomy
+
+- Narrow GREEN automation only after sustained evidence, explicit allowlists, budgets, alerts, kill switches, and owner-approved policy.
+- RED actions remain owner-controlled absent a future independently reviewed policy revision.

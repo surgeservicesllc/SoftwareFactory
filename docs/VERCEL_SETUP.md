@@ -1,54 +1,63 @@
 # Vercel setup
 
-UI hosting status: **Verified production deployment**. Deployment automation status in Phase 1A: **Not Connected**. The repository CI workflow validates code but does not deploy, merge, or receive production write credentials.
+Hosting project: `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Stable alias: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app).
 
-## Verified production UI
+Vercel hosts the Next.js application and server routes. The in-product Vercel deployment/rollback adapter remains **Not Connected**; CI has no deploy or merge credentials.
 
-Verified on 2026-08-12:
+## Current evidence
 
-- Team/project: `surgeservices-projects/softwarefactory`
-- Project ID: `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`
-- Production deployment ID: `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7`
-- Deployment state: `READY`
-- Stable alias: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app)
-- Inspector: [Vercel deployment inspector](https://vercel.com/surgeservices-projects/softwarefactory/Fi7jEzWFbtW3vrXDGuEodPumTuJ7)
-- Availability check: HTTP 200 with title `SoftwareFactory — AI Engineering Control Plane`
+- The Phase 1A production UI deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` was previously verified READY and reachable at the stable alias.
+- Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
+- GitHub App server-only variables are configured for Production and Preview; App permissions/events are configured, but installation is absent and the GitHub provider webhook endpoint still appears blank/inactive.
+- Preview Supabase variables are not independently verified.
+- A production deployment of the final Phase 1B commit, its deployment ID, and its live authenticated/GitHub acceptance journey are still required before Phase 1B can be called production-ready.
 
-This verifies the Vercel project identity and the deployed UI. It does not verify an in-product Vercel connection, Git repository/continuous-deployment linkage, deployment API executor, complete post-deploy observation policy, or rollback integration. Those capabilities remain **Not Connected**.
+Do not assume that the stable alias contains the current working tree. Record the exact commit, deployment ID, state, and smoke/acceptance evidence after promotion.
 
 ## Project configuration
 
-1. Use the verified `surgeservices-projects/softwarefactory` project through an owner-controlled session; verify repository linkage separately before enabling continuous deployment.
-2. Keep the Next.js framework preset and repository root aligned with the deployed source.
-3. Keep `npm ci`/the lockfile as the dependency source of truth and `npm run build` as the production build.
-4. Set environment variables using Vercel's encrypted settings, scoped separately to Development, Preview, and Production.
-5. Do not put privileged values in `NEXT_PUBLIC_` variables.
-6. Require owner-controlled production environment protection before live automation is considered.
+1. Use only `surgeservices-projects/softwarefactory`.
+2. Keep the Next.js preset and repository root aligned with this repository.
+3. Use the committed lockfile and `npm run build`.
+4. Target Node 22 or newer, matching `package.json` and CI.
+5. Store values in Vercel encrypted/sensitive settings with deliberate Production/Preview/Development scopes.
+6. Never expose privileged values through `NEXT_PUBLIC_`.
+7. Verify exact callback/webhook origins after changing aliases or domains.
 
-See [Environment variables](ENVIRONMENT_VARIABLES.md) for the public/server boundary.
+See [Environment variables](ENVIRONMENT_VARIABLES.md) and [GitHub App integration](GITHUB_APP_INTEGRATION.md).
 
 ## Environment isolation
 
-- Preview should use non-production Supabase/provider credentials and data.
-- Production secrets must not be available to untrusted pull-request builds.
-- Prefer separate Supabase projects for preview/staging and production.
-- Limit provider tokens to the exact team/project and operations required.
+- Production uses the exact hosted Supabase project described in [Supabase setup](SUPABASE_SETUP.md).
+- Preview should use separate Supabase data/credentials before authenticated preview testing.
+- Production secrets must not be available to untrusted fork builds.
+- GitHub private key/client/webhook/state secrets remain server-only.
+- `SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES` stays false in all hosted scopes.
 
-## Validation
+## Manual production promotion
 
-Before a manual production promotion:
+Before deploying:
 
-- lint, typecheck, tests, and build pass for the exact commit;
-- migrations were reviewed and verified separately;
-- risk/protected-resource approvals are satisfied;
-- preview rendering and primary responsive flows pass;
-- demo/disconnected states remain truthful; and
+- lint, typecheck, full Vitest, production build, and applicable E2E pass for the exact tree;
+- local and hosted migrations/lint/RLS checks pass;
+- tracked files/client bundle are scanned for secrets;
+- GitHub App callback/webhook values match the stable production origin;
+- safe error/empty/disconnected states remain truthful; and
 - rollback/containment and observation plans exist.
 
-A READY Vercel build plus the HTTP/title smoke check proves the UI deployment recorded above is reachable. It is not the complete health, observation, integration, or rollback evidence required by `policies/POST_DEPLOY_VALIDATION.md` for future automated delivery.
+After deploying:
 
-## Phase 1A restrictions
+1. Record exact commit and Vercel deployment ID/state.
+2. Confirm the stable alias resolves to that deployment and returns the expected title.
+3. Exercise unauthenticated protections and Supabase sign-in/onboarding.
+4. Complete the GitHub production acceptance checklist.
+5. Confirm no secret appears in responses, logs, or client assets.
+6. Observe provider failures and safe **Not Connected** behavior.
 
-- Do not add `VERCEL_TOKEN` to pull-request CI.
-- Do not add deploy hooks, production `vercel --prod`, auto-merge, or automated rollback to `.github/workflows/ci.yml`.
-- The UI may be described as deployed/READY using the exact evidence above. Keep the in-product Vercel connection and deployment/rollback automation labeled **Not Connected** until their separate identity, repository, permission, execution, and validation paths are verified.
+A Vercel READY state proves build/hosting readiness only. It does not prove Supabase tenant isolation, GitHub installation/webhooks, file-to-draft-PR behavior, post-deploy observation, or rollback automation.
+
+## Restrictions
+
+- Do not add `VERCEL_TOKEN`, provider secrets, or production database credentials to pull-request CI.
+- Do not add auto-deploy, auto-merge, or rollback steps to `.github/workflows/ci.yml`.
+- Do not describe the in-product Vercel adapter as connected because the UI is hosted on Vercel.

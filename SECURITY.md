@@ -12,4 +12,4 @@ If a credential may have been disclosed, revoke or rotate it immediately through
 
 ## Supported phase
 
-SoftwareFactory is currently a Phase 1A control-plane foundation. Live provider integrations and autonomous production execution are not supported. Security reports about unsafe claims, tenant isolation, RLS, authorization, audit integrity, or browser-exposed secrets are in scope.
+SoftwareFactory is implementing Phase 1B production GitHub App integration. The App is configured but remains **Not Connected** until the real installation and acceptance workflow passes. Autonomous production execution, merge, deployment, rollback, Codex, and Claude are not supported. Security reports about unsafe claims, tenant isolation, RLS, Auth/session boundaries, GitHub App tokens/permissions/webhook verification, repository mutation guards, audit integrity, or browser-exposed secrets are in scope.

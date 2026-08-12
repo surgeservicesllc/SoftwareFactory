@@ -1,17 +1,25 @@
 # Security guide
 
-SoftwareFactory treats the browser, provider responses, webhook payloads, repository content, and model output as untrusted. Next.js server code is the application authorization boundary, and Supabase Row Level Security is an independent tenant-isolation boundary.
+SoftwareFactory treats the browser, repository content, GitHub responses/webhooks, Supabase rows, and future model output as untrusted. Next.js server code is the application authorization boundary; Supabase RLS is an independent tenant boundary.
 
 ## Non-negotiable rules
 
-- Privileged keys, service-role credentials, tokens, passwords, and private keys never enter browser code, props, logs, source maps, database rows, fixtures, reports, or source control.
-- Every sensitive read and mutation authenticates the user and checks organization membership/resource ownership on the server.
-- RLS remains enabled and is tested for allowed access plus cross-tenant and anonymous denial.
-- Connections store provider-neutral metadata and an opaque server-side secret reference, not credential material.
-- RED actions require exact, current, explicit owner approval in Phase 1.
-- External mutations use least privilege, idempotency, replay protection, bounded retries, redaction, and audit events.
-- CI has read-only repository access and no merge/deploy credentials.
+- App private keys, client/state/webhook secrets, OAuth/installation tokens, service-role keys, passwords, and database credentials never enter browser code, props, logs, source maps, database rows, fixtures, reports, screenshots, or source control.
+- Every sensitive request authenticates the user and verifies active organization membership, connection, selected repository, and operation-specific role on the server.
+- RLS and FORCE RLS remain enabled on every exposed table; test allowed access plus cross-tenant and anonymous denial.
+- GitHub installation tokens are short-lived and scoped to the one repository ID and exact permissions required by the route.
+- Webhooks are bounded, raw-body HMAC verified, delivery-ID deduplicated, schema validated, and stored only as hashes/redacted subsets.
+- Standard file mutations require a safe path, expected blob SHA, verified default branch, project/connection mapping, idempotency key, owner/admin role, and draft PR outcome.
+- Protected paths—including repository memory/policies, Supabase, all application APIs, server-side GitHub/Supabase code, Auth/session boundaries, and deployment/environment/infrastructure controls—plus likely secrets, direct default-branch writes, non-draft PRs, merges, deployments, and archived/disabled repositories fail closed.
+- Important provider/database state transitions create append-only, redacted activity evidence.
+- RED actions require exact, current owner approval; Phase 1B never auto-merges or auto-deploys.
 
-The local repository-memory write switch is disabled by default and is safe only for a trusted, single-user local process. It must remain disabled in hosted environments until an authenticated multi-tenant file-write boundary and version history are implemented.
+## Privileged service-role boundary
 
-See [the complete security model](SECURITY_MODEL.md), [environment-variable rules](ENVIRONMENT_VARIABLES.md), and `policies/PROTECTED_RESOURCES.md`. Report vulnerabilities through the private process in the repository-root `SECURITY.md`.
+The service-role client is restricted to server-only GitHub webhook/synchronization and audited privileged RPC operations. Those RPCs still validate actor/tenant/resource identifiers and restrict grants. Interactive reads and project/Auth operations use the caller's session and RLS. Never move service-role access into a Client Component or use it to bypass a policy failure.
+
+## Current verification limits
+
+The code and final hardened-tree code/browser/secret tests implement the controls above. Hosted migrations through `009` are applied, local/remote history matches, linked public-schema lint reports no errors, and the final credential/client-bundle scan is clean. Hosted authenticated cross-tenant/RLS behavior remains release work. The real GitHub App installation and webhook/file-to-draft-PR journey has not passed; the provider webhook setting still appears blank/inactive and no signed delivery has been observed, so GitHub is **Not Connected**.
+
+See [Security model](SECURITY_MODEL.md), [Environment variables](ENVIRONMENT_VARIABLES.md), [GitHub App integration](GITHUB_APP_INTEGRATION.md), and `policies/PROTECTED_RESOURCES.md`. Report vulnerabilities through the private process in the repository-root `SECURITY.md`.

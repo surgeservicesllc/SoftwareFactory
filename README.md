@@ -1,47 +1,45 @@
 # SoftwareFactory
 
-SoftwareFactory is a standalone AI software-engineering command center for projects, agents, work queues, repository memory, provider connections, validation, approvals, releases, and executive reporting.
+SoftwareFactory is a server-first software-engineering control plane for tenant-scoped projects, GitHub App connections, repository inspection, guarded file changes, approvals, and auditable operational state.
 
-The repository is currently building **Phase 1A: the trustworthy control-plane foundation**. It does not yet run unrestricted autonomous production changes.
+The repository is implementing **Phase 1B: Production GitHub App Integration**. The code now includes Supabase authentication/onboarding, GitHub App installation and synchronization boundaries, live project/repository views, and a controlled file-to-draft-PR workflow. The real GitHub App installation and full production journey have not yet been verified, so GitHub remains **Not Connected** until that acceptance run succeeds.
 
-Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app) — verified Vercel deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` in project `surgeservices-projects/softwarefactory`. This is UI hosting only; Supabase, GitHub, AI-provider, and deployment/rollback automation connections remain **Not Connected**.
+Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for which release is live and which Phase 1B checks remain.
 
 ## Current trust boundary
 
 - Seeded or static presentation values are labeled **Demo Data**.
-- A provider without verified live connectivity is labeled **Not Connected**.
-- A queued Bot Manager command records intent; it does not mean an AI worker executed it.
-- Auto approve, merge, deploy, and rollback default OFF.
-- RED-risk actions require explicit owner approval in Phase 1.
-- Privileged provider keys and service-role credentials stay server-only and out of database rows.
-
-See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for the evidence-based implementation status and [`AI/QUALITY_SCORECARD.md`](AI/QUALITY_SCORECARD.md) for release gates.
+- A provider without a verified live installation/session is labeled **Not Connected**.
+- GitHub installation and repository tokens are minted server-side, scoped to one installation/repository, short-lived, and never returned to the browser.
+- File saves create an isolated `softwarefactory/*` branch, commit, and draft pull request. They never write directly to the default branch, merge, or deploy.
+- Protected paths and likely credential content are rejected by the standard file-change route.
+- Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
+- OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**.
 
 ## Technology
 
-- Next.js 16.3 with App Router
-- React 19.2 and TypeScript strict mode
-- Tailwind CSS 4
-- Supabase Auth/Postgres architecture with Row Level Security
-- Verified Vercel production UI hosting with deployment automation still **Not Connected**
-- Vitest/Testing Library and Playwright testing foundations
+- Next.js 16.3 App Router, React 19.2, TypeScript strict mode, and Tailwind CSS 4
+- Supabase Auth/Postgres with Row Level Security and audited security-definer workflows
+- GitHub App authentication with signed state, repository-scoped installation tokens, signed/idempotent webhooks, and draft-PR-only writes
+- Vercel hosting
+- Vitest/Testing Library and Playwright
 
 ## Local development
 
-Requirements: Node.js 22 or newer and npm (matching `package.json`).
+Requirements: Node.js 22 or newer and npm.
 
 ```bash
 npm ci
 ```
 
-Copy `.env.example` to `.env.local`. Leave provider values blank for explicitly labeled demo/disconnected behavior; never add real credentials to source control.
+Copy `.env.example` to `.env.local`, configure only the environment you intend to test, and keep real credentials out of source control.
 
 ```powershell
 Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`. See [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) and [`docs/ENVIRONMENT_VARIABLES.md`](docs/ENVIRONMENT_VARIABLES.md) for complete setup and secret-handling guidance.
+Open `http://localhost:3000`. See [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md), [`docs/ENVIRONMENT_VARIABLES.md`](docs/ENVIRONMENT_VARIABLES.md), and [`docs/GITHUB_APP_INTEGRATION.md`](docs/GITHUB_APP_INTEGRATION.md).
 
 ## Quality commands
 
@@ -55,46 +53,37 @@ npm run test:e2e
 npm run build
 ```
 
-CI runs locked install, lint, typecheck, Vitest, production build, and Playwright browser/accessibility tests. It has read-only repository permissions and does not merge or deploy.
+Final results for the current tree belong in [`AI/QUALITY_SCORECARD.md`](AI/QUALITY_SCORECARD.md). Test files existing in the repository are not, by themselves, proof that the production integration works.
 
 ## Architecture at a glance
 
-The browser is untrusted and contains no privileged secrets. Next.js server boundaries authenticate, authorize, validate, apply risk policy, and persist auditable state. Supabase provides tenant-scoped persistence protected by RLS. Future GitHub, Vercel, and AI-provider adapters resolve credentials only on the server and are separate from projects, agents, and users.
-
 ```text
 Browser
-  -> Next.js server boundary
-    -> authorization + risk policy + validation
-      -> Supabase (RLS-protected control-plane data)
-      -> server-only secret resolution
-      -> future provider adapters / durable workers
+  -> Next.js authenticated server boundary
+    -> authorization + tenant/risk validation
+      -> Supabase Auth/Postgres (RLS + immutable activity evidence)
+      -> GitHub App adapter (server-only secrets + short-lived tokens)
+        -> selected repository reads
+        -> controlled branch + commit + draft PR
 ```
 
-The current phase has no verified production worker, GitHub App automation, Vercel deployment automation, or automatic rollback executor. The Phase 1A UI itself is live on the verified Vercel deployment linked above.
+GitHub provider responses and webhook payloads are treated as untrusted. Supabase RLS remains an independent tenant boundary. Vercel deployment automation, merge automation, rollback automation, Codex execution, and Claude execution are not part of Phase 1B.
 
 ## Documentation
 
 - [`docs/README.md`](docs/README.md) — documentation index
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system boundaries and flow
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — runtime and trust boundaries
+- [`docs/GITHUB_APP_INTEGRATION.md`](docs/GITHUB_APP_INTEGRATION.md) — exact App setup, routes, permissions, and verification
 - [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md) and [`docs/DATABASE_MIGRATIONS.md`](docs/DATABASE_MIGRATIONS.md)
 - [`docs/VERCEL_SETUP.md`](docs/VERCEL_SETUP.md)
 - [`docs/TESTING.md`](docs/TESTING.md)
 - [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md)
 - [`docs/AUTONOMOUS_MODE.md`](docs/AUTONOMOUS_MODE.md)
-- [`docs/GITHUB_APP_INTEGRATION.md`](docs/GITHUB_APP_INTEGRATION.md)
 
-Repository memory lives under [`AI/`](AI/). Enforceable risk and automation constraints live under [`policies/`](policies/). Every coding agent must read the required files listed in [`AGENTS.md`](AGENTS.md) before material work.
-
-## Provider setup
-
-- Supabase: [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
-- Vercel: [`docs/VERCEL_SETUP.md`](docs/VERCEL_SETUP.md)
-- Future GitHub App: [`docs/GITHUB_APP_INTEGRATION.md`](docs/GITHUB_APP_INTEGRATION.md)
-
-Configuration or UI hosting alone is not proof of a control-plane provider connection. The production UI is verified, while Supabase, GitHub, AI providers, and the in-product Vercel deployment/rollback integration remain **Not Connected** until authenticated server-side health and failure paths are verified.
+Repository memory lives under [`AI/`](AI/), and enforceable constraints live under [`policies/`](policies/). Every coding agent must follow [`AGENTS.md`](AGENTS.md).
 
 ## Security
 
-Do not commit secrets or report them in public issues. Review [`SECURITY.md`](SECURITY.md), [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md), and [`policies/PROTECTED_RESOURCES.md`](policies/PROTECTED_RESOURCES.md). A suspected disclosure requires provider-side revocation/rotation; deleting a value from Git is not sufficient.
+Never commit credentials or paste them into issues, screenshots, fixtures, logs, or database rows. Review [`SECURITY.md`](SECURITY.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`policies/PROTECTED_RESOURCES.md`](policies/PROTECTED_RESOURCES.md). Revoke/rotate a possibly disclosed credential at its provider; deleting it from Git is insufficient.
 
 Deployment identity configured for SoftwareFactory.

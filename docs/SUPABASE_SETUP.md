@@ -1,49 +1,76 @@
 # Supabase setup
 
-Runtime status in Phase 1A: **Not Connected** until valid project configuration and an observed health/read/write path are verified.
+Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Provider health was verified as `ACTIVE_HEALTHY` on 2026-08-12.
 
-## Choose an environment
+Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` have been applied. Linked migration history matches local history. `009` serializes external-installation synchronization and makes synchronized GitHub default-branch state authoritative for project links. `supabase db lint --linked --schema public --level warning --fail-on error` reports no schema errors (`[]`). This makes migration application and static linked lint green; authenticated cross-tenant, anonymous-denial, privileged-RPC, and real application-session verification against the hosted service remain pending.
 
-Use a local Supabase stack for schema/RLS development. Use distinct hosted projects for preview/staging and production when live environments are introduced. Do not point routine local tests at production.
+## Hosted Auth configuration
+
+The linked Auth configuration uses:
+
+- site URL: `https://softwarefactory-tan.vercel.app`;
+- redirect URLs:
+  - `https://softwarefactory-tan.vercel.app/auth/callback`
+  - `http://localhost:3000/auth/callback`
+  - `http://127.0.0.1:3000/auth/callback`;
+- email sign-up enabled with confirmation;
+- anonymous sign-in disabled;
+- minimum password length 12;
+- JWT expiry 3600 seconds;
+- secure password change enabled;
+- email frequency limit one minute;
+- eight-digit OTPs; and
+- TOTP enrollment/verification enabled.
+
+Do not add wildcard redirect URLs. Local and production callbacks must remain exact.
+
+## Application Auth flow
+
+The repository implements email/password sign-up/sign-in, existing-user magic link, sign-out, callback exchange, onboarding, organization creation, membership resolution, and active-organization selection. Magic-link submission uses `shouldCreateUser: false`; a new user must complete sign-up/confirmation first.
+
+A real authenticated production session and end-to-end GitHub installation have not yet been verified. Do not treat Auth configuration or a healthy project as proof of that journey.
 
 ## Local workflow
 
-Prerequisites: Docker and a Supabase CLI available through your approved installation method.
+Prerequisites: Docker and an approved Supabase CLI installation.
 
 ```bash
 npx supabase start
 npx supabase db reset
 ```
 
-`db reset` is destructive to the local database only. Confirm the CLI is linked to the intended local environment before running database commands.
+`db reset` is destructive to the local disposable database. Never run it against the hosted project. Put local public URL/key values only in `.env.local`.
 
-The CLI output provides a local project URL and publishable/anonymous key. Put them only in `.env.local` using the names in [Environment variables](ENVIRONMENT_VARIABLES.md). Prefer `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the client accepts `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a legacy fallback. Phase 1A request handlers do not require a service-role key.
+## Hosted migration workflow
 
-## Hosted project workflow
+1. Confirm CLI identity and exact project ref before every linked command.
+2. Inspect `supabase migration list --linked` and ensure no unexpected migration appears.
+3. Review the SQL and risk classification.
+4. Run a dry run when supported.
+5. Apply only the additive migration chain.
+6. Run `supabase db lint --linked` and resolve every real finding with a new migration.
+7. Verify table/RPC/RLS/FORCE RLS state and application compatibility.
+8. Exercise allowed access plus cross-tenant and anonymous denial using user sessions, not service-role access.
 
-1. Create/select the correct Supabase organization and environment-specific project.
-2. Record ownership and recovery contacts outside the repository.
-3. Configure the browser-public URL and publishable key in the matching Vercel environment.
-4. Do not configure a service-role key for Phase 1A request handlers. They use user JWTs, RLS, and reviewed `SECURITY DEFINER` RPCs. A future service-role use requires a specific reviewed server operation and independent tenant authorization.
-5. Apply migrations using the protected process in [Database migrations](DATABASE_MIGRATIONS.md).
-6. Verify authentication, organization membership, RLS allow/deny behavior, audit emission, and connection health.
-7. Only then update status from **Not Connected**.
+Current stop condition: do not call the hosted data boundary fully verified until authenticated cross-tenant, anonymous-denial, privileged-RPC, audit, and real application-session checks pass. Migration history and linked schema lint are green.
 
 ## RLS expectations
 
-- Enable RLS in the same migration that creates every exposed table.
-- Define explicit policies; enabling RLS without required policies can make the application unusable but is safer than disabling it.
-- Scope rows through organization membership and/or user ownership.
-- Cover `SELECT`, `INSERT`, `UPDATE`, and `DELETE` separately as needed; do not assume a read policy authorizes writes.
-- Test at least two tenants and anonymous access to prove denial as well as allowed behavior.
-- Never use the service-role client in a test that claims to prove RLS; it bypasses RLS.
+- Every exposed table has RLS and FORCE RLS.
+- Policies scope access through organization membership and resource ownership.
+- `SELECT`, `INSERT`, `UPDATE`, and `DELETE` are considered separately.
+- Owner/admin-only operations are enforced server-side and/or in reviewed security-definer functions.
+- Security-definer functions pin `search_path`, validate `auth.uid()`, tenant membership, and exact resources, and expose only deliberate grants.
+- Service-role tests do not prove RLS because service role bypasses it.
 
-## Connection records
+## Secret handling
 
-Supabase connection rows contain non-secret metadata such as project reference, display name, status, and an opaque secret reference. They do not contain service-role keys, passwords, or access tokens.
+The Supabase public URL and publishable key may reach the browser. The service-role key and database/CLI credentials may not. GitHub connection rows contain provider metadata and an opaque secret reference—not App keys, OAuth/installation tokens, webhook secrets, or user passwords.
 
 ## Troubleshooting
 
-- **Permission denied:** inspect the authenticated user, organization membership, row ownership, and policy predicates. Do not disable RLS.
-- **Schema mismatch:** reset the local database and apply the full migration chain; do not edit an already-shared migration.
-- **Build lacks environment values:** demo/disconnected rendering should remain safe; runtime-dependent actions stay unavailable.
+- **Permission denied:** inspect user session, active organization, membership, resource ownership, and policy predicates. Never disable RLS.
+- **Migration history differs:** stop and verify the exact project/profile. Do not repair, delete, or renumber production migrations casually.
+- **Lint ambiguity:** qualify table aliases/columns in a new additive migration, apply it, and rerun linked lint.
+- **Auth redirect failure:** compare the exact site/redirect URLs above and the environment callback origin.
+- **Build lacks configuration:** fail to **Not Connected**; never fall back to a privileged browser key.

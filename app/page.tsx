@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
 import {
   DemoBadge,
   DemoNotice,
@@ -42,13 +43,15 @@ const metricIcons = [
   CircleDotDashed,
 ] as const;
 
+const illustrativeMetrics = dashboardMetrics.filter((metric) => metric.label !== "Connected projects");
+
 export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Executive overview / Phase 1A"
+        eyebrow="Executive overview / Phase 1B"
         title="Factory command center"
-        description="A truthful operating view of engineering activity, safety posture, and decisions that need an owner. Live integrations remain disconnected during foundation setup."
+        description="A truthful operating view of connected projects, GitHub pull requests, safety posture, and illustrative foundations that are still awaiting live providers."
         action={
           <div className="flex items-center gap-2">
             <StatusBadge tone="safe">Foundation healthy</StatusBadge>
@@ -57,8 +60,10 @@ export default function DashboardPage() {
         }
       />
 
+      <LiveDashboardMetrics />
+
       <DemoNotice>
-        Every metric and event below is illustrative. No live GitHub, AI worker, deployment, or production telemetry is represented on this dashboard.
+        The sections below remain illustrative Demo Data. Agent execution, deployment, production telemetry, and autonomous operations are not represented as live.
       </DemoNotice>
 
       <div className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">
@@ -134,7 +139,7 @@ export default function DashboardPage() {
           <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#536070]">Illustrative 30-day view</span>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {dashboardMetrics.map((metric, index) => (
+          {illustrativeMetrics.map((metric, index) => (
             <MetricCard
               key={metric.label}
               {...metric}

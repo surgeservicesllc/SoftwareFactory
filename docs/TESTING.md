@@ -1,58 +1,81 @@
 # Testing
 
-Phase 1A requires evidence at multiple layers. A passing render or production build alone is not sufficient.
+Phase 1B needs local code evidence, hosted database evidence, and real-provider acceptance evidence. None substitutes for the others.
 
-## Quality gates
-
-Run the repository scripts from the final `package.json`:
+## Commands
 
 ```bash
 npm run lint
 npm run typecheck
 npm test
-npm run build
-```
-
-Focused suites use these scripts:
-
-```bash
 npm run test:unit
 npm run test:integration
 npm run test:coverage
 npm run test:e2e
-npm run test:e2e:ui
+npm run build
 ```
 
-Vitest, jsdom, Testing Library, and jest-dom provide unit/integration foundations. Playwright runs Chromium projects at representative desktop, tablet, and mobile viewports, with `@axe-core/playwright` available for automated accessibility checks. Inspect `package.json` and the test configuration if a script changes. CI runs the core install/lint/typecheck/Vitest/build gates and a separate Playwright browser/accessibility job, all without deployment permissions.
+## Current hardened-tree evidence (2026-08-12)
 
-## Unit tests
+| Gate | Result |
+| --- | --- |
+| `npm run test:unit` | Pass — 58 tests after repository-write hardening |
+| `npm run test:integration` | Pass — 88 tests after migration `009` |
+| `npm run lint` | Pass on the hardened tree |
+| `npm run typecheck` | Pass on the hardened tree |
+| `npm test` | Pass — 16 files, 146 tests |
+| `npm run build` | Pass — 34 pages/routes |
+| Hosted Supabase migration push | Pass — local=remote for `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009` |
+| Hosted Supabase lint | Pass — public schema, warning level, fail-on-error; no schema errors (`[]`) |
+| Playwright E2E | Pass — 12/12 across desktop, tablet, and mobile, including navigation, overflow, browser-error, and axe gates |
+| Secret/client-bundle scan | Pass on the hardened tree — no credential patterns or built-client privileged server names |
+| Real GitHub App acceptance | Pending; App is **Not Connected** |
 
-Use unit tests for pure policy/risk decisions, validation, formatting, data transformations, reducers, and isolated interactive components. Include negative cases and boundary values.
+The local shell used Node 20 and emitted Supabase's future-support warning. The repository and intended production/CI runtime require Node 22 or newer. The warning does not invalidate the recorded local pass, but release evidence should prefer Node 22.
 
-## Integration tests
+## Unit and integration coverage
 
-Use integration tests for trusted server boundaries, command persistence, audit-event coupling, repository file operations, connection metadata/redaction, and Supabase behavior. RLS evidence must include two tenants plus anonymous denial and must not use service-role access for the user-under-test.
+Phase 1B tests cover or must continue to cover:
 
-## End-to-end tests
+- Supabase environment/Auth/session/onboarding and active-organization resolution;
+- same-origin and authenticated/tenant authorization boundaries;
+- installation-state signature, expiry, nonce, user, organization, and return-path validation;
+- App JWT/private-key/server-secret validation;
+- installation/repository synchronization and revoked/permission/rate-limit failures;
+- installation-token repository and permission scoping;
+- webhook signature, invalid signature, size bounds, delivery deduplication/conflict, accepted/ignored events, and redaction;
+- repository coordinates, refs, paths, file-size/binary handling, branch/commit/PR/check mapping;
+- literal normalized repository-name matching with no SQL wildcard expansion;
+- serialized first/existing installation synchronization, authoritative post-upsert binding, and synchronized-default-branch project linking;
+- expanded protected-resource path and likely-secret rejection;
+- controlled branch + expected SHA + draft-PR-only mutation and idempotency; and
+- schema/RPC/RLS/FORCE RLS/audit contracts for migrations.
 
-Cover the primary application shell and representative flows:
+Contract tests validate static SQL properties, but hosted catalog and cross-tenant user-session checks are still required.
 
-- navigate all required sections;
-- distinguish **Demo Data** and **Not Connected**;
-- submit a Bot Manager command and verify it remains queued when no worker exists;
-- modify/save a repository Markdown file and exercise unsaved-change protection;
-- inspect autonomous/risk controls and confirm destructive defaults are OFF; and
-- verify loading, error, empty, keyboard, and focus behavior.
+## End-to-end coverage
 
-Exercise at least representative mobile, tablet, and desktop viewports. Avoid assertions based only on screenshots; include semantic roles, visible state, navigation, and overflow checks.
+The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
-## Test data
+- unauthenticated redirects and safe **Not Connected** states;
+- sign-up/sign-in/callback/onboarding/organization selection;
+- Connections installation initiation and cancellation/error states;
+- real connected state only in a controlled provider acceptance environment;
+- project creation from a selected repository;
+- live branch/commit/PR/check views;
+- file tree/read/edit/preview/unsaved-change protection;
+- stale SHA, protected path, and provider failure;
+- successful controlled branch/commit/draft PR with no merge/deploy; and
+- accessibility, keyboard, browser-error, and viewport-overflow checks.
 
-- Use deterministic, fictional organizations/projects/providers.
-- Never copy production records or credentials into fixtures or snapshots.
-- Label seeded presentation records **Demo Data**.
-- Isolate database state per test and clean only known disposable resources.
+## Hosted Supabase evidence
+
+Linked migration list and public-schema lint are green through `009`. A hosted catalog query returned 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 enabled row-secret guards; the subsequent linked list independently confirms all eight expected migrations through `009`. Next, test two authenticated tenants plus anonymous denial without service role as the user-under-test. Test privileged RPCs with authorized and unauthorized actors and confirm immutable/redacted audit evidence.
+
+## Real GitHub acceptance
+
+Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). Provider configuration, mocked requests, and route tests do not prove the real callback/token/repository/webhook workflow.
 
 ## Final evidence
 
-Record exact commands, commit/tree, date, result, and relevant coverage in `AI/QUALITY_SCORECARD.md` and `AI/CURRENT_STATE.md`. A skipped, flaky, stale, or narrower-than-required test is not passing evidence for the omitted scope.
+Before claiming completion, record exact commands, tree/commit, date, result, hosted project/migration state, production deployment ID, and provider acceptance outcomes in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`. A skipped, stale, flaky, or narrower test is not passing evidence for omitted scope.

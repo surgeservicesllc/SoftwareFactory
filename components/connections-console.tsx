@@ -1,0 +1,298 @@
+"use client";
+
+import {
+  ArrowRight,
+  Box,
+  CheckCircle2,
+  Cloud,
+  Database,
+  ExternalLink,
+  GitFork,
+  KeyRound,
+  Loader2,
+  PlugZap,
+  RefreshCw,
+  ShieldAlert,
+  Waypoints,
+} from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+
+import { NotConnectedBadge, Panel, StatusBadge } from "@/components/ui";
+
+type Organization = { id: string; name: string; slug: string; role: string };
+type Repository = {
+  id: number;
+  fullName: string;
+  defaultBranch: string;
+  private: boolean;
+  archived: boolean;
+  htmlUrl: string;
+  selected: boolean;
+};
+type GithubConnection = {
+  id: string;
+  name: string;
+  status: string;
+  account: { login: string; type: string };
+  installation: { id: number; repositorySelection: string; suspendedAt: string | null; lastSyncedAt: string | null };
+  repositories: Repository[];
+};
+
+type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
+
+export function ConnectionsConsole() {
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [connections, setConnections] = useState<GithubConnection[]>([]);
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | null>(null);
+
+  const load = useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const organizationsResponse = await fetch("/api/organizations", { cache: "no-store" });
+      if (organizationsResponse.status === 401) {
+        setLoadState("signed-out");
+        return;
+      }
+      const organizationsBody = (await organizationsResponse.json()) as {
+        activeOrganizationId?: string | null;
+        organizations?: Organization[];
+        error?: { message?: string };
+      };
+      if (!organizationsResponse.ok) throw new Error(organizationsBody.error?.message ?? "Organizations could not be loaded.");
+      const availableOrganizations = organizationsBody.organizations ?? [];
+      setOrganizations(availableOrganizations);
+      const active = availableOrganizations.find((item) => item.id === organizationsBody.activeOrganizationId)
+        ?? (availableOrganizations.length === 1 ? availableOrganizations[0] : null);
+      if (!active) {
+        setLoadState(availableOrganizations.length ? "selection" : "onboarding");
+        return;
+      }
+      setOrganization(active);
+
+      const connectionsResponse = await fetch("/api/github/connections", { cache: "no-store" });
+      const connectionsBody = (await connectionsResponse.json()) as { connections?: GithubConnection[]; error?: { message?: string } };
+      if (!connectionsResponse.ok && connectionsResponse.status !== 503) {
+        throw new Error(connectionsBody.error?.message ?? "GitHub connections could not be loaded.");
+      }
+      setConnections(connectionsBody.connections ?? []);
+      if (connectionsResponse.status === 503) setMessage(connectionsBody.error?.message ?? "The GitHub App server configuration is not complete.");
+      setLoadState("ready");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Connections could not be loaded.");
+      setLoadState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  async function selectOrganization(organizationId: string) {
+    setPending("onboarding");
+    setMessage("");
+    try {
+      const response = await fetch("/api/organizations/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId }),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The organization could not be selected.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Organization selection failed.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function createOrganization(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending("onboarding");
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationName: String(form.get("organizationName") ?? "") }),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The organization could not be created.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Onboarding failed.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function connectGithub() {
+    if (!organization) return;
+    setPending("connect");
+    setMessage("");
+    try {
+      const response = await fetch("/api/github/install/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: organization.id, returnTo: "/connections" }),
+      });
+      const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
+      if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
+      window.location.assign(body.authorizationUrl);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "GitHub authorization failed.");
+      setPending(null);
+    }
+  }
+
+  async function syncConnection(connectionId: string) {
+    setPending("sync");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/github/connections/${connectionId}/sync`, { method: "POST" });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The GitHub connection could not be synchronized.");
+      setMessage("GitHub account, repositories, and default branches synchronized.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "GitHub sync failed.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function disconnectConnection(connection: GithubConnection) {
+    const confirmation = window.prompt(
+      `Disconnect installation #${connection.installation.id} from SoftwareFactory? Project history will be preserved.\n\nType DISCONNECT GITHUB to continue.`,
+    );
+    if (confirmation !== "DISCONNECT GITHUB") return;
+    setPending("disconnect");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/github/connections/${connection.id}/disconnect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation, installationId: connection.installation.id }),
+      });
+      const body = (await response.json()) as { affectedProjectCount?: number; error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The GitHub connection could not be disconnected.");
+      setMessage(`GitHub disconnected. ${body.affectedProjectCount ?? 0} affected project(s) retain their history.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "GitHub disconnect failed safely.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  if (loadState === "loading") {
+    return <Panel className="grid min-h-64 place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" aria-label="Loading connections" /></Panel>;
+  }
+
+  if (loadState === "signed-out") {
+    return <SetupNotice title="Authentication required" description="Sign in with the SoftwareFactory owner account before connecting GitHub." action={<Link href="/sign-in?next=/connections" className="primary-action">Sign in<ArrowRight className="size-4" /></Link>} />;
+  }
+
+  if (loadState === "onboarding") {
+    return (
+      <SetupNotice
+        title="Create the control-plane organization"
+        description="The first authenticated user becomes its owner. GitHub connections and projects remain tenant-scoped through Supabase RLS."
+        action={
+          <form onSubmit={createOrganization} className="mt-4 flex w-full max-w-md flex-col gap-2 sm:flex-row">
+            <input name="organizationName" required minLength={2} defaultValue="SurgeServices" aria-label="Organization name" className="h-10 flex-1 rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-white focus:border-[#647f29] focus:outline-none" />
+            <button disabled={pending === "onboarding"} className="primary-action justify-center">{pending === "onboarding" ? <Loader2 className="size-4 animate-spin" /> : null}Create organization</button>
+          </form>
+        }
+      />
+    );
+  }
+
+  if (loadState === "selection") {
+    return (
+      <SetupNotice
+        title="Select an organization"
+        description="Choose the tenant whose GitHub installations and projects you want to manage."
+        action={<div className="mt-4 flex flex-wrap justify-center gap-2">{organizations.map((item) => <button key={item.id} type="button" onClick={() => void selectOrganization(item.id)} disabled={pending !== null} className="secondary-action">{item.name}<ArrowRight className="size-3.5" /></button>)}</div>}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <Panel className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#e4e9ed]"><KeyRound className="size-4 text-[#c6f135]" />Secret-safe GitHub App connection</div>
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-[#748191]">Installation tokens are minted server-side, expire quickly, and are never returned to the browser or stored in Supabase. Database rows contain only installation and repository metadata.</p>
+          {message ? <p className="mt-3 flex items-start gap-2 text-[11px] text-[#d7b96d]" aria-live="polite"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{message}</p> : null}
+        </div>
+        <button type="button" onClick={connectGithub} disabled={pending !== null} className="primary-action justify-center">
+          {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+          {connections.length ? "Connect another GitHub account" : "Connect GitHub"}
+        </button>
+      </Panel>
+
+      {connections.length ? (
+        <div className="space-y-4">
+          {connections.map((connection) => (
+            <Panel key={connection.id} className="overflow-hidden">
+              <div className="flex flex-col gap-4 border-b border-[#202a36] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                <div>
+                  <div className="flex items-center gap-2"><GitFork className="size-4 text-[#c6f135]" /><h2 className="text-base font-semibold text-white">{connection.account.login}</h2><StatusBadge tone={connection.status === "connected" ? "safe" : "warning"}>{connection.status}</StatusBadge></div>
+                  <dl className="mt-4 grid grid-cols-[110px_1fr] gap-x-4 gap-y-2 text-[11px]">
+                    <dt className="text-[#667485]">Type</dt><dd className="text-[#c5cdd6]">GitHub App · {connection.account.type}</dd>
+                    <dt className="text-[#667485]">Installation</dt><dd className="font-mono text-[#c5cdd6]">#{connection.installation.id}</dd>
+                    <dt className="text-[#667485]">Repositories</dt><dd className="text-[#c5cdd6]">{connection.repositories.length}</dd>
+                    <dt className="text-[#667485]">Last sync</dt><dd className="text-[#c5cdd6]">{formatDate(connection.installation.lastSyncedAt)}</dd>
+                  </dl>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="secondary-action"><RefreshCw className={`size-3.5 ${pending === "sync" ? "animate-spin" : ""}`} />Sync</button>
+                  <a href={`https://github.com/settings/installations/${connection.installation.id}`} target="_blank" rel="noreferrer" className="secondary-action">Manage<ExternalLink className="size-3.5" /></a>
+                  <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="secondary-action border-[#4a292e] text-[#ff9da3]">{pending === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}Disconnect</button>
+                </div>
+              </div>
+              <div className="p-5 sm:p-6">
+                <p className="eyebrow">Repositories</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {connection.repositories.map((repository) => (
+                    <a key={repository.id} href={repository.htmlUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-lg border border-[#283341] bg-[#0b1017] p-3.5 hover:border-[#3b4959]">
+                      <CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold text-[#dce2e8]">{repository.fullName}</span><span className="mt-1 block font-mono text-[9px] text-[#667485]">{repository.defaultBranch} · {repository.private ? "private" : "public"}</span></span>
+                      <ExternalLink className="size-3.5 text-[#617080]" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+          ))}
+        </div>
+      ) : (
+        <SetupNotice title="No GitHub App installation connected" description="Choose Connect GitHub, authorize the app, select the SurgeServices account or organization, and grant access only to the repositories SoftwareFactory should manage." />
+      )}
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {[
+          ["OpenAI", Waypoints], ["Anthropic", Waypoints], ["Vercel", Cloud], ["Supabase", Database], ["Other", Box],
+        ].map(([name, Icon]) => (
+          <Panel key={name as string} className="p-4"><Icon className="size-4 text-[#778493]" /><h3 className="mt-3 text-xs font-semibold text-[#d5dbe2]">{name as string}</h3><div className="mt-3"><NotConnectedBadge /></div></Panel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SetupNotice({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+  return <Panel className="grid min-h-64 place-items-center p-6 text-center"><div className="max-w-lg"><span className="mx-auto grid size-11 place-items-center rounded-xl border border-[#2b3745] bg-[#151d27] text-[#91a334]"><PlugZap className="size-5" /></span><h2 className="mt-4 text-base font-semibold text-white">{title}</h2><p className="mt-2 text-xs leading-5 text-[#748191]">{description}</p>{action ? <div className="mt-4 flex justify-center">{action}</div> : null}</div></Panel>;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Not synchronized";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}

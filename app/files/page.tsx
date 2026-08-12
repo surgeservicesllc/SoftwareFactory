@@ -1,19 +1,18 @@
-import { FileManager } from "@/components/file-manager";
-import { PageHeader, StatusBadge } from "@/components/ui";
-import { loadRepositoryMemory } from "@/lib/repository-memory";
+import { Suspense } from "react";
 
-export default async function FilesPage() {
-  const files = await loadRepositoryMemory();
+import { GitHubFileManager } from "@/components/github-file-manager";
+import { PageHeader, Panel, StatusBadge } from "@/components/ui";
 
+export default function FilesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Memory / Repository files"
-        title="Files & AI memory"
-        description="Inspect the repository context, policies, checklists, playbooks, and documentation that ground future agents before they change the system."
-        action={<StatusBadge tone="info">SoftwareFactory repository</StatusBadge>}
+        eyebrow="Repository / Live files"
+        title="Files"
+        description="Browse the authorized GitHub repository, edit a text file, and create a reviewable draft pull request without writing to the default branch."
+        action={<StatusBadge tone="safe">GitHub-backed</StatusBadge>}
       />
-      <FileManager files={files} />
+      <Suspense fallback={<Panel className="min-h-[520px] animate-pulse"><span className="sr-only">Loading live GitHub files</span></Panel>}><GitHubFileManager /></Suspense>
     </>
   );
 }

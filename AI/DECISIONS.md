@@ -64,3 +64,38 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: Seeded/static values are labeled **Demo Data**, and absent live integrations are labeled **Not Connected**.
 - Consequence: Removing those labels requires live-source, freshness, and failure-state evidence.
+
+## ADR-010 — Use a GitHub App with repository-scoped short-lived tokens
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Phase 1B authenticates repository operations through a GitHub App. The server signs bounded App JWTs and mints short-lived installation tokens restricted to the selected repository ID and exact per-route permissions. Personal access tokens are not the application integration model.
+- Consequence: App private keys, client/state/webhook secrets, OAuth tokens, and installation tokens stay server-only and out of database rows. A configured App is still **Not Connected** until its real installation and failure paths are verified.
+
+## ADR-011 — GitHub file saves create an isolated branch and draft pull request
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: The standard Phase 1B repository write flow verifies tenant/project/repository/default branch, rejects protected paths and likely secrets, requires the expected blob SHA and an idempotency key, then creates a `softwarefactory/*` branch, commit, and open draft PR.
+- Consequence: The route cannot write directly to the default branch, silently overwrite stale content, create a non-draft PR, merge, modify workflows/protected paths, or deploy.
+
+## ADR-012 — Webhook ingress uses a narrow audited service-role boundary
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Public GitHub webhook ingress verifies the raw-body HMAC, size, delivery/event headers, schema, and replay identity before using a server-only Supabase service-role client for narrowly granted reconciliation functions. Stored payload evidence is redacted and hashed.
+- Consequence: Interactive operations continue to use user JWTs and RLS. Service role never enters the browser and never substitutes for actor/tenant/resource checks in privileged functions.
+
+## ADR-013 — Stop Phase 1B before Codex, autonomy, or Claude
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Phase 1B ends at authenticated GitHub repository visibility and owner/admin-initiated draft-PR creation. Codex execution is Phase 1C, autonomous-loop enablement is later, and Claude logical agents are Phase 2.
+- Consequence: OpenAI/Codex and Anthropic/Claude remain **Not Connected**; auto approve, merge, deploy, and rollback stay OFF and have no executor.
+
+## ADR-014 — Fail closed at synchronized GitHub repository boundaries
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Serialize installation synchronization by external installation ID before connection creation, re-resolve the installation's tenant/connection binding after upsert, match normalized repository full names literally rather than with SQL wildcard semantics, and persist only the synchronized GitHub default branch when linking a project. The standard file-change route also treats repository memory/policies, Supabase, every application API route, server-side GitHub/Supabase code, Auth/session boundaries, deployment/environment/infrastructure files, and security-sensitive subject paths as protected.
+- Consequence: Concurrent first syncs cannot create competing connection identities, caller text cannot override provider-synchronized repository/default-branch state, `%` and `_` cannot broaden repository authorization matches, and protected control-plane code must use a separate owner-approved workflow rather than the standard draft-PR editor.

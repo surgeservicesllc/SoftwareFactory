@@ -1,53 +1,71 @@
 # Environment variables
 
-Copy `.env.example` to `.env.local` for development. Real environment files are ignored and must never be committed.
+Copy `.env.example` to `.env.local` for development. Real environment files are ignored and must never be committed. An empty provider value must produce **Not Connected**, not a weaker authentication path.
 
 ## Browser-public configuration
 
-Only variables with `NEXT_PUBLIC_` are bundled for browser access. They are not secret.
+Only the following variables may be exposed through `NEXT_PUBLIC_`. They are intentionally public but still require RLS and server authorization.
 
-| Variable | Purpose | Phase 1A requirement |
+| Variable | Purpose | Production status |
 | --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Canonical application URL for absolute metadata links | `http://localhost:3000` locally; set per deployed environment |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project API URL | Optional until Supabase runtime is connected |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred Supabase publishable client credential, constrained by RLS | Optional until Supabase runtime is connected |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Legacy fallback for the Supabase anonymous client credential | Optional; prefer the publishable-key variable |
+| `NEXT_PUBLIC_APP_URL` | Canonical application URL | Use `https://softwarefactory-tan.vercel.app` in production |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project API URL | Configured in Vercel Production |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred browser credential constrained by RLS | Configured in Vercel Production |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Legacy fallback for the browser credential | Optional; prefer the publishable key |
 
-The anonymous/publishable credential is intentionally client-visible. It is not a substitute for RLS and must never be replaced with a service-role key.
+Never place a service-role key, provider token, client secret, private key, state secret, or webhook secret in a `NEXT_PUBLIC_` variable.
 
-## Server-only runtime secrets
+## Server-only Supabase configuration
 
-`SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES` is a server-only safety switch rather than a secret. It defaults to `false`. Set it to `true` only for a trusted, single-user local development process when repository Markdown saving is intentionally required. Never enable this local-filesystem route in preview or production; it is not an authenticated multi-tenant file service.
-
-| Variable | Purpose | Status |
+| Variable | Purpose | Rules/status |
 | --- | --- | --- |
-| `SUPABASE_SERVICE_ROLE_KEY` | Future narrow administrative server operations that intentionally bypass RLS | Protected and unused by Phase 1A request handlers |
-| `GITHUB_APP_ID` | Future GitHub App identifier | Future integration; **Not Connected** |
-| `GITHUB_APP_PRIVATE_KEY` | Future GitHub App signing key | Protected; **Not Connected** |
-| `GITHUB_WEBHOOK_SECRET` | Future GitHub webhook signature verification | Protected; **Not Connected** |
-| `VERCEL_TOKEN` | Future server-side Vercel API access | Protected; **Not Connected** |
-| `OPENAI_API_KEY` | Future server-side OpenAI worker access | Protected; **Not Connected** |
-| `ANTHROPIC_API_KEY` | Future server-side Anthropic worker access | Protected; **Not Connected** |
+| `SUPABASE_SERVICE_ROLE_KEY` | Narrow webhook and audited privileged GitHub synchronization/RPC boundary | Configured in Vercel Production; bypasses RLS and must stay server-only |
 
-Do not add a `NEXT_PUBLIC_` alias for any server-only value. Avoid passing the environment object into client code or serializing it into props, errors, logs, audit metadata, or reports.
+Interactive Auth, organization, project, and repository reads use the caller's session plus RLS. Service-role access does not replace tenant checks and is not a fix for an RLS error.
 
-Phase 1A request handlers use the authenticated user's JWT, RLS, and reviewed `SECURITY DEFINER` RPCs; they do not require the service-role key. Do not configure it merely to bypass an RLS problem.
-
-## Local migration/CLI secrets
-
-These are for local tooling or protected CI environments, not browser/runtime configuration:
+## Server-only GitHub App configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | Authenticate the Supabase CLI to a hosted account |
-| `SUPABASE_PROJECT_ID` | Link commands to the intended Supabase project |
-| `SUPABASE_DB_PASSWORD` | Database operation authentication |
+| `GITHUB_APP_ID` | Numeric App identity |
+| `GITHUB_APP_SLUG` | Installation URL slug |
+| `GITHUB_APP_CLIENT_ID` | OAuth client identity |
+| `GITHUB_APP_CLIENT_SECRET` | One-time callback code exchange |
+| `GITHUB_APP_PRIVATE_KEY_BASE64` | Preferred Vercel-safe PEM representation |
+| `GITHUB_APP_PRIVATE_KEY` | Alternative raw/escaped PEM representation |
+| `GITHUB_APP_CALLBACK_URL` | Exact environment callback URL |
+| `GITHUB_APP_WEBHOOK_SECRET` | Raw-body HMAC verification secret, minimum 32 bytes |
+| `GITHUB_APP_STATE_SECRET` | Installation state signing secret, minimum 32 bytes and distinct from webhook secret |
 
-Prefer interactive/local secret configuration or the deployment platform's encrypted secret store. Never put real values in `.env.example`, workflow YAML, shell history, fixtures, screenshots, or issue text.
+Configure exactly one private-key representation. The application prefers `GITHUB_APP_PRIVATE_KEY_BASE64` when both exist. GitHub values are configured for Vercel Production and Preview, but this is configuration evidence only; the App remains **Not Connected** until installation and the full production acceptance workflow pass.
 
-## Rotation and failure behavior
+## Safety/deferred providers
 
-- Rotate a credential immediately if it may have entered source control, logs, or a client bundle; removing it from Git is not sufficient.
-- A missing privileged variable must fail closed or produce **Not Connected**, never silently enable a weaker path.
-- Preview and production use separate credentials and scopes.
-- After configuration, validate behavior without printing the credential.
+| Variable | Purpose | Status |
+| --- | --- | --- |
+| `SOFTWAREFACTORY_ENABLE_LOCAL_FILE_WRITES` | Trusted single-user local Markdown writes | Defaults `false`; never enable in hosted environments |
+| `VERCEL_TOKEN` | Future in-product Vercel API adapter | **Not Connected**; not required to host the UI |
+| `OPENAI_API_KEY` | Future Codex/OpenAI worker | **Not Connected**; Phase 1C |
+| `ANTHROPIC_API_KEY` | Future Claude worker | **Not Connected**; Phase 2 |
+
+The GitHub-backed editor does not use the local file-write switch. It uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR.
+
+## CLI-only Supabase values
+
+These values are for protected local/operator tooling, not application runtime:
+
+| Variable | Purpose |
+| --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | Authenticate Supabase CLI |
+| `SUPABASE_PROJECT_ID` | Identify/link the intended project (`qpuofpmagrmyamahqwxw` in production) |
+| `SUPABASE_DB_PASSWORD` | Protected database operation authentication when required |
+
+Prefer the CLI credential store or a protected operator environment. Do not put real values in `.env.example`, workflow YAML, shell history, fixtures, screenshots, logs, or issue text.
+
+## Rotation and validation
+
+- Revoke/rotate immediately if a credential may have entered Git, logs, screenshots, or a client bundle.
+- Use separate preview and production credentials/data. Production Supabase values are verified configured; Preview Supabase values are not independently verified.
+- Restart/redeploy after secret changes, then verify behavior without printing values.
+- Validate the production client bundle contains no privileged variable names or values.
+- A provider object or environment variable alone is not a Connected result.

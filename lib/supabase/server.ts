@@ -26,11 +26,15 @@ export async function createSupabaseServerClient() {
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
-        for (const { name, options, value } of cookiesToSet) {
-          cookieStore.set(name, value, options);
+        try {
+          for (const { name, options, value } of cookiesToSet) {
+            cookieStore.set(name, value, options);
+          }
+        } catch {
+          // Server Components cannot write response cookies. The Next.js Proxy
+          // refreshes sessions before rendering; Route Handlers can write here.
         }
       },
     },
   });
 }
-

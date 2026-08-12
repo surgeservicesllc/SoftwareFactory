@@ -2,93 +2,87 @@
 
 ## System context
 
-SoftwareFactory is a Next.js control plane deployed on Vercel-compatible infrastructure and backed by Supabase. Browser components present state and collect intent. Trusted server code validates identity, ownership, policy, and request shape before accessing data or invoking a provider. External providers remain outside the trust boundary.
-
 ```text
-Browser UI
-  -> Next.js Server Components / Route Handlers / Server Actions
-    -> authorization + validation + policy checks
-      -> Supabase Postgres (RLS, audit data)
-      -> server-side secret resolver
-      -> future provider adapters (GitHub, Vercel, AI providers)
+Browser (untrusted)
+  -> Next.js server boundary
+    -> Supabase Auth session + active organization + server validation
+      -> Supabase Postgres (RLS/FORCE RLS + immutable activity evidence)
+      -> GitHub App adapter (server-only secrets)
+        -> short-lived token scoped to one installation/repository/permission set
+        -> GitHub API / signed webhooks (untrusted provider data)
 ```
 
-## Runtime layers
+Vercel hosts Next.js but is not an in-product deployment adapter. Codex/OpenAI and Claude/Anthropic workers are outside the Phase 1B runtime and **Not Connected**.
 
-### Presentation
+## Presentation and application services
 
-- App Router pages and layouts render the command-center shell.
-- Server Components are the default for data-bearing UI.
-- Client Components are limited to interaction such as navigation, forms, editors, filters, and unsaved-change protection.
-- Loading, error, empty, **Demo Data**, and **Not Connected** states are product states, not afterthoughts.
+- Server Components are preferred for data-bearing views; client boundaries are narrow interactive forms/editors.
+- Auth/onboarding resolves the user and active tenant before live control-plane views.
+- Connections shows real Supabase/GitHub metadata only after tenant-scoped reads; otherwise it says **Not Connected**.
+- Projects derives repository/default-branch state from an active selected GitHub installation through an audited transaction.
+- Files reads the real repository tree/content at explicit refs and turns owner/admin intent into a controlled draft-PR flow.
+- Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
 
-### Application services
+## Persistence
 
-- Commands represent user intent and are persisted before any future execution.
-- Policy evaluation combines project controls, risk classification, protected resources, and approvals.
-- Provider-neutral services own domain behavior; adapters translate to GitHub, Vercel, Supabase, OpenAI, Anthropic, or other APIs.
-- Every material state transition writes a corresponding activity event within the same trusted operation whenever transactional boundaries allow it.
+- Migrations `001`-`003` define the core control plane and audit/approval workflows.
+- `004` defines GitHub installation, repository, webhook-delivery, and change-request state plus privileged reconciliation functions.
+- `005` defines authenticated organization onboarding.
+- `007` transactionally links an active selected repository to a safe-default project.
+- `008_fix_github_sync_ambiguity` additively qualifies the repository installation column and named conflict constraint; it is applied remotely, local/remote history matches, and linked public-schema lint is clean.
+- `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
+- RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
+- Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
-### Persistence
+## Secrets and token lifecycle
 
-- Supabase Postgres is the planned source of truth for control-plane records.
-- UUID primary keys, timestamps, foreign keys, status constraints/enums, ownership columns, and query-path indexes are required.
-- RLS is enabled on exposed tables. Policies scope access through organization membership and/or user ownership.
-- Database migrations in `supabase/migrations/` are immutable once shared; corrections use a new migration.
-- Demo fixtures must remain distinguishable from operational records.
+- Supabase URL/publishable key are browser-public; RLS remains mandatory.
+- App private key, GitHub client/state/webhook secrets, Supabase service role, and future provider keys stay in Vercel server-only settings.
+- Installation-start state is HMAC signed, expires in ten minutes, and is bound to user, organization, allowlisted return path, and an HttpOnly nonce cookie.
+- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort.
+- App JWTs are short-lived; installation tokens are further scoped to one repository ID and exact route permissions.
 
-### Secrets and connections
+## Repository read/write boundary
 
-- Connection records belong to an organization or user and may be associated with projects through `project_connections`.
-- Records contain provider, display metadata, status, scopes, and a server-side secret reference—not a plaintext token, password, private key, or API key.
-- Privileged environment values are read only by server modules and must never use the `NEXT_PUBLIC_` prefix.
-- Browser code may receive only intentionally public configuration, such as a Supabase project URL and publishable/anonymous client key; database protection still depends on RLS.
+Read routes normalize and schema-validate branches, commits, PRs, check runs, directory entries, and UTF-8 files. Repository coordinates, refs, paths, response sizes, binary content, and installation state are bounded.
 
-### External execution boundary
+Write flow:
 
-Provider adapters and durable workers are a Phase 1B concern. Until they exist and are verified:
+1. Same-origin, authenticated owner/admin request.
+2. Verify active connection, selected non-archived repository, project mapping, and synchronized default branch. Repository full names are normalized and compared literally, without SQL wildcard semantics.
+3. Reject likely secrets and protected resource classes including repository memory/policies, Supabase, all application API routes, server-side provider/data libraries, Auth/session boundaries, and deployment/environment/infrastructure files; validate expected blob SHA and idempotency key.
+4. Reserve `github_change_requests` evidence.
+5. Read current default-branch reference/file state.
+6. Create a unique `softwarefactory/*` branch.
+7. Commit using the expected blob SHA.
+8. Require an open draft pull request.
+9. Complete or fail the audited request record.
 
-- integrations render **Not Connected**;
-- submitted commands are not shown as executed;
-- no UI toggle bypasses server policy;
-- no production auto-merge, auto-deploy, or autonomous rollback occurs.
+There is no merge or deployment step.
 
-## Core domain relationships
+## Webhook boundary
 
-- An organization owns members, projects, connections, agents, policies, and operational records.
-- A profile represents an authenticated user; organization membership determines tenant access.
-- A project describes one managed software system and its safety settings.
-- A connection represents one provider authorization independent of any project or agent.
-- `project_connections` attaches reusable connections to projects by purpose.
-- An agent definition describes role, provider/model preference, capabilities, and assignment; it does not hold provider credentials.
-- A command can generate tasks. Tasks can create agent runs, pull requests, deployments, test runs, incidents, reports, approvals, and activity events.
-
-## Request and command flow
-
-1. Authenticate the user and resolve active organization membership.
-2. Validate input on the server.
-3. Determine the target project and applicable policy.
-4. Classify risk and identify protected-resource contact.
-5. Persist the command as queued control-plane intent and append an audit event.
-6. If execution is unavailable, stop truthfully at queued/**Not Connected**.
-7. In a future worker, acquire a durable idempotency key, execute only within authorization, record evidence, and request approval when required.
-8. A merge, deployment, or rollback remains a separate policy-gated action.
+- Maximum raw body: 2 MiB.
+- Verify HMAC-SHA256 before JSON parsing.
+- Validate delivery/event headers and payload schema.
+- Hash the raw payload; store only an allowlisted redacted subset.
+- Deduplicate delivery ID and reject conflicting payload reuse.
+- Reconcile installation/repository/PR/check/status events through bounded database functions.
+- Unknown events/installations are ignored safely, not used to create tenant ownership.
 
 ## Security invariants
 
-- Client input is untrusted even when controls are hidden or disabled.
-- Authorization is checked server-side on every mutation and sensitive read.
-- Service-role access never enters the client bundle and never replaces tenant authorization checks.
-- Webhooks require signature verification, replay resistance, and idempotent handling.
-- Logs and audit payloads are structured and redacted.
-- RED actions require explicit owner approval in Phase 1.
-- Protected resources use stricter review and never qualify for unattended mutation under the Phase 1A policy.
+- Client input/provider output is untrusted.
+- Every sensitive operation is server-authorized and RLS-scoped.
+- Service role never enters the client and does not erase independent tenant checks.
+- Secrets/file bodies are excluded from audit metadata.
+- Important transitions append immutable events.
+- RED/protected actions require exact owner approval.
+- Auto approve/merge/deploy/rollback remain OFF.
 
 ## Deployment topology
 
-- Vercel serves the Next.js application and server functions.
-- Supabase provides Auth/Postgres and may provide storage or realtime only when explicitly adopted.
-- Background execution must not rely on a request remaining alive; a durable job runner is required before live orchestration.
-- Preview, staging, and production environments use separate credentials and preferably separate Supabase projects.
-
-See `docs/ARCHITECTURE.md` for an operator-oriented summary and `AI/DECISIONS.md` for decision history.
+- Vercel Production points at the hosted Supabase project and stores server-only GitHub/Supabase secrets.
+- Preview GitHub values are configured; Preview Supabase isolation remains unverified.
+- CI performs read-only validation and does not deploy or merge.
+- Phase 1C needs a durable worker/sandbox outside request lifetimes; Phase 2 adds Claude only through supported API connections, never five browser-automated consumer logins.

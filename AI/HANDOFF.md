@@ -4,42 +4,48 @@ Last updated: 2026-08-12
 
 ## Mission and boundary
 
-Continue Phase 1A as a trustworthy control-plane foundation. Do not implement or imply unrestricted production execution. The UI is deployed on Vercel, but all in-product provider integrations remain **Not Connected** until verified end to end; seeded metrics and examples are **Demo Data**.
+Finish Phase 1B end to end. The hardened implementation, hosted migration chain through `009`, linked schema lint, and final code/browser/secret gates are in place, but hosted authenticated tenant behavior and the real production acceptance journey are incomplete. Do not describe GitHub as Connected or Phase 1B as complete yet.
 
-## Before changing anything
+Do not begin Phase 1C Codex, Phase 1D autonomy, or Phase 2 Claude. Auto approve, merge, deploy, and rollback remain OFF.
 
-1. Read `AGENTS.md` and every AI/policy file it lists.
-2. Inspect `git status` and preserve unrelated work.
-3. Read the relevant bundled Next.js 16.3 documentation in `node_modules/next/dist/docs/`.
-4. Compare `AI/CURRENT_STATE.md` and `AI/BACKLOG.md` with authoritative files and tests.
-5. Identify the risk tier and protected resources touched by the proposed change.
+## Current evidence
 
-## Current workstream
+- Supabase project `qpuofpmagrmyamahqwxw` is `ACTIVE_HEALTHY`.
+- Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, and `009` are applied; local/remote history matches.
+- Linked public-schema lint with warning level/fail-on-error reports no schema errors (`[]`). Hosted catalog verification returned 22/22 RLS, 22/22 FORCE RLS, 43 policies, and 22 row-secret guards; the linked migration list separately confirms eight expected migrations through `009`. Authenticated cross-tenant/RPC behavior remains pending.
+- Migration `009` serializes sync by external installation ID, re-resolves the authoritative installation binding after upsert, and makes the synchronized GitHub default branch authoritative for project links. Repository full-name authorization now uses literal normalized comparison, and the standard editor's protected-path classifier covers control-plane, API, provider/server, Auth, data, deployment, environment, infrastructure, and security-sensitive subject paths.
+- GitHub App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists with expected permissions/events, and server-only values are configured in Vercel.
+- GitHub permissions/events/environment values are configured. No real installation/callback/repository/file/draft-PR acceptance run has passed; the provider webhook endpoint still appears blank/inactive and no signed delivery is verified. Status remains **Not Connected**.
+- Final hardened-tree gates: lint and typecheck pass; full Vitest passes 16 files/146 tests; integration passes 6 files/88 tests; build passes 34 pages/routes; Playwright passes 12/12 across desktop/tablet/mobile with accessibility, browser-error, and overflow checks; secret/client scans pass with no credential patterns or built-client privileged server names.
+- Exact Phase 1B Vercel deployment, hosted authenticated RLS behavior, and live provider acceptance remain.
+- Vercel project is `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`), stable alias `https://softwarefactory-tan.vercel.app`.
 
-- The Phase 1A foundation is a release candidate. Technical gates pass; the root requirement audit and owner-facing final implementation report are the remaining completion handoff.
-- Repository memory, governance policies, setup/operations documentation, environment-variable guidance, and a CI quality-gate workflow have been established.
-- Current verification evidence is recorded in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`: 81 Vitest tests, 12 Playwright tests across desktop/tablet/mobile, production build, secret scan, and local RLS/workflow verification pass.
-- Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`) hosts READY production deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` at `https://softwarefactory-tan.vercel.app`; its inspector is `https://vercel.com/surgeservices-projects/softwarefactory/Fi7jEzWFbtW3vrXDGuEodPumTuJ7`.
-- There is no verified live GitHub App, in-product Vercel connection/deployment automation, Supabase hosted runtime, or AI worker execution.
+## Immediate sequence
+
+1. Verify hosted cross-tenant/anonymous denial, privileged RPC authorization, audit immutability/redaction, and a real authenticated application session (catalog RLS/FORCE RLS is already green).
+2. Commit/push the exact validated tree to `main` and deploy that commit to the exact Vercel project.
+3. Record commit, deployment ID/state, stable-alias identity, and smoke results.
+4. Complete production Supabase Auth/onboarding.
+5. Configure/verify the blank/inactive GitHub webhook endpoint, install the App through SoftwareFactory, sync repositories, link the project, inspect live repository state, create one safe controlled draft PR, observe webhook/audit reconciliation, and test disconnect/loss paths.
+6. Update this memory/scorecard with exact evidence; only then issue the Phase 1B completion report.
 
 ## Safe operating notes
 
-- Keep auto approve, auto merge, auto deploy, and auto rollback OFF by default.
-- Persisting a command does not mean a worker ran it.
-- Never expose privileged values through `NEXT_PUBLIC_`, client modules, logs, fixtures, screenshots, or database rows.
-- RLS must remain enabled and tenant-scoped. Test cross-tenant denial, not only happy-path access.
-- Do not add deploy or merge permissions to `.github/workflows/ci.yml`.
+- Never print or commit App private key/client/state/webhook secrets, OAuth/installation tokens, service role, or DB credentials.
+- Use service role only in the narrow server-only webhook/privileged RPC boundary; it does not prove RLS.
+- Verify CLI identity and project ref before every linked database command. Never reset hosted production.
+- The standard file-change route must keep the expanded protected-resource classes blocked, repository matching literal, synchronized default branch authoritative, expected SHA required, isolated branch enforced, and PR draft-only.
+- Preserve **Demo Data** and **Not Connected** language whenever live evidence is absent.
+- Do not add GitHub administration/workflow/deployment permissions or CI deploy credentials.
 
-## Handoff checklist for the next material change
+## Completion checklist
 
-- [ ] Scope and acceptance criteria identified.
-- [ ] Risk tier and protected-resource contact recorded.
-- [ ] Relevant framework and policy documentation read.
-- [ ] Tests added/updated at the correct layer.
-- [ ] Lint, typecheck, tests, and build run as appropriate.
-- [ ] Demo/live labels and connection states remain truthful.
-- [ ] `AI/CURRENT_STATE.md`, `AI/BACKLOG.md`, `AI/DECISIONS.md`, and `AI/QUALITY_SCORECARD.md` updated if affected.
-
-## Completion handoff requirements
-
-The Phase 1A implementation report must list completed functionality, exact test commands/results, known limitations, outstanding work, and recommended Phase 1B work. It must also include evidence of secret review, RLS review, and primary responsive-layout testing.
+- [x] Hosted migration history and linked schema lint green.
+- [ ] Hosted authenticated RLS/RPC/audit behavior green (catalog gate is green).
+- [x] Local lint/typecheck/full Vitest/build and E2E/responsive/accessibility gates green on the hardened tree.
+- [x] Final secret/client scan green on the hardened tree.
+- [ ] Exact commit pushed to `main` and exact production deployment recorded.
+- [ ] Real Supabase authenticated session verified.
+- [ ] Real GitHub install/callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect workflow verified.
+- [ ] Failure/revocation/rate-limit/stale-SHA/protected-path states verified.
+- [ ] Documentation/current state/backlog/handoff/scorecard reflect final evidence.

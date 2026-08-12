@@ -2,54 +2,59 @@
 
 ## Product
 
-SoftwareFactory is a standalone AI software-engineering command center. Its long-term purpose is to coordinate projects, agents, source control, planning, validation, releases, monitoring, approvals, and auditable autonomous work from one trustworthy control plane.
+SoftwareFactory is a standalone AI software-engineering command center. Its long-term purpose is to coordinate authenticated projects, provider connections, agents, source control, planning, validation, releases, monitoring, approvals, and auditable bounded automation from one trustworthy control plane.
 
-The product is not an AI-provider account manager and an agent is not a provider login. Projects, users, agents, and provider connections are separate concepts joined only through explicit relationships.
+Projects, users, organizations, agents, provider connections, and provider accounts are separate concepts joined only through explicit tenant-scoped relationships. An agent is not a provider login.
 
 ## Current phase
 
-**Phase 1A — control-plane foundation.** The goal is a secure, responsive foundation with reliable state representation, not the appearance of a fully autonomous factory.
+**Phase 1B — Production GitHub App Integration.**
 
-Phase 1A establishes:
+Phase 1B extends the Phase 1A foundation with:
 
-- the application shell and primary navigation;
-- executive dashboard and Daily CEO Report views;
-- project, agent, connection, command, task, run, report, incident, approval, and audit foundations;
-- repository-memory and policy files;
-- Supabase schema and Row Level Security foundations;
-- controls for autonomous mode, risk authorization, approval, merge, deploy, and rollback;
-- unit, integration, and end-to-end testing foundations; and
-- CI gates for lint, typecheck, tests, and production build.
+- Supabase authentication, callback, onboarding, membership, and active-organization boundaries;
+- hosted tenant-scoped persistence with RLS/FORCE RLS and audited workflows;
+- a production GitHub App registration/install/callback model;
+- installation/repository synchronization and safe loss/disconnect handling;
+- short-lived, repository-scoped installation tokens;
+- branch, commit, pull-request, check, tree, and content reads;
+- signed/idempotent/redacted webhook ingestion;
+- transactional project-to-repository linking and live dashboard/project/file views; and
+- owner/admin-initiated file changes that create only a controlled branch, commit, and draft pull request.
+
+The code/configuration existing is not the same as a verified connection. GitHub remains **Not Connected** until the real installation and complete production acceptance journey pass.
 
 ## Truthful status language
 
-- **Demo Data** means seeded or static presentation data that is not derived from a live provider.
-- **Not Connected** means no verified live provider integration is available for that resource.
-- A persisted command is queued control-plane intent. It is not proof that an AI worker ran.
-- A configured control is not proof that the action is authorized or implemented.
+- **Demo Data** means seeded/static presentation data, not live telemetry.
+- **Not Connected** means no verified end-to-end provider installation/session is available.
+- **Configured** means code or protected environment values exist; it does not prove connectivity.
+- A draft pull request is not a merge or deployment.
+- A persisted command/task is intent; it is not proof an AI worker ran.
 
-No UI, documentation, or report may blur these distinctions.
+## Phase 1B non-goals
 
-## Phase 1A non-goals
-
-- unrestricted production execution;
-- autonomous RED-risk actions;
-- automatic production merge or deployment;
-- storing provider secrets in application database tables;
-- pretending demo metrics are live telemetry;
-- hard-coded personal projects or accounts; and
-- a fake GitHub, Vercel, Supabase, OpenAI, or Anthropic connection.
+- Codex/OpenAI worker execution (Phase 1C);
+- Claude/Anthropic agents or consumer-account browser automation (Phase 2);
+- direct writes to a repository default branch;
+- automatic pull-request approval or merge;
+- automatic production deployment or rollback;
+- workflow, branch-protection, administration, secrets, or deployment write permissions;
+- plaintext provider credentials in tables/source/logs/browser code; and
+- claims of live operation based only on configuration, mocks, or a page render.
 
 ## Product principles
 
-1. **Truth before theater.** State must describe what happened, not what a user hoped would happen.
-2. **Safe by default.** Potentially destructive capabilities start OFF and fail closed.
-3. **Server-side trust.** Authorization and secrets remain behind server boundaries.
-4. **Owner control.** Sensitive actions have an explicit approval path and RED actions require an owner in Phase 1.
-5. **Auditability.** Material decisions and state transitions emit append-only activity events.
-6. **Provider neutrality.** Core domain models should not depend on one AI or deployment provider.
-7. **Progressive autonomy.** Automation expands only after policy, validation, rollback, and observability mature together.
+1. **Truth before theater.** State describes verified events and source freshness.
+2. **Safe by default.** Mutating/external controls begin OFF and fail closed.
+3. **Server-side trust.** Authorization and provider secrets remain behind trusted boundaries.
+4. **Independent tenant defense.** Application checks and Supabase RLS both enforce ownership.
+5. **Least privilege.** GitHub tokens are short-lived, repository-ID-scoped, and permission-reduced.
+6. **No silent overwrite.** Repository changes require the expected blob SHA and isolated branch.
+7. **Owner control.** RED/protected-resource actions need exact current approval.
+8. **Auditability.** Material transitions emit immutable, redacted evidence.
+9. **Progressive autonomy.** No later-phase authority is inferred from Phase 1B features.
 
-## Success criteria
+## Phase 1B exit criteria
 
-Phase 1A is complete only after every requirement in the implementation objective is backed by current code or documentation and the completion checks in `AI/QUALITY_SCORECARD.md` pass. Rendered pages alone are not sufficient evidence.
+Phase 1B is complete only when current local gates, hosted Supabase migrations/lint/RLS checks, production deployment, and the real GitHub installation → repository sync → project link → file read → controlled branch/commit/draft PR → webhook/audit workflow all pass. `AI/QUALITY_SCORECARD.md` records the evidence.

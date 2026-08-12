@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+@layer components {
+  .primary-action {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#c6f135] px-4 text-xs font-bold text-[#0b1003] transition-colors hover:bg-[#d8ff52] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .secondary-action {
+    @apply inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#2d3947] bg-[#111821] px-3 text-[10px] font-semibold text-[#aab5c1] transition-colors hover:border-[#435163] hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .form-control {
+    @apply h-10 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-[#dce2e8] placeholder:text-[#4f5b69] focus:border-[#647f29] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+
 :root {
   --background: #080b10;
   --surface: #0d1118;

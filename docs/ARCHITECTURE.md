@@ -1,51 +1,71 @@
 # Architecture overview
 
-SoftwareFactory is a server-first Next.js control plane. Phase 1A models and presents software-factory state; it does not yet run unrestricted autonomous production work.
+SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authenticated, tenant-scoped GitHub App integration without adding autonomous merge, deployment, rollback, Codex, or Claude execution.
 
 ## Components
 
-| Component | Responsibility | Trust level |
+| Component | Responsibility | Trust level/status |
 | --- | --- | --- |
-| Browser UI | Present state and collect intent | Untrusted client |
-| Next.js server | Authenticate, authorize, validate, apply policy, redact, and coordinate data | Trusted application boundary |
-| Supabase Auth/Postgres | Identity and tenant-scoped control-plane records protected by RLS | Trusted persistence boundary |
-| Server secret configuration | Resolve privileged provider credentials | Protected server boundary |
-| Future provider adapters | Translate domain operations to GitHub, Vercel, and AI providers | External/untrusted responses |
-| Future durable workers | Lease, execute, validate, and record bounded jobs | Trusted only within explicit policy |
+| Browser UI | Present safe state and collect intent | Untrusted client |
+| Next.js server | Authenticate, authorize, validate, redact, and coordinate provider operations | Trusted application boundary |
+| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Trusted persistence boundary; migrations/lint green, authenticated tenant behavior pending |
+| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Server-only; production installation not yet verified |
+| GitHub webhook route | Verify raw-body HMAC, deduplicate delivery IDs, store redacted payloads, reconcile state | Implemented; live delivery not yet verified |
+| Vercel | Serve Next.js application and server functions | Hosting verified; deploy/rollback adapter **Not Connected** |
+| AI workers | Future task execution | Codex and Claude **Not Connected** |
 
-## Server-first request path
+## Authenticated request path
 
-1. A Server Component reads safe, tenant-scoped presentation data, or a client form submits intent to a trusted server boundary.
-2. The server authenticates the caller, resolves organization membership, validates input, and evaluates risk/policy.
-3. Supabase applies RLS in addition to application-level authorization.
-4. The operation persists state and its audit event.
-5. A future adapter may contact a provider using a short-lived credential resolved on the server.
-6. Provider output is treated as untrusted, normalized, and recorded with source/freshness evidence.
+1. Supabase Auth resolves the server-side user session.
+2. The server resolves the active organization and verifies membership/role.
+3. RLS independently restricts tenant rows.
+4. A GitHub request verifies the selected connection and repository belong to that tenant.
+5. The server mints a short-lived installation token scoped to that single repository and the exact requested permissions.
+6. GitHub output is schema-validated, normalized, and returned without token material.
+7. Mutations reserve an idempotent database record and append audit evidence.
 
-## App Router conventions
+Installation synchronization is serialized by external installation ID before connection creation and re-reads the post-upsert installation row as the authoritative tenant/connection binding. Repository full names are normalized and compared literally rather than through SQL wildcard matching. Project links persist only the synchronized GitHub default branch; any caller-supplied branch is an optimistic freshness expectation.
 
-- Prefer Server Components for data reads and static shell content.
-- Add `"use client"` only for the smallest interactive boundary.
-- Keep service-role and provider modules server-only; never import them into client graphs.
-- Use explicit loading, error, empty, **Demo Data**, and **Not Connected** states.
-- Validate authorization again at every mutation; disabled buttons are not security controls.
+## GitHub installation flow
+
+```text
+Authenticated owner/admin
+  -> POST /api/github/install/start
+  -> signed 10-minute state + HttpOnly nonce cookie
+  -> GitHub App installation and user authorization
+  -> GET /api/github/install/callback
+  -> verify state, user access, App identity, installation, repositories
+  -> revoke ephemeral user OAuth token
+  -> persist installation/repository metadata and activity evidence
+```
+
+The App private key, client secret, state secret, webhook secret, user OAuth token, and installation token never enter application tables or the browser.
+
+## Controlled file-change flow
+
+```text
+Open selected repository file at verified ref/SHA
+  -> reject protected resource classes and likely secrets
+  -> verify project + connection + default branch
+  -> reserve idempotency key
+  -> create softwarefactory/* branch from current default-branch SHA
+  -> update file using expected blob SHA
+  -> create draft pull request
+  -> persist commit/PR evidence
+```
+
+The standard route cannot write directly to the default branch, create a non-draft PR, merge, or deploy. A stale file SHA fails closed rather than silently overwriting changes.
+
+## Webhook path
+
+The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, validates delivery/event headers and payload shape, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. Unknown events and unknown installations are retained as ignored evidence. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
 
 ## Data architecture
 
-The model separates users/profiles, organizations/membership, projects, connections, project connections, agents, commands, tasks, agent runs, pull requests, deployments, test runs, incidents, reports, policies, approvals, and activity events.
+Migrations `001`-`003` define the Phase 1A control plane. Phase 1B adds GitHub installations, repositories, webhook deliveries, guarded change requests, authenticated onboarding, and transactional project/repository linking. Additive migrations `008` and `009` repair synchronization ambiguity, serialize installation sync, re-resolve the authoritative binding, and force synchronized-default-branch project linking. Every exposed table has RLS and FORCE RLS; privileged webhook/RPC use remains server-only and independently tenant-checked.
 
-Connections store provider-neutral metadata and an opaque secret reference. Projects can attach connections without embedding credentials. Agents describe roles and capabilities without becoming provider accounts. Commands are persisted intent and do not become “completed” without worker evidence.
+## Deployment boundary
 
-## Deployment
+Vercel serves the UI and server routes. It does not provide a SoftwareFactory deployment executor. The repository CI validates only and has no merge/deploy permission. Durable AI work cannot rely on a Vercel request lifetime and is deferred to Phase 1C.
 
-The Next.js application is Vercel-compatible. Supabase is independent managed state. Preview, staging, and production should use isolated configuration and preferably separate database projects. CI validates only; no Phase 1A workflow merges or deploys.
-
-Durable AI execution cannot safely depend on the lifetime of a Vercel request. Phase 1B needs a durable queue/worker with idempotency, leases, budgets, cancellation, provider timeouts, audit evidence, and a global kill switch.
-
-## Deeper contracts
-
-- Domain/security detail: `AI/ARCHITECTURE.md`
-- Decisions: `AI/DECISIONS.md`
-- Risk and automation: `policies/`
-- Supabase: [Supabase setup](SUPABASE_SETUP.md) and [Database migrations](DATABASE_MIGRATIONS.md)
-- Security: [Security model](SECURITY_MODEL.md)
+See `AI/ARCHITECTURE.md`, `AI/DECISIONS.md`, [Security model](SECURITY_MODEL.md), and the files under `policies/` for deeper contracts.

@@ -1,50 +1,183 @@
-# Future GitHub App integration
+# Production GitHub App integration
 
-Status: **Not Connected** in Phase 1A.
+Status: **Implemented; permissions/events/environment configured; Not Connected pending installation, webhook endpoint, and end-to-end verification.**
 
-## Why a GitHub App
+The GitHub App exists and its server-only values are configured in Vercel. That does not satisfy the product definition of Connected: no real installation has yet completed the SoftwareFactory callback, repository synchronization, project linking, file read/change, draft pull request, and webhook acceptance journey.
 
-A GitHub App supports installation-scoped permissions, short-lived installation tokens, organization-controlled repository selection, signed webhooks, and auditable identity. It is preferred over shared personal access tokens for multi-tenant repository automation.
+## Registered App
 
-## Domain mapping
+| Field | Production value/evidence |
+| --- | --- |
+| Owner | `surgeservicesllc` |
+| GitHub App name | `Surge SoftwareFactory` |
+| App slug | `surge-softwarefactory` |
+| App ID | `4573846` |
+| Homepage URL | `https://softwarefactory-tan.vercel.app` |
+| Callback URL | `https://softwarefactory-tan.vercel.app/api/github/install/callback` |
+| Setup URL | Leave blank; the authenticated installation callback owns setup completion |
+| Webhook URL | Required value: `https://softwarefactory-tan.vercel.app/api/github/webhooks`; provider General page currently appears blank/inactive |
+| Installation scope | Any account; the installing user chooses repositories in GitHub |
+| User authorization during installation | Enabled |
+| Expiring user authorization tokens | Enabled |
+| Device flow | Disabled |
+| Redirect on installation update | Enabled |
 
-- A GitHub App installation becomes a provider-neutral `connection` owned by an organization/user.
-- `project_connections` attaches that connection to a project for a declared purpose.
-- Store installation/account/repository metadata and an opaque secret reference only.
-- Never store the App private key, webhook secret, installation token, OAuth token, or user password in application tables.
-- Agents reference connection capability; they do not become GitHub accounts.
+The application webhook route and Vercel secret configuration exist, and the App permissions/events are configured. However, after attempted saves the GitHub App General page still appears to show a blank/inactive webhook endpoint. Treat the provider webhook configuration as unverified/not active until the exact URL is visibly retained and a signed delivery is accepted.
 
-## Proposed connection flow
+## Repository permissions
 
-1. An authenticated owner initiates installation from a server-generated, time-bound state value.
-2. GitHub completes installation and returns identifiers, not a reusable browser token.
-3. Trusted server code verifies state, membership/ownership, and the selected repositories.
-4. The control plane stores installation metadata and creates an activity event.
-5. Server code signs a JWT with the protected App private key only when needed, exchanges it for a short-lived installation token, and never returns that token to the browser.
-6. A health check verifies installation identity/permissions before displaying Connected.
+| Permission | Access | Used for |
+| --- | --- | --- |
+| Metadata | Read | Required repository/installation identity |
+| Contents | Read and write | Tree/file reads and controlled branch commit |
+| Pull requests | Read and write | PR visibility and draft PR creation |
+| Checks | Read | Check-run visibility |
+| Commit statuses | Read | Status events/readiness evidence |
+| Actions | Read | Workflow-run visibility |
+| Workflows | No access | The standard Phase 1B route cannot modify workflow files |
 
-## Initial least-privilege scope
+Organization permissions: none. Account permissions: none. Administration, secrets, deployments, environments, members, and branch-protection write access are not requested.
 
-Begin read-only for repository metadata, contents, pull requests, checks, and issues only as required by Phase 1B. Add write scopes one at a time with an explicit feature, risk review, non-production test, and owner-approved installation update. Do not request administration, secrets, organization-owner, workflow-write, or broad repository access speculatively.
+Subscribed/handled events:
 
-## Webhooks
+- `check_run`
+- `check_suite`
+- `installation`
+- `installation_repositories`
+- `pull_request`
+- `push`
+- `repository`
+- `status`
+- `workflow_run`
 
-- Verify GitHub's signature against the raw request body with the server-only webhook secret before parsing.
-- Validate event/action shape and installation/repository membership.
-- Store the delivery ID and process idempotently to prevent replay/duplication.
-- Acknowledge quickly and enqueue durable work; do not perform long agent execution in the webhook request.
-- Redact payloads and retain only fields required for reconciliation/audit.
-- Handle out-of-order/missing delivery through periodic least-privilege reconciliation.
+The route ignores unsupported events safely and records only redacted delivery evidence. Event selection in GitHub must match the permissions above; lifecycle events supplied by GitHub are still validated by the handler.
 
-## Safe implementation stages
+## Required Vercel variables
 
-1. Register a development App with read-only permissions and a non-production webhook endpoint.
-2. Implement install/uninstall/suspend and repository-selection reconciliation.
-3. Add read-only project discovery and PR/check status.
-4. Add signed webhook ingestion, deduplication, and audit events.
-5. Add isolated draft-PR creation with repository allowlists.
-6. Keep merging governed by `policies/AUTO_MERGE_POLICY.md`; Phase 1A never auto-merges.
+All GitHub values are server-only and must use Vercel encrypted/sensitive environment storage. Never add `NEXT_PUBLIC_` aliases.
 
-## Definition of connected
+| Variable | Purpose |
+| --- | --- |
+| `GITHUB_APP_ID` | Numeric App identity |
+| `GITHUB_APP_SLUG` | App installation URL slug |
+| `GITHUB_APP_CLIENT_ID` | OAuth client identity |
+| `GITHUB_APP_CLIENT_SECRET` | Exchange the callback code; secret |
+| `GITHUB_APP_PRIVATE_KEY_BASE64` | Preferred Vercel representation of the PEM private key; secret |
+| `GITHUB_APP_PRIVATE_KEY` | Alternative raw/escaped PEM; configure one private-key form, not both |
+| `GITHUB_APP_CALLBACK_URL` | Exact callback URL listed above |
+| `GITHUB_APP_WEBHOOK_SECRET` | HMAC verification secret; at least 32 bytes |
+| `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
+| `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-Do not remove **Not Connected** until a fresh server-side check confirms the expected App identity, active installation, tenant ownership, allowed repository, required permissions, webhook verification, token exchange, failure handling, and redacted audit evidence. Configuration fields alone do not prove connectivity.
+The production/preview GitHub variables have been added to the Vercel project without printing their values. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
+
+## Connection flow
+
+1. An authenticated organization owner/admin selects **Connect GitHub**.
+2. `POST /api/github/install/start` verifies same-origin request, active user, and organization manager role.
+3. The server creates signed state valid for ten minutes and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
+4. The browser follows the returned GitHub installation URL.
+5. GitHub returns `code`, `installation_id`, and signed `state` to the callback.
+6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, verifies that user can access the installation and that it belongs to this App, then reads installation/repository state using an App installation token.
+7. The ephemeral user OAuth token is never persisted or returned and is revoked best-effort after verification.
+8. An audited database workflow serializes by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, stores only installation/account/repository metadata, and updates the provider-neutral connection.
+9. The UI displays Connected only when the connection and installation are both active.
+
+Cancellation, organization-approval pending, wrong App, expired/mismatched state, revoked installation, insufficient permission, rate limit, provider outage, and malformed responses fail closed with safe error codes.
+
+## Server routes
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/github/install/start` | Begin owner/admin installation with signed state |
+| `GET /api/github/install/callback` | Verify installation and synchronize metadata |
+| `GET /api/github/connections` | Tenant-scoped connection/install/repository status |
+| `POST /api/github/connections/:id/sync` | Owner/admin reconciliation with live GitHub state |
+| `POST /api/github/connections/:id/disconnect` | Exact-confirmation disconnect while preserving history |
+| `GET /api/github/repositories` | Selected repositories for a connection |
+| `GET /api/github/repositories/:owner/:repo/branches` | Branches and protection visibility |
+| `GET /api/github/repositories/:owner/:repo/commits` | Commit history, optionally path-scoped |
+| `GET /api/github/repositories/:owner/:repo/pulls` | Pull request visibility |
+| `GET /api/github/repositories/:owner/:repo/checks` | Check runs for a ref |
+| `GET /api/github/repositories/:owner/:repo/tree` | Directory listing at a ref |
+| `GET /api/github/repositories/:owner/:repo/contents` | UTF-8 file read with SHA; 1 MiB maximum |
+| `POST /api/github/repositories/:owner/:repo/changes` | Guarded branch + commit + draft PR transaction |
+| `POST /api/github/webhooks` | Signed, bounded, idempotent webhook ingestion |
+
+Every repository request checks the authenticated tenant connection and selected repository before minting a short-lived token scoped to the repository ID and exact read/write permissions required by that route.
+
+## Database records
+
+Migration `20260812000400_github_integration.sql` adds:
+
+- `github_installations` — non-secret installation/account/permission/status metadata;
+- `github_repositories` — selected repository/default-branch/visibility/sync metadata;
+- `github_webhook_deliveries` — delivery ID, payload hash, redacted payload subset, processing state;
+- `github_change_requests` — idempotency reservation and branch/commit/draft-PR evidence.
+
+Migration `20260812000700_github_project_linking.sql` adds a transactional function that creates a safe-default project only from an active, selected, non-archived repository belonging to the caller's organization and primary GitHub connection.
+
+Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
+
+All four GitHub tables use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
+
+## Controlled file edits
+
+The standard editor requires an owner/admin, an active project-to-connection mapping, the verified synchronized repository default branch, the expected blob SHA, a bounded idempotency key, and content that passes sensitive-data checks. Normalized repository full names are matched literally in application code, never through SQL `ILIKE` wildcard semantics.
+
+It refuses:
+
+- direct default-branch writes;
+- non-draft or merge operations;
+- archived/disabled/unselected repositories;
+- stale SHA overwrites;
+- files larger than 1 MiB or binary/non-UTF-8 files;
+- repository control/memory (`.github/**`, `CODEOWNERS`, `AGENTS.md`, `CLAUDE.md`, `AI/**`, `policies/**`);
+- all Supabase paths, every `app/api/**` route, server-side GitHub/Supabase libraries, Auth/session boundaries, and root proxy/middleware;
+- deployment, environment, and infrastructure controls such as `.env*`, `.vercel/**`, `vercel.json`, Docker/Compose, Terraform, and common platform manifests;
+- security-sensitive subject paths whose names identify authorization, permissions, roles, RLS, sessions/cookies, cryptography/encryption, secrets/credentials/private keys, webhooks, deployments/releases/rollback, DNS, or billing; and
+- likely credentials in content, title, or commit message.
+
+Successful writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Nothing is merged or deployed.
+
+## Webhook guarantees
+
+- Verify HMAC-SHA256 over the unparsed body with constant-time comparison.
+- Reject missing/invalid signatures and bodies over 2 MiB.
+- Require syntactically valid GitHub delivery/event headers.
+- Deduplicate by delivery ID; reject reuse of an ID with different payload bytes.
+- Store a SHA-256 hash plus an allowlisted/redacted payload subset, not the raw payload.
+- Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
+- Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
+
+## Production acceptance checklist
+
+Do not change GitHub from **Not Connected** until all items are observed against the real service:
+
+- [ ] Production release contains the current routes and migrations.
+- [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
+- [ ] An authenticated SoftwareFactory owner/admin starts the installation flow.
+- [ ] GitHub installs the App on the intended account with only the intended repository/repositories.
+- [ ] Callback verifies the installation and returns to Connections.
+- [ ] Connection shows the real account, installation ID, repository count, and fresh sync time.
+- [ ] Manual sync handles success and revoked/insufficient-permission failure.
+- [ ] A project links transactionally to a selected repository and the synchronized default branch; a stale branch expectation fails closed.
+- [ ] Dashboard count derives from the live tenant records.
+- [ ] Projects displays real branches, commits, pull requests, and checks.
+- [ ] Files reads a real repository file and its SHA.
+- [ ] A safe test edit creates only a controlled branch, commit, and draft PR.
+- [ ] A stale SHA, SQL-wildcard-like repository name, and representative paths from every protected-resource class fail closed.
+- [ ] Pull request/webhook updates reconcile and create immutable activity evidence.
+- [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.
+
+## Troubleshooting
+
+- **`github_not_configured`:** one or more server-only variables are absent/invalid. Do not log values.
+- **State invalid/expired:** restart the installation from SoftwareFactory; do not reuse the callback URL.
+- **Awaiting organization approval:** an organization owner must approve the App in GitHub; SoftwareFactory remains **Not Connected**.
+- **Connection lost:** check installation revocation/suspension, selected repositories, and current permissions; then reconnect or sync.
+- **Permission denied:** compare the exact App settings above. Do not add administration/workflow permissions as a shortcut.
+- **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
+- **Webhook blank/inactive:** enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible before sending/observing a delivery.
+- **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
+- **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.

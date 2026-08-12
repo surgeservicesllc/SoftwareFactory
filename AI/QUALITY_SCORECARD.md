@@ -1,81 +1,92 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-12  
-Technical gate decision: **Pass for the Phase 1A foundation**  
-Completion decision: **Pending the owner-facing final implementation report and root requirement audit**
+Last reviewed: 2026-08-12
 
-Statuses are based on current command/runtime evidence, not the absence of a known failure. Vercel UI hosting is verified; Supabase, GitHub, AI-provider, and deployment/rollback automation connectivity remain **Not Connected**.
+Phase 1B decision: **Not release-ready yet**
+
+Reason: hosted migration/lint and final hardened-tree code/browser/secret gates pass, but hosted authenticated RLS behavior, exact production deployment, and real GitHub acceptance remain.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Scope | Required routes, controls, memory/policies, schema, tests, docs, environment template, and CI are present; final root requirement-by-requirement audit/report remains | Pending final audit/report |
-| Lint | `npm run lint` within `npm run check` | Pass |
-| Type safety | `npm run typecheck` within `npm run check` | Pass |
-| Unit tests | `npm run test:unit -- --reporter=verbose`: 2 files, 24 tests | Pass |
-| Integration tests | `npm run test:integration -- --reporter=verbose`: 3 files, 57 tests | Pass |
-| Full Vitest | `npm test` within `npm run check`: 5 files, 81 tests | Pass |
-| E2E tests | `npm run test:e2e`: 12/12 tests across desktop, tablet, and mobile Chromium projects | Pass |
-| Production build | `npm run build` within `npm run check`: compiled, typechecked, generated 17 routes; clean of prior filesystem-tracing warnings | Pass |
-| Production UI deployment | Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, deployment `dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7` READY, stable alias HTTP 200 with expected title | Pass for UI hosting; automation **Not Connected** |
-| Accessibility | Playwright/axe found no serious or critical automated violations at all three tested viewport classes; semantic navigation tests passed | Pass within automated Phase 1A scope |
-| Responsive UI | 1440×900 desktop, 834×1112 tablet, and Pixel 5 mobile navigation/render/overflow checks | Pass |
-| Loading/error/empty states | App Router loading/error/not-found files and explicit empty/disconnected states present; primary routes compile and navigate | Pass for foundation |
-| Secret safety | Repository credential-pattern scan and `.next/static` privileged-variable-name scan found no matches; only `.env.example` exists | Pass |
-| RLS | Three migrations parsed/applied in ephemeral PGlite; catalog confirmed RLS+FORCE RLS on all 18 public tables; tenant/default/approval/audit/sensitive-data smoke paths passed | Pass in local verification scope; hosted Supabase not connected |
-| Auditability | Migration workflow smoke emitted organization, project, command, task, approval, and required state-transition events | Pass in local verification scope |
-| Truthful state | Source/UI/E2E use **Demo Data**, **Not Connected**, and queued-without-execution language | Pass |
-| Automation safety | Defaults unit tests pass; RED approval transition is blocked before owner approval; CI is read-only with no merge/deploy steps | Pass |
+| Scope/implementation | Auth/onboarding, GitHub install/token/sync/read/write/webhook boundaries, project link, and live UI are present | Pass for implementation; live acceptance pending |
+| Unit | `npm run test:unit`: 58 tests on the hardened tree | Pass |
+| Integration | `npm run test:integration`: 88 tests after `009` | Pass |
+| Lint | `npm run lint` | Pass |
+| Type safety | `npm run typecheck` | Pass |
+| Full Vitest | `npm test`: 16 files, 146 tests | Pass |
+| Production build | `npm run build`: 34 pages/routes | Pass |
+| E2E/responsive/accessibility | Desktop/tablet/mobile Playwright/axe: 12/12 | Pass; navigation, viewport overflow, browser-error, and accessibility gates green |
+| Secret safety | Credential-pattern and built-client privileged-name scans on the hardened tree | Pass; no matches, and `.env.example` is the only tracked environment file |
+| Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, `ACTIVE_HEALTHY` | Pass |
+| Hosted migrations | Local=remote for `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009` | Pass |
+| Hosted database lint | Public schema, warning level, fail-on-error: no schema errors (`[]`) | Pass |
+| Hosted RLS | SQL Editor catalog: 22 public tables, 22 RLS, 22 FORCE RLS, 43 policies, 22 row-secret guards; linked history separately confirms 8 migrations through `009` | Catalog/history pass; authenticated behavior pending |
+| GitHub sync/project hardening | `009` serializes external-installation sync and forces synchronized default branch; repository full-name matching is literal | Implementation/contract and hosted migration pass; live behavior pending |
+| Protected-resource writes | Classifier blocks repository memory/policies, Supabase, every app API route, GitHub/server/Supabase libraries, Auth/session, deployment/environment/infrastructure, and sensitive subject paths | Unit pass; final full gate pending |
+| GitHub App configuration | App permissions/events and server values configured in Vercel; webhook endpoint still appears blank/inactive | Partial configuration; endpoint/delivery unverified |
+| GitHub real connection | Installation/callback/token/repository sync | **Not Connected** / pending |
+| GitHub webhook | Signed/idempotent route tested locally; real delivery | Pending live acceptance |
+| Project/repository flow | Code implemented; real selected repo/project | Pending live acceptance |
+| File-to-draft-PR | Guarded implementation/tests; real branch/commit/draft PR | Pending live acceptance |
+| Vercel production release | Baseline project/alias known; exact Phase 1B commit/deployment | Pending |
+| Codex/OpenAI | No live worker | **Not Connected** |
+| Claude/Anthropic | No live worker | **Not Connected** |
+| Automation safety | No merge/deploy/rollback endpoints/workflows; controls OFF | Pass |
 
-## Evidence record
+## Recorded hardened-tree evidence
 
 ```text
-Tree reviewed: working tree on main, after Phase 1A implementation
 Review date: 2026-08-12
-Local runtime: Node v20.19.0 / npm 10.8.2
-Target runtime: Node >=22 in package.json and Node 22.x in CI
+Local shell: Node 20 (Supabase future-support warning)
+Target runtime: Node >=22
 
-npm run check:
-  PASS — lint, typecheck, 5 Vitest files / 81 tests, production build / 17 routes
-npm run test:unit -- --reporter=verbose:
-  PASS — 2 files / 24 tests
-npm run test:integration -- --reporter=verbose:
-  PASS — 3 files / 57 tests
+npm run test:unit:
+  PASS — 58 tests after repository-write hardening
+npm run test:integration:
+  PASS — 88 tests after migration 009
+npm run lint:
+  PASS
+npm run typecheck:
+  PASS
+npm test:
+  PASS — 16 files / 146 tests
+npm run build:
+  PASS — 34 pages/routes
 npm run test:e2e:
-  PASS — 12/12; desktop 1440x900, tablet 834x1112, Pixel 5 mobile
+  PASS — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, axe
+final secret/client scan:
+  PASS — no credential patterns or built-client privileged server names
 
-secret review:
-  PASS — no common live-token/private-key patterns in repository files
-  PASS — no privileged server environment names in .next/static
-  PASS — only .env.example exists
+hosted Supabase:
+  project qpuofpmagrmyamahqwxw — ACTIVE_HEALTHY
+  applied/local=remote — 001, 002, 003, 004, 005, 007, 008, 009
+  linked public-schema lint — PASS, no schema errors / []
+  hosted catalog — 22 tables / 22 RLS / 22 FORCE RLS / 43 policies / 22 secret guards
+  linked migration history — 8 migrations through 009
+  008 local — pglast all 7; PGlite reproduced 004 failure, then repair passed create/resync with audit/grant checks
+  009 — serialized external-installation sync, authoritative post-upsert binding, synchronized-default-branch project linking
+  required — hosted authenticated RLS/tenant/RPC/audit behavior checks
 
-RLS and workflow review:
-  PASS (local scope) — 3 ordered migrations parsed with pglast and applied to
-  ephemeral PostgreSQL-compatible PGlite with stub auth schema; all 18 public
-  tables report RLS and FORCE RLS; safe defaults, GREEN queueing, RED approval
-  gate, sensitive-key rejection, and audit events passed.
-  LIMIT — not applied to a linked hosted Supabase project; pgcrypto extension
-  creation was skipped in PGlite because the test runtime lacks extensions.
-
-warnings:
-  Local Node 20 emits the Supabase future-support deprecation warning.
-  Vitest emits a future Vite native config-loader ESM warning.
-
-production UI deployment:
-  PASS — team/project surgeservices-projects/softwarefactory
-  project ID prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
-  deployment ID dpl_Fi7jEzWFbtW3vrXDGuEodPumTuJ7 / state READY
-  stable alias https://softwarefactory-tan.vercel.app returned HTTP 200 with
-  title "SoftwareFactory — AI Engineering Control Plane" on 2026-08-12
-  inspector https://vercel.com/surgeservices-projects/softwarefactory/Fi7jEzWFbtW3vrXDGuEodPumTuJ7
-  LIMIT — this proves UI hosting/availability, not an in-product Vercel connection,
-  repository linkage, automated deployment, post-deploy monitoring, or rollback.
+pending:
+  exact Phase 1B commit + Vercel deployment ID/smoke
+  authenticated production Supabase journey
+  real GitHub installation/repository/project/file/draft-PR/webhook/disconnect acceptance
 ```
+
+## Security acceptance still required
+
+- prove two-tenant and anonymous denial with user sessions;
+- verify RLS and FORCE RLS on every exposed hosted table;
+- verify security-definer search paths/grants/actor checks after `009`;
+- verify App token scope/expiry and no token leakage in responses/logs;
+- observe valid/invalid/duplicate webhook behavior in production;
+- verify protected path, likely-secret, stale SHA, wrong tenant, revoked installation, and insufficient permission failures; and
+- verify activity evidence is immutable and redacted.
 
 ## Release-blocking invariants
 
-- Any exposed secret, cross-tenant access, disabled RLS, or unapproved RED action is an immediate failure.
-- A UI-only control without server enforcement does not satisfy a safety requirement.
-- A schema-presence test alone does not prove RLS; the local catalog/workflow smoke evidence above supplements static contract tests, while a hosted Supabase rerun remains Phase 1B work.
-- A passing page render proves only the recorded UI availability check, not control-plane provider connectivity. Supabase, GitHub, AI providers, and Vercel deployment/rollback automation remain **Not Connected**.
-- Demo data that can be mistaken for live production information is a failure.
-- A future material change invalidates affected evidence and requires this scorecard to be rerun and updated.
+- Any exposed secret, disabled RLS, cross-tenant access, direct default-branch write, non-draft/merge/deploy action, or unapproved RED action is an immediate failure.
+- Configuration/mocks/tests cannot be relabeled as a real provider connection.
+- Clean migration/lint evidence does not prove authenticated RLS behavior; both evidence layers must be stated separately.
+- A Vercel READY deployment is not full post-deploy/provider acceptance.
+- A future code/provider/schema change invalidates affected evidence and requires this scorecard to be rerun.

@@ -23,6 +23,11 @@ test("loads the truthful control-plane dashboard without browser errors", async 
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
   });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      browserErrors.push(`${response.status()} ${response.url()}`);
+    }
+  });
   page.on("pageerror", (error) => browserErrors.push(error.message));
 
   const response = await page.goto("/", { waitUntil: "domcontentloaded" });
