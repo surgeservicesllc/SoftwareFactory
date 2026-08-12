@@ -18,6 +18,12 @@ Supabase migrations under `supabase/migrations/` are immutable schema history af
 | `011_harden_direct_mutation_boundaries` | Remove direct authenticated connection/member mutations and align database secret detection with `github_pat_` | Local only; hosted promotion pending exact owner approval |
 | `012_github_change_audit` | Add actor-attributed immutable completed/failed GitHub change-request evidence, including bounded branch/commit failure evidence | Local only; hosted promotion pending exact owner approval |
 | `013_reconcile_github_repository_grants` | Add service-role-only bounded upsert of repositories newly granted through a verified webhook | Local only; hosted promotion pending exact owner approval |
+| `014_sync_linked_project_repository_metadata` | Propagate provider-authoritative repository rename/default-branch changes to exact connection-linked projects with immutable redacted activity evidence | Local only; hosted promotion pending exact owner approval |
+| `015_recover_draft_pr_completion` | Recover a reserved change request from actor-attributed branch/commit/existing-draft-PR evidence after an ambiguous completion response | Local only; hosted promotion pending exact owner approval |
+| `016_guard_github_installation_terminal_state` | Make deletion terminal for an installation ID and order installation lifecycle events by provider time | Local only; hosted promotion pending exact owner approval |
+| `017_close_authenticated_control_plane_writes` | Remove remaining direct authenticated writes to connections/projects/links/change requests and reserve exact live changes through a narrow authenticated RPC | Local only; hosted promotion pending exact owner approval |
+| `018_order_github_repository_events` | Order repository metadata events by provider time; preserve terminal deletion and require explicit newer restore before unselected resynchronization | Local only; hosted promotion pending exact owner approval |
+| `019_allow_service_role_sensitive_json_checks` | Grant the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed by table CHECK evaluation; keep recursive/text helpers inaccessible | Local only; hosted promotion pending exact owner approval |
 
 There is no `006` in the current Phase 1B chain. Do not rename applied migrations to close the numeric gap; ordering is determined by the full timestamp filename.
 
@@ -29,7 +35,7 @@ Project `qpuofpmagrmyamahqwxw` is `ACTIVE_HEALTHY`. Hosted migration history inc
 
 The last successful `supabase db lint --linked --schema public --level warning --fail-on error` was clean through `009` (`[]`). A post-`010` CLI lint attempt was blocked by a Supabase CLI account `403`, so the repository does not claim post-`010` CLI-lint evidence. Authenticated cross-tenant and broader RPC/audit verification remain pending.
 
-Migrations `011`, `012`, and `013` exist only in the local working tree. They have not been applied to project `qpuofpmagrmyamahqwxw`, do not appear in its hosted ledger, and have no hosted lint/RLS/RPC evidence. Because they change authorization, grants, audit behavior, and a privileged webhook workflow, promotion requires exact current owner approval for that production target, followed by ledger, lint, grant, RLS, activity-immutability, and application health checks.
+Migrations `011` through `019` exist only in the local working tree. They have not been applied to project `qpuofpmagrmyamahqwxw`, do not appear in its hosted ledger, and have no hosted lint/RLS/RPC evidence. Because this chain changes authorization, grants, audit behavior, mutation reservation/recovery, linked-project propagation, privileged webhook lifecycle reconciliation, and a service-role CHECK-helper grant, promotion requires exact current owner approval for this complete production target and sequence. After application, verify the ledger, lint, table/function/helper grants, RLS/FORCE RLS, actor/tenant/resource checks, immutable/redacted activity evidence, terminal/out-of-order event behavior, retry/recovery behavior, provider-ingress CHECK evaluation, and application health.
 
 ## Creating a migration
 

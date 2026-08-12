@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const webhookHarness = vi.hoisted(() => ({
   insert: vi.fn(),
   insertError: null as { code: string } | null,
+  installationStatus: "active",
   replay: null as { id: string; payload_sha256: string; status: string } | null,
   rpc: vi.fn(),
   from: vi.fn(),
@@ -44,6 +45,7 @@ const payload = JSON.stringify({
     id: 123,
     name: "factory",
     owner: { login: "acme" },
+    updated_at: "2026-08-12T12:00:00Z",
     visibility: "private",
   },
   sender: { id: 789, login: "octocat" },
@@ -67,6 +69,7 @@ function webhookRequest(body = payload, signatureOverride?: string, eventName = 
 
 beforeEach(() => {
   webhookHarness.insertError = null;
+  webhookHarness.installationStatus = "active";
   webhookHarness.replay = null;
   webhookHarness.insert.mockReset().mockImplementation(() => ({
     select: () => ({
@@ -89,6 +92,7 @@ beforeEach(() => {
                 connection_id: "11111111-1111-4111-8111-111111111111",
                 id: "22222222-2222-4222-8222-222222222222",
                 organization_id: "33333333-3333-4333-8333-333333333333",
+                status: webhookHarness.installationStatus,
               },
               error: null,
             }),
@@ -157,6 +161,7 @@ describe("GitHub webhook route", () => {
   const repository = {
     full_name: "acme/factory",
     id: 123,
+    updated_at: "2026-08-12T12:00:00Z",
   };
   const installation = { id: 456 };
   const validAcceptedPayloads = {
@@ -174,7 +179,7 @@ describe("GitHub webhook route", () => {
     },
     installation: {
       action: "created",
-      installation,
+      installation: { ...installation, updated_at: "2026-08-12T12:00:00Z" },
     },
     installation_repositories: {
       action: "added",
@@ -267,6 +272,25 @@ describe("GitHub webhook route", () => {
     expect(webhookHarness.rpc).not.toHaveBeenCalled();
   });
 
+  it("does not reconcile a retried repository grant for a terminal deleted installation", async () => {
+    const body = JSON.stringify(validAcceptedPayloads.installation_repositories);
+    webhookHarness.installationStatus = "deleted";
+    webhookHarness.insertError = { code: "23505" };
+    webhookHarness.replay = {
+      id: "44444444-4444-4444-8444-444444444444",
+      payload_sha256: sha256Hex(new TextEncoder().encode(body)),
+      status: "accepted",
+    };
+
+    const response = await POST(webhookRequest(body, undefined, "installation_repositories"));
+
+    expect(response.status).toBe(200);
+    expect(webhookHarness.rpc).toHaveBeenCalledTimes(1);
+    expect(webhookHarness.rpc).toHaveBeenCalledWith("process_github_webhook_delivery", {
+      p_delivery_id: "44444444-4444-4444-8444-444444444444",
+    });
+  });
+
   it.each(Object.entries(validAcceptedPayloads))(
     "accepts a minimally valid %s payload",
     async (eventName, eventPayload) => {
@@ -277,6 +301,31 @@ describe("GitHub webhook route", () => {
       expect(webhookHarness.rpc).toHaveBeenCalledTimes(eventName === "installation_repositories" ? 2 : 1);
     },
   );
+
+  it("records a delayed event for a deleted installation as ignored", async () => {
+    webhookHarness.installationStatus = "deleted";
+    const body = JSON.stringify({
+      action: "unsuspend",
+      installation: { id: 456, updated_at: "2026-08-12T12:01:00Z" },
+    });
+
+    const response = await POST(webhookRequest(body, undefined, "installation"));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ accepted: false, processed: false });
+    expect(webhookHarness.rpc).not.toHaveBeenCalled();
+    expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: {
+        accepted_event: true,
+        known_installation: true,
+        terminal_installation: true,
+      },
+      payload: expect.objectContaining({
+        installation_updated_at: "2026-08-12T12:01:00Z",
+      }),
+      status: "ignored",
+    }));
+  });
 
   it.each(Object.entries(validAcceptedPayloads))(
     "rejects a %s payload without its GitHub App installation before database access",
@@ -318,7 +367,7 @@ describe("GitHub webhook route", () => {
     expect(webhookHarness.rpc).not.toHaveBeenCalled();
     expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
       external_installation_id: null,
-      metadata: { accepted_event: false, known_installation: false },
+      metadata: { accepted_event: false, known_installation: false, terminal_installation: false },
       status: "ignored",
     }));
     expect(JSON.stringify(webhookHarness.insert.mock.calls[0]?.[0]))

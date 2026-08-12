@@ -85,6 +85,11 @@ export function getGitHubAppConfiguration(): GitHubAppConfiguration {
   if (Buffer.byteLength(webhookSecret, "utf8") < 32) {
     throw new GitHubConfigurationError("GITHUB_APP_WEBHOOK_SECRET must contain at least 32 bytes.");
   }
+  if (stateSecret === webhookSecret) {
+    throw new GitHubConfigurationError(
+      "GITHUB_APP_STATE_SECRET and GITHUB_APP_WEBHOOK_SECRET must be distinct secrets.",
+    );
+  }
 
   return {
     appId,

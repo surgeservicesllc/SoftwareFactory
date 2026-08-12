@@ -15,7 +15,9 @@ import {
 import {
   createGitHubBranch,
   createGitHubDraftPullRequest,
+  getGitHubFile,
   isProtectedGitHubWritePath,
+  listGitHubTree,
   normalizeRepositoryPath,
   updateGitHubFileOnBranch,
   validateGitHubRef,
@@ -148,6 +150,26 @@ describe("GitHub repository write safety", () => {
     expect(isProtectedGitHubWritePath(".npmrc")).toBe(true);
     expect(isProtectedGitHubWritePath("services/api/Dockerfile")).toBe(true);
     expect(isProtectedGitHubWritePath("next.config.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("components/safety-controls.tsx")).toBe(true);
+    expect(isProtectedGitHubWritePath("lib/autonomy.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("lib/risk.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("lib/constants.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("package.json")).toBe(true);
+    expect(isProtectedGitHubWritePath("package-lock.json")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/security/guard.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/AI/BACKLOG.md")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/policies/AUTO_MERGE_POLICY.md")).toBe(true);
+    expect(isProtectedGitHubWritePath("apps/control/supabase/migrations/next.sql")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/app/api/projects/route.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/authentication/password.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/oauth/callback.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/identity/permissions.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/rbac/roles.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/sessions/store.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/encryption/keyring.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/lib/github/client.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("src/middleware.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("packages/web/.github/workflows/ci.yml")).toBe(true);
     expect(isProtectedGitHubWritePath("proxy.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("vercel.json")).toBe(true);
     expect(isProtectedGitHubWritePath("README.md")).toBe(false);
@@ -409,5 +431,63 @@ describe("GitHub provider boundaries", () => {
     await expect(githubApiRequest("/installation/repositories", { token: "secret-token" }))
       .rejects.toMatchObject({ code: "github_invalid_response", status: 502 });
     expect(cancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GitHub repository file reads", () => {
+  it("maps a live directory response and encodes the requested path and ref", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json([{
+      html_url: "https://github.com/example-org/application/tree/main/docs",
+      name: "guides",
+      path: "docs/guides",
+      sha: "a".repeat(40),
+      size: 0,
+      type: "dir",
+    }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listGitHubTree("installation-token-value", "example-org", "application", "feature/docs", "docs")).resolves.toEqual([{
+      name: "guides",
+      path: "docs/guides",
+      sha: "a".repeat(40),
+      size: 0,
+      type: "directory",
+      url: "https://github.com/example-org/application/tree/main/docs",
+    }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: "/repos/example-org/application/contents/docs", search: "?ref=feature%2Fdocs" }),
+      expect.objectContaining({ cache: "no-store", redirect: "error" }),
+    );
+  });
+
+  it("decodes a bounded UTF-8 file and rejects binary, invalid, and oversized content", async () => {
+    const text = "Hello, factory ✓";
+    const textBytes = Buffer.from(text, "utf8");
+    const fileResponse = (bytes: Buffer, size = bytes.byteLength) => Response.json({
+      content: bytes.toString("base64"),
+      encoding: "base64",
+      html_url: "https://github.com/example-org/application/blob/main/README.md",
+      name: "README.md",
+      path: "README.md",
+      sha: "b".repeat(40),
+      size,
+      type: "file",
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(fileResponse(textBytes))
+      .mockResolvedValueOnce(fileResponse(Buffer.from([0x61, 0x00, 0x62])))
+      .mockResolvedValueOnce(fileResponse(Buffer.from([0xff])))
+      .mockResolvedValueOnce(fileResponse(Buffer.alloc(0), 1024 * 1024 + 1));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getGitHubFile("installation-token-value", "example-org", "application", "main", "README.md")).resolves.toMatchObject({
+      content: text,
+      encoding: "utf-8",
+      ref: "main",
+      size: textBytes.byteLength,
+    });
+    await expect(getGitHubFile("installation-token-value", "example-org", "application", "main", "README.md")).rejects.toMatchObject({ code: "github_file_binary", status: 415 });
+    await expect(getGitHubFile("installation-token-value", "example-org", "application", "main", "README.md")).rejects.toMatchObject({ code: "github_file_binary", status: 415 });
+    await expect(getGitHubFile("installation-token-value", "example-org", "application", "main", "README.md")).rejects.toMatchObject({ code: "github_file_too_large", status: 413 });
   });
 });

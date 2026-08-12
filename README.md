@@ -2,9 +2,9 @@
 
 SoftwareFactory is a server-first software-engineering control plane for tenant-scoped projects, GitHub App connections, repository inspection, guarded file changes, approvals, and auditable operational state.
 
-The repository is implementing **Phase 1B: Production GitHub App Integration**. Implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` is pushed to `origin/main` and deployed in Vercel through owner-authored empty deployment marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`, which preserves the implementation commit's authorship while building the exact same application tree. That tree includes Supabase authentication/onboarding, active-organization-scoped GitHub routes, truthful live connection/project/file views, a tenant-scoped activity stream, and a controlled file-to-draft-PR workflow. Forward migrations `011`-`013` remain unapplied to hosted Supabase. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, but the authenticated SoftwareFactory callback/tenant connection, active webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
+The repository is implementing **Phase 1B: Production GitHub App Integration**. The current working tree adds another fail-closed hardening increment for callback errors, provider URL validation, retry-safe file changes, installation/repository event ordering, linked-project metadata propagation, audited control-plane mutation boundaries, and the narrow service-role helper grant required by provider-ingress table constraints. Lint, typecheck, 38 files/263 tests, coverage with required risk/constants thresholds, the full-chain RLS matrix through migration `019`, a 34-route production build, local Playwright 12/12, and source/client secret scans pass. Local forward migrations `011`-`019` are not applied to hosted Supabase; publication/deployment and hosted/live provider gates remain pending. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, but the authenticated SoftwareFactory callback/tenant connection, active webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
 
-Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Production Playwright passes 12/12. See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for the remaining Phase 1B checks.
+Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). The last independently verified pre-hardening release was commit `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`; its public Playwright suite passed 12/12. That historical evidence does not validate the pending working tree. See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for the remaining Phase 1B checks.
 
 ## Current trust boundary
 
@@ -16,6 +16,8 @@ Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-
 - The Activity page reads immutable tenant events through a no-store server API and excludes event metadata from browser responses.
 - No HTTP route writes directly to the local repository; the legacy local file writer and its environment switch have been removed.
 - Protected paths and likely credential content are rejected by the standard file-change route.
+- A retry of the same file-change intent reuses its idempotency key, and provider-created draft-PR evidence can recover a lost database-completion response without creating a second PR.
+- GitHub lifecycle reconciliation treats deletion as terminal for an installation ID and applies installation/repository metadata only with provider ordering evidence.
 - Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
 - OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**.
 

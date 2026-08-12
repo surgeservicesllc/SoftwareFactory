@@ -16,7 +16,10 @@ const deliveryPattern = /^[A-Za-z0-9-]{16,128}$/;
 const eventPattern = /^[a-z][a-z0-9_]{0,62}$/;
 const actionSchema = z.string().regex(eventPattern);
 const externalIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
-const installationSchema = z.object({ id: externalIdSchema });
+const installationSchema = z.object({
+  id: externalIdSchema,
+  updated_at: z.string().datetime({ offset: true }).optional(),
+});
 const repositorySchema = z.object({
   archived: z.boolean().optional(),
   default_branch: z.string().max(255).optional(),
@@ -25,6 +28,7 @@ const repositorySchema = z.object({
   full_name: z.string().min(3).max(201).regex(/^[^/\s]+\/[^/\s]+$/),
   name: z.string().min(1).max(100).optional(),
   owner: z.object({ login: z.string().min(1).max(100) }).optional(),
+  updated_at: z.string().datetime({ offset: true }),
   visibility: z.enum(["public", "private", "internal"]).optional(),
 });
 const repositoryIdSchema = z.object({ id: externalIdSchema });
@@ -143,6 +147,7 @@ function redactedPayload(payload: WebhookPayload) {
   return {
     action: payload.action ?? null,
     installation_id: payload.installation?.id ?? null,
+    installation_updated_at: payload.installation?.updated_at ?? null,
     repository: payload.repository
       ? {
         archived: payload.repository.archived ?? null,
@@ -152,6 +157,7 @@ function redactedPayload(payload: WebhookPayload) {
         id: payload.repository.id,
         name: payload.repository.name ?? null,
         owner_login: payload.repository.owner?.login ?? null,
+        updated_at: payload.repository.updated_at,
         visibility: payload.repository.visibility ?? null,
       }
       : null,
@@ -241,11 +247,12 @@ export async function POST(request: Request) {
       connection_id: string;
       id: string;
       organization_id: string;
+      status: string;
     } | null = null;
     if (externalInstallationId) {
       const lookup = await serviceClient
         .from("github_installations")
-        .select("id,organization_id,connection_id")
+        .select("id,organization_id,connection_id,status")
         .eq("external_installation_id", externalInstallationId)
         .maybeSingle();
       if (lookup.error) throw lookup.error;
@@ -256,6 +263,8 @@ export async function POST(request: Request) {
       ? "ignored"
       : !installation
         ? "ignored"
+        : installation.status === "deleted"
+          ? "ignored"
         : "accepted";
     const payload = redactedPayload(webhookPayload);
     const payloadHash = sha256Hex(rawBody);
@@ -272,6 +281,7 @@ export async function POST(request: Request) {
         metadata: {
           accepted_event: acceptedEvent,
           known_installation: Boolean(installation),
+          terminal_installation: installation?.status === "deleted",
         },
         organization_id: installation?.organization_id ?? null,
         payload,
@@ -299,6 +309,7 @@ export async function POST(request: Request) {
         if (
           eventName === "installation_repositories"
           && installation
+          && installation.status !== "deleted"
           && payload.added_repositories.length
         ) {
           const reconciliation = await serviceClient.rpc("reconcile_github_repository_grants", {
@@ -327,6 +338,7 @@ export async function POST(request: Request) {
       if (
         eventName === "installation_repositories"
         && installation
+        && installation.status !== "deleted"
         && payload.added_repositories.length
       ) {
         const reconciliation = await serviceClient.rpc("reconcile_github_repository_grants", {

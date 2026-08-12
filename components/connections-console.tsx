@@ -91,7 +91,11 @@ export function ConnectionsConsole() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const callbackNotice = readGitHubCallbackNotice(window.location.search);
+    const timer = window.setTimeout(() => {
+      if (callbackNotice) setMessage(callbackNotice);
+      void load();
+    }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
@@ -210,7 +214,7 @@ export function ConnectionsConsole() {
         description="The first authenticated user becomes its owner. GitHub connections and projects remain tenant-scoped through Supabase RLS."
         action={
           <form onSubmit={createOrganization} className="mt-4 flex w-full max-w-md flex-col gap-2 sm:flex-row">
-            <input name="organizationName" required minLength={2} defaultValue="SurgeServices" aria-label="Organization name" className="h-10 flex-1 rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-white focus:border-[#647f29] focus:outline-none" />
+            <input name="organizationName" required minLength={2} placeholder="Engineering organization" aria-label="Organization name" className="h-10 flex-1 rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-white focus:border-[#647f29] focus:outline-none" />
             <button disabled={pending === "onboarding"} className="primary-action justify-center">{pending === "onboarding" ? <Loader2 className="size-4 animate-spin" /> : null}Create organization</button>
           </form>
         }
@@ -224,6 +228,16 @@ export function ConnectionsConsole() {
         title="Select an organization"
         description="Choose the tenant whose GitHub installations and projects you want to manage."
         action={<div className="mt-4 flex flex-wrap justify-center gap-2">{organizations.map((item) => <button key={item.id} type="button" onClick={() => void selectOrganization(item.id)} disabled={pending !== null} className="secondary-action">{item.name}<ArrowRight className="size-3.5" /></button>)}</div>}
+      />
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <SetupNotice
+        title="Connections unavailable"
+        description={message || "The live connection service could not be reached."}
+        action={<button type="button" onClick={() => void load()} className="secondary-action"><RefreshCw className="size-3.5" />Retry</button>}
       />
     );
   }
@@ -259,7 +273,7 @@ export function ConnectionsConsole() {
                 </div>
                 <div className="flex gap-2">
                   {connection.installation ? <><button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="secondary-action"><RefreshCw className={`size-3.5 ${pending === "sync" ? "animate-spin" : ""}`} />Sync</button>
-                  <a href={`https://github.com/settings/installations/${connection.installation.id}`} target="_blank" rel="noreferrer" className="secondary-action">Manage<ExternalLink className="size-3.5" /></a>
+                  <a href={githubInstallationManagementUrl(connection)} target="_blank" rel="noreferrer" className="secondary-action">Manage<ExternalLink className="size-3.5" /></a>
                   <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="secondary-action border-[#4a292e] text-[#ff9da3]">{pending === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}Disconnect</button></> : null}
                 </div>
               </div>
@@ -280,14 +294,18 @@ export function ConnectionsConsole() {
           ))}
         </div>
       ) : (
-        <SetupNotice title="No GitHub App installation connected" description="Choose Connect GitHub, authorize the app, select the SurgeServices account or organization, and grant access only to the repositories SoftwareFactory should manage." />
+        <SetupNotice title="No GitHub App installation connected" description="Choose Connect GitHub, authorize the app, select the intended account or organization, and grant access only to the repositories SoftwareFactory should manage." />
       )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {[
-          ["OpenAI", Waypoints], ["Anthropic", Waypoints], ["Vercel", Cloud], ["Supabase", Database], ["Other", Box],
-        ].map(([name, Icon]) => (
-          <Panel key={name as string} className="p-4"><Icon className="size-4 text-[#778493]" /><h3 className="mt-3 text-xs font-semibold text-[#d5dbe2]">{name as string}</h3><div className="mt-3"><NotConnectedBadge /></div></Panel>
+          { name: "OpenAI model adapter", Icon: Waypoints, connected: false },
+          { name: "Anthropic model adapter", Icon: Waypoints, connected: false },
+          { name: "Vercel deployment adapter", Icon: Cloud, connected: false },
+          { name: "Supabase control plane", Icon: Database, connected: true },
+          { name: "Other providers", Icon: Box, connected: false },
+        ].map(({ name, Icon, connected }) => (
+          <Panel key={name} className="p-4"><Icon className="size-4 text-[#778493]" /><h3 className="mt-3 text-xs font-semibold text-[#d5dbe2]">{name}</h3><div className="mt-3">{connected ? <StatusBadge tone="safe">Connected</StatusBadge> : <NotConnectedBadge />}</div></Panel>
         ))}
       </div>
     </div>
@@ -301,4 +319,36 @@ function SetupNotice({ title, description, action }: { title: string; descriptio
 function formatDate(value: string | null) {
   if (!value) return "Not synchronized";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+export function readGitHubCallbackNotice(search: string) {
+  const params = new URLSearchParams(search);
+  if (params.get("github") === "connected") {
+    const repositories = params.get("repositories");
+    const repositoryCount = repositories && /^\d{1,6}$/.test(repositories)
+      ? Number(repositories)
+      : null;
+    return repositoryCount === null
+      ? "GitHub installation connected and synchronized."
+      : `GitHub installation connected with ${repositoryCount} selected repositor${repositoryCount === 1 ? "y" : "ies"}.`;
+  }
+
+  if (params.get("github") !== "error") return "";
+  const code = params.get("githubError") ?? "";
+  const message = params.get("githubMessage") ?? "";
+  if (!/^[a-z][a-z0-9_]{0,62}$/.test(code)) {
+    return "GitHub authorization could not be completed safely.";
+  }
+  if (!message || message.length > 240 || /[\u0000-\u001f\u007f]/.test(message)) {
+    return `GitHub authorization could not be completed safely (${code}).`;
+  }
+  return `${message} (${code})`;
+}
+
+function githubInstallationManagementUrl(connection: Pick<GithubConnection, "account" | "installation">) {
+  if (!connection.installation) return "https://github.com/settings/installations";
+  if (connection.account?.type === "Organization" && connection.account.login) {
+    return `https://github.com/organizations/${encodeURIComponent(connection.account.login)}/settings/installations/${connection.installation.id}`;
+  }
+  return `https://github.com/settings/installations/${connection.installation.id}`;
 }
