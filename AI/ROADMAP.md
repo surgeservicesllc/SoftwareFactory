@@ -27,7 +27,7 @@ Exit work:
 
 - verify hosted authenticated RLS allow/deny and privileged-RPC behavior (migration history through `009` and linked schema lint are green);
 - [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
-- record the exact source commit for READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`; and
+- preserve the verified runtime provenance for READY deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; and
 - pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.
 
 No merge or production deployment autonomy is implied.

@@ -47,7 +47,7 @@ Overall status: **Production deployment and repository-scoped GitHub App install
 | GitHub App object/secrets | Configured and rotated | `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists; its sole remaining key fingerprint is `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`, and the corresponding server-only key is promoted in Vercel. |
 | GitHub provider installation | Installed; repository-scoped | Installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. This does not establish a SoftwareFactory tenant connection. |
 | GitHub App connection | **Not Connected** | The authenticated SoftwareFactory owner callback, organization connection record, repository synchronization, project/file/draft-PR journey, and signed webhook delivery remain pending. The provider General form is blank/inactive, and App-authenticated hook configuration returns `404` with no hook object. |
-| Vercel UI hosting | Production deployment verified | Deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` is READY at `https://softwarefactory-tan.vercel.app`; stable-production Playwright passed 12/12. This is hosting evidence, not an in-product deploy/rollback adapter or full provider acceptance. |
+| Vercel UI hosting | Production deployment verified | Deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` is READY/Current at `https://softwarefactory-tan.vercel.app`; stable-production Playwright passed 12/12. This is hosting evidence, not an in-product deploy/rollback adapter or full provider acceptance. |
 | Vercel deployment/rollback adapter | **Not Connected** | Hosting does not create an in-product deploy or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -68,16 +68,16 @@ Overall status: **Production deployment and repository-scoped GitHub App install
 | Hosted database lint | linked CLI | Pass through `009` — no schema errors (`[]`); post-`010` attempt blocked by CLI-account `403`, not claimed |
 | Playwright | `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe checks |
 | Secret/client scan | tracked/built asset review on hardened tree | Pass — no credential patterns or built-client privileged server names; only `.env.example` is tracked |
-| Stable production Playwright | `PLAYWRIGHT_BASE_URL=https://softwarefactory-tan.vercel.app npm run test:e2e` | Pass — 12/12 against deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` |
+| Stable production Playwright | `PLAYWRIGHT_BASE_URL=https://softwarefactory-tan.vercel.app npm run test:e2e` | Pass — 12/12 against deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` |
 | Live GitHub acceptance | production checklist | Pending; **Not Connected** |
-| Phase 1B Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`, READY, stable alias 12/12 |
+| Phase 1B/1D Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_436vwUxUAuypnRmCstgptQa2qfve`, READY/Current from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`, stable alias 12/12 |
 
 The local shell used Node 20 and emitted Supabase's future-support warning. The repository, CI, and intended production runtime target Node 22 or newer.
 
 ## Known limitations and release blockers
 
 - Verify hosted authenticated RLS/FORCE RLS, cross-tenant/anonymous denial, privileged-RPC authorization, audit behavior, and a real application session.
-- Record/verify the exact source commit for the READY Vercel deployment and ensure the final repository tree is pushed to `main`.
+- Keep the final documentation-only evidence commit on `main`; application code commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` is the verified READY/Current runtime source.
 - Complete real Supabase sign-in/onboarding.
 - Complete the authenticated owner callback for provider installation `153286187`, persist the organization connection, and verify repository sync, project link, reads, safe edit/draft PR, audit, error/revocation paths, and disconnect.
 - Configure and verify the GitHub webhook endpoint. The provider General form is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; observe a valid signed production delivery before changing its status.

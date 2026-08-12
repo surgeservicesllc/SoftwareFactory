@@ -30,7 +30,7 @@ Reason: hosted migration `010` safety checks, prior linked lint through `009`, f
 | GitHub webhook | Route tested locally; provider General form blank/inactive and App-auth hook config returns `404`/no hook object | **Not Connected** / no real delivery |
 | Project/repository flow | Code implemented; real selected repo/project | Pending live acceptance |
 | File-to-draft-PR | Guarded implementation/tests; real branch/commit/draft PR | Pending live acceptance |
-| Vercel production deployment | `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`, READY at stable alias; production Playwright 12/12 | Pass for hosting/public E2E; exact source-commit provenance and full provider acceptance pending |
+| Vercel production deployment | `dpl_436vwUxUAuypnRmCstgptQa2qfve`, READY/Current at stable alias from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; production Playwright 12/12 | Pass for hosting/public E2E and exact runtime provenance; full provider acceptance pending |
 | Codex/OpenAI | No live worker | **Not Connected** |
 | Claude/Anthropic | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback endpoints/workflows; controls OFF | Pass |
@@ -63,7 +63,8 @@ final secret/client scan:
   PASS — no credential patterns or built-client privileged server names; only .env.example tracked
 
 Vercel production:
-  deployment dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh — READY at stable alias
+  deployment dpl_436vwUxUAuypnRmCstgptQa2qfve — READY/Current at stable alias
+  exact runtime source — 3dfdbf35daeff7a79e09a41e5070e521b23d83f9
 
 GitHub App provider state:
   installation 153286187 — installed on surgeservicesllc
@@ -85,7 +86,7 @@ hosted Supabase:
   required — hosted authenticated RLS/tenant/RPC/audit behavior checks
 
 pending:
-  exact source-commit provenance for the READY Vercel deployment and final main push
+  final evidence-only documentation commit on main (runtime provenance is already verified)
   authenticated production Supabase journey
   authenticated SoftwareFactory callback/tenant connection/repository/project/file/draft-PR/webhook/disconnect acceptance
   authorized post-010 CLI lint and broader hosted tenant/RPC/audit verification

@@ -28,7 +28,7 @@ npm run build
 | Hosted Supabase migration application | Pass through `010`; transactional preflight `unsafe_project_rows=0` and hosted safety checks passed |
 | Hosted Supabase lint | Pass through `009` — no schema errors (`[]`); post-`010` CLI attempt blocked by account `403`, so not claimed |
 | Playwright E2E | Pass — 12/12 across desktop, tablet, and mobile, including navigation, overflow, browser-error, and axe gates |
-| Stable-production Playwright | Pass — 12/12 at `https://softwarefactory-tan.vercel.app` on READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` |
+| Stable-production Playwright | Pass — 12/12 at `https://softwarefactory-tan.vercel.app` on READY/Current deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` |
 | Secret/client-bundle scan | Pass on the hardened tree — no credential patterns or built-client privileged server names |
 | GitHub provider installation | Pass — installation `153286187`, `surgeservicesllc/SoftwareFactory` only |
 | Real in-product GitHub acceptance | Pending; App connection/webhook remain **Not Connected** |

@@ -32,8 +32,8 @@ Checked items have repository or provider evidence. “Implemented” does not m
 - [ ] Verify hosted two-tenant allow/deny paths, anonymous denial, privileged RPC authorization, and immutable audit events with real authenticated sessions.
 - [x] Rerun final lint, typecheck, full Vitest (157 tests on the latest tree), build (34 routes), and Playwright at desktop/tablet/mobile with accessibility/browser-error/overflow gates (12/12) after the Phase 1B hardening and Phase 1D observation scaffold.
 - [x] Rerun final secret and built-client privileged-variable scans on the exact hardened tree; no credential patterns or built-client privileged server names were found.
-- [x] Verify Vercel deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` READY at the stable production alias and pass stable-production Playwright 12/12.
-- [ ] Record/verify the READY deployment's exact source commit and ensure the final repository tree is pushed to `main`.
+- [x] Verify Vercel deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` READY/Current at the stable production alias and pass stable-production Playwright 12/12.
+- [x] Verify exact runtime source commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` and push it to `main`.
 - [ ] Verify production Supabase sign-up/confirmation/sign-in/onboarding/session paths.
 - [ ] Configure and verify the GitHub App webhook endpoint: the provider General page is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; then observe a correctly signed production delivery.
 - [ ] Complete the authenticated SoftwareFactory owner callback for existing provider installation `153286187`; persist the tenant connection and verify identity, permissions, repository count, freshness, and audit evidence.

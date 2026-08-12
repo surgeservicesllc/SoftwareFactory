@@ -21,14 +21,14 @@ An execution-inert Phase 1D observation scaffold now exists by explicit request.
 - The sole remaining GitHub App key has public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`; the corresponding protected Vercel value was rotated and promoted. No private key material belongs in repository memory.
 - The provider installation does not yet have an authenticated SoftwareFactory owner callback, tenant connection record, repository sync, project/file/draft-PR acceptance run, or signed webhook delivery. The provider General form is blank/inactive and App-authenticated hook configuration returns `404` with no hook object. In-product status remains **Not Connected**.
 - Final current-tree gates: lint and typecheck pass; full Vitest passes 157 tests; integration passes 6 files/88 tests; build passes 34 pages/routes; Playwright passes 12/12 across desktop/tablet/mobile with accessibility, browser-error, and overflow checks; secret/client scans pass with no credential patterns or built-client privileged server names.
-- Vercel deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` is READY at `https://softwarefactory-tan.vercel.app`; stable-production Playwright passed 12/12. Exact source-commit provenance, hosted authenticated RLS behavior, and remaining provider acceptance still require evidence.
+- Vercel deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` is READY/Current at `https://softwarefactory-tan.vercel.app` from exact runtime source commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; stable-production Playwright passed 12/12. Hosted authenticated RLS behavior and remaining provider acceptance still require evidence.
 - Phase 1D scaffold adds the pure prerequisite evaluator, truthful static controls, same-origin tenant/owner controls API hardening, and hosted locked observation controls. No action executor exists.
 - Vercel project is `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`), stable alias `https://softwarefactory-tan.vercel.app`.
 
 ## Immediate sequence
 
 1. Verify hosted cross-tenant/anonymous denial, privileged RPC authorization, audit immutability/redaction, and a real authenticated application session (catalog RLS/FORCE RLS is already green).
-2. Record/verify the exact source commit for READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` and ensure the final repository tree is pushed to `main`.
+2. Preserve runtime provenance: deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` is from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; the following evidence-only documentation commit does not change application behavior.
 3. Complete production Supabase Auth/onboarding.
 4. Complete the authenticated owner callback for existing provider installation `153286187`, persist/sync the tenant connection, link the project, inspect live repository state, create one safe controlled draft PR, and test disconnect/loss paths.
 5. Configure/verify the blank/inactive GitHub webhook endpoint (App-authenticated configuration currently returns `404`/no hook object), then observe signed webhook/audit reconciliation.

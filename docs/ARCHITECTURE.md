@@ -11,7 +11,7 @@ SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authentic
 | Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Trusted persistence boundary; migrations/lint green, authenticated tenant behavior pending |
 | GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Server-only; provider installation `153286187` is repository-scoped, but in-product callback/connection remains pending |
 | GitHub webhook route | Verify raw-body HMAC, deduplicate delivery IDs, store redacted payloads, reconcile state | Implemented; live delivery not yet verified |
-| Vercel | Serve Next.js application and server functions | Deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` READY with stable-production E2E 12/12; deploy/rollback adapter **Not Connected** |
+| Vercel | Serve Next.js application and server functions | Deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` READY/Current with stable-production E2E 12/12; deploy/rollback adapter **Not Connected** |
 | AI workers | Future task execution | Codex and Claude **Not Connected** |
 
 ## Authenticated request path

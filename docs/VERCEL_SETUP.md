@@ -6,14 +6,14 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 
 ## Current evidence
 
-- Production deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh` is verified READY and reachable at the stable alias. Playwright against the stable production URL passed 12/12.
+- Production deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` is verified READY/Current from exact runtime source commit `3dfdbf35daeff7a79e09a41e5070e521b23d83f9` and reachable at the stable alias. Playwright against the stable production URL passed 12/12.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
 - GitHub App server-only variables are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`) and promoted in the READY deployment.
 - GitHub provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. The authenticated in-product callback/tenant connection remains pending, and the provider webhook remains blank/inactive with App-authenticated hook configuration returning `404`/no hook object.
 - Preview Supabase variables are not independently verified.
-- Exact source-commit provenance for the READY deployment and the live authenticated GitHub acceptance journey are still required before Phase 1B can be called complete.
+- The live authenticated GitHub acceptance journey is still required before Phase 1B can be called complete.
 
-The deployment identity/state/public E2E are recorded above. Do not assume that this proves the exact current working tree or provider acceptance; record the exact source commit and remaining authenticated evidence.
+The deployment identity, runtime source, state, and public E2E are recorded above. The following documentation-only evidence commit does not change runtime behavior; it also does not prove provider acceptance.
 
 ## Project configuration
 

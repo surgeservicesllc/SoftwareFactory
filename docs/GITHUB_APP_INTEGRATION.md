@@ -72,7 +72,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The production/preview GitHub variables have been added to the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key and promoted in READY deployment `dpl_33dEW1EM6x8ofqqHYtm5CaKUznSh`; only its public fingerprint is recorded above. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
+The production/preview GitHub variables have been added to the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key and is present in READY/Current deployment `dpl_436vwUxUAuypnRmCstgptQa2qfve` from `3dfdbf35daeff7a79e09a41e5070e521b23d83f9`; only its public fingerprint is recorded above. Production Supabase public/runtime variables are also configured. Preview Supabase configuration is not independently verified.
 
 ## Connection flow
 
