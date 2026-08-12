@@ -96,3 +96,5 @@ Configuration or UI hosting alone is not proof of a control-plane provider conne
 ## Security
 
 Do not commit secrets or report them in public issues. Review [`SECURITY.md`](SECURITY.md), [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md), and [`policies/PROTECTED_RESOURCES.md`](policies/PROTECTED_RESOURCES.md). A suspected disclosure requires provider-side revocation/rotation; deleting a value from Git is not sufficient.
+
+Deployment identity configured for SoftwareFactory.
