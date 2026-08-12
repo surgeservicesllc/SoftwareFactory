@@ -99,3 +99,10 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: Serialize installation synchronization by external installation ID before connection creation, re-resolve the installation's tenant/connection binding after upsert, match normalized repository full names literally rather than with SQL wildcard semantics, and persist only the synchronized GitHub default branch when linking a project. The standard file-change route also treats repository memory/policies, Supabase, every application API route, server-side GitHub/Supabase code, Auth/session boundaries, deployment/environment/infrastructure files, and security-sensitive subject paths as protected.
 - Consequence: Concurrent first syncs cannot create competing connection identities, caller text cannot override provider-synchronized repository/default-branch state, `%` and `_` cannot broaden repository authorization matches, and protected control-plane code must use a separate owner-approved workflow rather than the standard draft-PR editor.
+
+## ADR-015 — Exclude local artifacts from Vercel deployment source
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Commit a fail-closed `.vercelignore` that excludes dependencies, build/test caches, local CLI metadata, environment files, private-key files, and ignored work artifacts from Vercel source uploads.
+- Consequence: Production receives the reviewed repository source without unrelated local artifacts or credential-bearing file classes.

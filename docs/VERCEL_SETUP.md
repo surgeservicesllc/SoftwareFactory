@@ -23,6 +23,7 @@ Do not assume that the stable alias contains the current working tree. Record th
 5. Store values in Vercel encrypted/sensitive settings with deliberate Production/Preview/Development scopes.
 6. Never expose privileged values through `NEXT_PUBLIC_`.
 7. Verify exact callback/webhook origins after changing aliases or domains.
+8. Keep `.vercelignore` fail-closed so local dependencies, build caches, test artifacts, CLI metadata, environment files, and private-key files are never uploaded as deployment source.
 
 See [Environment variables](ENVIRONMENT_VARIABLES.md) and [GitHub App integration](GITHUB_APP_INTEGRATION.md).
 
