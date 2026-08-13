@@ -21,6 +21,7 @@ const publicTables = [
   "approvals",
   "commands",
   "connections",
+  "deployment_validations",
   "deployments",
   "github_change_requests",
   "github_installations",
@@ -30,11 +31,19 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "incidents",
+  "monitor_observations",
+  // Phase 1E production-operations tables. Each is created with RLS and FORCE
+  // RLS enabled in 20260812002800_phase1e_production_operations.sql.
+  "operations_audit_events",
+  "operations_events",
   "organization_members",
   "organizations",
   "policies",
+  "production_diagnoses",
+  "production_monitors",
   "profiles",
   "project_connections",
+  "project_health_snapshots",
   "projects",
   // Phase 2A provider execution tables. Each is created with RLS and FORCE RLS
   // enabled and tenant-scoped policies in 20260813000100_provider_execution_layer.sql.
@@ -42,7 +51,10 @@ const publicTables = [
   "provider_routing_decisions",
   "provider_run_events",
   "pull_requests",
+  "release_freezes",
+  "repair_attempts",
   "reports",
+  "rollback_operations",
   "tasks",
   "test_runs",
 ] as const;

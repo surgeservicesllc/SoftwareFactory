@@ -64,6 +64,15 @@ Missing, stale, or mismatched deployment evidence produces `inconclusive`, never
 
 A failed validation does not automatically authorize rollback. Evaluate `AUTO_ROLLBACK.md` from fresh state. Database, auth/security, secret, DNS, and other protected-resource changes require owner-led containment or recovery in Phase 1.
 
+## Phase 1E implementation status
+
+Phase 1E records validation evidence and consumes it; it does not deploy. It changes no requirement above.
+
+- `deployment_validations` stores project, deployment, outcome, checks, baseline reference, validator version, policy version, correlation id, and timestamps. Outcomes are `passed`, `failed`, `inconclusive`, or `cancelled`, exactly as this policy defines them.
+- A passing validation is required — and is not sufficient — to resolve an incident: production must also no longer be failing its own monitors, and root cause plus corrective action must be recorded. A successful deployment alone closes nothing.
+- A failed validation does not authorize rollback. Eligibility is re-evaluated from fresh state under `AUTO_ROLLBACK.md`, and the result is always blocked while no executor exists.
+- Validation is currently recorded by an owner or administrator rather than produced by an automated validator, because no deployment integration exists to trigger one.
+
 ## Phase 1A user-interface rule
 
 Deployment and validation examples must say **Demo Data**. Provider-dependent actions must say **Not Connected**. No Phase 1A report may count a production deployment or rollback unless an independently verified live integration created the evidence above.

@@ -45,6 +45,19 @@ Automatic rollback may be considered only for a narrowly allowlisted deployment 
 5. Validate recovery using `POST_DEPLOY_VALIDATION.md`.
 6. If recovery fails, stop automation, escalate to the owner/incident commander, and preserve evidence.
 
+## Phase 1E implementation status
+
+Phase 1E implements this policy's decision path and none of its execution path. It changes no rule above.
+
+- Rollback eligibility is evaluated fail-closed against the conditions in this document, and every blocker is recorded rather than the first one only.
+- `EXECUTOR_NOT_CONNECTED` is unconditional: no deployment provider adapter exists, so an eligible-looking rollback is still recorded as blocked and nothing is executed.
+- Last Known Good is evidence-bound. A deployment qualifies only when it succeeded **and** its own post-deploy validation passed; a provider "ready" status alone never qualifies.
+- A failed rollback cannot be recorded without escalating the incident to SEV1 and flagging owner attention. This is a database CHECK constraint, not application logic, so recovery failure cannot degrade into silence.
+- Rollback attempts are bounded at three per incident, after which the decision belongs to the owner.
+- No database or data migration is reversed by any Phase 1E code path.
+
+Enablement still requires everything below, plus an owner-approved migration relaxing the Phase 1D constraint that pins `auto_rollback` off.
+
 ## Required drills before enablement
 
 - successful rollback of a disposable preview/staging deployment;

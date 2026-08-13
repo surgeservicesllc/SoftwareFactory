@@ -60,12 +60,36 @@ Checked items have repository/provider evidence only. The owner repository conne
 - Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
 - Prior local baseline before migrations `014`-`019`: 25 files/208 tests, 34-route build, local Playwright 12/12. Historical only and not proof for the current `020`-`023` tree.
 
+## Phase 1E production operations
+
+Implemented and locally verified against the migrated schema. Nothing here is live production evidence.
+
+- [x] Add migration `028` with ten RLS/FORCE-RLS operations tables, additive SEV1–SEV4 incident columns, owner-scoped SECURITY DEFINER workflows, and zero new `service_role` table privileges.
+- [x] Build provider-neutral monitoring with one connected HTTPS-probe adapter, an explicit Not Connected reason and unblocking condition for every other provider, and a CHECK constraint preventing an unconnected monitor from being enabled.
+- [x] Derive `healthy/degraded/critical/unknown/paused` health from real signals with append-only history and a stored reason; resolve absence of evidence to UNKNOWN.
+- [x] Create and deduplicate SEV1–SEV4 incidents automatically with upward-only severity escalation and full evidence columns.
+- [x] Freeze autonomous releases automatically on SEV1/SEV2; add owner-only resume with acknowledgement, an organization-wide emergency stop, and an owner-only reversal of that stop that never silently lifts a per-project freeze.
+- [x] Resolve Last Known Good only from a validated deployment; evaluate rollback fail-closed; escalate a failed rollback to SEV1 with owner attention by constraint.
+- [x] Add a deterministic Production Investigator returning cause, cited evidence, subsystem, confidence, action, and risk without intermediate reasoning.
+- [x] Create bounded repair work capped at three attempts with escalation, refusing RED and above-ceiling work so the risk policy is not bypassed.
+- [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
+- [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
+- [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
+- [x] Pass lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe.
+- [ ] Apply hosted migration `028` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
+- [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
+- [ ] Persist per-project synthetic journey definitions; profile validation exists but journeys are not yet stored.
+- [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
+- [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
+- [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
+
 ## Explicitly deferred
 
 - Phase 1C durable Codex/OpenAI worker, sandboxing, leasing, budgets, and execution: **Not Connected; do not start.**
 - Phase 1D execution/autonomy beyond the inert observation scaffold: OFF.
 - Phase 2 Anthropic/Claude agents: **Not Connected; do not start.**
 - Auto approval, merge, deployment, and rollback: OFF with no executor.
+- Phase 1E rollback and repair **execution**: deferred behind a provider adapter, the `AUTO_ROLLBACK.md` drills, and an owner-approved migration relaxing the migration-`010` constraint. Phase 1E records the decision; it never performs the action.
 
 ## Phase 2A provider layer integration
 

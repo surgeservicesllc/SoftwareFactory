@@ -27,6 +27,22 @@ Finish the remaining Phase 1B adverse/tenant/rollback observations without distu
 - Generic non-placeholder secret assignments are blocked. Protected approval snapshots are bound to exact reservations and revalidated before the write-scoped GitHub token is minted.
 - A server-verified signed-out hint lets the dashboard skip protected browser fetches; exact production passes the focused browser-error race 30/30 and full Playwright 48/48.
 
+## Phase 1E production operations
+
+The production-operations control plane is implemented in source and in migration `028`. **Migration `028` is not applied to hosted Supabase**, and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown** today.
+
+What it does: monitors production through one bounded HTTPS-probe adapter, derives project health with a stored reason, opens and deduplicates SEV1–SEV4 incidents, freezes autonomous releases automatically on SEV1/SEV2, resolves Last Known Good only from a validated deployment, evaluates rollback fail-closed, diagnoses deterministically, creates bounded repair work, orchestrates ten durable event types idempotently, gates resolution on real restoration evidence, and reports daily.
+
+What it deliberately does not do, and why:
+
+- **No rollback execution.** No deployment provider adapter exists, `policies/AUTO_ROLLBACK.md` disables automatic rollback, and migration `010` pins `auto_rollback` off. Every rollback decision records `EXECUTOR_NOT_CONNECTED`. No database or data migration is ever reversed.
+- **No repair execution.** Phase 1C is Not Connected, so repair work is created and left unassigned.
+- **No deployment, merge, or scheduled monitoring.** Checks are owner-triggered; authorizing a scheduler identity must not widen `service_role`.
+
+Invariants a future change must not break: `service_role` gains no new table privileges; the four append-only evidence tables stay append-only; `production_monitors_enabled_requires_connection` stays in place so an unconnected monitor cannot be enabled; `rollback_operations_failure_escalates` stays in place so a failed rollback cannot be silent; `incidents_resolution_requires_cause` stays in place so a green deployment cannot close an incident; and `EXECUTOR_NOT_CONNECTED` stays unconditional in `autonomous_release_allowed`.
+
+Next Phase 1E steps: apply hosted `028` after reauthenticating the Supabase CLI, configure an owner-authorized monitor target, and record the first real detection-to-resolution journey.
+
 ## Migration boundary
 
 Hosted Supabase is current through `027`; its history matched the repository before the additive `027` promotion:
@@ -48,6 +64,7 @@ Hosted Supabase is current through `027`; its history matched the repository bef
 - `025`: generic secret-assignment detection, protected approval/reservation/token-order integrity, and serialized stable repository relinking.
 - `026`: revoke all `service_role` public-table privileges, then restore only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
 - `027`: hosted; immutable owner RED approval/single-use execution, exact candidate signed-delivery provenance/freshness, cross-App repository serialization, atomic history-preserving project handoff, and evidence-bound reverse handoff.
+- `028`: **not hosted.** Phase 1E production operations: ten RLS/FORCE-RLS tables, additive SEV1–SEV4 incident evidence, owner-scoped operations workflows, append-only evidence triggers, and zero new `service_role` table privileges.
 
 The verified pre-`027` dry run/lint and exact hosted ACL matrix remain recorded: `service_role` had only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19. Migration `027` adds two explicitly RLS/FORCE-RLS evidence tables with narrow owner SELECT and no browser mutation grants; its live owner handoff path passed.
 
@@ -101,3 +118,5 @@ The verified pre-`027` dry run/lint and exact hosted ACL matrix remain recorded:
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [ ] Documentation and scorecard reflect final evidence without claiming Phase 1C.
+- [x] Phase 1E control plane passes lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
+- [ ] Hosted migration `028` is applied and a real production target is observed before any Phase 1E surface claims live monitoring.
