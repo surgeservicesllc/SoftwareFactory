@@ -42,6 +42,42 @@ function isEnvStylePath(path: string) {
   return fileName.startsWith(".env") || fileName.endsWith(".envrc");
 }
 
+/**
+ * Longest slice of a single line handed to a regex, with an overlap wide enough
+ * that a credential straddling a boundary is still matched. Minified bundles
+ * and single-line JSON produce lines long enough that unbounded backtracking
+ * would stall the worker, so the input is bounded rather than the patterns
+ * loosened.
+ */
+const MAX_SCAN_CHUNK = 4_096;
+const CHUNK_OVERLAP = 512;
+
+function* scanSegments(line: string): Generator<string> {
+  if (line.length <= MAX_SCAN_CHUNK) {
+    yield line;
+    return;
+  }
+  for (let start = 0; start < line.length; start += MAX_SCAN_CHUNK - CHUNK_OVERLAP) {
+    yield line.slice(start, start + MAX_SCAN_CHUNK);
+  }
+}
+
+/** True when any segment of a long line matches, without unbounded backtracking. */
+function matchesLine(line: string, test: (segment: string) => boolean): boolean {
+  for (const segment of scanSegments(line)) {
+    if (test(segment)) return true;
+  }
+  return false;
+}
+
+function execLine(line: string, pattern: RegExp): RegExpExecArray | null {
+  for (const segment of scanSegments(line)) {
+    const match = pattern.exec(segment);
+    if (match) return match;
+  }
+  return null;
+}
+
 export function scanContentForSecrets(path: string, content: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
   const lines = content.split(/\r?\n/);
@@ -50,7 +86,7 @@ export function scanContentForSecrets(path: string, content: string): SecretFind
     const line = lines[index];
     const lineNumber = index + 1;
 
-    if (PRIVATE_KEY_BLOCK.test(line)) {
+    if (matchesLine(line, (segment) => PRIVATE_KEY_BLOCK.test(segment))) {
       findings.push({
         path,
         line: lineNumber,
@@ -60,7 +96,7 @@ export function scanContentForSecrets(path: string, content: string): SecretFind
       continue;
     }
 
-    if (containsLikelySecret(line)) {
+    if (matchesLine(line, containsLikelySecret)) {
       findings.push({
         path,
         line: lineNumber,
@@ -71,7 +107,7 @@ export function scanContentForSecrets(path: string, content: string): SecretFind
     }
 
     if (isEnvStylePath(path)) {
-      const envMatch = ENV_ASSIGNMENT.exec(line);
+      const envMatch = execLine(line, ENV_ASSIGNMENT);
       if (envMatch && SECRET_NAME.test(envMatch[1]) && !isPlaceholder(envMatch[2])) {
         findings.push({
           path,
@@ -83,7 +119,7 @@ export function scanContentForSecrets(path: string, content: string): SecretFind
       continue;
     }
 
-    const codeMatch = CODE_ASSIGNMENT.exec(line);
+    const codeMatch = execLine(line, CODE_ASSIGNMENT);
     if (codeMatch && SECRET_NAME.test(codeMatch[1]) && !isPlaceholder(codeMatch[3])) {
       findings.push({
         path,

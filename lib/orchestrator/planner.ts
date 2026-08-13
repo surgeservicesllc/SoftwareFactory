@@ -388,9 +388,14 @@ export function planCommand(context: PlanningContext): CommandPlan {
     ["green", "yellow", "red"] as const
   )[Math.max(requestedRank, detectedRank)];
 
+  // A task's risk is what actually gates execution, so it must carry both the
+  // detected risk and the owner's declared floor. Leaving the floor on the plan
+  // alone would let a YELLOW declaration run as GREEN work.
   const tasks = intent.build(context).map((planned) => {
     const taskRank = { green: 0, yellow: 1, red: 2 }[planned.risk];
-    const raised = (["green", "yellow", "red"] as const)[Math.max(taskRank, detectedRank)];
+    const raised = (["green", "yellow", "red"] as const)[
+      Math.max(taskRank, detectedRank, requestedRank)
+    ];
     return { ...planned, risk: raised };
   });
 
