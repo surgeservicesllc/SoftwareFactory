@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ProjectOperationsPanel } from "@/components/project-operations-panel";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -472,6 +473,8 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
           <Stat label="Open pull requests" value={loading ? "…" : String(openPullRequests.length)} />
           <Stat label="Checks" value={loading ? "…" : checkSummary.label} tone={checkSummary.tone} />
         </dl>
+
+        <ProjectOperationsPanel projectId={project.id} />
       </div>
 
       {!isConnected ? <WarningStrip text="GitHub access was lost. Nothing can be read from this repository until you reconnect." danger /> : null}

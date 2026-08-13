@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260812002700_handoff_github_project_connection.sql";
+  "20260812002800_phase1e_production_operations.sql";
 
 const publicTables = [
   "activity_events",
@@ -21,6 +21,7 @@ const publicTables = [
   "approvals",
   "commands",
   "connections",
+  "deployment_validations",
   "deployments",
   "github_change_requests",
   "github_installations",
@@ -30,14 +31,23 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "incidents",
+  "monitor_observations",
+  "operations_audit_events",
+  "operations_events",
   "organization_members",
   "organizations",
   "policies",
+  "production_diagnoses",
+  "production_monitors",
   "profiles",
   "project_connections",
+  "project_health_snapshots",
   "projects",
   "pull_requests",
+  "release_freezes",
+  "repair_attempts",
   "reports",
+  "rollback_operations",
   "tasks",
   "test_runs",
 ] as const;

@@ -11,6 +11,7 @@ import { expect, test } from "@playwright/test";
  * here, which is exactly the state most visitors meet first.
  */
 const routes = [
+  { path: "/operations", heading: "Operations" },
   { path: "/projects", heading: "Projects" },
   { path: "/files", heading: "Files" },
   { path: "/bot-manager", heading: "Bot Manager" },
