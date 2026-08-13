@@ -123,3 +123,4 @@ The verified pre-`027` dry run/lint and exact hosted ACL matrix remain recorded:
 - [ ] Documentation and scorecard reflect final evidence without claiming Phase 1C.
 - [x] Phase 1E control plane passes lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [ ] Hosted migration `028` is applied and a real production target is observed before any Phase 1E surface claims live monitoring.
+- [x] The control plane is served under `/solutions` and verified live: twelve pages serve both navigation landmarks, every former path returns `308`, and the console stays `noindex` and out of the sitemap. See ADR-041.

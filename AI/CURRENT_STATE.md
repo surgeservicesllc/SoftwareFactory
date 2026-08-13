@@ -20,6 +20,7 @@ Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboardin
 ## Implemented application boundaries
 
 - Next.js 16.3 App Router, React 19.2, TypeScript strict mode, Tailwind CSS 4, server-first Auth/tenant/provider boundaries, and caller-session Supabase RLS reads.
+- The whole control plane is served under `/solutions` from `app/(portal)/`; the former `app/(console)/` group is gone. Twelve routes build there, each rendering the marketing global navigation above the console shell. Permanent redirects cover every former top-level path and its subpaths, and the GitHub return-path allowlist moved with them. `/solutions` is `noindex`, disallowed in `robots.txt`, and absent from the sitemap, which now lists marketing routes only. Each console page carries its own title so a tab no longer reads as the public home page.
 - Supabase sign-up/sign-in/magic-link/sign-out/callback/onboarding, organization membership, and active-organization selection.
 - GitHub App installation start/callback, short-lived repository-ID-scoped installation tokens, bounded repository reads, signed/idempotent/redacted webhooks, transaction-serialized project linking by stable repository UUID, and an isolated branch + commit + draft-PR-only file-change flow.
 - Every interactive GitHub route is bound to the caller's exact active organization. Revoked or insufficient-permission token creation is persisted best-effort as connection loss; rate-limit errors do not falsely revoke the connection.
@@ -128,6 +129,13 @@ Phase 1E adds a production-operations control plane in source and in migration `
 - `tests/integration/phase1e-operations.contract.test.ts` (16 tests) guards same-origin and role checks on every mutation, the execution envelope on every response, absence of any provider deployment call, no new `service_role` table grants, and the preserved Phase 1D interlocks.
 - Released to `main` as merge commit `b243e1ddf9ce8155c4440c56d7b846ccc3d74ce0`. CI run `31731632715` passed both the quality/build job and the browser/accessibility job against that exact commit, and the Vercel Preview for the merged head deployed READY beforehand.
 - This is control-plane evidence against a migrated database. It is **not** live production evidence: migration `028` is unhosted and no real production target has been observed.
+
+## /solutions routing evidence
+
+- Local gates on the routing change: lint, typecheck, `vitest run` (83 files / 824 tests), and a clean production build listing all twelve `/solutions` routes. Playwright passes 117/117 across desktop, tablet, and mobile, with axe on each moved page.
+- Verified against live production: `/solutions` and its eleven children each return `200` and serve both landmarks (`aria-label="Primary"` and `aria-label="Console"`) plus the `--shell-top:73px` offset. Every former top-level path returns `308` to its `/solutions` home, preserving query strings and subpaths.
+- `/solutions/projects` serves `noindex, nofollow`; the marketing home serves no robots meta; `robots.txt` disallows `/solutions`.
+- `tests/integration/console-routing.contract.test.ts` guards the agreement between the route tree, the redirects, and the crawler directives. Its sitemap/robots assertion was mutation-checked: re-adding `/solutions` to the sitemap fails it.
 
 ## Release blockers
 

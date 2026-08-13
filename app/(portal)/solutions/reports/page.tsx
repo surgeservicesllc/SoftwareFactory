@@ -1,6 +1,10 @@
 import { ReportsConsole } from "@/components/reports-console";
 import { PageHeader } from "@/components/ui";
 
+export const metadata = {
+  title: "Reports",
+};
+
 export default function ReportsPage() {
   return (
     <>

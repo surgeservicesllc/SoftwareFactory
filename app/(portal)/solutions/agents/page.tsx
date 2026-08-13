@@ -1,6 +1,10 @@
 import { AgentsConsole } from "@/components/agents-console";
 import { PageHeader, StatusBadge } from "@/components/ui";
 
+export const metadata = {
+  title: "Agents",
+};
+
 export default function AgentsPage() {
   return (
     <>

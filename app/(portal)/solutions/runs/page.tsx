@@ -1,6 +1,10 @@
 import { RunsConsole } from "@/components/runs-console";
 import { PageHeader, StatusBadge } from "@/components/ui";
 
+export const metadata = {
+  title: "Runs",
+};
+
 export default function RunsPage() {
   return (
     <>

@@ -1,6 +1,10 @@
 import { ConnectionsConsole } from "@/components/connections-console";
 import { PageHeader } from "@/components/ui";
 
+export const metadata = {
+  title: "Connections",
+};
+
 export default function ConnectionsPage() {
   return (
     <>

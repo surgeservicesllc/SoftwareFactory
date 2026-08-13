@@ -4,7 +4,6 @@ const MARKETING_ROUTES = [
   { path: "/", priority: 1 },
   { path: "/platform", priority: 0.9 },
   { path: "/features", priority: 0.9 },
-  { path: "/solutions", priority: 0.8 },
   { path: "/pricing", priority: 0.9 },
   { path: "/resources", priority: 0.8 },
   { path: "/about", priority: 0.7 },
@@ -14,7 +13,9 @@ const MARKETING_ROUTES = [
  * Marketing routes only.
  *
  * Console routes are deliberately absent: that route group is `noindex`, and
- * listing authenticated surfaces here would advertise them to crawlers.
+ * listing authenticated surfaces here would advertise them to crawlers. That
+ * now includes `/solutions` itself, which became the control-plane dashboard
+ * rather than a marketing page, so it is disallowed in robots.txt too.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
   const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;

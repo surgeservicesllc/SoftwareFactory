@@ -445,7 +445,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
           </div>
           <div className="flex flex-wrap gap-2 sm:shrink-0">
             {isConnected ? (
-              <Link href={`/files?project=${project.id}`} className="btn btn-primary btn-sm">
+              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-primary btn-sm">
                 <FolderTree className="size-4" aria-hidden="true" />
                 Browse files
               </Link>

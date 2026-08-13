@@ -281,3 +281,10 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: `app/(marketing)/` carries the public header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`, with `robots.ts` disallowing console paths and `sitemap.ts` listing marketing routes only. The former console homepage is now `/solutions`, reached from the main navigation, and each shell owns exactly one skip link.
 - Consequence: The two visual systems and their metadata no longer share a layout. The console's lime palette is not reused on marketing pages; only shared primitives cross the boundary.
+
+## ADR-041 - The control plane is served under /solutions
+
+- Date: 2026-08-13
+- Status: Accepted; supersedes the route-group half of ADR-040
+- Decision: Every control-plane page lives under `/solutions` in `app/(portal)/`, and the `app/(console)/` group is removed. The portal layout renders the marketing global navigation above the console shell, offsetting the shell's fixed sidebar and header by `--shell-top: 73px`; the shell defaults that variable to `0`, so nothing else is affected. Permanent redirects map each former top-level path and its subpaths to the new home, and `lib/github/state.ts`'s return-path allowlist moves with them. The two shells' mobile menu buttons carry distinct accessible names, and the console `nav` is labelled "Console" rather than "Primary", because both landmarks now render on the same page.
+- Consequence: A visitor arriving from the public site keeps that wayfinding inside the console, and existing links, bookmarks, and in-flight provider callbacks continue to resolve. `/solutions` is no longer a marketing page: it is `noindex` by root-layout inheritance, disallowed in `robots.txt`, and absent from `sitemap.ts`. Adding a console page outside `app/(portal)/solutions/`, or re-listing a disallowed path in the sitemap, fails `tests/integration/console-routing.contract.test.ts`.
