@@ -78,7 +78,8 @@ create table public.marketing_pricing_plans (
 create table public.marketing_plan_features (
   id uuid primary key default gen_random_uuid(),
   plan_slug text not null references public.marketing_pricing_plans(slug) on delete cascade,
-  label text not null check (char_length(btrim(label)) between 1 and 80),
+  -- Null for a row that only appears in the comparison matrix, not on the card.
+  label text check (label is null or char_length(btrim(label)) between 1 and 80),
   -- Comparison-matrix cell. Null means the row is card-only.
   matrix_row text check (matrix_row is null or char_length(matrix_row) <= 60),
   matrix_value text check (matrix_value is null or char_length(matrix_value) <= 40),

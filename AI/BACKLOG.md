@@ -37,13 +37,14 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [x] Label seeded content **Demo Data** and read live content from Supabase when the migration is hosted.
 - [x] Add `sitemap.ts` and `robots.ts` that publish marketing routes and disallow console paths.
 - [x] Add unit coverage for marketing types, seed content and queries, plus a migration contract test with seed parity.
+- [x] Add an executable behavioral matrix against in-process PostgreSQL (21/21) covering published-only reads, refused browser writes, unreadable subscribers, and the subscribe function. It caught a real `NOT NULL` defect on `marketing_plan_features.label`, now fixed.
 - [ ] Obtain exact owner approval for hosted migration `20260813000100` and verify published-only reads, the absence of any browser write path, and subscriber-table unreadability against a real anon session.
 - [ ] Replace placeholder leadership headshots and third-party wordmarks with licensed assets.
 - [ ] Add per-page OG images.
 
 ## Phase 1B release blockers
 
-- [x] Pass current-tree lint/typecheck, full Vitest 49 files/413 tests, full-chain RLS behavior 5/5 through migration `019`, and a 46-page production build.
+- [x] Pass current-tree lint/typecheck, full Vitest 50 files/434 tests, full-chain RLS behavior 5/5 through migration `019`, and a 46-page production build.
 - [x] Pass current-tree coverage at 73.18% statements, 70.44% branches, 71.90% functions, and 74.22% lines with required risk/constants thresholds.
 - [x] Pass current-tree Playwright 81/81 across desktop/tablet/mobile including axe checks on every marketing page, the bot fabric, and the console; fix the contrast, definition-list, overflow and keyboard-scroll defects those gates surfaced.
 - [x] Pass source/client secret gates: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.

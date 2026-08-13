@@ -32,6 +32,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `app/(marketing)/` renders the public site with its own header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`. `robots.ts` disallows console paths and `sitemap.ts` lists marketing routes only.
 - Marketing pages are Server Components. `lib/marketing/queries.ts` reads the `marketing_*` schema through the caller's Supabase client, never throws, and reports whether the response came from Supabase or the seeded fallback so the interface can label it.
 - The marketing schema is content, not control plane: published rows are world-readable by explicit `anon` policy, RLS and FORCE RLS remain enabled, nothing grants a browser INSERT/UPDATE/DELETE, and no marketing table references a tenant table.
+- The schema's behavior is verified executably, not only textually: `tests/integration/marketing-rls-behavior.test.ts` applies the migration to in-process PostgreSQL and exercises it as the real `anon` and `authenticated` roles.
 - Newsletter subscription is the only public write. It runs through `subscribe_to_newsletter`, which validates and normalizes the address, is idempotent per email, and returns a constant status so the endpoint cannot enumerate subscribers.
 
 ## Persistence

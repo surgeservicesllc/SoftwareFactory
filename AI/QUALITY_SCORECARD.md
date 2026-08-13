@@ -9,7 +9,7 @@ Reason: local gates pass for the Phase 1B hardening and the new bot fabric contr
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; strict provider schemas/URLs; truthful UI; retry-safe draft-PR flow; lifecycle ordering; local migrations `011`-`019` | Implemented; all current local gates pass; live acceptance pending |
-| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 49 files/413 tests |
+| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 50 files/434 tests |
 | Current-tree coverage | `npm run test:coverage` | Pass - 73.18% statements, 70.44% branches, 71.90% functions, 74.22% lines; `lib/marketing` 97.61% and `lib/bots` 94.35% statements; required risk/constants thresholds pass |
 | Current-tree migration chain | Full-chain RLS behavioral matrix through migration `019` | Pass - 5/5 |
 | Current-tree production build | `npm run build` | Pass - 46 generated pages across the marketing and console route groups |
@@ -20,6 +20,7 @@ Reason: local gates pass for the Phase 1B hardening and the new bot fabric contr
 | Local migrations `011`-`019` | Authorization/grants, audit, reconciliation, metadata propagation, recovery, lifecycle ordering, reservation, CHECK-helper grant | Local only; exact owner approval/application/post-apply verification pending |
 | Local migration `20260813000100` | Marketing content schema: RLS/FORCE RLS, published-only `anon` SELECT, no browser write path, no tenant reference, validating subscribe function | Local only; exact owner approval/application/post-apply verification pending |
 | Marketing content provenance | Pages report `source`; seeded copy renders a **Demo Data** notice | Pass in current local tests |
+| Marketing schema behavior | In-process PostgreSQL matrix as real `anon`/`authenticated` roles | Pass - 21/21: published-only reads, no browser write path on any content table, subscribers unreadable, subscribe function normalizes/idempotent/validating |
 | Local migrations `020`-`021` | Bot fabric audit labels; bots/roles/assignments with RLS/FORCE RLS, select-only grants, audited definer mutations, credential-reference and HTTPS constraints, one open posting per bot | Local only; exact owner approval/application/post-apply verification pending |
 | Bot credential boundary | Reference names only, allowlist plus control-plane denylist in application and table CHECK; presence resolved server-side to a boolean | Pass in current local tests; no credential value is stored, returned, or logged |
 | Bot execution | No worker binds to bots, roles, or assignments | **Not Connected** - readiness is configuration evidence only |
