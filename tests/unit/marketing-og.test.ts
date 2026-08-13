@@ -15,6 +15,12 @@ const { MARKETING_PAGES } = await import("@/lib/marketing/content");
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const marketingRoot = resolve(repositoryRoot, "app/(marketing)");
 
+/**
+ * `solutions` has a content row but no page in this route group: it resolves to
+ * the authenticated console dashboard, which is `noindex` and needs no card.
+ */
+const CONSOLE_OWNED_SLUGS = new Set(["solutions"]);
+
 /** Every marketing route directory, plus the group root for `/`. */
 function routeDirectories(): { dir: string; slug: string }[] {
   const nested = readdirSync(marketingRoot, { withFileTypes: true })
@@ -104,7 +110,8 @@ describe("marketing route wiring", () => {
   const routes = routeDirectories();
 
   it("gives every marketing route both an Open Graph and a Twitter card", () => {
-    expect(routes.length).toBe(MARKETING_PAGES.length);
+    const publicPages = MARKETING_PAGES.filter((page) => !CONSOLE_OWNED_SLUGS.has(page.slug));
+    expect(routes.length).toBe(publicPages.length);
 
     for (const { dir, slug } of routes) {
       const files = readdirSync(dir);
