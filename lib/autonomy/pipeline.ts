@@ -3,6 +3,7 @@ import { evaluateApproval, type ApprovalResult } from "@/lib/autonomy/approval";
 import type { AutomaticAction, EffectiveAutonomyControls } from "@/lib/autonomy/controls";
 import { reclassifyAgainstDeclared, type DiffFile, type DiffRiskAssessment } from "@/lib/autonomy/diff-risk";
 import { evaluateGates, type GateEvaluation, type GateResult } from "@/lib/autonomy/gates";
+import { evaluateMergeReadiness, type MergeReadinessRequest } from "@/lib/autonomy/merge-readiness";
 import type { RiskLevel } from "@/lib/risk";
 
 /**
@@ -90,6 +91,11 @@ export interface PipelineInput {
    * 1C worker, and only that run blocks here.
    */
   readonly codeAuthoredBy?: "human" | "worker";
+  /**
+   * The last-moment revalidation inputs, read at merge time rather than when
+   * the change was gated. Omitted when the run is not attempting a merge.
+   */
+  readonly mergeReadiness?: Omit<MergeReadinessRequest, "approved" | "executorConnected">;
 }
 
 export interface PipelineRun {
@@ -233,12 +239,30 @@ function evaluateStage(stage: PipelineStage, context: StageContext): StageOutcom
         ? satisfied(stage, "Approved automatically.")
         : blocked(stage, approval.decision, approval.reason);
 
-    case "merge":
+    case "merge": {
+      // Revalidate against the current head before anything is attempted: an
+      // approval and a test run both describe the commit they were made
+      // against, not whatever is on the branch now.
+      if (input.mergeReadiness) {
+        const readiness = evaluateMergeReadiness({
+          ...input.mergeReadiness,
+          approved: approval.decision === "APPROVED_AUTOMATICALLY",
+          executorConnected: false,
+        });
+        // Never ready in this tree, but report what else was wrong first — a
+        // stale approval or a conflict matters even once an executor exists.
+        const first = readiness.blockers.find(
+          (blocker) => blocker !== "MERGE_EXECUTOR_NOT_CONNECTED",
+        );
+        if (first) return blocked(stage, first, readiness.reason);
+      }
+
       return blocked(
         stage,
         UNEXECUTABLE_STAGES.merge,
         "No merge executor exists; introducing one is out of scope for this phase.",
       );
+    }
 
     case "deploy":
       return blocked(
