@@ -345,7 +345,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
       <div className="grid divide-y divide-[#202b38] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
         <InspectorSection title="Branches" icon={GitBranch} empty="No branch data available.">
           {data.branches.slice(0, 6).map((item) => (
-            <div key={item.name} className="flex items-center gap-2 py-2 text-[10px]"><GitBranch className="size-3.5 shrink-0 text-[#71802c]" /><span className="min-w-0 flex-1 truncate font-mono text-[#aeb8c3]">{item.name}</span>{item.name === project.defaultBranch ? <StatusBadge tone="info" dot={false}>Default</StatusBadge> : null}{item.protected ? <StatusBadge tone="safe" dot={false}>Protected</StatusBadge> : null}<span className="font-mono text-[#536070]">{shortSha(item.sha)}</span></div>
+            <div key={item.name} className="flex items-center gap-2 py-2 text-[10px]"><GitBranch className="size-3.5 shrink-0 text-[#71802c]" /><span className="min-w-0 flex-1 truncate font-mono text-[#aeb8c3]">{item.name}</span>{item.name === project.defaultBranch ? <StatusBadge tone="info" dot={false}>Default</StatusBadge> : null}{item.protected ? <StatusBadge tone="safe" dot={false}>Protected</StatusBadge> : null}<span className="font-mono text-[#8592a3]">{shortSha(item.sha)}</span></div>
           ))}
         </InspectorSection>
         <InspectorSection title="Recent commits" icon={GitCommitHorizontal} empty="No commit data available.">
@@ -362,7 +362,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
 
       <div className="border-t border-[#202b38] bg-[#0a0f16] p-4">
         <div className="flex items-center gap-2"><CircleDotDashed className="size-4 text-[#7d8a99]" aria-hidden="true" /><h3 className="text-[11px] font-semibold text-[#c9d0d8]">GitHub Actions / checks</h3></div>
-        {data.checkRuns.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}</div> : <p className="mt-2 text-[10px] text-[#657283]">{loading ? "Loading live check data…" : "No check data available."}</p>}
+        {data.checkRuns.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}</div> : <p className="mt-2 text-[10px] text-[#8592a3]">{loading ? "Loading live check data…" : "No check data available."}</p>}
       </div>
     </Panel>
   );

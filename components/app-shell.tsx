@@ -26,7 +26,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
 const navigation = [
-  { label: "Dashboard", href: "/", icon: CircleGauge },
+  { label: "Dashboard", href: "/solutions", icon: CircleGauge },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Bot Manager", href: "/bot-manager", icon: Bot },
   { label: "Files", href: "/files", icon: FileText },
@@ -68,7 +68,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav aria-label="Primary" className="mt-8 flex-1 space-y-1">
       {navigation.map(({ label, href, icon: Icon }) => {
-        const isActive = href === "/" ? pathname === href : pathname.startsWith(href);
+        const isActive = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}

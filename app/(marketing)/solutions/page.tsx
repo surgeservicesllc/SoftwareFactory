@@ -17,17 +17,29 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import type { Metadata } from "next";
+
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
+import {
+  Eyebrow,
+  GradientText,
+  MarketingSection,
+  SecondaryCta,
+} from "@/components/marketing/primitives";
 import {
   DemoBadge,
   DemoNotice,
   MetricCard,
-  PageHeader,
   Panel,
   SectionTitle,
   StatusBadge,
 } from "@/components/ui";
 import { dashboardMetrics, demoActivity, demoReport } from "@/lib/demo-data";
+import { getMarketingContent, getMarketingMetadata } from "@/lib/marketing/queries";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return getMarketingMetadata("solutions");
+}
 
 const metricIcons = [
   Projector,
@@ -45,20 +57,29 @@ const metricIcons = [
 
 const illustrativeMetrics = dashboardMetrics.filter((metric) => metric.label !== "Connected projects");
 
-export default function DashboardPage() {
+export default async function SolutionsPage() {
+  const { page } = await getMarketingContent("solutions");
+
   return (
-    <>
-      <PageHeader
-        eyebrow="Executive overview / Phase 1B"
-        title="Factory command center"
-        description="A truthful operating view of connected projects, GitHub pull requests, safety posture, and illustrative foundations that are still awaiting live providers."
-        action={
-          <div className="flex items-center gap-2">
-            <StatusBadge tone="safe">Foundation healthy</StatusBadge>
-            <DemoBadge />
-          </div>
-        }
-      />
+    <MarketingSection className="pt-10 sm:pt-14">
+      <header className="mb-8 flex flex-col gap-5 border-b border-[#1b2430] pb-8 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
+          {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
+          <h1 className="mt-5 text-balance text-[34px] font-bold leading-[1.06] tracking-[-0.04em] text-white sm:text-[46px]">
+            {page?.headline ?? "See the factory"}{" "}
+            <GradientText>{page?.headlineAccent ?? "in operation."}</GradientText>
+          </h1>
+          <p className="mt-5 text-[15px] leading-7 text-[#8593a5]">
+            {page?.subheadline ??
+              "A truthful operating view of connected projects, delivery controls and engineering intelligence."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge tone="safe">Foundation healthy</StatusBadge>
+          <DemoBadge />
+          <SecondaryCta href="/sign-in?next=/projects">Open the console</SecondaryCta>
+        </div>
+      </header>
 
       <LiveDashboardMetrics />
 
@@ -136,7 +157,7 @@ export default function DashboardPage() {
       <section className="mt-6" aria-labelledby="metrics-title">
         <div className="mb-3 flex items-center justify-between">
           <h2 id="metrics-title" className="eyebrow">Operating metrics</h2>
-          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#536070]">Illustrative 30-day view</span>
+          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#8592a3]">Illustrative 30-day view</span>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {illustrativeMetrics.map((metric, index) => (
@@ -232,6 +253,6 @@ export default function DashboardPage() {
         Production actions remain disabled. This foundation records intent and policy state; it does not operate external systems.
         <PackageCheck className="ml-auto hidden size-4 text-[#44505f] sm:block" aria-hidden="true" />
       </div>
-    </>
+    </MarketingSection>
   );
 }

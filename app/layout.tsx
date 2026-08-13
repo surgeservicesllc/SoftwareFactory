@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 
-import { AppShell } from "@/components/app-shell";
-
 import "./globals.css";
 
 const vercelHost =
@@ -56,7 +54,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <AppShell>{children}</AppShell>
+        {children}
       </body>
     </html>
   );
