@@ -2,80 +2,108 @@
 
 ## Trust boundaries
 
-The browser is untrusted. Next.js server code authenticates and authorizes. Supabase RLS independently restricts tenant data. GitHub responses, webhooks, repository content, Vercel state, and future model output remain external/untrusted even when cryptographically authenticated.
+The browser is untrusted. Next.js authenticates and authorizes command intent. Supabase RLS independently restricts tenant data. GitHub responses, webhook payloads, repository files, dispatch events, Codex/model output, validation output, and Vercel/GitHub status are external or untrusted even when authenticated.
+
+Phase 1C adds a distinct trusted worker boundary. A dispatch event is never authority: the worker must claim one durable eligible run with service-role-only RPCs and an exact lease token, then revalidate repository identity, base SHA, cancellation, budgets, and policy before each material stage.
 
 ## Authentication and tenant authorization
 
-- Supabase Auth sessions are resolved server-side and refreshed through the narrow proxy boundary.
-- Sensitive routes require an authenticated user and active organization membership; interactive GitHub routes reject an organization, connection, installation, or repository outside that exact active organization.
-- Installation/sync/disconnect/project creation/file changes require owner/admin where appropriate. Project creation serializes on the stable tenant/repository UUID and permits relinking only after every prior project for that repository is archived.
-- Protected-file changes require the active organization owner specifically and an exact, current RED approval; an administrator cannot approve them.
-- Repository calls verify the connection, installation, selected repository, and tenant before minting a token.
-- Project/change authorization follows the immutable tenant-scoped repository UUID stored on the project connection, not a mutable repository name.
-- Hidden/disabled UI controls are never authorization.
-- RLS and FORCE RLS protect exposed tables; service-role operations require independent checks.
-- Agents, commands, tasks, runs, and reports are exposed through bounded caller-member safe-projection RPCs; authenticated sessions have no direct SELECT on those sensitive base tables. Command writes also require same-origin requests.
+- Supabase Auth sessions resolve server-side with an active organization.
+- Command submission requires same origin, authenticated organization ownership, and a live connected project.
+- Repository identity comes from the project connection's immutable GitHub repository UUID plus persisted installation/App IDs; a mutable name is display metadata.
+- The server fetches the current default-branch SHA before persistence. The worker verifies the same SHA from GitHub before checkout.
+- Member-facing agent/task/run/report/status functions require organization membership and return bounded allowlisted fields.
+- Run cancel/retry requires owner/admin, exact run/organization checks, bounded reasons, and eligible retry state.
+- Worker table access is denied to browser sessions; privileged worker functions are service-role only.
+- Hidden controls and request JSON never confer authority.
 
-## GitHub authentication
+## Risk and orchestration integrity
 
-- Installation start uses HMAC-signed, ten-minute state plus an HttpOnly nonce cookie tied to user, organization, App slot, and App ID.
-- Callback selects the configured App from the untrusted routing hint, verifies the complete state with that App's distinct secret, requires the signed App ID to match configuration, exchanges the one-time OAuth code, verifies user access and exact App identity, and never persists/returns the user token.
-- App JWTs use the server-only private key and a bounded lifetime.
-- Installation tokens are short-lived, repository-ID-scoped, and permission-reduced for each operation.
-- Provider responses are size bounded and schema validated; redirects and API origins are allowlisted.
+The server computes the highest of requested risk, command-type floor, and protected prompt/acceptance-criteria signals. Phase 1C migrations `130007`-`130011` independently recompute the floor, restrict keys/payload/dependencies, reject likely secrets, require ownership, and reject any provider/model/role/budget/workflow outside the fixed plan. Direct PostgREST callers cannot downgrade or widen a run, cross tenant/project dependency boundaries, or reset total retry budgets.
 
-## Webhook security
+Only manual GREEN/YELLOW commands become claimable. RED commands/tasks are forced back to blocked/awaiting approval and excluded from claim. An owner approval cannot turn RED into Phase 1C execution authority.
 
-- Read raw bytes before JSON parsing and cap them at 2 MiB.
-- Verify `X-Hub-Signature-256` with the server-only secret using constant-time comparison.
-- In the pre-release dual-App boundary, identify the signing App from its isolated secret and reject a delivery when that App ID differs from the persisted installation App ID.
-- Validate GitHub delivery/event headers and an allowlisted payload shape.
-- Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
-- Store only a redacted subset plus hash/status metadata. Authenticated clients cannot directly read webhook-delivery or raw Activity rows; `list_activity` may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence, never the stored subset or unknown nested fields.
-- Unknown events/installations are ignored safely and cannot mutate another tenant.
-- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`027` are hosted; live candidate handoff evidence passes.
+## Worker lease security
 
-## Repository mutations
+- Workers register a bounded ID/version/capability projection and refresh a heartbeat.
+- A claim sets worker ID, lease UUID, expiry, attempt number, and running state atomically and prevents a second active lease for the same neutral logical agent.
+- Every heartbeat/event/validation/artifact/completion call rechecks the exact worker/lease/run tuple.
+- Cancellation is durable and checked by heartbeat/abort paths.
+- Retry is explicit, owner/admin scoped, allowed only for retryable failed attempts below the maximum, and creates audit evidence.
+- Stale lease recovery is database controlled. Exhausted stale leases terminalize as failed/cancelled with activity/report evidence; arbitrary reassignment or duplicate terminal completion fails closed.
+- Worker heartbeat status is time-derived. A one-shot worker started by approved default-branch repository dispatch or schedule registers active while running and records `idle` on clean exit; a fresh idle heartbeat is briefly Available/Connected, then becomes stale/**Not Connected** after the bounded threshold. That no-work observation cannot prove live execution, and branch-selectable manual workflow dispatch is absent.
 
-- Validate coordinates, refs, path, size, UTF-8 content, project/repository-UUID mapping, and synchronized default branch. Repository names are display/freshness metadata, not authorization keys.
-- Reject credential-like content, including opaque non-placeholder values assigned to generic secret-bearing keys such as `PASSWORD`, `CLIENT_SECRET`, or `PRIVATE_KEY_BASE64`. For repository memory/policies, Supabase, application APIs, server-side provider/data libraries, Auth/session boundaries, deployment/environment/infrastructure files, and other protected paths, require the active owner to provide the exact path-bound RED confirmation, bounded rationale, and rollback plan.
-- Reserve an idempotency record through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository binding before provider writes. An unchanged browser save intent reuses its idempotency key.
-- Persist immutable requester/approver/executor, path, content digest, expected blob SHA, base branch, rationale, rollback, decision, and expiry evidence before a protected provider write. A trigger and the provider-entry RPC revalidate that snapshot against the exact reservation. Approval expires within 15 minutes.
-- Give each reservation a five-minute lease. Reclaim is allowed only for the original requester and exact intent before provider execution/evidence; persist and revalidate entry into the provider boundary before minting a write-scoped installation token so a started execution cannot be reclaimed or bypass approval ordering.
-- Create a new `softwarefactory/*` branch, update with the expected blob SHA, and require GitHub to return an open draft PR.
-- Never write directly to the default branch, merge, modify workflows, or deploy.
-- Record completed/failed mutation evidence without file content or secrets. If the branch, commit, and draft PR exist at GitHub but database completion was ambiguous, a server-only recovery RPC records that same provider evidence instead of initiating a duplicate change.
-- No HTTP local-repository writer or local-write environment switch remains as an alternate mutation path.
+## Codex execution security
 
-## Secrets
+- The supported `@openai/codex-sdk` receives the OpenAI key server-side only.
+- Codex has an isolated `CODEX_HOME`, controlled process environment, one repository work directory, workspace-write sandbox, approval `never`, workspace network disabled, and web search disabled.
+- Prompt content contains only bounded command, criteria, logical role, risk, and non-secret repository/base-SHA identity. It explicitly forbids credential access, provider actions, push/PR/merge/deploy, `.git` changes, and network enabling.
+- Turns, input/output tokens, wall time, retries, and persisted event/output sizes are bounded.
+- Agent reasoning/messages are not blindly stored. Only a small allowlisted event projection and final bounded redacted summary/usage are persisted.
 
-Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_`. Primary and candidate App private keys, GitHub client/state/webhook secrets, OAuth/installation tokens, Supabase service role, DB credentials, and future provider keys stay in environment-scoped secret storage. Candidate configuration is absent-or-complete and cannot reuse primary cryptographic material. Database connection rows hold only non-secret metadata/opaque references.
+## Workspace and process security
 
-## Audit and privacy
+- Work root cannot be filesystem root, home, or repository root. A run marker binds run, repository, base SHA, and branch.
+- Git uses explicit commands with `shell: false`, disabled terminal prompting, time/output caps, and per-command credential injection/redaction.
+- The remote URL, current branch, fetched SHA, remote existing branch, and ancestry are verified before recovery.
+- Branches match `factory/<run-uuid>-<slug>` and are never the default branch.
+- Dependency bootstrap uses the exact pinned Node digest, bridge network only for `npm ci`, and `--ignore-scripts`.
+- Deterministic validation uses network none, read-only root, dropped capabilities, no-new-privileges, PID/CPU/memory caps, a noexec temporary filesystem, controlled environment, and bounded output.
 
-Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Migrations `012`, `014`-`016`, `018`, and `022`-`024` are hosted; webhook payloads and change records deliberately avoid raw credentials and full file bodies.
+## Repository mutation security
 
-Hosted migrations `011` and `017` remove direct authenticated writes so narrow audited workflows remain the intended mutation path.
+The changed-file scanner:
 
-Hosted migration `019` exposes only the SECURITY DEFINER sensitive-JSON wrapper required by provider-ingress CHECK expressions; recursive/text classifiers remain inaccessible. Hosted migration `026` closes the separately discovered default-ACL table-grant drift.
+- normalizes paths and rejects absolute/traversing/`.git`/credential/key-container paths;
+- rejects symlinks and binary/non-UTF-8 files;
+- rejects likely secret assignments/content;
+- caps at 200 files, 2 MiB per file, and 10 MiB aggregate changed content; and
+- requires a current exact approval naming every protected path. RED remains blocked earlier regardless of approval.
 
-Migrations `020`-`027` are hosted. The pre-`027` matched-history/lint/catalog/browser-grant/ACL evidence passes; `027` adds immutable owner approval/execution and atomically preserved project/history during the live candidate handoff after exact signed-delivery proof. Candidate callback/sync/webhook/read/draft-write acceptance passes. Cross-tenant, anonymous, reverse-handoff, disconnect/loss, and remaining adverse behavior remain pending.
+After validation/scan, the worker commits with `surgeservicesllc <surgeservicesllc@gmail.com>`, mints a repository-ID-scoped App token, pushes only the factory branch, and creates or recovers only an open draft PR. Artifact persistence requires one coherent branch/commit pair and at most one exactly matching draft PR; exact replay is accepted, while partial/conflicting project/repository/run/base/head/URL/number evidence is rejected. Recovery revalidates remote branch SHA and PR identity.
 
-## Supply chain and delivery
+CI is observed against the exact head SHA. `SOFTWAREFACTORY_REQUIRED_CHECKS` must contain 1-20 unique pipe-delimited exact names; the reviewed value is `Lint, typecheck, test, and build|Browser and accessibility tests`. The publisher requires the complete returned check set, every observed check terminal and acceptable, each required name present with exact `success`, the identical passing fingerprint twice, and a final exact PR number/base/head recheck. It cannot approve, merge, write the default branch, modify workflows/branch protection/secrets/settings, deploy, or rollback.
 
-- Use the committed lockfile and `npm ci`.
-- CI has read-only repository access and no provider/deployment credentials.
-- Review dependencies, workflows, migrations, Auth/RLS, and provider-permission changes as protected work.
-- Never run untrusted pull-request code with protected secrets.
-- Auto approve/merge/deploy/rollback remain OFF.
-- The Phase 1D global kill switch is ON, the observation ceiling is GREEN, and the execution worker is **Not Connected**. A `WOULD_BE_ELIGIBLE` observation is never an execution grant.
-- Global CSP/security headers deny framing and objects, restrict connections/images/forms/scripts/styles to required sources, and disable camera/microphone/geolocation/payment capabilities. Repository Markdown previews do not fetch external images.
+## Database and audit security
+
+- The owner-approved production ledger repair and forward chain are complete through `130014`: `130006` adds decision-only Phase 1D controls; `130007` adds provider compatibility; `130008` commits Phase 1C enums before `130009` execution; `130010` hardens roster/recovery/reporting; `130011` adds dependencies plus cumulative retry budgets; and `130012`-`130014` are forward-only lint and emergency-stop repairs. Local `130015` restores two model checks from 120 to 128, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded run-detail routing evidence, revokes authenticated raw routing-decision/event SELECT, and retains tenant-scoped model-configuration SELECT; it is unhosted and needs fresh exact RED approval.
+- `130010` provisions an idempotent logical roster (Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, CEO Reporter) without overwriting user-created agents or explicit provider assignments. Provider-account identity remains separate, and general Phase 1C work maps to Orchestrator.
+- New tables use RLS/FORCE RLS, foreign keys, constraints, indexes, explicit policies, and revoked direct grants.
+- Service role reaches execution tables only through reviewed SECURITY DEFINER functions with pinned search paths and exact lease/resource validation.
+- Command/task/run details reach members through bounded JSON projections, not broad base-table grants.
+- Run events, artifacts, and validations are append-only; outputs/details reject secret-like content and have strict size/shape limits.
+- Material transitions append immutable Activity events. Success, failure, cancellation, queued cancellation, and exhausted stale leases create bounded structured reports; report PR links come from authoritative projections, and cancellation wins at the terminal safe boundary.
+
+## Secret storage and workflow supply chain
+
+Vercel retains Next.js/GitHub integration secrets. The worker uses protected GitHub Actions repository secrets. GitHub forbids Actions secret names beginning `GITHUB_`, so the reviewed names are:
+
+- `SOFTWAREFACTORY_SUPABASE_URL`
+- `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`
+- `SOFTWAREFACTORY_OPENAI_API_KEY`
+- `SOFTWAREFACTORY_GITHUB_APP_ID`
+- `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`
+- `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`
+- `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`
+
+The workflow maps them only for the worker step. Checkout uses `persist-credentials: false`; the workflow token has contents read; locked dependencies install before secrets are present; the exact validation image is preloaded before the secret-bearing step. Untrusted PR code must never receive these secrets.
+
+Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal literal `true` before the job runs. Missing/false skips repository-dispatch and schedule triggers; branch-selectable manual workflow dispatch is intentionally absent. Keep the variable absent/false through migration/secret setup, publication, normal CI, and matching Vercel verification. This variable is not a credential, but enabling it activates a protected secret-bearing provider workflow and therefore requires exact owner RED approval for a bounded window; return it to absent/false afterward unless continued operation is separately approved.
+
+## Current evidence boundary
+
+Production migration history and schema are reconciled through `130014`, linked lint passed, Phase 1D remains execution-inert with every action OFF and the kill switch ON, and the Phase 1C workflow is published. The frozen routing/UI candidate passes its local final-candidate gates, while publication, CI/Vercel evidence, exact approval for local `130015`, and hosted verification remain pending. Six non-OpenAI worker secrets remain configured while the OpenAI secret and activation variable are absent. A bounded live worker attempt proved registration, heartbeat, claim, and provider-thread persistence but failed before any changed file, factory branch, commit, draft PR, or exact-head CI because the provider project had no remaining credits. The subsequent no-claim diagnostic identified `credit_balance_exhausted`. Provider execution therefore remains **Not Connected** until a funded replacement credential passes the diagnostic and a new current-base GREEN command completes.
+
+## Autonomous and delivery boundary
+
+Hosted migration `010` still locks the global kill switch ON and Autonomous Mode/auto approve/merge/deploy/rollback OFF. Manual Phase 1C is one owner-submitted run, not a closed autonomous loop. No Phase 1C component may change its own guardrails.
 
 ## Incident response
 
-1. Activate the relevant kill/containment path and preserve redacted evidence.
-2. Revoke/rotate possibly exposed credentials at GitHub, Supabase, or Vercel.
-3. Suspend/disconnect affected installations/projects without deleting audit history.
-4. Notify the owner and record the incident.
-5. Recover through a verified plan; never assume rollback is safe.
-6. Reverify tenant isolation, provider permissions, webhook signatures, and production behavior before reconnecting.
+1. Stop/disable the workflow and preserve bounded redacted evidence.
+2. Cancel or let leases expire; do not force a terminal success.
+3. Revoke/rotate any potentially exposed OpenAI, Supabase, or GitHub credential at its provider.
+4. Close an unsafe draft PR and contain its isolated branch without altering audit evidence.
+5. Notify the owner and record the incident/containment.
+6. Verify repository default branch, provider settings, hosted schema, tenant isolation, secret boundary, and logs.
+7. Resume only after a reviewed recovery plan and fresh exact approval where protected resources are involved.

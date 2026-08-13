@@ -55,7 +55,7 @@ export interface AutonomyEnvelope {
   readonly emergencyStopActive: boolean;
   /** An active release freeze on the project, automatic on SEV1/SEV2. */
   readonly releaseFrozen: boolean;
-  /** True only once a real execution worker is bound. Phase 1C is not started. */
+  /** True only once an autonomous worker is separately bound; manual Phase 1C does not satisfy this. */
   readonly executorConnected: boolean;
 }
 

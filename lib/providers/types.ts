@@ -93,11 +93,13 @@ export function isReviewTaskKind(taskKind: ProviderTaskKind): boolean {
 export const AGENT_ROLES = [
   "orchestrator",
   "product",
+  "architect",
   "frontend",
   "backend",
   "database",
   "qa",
   "security",
+  "performance",
   "release",
   "ceo_reporter",
   "custom",

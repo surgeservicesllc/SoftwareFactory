@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, NotConnectedBadge, StatusBadge } from "@/components/ui";
+import { WorkerStatusBadge } from "@/components/worker-status";
 
 type Organization = { id: string; name: string; slug: string; role: string };
 type Repository = {
@@ -64,7 +65,6 @@ type HandoffIntent = {
 type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
 
 const otherProviders = [
-  { name: "OpenAI model adapter", connected: false },
   { name: "Anthropic model adapter", connected: false },
   { name: "Vercel deployment adapter", connected: false },
   { name: "Supabase control plane", connected: true },
@@ -630,6 +630,10 @@ export function ConnectionsConsole() {
       <Card className="p-5">
         <p className="label">Other providers</p>
         <ul className="mt-3 flex flex-wrap gap-2">
+          <li className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
+            <span className="text-sm font-medium text-foreground">OpenAI Codex worker</span>
+            <WorkerStatusBadge />
+          </li>
           {otherProviders.map(({ name, connected }) => (
             <li key={name} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
               <span className="text-sm font-medium text-foreground">{name}</span>

@@ -1,55 +1,63 @@
 # Roadmap
 
-Roadmap order follows safety dependencies. A later phase cannot inherit authority from an earlier phase.
+Roadmap order follows safety dependencies. A later phase never inherits authority implicitly.
 
 ## Phase 1A - trustworthy control-plane foundation
 
-Status: **Complete baseline; deployed UI evidence retained.**
+Status: **Complete baseline; deployed evidence retained.**
 
-- Responsive shell, truthful **Demo Data**/**Not Connected** states, tenant model, Supabase/RLS/audit foundations, risk/approval controls, CI, and safe OFF defaults.
-- No unrestricted production execution, merge, deployment, or rollback.
+Tenant/auth foundations, RLS/audit, truthful Demo Data/Not Connected language, risk controls, responsive shell, and safe OFF defaults exist. No unrestricted production authority was granted.
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **Hosted migration `027`, the deployed dual-App release, candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, a post-sync processed candidate-signed delivery, and the atomic handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f` are live. Candidate-backed read and draft-only PR `#8` write acceptance passed; the PR stayed draft, passed CI/Preview, was closed unmerged, and its branch was deleted. Primary installation `153445938` remains active as rollback. Phase 1B remains incomplete for the live second-tenant and remaining adverse lifecycle/disconnect/reverse-observation matrix.**
+Status: **Connected for the owner repository path; remaining acceptance gaps keep the phase incomplete.**
 
-Implemented in source:
+Candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, project `b1f23696-437e-4d89-b55f-d7a949980e8f`, signed webhook evidence, repository reads, and draft-only write acceptance pass for exactly `surgeservicesllc/SoftwareFactory`. Primary installation `153445938` remains rollback while Support `#4660724` tracks its webhook defect.
 
-- Supabase Auth/onboarding/active organization and caller-RLS tenant surfaces.
-- GitHub App installation/callback/token/sync/disconnect boundaries and bounded repository reads.
-- Signed/idempotent/redacted webhook ingress, provider-time lifecycle ordering, and terminal deletion safeguards.
-- Transactional project linking and provider-authoritative repository/default-branch propagation by immutable repository UUID.
-- Bounded caller-member list RPC projections, raw Activity/webhook direct-read closure, same-origin command creation, allowlisted activity details, restrictive browser CSP, installation-ID/repository-selection visibility, and live Projects metadata/check visibility including stable repository-ID matching, detail-fetched PR mergeability, and per-PR head-SHA checks.
-- Controlled branch + commit + draft-PR file changes with stable same-intent idempotency, exact-binding reservation, terminal audit evidence, provider-evidence completion recovery, and generic secret-assignment detection. Protected-file changes require an exact, short-lived, owner-only RED approval revalidated before write-token minting; merge/default-branch/deploy authority remains absent.
-- Commit-attribution hardening requires one strictly validated server-only deployment identity, sends it as both author and committer, and has no App-bot fallback. Production/Preview configuration and ordinary/protected live draft attribution are verified.
-- Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
-- Hosted forward migrations `011`-`026`, including the verified `service_role` table-grant remediation.
-- Deployed dual-App configuration/state/token/webhook isolation and hosted owner-only atomic reversible handoff migration `027`; live callback/sync/webhook/handoff/read/draft-write acceptance now passes for the candidate owner path.
-
-Verified application-release evidence recorded 2026-08-13: commit `799d2cea189b6860a03987ae75c25765f9ac4aca` (tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`), green CI run `31716263910`, and READY Vercel deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and the stable production alias. Later documentation-only successors do not invalidate this runtime evidence unless application code changes.
-
-Remaining exit work:
-
-1. Observe the rollback window and execute the evidence-bound reverse-handoff check before retiring any primary access.
-2. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real caller sessions. Only one actual user/email is currently authorized, so local behavioral tests do not replace this live matrix.
-3. Exercise the remaining live failure/disconnect cases, including stale SHA, role/approval expiry, revoked/insufficient permission, rate limit, provider ordering, terminal deletion/restore, idempotent recovery, and preserved history.
-
-No merge or production deployment autonomy is implied. The candidate repository connection and webhook are live for the owner path; the primary webhook remains impaired, Phase 1C and Phase 2 remain **Not Connected**, and every automatic action remains OFF.
+Remaining: live second-tenant/anonymous/RPC coverage, reverse handoff, disconnect/loss, and the remaining provider adverse/recovery/lifecycle matrix.
 
 ## Phase 1C - Codex execution
 
-Status: **Not Connected; not started.**
+Status: **Published and hosted, but OpenAI/Codex remains Not Connected because the provider project has exhausted credits and no successful draft-PR journey exists.**
 
-- Future durable provider-neutral worker, leases/heartbeat/cancellation/idempotency, isolated workspaces, budgets/timeouts, sandbox/network controls, redacted traces, and bounded human-reviewed work.
-- Do not begin until Phase 1B exits and the owner explicitly authorizes the phase.
+Implemented and published:
+
+- authenticated connected-project command composer with type, acceptance criteria, deterministic risk, stable idempotency, exact base-SHA binding, and delayed-dispatch truth;
+- fixed provider/model/role/budget/workflow planning with an independent SQL enforcement boundary;
+- durable command/task/run/dependency, worker heartbeat, lease, cumulative retry-budget, cancellation, event, artifact, validation, report, and activity persistence;
+- an idempotent provider-neutral eleven-role roster for every organization, with provider/model retained only as run metadata;
+- supported `@openai/codex-sdk` adapter with bounded turns/tokens, isolated configuration, workspace-write sandbox, network/web search disabled, and redacted events;
+- exact-repository Git workspace, pinned-container validation, secret/protected-path policy scanning, isolated `factory/*` commit/push, draft-PR-only publication, exact-head CI observation, and one bounded repair;
+- safe list/detail/status APIs and real-data dashboard, Bot Manager, Backlog, Agents, Runs, and Reports views; and
+- reviewed GitHub Actions one-shot worker with opaque default-branch repository dispatch plus scheduled recovery and no branch-selectable manual trigger;
+- coherent branch/commit/draft-PR recovery, stale-lease terminalization, structured success/failure/cancellation reports, owner-only command submission, and an exact required-CI-check allowlist; and
+- prior verified production baseline before this update green on bundled Node `24.19.0`: lint/typecheck, 117 files/1,282 tests, build with 74 page/route entries, Playwright/axe 117/117, focused migration/security suites, production dependency audit 0, and safe disabled-worker exit. Baseline commit `0c662a24393f682073e6002c5aff9339292226d8` passed both required jobs in CI run `31749352644`, and Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY.
+
+Implemented locally in the current update, but not yet published or hosted:
+
+- rolling-compatible Runs/Agents provider surfaces and a bounded "Why this provider?" projection; and
+- forward migration `20260813001500_expose_bounded_run_routing.sql`, which restores the original 128-character provider catalogue/API bound for the assignment/run model checks, preserves their other semantics, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, preserves the run-detail function identity/ACL boundary, caps and allowlists durable routing evidence, revokes raw authenticated routing-decision/event reads while retaining model-catalogue reads, and remains unapplied pending its own exact RED approval.
+
+Not yet complete:
+
+1. Preserve the frozen current-update candidate's passing local final gates and publish it with a new exact commit, CI run, and matching deployment evidence; do not reuse the prior baseline release identity.
+2. Obtain fresh exact RED approval for the complete `130015`, apply only that migration forward to `qpuofpmagrmyamahqwxw`, and verify the exact two widened constraint definitions plus 128-character assignment/run/project regression, all four no-secret constraints plus valid and negative credential-shaped scalar regressions, the two raw-SELECT revokes and retained model-catalogue SELECT, ledger, function signature/security/search path/ACL, bounded runtime behavior, RLS/direct-denial, lint, and health. Hosted state remains `130014` until that succeeds.
+3. Sign in to the OpenAI Platform, revoke the key exposed in chat, and fund the intended project or create a fresh key in a funded replacement project. Keep the GitHub OpenAI secret absent and activation OFF until this is complete.
+4. Configure only the fresh funded key through the protected repository-secret path, briefly admit the distinct `softwarefactory_phase1c_preflight` event, immediately return activation to absent/OFF, and require both the exact-model lookup and bounded non-stored response to pass without Docker preload or durable claim.
+5. Leave failed run `f4594556-6f72-4763-a480-6993939e3651` as historical evidence. Its immutable planned base predates the verified production baseline; retry would correctly fail `stale_base_sha` and waste its second attempt.
+6. Obtain/confirm exact authorization for a new safe GREEN acceptance command, bind it to the then-current `main`, briefly activate only for job admission, and observe the active one-shot worker through a validated draft PR and stable exact-head required checks.
+7. Return activation to absent/OFF immediately after claim and remove/revoke the temporary OpenAI secret/key after acceptance.
+8. Record exact provider, command, task, run, agent, routing reasons, branch, commit, PR, check, report, deployment, activation/deactivation, and audit evidence; complete the remaining unrelated-authenticated and mutation-denial acceptance before claiming 100%.
+
+Phase 1C ends at a human-reviewable draft PR. RED remains non-executable; no merge or deployment is authorized.
 
 ## Phase 1D - autonomous-loop controls
 
-Status: **Decision layer complete and locally verified; every automatic action remains constrained OFF and no executor exists.**
+Status: **Decision layer published and hosted; every automatic action remains constrained OFF and no executor exists.**
 
 Implemented in source and proven against the migrated schema:
 
-- The complete nine-action control model — plan, code, test, repair, review, approve, merge, deploy, rollback — at both an organization and a project scope. Migration `010` shipped four actions at one scope; migration `20260813000500` adds the rest without relaxing anything.
+- The complete nine-action control model — plan, code, test, repair, review, approve, merge, deploy, rollback — at both an organization and a project scope. Migration `010` shipped four actions at one scope; hosted migration `130006` adds the rest without relaxing anything.
 - Most-restrictive-wins resolution. An action survives only where both scopes enable it, the ceiling is the lower of the two, and the envelope (kill switch, emergency stop, release freeze, missing executor) forces every action off regardless of either scope. `resolved_autonomy_controls` holds the same rule in the database so no caller can resolve it more permissively.
 - Risk classification of an actual diff, not of a hand-supplied factor list. Deciding your own risk is the judgement an autonomous loop must not be trusted with, so factors are derived from changed paths plus credential- and destructive-shaped content. A change is reclassified when finished and an escalation past its declaration blocks it.
 - The GREEN gate set and the enhanced set that YELLOW and RED add on top of it. A missing result is a blocker, never a pass; `not_connected` stays distinct from `not_run`.
@@ -61,11 +69,13 @@ Not implemented, and blocked rather than simulated:
 
 - **Enabling any automatic action.** Both scopes are held by validated CHECK constraints and a trigger. Relaxing them is a RED action requiring an owner-approved migration.
 - **Merge, deploy, and Codex execution.** Each is reached, evaluated, and blocked by name (`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED`, `CODEX_WORKER_NOT_CONNECTED`). Tests assert the blockers, so connecting an executor fails them deliberately rather than silently granting authority.
-- Hosted migration `20260813000500` is **not applied**.
+- No Phase 1D executor is connected. Hosted control migration `130006` and forward resolver correction `130014` retain all nine actions OFF and the global kill switch ON.
+
+This is an execution-inert decision layer, not authorization to begin autonomous operation. The global kill switch remains ON, Autonomous Mode remains OFF, the maximum hypothetical autonomous risk remains GREEN, and every automatic action remains OFF. The published manual Phase 1C path does not change these interlocks.
 
 ## Phase 1E - production operations
 
-Status: **Control plane implemented and locally verified; no production-mutating executor exists and hosted migration `028` is not applied.**
+Status: **Control-plane source published and migration `028` hosted; no production target has been observed and no production-mutating executor exists.**
 
 Implemented in source and proven against the migrated schema:
 
@@ -87,16 +97,16 @@ Not implemented, and blocked rather than simulated:
 3. Vercel deployment, error-rate, latency, job, and integration telemetry — no connected provider.
 4. Continuous scheduled monitoring — checks are owner-triggered because no scheduler identity is authorized; adding one must not widen `service_role`.
 
-Exit work: apply hosted migration `028`, configure a real monitored production target under owner authorization, and record live detection-to-resolution evidence. Until then no Phase 1E surface may claim observation.
+Exit work: configure a real monitored production target under owner authorization and record live detection-to-resolution evidence. Until then no Phase 1E surface may claim observation.
 
-## Phase 2 - Claude and governed delivery
+## Phase 2A - advisory multi-provider layer
 
-Status: **Not Connected; not started.**
+Status: **Implemented and published on `main`; hosted schema and ledger reconciled; execution Not Connected.**
 
-- Future supported Anthropic API connections and logical roles, not consumer-account browser automation.
-- Preview validation and separately approved governance precede any delivery automation.
+`main` contains official Anthropic/OpenAI adapters, provider health and model discovery, deterministic routing, controlled fallback, independent-review enforcement, advisory run persistence, owner execution controls, and provider UI. Hosted Supabase has the reconciled `130001` schema and `130007` Phase 1C compatibility layer; provider credentials and a live advisory call are unverified, and organization execution defaults OFF. Phase 2A can return analysis artifacts only; it cannot write a repository, approve or merge, deploy, roll back, or enable Phase 1C/1D. Browser automation of consumer accounts is not an approved integration model.
+
+Remaining: configure a supported server-side provider credential, deliberately enable one organization under the applicable approval/cost controls, and record live health/routing/run evidence before calling either provider Connected.
 
 ## Later measured autonomy
 
-- Narrow GREEN automation only after sustained non-production evidence, explicit allowlists, budgets, alerts, kill switches, and owner-approved policy.
-- RED actions remain owner-controlled absent a future independently reviewed policy revision.
+Only after sustained non-production evidence may a separately approved phase consider narrow GREEN allowlists, independent validation, budgets, alerts, kill switches, branch protection, and observation. RED remains owner controlled. Automatic merge, production deployment, and rollback are not Phase 1C features.

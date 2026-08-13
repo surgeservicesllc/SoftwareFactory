@@ -4,9 +4,9 @@ import type { Gate, GateResult } from "@/lib/autonomy/gates";
 /**
  * The three reviewing agents the loop runs before a change may be approved.
  *
- * These are deterministic analysers, not model calls. Phase 1C is not started
- * and Phase 2A's provider layer is a general execution surface, not a reviewer
- * bound to this loop — so a model-backed reviewer would be a claim this tree
+ * These are deterministic analysers, not model calls. Manual Phase 1C remains
+ * separate and Not Connected, and Phase 2A's provider layer is a general
+ * execution surface, not a reviewer bound to this loop — so a model-backed reviewer would be a claim this tree
  * cannot support. A rules engine can be tested, reproduces exactly, and cannot
  * hallucinate an approval, which is the property that matters at a gate.
  *

@@ -222,6 +222,11 @@ describe("GitHub repository write safety", () => {
     expect(isProtectedGitHubWritePath("packages/web/lib/github/client.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("src/middleware.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("packages/web/.github/workflows/ci.yml")).toBe(true);
+    expect(isProtectedGitHubWritePath("lib/worker/workspace.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("lib/orchestration/command.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("scripts/worker.mts")).toBe(true);
+    expect(isProtectedGitHubWritePath(".codex/config.toml")).toBe(true);
+    expect(isProtectedGitHubWritePath(".claude/settings.json")).toBe(true);
     expect(isProtectedGitHubWritePath("proxy.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("vercel.json")).toBe(true);
     expect(isProtectedGitHubWritePath("README.md")).toBe(false);

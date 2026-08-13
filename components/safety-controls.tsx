@@ -49,7 +49,7 @@ const riskTiers = [
   {
     key: "YELLOW",
     title: "Blocked",
-    description: "Real behaviour changes. Outside what this phase may consider.",
+    description: "Blocked for autonomous work. A manual request may still run within policy.",
     enabled: false,
   },
   {
@@ -83,13 +83,14 @@ export function SafetyControls({ compact = false }: { compact?: boolean }) {
       <div className="flex items-start gap-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] px-4 py-3 text-sm text-[var(--danger)]">
         <LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <p>
-          <span className="font-semibold">Global kill switch ON.</span> Even if a task passed every
-          check, nothing would run. There is no worker connected to run it.
+          <span className="font-semibold">Autonomous mode OFF.</span> SoftwareFactory cannot start
+          work by itself. A manual GREEN or YELLOW request may run through a connected Phase 1C
+          worker; RED work still requires explicit owner approval.
         </p>
       </div>
 
       <section className="mt-6">
-        <h3 className="label">Highest risk it may consider</h3>
+        <h3 className="label">Highest risk autonomous mode may consider</h3>
         <div className={cn("mt-2 grid gap-2", compact ? "grid-cols-1" : "md:grid-cols-3")}>
           {riskTiers.map((tier) => (
             <div

@@ -6,6 +6,8 @@ Phase 2A provider layer, the bot fabric, and the public marketing site were all 
 Baseline verified before any Phase 1D edit: `npm run lint`, `npm run typecheck`, and
 `vitest run` (82 files / 824 tests) all pass; `npm run build` succeeds.
 
+Current status: the Phase 1D decision layer and hosted migration chain through `130014` are complete and execution-inert. Manual Phase 1C is published but Not Connected; it is not an autonomous executor. The audit below is retained as the historical design baseline, while the integration register records the later hosted state.
+
 ## 1. What the audit actually found
 
 The Phase 1D objective describes a closed loop:
@@ -13,15 +15,13 @@ The Phase 1D objective describes a closed loop:
 > Backlog/Event → Orchestrator → Codex → Code → Tests → Review → PR → CI → Preview →
 > Risk Gate → Auto Approve/Merge → Deploy → Validate → Report
 
-Most of the **right-hand half** of that loop already exists, built by Phase 1E as a
-production-operations control plane. Most of the **left-hand half** does not exist, and its
-executor stages are blocked by the absence of Phase 1C.
+At the original audit, most of the **right-hand half** of that loop already existed, built by Phase 1E as a production-operations control plane. Most of the **left-hand half** did not yet exist. The decision layer was subsequently implemented, but its executor stages remain blocked because manual Phase 1C is Not Connected and no autonomous binding is authorized.
 
 | Loop stage | Real state in this tree | Owner |
 | --- | --- | --- |
 | Backlog / Event intake | PARTIAL — `operations_events` is a durable, deduplicated, bounded-attempt queue for ten operations event types. There is no backlog-driven work intake. | Phase 1E |
 | Orchestrator | MISSING — no stage machine, no run record, no transition ledger. | — |
-| Codex → Code | **BLOCKED** — Phase 1C never started. `lib/providers/*` (Phase 2A) can call Anthropic and OpenAI, but there is no worker, lease, sandbox, workspace, or budget. | — |
+| Codex → Code | **BLOCKED** — manual Phase 1C is published but Not Connected and is not an autonomous executor. Its worker, lease, sandbox, workspace, and budget cannot be invoked by this loop. | — |
 | Tests / Review | MISSING as gates. The repository runs its own CI; nothing models a gate set, a finding, or a blocking finding. | — |
 | PR | PARTIAL — the GitHub editor creates an isolated branch, commit, and **draft** PR only. | Phase 1B |
 | CI | PARTIAL — real GitHub Actions CI exists and is readable; nothing consumes its result as a gate. | Phase 1B |
@@ -82,7 +82,7 @@ safely or honestly in this phase).
 | 22 | Rollback execution | **BLOCKED** | No adapter; `policies/AUTO_ROLLBACK.md` disables it; migration `010` pins `auto_rollback = false` |
 | 23 | Incident on failure | **COMPLETE** | `open_production_incident`, SEV1–SEV4, fingerprint dedup |
 | 24 | Repair task creation | **COMPLETE** | `create_repair_attempt`, capped at three attempts |
-| 25 | Repair execution (Codex) | **BLOCKED** | Phase 1C not started |
+| 25 | Repair execution (Codex) | **BLOCKED** | Manual Phase 1C is published but Not Connected and has no autonomous authority |
 | 26 | Backlog Autopilot | **BLOCKED** | Depends on 14 and 25 |
 | 27 | Reporting | **COMPLETE** | `generate_operations_report` |
 | 28 | RLS / least privilege / server-only secrets | **COMPLETE and must stay complete** | 25+ tables with RLS + FORCE RLS; `service_role` holds table privileges on exactly four GitHub ingress tables |
@@ -139,7 +139,7 @@ and an agent must not perform it. That is the single reason this phase does not 
 | Auto-merge | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases | An owner-approved policy revision |
 | Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset in every environment checked | An owner-authorized Vercel connection with a server-only token. The **read** adapter is built and will report live data the moment a token exists; no write path exists at all. |
 | Rollback execution | No deploy adapter; `policies/AUTO_ROLLBACK.md` disables it | Adapter, the six drills in that policy, and an owner-approved migration |
-| Codex code and repair execution | Phase 1C not started | A Phase 1C worker with leases, sandbox, budgets, and redacted traces |
+| Codex code and repair execution | Manual Phase 1C is published but Not Connected and cannot be invoked by Phase 1D | Separate owner authorization plus a connected execution design; manual connectivity alone is insufficient |
 | Backlog Autopilot execution | Depends on the two rows above | Both unblocked |
 
 Nothing in the shipped UI, API, or reports may present any blocked capability as available.
@@ -204,16 +204,16 @@ What this phase's decision layer touches, and in which direction.
 | Phase 1E operations schema | reads | **Connected** | `resolved_autonomy_controls` reads `release_freezes` so an active freeze appears in the decision envelope. The loop journey drives Phase 1E's real incident, freeze, Last Known Good, rollback-decision and repair functions. |
 | Phase 1E repair bounds | mirrored | **Connected** | `MAX_ATTEMPTS.repair` is 3, matching the database-enforced cap, so the rule does not exist in only one half of the loop. |
 | Phase 1A risk policy | reads | **Connected** | `diff-risk.ts` derives factors and defers to `classifyRisk`/`compareRisk`; it introduces no second risk vocabulary. |
-| Supabase (hosted) | writes schema | **Not Connected** | Migration `20260813000500` is unapplied. `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID` and `SUPABASE_DB_PASSWORD` are unset here. |
+| Supabase (hosted) | writes schema | **Hosted** | The reconciled chain through `130014` is applied; every autonomous action remains OFF and the kill switch remains ON. Schema presence grants no execution authority. |
 | Vercel deployments | reads | **Not Connected** | `lib/deploy/vercel.ts` implements the real read contract and reports the reason. `VERCEL_TOKEN` is unset. No write path exists. |
 | GitHub CI | reads | **Available, not wired** | CI results are readable and the `ci` gate models them, but nothing ingests a run automatically; a gate result is supplied by its caller. |
 | GitHub merge | writes | **Absent by policy** | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases. The decision path returns `MERGE_EXECUTOR_NOT_CONNECTED`. |
-| Codex / execution worker | writes | **Owned by Phase 1C (PR #9)** | Another agent is building it. This phase deliberately does not duplicate it; see §9 for the seam it should bind to. |
+| Codex / execution worker | writes | **Manual Phase 1C published; autonomous binding absent** | The manual worker is Not Connected and this phase deliberately does not bind it; see §9 for the guarded seam a future separately authorized executor would need. |
 
 ## 9. The seam a Phase 1C worker binds to
 
-Phase 1C is being built separately (PR #9). This phase does **not** implement a worker, and a
-future one should not reimplement these decisions. The contract is:
+Manual Phase 1C is published separately and remains Not Connected. This phase does **not** bind it
+as an autonomous worker, and any future separately authorized executor must not reimplement these decisions. The contract is:
 
 1. **Ask what you may do.** `resolveEffectiveControls(organization, project, envelope)`, with the
    envelope read from `public.resolved_autonomy_controls(project_id)` rather than assumed. Then
@@ -251,5 +251,6 @@ can now rely on a decision layer above it. It can:
 - **Autopilot respects health.** No new work is selected for a project Phase 1E reports as
   degraded, critical or paused.
 
-Phase 1E's own remaining gap is unchanged by this phase: migrations `028`/`029` are unhosted and
-no monitor has observed a real production target.
+Phase 1E is now hosted as part of the reconciled production chain through `130014`. This phase does
+not claim that a monitor has completed a new live-target acceptance run; that evidence remains
+separate from schema promotion.

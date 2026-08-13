@@ -6,7 +6,9 @@ test("presents the bot fabric without claiming a connected worker", async ({ pag
 
   expect(response?.ok(), `bot manager returned ${response?.status()}`).toBe(true);
   await expect(page.locator("h1")).toContainText(/bot manager/i);
-  await expect(page.getByText(/Worker Not Connected/i).first()).toBeVisible();
+  await expect(
+    page.getByText(/Worker (?:Not Connected|status requires sign-in)/i).first(),
+  ).toBeVisible();
 });
 
 test("offers a truthful next step instead of a fabricated fleet", async ({ page }) => {

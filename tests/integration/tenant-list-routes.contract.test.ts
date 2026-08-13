@@ -70,6 +70,34 @@ describe("list routes withhold sensitive columns", () => {
   });
 });
 
+describe("provider routes preserve hardened tenant reads", () => {
+  const service = read("lib/providers/service.ts");
+  const preview = read("app/api/runs/preview/route.ts");
+  const runs = read("app/api/runs/route.ts");
+
+  it("never restores direct agents or agent_runs reads", () => {
+    for (const source of [service, preview, runs]) {
+      expect(source).not.toMatch(/\.from\(["'](?:agents|agent_runs)["']\)/);
+    }
+    expect(service).toContain('rpc("list_provider_run_metrics"');
+    expect(preview).toContain('rpc("get_provider_agent_assignment"');
+    expect(runs).toContain('rpc("get_provider_agent_assignment"');
+  });
+
+  it("keeps preview no-contact and opts into provider probes only after run validation", () => {
+    expect(preview).not.toContain("probeProviders: true");
+    expect(runs).toContain("{ probeProviders: true }");
+    expect(service).toMatch(/executionEnabled\s*&&\s*options\.probeProviders\s*===\s*true/);
+
+    const taskCheck = runs.indexOf("const task = await loadTask");
+    const agentCheck = runs.indexOf("const agent = await loadAgent");
+    const contextLoad = runs.indexOf("const context = await loadProjectRoutingContext");
+    expect(taskCheck).toBeGreaterThan(-1);
+    expect(agentCheck).toBeGreaterThan(taskCheck);
+    expect(contextLoad).toBeGreaterThan(agentCheck);
+  });
+});
+
 describe("safe list migration", () => {
   const migration = read("supabase/migrations/20260812002000_safe_tenant_list_reads.sql");
 
