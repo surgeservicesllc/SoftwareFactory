@@ -65,3 +65,5 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 
 - [ ] Decide whether to enable protection/required checks and require verified signatures on `main`; the branch is currently unprotected and the published release commit is unsigned. Any settings change is a protected owner-approved action.
 - [ ] Review unexpected `theagoras.com` Vercel aliases, verify ownership and routing intent, and remove or retain them only through an explicitly approved protected routing change.
+
+<!-- SoftwareFactory Phase 1B protected draft-PR acceptance check. Do not merge. -->
