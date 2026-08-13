@@ -96,4 +96,4 @@ Repository memory lives under [`AI/`](AI/), and enforceable constraints live und
 
 Never commit credentials or paste them into issues, screenshots, fixtures, logs, or database rows. Review [`SECURITY.md`](SECURITY.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`policies/PROTECTED_RESOURCES.md`](policies/PROTECTED_RESOURCES.md). Revoke/rotate a possibly disclosed credential at its provider; deleting it from Git is insufficient.
 
-Deployment identity configured for SoftwareFactory.
+Deployment identity verification is exercised through a draft pull request.
