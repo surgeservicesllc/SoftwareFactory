@@ -168,3 +168,63 @@ policy-blocked, they are **materially impossible** here. Applying the hosted
 migration, reading real deployment state, and running a Codex worker each
 require a credential that does not exist in this environment, so no amount of
 further implementation in this phase could have closed them.
+
+
+## 8. Integration register
+
+What this phase's decision layer touches, and in which direction.
+
+| Integration | Direction | State | Detail |
+| --- | --- | --- | --- |
+| Phase 1E operations schema | reads | **Connected** | `resolved_autonomy_controls` reads `release_freezes` so an active freeze appears in the decision envelope. The loop journey drives Phase 1E's real incident, freeze, Last Known Good, rollback-decision and repair functions. |
+| Phase 1E repair bounds | mirrored | **Connected** | `MAX_ATTEMPTS.repair` is 3, matching the database-enforced cap, so the rule does not exist in only one half of the loop. |
+| Phase 1A risk policy | reads | **Connected** | `diff-risk.ts` derives factors and defers to `classifyRisk`/`compareRisk`; it introduces no second risk vocabulary. |
+| Supabase (hosted) | writes schema | **Not Connected** | Migration `20260813000500` is unapplied. `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID` and `SUPABASE_DB_PASSWORD` are unset here. |
+| Vercel deployments | reads | **Not Connected** | `lib/deploy/vercel.ts` implements the real read contract and reports the reason. `VERCEL_TOKEN` is unset. No write path exists. |
+| GitHub CI | reads | **Available, not wired** | CI results are readable and the `ci` gate models them, but nothing ingests a run automatically; a gate result is supplied by its caller. |
+| GitHub merge | writes | **Absent by policy** | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases. The decision path returns `MERGE_EXECUTOR_NOT_CONNECTED`. |
+| Codex / execution worker | writes | **Owned by Phase 1C (PR #9)** | Another agent is building it. This phase deliberately does not duplicate it; see §9 for the seam it should bind to. |
+
+## 9. The seam a Phase 1C worker binds to
+
+Phase 1C is being built separately (PR #9). This phase does **not** implement a worker, and a
+future one should not reimplement these decisions. The contract is:
+
+1. **Ask what you may do.** `resolveEffectiveControls(organization, project, envelope)`, with the
+   envelope read from `public.resolved_autonomy_controls(project_id)` rather than assumed. Then
+   `isActionPermitted(controls, action, risk)`. A worker must never consult a single project row
+   directly — that skips the organization ceiling and the envelope.
+2. **Ask what to work on.** `selectAutopilotWork` returns an ordered queue and an explained
+   exclusion list. Do not re-sort it; the ordering encodes "safer first within a priority".
+3. **Do the work, then be judged on the result.** `runPipeline` reclassifies the finished diff
+   rather than trusting the opening declaration, runs the gates and the agents, and returns the
+   approval decision. A worker supplies gate *results*; it does not decide whether they suffice.
+4. **On failure, ask before retrying.** `evaluateRetry(stage, attemptsUsed)` returns `RETRY`,
+   `ESCALATE` or `STOP`. Escalation is not a failure of the worker; it is the designed end of a
+   bounded budget.
+5. **Never author and approve.** `evaluateApproval` refuses when `approverId === authorId`, at
+   every risk level. A worker that is both is refused, which is the intended behaviour.
+
+The three stages that block by name — `CODEX_WORKER_NOT_CONNECTED`,
+`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED` — are asserted in
+`tests/integration/phase1d-loop-journey.behavior.test.ts`. Connecting an executor is *supposed*
+to fail those assertions. Update them deliberately; do not weaken them to "either blocked or not".
+
+## 10. Phase 1E readiness
+
+Phase 1E is already implemented and merged; the question this phase answers is whether Phase 1E
+can now rely on a decision layer above it. It can:
+
+- **Freeze propagates upward.** A SEV1/SEV2 freeze is visible in the Phase 1D envelope and holds
+  every automatic action off, so Phase 1E's protective action is not something the loop can
+  route around.
+- **Rollback keeps its decision path.** Phase 1D adds no competing rollback authority. Last Known
+  Good still resolves only from a validated deployment, and rollback execution still returns
+  `EXECUTOR_NOT_CONNECTED`.
+- **Repair inherits a bound, not a new one.** The retry cap mirrors the database's, so a repair
+  cannot be retried more times by going through the decision layer than by going through Phase 1E.
+- **Autopilot respects health.** No new work is selected for a project Phase 1E reports as
+  degraded, critical or paused.
+
+Phase 1E's own remaining gap is unchanged by this phase: migrations `028`/`029` are unhosted and
+no monitor has observed a real production target.
