@@ -7,9 +7,29 @@ import {
   requireGitHubConnection,
   requireGitHubUser,
 } from "@/lib/github/access";
-import { createGitHubInstallationToken } from "@/lib/github/client";
+import { createGitHubInstallationToken, GitHubApiError } from "@/lib/github/client";
 import { getGitHubAppConfiguration } from "@/lib/github/config";
 import { validateRepositoryCoordinate } from "@/lib/github/repository";
+import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
+
+async function markDiscoveredConnectionLoss(
+  connectionId: string,
+  error: GitHubApiError,
+) {
+  if (!["github_installation_revoked", "github_permission_denied"].includes(error.code)) return;
+  try {
+    await createSupabaseGitHubWebhookClient().rpc("mark_github_connection_lost", {
+      p_actor_user_id: null,
+      p_connection_id: connectionId,
+      p_reason: error.code === "github_installation_revoked"
+        ? "installation_revoked"
+        : "insufficient_permission",
+    });
+  } catch {
+    // The provider failure remains the client-safe primary error. Connection-loss
+    // persistence is best effort because no database detail may replace it.
+  }
+}
 
 export async function prepareGitHubRepositoryRequest(
   request: Request,
@@ -44,14 +64,22 @@ export async function prepareGitHubRepositoryRequest(
       "Organization owner or administrator access is required.",
     );
   }
-  const installationToken = await createGitHubInstallationToken(
-    getGitHubAppConfiguration(),
-    context.installationId,
-    {
-      permissions,
-      repositoryIds: [context.repository.externalId],
-    },
-  );
+  let installationToken;
+  try {
+    installationToken = await createGitHubInstallationToken(
+      getGitHubAppConfiguration(),
+      context.installationId,
+      {
+        permissions,
+        repositoryIds: [context.repository.externalId],
+      },
+    );
+  } catch (error) {
+    if (error instanceof GitHubApiError) {
+      await markDiscoveredConnectionLoss(context.connectionId, error);
+    }
+    throw error;
+  }
   return {
     connectionId: connectionId!,
     context,

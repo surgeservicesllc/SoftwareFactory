@@ -2,9 +2,9 @@
 
 SoftwareFactory is a server-first software-engineering control plane for tenant-scoped projects, GitHub App connections, repository inspection, guarded file changes, approvals, and auditable operational state.
 
-The repository is implementing **Phase 1B: Production GitHub App Integration**. Implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` is pushed to `origin/main` and deployed in Vercel through owner-authored empty deployment marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`, which preserves the implementation commit's authorship while building the exact same application tree. That tree includes Supabase authentication/onboarding, active-organization-scoped GitHub routes, truthful live connection/project/file views, a tenant-scoped activity stream, and a controlled file-to-draft-PR workflow. Forward migrations `011`-`013` remain unapplied to hosted Supabase. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, but the authenticated SoftwareFactory callback/tenant connection, active webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
+The repository is implementing **Phase 1B: Production GitHub App Integration**. Application release `427190d050796e3f5ff5cf6154adc2c34e2e5694` adds fail-closed callback errors, provider URL validation, retry-safe file changes, installation/repository event ordering, linked-project metadata propagation, audited control-plane mutation boundaries, and the narrow service-role helper grant required by provider-ingress table constraints. Its local quality gates and CI pass, and its exact application tree is serving in production. Local forward migrations `011`-`019` are not applied to hosted Supabase; hosted/live provider gates remain pending. A real GitHub provider installation is restricted to `surgeservicesllc/SoftwareFactory`, but the authenticated SoftwareFactory callback/tenant connection, active webhook, and full production journey have not passed; GitHub therefore remains **Not Connected** in-product.
 
-Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Production Playwright passes 12/12. See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for the remaining Phase 1B checks.
+Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), in Vercel project `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Provider metadata on READY deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` records application SHA `427190d050796e3f5ff5cf6154adc2c34e2e5694`; production Playwright passes 12/12 and the deployed-client scan is clean. This provider-resolved application-release evidence remains valid across documentation-only successor commits that do not alter the runtime tree. See [`AI/CURRENT_STATE.md`](AI/CURRENT_STATE.md) for the remaining Phase 1B checks.
 
 ## Current trust boundary
 
@@ -16,6 +16,8 @@ Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-
 - The Activity page reads immutable tenant events through a no-store server API and excludes event metadata from browser responses.
 - No HTTP route writes directly to the local repository; the legacy local file writer and its environment switch have been removed.
 - Protected paths and likely credential content are rejected by the standard file-change route.
+- A retry of the same file-change intent reuses its idempotency key, and provider-created draft-PR evidence can recover a lost database-completion response without creating a second PR.
+- GitHub lifecycle reconciliation treats deletion as terminal for an installation ID and applies installation/repository metadata only with provider ordering evidence.
 - Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
 - OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**.
 

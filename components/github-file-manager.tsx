@@ -4,21 +4,26 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
+  FileCode2,
   FileText,
   Folder,
+  GitCommitHorizontal,
   GitPullRequestArrow,
   Loader2,
   RefreshCw,
   Save,
   Search,
+  ShieldAlert,
 } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { BlockedState, Card, StatusBadge } from "@/components/ui";
+import { Card, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 type Project = { id: string; name: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
@@ -28,6 +33,7 @@ type Commit = { sha: string; message: string; author: { name: string; githubLogi
 type PullRequestResult = { number: number; title: string; url: string; draft: boolean; state: string };
 type LoadState = "loading" | "signed-out" | "setup" | "ready" | "error";
 type SaveState = "idle" | "saving" | "conflict" | "error" | "saved";
+type PendingSaveIntent = { fingerprint: string; idempotencyKey: string };
 
 const preferredPathPrefixes = ["AI/", "agents/", "policies/", "prompts/", "checklists/", "playbooks/", "docs/"];
 
@@ -51,6 +57,7 @@ export function GitHubFileManager() {
   const [createdPullRequest, setCreatedPullRequest] = useState<PullRequestResult | null>(null);
   const fileRef = useRef<RepositoryFile | null>(null);
   const dirtyRef = useRef(false);
+  const pendingSaveIntentRef = useRef<PendingSaveIntent | null>(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -86,7 +93,6 @@ export function GitHubFileManager() {
     dirtyRef.current = isDirty;
   }, [file, isDirty]);
 
-  /* Unsaved edits survive a stray click or tab close. */
   useEffect(() => {
     function preventUnload(event: BeforeUnloadEvent) {
       if (isDirty) event.preventDefault();
@@ -97,7 +103,7 @@ export function GitHubFileManager() {
       if (!(target instanceof Element)) return;
       const link = target.closest("a[href]");
       if (!link || link.getAttribute("target") === "_blank") return;
-      if (!window.confirm("Leave this page and lose your unsaved changes?")) {
+      if (!window.confirm("Leave this page and discard unsaved GitHub file changes?")) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -123,7 +129,7 @@ export function GitHubFileManager() {
 
   const loadDirectory = useCallback(async (nextPath: string, activeProject = project, options: { preserveFile?: boolean } = {}) => {
     if (!activeProject?.connectionId || !activeProject.githubRepository) return;
-    if (fileRef.current && dirtyRef.current && !options.preserveFile && !window.confirm("Discard your unsaved changes?")) return;
+    if (fileRef.current && dirtyRef.current && !options.preserveFile && !window.confirm("Discard unsaved changes to the open file?")) return;
     const [activeOwner, activeRepository] = activeProject.githubRepository.split("/");
     if (!activeOwner || !activeRepository) return;
     setLoadingTree(true);
@@ -132,10 +138,11 @@ export function GitHubFileManager() {
       const queryString = new URLSearchParams({ connectionId: activeProject.connectionId, ref: activeProject.defaultBranch, path: nextPath });
       const response = await fetch(`/api/github/repositories/${encodeURIComponent(activeOwner)}/${encodeURIComponent(activeRepository)}/tree?${queryString}`, { cache: "no-store" });
       const body = (await response.json()) as { entries?: TreeEntry[]; error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "This folder could not be loaded.");
+      if (!response.ok) throw new Error(body.error?.message ?? "The repository tree could not be loaded.");
       setEntries(sortEntries(body.entries ?? []));
       setDirectoryPath(nextPath);
       if (!options.preserveFile) {
+        pendingSaveIntentRef.current = null;
         setFile(null);
         setContent("");
         setLastCommit(null);
@@ -143,7 +150,7 @@ export function GitHubFileManager() {
         setCreatedPullRequest(null);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "This folder could not be loaded.");
+      setMessage(error instanceof Error ? error.message : "The repository tree could not be loaded.");
     } finally {
       setLoadingTree(false);
     }
@@ -157,7 +164,7 @@ export function GitHubFileManager() {
 
   async function fetchFile(entry: TreeEntry, confirmDiscard = true) {
     if (!project?.connectionId) return;
-    if (confirmDiscard && file?.path !== entry.path && isDirty && !window.confirm("Discard your unsaved changes?")) return;
+    if (confirmDiscard && file?.path !== entry.path && isDirty && !window.confirm("Discard unsaved changes to the open file?")) return;
     setLoadingFile(true);
     setMessage("");
     setCreatedPullRequest(null);
@@ -171,13 +178,14 @@ export function GitHubFileManager() {
         fetch(`/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits?${commitQuery}`, { cache: "no-store" }),
       ]);
       const body = (await contentResponse.json()) as { file?: RepositoryFile; error?: { message?: string } };
-      if (!contentResponse.ok || !body.file) throw new Error(body.error?.message ?? "This file could not be opened.");
+      if (!contentResponse.ok || !body.file) throw new Error(body.error?.message ?? "The GitHub file could not be loaded.");
       const commitBody = (await commitResponse.json()) as { commits?: Commit[] };
       setFile(body.file);
+      pendingSaveIntentRef.current = null;
       setContent(body.file.content);
       setLastCommit(commitResponse.ok ? commitBody.commits?.[0] ?? null : null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "This file could not be opened.");
+      setMessage(error instanceof Error ? error.message : "The GitHub file could not be loaded.");
       setSaveState("error");
     } finally {
       setLoadingFile(false);
@@ -186,7 +194,7 @@ export function GitHubFileManager() {
 
   async function reloadFile() {
     if (!file) return;
-    if (isDirty && !window.confirm("Load the latest version from GitHub and lose your unsaved changes?")) return;
+    if (isDirty && !window.confirm("Reload the latest GitHub version and discard your unsaved changes?")) return;
     await fetchFile({ name: file.path.split("/").at(-1) ?? file.path, path: file.path, type: "file", sha: file.sha, size: file.size, url: file.url }, false);
   }
 
@@ -196,6 +204,22 @@ export function GitHubFileManager() {
     setMessage("");
     try {
       const title = `Update ${file.path} via SoftwareFactory`;
+      const fingerprint = githubSaveIntentFingerprint({
+        baseBranch: project.defaultBranch,
+        commitMessage: title,
+        connectionId: project.connectionId,
+        content,
+        expectedBlobSha: file.sha,
+        path: file.path,
+        projectId: project.id,
+        repository: project.githubRepository ?? "",
+        title,
+      });
+      const pendingIntent = pendingSaveIntentRef.current;
+      const idempotencyKey = pendingIntent?.fingerprint === fingerprint
+        ? pendingIntent.idempotencyKey
+        : `sf:${project.id}:${crypto.randomUUID()}`;
+      pendingSaveIntentRef.current = { fingerprint, idempotencyKey };
       const response = await fetch(`/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/changes?connectionId=${encodeURIComponent(project.connectionId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -207,7 +231,7 @@ export function GitHubFileManager() {
           baseBranch: project.defaultBranch,
           title,
           commitMessage: title,
-          idempotencyKey: `sf:${project.id}:${Date.now()}:${crypto.randomUUID()}`,
+          idempotencyKey,
         }),
       });
       const body = (await response.json()) as { pullRequest?: PullRequestResult; error?: { code?: string; message?: string } };
@@ -220,19 +244,20 @@ export function GitHubFileManager() {
           )
         ) {
           setSaveState("conflict");
-          setMessage("Someone changed this file in GitHub after you opened it. Load the latest version, reapply your edit, then try again.");
+          setMessage("Conflict detected. GitHub has a newer file version. Reload the latest version and reconcile your edits before saving again.");
           return;
         }
         if (body.error?.code === "protected_resource") {
           setSaveState("error");
-          setMessage("This file is protected. Changing it needs owner approval through a separate process, not this editor.");
+          setMessage("Owner approval required. This protected repository path cannot use the standard Phase 1B draft-PR save flow.");
           return;
         }
         throw new Error(body.error?.message ?? "The draft pull request could not be created.");
       }
+      pendingSaveIntentRef.current = null;
       setCreatedPullRequest(body.pullRequest);
       setSaveState("saved");
-      setMessage("Draft pull request created. Nothing was merged or deployed.");
+      setMessage("Change committed on an isolated softwarefactory/* branch and opened as a draft pull request. Nothing was merged or deployed.");
     } catch (error) {
       setSaveState("error");
       setMessage(error instanceof Error ? error.message : "The draft pull request could not be created.");
@@ -240,8 +265,9 @@ export function GitHubFileManager() {
   }
 
   function changeProject(projectId: string) {
-    if (isDirty && !window.confirm("Switch projects and lose your unsaved changes?")) return;
+    if (isDirty && !window.confirm("Switch projects and discard unsaved file changes?")) return;
     setSelectedProjectId(projectId);
+    pendingSaveIntentRef.current = null;
     setDirectoryPath("");
     setEntries([]);
     setFile(null);
@@ -258,232 +284,106 @@ export function GitHubFileManager() {
     return entries.filter((entry) => !normalized || entry.name.toLowerCase().includes(normalized) || entry.path.toLowerCase().includes(normalized));
   }, [entries, query]);
 
-  if (state === "loading") {
-    return (
-      <Card className="grid min-h-[420px] place-items-center">
-        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading files" />
-      </Card>
-    );
-  }
-  if (state === "signed-out") return <BlockedState icon={Folder} title="Sign in to browse your files" description="Repository files are visible only to members of your organization." href="/auth/sign-in?next=/files" label="Sign in" />;
-  if (state === "setup" || (state === "ready" && !projects.length)) return <BlockedState icon={Folder} title="No connected project yet" description="Add a project first, then come back to browse and edit its files." href="/projects" label="Add a project" />;
-  if (state === "error" || !project) return <BlockedState icon={Folder} title="Files are unavailable" description={message || "This repository could not be loaded."} href="/connections" label="Check connections" />;
+  if (state === "loading") return <Card className="grid min-h-[520px] place-items-center"><Loader2 className="size-6 animate-spin text-[var(--accent)]" aria-label="Loading live repository" /></Card>;
+  if (state === "signed-out") return <FilesNotice title="Sign in to browse GitHub" description="Real repository files are available only to authenticated organization members." href="/sign-in?next=/files" label="Sign in" />;
+  if (state === "setup" || (state === "ready" && !projects.length)) return <FilesNotice title="No connected GitHub project" description="Authorize or restore the GitHub App, then connect an active selected repository before browsing files." href="/projects" label="Open projects" />;
+  if (state === "error" || !project) return <FilesNotice title="Repository unavailable" description={message || "The live repository could not be loaded."} href="/connections" label="Review connections" />;
 
   const parentPath = directoryPath.includes("/") ? directoryPath.slice(0, directoryPath.lastIndexOf("/")) : "";
 
   return (
     <div className="space-y-4">
       <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <p className="truncate font-medium text-foreground">{project.githubRepository}</p>
-          <StatusBadge tone="safe">{project.defaultBranch}</StatusBadge>
-        </div>
-        {projects.length > 1 ? (
-          <select aria-label="Project" value={project.id} onChange={(event) => changeProject(event.target.value)} className="input sm:w-56">
-            {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        ) : null}
+        <div className="min-w-0"><p className="label">Live GitHub source</p><p className="mt-1 truncate font-mono text-xs text-[var(--text)]">{project.githubRepository}@{project.defaultBranch}</p></div>
+        <div className="flex flex-wrap items-center gap-2"><select aria-label="Project" value={project.id} onChange={(event) => changeProject(event.target.value)} className="input min-w-48">{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><StatusBadge tone="safe">GitHub Connected</StatusBadge></div>
       </Card>
 
-      <div className="card overflow-hidden lg:grid lg:min-h-[640px] lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-b border-line lg:border-b-0 lg:border-r" aria-label="Repository files">
-          <div className="border-b border-line p-3">
-            <label className="relative block">
-              <span className="sr-only">Search this folder</span>
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" aria-hidden="true" />
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this folder…" className="input pl-9" />
-            </label>
+      <div className="card min-h-[700px] overflow-hidden rounded-xl lg:grid lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="border-b border-[var(--border)] bg-[var(--surface-inset)] lg:border-b-0 lg:border-r" aria-label="Live GitHub repository files">
+          <div className="border-b border-[var(--border)] p-3">
+            <label className="relative block"><span className="sr-only">Search current repository directory</span><Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--text-faint)]" aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this directory…" className="input pl-9" /></label>
           </div>
-
-          <div className="flex min-h-12 items-center gap-2 border-b border-line px-3">
-            <button
-              type="button"
-              onClick={() => void loadDirectory(parentPath)}
-              disabled={!directoryPath || loadingTree}
-              className="btn btn-secondary btn-sm size-9 px-0"
-              aria-label="Go up one folder"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void loadDirectory(directoryPath, project, { preserveFile: true })}
-              disabled={loadingTree}
-              className="btn btn-secondary btn-sm size-9 px-0"
-              aria-label="Refresh this folder"
-            >
-              <RefreshCw className={cn("size-4", loadingTree && "animate-spin")} aria-hidden="true" />
-            </button>
-            <p className="min-w-0 flex-1 truncate text-sm text-muted">/{directoryPath}</p>
+          <div className="flex min-h-12 items-center gap-2 border-b border-[var(--border)] px-3">
+            <button type="button" onClick={() => void loadDirectory(parentPath)} disabled={!directoryPath || loadingTree} className="grid size-8 place-items-center rounded-md border border-[var(--border)] text-[var(--text-muted)] disabled:opacity-35" aria-label="Parent directory"><ArrowLeft className="size-3.5" /></button>
+            <button type="button" onClick={() => void loadDirectory(directoryPath, project, { preserveFile: true })} disabled={loadingTree} className="grid size-8 place-items-center rounded-md border border-[var(--border)] text-[var(--text-muted)]" aria-label="Refresh directory"><RefreshCw className={`size-3.5 ${loadingTree ? "animate-spin" : ""}`} /></button>
+            <p className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--text-muted)]">/{directoryPath}</p>
           </div>
-
-          <div className="max-h-80 overflow-y-auto p-2 lg:max-h-[520px]">
-            {loadingTree ? (
-              <div className="grid min-h-40 place-items-center">
-                <Loader2 className="size-5 animate-spin text-accent" aria-label="Loading folder" />
-              </div>
-            ) : visibleEntries.length ? (
-              <ul>
-                {visibleEntries.map((entry) => (
-                  <li key={entry.sha + entry.path}>
-                    <button
-                      type="button"
-                      onClick={() => entry.type === "directory" ? void loadDirectory(entry.path) : void fetchFile(entry)}
-                      className={cn(
-                        "flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm transition-colors",
-                        file?.path === entry.path
-                          ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
-                          : "text-muted hover:bg-surface-raised hover:text-foreground",
-                      )}
-                    >
-                      {entry.type === "directory"
-                        ? <Folder className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                        : <FileText className="size-4 shrink-0 text-faint" aria-hidden="true" />}
-                      <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="px-3 py-8 text-center text-sm text-faint">
-                {query ? "Nothing matches that search." : "This folder is empty."}
-              </p>
-            )}
+          <div className="max-h-[360px] overflow-y-auto p-2 lg:max-h-[620px]">
+            {loadingTree ? <div className="grid min-h-40 place-items-center"><Loader2 className="size-5 animate-spin text-[var(--accent)]" /></div> : visibleEntries.length ? visibleEntries.map((entry) => (
+              <button key={entry.sha + entry.path} type="button" onClick={() => entry.type === "directory" ? void loadDirectory(entry.path) : void fetchFile(entry)} className={cn("flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs hover:bg-[var(--surface-raised)] hover:text-[var(--text)]", file?.path === entry.path ? "bg-[var(--accent)]/[0.08] text-[var(--accent-text)]" : "text-[var(--text-muted)]") }>
+                {entry.type === "directory" ? <Folder className="size-4 shrink-0 text-[var(--accent)]" /> : <FileText className="size-4 shrink-0 text-[var(--text-faint)]" />}
+                <span className="min-w-0 flex-1 truncate">{entry.name}</span>{preferredPath(entry.path) ? <span className="rounded border border-[var(--accent-border)] px-1 font-mono text-xs uppercase text-[var(--accent-text)]">Core</span> : null}{entry.type === "directory" ? <ChevronRight className="size-3" /> : <span className="font-mono text-xs text-[var(--text-faint)]">{formatBytes(entry.size)}</span>}
+              </button>
+            )) : <p className="px-3 py-8 text-center text-xs text-[var(--text-faint)]">{query ? "No matching entries in this directory." : "No entries in this directory."}</p>}
           </div>
         </aside>
 
         <section className="min-w-0">
-          <header className="border-b border-line px-4 py-3">
+          <header className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-2">
-                <h2 className="truncate font-medium text-foreground">{file?.path ?? "Pick a file"}</h2>
-                {isDirty ? <StatusBadge tone="warning" dot={false}>Unsaved</StatusBadge> : null}
+              <div className="flex min-w-0 items-center gap-2"><FileCode2 className="size-4 shrink-0 text-[var(--accent)]" /><h2 className="truncate font-mono text-sm font-semibold text-[var(--text)]">{file?.path ?? "Choose a file from GitHub"}</h2>{isDirty ? <span className="size-1.5 shrink-0 rounded-full bg-[var(--warning)]" title="Unsaved changes" /> : null}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {file ? <div className="flex rounded-md border border-[var(--border)] bg-[var(--surface-inset)] p-0.5">{(["edit", "preview"] as const).map((tab) => <button key={tab} type="button" onClick={() => setMode(tab)} aria-pressed={mode === tab} className={cn("min-h-7 rounded px-2.5 text-xs font-semibold capitalize", mode === tab ? "bg-[var(--surface-raised)] text-[var(--text)]" : "text-[var(--text-faint)]")}>{tab}</button>)}</div> : null}
+                <button type="button" onClick={() => void reloadFile()} disabled={!file || loadingFile} className="btn btn-secondary btn-sm"><RefreshCw className={cn("size-3.5", loadingFile && "animate-spin")} />Reload</button>
+                <button id="save-github-file" type="button" onClick={() => void saveAsDraftPullRequest()} disabled={!isDirty || saveState === "saving" || saveState === "saved"} className="btn btn-primary justify-center">{saveState === "saving" ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}Create draft PR</button>
               </div>
-              {file ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex rounded-lg border border-line p-0.5">
-                    {(["edit", "preview"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setMode(tab)}
-                        aria-pressed={mode === tab}
-                        className={cn(
-                          "min-h-8 rounded px-3 text-sm font-medium capitalize transition-colors",
-                          mode === tab ? "bg-surface-raised text-foreground" : "text-muted",
-                        )}
-                      >
-                        {tab}
-                      </button>
-                    ))}
-                  </div>
-                  <button type="button" onClick={() => void reloadFile()} disabled={loadingFile} className="btn btn-secondary btn-sm">
-                    <RefreshCw className={cn("size-4", loadingFile && "animate-spin")} aria-hidden="true" />
-                    Reload
-                  </button>
-                  <button
-                    id="save-github-file"
-                    type="button"
-                    onClick={() => void saveAsDraftPullRequest()}
-                    disabled={!isDirty || saveState === "saving" || saveState === "saved"}
-                    className="btn btn-primary btn-sm"
-                  >
-                    {saveState === "saving" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                    Propose change
-                  </button>
-                </div>
-              ) : null}
             </div>
+            {file ? <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs uppercase tracking-[0.08em] text-[var(--text-faint)]"><div><dt className="inline">Version SHA </dt><dd className="inline text-[var(--text-muted)]">{shortSha(file.sha)}</dd></div><div><dt className="inline">Size </dt><dd className="inline text-[var(--text-muted)]">{formatBytes(file.size)}</dd></div><div><dt className="inline">Source </dt><dd className="inline text-[var(--text-muted)]">{file.ref}</dd></div>{lastCommit ? <div><dt className="inline">Last commit </dt><dd className="inline text-[var(--text-muted)]">{shortSha(lastCommit.sha)} · {lastCommit.author.githubLogin ?? lastCommit.author.name} · {lastCommit.date ? formatDate(lastCommit.date) : "Date unavailable"}</dd></div> : null}</dl> : null}
           </header>
 
-          {saveState === "conflict" ? (
-            <div className="flex items-start gap-3 border-b border-[var(--danger-border)] bg-[var(--danger-surface)] px-4 py-3 text-sm text-[var(--danger)]" role="alert">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <div>
-                <strong className="font-semibold">This file changed in GitHub</strong>
-                <p className="mt-0.5">{message}</p>
-                <button type="button" onClick={() => void reloadFile()} className="mt-2 font-medium underline underline-offset-4">
-                  Load the latest version
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {saveState === "conflict" ? <div className="flex items-start gap-3 border-b border-[var(--danger-border)] bg-[var(--danger-surface)] px-4 py-3 text-xs leading-5 text-[var(--danger)]" role="alert"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><div><strong className="block text-[var(--danger)]">Conflict detected</strong>{message}<button type="button" onClick={() => void reloadFile()} className="mt-2 underline underline-offset-4">Reload latest GitHub version</button></div></div> : null}
 
-          {loadingFile ? (
-            <div className="grid min-h-[420px] place-items-center">
-              <Loader2 className="size-6 animate-spin text-accent" aria-label="Opening file" />
-            </div>
-          ) : file ? (
+          {loadingFile ? <div className="grid min-h-[560px] place-items-center"><Loader2 className="size-6 animate-spin text-[var(--accent)]" /></div> : file ? (
             <div>
-              {mode === "edit" ? (
-                <textarea
-                  value={content}
-                  onChange={(event) => { setContent(event.target.value); setCreatedPullRequest(null); setSaveState("idle"); setMessage(""); }}
-                  spellCheck
-                  className="min-h-[420px] w-full resize-y border-0 bg-surface-inset p-4 font-mono text-sm leading-6 text-foreground focus:outline-none sm:p-6"
-                  aria-label={`Edit ${file.path}`}
-                />
-              ) : (
-                <article className="prose-dark min-h-[420px] overflow-auto p-5 sm:p-8">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-                </article>
-              )}
-
-              <footer className="flex flex-col gap-2 border-t border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p
-                  className={cn(
-                    "flex items-start gap-2 text-sm",
-                    saveState === "error" || saveState === "conflict" ? "text-[var(--danger)]" : "text-muted",
-                  )}
-                  aria-live="polite"
-                >
-                  {saveState === "saved" ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" /> : null}
-                  {message || (isDirty
-                    ? "Your changes are only in this browser so far."
-                    : "Editing a file opens a draft pull request for you to review. It never writes to the main branch.")}
-                </p>
-                <div className="flex items-center gap-2">
-                  {createdPullRequest ? (
-                    <a href={createdPullRequest.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                      <GitPullRequestArrow className="size-4" aria-hidden="true" />
-                      Open PR #{createdPullRequest.number}
-                      <ExternalLink className="size-4" aria-hidden="true" />
-                    </a>
-                  ) : lastCommit ? (
-                    <a href={lastCommit.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                      Last changed {lastCommit.date ? formatDate(lastCommit.date) : "at an unknown time"}
-                      <ExternalLink className="size-4" aria-hidden="true" />
-                    </a>
-                  ) : null}
-                </div>
+              {mode === "edit" ? <textarea value={content} onChange={(event) => { pendingSaveIntentRef.current = null; setContent(event.target.value); setCreatedPullRequest(null); setSaveState("idle"); setMessage(""); }} spellCheck className="min-h-[540px] w-full resize-y border-0 bg-[var(--surface-inset)] p-4 font-mono text-sm leading-6 text-[var(--text)] focus:outline-none sm:p-6" aria-label={`Edit ${file.path}`} /> : <article className="prose-dark min-h-[540px] overflow-auto bg-[var(--surface-inset)] p-5 sm:p-8"><ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown></article>}
+              <footer className="flex min-h-12 flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <p className={cn("flex items-start gap-1.5 text-xs", saveState === "error" || saveState === "conflict" ? "text-[var(--danger)]" : "text-[var(--text-muted)]")} aria-live="polite">{message ? <ShieldAlert className="mt-0.5 size-3 shrink-0" /> : <CheckCircle2 className="size-3 shrink-0 text-[var(--accent)]" />}{message || (isDirty ? "Unsaved changes are protected during navigation and window close." : "Reads are live. Saves create an isolated branch and draft pull request.")}</p>
+                <div className="flex items-center gap-2">{lastCommit ? <a href={lastCommit.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm"><GitCommitHorizontal className="size-3.5" />Commit {shortSha(lastCommit.sha)}<ExternalLink className="size-3" /></a> : null}{createdPullRequest ? <a href={createdPullRequest.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm"><GitPullRequestArrow className="size-3.5" />Draft PR #{createdPullRequest.number}<ExternalLink className="size-3" /></a> : null}</div>
               </footer>
             </div>
-          ) : (
-            <div className="grid min-h-[420px] place-items-center p-8 text-center">
-              <div className="max-w-sm">
-                <FileText className="mx-auto size-8 text-faint" aria-hidden="true" />
-                <p className="mt-4 font-semibold text-foreground">Pick a file to read or edit</p>
-                <p className="mt-2 text-sm text-muted">
-                  Files are read live from GitHub. Very large files, binary files, and protected files
-                  cannot be edited here.
-                </p>
-              </div>
-            </div>
-          )}
+          ) : <div className="grid min-h-[610px] place-items-center p-8 text-center"><div><FileCode2 className="mx-auto size-9 text-[var(--text-faint)]" /><p className="mt-4 text-sm font-semibold text-[var(--text)]">Select a text file</p><p className="mt-2 max-w-sm text-xs leading-5 text-[var(--text-faint)]">Files are fetched from GitHub at the verified default branch. Binary and oversized files fail closed; protected resources require a separate owner-approved workflow.</p></div></div>}
         </section>
       </div>
     </div>
   );
 }
 
-function preferredPath(path: string) { return path === "AGENTS.md" || preferredPathPrefixes.some((prefix) => path.startsWith(prefix)); }
-function sortEntries(entries: TreeEntry[]) {
-  return [...entries].sort((left, right) => {
-    if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
-    const leftPreferred = preferredPath(left.path);
-    const rightPreferred = preferredPath(right.path);
-    if (leftPreferred !== rightPreferred) return leftPreferred ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
+function FilesNotice({ title, description, href, label }: { title: string; description: string; href: string; label: string }) {
+  return <Card className="grid min-h-[520px] place-items-center p-6 text-center"><div className="max-w-md"><Folder className="mx-auto size-8 text-[var(--accent)]" /><h2 className="mt-4 text-base font-semibold text-white">{title}</h2><p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">{description}</p><Link href={href} className="btn btn-primary mt-4 justify-center">{label}<ChevronRight className="size-4" /></Link></div></Card>;
 }
+
+function preferredPath(path: string) { return path === "AGENTS.md" || preferredPathPrefixes.some((prefix) => path.startsWith(prefix)); }
+function sortEntries(entries: TreeEntry[]) { return [...entries].sort((left, right) => {
+  if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
+  const leftPreferred = preferredPath(left.path);
+  const rightPreferred = preferredPath(right.path);
+  if (leftPreferred !== rightPreferred) return leftPreferred ? -1 : 1;
+  return left.name.localeCompare(right.name);
+}); }
+function shortSha(sha: string) { return sha.slice(0, 7); }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatBytes(bytes: number) { if (bytes < 1_024) return `${bytes} B`; if (bytes < 1_024 * 1_024) return `${Math.round(bytes / 1_024)} KB`; return `${(bytes / (1_024 * 1_024)).toFixed(1)} MB`; }
+
+export function githubSaveIntentFingerprint(intent: {
+  baseBranch: string;
+  commitMessage: string;
+  connectionId: string;
+  content: string;
+  expectedBlobSha: string;
+  path: string;
+  projectId: string;
+  repository: string;
+  title: string;
+}) {
+  return JSON.stringify([
+    intent.projectId,
+    intent.connectionId,
+    intent.repository,
+    intent.baseBranch,
+    intent.path,
+    intent.expectedBlobSha,
+    intent.content,
+    intent.title,
+    intent.commitMessage,
+  ]);
+}

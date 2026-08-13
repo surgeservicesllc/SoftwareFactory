@@ -116,9 +116,10 @@ describe("LiveDashboardMetrics", () => {
 
     render(<LiveDashboardMetrics />);
 
-    expect(await screen.findByText(/Live .* Supabase \+ GitHub/)).toBeInTheDocument();
+    expect(await screen.findByText(/Live .* Supabase .* GitHub Not Connected/)).toBeInTheDocument();
     expect(screen.getByText("Connected projects").closest("article")).toHaveTextContent("0");
-    expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("0");
+    expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("—");
+    expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("GitHub Not Connected");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

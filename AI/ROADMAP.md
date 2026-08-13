@@ -2,67 +2,56 @@
 
 Roadmap order follows safety dependencies. A later phase cannot inherit authority from an earlier phase.
 
-## Phase 1A — trustworthy control-plane foundation
+## Phase 1A - trustworthy control-plane foundation
 
 Status: **Complete baseline; deployed UI evidence retained.**
 
-- Responsive shell, truthful demo/disconnected states, provider-neutral domain model, Supabase/RLS/audit foundations, risk/approval controls, tests, CI, documentation, and safe OFF defaults.
+- Responsive shell, truthful **Demo Data**/**Not Connected** states, tenant model, Supabase/RLS/audit foundations, risk/approval controls, CI, and safe OFF defaults.
 - No unrestricted production execution, merge, deployment, or rollback.
 
-## Phase 1B — Production GitHub App Integration
+## Phase 1B - Production GitHub App Integration
 
-Status: **Implementation/hardening gates, `main` publication, and production deployment pass; hosted promotion of `011`-`013`, authenticated tenant behavior, and live acceptance remain pending.**
+Status: **Hardening passes local gates, CI, and exact-tree production hosting; hosted migrations `011`-`019`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
 
-Implemented:
+Implemented in source:
 
-- Supabase Auth/onboarding/active organization.
-- Hosted schema through migration `009`, including serialized installation synchronization and authoritative synchronized-default-branch project linking.
-- GitHub App install/callback/token/sync/disconnect boundaries.
-- Repository/branch/commit/PR/check/file reads.
-- Signed/idempotent/redacted webhook ingestion.
-- Transactional project linking and live metrics/views.
-- Controlled branch + commit + draft-PR file changes.
-- Exact active-organization enforcement, truthful live connection/project/file state, live tenant Activity reads, no local HTTP writer, and local forward migrations `011`-`013` for mutation/audit/webhook hardening.
+- Supabase Auth/onboarding/active organization and caller-RLS tenant surfaces.
+- GitHub App installation/callback/token/sync/disconnect boundaries and bounded repository reads.
+- Signed/idempotent/redacted webhook ingress, provider-time lifecycle ordering, and terminal deletion safeguards.
+- Transactional project linking and provider-authoritative repository/default-branch propagation.
+- Controlled branch + commit + draft-PR file changes with broad protected-path rejection, stable same-intent idempotency, exact-binding reservation, terminal audit evidence, and provider-evidence completion recovery.
+- Local forward migrations `011`-`019`, all unhosted.
 
 Exit work:
 
-- obtain exact owner approval and apply/verify local migrations `011`-`013` on hosted Supabase (hosted ledger currently ends at `010`; linked lint is green only through `009`);
-- verify hosted authenticated RLS allow/deny and privileged-RPC behavior;
-- [x] Rerun lint, typecheck, full Vitest, build, E2E, and secret/client scans on the exact hardened tree.
-- [x] Push implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278`, preserve its authorship through owner-authored empty marker/current main `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`, and verify READY deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, production Playwright 12/12, and expected HTTP status boundaries; and
-- pass the real installation/repository/project/file/draft-PR/webhook/disconnect workflow.
+1. Obtain exact owner approval and apply/verify migrations `011`-`019` on the hosted Supabase project (hosted ledger currently ends at `010`; last clean linked lint ends at `009`).
+2. Verify hosted two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
+3. Complete production Auth/onboarding and the real GitHub installation -> tenant connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss journey.
 
-No merge or production deployment autonomy is implied.
+No merge or production deployment autonomy is implied. GitHub remains **Not Connected** until the live journey passes.
 
-## Phase 1C — Codex execution
+## Phase 1C - Codex execution
 
 Status: **Not Connected; not started.**
 
-- Durable provider-neutral worker, leasing/heartbeat/cancellation/idempotency.
-- Isolated workspaces, budgets/timeouts, sandbox/network restrictions, redacted traces.
-- Bounded GREEN tasks, deterministic validation, and human-reviewed draft PRs.
-- Kill switch, approval inbox, incident evidence, and observed non-production pilot.
+- Future durable provider-neutral worker, leases/heartbeat/cancellation/idempotency, isolated workspaces, budgets/timeouts, sandbox/network controls, redacted traces, and bounded human-reviewed work.
+- Do not begin until Phase 1B exits and the owner explicitly authorizes the phase.
 
-Do not begin without explicit instruction after Phase 1B exits.
+## Phase 1D - autonomous-loop controls
 
-## Phase 1D — autonomous-loop controls
+Status: **Observation-only scaffold; execution not started and controls remain OFF.**
 
-Status: **Observation-only scaffold and hosted locked controls implemented; execution not started and controls remain OFF.**
+- Autonomous Mode constrained OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF, evaluator always `executionAllowed: false`.
+- Hosted migration `010` contains the current fail-closed controls. No action executor exists.
 
-- [x] Add a fail-closed GREEN-only observation evaluator, Autonomous Mode OFF constraint, locked global kill switch, truthful UI/API boundary, and schema hardening migration.
-- [x] Apply/verify hosted migration `010`: zero unsafe rows at preflight/after application, kill-switch default true, both constraints validated, authenticated RPC execute only, anonymous denied.
-- [ ] Restore authorized post-`010` CLI lint and run observation against trustworthy non-production evidence.
-- No auto approve/merge/deploy/rollback until separate policy, provider, branch protection, validation, health, and rollback drills pass.
-
-## Phase 2 — Claude and governed delivery
+## Phase 2 - Claude and governed delivery
 
 Status: **Not Connected; not started.**
 
-- Use supported Anthropic API connections and logical roles, not browser automation of consumer accounts.
-- Provider-neutral Bot Manager routing between Codex, Claude, and automation capabilities.
-- Preview deployment/validation before any separately approved delivery automation.
+- Future supported Anthropic API connections and logical roles, not consumer-account browser automation.
+- Preview validation and separately approved governance precede any delivery automation.
 
 ## Later measured autonomy
 
-- Narrow GREEN automation only after sustained evidence, explicit allowlists, budgets, alerts, kill switches, and owner-approved policy.
+- Narrow GREEN automation only after sustained non-production evidence, explicit allowlists, budgets, alerts, kill switches, and owner-approved policy.
 - RED actions remain owner-controlled absent a future independently reviewed policy revision.

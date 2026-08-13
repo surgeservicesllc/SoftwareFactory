@@ -5,6 +5,7 @@ import { createSign } from "node:crypto";
 import { z } from "zod";
 
 import type { GitHubAppConfiguration } from "@/lib/github/config";
+import { githubWebUrlSchema } from "@/lib/github/schemas";
 import type {
   GitHubInstallationSnapshot,
   GitHubInstallationToken,
@@ -41,7 +42,7 @@ const repositorySchema = z.object({
   full_name: z.string().min(3).max(201),
   owner: z.object({ login: z.string().min(1).max(100) }),
   private: z.boolean(),
-  html_url: z.string().url(),
+  html_url: githubWebUrlSchema,
   visibility: z.enum(["public", "private", "internal"]),
   updated_at: z.string().datetime({ offset: true }),
   pushed_at: z.string().datetime({ offset: true }).nullable(),
@@ -476,14 +477,14 @@ export async function fetchGitHubInstallationSnapshot(
   const requiredEvents = [
     "check_run",
     "check_suite",
-    "installation",
-    "installation_repositories",
     "pull_request",
     "push",
     "repository",
     "status",
     "workflow_run",
   ];
+  // GitHub sends "installation" and "installation_repositories" to every
+  // GitHub App automatically and omits them from this configurable event list.
   if (requiredEvents.some((eventName) => !installation.events.includes(eventName))) {
     throw new GitHubApiError(
       403,

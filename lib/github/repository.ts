@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { GitHubApiError, githubApiRequest } from "@/lib/github/client";
+import { githubWebUrlSchema } from "@/lib/github/schemas";
 
 const repositoryCoordinatePattern = /^[A-Za-z0-9_.-]+$/;
 const shaPattern = /^[0-9a-f]{40,64}$/;
@@ -20,7 +21,7 @@ const pullRequestSchema = z.object({
   title: z.string(),
   state: z.enum(["open", "closed"]),
   draft: z.boolean().nullable().default(false),
-  html_url: z.string().url(),
+  html_url: githubWebUrlSchema,
   updated_at: z.string().datetime({ offset: true }),
   created_at: z.string().datetime({ offset: true }),
   mergeable: z.boolean().nullable().optional(),
@@ -35,7 +36,7 @@ const pullRequestSchema = z.object({
 
 const commitSchema = z.object({
   sha: z.string().regex(shaPattern),
-  html_url: z.string().url(),
+  html_url: githubWebUrlSchema,
   commit: z.object({
     message: z.string(),
     author: z.object({
@@ -52,7 +53,7 @@ const checkRunSchema = z.object({
   name: z.string(),
   status: z.enum(["queued", "in_progress", "completed", "pending", "requested", "waiting"]),
   conclusion: z.string().nullable(),
-  html_url: z.string().url().nullable(),
+  html_url: githubWebUrlSchema.nullable(),
   started_at: z.string().datetime({ offset: true }).nullable(),
   completed_at: z.string().datetime({ offset: true }).nullable(),
 });
@@ -63,7 +64,7 @@ const contentsEntrySchema = z.object({
   type: z.enum(["file", "dir", "symlink", "submodule"]),
   sha: z.string().regex(shaPattern),
   size: z.number().int().nonnegative(),
-  html_url: z.string().url().nullable(),
+  html_url: githubWebUrlSchema.nullable(),
 });
 
 const fileSchema = contentsEntrySchema.extend({
@@ -78,8 +79,8 @@ const referenceSchema = z.object({
 });
 
 const contentMutationSchema = z.object({
-  content: z.object({ html_url: z.string().url().nullable() }).nullable(),
-  commit: z.object({ sha: z.string().regex(shaPattern), html_url: z.string().url() }),
+  content: z.object({ html_url: githubWebUrlSchema.nullable() }).nullable(),
+  commit: z.object({ sha: z.string().regex(shaPattern), html_url: githubWebUrlSchema }),
 });
 
 const createdPullRequestSchema = z.object({
@@ -88,7 +89,7 @@ const createdPullRequestSchema = z.object({
   title: z.string(),
   state: z.enum(["open", "closed"]),
   draft: z.boolean(),
-  html_url: z.string().url(),
+  html_url: githubWebUrlSchema,
 });
 
 function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown, message: string) {
@@ -139,7 +140,31 @@ export function isProtectedGitHubWritePath(path: string) {
   const normalized = normalizeRepositoryPath(path).toLowerCase();
   const segments = normalized.split("/");
   const fileName = segments.at(-1) ?? "";
-  const protectedSubject = /(^|[._-])(auth|authorization|access|permission|role|rls|session|cookie|crypto|encrypt|secret|credential|private[-_]?key|webhook|deploy|deployment|release|rollback|dns|billing)([._-]|$)/;
+  const protectedSubject = /(^|[._-])(auth|authentication|authorize|authorization|oauth|identity|mfa|sso|rbac|access|permission|permissions|role|roles|rls|session|sessions|cookie|middleware|crypto|cryptography|encrypt|encryption|decrypt|security|secret|credential|private[-_]?key|webhook|workflow|deploy|deployment|release|rollback|recovery|backup|dns|domain|billing|payment|stripe|autonomy|autonomous|safety|guardrail|risk|approval|audit|incident|policy|protected|provider|installation)([._-]|$)/;
+  const protectedDirectories = new Set([
+    ".circleci",
+    ".github",
+    ".gitlab",
+    ".openai",
+    ".vercel",
+    "ai",
+    "database",
+    "db",
+    "helm",
+    "infra",
+    "infrastructure",
+    "k8s",
+    "kubernetes",
+    "migrations",
+    "policies",
+    "schema",
+    "supabase",
+    "terraform",
+  ]);
+  const containsProtectedRoute = segments.some((segment, index) => (
+    (segment === "app" && ["api", "auth", "settings"].includes(segments[index + 1] ?? ""))
+    || (segment === "lib" && ["github", "server", "supabase"].includes(segments[index + 1] ?? ""))
+  ));
   return fileName === "agents.md"
     || fileName === "claude.md"
     || fileName === "codeowners"
@@ -147,26 +172,20 @@ export function isProtectedGitHubWritePath(path: string) {
     || fileName === ".yarnrc"
     || fileName === ".yarnrc.yml"
     || fileName === ".pnpmfile.cjs"
+    || fileName === "package.json"
+    || ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].includes(fileName)
     || fileName.startsWith(".env")
     || fileName.startsWith("dockerfile")
     || fileName.startsWith("docker-compose")
     || /^(next|nuxt|webpack|vite)\.config\.[a-z0-9]+$/.test(fileName)
     || normalized === ".github/codeowners"
     || normalized === "docs/codeowners"
-    || normalized.startsWith(".github/")
-    || normalized.startsWith("ai/")
-    || normalized.startsWith("policies/")
-    || normalized.startsWith("supabase/")
-    || normalized.startsWith("app/api/")
-    || normalized.startsWith("lib/github/")
-    || normalized.startsWith("lib/server/")
-    || normalized.startsWith("lib/supabase/")
-    || normalized.startsWith(".vercel/")
-    || normalized.startsWith("infra/")
-    || normalized.startsWith("infrastructure/")
-    || normalized.startsWith("terraform/")
-    || normalized.startsWith("app/api/auth/")
-    || normalized.startsWith("app/auth/")
+    || segments.some((segment) => protectedDirectories.has(segment))
+    || containsProtectedRoute
+    || normalized.startsWith("components/safety-controls.")
+    || normalized === "lib/autonomy.ts"
+    || normalized === "lib/constants.ts"
+    || normalized === "lib/risk.ts"
     || normalized === "proxy.ts"
     || normalized === "middleware.ts"
     || normalized === "vercel.json"
@@ -319,7 +338,12 @@ export async function getGitHubFile(
   if (content.byteLength !== file.size || content.byteLength > MAX_FILE_BYTES) {
     throw new GitHubApiError(502, "github_file_invalid", "GitHub returned inconsistent file content.");
   }
-  const decoded = new TextDecoder("utf-8", { fatal: true }).decode(content);
+  let decoded: string;
+  try {
+    decoded = new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    throw new GitHubApiError(415, "github_file_binary", "Binary files are not editable in SoftwareFactory.");
+  }
   if (decoded.includes("\u0000")) {
     throw new GitHubApiError(415, "github_file_binary", "Binary files are not editable in SoftwareFactory.");
   }

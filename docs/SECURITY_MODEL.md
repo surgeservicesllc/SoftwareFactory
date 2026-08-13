@@ -29,16 +29,16 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 - Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
 - Store only a redacted subset plus hash/status metadata.
 - Unknown events/installations are ignored safely and cannot mutate another tenant.
-- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. The required forward migration `013` is local and not hosted yet.
+- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. The required forward migrations are local and not hosted yet.
 
 ## Repository mutations
 
 - Validate coordinates, refs, path, size, UTF-8 content, project mapping, and synchronized default branch; match normalized repository full names literally without SQL wildcard semantics.
 - Reject credential-like content and protected resource classes including repository memory/policies, Supabase, every application API route, server-side provider/data libraries, Auth/session boundaries, deployment/environment/infrastructure files, and security-sensitive subject paths.
-- Reserve an idempotency record before provider writes.
+- Reserve an idempotency record through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository binding before provider writes. An unchanged browser save intent reuses its idempotency key.
 - Create a new `softwarefactory/*` branch, update with the expected blob SHA, and require GitHub to return an open draft PR.
 - Never write directly to the default branch, merge, modify workflows, or deploy.
-- Record completed/failed mutation evidence without file content or secrets.
+- Record completed/failed mutation evidence without file content or secrets. If the branch, commit, and draft PR exist at GitHub but database completion was ambiguous, a server-only recovery RPC records that same provider evidence instead of initiating a duplicate change.
 - No HTTP local-repository writer or local-write environment switch remains as an alternate mutation path.
 
 ## Secrets
@@ -47,9 +47,11 @@ Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_
 
 ## Audit and privacy
 
-Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Local migration `012` makes completed and failed GitHub change requests explicitly actor-attributed and retains only bounded branch/commit failure evidence; it is not hosted yet. Webhook payloads and change records deliberately avoid raw credentials and full file bodies. The live Activity API uses the caller's RLS session and does not return event metadata to the browser.
+Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Local migration `012` makes completed and failed GitHub change requests explicitly actor-attributed and retains only bounded branch/commit failure evidence; `014` audits exact linked-project metadata propagation; `015` audits completion recovery; and `016`/`018` audit applied, stale, ignored, and terminal provider transitions. None is hosted yet. Webhook payloads and change records deliberately avoid raw credentials and full file bodies. The live Activity API uses the caller's RLS session and does not return event metadata to the browser.
 
-Local migration `011` removes direct authenticated `connections` deletion and direct `organization_members` mutation grants/policies so the audited server workflows remain the intended mutation path. Until `011` is explicitly approved and applied to hosted Supabase, that hosted hardening is pending rather than assumed.
+Local migrations `011` and `017` remove direct authenticated writes to connections, memberships, projects, project links, and GitHub change requests so narrow audited workflows remain the intended mutation path. Until the complete local chain is explicitly approved and applied to hosted Supabase, that hosted hardening is pending rather than assumed.
+
+Local migration `019` addresses the separate provider-ingress CHECK-expression boundary: service role may execute only the SECURITY DEFINER sensitive-JSON wrapper referenced by table constraints. Its recursive implementation and the standalone text classifier remain inaccessible. This grant is local/unhosted and requires exact owner-approved promotion plus a real service-role insert/rejection matrix.
 
 ## Supply chain and delivery
 

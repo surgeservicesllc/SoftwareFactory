@@ -121,7 +121,28 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: Bind every interactive GitHub route to the caller's exact active organization. Treat a project as connected only while its connection is connected, installation is active and unsuspended, and synchronized repository is selected, non-archived, and enabled. Expose immutable activity through a bounded caller-RLS API that omits metadata from browser responses. Remove the legacy HTTP local-repository writer, and route terminal GitHub change evidence and newly granted repository reconciliation through narrowly granted audited database workflows.
 - Consequence: Retained connection/project rows cannot create a false Connected state or authorize repository access after loss. Local migrations `011`-`013` must receive exact owner approval and hosted verification before their authorization/audit/webhook guarantees are claimed in production; the Activity UI, route hardening, and webhook reconciliation also require a matching deployed commit and real authenticated acceptance.
 
-## ADR-018 — Semantic design tokens and a 12px minimum type size
+## ADR-018 - Provider lifecycle events are ordered and terminal states fail closed
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migrations `014`, `016`, and `018` pending
+- Decision: Treat provider timestamps, not webhook arrival order, as lifecycle ordering evidence. Deletion is terminal for the same GitHub installation ID. Repository deletion remains terminal until an explicit newer restore event, and restored repositories remain unselected until a fresh access synchronization. Propagate repository rename/default-branch metadata only through the exact tenant connection linking the repository to a project.
+- Consequence: Delayed suspend, unsuspend, rename, archive, delete, or restore deliveries cannot reactivate an installation, restore stale repository state, or rewrite an unrelated project. Ignored, stale, and terminal outcomes remain auditable. A genuine reinstall uses a new provider installation ID.
+
+## ADR-019 - GitHub change intent uses audited reservation and provider-evidence recovery
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migrations `015` and `017` pending
+- Decision: Remove direct authenticated writes to provider connections, projects, project links, and GitHub change-request rows. Reserve a file change through a caller-authenticated, tenant-validating RPC. Reuse one idempotency key while the same browser save intent is retried. If GitHub has already returned an isolated branch, commit, and open draft PR but database completion fails or its response is lost, finish the same request from that bounded provider evidence through a server-only recovery RPC.
+- Consequence: Ambiguous retries do not intentionally create a second branch or draft PR; the recovery path cannot merge, deploy, or write the default branch. Hosted guarantees cannot be claimed until the complete migration chain is owner-approved, applied, and verified.
+
+## ADR-020 - Provider-ingress CHECK helpers use a minimal wrapper grant
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migration `019` pending
+- Decision: PostgreSQL evaluates table CHECK expressions with the invoking role's function privileges. Grant the service-role provider-ingress boundary execute only on the SECURITY DEFINER `jsonb_has_sensitive_keys(jsonb)` wrapper used by those constraints. Keep its recursive implementation and the standalone text secret classifier inaccessible to service role.
+- Consequence: Service-role inserts still pass the same sensitive-JSON constraints without exposing broader classifier internals or widening authenticated mutation authority. Hosted behavior must be verified after exact owner-approved promotion.
+
+## ADR-021 — Semantic design tokens and a 12px minimum type size
 
 - Date: 2026-08-12
 - Status: Accepted
@@ -129,7 +150,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: The prior interface set body copy at 10-11px and metadata at 7-9px across 133 declarations, with roughly 500 literal hex values and nine competing grey text tones. Several of those tones (for example `#566271` on `#0b1017`, about 3.1:1) failed WCAG AA, and the failures were invisible to automated checks because gradient panel backgrounds made axe return "incomplete" rather than "violation" for contrast.
 - Consequence: Contrast is a property of the token set rather than of each call site, so a token change is auditable in one place. Element resets live in `@layer base` so component classes can win the cascade; adding an unlayered element rule that competes with a component class is a regression. Reintroducing literal hex values or sub-12px type in application code contradicts this decision.
 
-## ADR-019 — Plain language first, with the technical term kept alongside
+## ADR-022 — Plain language first, with the technical term kept alongside
 
 - Date: 2026-08-12
 - Status: Accepted
@@ -137,7 +158,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: Truthfulness obligations under ADR-009 were being met by repeating the same **Demo Data** and **Not Connected** badges three to five times per page. Repetition produces banner blindness, which weakens the very contract it is meant to serve, while phase vocabulary ("Phase 1D observation ceiling", "declared maximum risk") left readers unable to tell which screens did anything real.
 - Consequence: Structure carries the truthfulness contract — a grouped navigation heading and one notice per page — so exact labels stay meaningful where they appear. Precise terms are never deleted, only demoted next to their plain-language equivalent, and API values are unaffected by presentation wording.
 
-## ADR-020 — Every surface reads live tenant records; empty replaces illustrative
+## ADR-023 — Every surface reads live tenant records; empty replaces illustrative
 
 - Date: 2026-08-12
 - Status: Accepted

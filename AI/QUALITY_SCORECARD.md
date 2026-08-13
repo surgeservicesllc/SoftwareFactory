@@ -4,20 +4,46 @@ Last reviewed: 2026-08-12
 
 Phase 1B decision: **Not release-ready yet**
 
-Reason: review hardening, local gates, `main` publication, READY production deployment, public HTTP checks, and production Playwright pass. Hosted migrations `011`-`013`, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending.
+Reason: local gates, GitHub publication/CI, and exact-tree production hosting pass, but hosted migrations `011`-`019`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
 
-A GREEN interface simplification (ADR-018, ADR-019) now sits on top of that hardening. It is presentation-only and does not move any release blocker: no provider became Connected, no phase advanced, and every production row below still describes tree `e0ca6e7`, which predates it.
+A GREEN interface simplification (ADR-021, ADR-022) now sits on top of that hardening. It is presentation-only and does not move any release blocker: no provider became Connected, no phase advanced, and every production row below still describes release `427190d`, which predates it.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
+| Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; strict provider schemas/URLs; truthful UI; retry-safe draft-PR flow; lifecycle ordering; local migrations `011`-`019` | Implemented; all current local gates pass; live acceptance pending |
+| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 38 files/263 tests (unit 23/145, integration 15/118) |
+| Current-tree coverage | `npm run test:coverage` | Pass - 38 files/263 tests; 66.08% statements, 65.13% branches, 58.62% functions, 67.16% lines; required risk/constants thresholds pass |
+| Current-tree migration chain | Full-chain RLS behavioral matrix through migration `019` | Pass - 5/5 |
+| Current-tree production build | `npm run build` | Pass - 34 routes |
+| Current-tree E2E/responsive/accessibility | `npm run test:e2e` after relocating an ignored stale OneDrive coverage cache | Pass - 12/12 desktop/tablet/mobile including axe |
+| Current-tree secret/client scan | Tracked and untracked non-fixture source plus rebuilt `.next/static` | Pass - no credential/private-key markers in non-fixture source; only explicit fake detector fixtures matched; no privileged env names/key markers/`service_role` in client assets |
+| Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY` | Historical pass |
+| Hosted migrations | Hosted ledger through `010` | Pass through `010` only |
+| Local migrations `011`-`019` | Authorization/grants, audit, reconciliation, metadata propagation, recovery, lifecycle ordering, reservation, CHECK-helper grant | Local only; exact owner approval/application/post-apply verification pending |
+| Hosted database lint | Last successful linked public-schema lint through `009`: `[]`; post-`010` CLI received `403` | Pass through `009`; later state unverified |
+| Hosted RLS catalog | Prior 22 tables / 22 RLS / 22 FORCE RLS / 43 policies / 22 secret guards | Catalog evidence retained; current authenticated behavior pending |
+| Protected-resource writes | Broad subject/path/dependency/provider/control-plane classes blocked; no local HTTP writer; required risk/constants thresholds pass | Pass in current local tests; live-provider acceptance pending |
+| Idempotency/recovery | Same browser intent retains key; exact-binding reservation; existing draft-PR evidence recovery | Implemented locally via application + migrations `015`/`017`; hosted/live verification pending |
+| Lifecycle safety | Provider-time installation/repository ordering; terminal deletion; explicit newer restore remains unselected | Implemented locally via migrations `016`/`018`; hosted/live verification pending |
+| Service-role CHECK boundary | Only sensitive-JSON SECURITY DEFINER wrapper granted for provider-ingress constraints | Implemented locally via `019`; hosted verification pending |
+| GitHub App configuration | App ID `4573846`; server-only variable names configured | Configuration evidence only |
+| GitHub provider installation | Installation `153286187`, selected only for `surgeservicesllc/SoftwareFactory` | Provider-scope evidence only |
+| GitHub real connection | Authenticated SoftwareFactory callback/tenant connection/token/repository sync | **Not Connected** |
+| GitHub webhook | Route implemented; active hook/valid signed production delivery absent | **Not Connected** |
+| Project/repository and file-to-draft-PR flow | Code/tests exist; real journey absent | Pending live acceptance |
+| Git/main provenance for this increment | Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, author `NewWorldVenture`; CI run `31649243266` | Pass - commit on `main`, 2/2 CI green |
+| Vercel production for this increment | READY deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu`; metadata `softwarefactoryGitCommitSha=427190d050796e3f5ff5cf6154adc2c34e2e5694` | Pass - exact application tree, production alias, HTTP/E2E/assets/log checks verified |
+| OpenAI/Codex | No live worker; Phase 1C not started | **Not Connected** |
+| Anthropic/Claude | No live worker | **Not Connected** |
+| Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
+| Phase 1D observation scaffold | Autonomous Mode OFF, GREEN-only observation, global kill switch ON | Execution remains blocked |
 | Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; truthful connection/project/file state; live Activity; guarded GitHub writes; local migrations `011`-`013` | Implemented locally; live acceptance pending |
 | Current-tree check phases | `npm run check` | Lint, typecheck, and 24 files/205 tests pass; build phase hit only a stale OneDrive `.next` cache `EPERM` |
 | Current-tree production build | standalone `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
-| Full coverage suite | `npm run test:coverage` after final `013` ordering/contracts | Pass — 25 files/208 tests; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
 | Focused `013` chain | 3 files/44 tests | Pass |
 | Local E2E/responsive/accessibility | `npm run test:e2e` | Pass — 48/48 desktop/tablet/mobile. Dashboard depth checks (12) plus `tests/e2e/pages.spec.ts` (36) asserting heading, no horizontal overflow, and axe on 12 routes. |
-| Interface simplification (GREEN) | Design tokens with a 12px type floor (ADR-018), plain-language copy (ADR-019), grouped navigation, guided dashboard path, dead `project-form` removed | Pass locally on Node 22 — `npm run check` green in one run; presentation only, no route/schema/policy/provider change |
-| Live Supabase wiring (ADR-020) | Five tenant read routes over existing tables through one server-only boundary; five surfaces converted from seeded arrays; `lib/demo-data.ts` deleted | Pass locally — 27 files/234 tests. Read-only application change: no hosted schema change, no credential set, no provider capability added |
+| Interface simplification (GREEN) | Design tokens with a 12px type floor (ADR-021), plain-language copy (ADR-022), grouped navigation, guided dashboard path, dead `project-form` removed | Pass locally on Node 22 — `npm run check` green in one run; presentation only, no route/schema/policy/provider change |
+| Live Supabase wiring (ADR-023) | Five tenant read routes over existing tables through one server-only boundary; five surfaces converted from seeded arrays; `lib/demo-data.ts` deleted | Pass locally — 40 files/289 tests on the merged tree. Read-only application change: no hosted schema change, no credential set, no provider capability added |
 | Withheld-column contract | Run `input`/`output`, report `content`, and command `parameters` are excluded from every list select; no `select("*")` | Pass — asserted by `tests/integration/tenant-list-routes.contract.test.ts` |
 | Interface accessibility repairs | axe across every route at three viewports | Pass — two real WCAG AA defects fixed: anchor primary buttons at 1.21:1 caused by an unlayered `a { color: inherit }` outranking `@layer components`, and a keyboard-unreachable horizontal scroll region on the backlog. Both predate this change; gradient panel backgrounds had made axe report contrast "incomplete" rather than failing. |
 | Secret safety | Current source/tracked and `.next/static` scan | Pass; only the synthetic `github_pat_` fixture matched, and no built static server-secret markers were found |
@@ -35,22 +61,31 @@ A GREEN interface simplification (ADR-018, ADR-019) now sits on top of that hard
 | GitHub webhook | Route tested locally; provider General form blank/inactive and App-auth hook config returns `404`/no hook object | **Not Connected** / no real delivery |
 | Project/repository flow | Code implemented; real selected repo/project | Pending live acceptance |
 | File-to-draft-PR | Guarded implementation/tests; real branch/commit/draft PR | Pending live acceptance |
-| Git/main provenance | implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278`; owner marker/current main `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` | Pass — implementation authorship preserved; empty marker changes no application files |
-| Vercel production deployment | `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, READY/current at deployment URL and stable alias, exact `e0ca6e7` application tree via marker `7bd9d30`; production Playwright 12/12 | Pass for hosting/public E2E and exact runtime provenance; full provider acceptance pending |
 | Production HTTP probes | `/`, `/activity`, `/connections` 200; unauthenticated `/api/activity` 401; removed `/api/files` 404 | Pass |
 | Codex/OpenAI | No live worker | **Not Connected** |
 | Claude/Anthropic | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback endpoints/workflows; controls OFF | Pass |
 | Phase 1D observation scaffold | Autonomous Mode OFF; GREEN-only pure evaluator; static locked UI; same-origin tenant/owner API; hosted migration `010` kill switch/constraints | Local lint/typecheck, focused tests (51), full tests (157), 34-route build, and hosted safety checks pass; execution remains blocked |
 
-## Recorded local and hosted evidence
-
-The hardening gates and current production deployment are recorded first. Hosted Supabase still ends at `010`; source migrations `011`-`013` are present in the deployed tree but are not applied to the database.
+## Recorded local and release evidence
 
 ```text
-Live Supabase wiring re-run (ADR-020, read-only application change):
+Review date: 2026-08-12
+Verified hardening application release:
+  commit: 427190d050796e3f5ff5cf6154adc2c34e2e5694
+  author: NewWorldVenture
+  CI: run 31649243266 - PASS, 2/2
+  deployment: dpl_9oqg94scmdn5X86r7yyrgmsVtmBu - READY Production
+  deployment metadata: softwarefactoryGitCommitSha=427190d050796e3f5ff5cf6154adc2c34e2e5694
+  deployment URL: softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app
+  stable alias: https://softwarefactory-tan.vercel.app
+  public Playwright: PASS - 12/12
+  HTTP: five public routes 200; authenticated APIs 401; removed /api/files 404; expected title
+  deployed JS: 9 assets scanned, no privileged markers
+  recent logs: 0 errors; 0 HTTP 500
+Live Supabase wiring re-run (ADR-023, read-only application change):
 Local shell: Node 22
-  npm run check                 PASS — lint, typecheck, 27 files / 234 tests, build in one run
+  npm run check                 PASS - lint, typecheck, 40 files / 289 tests, build in one run
   build route table             46 entries, including the 4 new /api/agents|tasks|runs|reports routes
                                 (/api/commands already existed and gained a GET)
   npm run test:e2e              PASS — 48/48 across desktop/tablet/mobile
@@ -73,97 +108,33 @@ Local shell: Node 22 (no Supabase future-support warning)
                                 which must be a literal and is commented to track --bg; every other
                                 colour (~500 previously) now resolves through a token. No route,
                                 schema, policy, token, or provider behaviour changed.
-  NOT deployed                  every production row below describes tree e0ca6e7, which predates this
+  NOT deployed                  the published production rows describe release 427190d, which predates this
 
 Prior review date: 2026-08-12
 Local shell: Node 20 (Supabase future-support warning)
 Target runtime: Node >=22
 
-npm run check (current local hardening):
-  PASS — lint, typecheck, 24 files / 205 tests
-  BUILD PHASE — stale OneDrive .next cache EPERM only
-npm run build after recoverable cache relocation:
-  PASS — 34 pages/routes
-npm run test:coverage (after final 013 ordering/contracts):
-  PASS — 25 files / 208 tests
-  COVERAGE — 50.44 statements / 52.99 branches / 45.07 functions / 51.24 lines
-focused 013 chain:
-  PASS — 3 files / 44 tests
-npm run test:e2e (current local hardening):
-  PASS — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, axe
-current secret/client scan:
-  PASS — only synthetic github_pat_ fixture matched; no .next/static server-secret markers
-
-Prior baseline detail:
-npm run test:unit:
-  PASS — 58 tests after repository-write hardening
-npm run test:integration:
-  PASS — 88 tests after migration 009
-npm run lint:
-  PASS
-npm run typecheck:
-  PASS
-npm test:
-  PASS — 157 tests on the prior Phase 1D observation-scaffold baseline
-npm run build:
-  PASS — 34 pages/routes
-npm run test:e2e:
-  PASS — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, axe
-stable production test:e2e:
-  PASS — 12/12 at https://softwarefactory-tan.vercel.app
-final secret/client scan:
-  PASS — no credential patterns or built-client privileged server names; only .env.example tracked
-
-Vercel production:
-  implementation — e0ca6e7fe62234817e24273fb8ba3f6a12ffd278, pushed to origin/main
-  current main / owner-authored empty deployment marker — 7bd9d30e67bf018aba32f28d235d4a2f1232d65c
-  deployment — dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY, READY/current
-  deployment URL — softwarefactory-fbho4i38o-surgeservices-projects.vercel.app
-  stable alias — https://softwarefactory-tan.vercel.app
-  production Playwright — PASS, 12/12
-  HTTP — / 200; /activity 200; /connections 200; /api/activity unauthenticated 401; /api/files 404
-  provenance note — direct e0ca deployment was blocked by Vercel Hobby private-repo author membership; empty marker changes no application files and builds the exact e0ca application tree
-
-GitHub App provider state:
-  installation 153286187 — installed on surgeservicesllc
-  selected repositories — surgeservicesllc/SoftwareFactory only
-  sole key fingerprint — SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=
-  webhook — Not Connected; General form blank/inactive, App-auth configuration 404/no hook object
-
-hosted Supabase:
-  project qpuofpmagrmyamahqwxw — ACTIVE_HEALTHY
-  applied hosted ledger — 001, 002, 003, 004, 005, 007, 008, 009, 010
-  010 preflight — unsafe_project_rows=0
-  010 safety — kill-switch default true; constraints validated; 0 switch off; 0 unsafe projects; authenticated RPC true; anon false
-  linked public-schema lint through 009 — PASS, no schema errors / []
-  post-010 linked lint — NOT VERIFIED; CLI account returned 403
-  hosted catalog — 22 tables / 22 RLS / 22 FORCE RLS / 43 policies / 22 secret guards
-  linked migration history — 9 migrations through 010
-  008 local — pglast all 7; PGlite reproduced 004 failure, then repair passed create/resync with audit/grant checks
-  009 — serialized external-installation sync, authoritative post-upsert binding, synchronized-default-branch project linking
-  required — hosted authenticated RLS/tenant/RPC/audit behavior checks
-
-pending:
-  exact owner approval and hosted application/verification of migrations 011, 012, and 013
-  authenticated production Supabase journey
-  authenticated SoftwareFactory callback/tenant connection/repository/project/file/draft-PR/webhook/disconnect acceptance
-  authorized post-010 CLI lint and broader hosted tenant/RPC/audit verification
+Hosted Supabase baseline:
+  project: qpuofpmagrmyamahqwxw
+  applied ledger: 001, 002, 003, 004, 005, 007, 008, 009, 010
+  last clean linked public-schema lint: through 009 / []
+  post-010 linked lint: NOT VERIFIED - CLI account returned 403
 ```
 
-## Security acceptance still required
+Application-release evidence is provider-resolved through deployment metadata rather than inferred from the latest Git tip, so a documentation-only successor does not make the runtime SHA claim stale. It does not verify hosted migrations `011`-`019` or the live GitHub workflow.
 
-- prove two-tenant and anonymous denial with user sessions;
-- verify RLS and FORCE RLS on every exposed hosted table;
-- verify security-definer search paths/grants/actor checks after hosted promotion of `011`-`013`;
-- verify App token scope/expiry and no token leakage in responses/logs;
-- observe valid/invalid/duplicate webhook behavior in production;
-- verify protected path, likely-secret, stale SHA, wrong tenant, revoked installation, and insufficient permission failures; and
-- verify activity evidence is immutable and redacted.
+## Security and production acceptance still required
+
+- Preserve the passing current-tree quality/secret evidence for the exact committed tree and rerun affected checks after any change.
+- Apply migrations `011`-`019` only after exact owner approval; verify all grants/search paths, RLS/FORCE RLS, two-tenant/anonymous denial, provider-ingress CHECK evaluation, actor attribution, immutable/redacted activity, lifecycle ordering, and recovery behavior.
+- Complete a real authenticated production session and the entire GitHub callback/token/repository/project/read/edit/draft-PR/disconnect journey.
+- Observe valid, invalid, duplicate, stale, out-of-order, deletion, and restore webhook deliveries in production.
+- Verify stale SHA, protected path, likely secret, wrong tenant, revoked installation, insufficient permission, rate limit, stable retry, and ambiguous completion recovery.
+- Complete and record hosted migration/Auth/GitHub provider acceptance separately from the already verified application release.
 
 ## Release-blocking invariants
 
-- Any exposed secret, disabled RLS, cross-tenant access, direct default-branch write, non-draft/merge/deploy action, or unapproved RED action is an immediate failure.
-- Configuration/mocks/tests cannot be relabeled as a real provider connection.
-- Clean migration/lint evidence does not prove authenticated RLS behavior; both evidence layers must be stated separately.
-- A Vercel READY deployment is not full post-deploy/provider acceptance.
-- A future code/provider/schema change invalidates affected evidence and requires this scorecard to be rerun.
+- Any exposed secret, disabled RLS, cross-tenant access, direct default-branch write, non-draft/merge/deploy action, stale event reactivation, duplicate ambiguous retry, or unapproved protected production action is a failure.
+- Configuration, tests, provider installation, or Vercel READY status cannot be relabeled as a real SoftwareFactory GitHub connection.
+- A clean migration/lint result does not prove authenticated RLS behavior; both evidence layers are required.
+- A future code/provider/schema/deployment change invalidates affected evidence and requires this scorecard to be rerun.

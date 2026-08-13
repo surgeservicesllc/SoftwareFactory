@@ -81,8 +81,19 @@ export function LiveDashboardMetrics() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load, supabaseConfigured]);
-
-  const statusLabel = useMemo(() => state === "ready" ? "Live · Supabase + GitHub" : state === "signed-out" ? "Sign in required" : state === "setup" ? "Organization setup required" : state === "error" ? "Live source unavailable" : "Loading live source", [state]);
+  const githubConnected = state === "ready" && connectedCount > 0;
+  const statusLabel = useMemo(
+    () => state === "ready"
+      ? githubConnected ? "Live · Supabase + GitHub" : "Live · Supabase · GitHub Not Connected"
+      : state === "signed-out"
+        ? "Sign in required"
+        : state === "setup"
+          ? "Organization setup required"
+          : state === "error"
+            ? "Live source unavailable"
+            : "Loading live source",
+    [githubConnected, state],
+  );
 
   /*
    * Setup progress is derived from the single /api/projects read the metrics
@@ -143,7 +154,7 @@ export function LiveDashboardMetrics() {
             <p className="mt-1 text-sm text-muted">Read from your own Supabase records and from GitHub.</p>
           </div>
           <div className="flex items-center gap-2">
-            <StatusBadge tone={state === "ready" ? "safe" : state === "error" ? "danger" : "neutral"}>{statusLabel}</StatusBadge>
+            <StatusBadge tone={githubConnected ? "safe" : state === "error" ? "danger" : "neutral"}>{statusLabel}</StatusBadge>
             <button type="button" onClick={() => void load()} disabled={state === "loading"} className="btn btn-secondary btn-sm" aria-label="Refresh live dashboard metrics">
               {state === "loading" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Refresh
@@ -159,13 +170,17 @@ export function LiveDashboardMetrics() {
             tone={connectedCount ? "safe" : "neutral"}
             demo={false}
           />
+          {/* Without a live GitHub connection there is no pull-request total to
+              state, so the count stays blank rather than implying a real zero. */}
           <MetricCard
             label="Open pull requests"
-            value={state === "ready" && openPullRequests !== null ? String(openPullRequests) : "—"}
+            value={githubConnected && openPullRequests !== null ? String(openPullRequests) : "—"}
             detail={state === "ready"
-              ? openPullRequests === null
-                ? "Incomplete — a GitHub read failed"
-                : `Live across ${projects.length} connected project${projects.length === 1 ? "" : "s"}`
+              ? !githubConnected
+                ? "GitHub Not Connected"
+                : openPullRequests === null
+                  ? "Incomplete — one or more GitHub reads failed"
+                  : `Live across ${projects.length} connected project${projects.length === 1 ? "" : "s"}`
               : statusLabel}
             icon={GitPullRequestArrow}
             tone={openPullRequests === null ? "warning" : "info"}

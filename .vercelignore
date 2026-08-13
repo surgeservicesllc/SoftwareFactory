@@ -1,5 +1,6 @@
 .git/
 .next/
+.next-*/
 .vercel/
 node_modules/
 coverage/
@@ -8,6 +9,9 @@ test-results/
 work/
 .env*
 !.env.example
+*.key
+*.p12
+*.pfx
 *.pem
 *.tsbuildinfo
 npm-debug.log*
