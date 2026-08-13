@@ -233,35 +233,49 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: A Phase 2A provider run reads bounded context and returns an analysis artifact. It has no repository, merge, deployment, or approval authority; applying a recommendation remains the existing owner-driven branch, commit, and draft-pull-request flow. Outbound execution is gated by `organizations.ai_provider_execution_enabled`, which defaults OFF and is owner-only, so a configured credential is never by itself consent to spend. Fallback requires the project policy to allow it *and* the failure class to be declared fallback eligible; credential, authorization, cancellation, and content-policy failures are never fallback eligible. An independent-review step cannot be satisfied by the agent that produced the work under review, whichever provider executed it.
 - Consequence: Enabling a provider changes what SoftwareFactory can analyze, not what it can change. Fallback cannot be used to shop a refused request to a second provider or to paper over a broken credential, and a single agent cannot both implement and approve. Widening this boundary requires a separate owner-approved decision and a forward migration that deliberately changes the interlocks.
 
-## ADR-034 - The bot fabric is a control-plane registry, not an execution surface
+## ADR-034 - Phase 1E is a production-operations control plane, not a production mutator
+
+- Date: 2026-08-13
+- Status: Accepted; implemented and locally verified; hosted migration `028` and live observation pending
+- Decision: Build the Phase 1E objective as far as the tree honestly allows and stop at the mutation boundary. Everything that only observes or restricts is implemented and may run automatically: monitoring ingestion, health derivation, incident creation and deduplication, severity classification, release freeze, diagnosis, bounded repair-work creation, resolution gating, durable event orchestration, and reporting. Everything that would mutate production is built up to the decision boundary, records immutable evidence, and stops at a named blocker. Freeze is automatic precisely because it only removes authority; resume and organization-wide stop are owner-only. Rollback and repair execution record `EXECUTOR_NOT_CONNECTED` and `WORKER_NOT_CONNECTED` rather than acting, because no deployment provider adapter exists, `policies/AUTO_ROLLBACK.md` disables automatic rollback, migration `010` pins `auto_rollback` off, and Phase 1C is Not Connected.
+- Consequence: The stated Phase 1E target chain is demonstrated end to end against the real migrated schema with two stages asserted as blocked rather than simulated — the Codex fix and the deploy. Migration `028` adds ten RLS/FORCE-RLS tables and grants `service_role` no new table privileges, so the verified `026` ACL matrix is unchanged; provider ingestion runs through narrow SECURITY DEFINER workflows instead of table grants, which also leaves scheduled monitoring **Not Connected** until a scheduler identity is authorized without widening `service_role`. Four constraints carry the safety guarantees rather than convention: an unconnected monitor cannot be enabled, a failed rollback cannot be recorded without escalating, an incident cannot be resolved without root cause and corrective action, and `EXECUTOR_NOT_CONNECTED` is appended unconditionally so no configuration change can grant release authority. Phase 1B remains incomplete, Phase 1C and Phase 2 remain Not Connected, Autonomous Mode stays OFF, the global kill switch stays ON, and no automatic approve, merge, deploy, or rollback exists.
+
+## ADR-035 - Monitoring may never present a signal it did not observe
+
+- Date: 2026-08-13
+- Status: Accepted; implemented
+- Decision: A monitoring surface fails in a specific way: an empty chart looks identical to a healthy one. So absence of evidence resolves to **UNKNOWN**, never HEALTHY; a monitor whose provider adapter is not connected cannot be enabled at all, enforced by the `production_monitors_enabled_requires_connection` CHECK constraint; a probe that cannot run records nothing rather than an `unknown` observation that would corrupt the failure count; and every unconnected provider is listed with the exact reason and the condition that would unblock it. The single connected adapter validates its target before every request — HTTPS only, standard port, no credentials, and no loopback, private, carrier-grade-NAT, link-local, or cloud-metadata address — does not follow redirects, and never reads a response body, so production content cannot enter control-plane evidence.
+- Consequence: The product cannot fabricate monitoring, and the failure mode when a provider is missing is an explicit Not Connected with a reason rather than a silent gap. One residual limitation is recorded rather than hidden: a public hostname that resolves to a private address at DNS time is not detected, because that needs resolve-then-connect-by-IP handling. Live monitoring remains unproven until hosted migration `028` is applied and an owner-authorized production target is observed.
+
+## ADR-036 - The bot fabric is a control-plane registry, not an execution surface
 
 - Date: 2026-08-12
 - Status: Accepted for local implementation; hosted migrations `020` and `021` pending
 - Decision: Model provider-neutral bots, organization-authored roles, and bot-to-project assignments as first-class tenant records. A bot stores metadata plus the NAME of a server-side environment variable; the value is resolved only on the server, only to a presence boolean, and never enters a table, a browser response, a log, or audit metadata. Privileged reference names (Supabase service role, GitHub App private key and secrets, database URL, Vercel token, and any `NEXT_PUBLIC_` variable) are rejected by both the application allowlist and a table CHECK constraint. Readiness describes configuration only: `ready` means the reference and configuration resolve server-side, and the check performs no provider request. Assignment is declarative routing intent; a bot holds at most one open posting so moving it between projects is a single audited transition.
 - Consequence: Registering a bot, authoring a role, and posting a bot cannot start work. OpenAI/Codex and Anthropic/Claude remain **Not Connected**, Phase 1C and Phase 2 remain unstarted, and no executor is introduced. A future worker binds to these records only under a separate owner-approved decision; connecting one would require verified-session evidence before any surface may say "Connected".
 
-## ADR-035 - Cascade layers govern the anchor reset
+## ADR-037 - Cascade layers govern the anchor reset
 
 - Date: 2026-08-12
 - Status: Accepted
 - Decision: Keep the global `a { color: inherit }` reset inside `@layer base`. Unlayered rules outrank every cascade layer, so an unlayered reset silently defeated `@layer components` classes: `.primary-action` rendered correctly as a button and at 1.19:1 contrast as a link.
 - Consequence: Component and utility classes control anchor color as intended. Accessibility scanning now covers `/bot-manager` in addition to the dashboard, so a regression of this class fails a gate instead of shipping.
 
-## ADR-036 - Marketing content is a separate, world-readable schema
+## ADR-038 - Marketing content is a separate, world-readable schema
 
 - Date: 2026-08-13
 - Status: Accepted for local implementation; hosted migration `20260813000100` pending
 - Decision: Serve the public marketing site from its own `marketing_*` schema rather than from tenant tables or hard-coded copy. Published rows carry an explicit `anon` SELECT policy, because marketing copy is public by design; RLS and FORCE RLS stay enabled and no marketing table grants INSERT, UPDATE, or DELETE to `anon` or `authenticated`. No marketing table references a tenant table or carries an `organization_id`. The single public write path is `subscribe_to_newsletter`, a SECURITY DEFINER function that validates and normalizes the address, is idempotent per email, and returns a constant status; `newsletter_subscribers` is excluded from the SELECT-policy loop, so a browser can never read it back.
 - Consequence: Marketing content can be edited without a deploy once the migration is hosted, and the public surface cannot be used to enumerate subscribers or reach tenant data. Widening the marketing schema's grants, or adding an `organization_id` to it, requires a superseding decision.
 
-## ADR-037 - Marketing pages state their content provenance
+## ADR-039 - Marketing pages state their content provenance
 
 - Date: 2026-08-13
 - Status: Accepted
 - Decision: `lib/marketing/queries.ts` never throws. An unconfigured or unreachable Supabase, or a missing page row, returns seeded content tagged `source: "seed"`, and the page renders a **Demo Data** notice. A missing page row falls back wholesale rather than mixing live and seeded sections.
 - Consequence: A marketing page always renders, and never presents seeded copy as live. Removing the fallback requires removing the notice with it; removing the notice alone would make the page lie.
 
-## ADR-038 - Two route groups separate the public site from the control plane
+## ADR-040 - Two route groups separate the public site from the control plane
 
 - Date: 2026-08-13
 - Status: Accepted

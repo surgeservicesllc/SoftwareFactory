@@ -89,6 +89,28 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - The owner handoff uses an immutable exact-tuple RED approval plus single-use execution and an atomic database RPC. Both installations and repository copies must remain active/selected and refer to the same GitHub account/external repository. Pending changes and conflicting links block the transition; the live handoff preserved project `b1f23696-437e-4d89-b55f-d7a949980e8f` and its change/audit history.
 - Candidate-backed read and draft-write acceptance passed through PR `#8`. The PR remained draft, CI and preview passed, it was closed unmerged, and its temporary branch was deleted. A reverse handoff and disconnect/loss observation remain pending before primary retirement.
 
+## Production-operations plane (Phase 1E)
+
+```text
+Owner/admin request -> /api/operations/* (same-origin, tenant-scoped, no-store)
+  -> bounded HTTPS probe (public targets only, no response body read)
+    -> record_monitor_observation -> evaluate_project_health
+      -> open_production_incident (fingerprint dedupe, SEV1-SEV4)
+        -> freeze_project_releases (automatic for SEV1/SEV2)
+        -> enqueue_operations_event (durable, idempotent)
+          -> record_rollback_decision  ..... always blocked: no executor
+          -> record_production_diagnosis .. deterministic rules engine
+          -> create_repair_attempt ........ bounded to 3, assignment not_connected
+            -> resolve_production_incident . gated on restoration + validation + cause
+```
+
+- Ten tables carry RLS and FORCE RLS; browsers receive SELECT only. Every write goes through a SECURITY DEFINER workflow that re-derives the caller from `auth.uid()`, so `service_role` gains no new table privileges and the verified migration-`026` ACL matrix is unchanged.
+- `monitor_observations`, `project_health_snapshots`, `production_diagnoses`, and `operations_audit_events` are append-only: a trigger refuses UPDATE and DELETE for any role that could reach them.
+- The only connected monitoring adapter is a direct HTTPS probe. `production_monitors_enabled_requires_connection` makes it impossible to enable a monitor whose adapter is Not Connected, so the product cannot present a signal it did not observe.
+- `autonomous_release_allowed` returns false unconditionally and enumerates the live blockers. `EXECUTOR_NOT_CONNECTED` is appended without a condition, so no configuration change can make it return true.
+- The probe validates its target before every request: HTTPS only, standard port, no credentials in the URL, and no loopback, private, carrier-grade-NAT, link-local, or cloud-metadata address. It does not follow redirects and never reads a response body, so production content cannot enter control-plane evidence. Residual limitation: a public hostname that resolves to a private address at DNS time is not detected.
+- Scheduled monitoring is **Not Connected**. Checks are owner-triggered because no scheduler identity is authorized, and adding one must not widen `service_role`.
+
 ## Security invariants
 
 - Client input/provider output is untrusted.

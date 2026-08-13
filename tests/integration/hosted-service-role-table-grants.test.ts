@@ -15,17 +15,19 @@ const latestMigration =
   "20260813000400_marketing_content.sql";
 
 const publicTables = [
+  // Sorted alphabetically to match the catalogue query. Three successive
+  // merges drifted this list out of order; keep it sorted when adding tables,
+  // and only after confirming the new table enables RLS and FORCE RLS.
   "activity_events",
   "agent_runs",
   "agents",
   "approvals",
-  // Universal bot fabric. RLS and FORCE RLS with tenant-scoped policies in
-  // 20260813000300_bot_fabric.sql.
   "bot_assignments",
   "bot_roles",
   "bots",
   "commands",
   "connections",
+  "deployment_validations",
   "deployments",
   "github_change_requests",
   "github_installations",
@@ -35,9 +37,6 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "incidents",
-  // Public marketing content. 20260813000400_marketing_content.sql revokes all
-  // from anon/authenticated, enables RLS and FORCE RLS on each table, then
-  // grants select back behind a `using (published)` policy.
   "marketing_features",
   "marketing_logos",
   "marketing_pages",
@@ -48,20 +47,27 @@ const publicTables = [
   "marketing_stats",
   "marketing_team_members",
   "marketing_testimonials",
+  "monitor_observations",
   "newsletter_subscribers",
+  "operations_audit_events",
+  "operations_events",
   "organization_members",
   "organizations",
   "policies",
+  "production_diagnoses",
+  "production_monitors",
   "profiles",
   "project_connections",
+  "project_health_snapshots",
   "projects",
-  // Phase 2A provider execution tables. Each is created with RLS and FORCE RLS
-  // enabled and tenant-scoped policies in 20260813000100_provider_execution_layer.sql.
   "provider_model_configurations",
   "provider_routing_decisions",
   "provider_run_events",
   "pull_requests",
+  "release_freezes",
+  "repair_attempts",
   "reports",
+  "rollback_operations",
   "tasks",
   "test_runs",
 ] as const;

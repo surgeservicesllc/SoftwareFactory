@@ -10,6 +10,7 @@ import {
   FileText,
   FolderKanban,
   GitBranch,
+  HeartPulse,
   Menu,
   PlugZap,
   ScrollText,
@@ -34,6 +35,7 @@ const navigationGroups = [
     heading: null,
     items: [
       { label: "Dashboard", href: "/solutions", icon: CircleGauge },
+      { label: "Operations", href: "/operations", icon: HeartPulse },
       { label: "Projects", href: "/projects", icon: FolderKanban },
       { label: "Files", href: "/files", icon: FileText },
     ],
