@@ -238,6 +238,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
 
   const isOwner = overview?.role === "owner";
   const summary = overview?.summary ?? null;
+  const operationsStopped = (overview?.projects ?? []).some((project) => project.operationsStopped);
 
   if (state === "signed-out") {
     return (
@@ -648,22 +649,38 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
         <Card className="p-5">
           <SectionTitle
             title="Emergency controls"
-            description="Stopping autonomous operations freezes every project in this organization and flags them for your review."
+            description="Stopping autonomous operations freezes every project in this organization and flags them for your review. Resuming clears that stop; each release freeze is still released on its own evidence."
           />
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm mt-4"
-            disabled={busyAction !== null}
-            onClick={() =>
-              void post("stop-all", "/api/operations/controls", {
-                action: "stop",
-                reason: "Owner stopped autonomous operations from the Operations console.",
-              })
-            }
-          >
-            <PlugZap className="size-4" aria-hidden="true" />
-            Stop autonomous operations
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={busyAction !== null || operationsStopped}
+              onClick={() =>
+                void post("stop-all", "/api/operations/controls", {
+                  action: "stop",
+                  reason: "Owner stopped autonomous operations from the Operations console.",
+                })
+              }
+            >
+              <PlugZap className="size-4" aria-hidden="true" />
+              Stop autonomous operations
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={busyAction !== null || !operationsStopped}
+              onClick={() =>
+                void post("resume-all", "/api/operations/controls", {
+                  action: "resume_operations",
+                  note: "Owner resumed autonomous operations from the Operations console after review.",
+                })
+              }
+            >
+              <ShieldCheck className="size-4" aria-hidden="true" />
+              Resume autonomous operations
+            </button>
+          </div>
         </Card>
       ) : null}
     </div>

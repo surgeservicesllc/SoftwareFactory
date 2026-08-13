@@ -137,7 +137,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### Evidence
 
 - `npm run lint`, `npm run typecheck`: pass.
-- `vitest run`: 62 files / 537 tests pass, including 27 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
+- `vitest run`: 62 files / 538 tests pass, including 28 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
 - `npm run build`: 60 app entries compile, including 11 new operations APIs and the Operations page.
 - Playwright: 51/51 across desktop, tablet, and mobile including axe, with `/operations` added.
 - The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.

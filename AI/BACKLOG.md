@@ -68,14 +68,14 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Build provider-neutral monitoring with one connected HTTPS-probe adapter, an explicit Not Connected reason and unblocking condition for every other provider, and a CHECK constraint preventing an unconnected monitor from being enabled.
 - [x] Derive `healthy/degraded/critical/unknown/paused` health from real signals with append-only history and a stored reason; resolve absence of evidence to UNKNOWN.
 - [x] Create and deduplicate SEV1–SEV4 incidents automatically with upward-only severity escalation and full evidence columns.
-- [x] Freeze autonomous releases automatically on SEV1/SEV2; add owner-only resume with acknowledgement and an organization-wide emergency stop.
+- [x] Freeze autonomous releases automatically on SEV1/SEV2; add owner-only resume with acknowledgement, an organization-wide emergency stop, and an owner-only reversal of that stop that never silently lifts a per-project freeze.
 - [x] Resolve Last Known Good only from a validated deployment; evaluate rollback fail-closed; escalate a failed rollback to SEV1 with owner attention by constraint.
 - [x] Add a deterministic Production Investigator returning cause, cited evidence, subsystem, confidence, action, and risk without intermediate reasoning.
 - [x] Create bounded repair work capped at three attempts with escalation, refusing RED and above-ceiling work so the risk policy is not bypassed.
 - [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
-- [x] Pass lint, typecheck, 62 files/537 tests, a 60-entry build, and Playwright 51/51 including axe.
+- [x] Pass lint, typecheck, 62 files/538 tests, a 60-entry build, and Playwright 51/51 including axe.
 - [ ] Apply hosted migration `028` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
 - [ ] Persist per-project synthetic journey definitions; profile validation exists but journeys are not yet stored.

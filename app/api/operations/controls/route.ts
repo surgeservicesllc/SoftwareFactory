@@ -44,6 +44,10 @@ const controlSchema = z.discriminatedUnion("action", [
     action: z.literal("stop"),
     reason: z.string().trim().min(10).max(500),
   }).strict(),
+  z.object({
+    action: z.literal("resume_operations"),
+    note: z.string().trim().min(10).max(500),
+  }).strict(),
 ]);
 
 export async function POST(request: Request) {
@@ -94,6 +98,23 @@ export async function POST(request: Request) {
         action: "resume",
         changed: data === true,
         releasesFrozen: data !== true,
+      });
+    }
+
+    if (parsed.data.action === "resume_operations") {
+      // Reversing the emergency stop never lifts a per-project release freeze;
+      // each one is released on its own evidence.
+      const { data, error } = await context.client.rpc("resume_autonomous_operations", {
+        p_organization_id: context.activeOrganization.id,
+        p_note: parsed.data.note,
+      });
+      if (error) return databaseErrorResponse(error);
+
+      return jsonNoStore({
+        ...OPERATIONS_EXECUTION_ENVELOPE,
+        action: "resume_operations",
+        projectsResumed: typeof data === "number" ? data : 0,
+        releaseFreezesLifted: 0,
       });
     }
 

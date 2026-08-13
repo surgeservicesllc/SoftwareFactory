@@ -701,6 +701,42 @@ describe("Phase 1E production operations behavior", () => {
     await resetRole(db);
   });
 
+  it("lets only the owner reverse the emergency stop, without silently lifting release freezes", async () => {
+    await assumeRole(db, "authenticated", adminId);
+    await expect(
+      db.query(`select public.resume_autonomous_operations($1::uuid, 'Reviewed and safe to resume')`, [organizationId]),
+    ).rejects.toThrow(/only an organization owner/i);
+
+    await assumeRole(db, "authenticated", ownerId);
+    await expect(
+      db.query(`select public.resume_autonomous_operations($1::uuid, 'short')`, [organizationId]),
+    ).rejects.toThrow(/at least 10 characters/i);
+
+    const { rows } = await db.query<{ resume_autonomous_operations: number }>(
+      `select public.resume_autonomous_operations($1::uuid, 'Reviewed the incident and resumed operations') as resume_autonomous_operations`,
+      [organizationId],
+    );
+    expect(rows[0].resume_autonomous_operations).toBeGreaterThanOrEqual(1);
+
+    const { rows: projectRows } = await db.query<{
+      autonomous_operations_stopped: boolean;
+      autonomous_releases_frozen: boolean;
+    }>(
+      `select autonomous_operations_stopped, autonomous_releases_frozen from public.projects where id = $1::uuid`,
+      [projectId],
+    );
+    expect(projectRows[0].autonomous_operations_stopped).toBe(false);
+    // The release freeze survives: it is released on its own evidence.
+    expect(projectRows[0].autonomous_releases_frozen).toBe(true);
+
+    const { rows: healthRows } = await db.query<{ evaluate_project_health: string }>(
+      `select public.evaluate_project_health($1::uuid)::text as evaluate_project_health`,
+      [projectId],
+    );
+    expect(healthRows[0].evaluate_project_health).not.toBe("paused");
+    await resetRole(db);
+  });
+
   it("denies every cross-tenant read and workflow call", async () => {
     await assumeRole(db, "authenticated", outsiderId);
 

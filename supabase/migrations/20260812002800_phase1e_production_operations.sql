@@ -1408,6 +1408,68 @@ begin
 end;
 $function$;
 
+create or replace function public.resume_autonomous_operations(
+  p_organization_id uuid,
+  p_note text
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $function$
+declare
+  affected integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception using errcode = '42501', message = 'authentication is required';
+  end if;
+
+  if not public.is_organization_owner(p_organization_id) then
+    raise exception using errcode = '42501', message = 'only an organization owner may resume autonomous operations';
+  end if;
+
+  if p_note is null or char_length(btrim(p_note)) < 10 then
+    raise exception using errcode = '22023', message = 'a note of at least 10 characters is required';
+  end if;
+
+  -- Clearing the emergency stop is deliberately narrow. Per-project release
+  -- freezes are NOT lifted here: each one is released on its own evidence
+  -- through resume_project_releases.
+  update public.projects
+  set autonomous_operations_stopped = false
+  where organization_id = p_organization_id
+    and status <> 'archived'
+    and autonomous_operations_stopped;
+
+  get diagnostics affected = row_count;
+
+  -- Owner attention set by the stop itself may clear, but a project with an
+  -- incident still demanding attention keeps its flag.
+  update public.projects project
+  set owner_attention_required = false
+  where project.organization_id = p_organization_id
+    and project.status <> 'archived'
+    and project.owner_attention_required
+    and not exists (
+      select 1 from public.incidents incident
+      where incident.project_id = project.id
+        and incident.owner_attention_required
+        and incident.status in ('open', 'investigating', 'mitigated')
+    );
+
+  perform public.record_operations_audit_event(
+    p_organization_id, null, 'operations.stopped'::public.operations_audit_kind,
+    'organization', p_organization_id, format('Autonomous operations resumed: %s', left(p_note, 400)),
+    pg_catalog.jsonb_build_object('projects_resumed', affected, 'resumed', true)
+  );
+
+  return affected;
+end;
+$function$;
+
+comment on function public.resume_autonomous_operations(uuid, text) is
+  'Owner-only reversal of the emergency stop. It clears the organization-wide stop but never lifts a per-project release freeze, which must be released on its own evidence.';
+
 /* ------------------------------------------------- deployment validation */
 
 create or replace function public.record_deployment_validation(
@@ -2580,6 +2642,7 @@ revoke all on function public.open_production_incident(uuid, text, text, public.
 revoke all on function public.freeze_project_releases(uuid, text, text, uuid, boolean) from public, anon, service_role;
 revoke all on function public.resume_project_releases(uuid, text, boolean) from public, anon, service_role;
 revoke all on function public.stop_autonomous_operations(uuid, text) from public, anon, service_role;
+revoke all on function public.resume_autonomous_operations(uuid, text) from public, anon, service_role;
 revoke all on function public.record_deployment_validation(uuid, public.deployment_validation_state, jsonb, text, text, text, text) from public, anon, service_role;
 revoke all on function public.last_known_good_deployment(uuid, text, timestamptz) from public, anon, service_role;
 revoke all on function public.record_rollback_decision(uuid, boolean, text, jsonb, uuid, uuid) from public, anon, service_role;
@@ -2607,6 +2670,7 @@ grant execute on function public.open_production_incident(uuid, text, text, publ
 grant execute on function public.freeze_project_releases(uuid, text, text, uuid, boolean) to authenticated;
 grant execute on function public.resume_project_releases(uuid, text, boolean) to authenticated;
 grant execute on function public.stop_autonomous_operations(uuid, text) to authenticated;
+grant execute on function public.resume_autonomous_operations(uuid, text) to authenticated;
 grant execute on function public.record_deployment_validation(uuid, public.deployment_validation_state, jsonb, text, text, text, text) to authenticated;
 grant execute on function public.last_known_good_deployment(uuid, text, timestamptz) to authenticated;
 grant execute on function public.record_rollback_decision(uuid, boolean, text, jsonb, uuid, uuid) to authenticated;
