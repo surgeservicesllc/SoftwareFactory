@@ -133,6 +133,15 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [ ] Re-probe sign-up and sign-in after that configuration lands, and record the observed codes here.
 - [ ] Delete the diagnostic account `sf-probe-a91c@gmail.com`, created against the hosted project while reproducing this defect.
 
+## Signed-in site state and roles
+
+- [x] Resolve a server-verified viewer in every route-group layout so the signed-in navigation is correct in the first render (ADR-042).
+- [x] Show console destinations, the signed-in identity, and sign-out once there is a session; leave the signed-out site unchanged.
+- [x] Add the super-administrator role, configured by server-only `SUPER_ADMIN_EMAILS`, gated on a confirmed email address, with an Admin entry and a server-checked `/admin` page.
+- [ ] **Owner action:** set `SUPER_ADMIN_EMAILS` in Vercel Production and Preview if the role should not use the repository default list.
+- [ ] Verify the signed-in navigation against the deployed site once an account can actually be confirmed — this is blocked by the same email-delivery gap as account creation.
+- [ ] Decide whether super-administrator status should move from an email list to a database-backed role once a second real tenant exists.
+
 ## Maintenance
 
 - [ ] Run final verification on the repository-supported Node version.
