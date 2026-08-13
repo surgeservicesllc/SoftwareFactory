@@ -4,6 +4,26 @@ Last triaged: 2026-08-13
 
 Checked items have repository/provider evidence only. The owner repository connection is live, but checked items do not make the webhook Connected or Phase 1B complete.
 
+## Phase 1D autonomous-loop controls
+
+- [x] Complete the nine-action control model (plan, code, test, repair, review, approve, merge, deploy, rollback) at both an organization and a project scope.
+- [x] Resolve the two scopes most-restrictive-wins, with the envelope (kill switch, emergency stop, release freeze, missing executor) overriding both.
+- [x] Hold the same rule in the database as `public.resolved_autonomy_controls`, `security invoker` so it cannot cross a tenant boundary.
+- [x] Classify risk from the actual diff, and block a change that classified higher than it was declared.
+- [x] Define the GREEN gate set and the enhanced set YELLOW and RED add on top; treat a missing result as a blocker and keep `not_connected` distinct from `not_run`.
+- [x] Add deterministic Review, QA and Security agents whose blocking findings stop progression.
+- [x] Return `APPROVED_AUTOMATICALLY` / `OWNER_APPROVAL_REQUIRED` / `NOT_APPROVED`, evaluated after the gates, with an absolute no-self-approval rule.
+- [x] Sequence the twelve pipeline stages and halt at the first block.
+- [x] Show all nine actions in the interface, with the reason each is off.
+- [x] Prove the interlocks against real PostgreSQL and demonstrate the loop end-to-end including the blocked stages.
+- [ ] Apply hosted migration `20260813000500`. It relaxes nothing, so it grants no authority by itself. **Owner-gated.**
+- [ ] **BLOCKED — enabling any automatic action.** RED under `policies/RISK_CLASSIFICATION.md`; needs a separate owner-approved migration after sustained non-production evidence.
+- [ ] **BLOCKED — auto-merge.** `AGENTS.md` forbids introducing the workflow in this line of phases.
+- [ ] **BLOCKED — deploy execution and preview validation.** No Vercel API connection; `VERCEL_TOKEN` unset.
+- [ ] **BLOCKED — rollback execution.** No adapter; `policies/AUTO_ROLLBACK.md` disables it.
+- [ ] **BLOCKED — Codex code and repair execution.** Phase 1C not started.
+- [ ] **BLOCKED — Backlog Autopilot.** Depends on the two rows above.
+
 ## Phase 1B implementation
 
 - [x] Supabase Auth/onboarding, active organization, tenant-scoped APIs, RLS/FORCE RLS foundations, and immutable Activity reads.

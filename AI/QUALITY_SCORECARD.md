@@ -10,8 +10,37 @@ Phase 1E decision: **Production-operations control plane implemented and locally
 
 Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges, and the detection-to-resolution pipeline is proven against the real migrated schema. Migration `028` is **not** applied to hosted Supabase and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
 
+Phase 1D decision: **Decision layer complete and proven against a migrated database; every automatic action remains constrained OFF and no executor exists**
+
+Reason: migration `20260813000500` completes the nine-action control model at both an organization and a project scope, extends both interlocks to cover the new columns, and relaxes nothing — every flag is created `false`, constrained `false`, and refused by the trigger. The decision modules classify an actual diff, require the correct gate set, run three deterministic reviewing agents, and return the approval tri-state with an absolute no-self-approval rule. Merge, deploy and Codex execution are reached, evaluated, and blocked by name. Migration `20260813000500` is **not** applied to hosted Supabase.
+
+### Phase 1D completion
+
+| Objective area | Completion | Note |
+| --- | --- | --- |
+| Controls (9 actions, 2 scopes, most-restrictive-wins, emergency STOP) | **100%** | STOP and freeze were already Phase 1E; this phase added the missing five actions, the organization scope, and the resolver |
+| Risk classification, before work and on the final diff | **100%** | Derived from paths and content; escalation past a declaration blocks |
+| Gates (GREEN set, YELLOW set, blocking findings) | **100%** | A missing result blocks; `not_connected` distinct from `not_run` |
+| Review / QA / Security agents | **100%** as deterministic analysers | Model-backed review needs Phase 1C/2A binding, which this phase does not claim |
+| Approval (tri-state, no self-approval) | **100%** | Evaluated after the gates; unsound work is never escalated to a person |
+| Orchestrator stage machine | **100%** as a decision machine | Twelve stages, halts at the first block |
+| Deploy / preview / validate | **Validate 100% (Phase 1E); deploy and preview 0%** | **Blocked** — no Vercel API connection |
+| Rollback | **Decision 100% (Phase 1E); execution 0%** | **Blocked** — no adapter; `AUTO_ROLLBACK.md` disables it |
+| Healing / repair | **Creation 100% (Phase 1E); execution 0%** | **Blocked** — Phase 1C not started |
+| Auto merge | **0%** | **Blocked** — `AGENTS.md` forbids introducing the workflow in this line of phases |
+| Backlog Autopilot | **0%** | **Blocked** — depends on the two rows above |
+| Enabling any automatic action | **0% by design** | RED under `RISK_CLASSIFICATION.md`; needs an owner-approved migration |
+
 | Area | Evidence | Status |
 | --- | --- | --- |
+| Phase 1D gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass - lint/typecheck; 90 files/986 tests; 97 build entries |
+| Phase 1D E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe | Pass - 117/117 |
+| Phase 1D control interlocks | `tests/integration/phase1d-autonomy-controls.behavior.test.ts` against the migrated schema | Pass - 35 tests: each of nine actions refused at each of two scopes, both ceilings, both mode flags, the kill switch, and a new project or organization trying to be born with authority; both constraints `convalidated`; `anon` holds no write |
+| Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 91 tests across controls, diff risk, gates, agents, approval, and the stage machine |
+| Phase 1D end-to-end loop | `tests/integration/phase1d-loop-journey.behavior.test.ts` | Pass - a GREEN change reaches `APPROVED_AUTOMATICALLY` and then halts at `MERGE_EXECUTOR_NOT_CONNECTED`; a failed release drives incident, automatic freeze, Last Known Good, blocked rollback and bounded repair through Phase 1E's real functions, and the freeze is shown propagating back into the decision layer |
+| Phase 1D self-approval boundary | Same journey plus `tests/unit/autonomy-approval.test.ts` | Pass - the author is refused as approver at every risk level, including RED and including an owner |
+| Phase 1D hosted state | Hosted Supabase is current through `027` | **Not applied** - migration `20260813000500` is unhosted |
+
 | Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 69 files/635 tests; 64 build entries |
 | Phase 1E coverage | `npm run test:coverage` | Pass - merged tree with Phase 2A: statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%. The Phase 1E tree alone measured 78.02/77.79/70.00/79.15 |
 | Phase 1E E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe, `/operations` added | Pass - 51/51 |
