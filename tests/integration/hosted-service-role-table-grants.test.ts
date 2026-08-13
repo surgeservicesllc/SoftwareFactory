@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260813001100_phase1c_task_dependencies.sql";
+const latestMigration = "20260813001300_fix_phase1c_function_lint.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Three successive
