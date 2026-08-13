@@ -12,13 +12,13 @@ Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scope
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 62 files/538 tests; 60 build entries |
-| Phase 1E coverage | `npm run test:coverage` | Pass - statements 78.02%, branches 77.79%, functions 70.00%, lines 79.15% (up from 74.76/75.59/68.02/75.82) |
+| Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 69 files/635 tests; 64 build entries |
+| Phase 1E coverage | `npm run test:coverage` | Pass - merged tree with Phase 2A: statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%. The Phase 1E tree alone measured 78.02/77.79/70.00/79.15 |
 | Phase 1E E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe, `/operations` added | Pass - 51/51 |
 | Phase 1E detection pipeline | `tests/integration/phase1e-operations.behavior.test.ts` against the migrated schema | Pass - 28 tests: threshold detection, dedupe, upward-only severity, automatic freeze, owner-only resume, Last Known Good, blocked/failed rollback, bounded repairs, resolution gating, event idempotency, RLS, append-only |
 | Phase 1E end-to-end journey | `tests/integration/phase1e-incident-journey.behavior.test.ts` | Pass - ordered Monitor→Detect→Incident→Freeze→Rollback→Diagnose→Repair→Validate→Resolve, plus failed-rollback escalation to SEV1; Codex-fix and deploy stages asserted as blocked, not simulated |
 | Phase 1E boundary contracts | `tests/integration/phase1e-operations.contract.test.ts` | Pass - 16 tests: same-origin and role checks on every mutation, execution envelope on every response, no provider deployment call, no new `service_role` table grants, Phase 1D interlocks preserved |
-| Phase 1E privilege boundary | Post-`028` grant assertions in the behavioral and hosted-grant suites | Pass - `service_role` still holds table privileges on exactly the four GitHub ingress tables; 35/35 public tables have RLS and FORCE RLS |
+| Phase 1E privilege boundary | Post-`028` grant assertions in the behavioral and hosted-grant suites | Pass - `service_role` still holds table privileges on exactly the four GitHub ingress tables; 38/38 public tables have RLS and FORCE RLS |
 | Phase 1E monitoring truth | `production_monitors_enabled_requires_connection`; provider registry; probe target validation | Pass - an unconnected monitor cannot be enabled; private/loopback/metadata targets are refused; no response body is read |
 | Phase 1E execution boundary | `autonomous_release_allowed`; `PHASE_1E_ROLLBACK_EXECUTOR_CONNECTED`; `PHASE_1E_REPAIR_WORKER_CONNECTED` | Pass - release authority returns false unconditionally with `EXECUTOR_NOT_CONNECTED`; no rollback, deployment, merge, or repair is executed |
 | Phase 1E hosted state | Hosted Supabase is current through `027` | **Not applied** - migration `028` is unhosted and no production target has been observed |

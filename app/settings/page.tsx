@@ -1,5 +1,6 @@
 import { LockKeyhole } from "lucide-react";
 
+import { ProviderSettings } from "@/components/provider-settings";
 import { SafetyControls } from "@/components/safety-controls";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 
@@ -21,10 +22,14 @@ export default function SettingsPage() {
         action={<StatusBadge tone="danger">Kill switch ON</StatusBadge>}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="p-5 sm:p-6">
-          <SafetyControls />
-        </Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <Card className="p-5 sm:p-6">
+            <SafetyControls />
+          </Card>
+
+          <ProviderSettings />
+        </div>
 
         <div className="space-y-4">
           <Card className="p-5">

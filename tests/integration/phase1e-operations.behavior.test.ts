@@ -174,8 +174,9 @@ describe("Phase 1E production operations behavior", () => {
        where n.nspname = 'public' and c.relkind = 'r'
        order by c.relname`,
     );
-    // Every public table, including the ten added by Phase 1E, must be covered.
-    expect(rlsRows).toHaveLength(35);
+    // Every public table must be covered, including the ten added by Phase 1E
+    // and the three added by the Phase 2A provider layer.
+    expect(rlsRows).toHaveLength(38);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

@@ -75,7 +75,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
-- [x] Pass lint, typecheck, 62 files/538 tests, a 60-entry build, and Playwright 51/51 including axe.
+- [x] Pass lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe.
 - [ ] Apply hosted migration `028` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
 - [ ] Persist per-project synthetic journey definitions; profile validation exists but journeys are not yet stored.
@@ -90,6 +90,16 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - Phase 2 Anthropic/Claude agents: **Not Connected; do not start.**
 - Auto approval, merge, deployment, and rollback: OFF with no executor.
 - Phase 1E rollback and repair **execution**: deferred behind a provider adapter, the `AUTO_ROLLBACK.md` drills, and an owner-approved migration relaxing the migration-`010` constraint. Phase 1E records the decision; it never performs the action.
+
+## Phase 2A provider layer integration
+
+- [x] Integrate `claude/github-connection-confirm-qe3tqm` into `main`: `lib/providers/*` adapter contract, `/api/providers*` routes, `/api/runs` POST, `/api/agents` POST + `[agentId]/assignment`, `/api/runs/preview`, `ProviderSettings`/`ProviderStatusPanel`/`TaskRunLauncher`, and migration `20260813000100_provider_execution_layer.sql`. See ADR-032 and ADR-033.
+- [x] Keep the hardened read path: `/api/runs` and `/api/agents` GET still use the `tenantRpcListResponse` safe-projection RPCs. The branch's versions read directly from tables and would have reverted that boundary, so only its POST handlers were taken.
+- [x] Verify the three new provider tables (`provider_model_configurations`, `provider_routing_decisions`, `provider_run_events`) each enable RLS **and** FORCE RLS with tenant-scoped policies before adding them to the service-role grant matrix.
+- [x] Restyle the three new provider components onto the design tokens; as merged they used sub-12px text and literal hex values, and `/settings` failed axe contrast at three viewports until fixed.
+- [x] Scope the runs sensitive-column guard to the GET handler, matching the existing commands-route assertion. The POST handler records provider run input/output/errors by design; the guarantee protected is that the *list view* never projects them.
+- [ ] Port the provider assignment control onto the RPC-backed `AgentsConsole`, and surface provider/model/routing on `RunsConsole`. Both need `list_agents`/`list_agent_runs` to return provider columns, which is a migration change. The branch's console tests were removed from `tests/unit/provider-surfaces.test.tsx` rather than asserted against UI this integration does not ship.
+- [ ] Provider execution stays OFF until an owner enables it per organization, and no provider key is set in this repository. Outbound AI execution remains **Not Connected**.
 
 ## Maintenance
 
