@@ -6,6 +6,35 @@ Last updated: 2026-08-13
 
 Finish the remaining Phase 1B adverse/tenant/rollback observations without disturbing the verified candidate cutover. Hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, post-sync signed webhook processing, and the owner-approved atomic handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f` are live. Candidate-backed file read and draft-only PR `#8` write acceptance passed and was cleaned up without merging. Primary installation `153445938` remains active as rollback, and Support ticket `#4660724` remains OPEN for its separate webhook defect. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
 
+## Phase 1D state for the next agent
+
+The autonomous-loop **decision layer** is complete and lives in `lib/autonomy/`. It decides; it
+never executes.
+
+- `controls.ts` — nine automatic actions at two scopes, resolved most-restrictive-wins. Read the
+  envelope from `public.resolved_autonomy_controls(project_id)` rather than assuming it.
+- `diff-risk.ts` — classifies a real diff. Do not reintroduce caller-declared risk as the only
+  input; the whole point is that the thing being judged does not supply its own verdict.
+- `gates.ts`, `agents.ts`, `approval.ts`, `pipeline.ts` — the gate sets, the three reviewing
+  agents, the approval tri-state, and the twelve-stage machine.
+
+Rules that must survive any future change:
+
+1. **Approval never outranks verification.** Owner approval is evaluated after the gates. If you
+   find yourself moving that check earlier, stop.
+2. **No self-approval, at any risk level, including for an owner.**
+3. **A missing gate result is a blocker, never a pass.**
+4. **Blocked stages are named, not skipped.** `MERGE_EXECUTOR_NOT_CONNECTED`,
+   `DEPLOY_EXECUTOR_NOT_CONNECTED` and `CODEX_WORKER_NOT_CONNECTED` are asserted in
+   `tests/integration/phase1d-loop-journey.behavior.test.ts`. If you connect an executor, those
+   assertions are supposed to fail — update them deliberately, and do not weaken them to
+   "either blocked or not".
+5. **Migration `20260813000500` relaxes nothing.** Enabling any automatic action is a RED action
+   requiring an owner-approved migration. Do not do it as a side effect of anything else.
+
+Hosted migration `20260813000500` is not applied. Until it is, the nine-action model exists in
+source and in local behavioral tests only.
+
 ## Current repository work
 
 - The deployed tree supports isolated `primary` and `candidate` GitHub App configurations. Candidate configuration is all-or-nothing and must not reuse App identity, OAuth credentials, private key, state secret, or webhook secret.

@@ -7,7 +7,12 @@ vi.mock("server-only", () => ({}));
 const createSupabaseServerClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient }));
 
-const { getMarketingContent, getMarketingMetadata } = await import("@/lib/marketing/queries");
+const createSupabaseAnonClient = vi.fn();
+vi.mock("@/lib/supabase/anon", () => ({ createSupabaseAnonClient }));
+
+const { getMarketingContent, getMarketingMetadata, getPublicMarketingContent } = await import(
+  "@/lib/marketing/queries"
+);
 
 type Rows = Record<string, Record<string, unknown>[]>;
 
@@ -173,6 +178,35 @@ describe("getMarketingContent", () => {
     const content = await getMarketingContent("resources");
 
     expect(content.resources[0].kind).toBe("guide");
+  });
+});
+
+describe("getPublicMarketingContent", () => {
+  it("reads without a session, so the caller stays cacheable", async () => {
+    createSupabaseAnonClient.mockReturnValueOnce(fakeClient({ marketing_pages: [pageRow] }));
+
+    const content = await getPublicMarketingContent("about");
+
+    expect(content.source).toBe("supabase");
+    expect(content.page?.slug).toBe("about");
+    // Touching the cookie-backed client would force every card to render per request.
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the seed when Supabase is not configured", async () => {
+    createSupabaseAnonClient.mockImplementationOnce(() => {
+      throw new Error("not configured");
+    });
+
+    await expect(getPublicMarketingContent("pricing")).resolves.toMatchObject({ source: "seed" });
+  });
+
+  it("maps the same shape as the session-backed reader", async () => {
+    const rows = { marketing_pages: [pageRow], marketing_logos: [{ name: "Acme", wordmark: "ACME" }] };
+    createSupabaseAnonClient.mockReturnValueOnce(fakeClient(rows));
+    createSupabaseServerClient.mockResolvedValueOnce(fakeClient(rows));
+
+    expect(await getPublicMarketingContent("about")).toEqual(await getMarketingContent("about"));
   });
 });
 

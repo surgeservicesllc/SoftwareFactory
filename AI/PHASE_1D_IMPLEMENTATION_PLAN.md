@@ -1,0 +1,153 @@
+# Phase 1D implementation plan — autonomous-loop controls
+
+Audit date: 2026-08-13
+Audited tree: `8938ea6` (`origin/main`, after the Phase 1E operations control plane, the
+Phase 2A provider layer, the bot fabric, and the public marketing site were all merged).
+Baseline verified before any Phase 1D edit: `npm run lint`, `npm run typecheck`, and
+`vitest run` (82 files / 824 tests) all pass; `npm run build` succeeds.
+
+## 1. What the audit actually found
+
+The Phase 1D objective describes a closed loop:
+
+> Backlog/Event → Orchestrator → Codex → Code → Tests → Review → PR → CI → Preview →
+> Risk Gate → Auto Approve/Merge → Deploy → Validate → Report
+
+Most of the **right-hand half** of that loop already exists, built by Phase 1E as a
+production-operations control plane. Most of the **left-hand half** does not exist, and its
+executor stages are blocked by the absence of Phase 1C.
+
+| Loop stage | Real state in this tree | Owner |
+| --- | --- | --- |
+| Backlog / Event intake | PARTIAL — `operations_events` is a durable, deduplicated, bounded-attempt queue for ten operations event types. There is no backlog-driven work intake. | Phase 1E |
+| Orchestrator | MISSING — no stage machine, no run record, no transition ledger. | — |
+| Codex → Code | **BLOCKED** — Phase 1C never started. `lib/providers/*` (Phase 2A) can call Anthropic and OpenAI, but there is no worker, lease, sandbox, workspace, or budget. | — |
+| Tests / Review | MISSING as gates. The repository runs its own CI; nothing models a gate set, a finding, or a blocking finding. | — |
+| PR | PARTIAL — the GitHub editor creates an isolated branch, commit, and **draft** PR only. | Phase 1B |
+| CI | PARTIAL — real GitHub Actions CI exists and is readable; nothing consumes its result as a gate. | Phase 1B |
+| Preview | **BLOCKED** — Vercel hosts previews, but there is no in-product Vercel API connection. `VERCEL_TOKEN` is documented and unset. | — |
+| Risk Gate | PARTIAL — `lib/risk.ts` classifies from *explicitly supplied factors* and evaluates authorization. Nothing classifies an actual diff. | Phase 1A |
+| Auto Approve / Merge | MISSING — no approval decision type, no self-approval rule, no merge adapter. `AGENTS.md` forbids introducing an auto-merge workflow. | — |
+| Deploy | **BLOCKED** — no deployment adapter. | — |
+| Validate | COMPLETE — `deployment_validations`, health derivation, synthetic profiles, bounded HTTPS probes. | Phase 1E |
+| Rollback | DECISION PATH COMPLETE, EXECUTION BLOCKED — Last Known Good resolves only from a deployment whose own validation passed; failed rollback must escalate to SEV1. | Phase 1E |
+| Incident / Repair | CREATION COMPLETE, EXECUTION BLOCKED — bounded to three attempts, escalates instead of retrying. | Phase 1E |
+| Report | COMPLETE — `generate_operations_report`. | Phase 1E |
+
+### The controls the objective asks for, against what exists
+
+The objective asks for global and project controls for **Autonomous Mode**, **Max Auto Risk**,
+and nine automatic actions: Plan, Code, Test, Repair, Review, Approve, Merge, Deploy, Rollback.
+
+`public.projects` currently has `autonomous_mode`, `maximum_autonomous_risk`, and **four** of
+the nine: `auto_approve`, `auto_merge`, `auto_deploy`, `auto_rollback`. There is no
+`auto_plan`, `auto_code`, `auto_test`, `auto_repair`, or `auto_review`. There is no
+organization-level control record at all — only `organizations.autonomy_kill_switch_active`,
+a single boolean locked ON by a CHECK constraint in hosted migration `010`. Nothing resolves
+an organization setting against a project setting, so "most restrictive wins" has nothing to
+operate on.
+
+Emergency STOP **does** exist: Phase 1E's `stop_autonomous_operations` is owner-only, requires
+a written reason, and is audited.
+
+## 2. Component audit
+
+Legend: **COMPLETE** (built and evidenced) · **PARTIAL** (some substrate exists) ·
+**MISSING** (nothing exists) · **BROKEN** (exists and is wrong) · **BLOCKED** (cannot be done
+safely or honestly in this phase).
+
+| # | Component | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Risk vocabulary GREEN/YELLOW/RED | **COMPLETE** | `lib/risk.ts`, `policies/RISK_CLASSIFICATION.md` |
+| 2 | Risk classification from explicit factors | **COMPLETE** | `classifyRisk`, empty input defaults YELLOW |
+| 3 | Risk classification **of a diff** | **MISSING** | Nothing maps changed paths to factors |
+| 4 | Risk authorization gate ordering | **COMPLETE** | `evaluateRiskAuthorization` — owner approval cannot override mode, ceiling, or failed validation |
+| 5 | Project automatic-action controls | **PARTIAL** | 4 of 9 flags exist |
+| 6 | Organization automatic-action controls | **MISSING** | Only the single locked kill switch |
+| 7 | Most-restrictive-wins resolution | **MISSING** | No resolver |
+| 8 | Emergency STOP | **COMPLETE** | `stop_autonomous_operations` (Phase 1E), owner-only, audited |
+| 9 | Release freeze | **COMPLETE** | `freeze_project_releases`, automatic on SEV1/SEV2 |
+| 10 | Gate sets (GREEN / YELLOW) | **MISSING** | No gate model, no findings, no blocking semantics |
+| 11 | Review / QA / Security agents | **MISSING** | No agent records, no findings |
+| 12 | Approval decision tri-state | **MISSING** | `evaluateRiskAuthorization` returns a different, execution-oriented vocabulary |
+| 13 | No-self-approval rule | **MISSING** | Nothing compares author to approver |
+| 14 | Orchestrator stage machine | **MISSING** | — |
+| 15 | Branch-protection revalidation | **MISSING** | — |
+| 16 | Merge executor | **BLOCKED** | `AGENTS.md` forbids an auto-merge workflow in this line of phases |
+| 17 | Deploy executor | **BLOCKED** | No Vercel API connection; `VERCEL_TOKEN` unset |
+| 18 | Preview validation | **BLOCKED** | Same |
+| 19 | Post-deploy validation | **COMPLETE** | Phase 1E `deployment_validations`, probes, synthetic profiles |
+| 20 | Last Known Good | **COMPLETE** | `last_known_good_deployment`, resolves only from a validated deployment |
+| 21 | Rollback decision | **COMPLETE** | `record_rollback_decision`, fail-closed |
+| 22 | Rollback execution | **BLOCKED** | No adapter; `policies/AUTO_ROLLBACK.md` disables it; migration `010` pins `auto_rollback = false` |
+| 23 | Incident on failure | **COMPLETE** | `open_production_incident`, SEV1–SEV4, fingerprint dedup |
+| 24 | Repair task creation | **COMPLETE** | `create_repair_attempt`, capped at three attempts |
+| 25 | Repair execution (Codex) | **BLOCKED** | Phase 1C not started |
+| 26 | Backlog Autopilot | **BLOCKED** | Depends on 14 and 25 |
+| 27 | Reporting | **COMPLETE** | `generate_operations_report` |
+| 28 | RLS / least privilege / server-only secrets | **COMPLETE and must stay complete** | 25+ tables with RLS + FORCE RLS; `service_role` holds table privileges on exactly four GitHub ingress tables |
+
+## 3. Scope decision recorded for this phase
+
+Phase 1D is implemented as the **decision layer of the autonomous loop**, not as an executor.
+
+- Everything that **decides, restricts, or records** is built and fully exercised: the complete
+  nine-action control model, organization-over-project resolution, diff risk classification,
+  the GREEN and YELLOW gate sets with blocking findings, the approval tri-state with a
+  no-self-approval rule, and the orchestrator stage machine.
+- Everything that would **mutate a protected resource** — merge, deploy, rollback execution,
+  Codex execution — is built up to the decision boundary, returns a named blocker, and stops.
+  No provider mutation is performed and no surface implies one happened.
+- **The Phase 1D interlocks are not relaxed.** Hosted migration `010` constrains every project
+  to `autonomous_mode = false`, a GREEN ceiling, and all automatic actions off. This phase adds
+  the five missing flags *to that same constraint* rather than loosening it. The control model
+  becomes complete and correct while remaining fail-closed.
+
+Relaxing those interlocks is a RED action under `policies/RISK_CLASSIFICATION.md`
+("security controls disablement"). It requires explicit owner approval and a separate migration,
+and an agent must not perform it. That is the single reason this phase does not close the loop.
+
+## 4. Delivered in this change
+
+| Objective section | Delivered | Where |
+| --- | --- | --- |
+| Controls: nine automatic actions, both scopes | **COMPLETE** as a model, fail-closed by constraint | `lib/autonomy/controls.ts`, migration `20260813000500` |
+| Most restrictive wins | **COMPLETE** | `resolveEffectiveControls` — organization off beats project on; lower ceiling wins; STOP and kill switch force everything off |
+| Emergency STOP | **COMPLETE** (integrated, not rebuilt) | Phase 1E `stop_autonomous_operations`, consumed by the resolver |
+| Risk classification before work | **COMPLETE** | `classifyRisk` (existing) |
+| Risk classification of the final diff | **COMPLETE** | `lib/autonomy/diff-risk.ts` |
+| Gates: GREEN set | **COMPLETE** | `lib/autonomy/gates.ts` |
+| Gates: YELLOW set | **COMPLETE** | same |
+| Blocking findings stop progression | **COMPLETE** | same |
+| Review / QA / Security agents | **COMPLETE** as finding producers | `lib/autonomy/agents.ts` |
+| Approval tri-state | **COMPLETE** | `lib/autonomy/approval.ts` |
+| No self-approval | **COMPLETE** | same — the author is refused as approver at every scope |
+| Orchestrator stage machine | **COMPLETE** as a decision machine | `lib/autonomy/pipeline.ts` |
+| Merge / Deploy / Rollback execution | **BLOCKED, named** | Every path returns its exact blocker |
+
+## 5. Explicitly BLOCKED, with unblocking conditions
+
+| Blocked capability | Blocker | Unblocking condition |
+| --- | --- | --- |
+| Turning any automatic action ON | Hosted migration `010` CHECK constraint plus the locked organization kill switch | Owner-approved migration that deliberately relaxes the interlock, after sustained non-production evidence |
+| Auto-merge | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases | An owner-approved policy revision |
+| Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset | An owner-authorized Vercel connection with a server-only token |
+| Rollback execution | No deploy adapter; `policies/AUTO_ROLLBACK.md` disables it | Adapter, the six drills in that policy, and an owner-approved migration |
+| Codex code and repair execution | Phase 1C not started | A Phase 1C worker with leases, sandbox, budgets, and redacted traces |
+| Backlog Autopilot execution | Depends on the two rows above | Both unblocked |
+
+Nothing in the shipped UI, API, or reports may present any blocked capability as available.
+Each renders **Not Connected** with the reason above.
+
+## 6. What the demonstration proves, and what it cannot
+
+The end-to-end test walks a GREEN change through classify → gates → agents → approval →
+merge decision, and separately walks a failed deploy through incident → rollback decision →
+repair task → resolution, against the real migrated schema.
+
+Two stages are asserted as **blocked rather than simulated**: the merge and the deploy. The
+test records the exact blocker instead of skipping the stage, so a future phase that connects
+an executor will see those assertions fail and have to update them deliberately.
+
+This is a control-plane demonstration against a migrated database. It is not evidence that any
+autonomous action ran in production, because none can.

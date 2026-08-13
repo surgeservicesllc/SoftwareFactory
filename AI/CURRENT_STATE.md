@@ -35,7 +35,7 @@ Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboardin
 - Authenticated direct reads of raw Activity and webhook-delivery rows are revoked. Activity uses a caller-member, row-limited RPC and returns only allowlisted, bounded GitHub/SoftwareFactory actor, source, resource, action, status, conclusion, and transition evidence; raw audit metadata and stored webhook subsets remain server-side. Webhook project attribution uses the stable repository UUID.
 - Projects selects repositories by stable provider ID and renders live repository sync time, branch protection/SHA, commit author/date, PR author/created/updated time and detail-fetched mergeability, default-branch checks, and per-PR checks fetched against each displayed head SHA.
 - Global browser headers include a restrictive CSP, framing/object denial, a narrow Supabase connection allowlist, and a narrow image allowlist; repository Markdown previews do not load external images.
-- No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D observation scaffold remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF.
+- No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D control model is now complete and remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all **nine** automatic actions OFF at both the organization and project scope.
 - The signed-out dashboard receives a server-verified authentication hint so it skips protected browser fetches; the focused production race regression passes 30/30 repeated runs.
 
 ## Phase 1E production-operations state
@@ -120,6 +120,24 @@ Phase 1E adds a production-operations control plane in source and in migration `
 - GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, remains OPEN as the primary-App defect record. Primary installation `153445938` stays active as the rollback boundary.
 - The temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no secret or helper artifact remains in the repository checkout.
 
+## Phase 1D autonomy-control state
+
+- The control model covers all nine automatic actions — plan, code, test, repair, review, approve, merge, deploy, rollback — at an organization scope and a project scope. Migration `010` shipped four at one scope; migration `20260813000500` adds the remaining five plus the organization scope, and relaxes nothing.
+- Resolution is most-restrictive-wins: an action survives only where both scopes enable it, the ceiling is the lower of the two, and the envelope (kill switch, emergency stop, release freeze, missing executor) forces every action off regardless of either scope. The resolver reports the mode the operator configured rather than rewriting it, so the interface can say "on, but held because X".
+- `public.resolved_autonomy_controls` holds the identical rule in the database, is `security invoker` so it cannot cross a tenant boundary, and returns every action OFF while no executor is connected.
+- Risk is classified from the actual diff — changed paths plus credential- and destructive-shaped content — rather than from a self-declared factor list. A finished change that classifies higher than it was declared is blocked and must be re-gated.
+- Gates: a GREEN base set of tests, lint, typecheck, build, secret scan, diff review, CI and preview smoke, plus an enhanced set of security review, migration review, E2E and validated rollback that YELLOW and RED add on top. A missing result is a blocker, never a pass, and `not_connected` stays distinct from `not_run`.
+- Review, QA and Security agents are deterministic analysers, not model calls: Phase 1C is not started, and a rules engine cannot hallucinate an approval. Blocking findings stop progression; advisory findings are recorded and do not.
+- Approval returns `APPROVED_AUTOMATICALLY`, `OWNER_APPROVAL_REQUIRED`, or `NOT_APPROVED`. Owner approval is evaluated after the gates, so nothing can be approved past a failing check, and an unsound change is never escalated to a person. No-self-approval is absolute at every risk level, including for an owner.
+- The orchestrator sequences twelve stages and halts at the first blocked one. `implement`, `merge` and `deploy` are reached, evaluated, and blocked by name.
+
+## Phase 1D verification evidence
+
+- `tests/integration/phase1d-autonomy-controls.behavior.test.ts` (35 tests) applies the whole migration chain to real PostgreSQL and attempts, from every direction, to switch something on: each of the nine actions at each of the two scopes, both risk ceilings, both autonomous-mode flags, the global kill switch, and a newly inserted project or organization trying to be born with authority. Every attempt is refused, both constraints are `convalidated`, and `anon` holds no INSERT/UPDATE/DELETE on either table.
+- 91 unit tests cover the five decision modules: control resolution and envelope precedence, diff classification including credential and destructive-SQL detection, gate requirement and blocking semantics, the three agents' findings, the approval tri-state and the no-self-approval rule, and the stage machine.
+- The GREEN end-to-end demonstration runs a well-formed change through classify, verify, review, pull request, risk gate and approval to `APPROVED_AUTOMATICALLY`, and then **still halts** at `MERGE_EXECUTOR_NOT_CONNECTED`. The blocked stages are asserted by name, so a future phase that connects an executor fails these tests deliberately rather than silently gaining authority.
+- This is control-plane evidence against a migrated database. Hosted migration `20260813000500` is **not applied**, and no automatic action has run or can run.
+
 ## Phase 1E verification evidence
 
 - Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (82 files / 819 tests on the merged tree), and a clean production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
@@ -144,3 +162,4 @@ Phase 1E adds a production-operations control plane in source and in migration `
 2. Complete the live second-tenant/anonymous/RPC matrix and remaining stale-SHA, approval-expiry, revoked/insufficient-permission, rate-limit, ordering, deletion/restore, idempotency, and recovery cases.
 3. Keep Phase 1B incomplete, Phase 1C/Phase 2 **Not Connected**, Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF until those gaps close.
 4. Apply hosted migration `028` and configure an owner-authorized production target before any Phase 1E surface may claim observation. Until then Phase 1E is implemented but unproven against real production.
+5. Apply hosted migration `20260813000500` to complete the nine-action control model on the hosted database. It relaxes nothing, so it does not itself grant authority; enabling any action afterwards remains a separate RED action requiring an owner-approved migration.
