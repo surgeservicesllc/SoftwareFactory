@@ -1,6 +1,6 @@
 # Marketing site build — working plan
 
-Last updated: 2026-08-13 (checkpoint 1: site built, gates green)
+Last updated: 2026-08-13 (checkpoint 2: site built, tested, documented; all gates green)
 Branch: `claude/universal-bot-interface-0caeda`
 Owner of this file: whichever agent is currently working. **Update it before your session ends.**
 
@@ -85,14 +85,28 @@ the address, is idempotent per email, and returns no row data. `anon` gets no SE
       unclipped hero glows causing mobile overflow, a grid item stretched by the comparison
       table, and a scroll region with no keyboard access.
 
-### In progress
-- [ ] Unit tests for `lib/marketing/*` and an integration contract test for the migration.
+- [x] Unit tests: `marketing-types`, `marketing-content`, `marketing-queries` (mocked Supabase,
+      covering fallback, wholesale fallback on a missing page row, per-table degradation, and
+      testimonial scoping). `lib/marketing` sits at 97.61% statement coverage.
+- [x] Integration contract test incl. **seed parity** — the migration seed and
+      `lib/marketing/content.ts` cannot drift on page slugs, plan prices, highlight, or matrix rows.
+- [x] `sitemap.ts` (marketing routes only) and `robots.ts` (console paths disallowed).
+- [x] Root metadata retitled to the marketing brand; console group carries its own title template.
+- [x] `AI/CURRENT_STATE.md`, `AI/BACKLOG.md`, `AI/HANDOFF.md`, `AI/QUALITY_SCORECARD.md`,
+      `AI/ARCHITECTURE.md`, `AI/DECISIONS.md` (ADR-023/024/025) and `README.md` updated.
 
-### Not started
-- [ ] Seed-parity test: `lib/marketing/content.ts` must not drift from the migration seed.
-- [ ] `sitemap.ts` + OG images for marketing routes.
-- [ ] Update `AI/CURRENT_STATE.md`, `AI/BACKLOG.md`, `AI/HANDOFF.md`, `AI/QUALITY_SCORECARD.md`,
-      `AI/DECISIONS.md` (ADR for the marketing content boundary), and `README.md`.
+### Remaining
+- [ ] **Owner approval to host migration `20260813000100`.** Until then every marketing page
+      renders the seeded fallback and shows a **Demo Data** notice. This is the only thing standing
+      between the current build and "100% wired to Supabase" — the query layer, RLS, policies and
+      the subscribe RPC are all written and tested; they simply are not applied to the hosted
+      project yet, and applying them is an owner-gated protected action under `AGENTS.md`.
+- [ ] Verify against a real anon session once hosted: published-only reads, no browser write path,
+      and that `newsletter_subscribers` is unreadable.
+- [ ] Replace placeholder leadership headshots and third-party wordmarks with licensed assets.
+- [ ] Per-page OG images (`opengraph-image.tsx` per route).
+- [ ] Optional: an authenticated editor UI for marketing content (owner/admin only, audited),
+      so copy can be changed without SQL.
 
 ## Open questions for the owner
 

@@ -1,6 +1,6 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 Phase 1B decision: **Not release-ready yet**
 
@@ -9,15 +9,17 @@ Reason: local gates pass for the Phase 1B hardening and the new bot fabric contr
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; strict provider schemas/URLs; truthful UI; retry-safe draft-PR flow; lifecycle ordering; local migrations `011`-`019` | Implemented; all current local gates pass; live acceptance pending |
-| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 45 files/364 tests |
-| Current-tree coverage | `npm run test:coverage` | Pass - 70.96% statements, 69.49% branches, 67.59% functions, 72.11% lines; `lib/bots` 94.35% statements; required risk/constants thresholds pass |
+| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 49 files/413 tests |
+| Current-tree coverage | `npm run test:coverage` | Pass - 73.18% statements, 70.44% branches, 71.90% functions, 74.22% lines; `lib/marketing` 97.61% and `lib/bots` 94.35% statements; required risk/constants thresholds pass |
 | Current-tree migration chain | Full-chain RLS behavioral matrix through migration `019` | Pass - 5/5 |
-| Current-tree production build | `npm run build` | Pass - 40 routes |
-| Current-tree E2E/responsive/accessibility | `npm run test:e2e` across dashboard and bot fabric | Pass - 24/24 desktop/tablet/mobile including axe; two contrast defects the new bot-fabric gate surfaced were fixed |
+| Current-tree production build | `npm run build` | Pass - 46 generated pages across the marketing and console route groups |
+| Current-tree E2E/responsive/accessibility | `npm run test:e2e` across marketing, bot fabric and console | Pass - 81/81 desktop/tablet/mobile including axe on all seven marketing pages; contrast, definition-list, mobile-overflow and keyboard-scroll defects surfaced by these gates were fixed |
 | Current-tree secret/client scan | Tracked and untracked non-fixture source plus rebuilt `.next/static` | Pass - no credential/private-key markers in non-fixture source; only explicit fake detector fixtures matched; no privileged env names/key markers/`service_role` in client assets |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY` | Historical pass |
 | Hosted migrations | Hosted ledger through `010` | Pass through `010` only |
 | Local migrations `011`-`019` | Authorization/grants, audit, reconciliation, metadata propagation, recovery, lifecycle ordering, reservation, CHECK-helper grant | Local only; exact owner approval/application/post-apply verification pending |
+| Local migration `20260813000100` | Marketing content schema: RLS/FORCE RLS, published-only `anon` SELECT, no browser write path, no tenant reference, validating subscribe function | Local only; exact owner approval/application/post-apply verification pending |
+| Marketing content provenance | Pages report `source`; seeded copy renders a **Demo Data** notice | Pass in current local tests |
 | Local migrations `020`-`021` | Bot fabric audit labels; bots/roles/assignments with RLS/FORCE RLS, select-only grants, audited definer mutations, credential-reference and HTTPS constraints, one open posting per bot | Local only; exact owner approval/application/post-apply verification pending |
 | Bot credential boundary | Reference names only, allowlist plus control-plane denylist in application and table CHECK; presence resolved server-side to a boolean | Pass in current local tests; no credential value is stored, returned, or logged |
 | Bot execution | No worker binds to bots, roles, or assignments | **Not Connected** - readiness is configuration evidence only |
@@ -68,7 +70,7 @@ Application-release evidence is provider-resolved through deployment metadata ra
 ## Security and production acceptance still required
 
 - Preserve the passing current-tree quality/secret evidence for the exact committed tree and rerun affected checks after any change.
-- Apply migrations `011`-`021` only after exact owner approval; verify all grants/search paths, RLS/FORCE RLS, two-tenant/anonymous denial, provider-ingress CHECK evaluation, actor attribution, immutable/redacted activity, lifecycle ordering, and recovery behavior.
+- Apply migrations `011`-`021` and `20260813000100` only after exact owner approval; verify all grants/search paths, RLS/FORCE RLS, two-tenant/anonymous denial, provider-ingress CHECK evaluation, actor attribution, immutable/redacted activity, lifecycle ordering, and recovery behavior.
 - Complete a real authenticated production session and the entire GitHub callback/token/repository/project/read/edit/draft-PR/disconnect journey.
 - Observe valid, invalid, duplicate, stale, out-of-order, deletion, and restore webhook deliveries in production.
 - Verify stale SHA, protected path, likely secret, wrong tenant, revoked installation, insufficient permission, rate limit, stable retry, and ambiguous completion recovery.
@@ -77,6 +79,7 @@ Application-release evidence is provider-resolved through deployment metadata ra
 ## Release-blocking invariants
 
 - Any exposed secret, disabled RLS, cross-tenant access, direct default-branch write, non-draft/merge/deploy action, stale event reactivation, duplicate ambiguous retry, or unapproved protected production action is a failure.
+- Seeded marketing copy presented without its **Demo Data** notice, any browser write path into the marketing schema, or any anon read of `newsletter_subscribers` is a failure.
 - A registered, ready, or assigned bot relabelled as connected, running, or executing work is a failure. Readiness describes configuration; no executor exists.
 - Configuration, tests, provider installation, or Vercel READY status cannot be relabeled as a real SoftwareFactory GitHub connection.
 - A clean migration/lint result does not prove authenticated RLS behavior; both evidence layers are required.

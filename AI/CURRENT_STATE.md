@@ -1,6 +1,6 @@
 # Current state
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 Phase: 1B - Production GitHub App Integration
 
@@ -19,6 +19,9 @@ Overall status: **Phase 1B hardening plus the bot fabric control plane pass loca
 - The standard editor blocks broad security/identity/provider/automation/dependency/infrastructure resource classes, keeps one idempotency key for an unchanged retry intent, and can recover an already-created draft PR after an ambiguous database-completion response.
 - Installation and repository webhook transitions are provider-time ordered. Deletion is terminal for an installation ID; repository deletion remains terminal until an explicit newer restore, and restored repositories stay unselected pending access synchronization.
 - Provider-authoritative repository rename/default-branch changes propagate only to exact connection-linked projects and create redacted immutable activity evidence.
+- A public marketing site (`/`, `/platform`, `/features`, `/solutions`, `/pricing`, `/resources`, `/about`) is served from an eleven-table `marketing_*` schema. Published rows are world-readable through an explicit `anon` SELECT policy; RLS and FORCE RLS stay on, and no marketing table grants a browser any write path or references a tenant table. Newsletter subscription is the only public input and runs through a validating SECURITY DEFINER function whose table `anon` cannot read.
+- Marketing pages state their provenance: content read from Supabase renders plainly; seeded fallback content renders a **Demo Data** notice. A missing page row falls back wholesale rather than mixing live and seeded sections.
+- The former console homepage is now `/solutions` under the marketing navigation. `app/(console)/` keeps the sidebar shell and stays `noindex`; `app/(marketing)/` is indexable, with `robots.ts` disallowing console paths.
 - The bot fabric registers provider-neutral bots (Anthropic, OpenAI, Google, xAI, Mistral, DeepSeek, Groq, OpenRouter, self-hosted, and custom OpenAI-compatible endpoints), organization-authored roles, and bot-to-project assignments. A bot stores metadata plus the name of a server-side environment variable; no credential value is stored, returned, or logged, and privileged reference names are rejected by both an application allowlist and a table CHECK constraint.
 - Bot readiness is configuration evidence only. A check resolves the referenced variable to a presence boolean and validates the catalog entry, model, and endpoint; it makes no provider request and never asserts a session. Assignment is declarative routing intent and a bot holds at most one open posting, so moving between projects is one audited transition.
 - No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D observation scaffold remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF.
@@ -38,6 +41,7 @@ Overall status: **Phase 1B hardening plus the bot fabric control plane pass loca
   - `018` provider-orders repository metadata and preserves terminal deletion/explicit restore semantics.
   - `019` grants service role only the SECURITY DEFINER sensitive-JSON wrapper required by provider-ingress table CHECK evaluation; recursive/text helpers remain inaccessible.
   - `020` adds the bot fabric activity-event labels in their own transaction.
+  - `20260813000100` adds the eleven `marketing_*` content tables plus `newsletter_subscribers`, with RLS/FORCE RLS, published-only `anon` SELECT, no browser write path, and the `subscribe_to_newsletter` function.
   - `021` adds `bots`, `bot_roles`, and `bot_assignments` with RLS/FORCE RLS, select-only authenticated grants, audited SECURITY DEFINER mutation functions, credential-reference and HTTPS constraints, and a partial unique index keeping one open posting per bot.
 - Promoting this authorization/audit/provider-ingress chain is a protected production action requiring exact owner approval and post-apply ledger, lint, grant, RLS/FORCE RLS, tenant, audit, ordering, recovery, CHECK-evaluation, and health verification.
 - The last clean linked public-schema lint is through `009`; a post-`010` attempt was blocked by the current Supabase CLI account `403`. No later hosted lint claim is made.
@@ -57,12 +61,14 @@ Overall status: **Phase 1B hardening plus the bot fabric control plane pass loca
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
+| Marketing content | Implemented locally; migration `20260813000100` unhosted | Pages render from the seeded fallback and are labelled **Demo Data** until the migration is applied. |
 | Bot fabric registry | Implemented locally; migrations `020`-`021` unhosted | Bots, roles, and assignments are control-plane records. Readiness reflects configuration only; no worker executes assigned work. |
 | Auto approve/merge/deploy/rollback | OFF | No autonomous production authority or executor exists. |
 
 ## Verification evidence
 
-- Current working tree: lint and typecheck pass; full Vitest passes 45 files/364 tests; coverage passes at 70.96% statements, 69.49% branches, 67.59% functions, and 72.11% lines with required risk/constants thresholds satisfied (`lib/bots` covers 94.35% of statements); the full migration-chain RLS behavioral matrix passes 5/5 through migration `019`; the production build passes with 40 routes; and local Playwright passes 24/24 across desktop/tablet/mobile including axe checks on the dashboard and the bot fabric.
+- Current working tree: lint and typecheck pass; full Vitest passes 49 files/413 tests; coverage passes at 73.18% statements, 70.44% branches, 71.90% functions, and 74.22% lines with required risk/constants thresholds satisfied (`lib/marketing` covers 97.61% and `lib/bots` 94.35% of statements); the full migration-chain RLS behavioral matrix passes 5/5 through migration `019`; the production build passes with the marketing and console route groups; and local Playwright passes 81/81 across desktop/tablet/mobile including axe checks on every marketing page, the bot fabric, and the console.
+- Extending accessibility scanning to the seven marketing pages surfaced further real defects, all fixed: four muted tokens below the 4.5:1 minimum (`#6d7a8c` at 4.33:1, `#4a5768` at 2.56:1, `#657283` at 4.02:1, `#536070` at 3.07:1), a `<dl>` whose `<dd>` was not a direct child of the list or a wrapping `div`, decorative hero glows that were never clipped and scrolled the page sideways on mobile, a comparison table stretching its grid column instead of scrolling in place, and that scroll region having no keyboard access.
 - Two accessibility defects found by the new bot-fabric axe gate were fixed: the global anchor reset moved into `@layer base` so component classes are not defeated by an unlayered rule (`.primary-action` links rendered at 1.19:1), and the command composer's unselected risk chips moved from `#627080` to `#93a0af` on `#10161f` (3.58:1 to above the 4.5:1 minimum).
 - Source/client secret gates pass: tracked and untracked non-fixture source contained no credential/private-key marker; the only source pattern hits were explicit fake detector fixtures in `github-repository-grants` and `github-rls-behavior`; rebuilt `.next/static` contained no privileged environment name, key marker, or `service_role` marker.
 - GitHub `main` application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694` (author `NewWorldVenture`) passed CI run `31649243266` with 2/2 jobs green.

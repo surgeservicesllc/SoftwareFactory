@@ -5,7 +5,7 @@ import { CommandComposer } from "@/components/command-composer";
 import { PageHeader, Panel, SectionTitle, StatusBadge } from "@/components/ui";
 
 export const metadata = {
-  title: "Bot Manager | SoftwareFactory",
+  title: "Bot Manager",
 };
 
 export default function BotManagerPage() {

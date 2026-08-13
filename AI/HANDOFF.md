@@ -1,12 +1,15 @@
 # Handoff
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Mission and boundary
 
 Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening increment passes local gates, is published to GitHub, passes CI, and is verified on an exact-tree production deployment. It is not promoted to hosted Supabase and the live provider journey is incomplete. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
 
 ## Current repository work
+
+- A public marketing site now ships alongside the control plane. `app/(marketing)/` holds `/`, `/platform`, `/features`, `/solutions`, `/pricing`, `/resources`, `/about`; `app/(console)/` keeps the existing authenticated pages. The former console homepage is `/solutions`, reached from the main navigation, and the console sidebar's Dashboard entry points there.
+- Marketing content is read from the `marketing_*` schema through `lib/marketing/queries.ts`, which never throws and reports `source: "seed"` when it falls back, so seeded copy is always labelled **Demo Data**. `todo.md` tracks the remaining marketing work for whoever picks it up next.
 
 - The bot fabric adds `bots`, `bot_roles`, and `bot_assignments` plus `/bot-manager`, `/api/bots*`, `/api/bot-roles*`, and `/api/bot-assignments*`. Bots are provider-neutral and store a credential *reference name*, never a value. Readiness is configuration-only and makes no provider request. Assignment is routing intent with no executor.
 - Two accessibility defects surfaced by the new bot-fabric axe gate are fixed: the global anchor reset moved into `@layer base` (an unlayered rule was defeating `@layer components`, rendering `.primary-action` links at 1.19:1), and the command composer's unselected risk chips moved to `#93a0af`.
@@ -33,6 +36,7 @@ Hosted Supabase is applied only through `010`. Local migrations `011`-`021` are 
 - `018`: provider-time repository lifecycle and terminal delete/explicit restore handling.
 - `019`: minimal service-role execute on the SECURITY DEFINER sensitive-JSON CHECK wrapper; recursive/text helpers remain inaccessible.
 - `020`: bot fabric activity-event labels, added in their own transaction.
+- `20260813000100`: marketing content tables, published-only `anon` SELECT, no browser write path, and the validating `subscribe_to_newsletter` function.
 - `021`: bot fabric tables, RLS/FORCE RLS, select-only authenticated grants, audited SECURITY DEFINER mutations, credential-reference and HTTPS constraints, and one open posting per bot.
 
 This complete authorization/audit/provider-ingress chain requires exact current owner approval before production application. After apply, verify the hosted ledger, linked lint, RLS/FORCE RLS, table/function/helper grants, caller/tenant/resource checks, immutable/redacted activity, provider-ingress CHECK evaluation, out-of-order/terminal transitions, recovery/idempotency, and application health.
@@ -46,9 +50,9 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, authored `NewWorldVenture`, is on GitHub `main`; CI run `31649243266` passed 2/2.
 - The automatic Git-triggered deployment `dpl_H6SvxkXj3LKiLoCjZ1PWarQs3umq` was blocked by Vercel Hobby commit-author access. The supported detached, tracked-files-only, owner-authenticated deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` is READY Production and stores the exact application SHA in `softwarefactoryGitCommitSha` metadata.
 - Deployment URL `https://softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app` pass production validation: five public routes 200 with expected title, representative authenticated APIs 401, removed `/api/files` 404, Playwright 12/12, nine deployed JavaScript assets clean, and recent error/HTTP-500 logs zero.
-- Current tree: lint/typecheck pass; full Vitest passes 45 files/364 tests; full-chain RLS behavior passes 5/5 through migration `019`; production build passes with 40 routes.
-- Current coverage: 70.96% statements, 69.49% branches, 67.59% functions, and 72.11% lines; required risk/constants thresholds pass; `lib/bots` covers 94.35% of statements.
-- Current Playwright passes 24/24 across desktop/tablet/mobile including axe checks on the dashboard and the bot fabric.
+- Current tree: lint/typecheck pass; full Vitest passes 49 files/413 tests; full-chain RLS behavior passes 5/5 through migration `019`; production build passes with 40 routes.
+- Current coverage: 73.18% statements, 70.44% branches, 71.90% functions, and 74.22% lines; required risk/constants thresholds pass; `lib/marketing` covers 97.61% and `lib/bots` 94.35% of statements.
+- Current Playwright passes 81/81 across desktop/tablet/mobile including axe checks on every marketing page, the bot fabric, and the console.
 - Source/client secret gates pass: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures in `github-repository-grants` and `github-rls-behavior` matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.
 
 ## Immediate sequence
@@ -65,6 +69,7 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Verify CLI identity and project ref before every linked database command. Never reset hosted production.
 - Preserve **Demo Data** and **Not Connected** language when live evidence is absent.
 - Keep default-branch writes, non-draft PRs, merge, deploy, rollback, workflow/administration writes, and autonomous execution unavailable.
+- Marketing pages must keep their provenance notice. If a page renders seeded content it says **Demo Data**; never remove the notice while the fallback remains.
 - A bot may be registered, ready, and assigned without any worker existing. Never describe a bot as connected, running, or working; readiness is configuration evidence only.
 
 ## Completion checklist

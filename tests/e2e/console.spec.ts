@@ -43,7 +43,7 @@ test("loads the control plane without browser errors", async ({
   const response = await page.goto(CONSOLE_ROUTE, { waitUntil: "domcontentloaded" });
 
   expect(response?.ok(), `console returned ${response?.status()}`).toBe(true);
-  await expect(page).toHaveTitle(/SoftwareFactory/i);
+  await expect(page).toHaveTitle(/AI Software Factory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
   await expect(page.getByRole("link", { name: /softwarefactory dashboard/i }).first()).toBeVisible();

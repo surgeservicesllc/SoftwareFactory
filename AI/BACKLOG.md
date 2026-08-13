@@ -1,6 +1,6 @@
 # Backlog
 
-Last triaged: 2026-08-12
+Last triaged: 2026-08-13
 
 Checked items have repository/provider evidence only. They do not make GitHub Connected or Phase 1B complete.
 
@@ -27,11 +27,25 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [ ] Obtain exact owner approval for hosted migrations `020`-`021` and verify grants, RLS behavior, audit evidence, and constraint enforcement against two authenticated tenants.
 - [ ] Do not connect an execution worker to these records. That requires a separate owner-approved phase decision.
 
+## Marketing site
+
+- [x] Build `/`, `/platform`, `/features`, `/solutions`, `/pricing`, `/resources`, `/about` from the approved mockups.
+- [x] Move the former console homepage to `/solutions` in the main navigation.
+- [x] Split `app/(marketing)/` and `app/(console)/` so the two shells and their robots directives no longer share a layout.
+- [x] Add the `marketing_*` schema: RLS/FORCE RLS, published-only `anon` SELECT, no browser write path, no tenant reference.
+- [x] Add `subscribe_to_newsletter` plus `POST /api/newsletter`, with a uniform response that cannot enumerate subscribers.
+- [x] Label seeded content **Demo Data** and read live content from Supabase when the migration is hosted.
+- [x] Add `sitemap.ts` and `robots.ts` that publish marketing routes and disallow console paths.
+- [x] Add unit coverage for marketing types, seed content and queries, plus a migration contract test with seed parity.
+- [ ] Obtain exact owner approval for hosted migration `20260813000100` and verify published-only reads, the absence of any browser write path, and subscriber-table unreadability against a real anon session.
+- [ ] Replace placeholder leadership headshots and third-party wordmarks with licensed assets.
+- [ ] Add per-page OG images.
+
 ## Phase 1B release blockers
 
-- [x] Pass current-tree lint/typecheck, full Vitest 45 files/364 tests, full-chain RLS behavior 5/5 through migration `019`, and a 40-route production build.
-- [x] Pass current-tree coverage at 70.96% statements, 69.49% branches, 67.59% functions, and 72.11% lines with required risk/constants thresholds.
-- [x] Pass current-tree Playwright 24/24 across desktop/tablet/mobile including axe checks on the dashboard and the bot fabric; fix the two contrast defects that gate surfaced.
+- [x] Pass current-tree lint/typecheck, full Vitest 49 files/413 tests, full-chain RLS behavior 5/5 through migration `019`, and a 46-page production build.
+- [x] Pass current-tree coverage at 73.18% statements, 70.44% branches, 71.90% functions, and 74.22% lines with required risk/constants thresholds.
+- [x] Pass current-tree Playwright 81/81 across desktop/tablet/mobile including axe checks on every marketing page, the bot fabric, and the console; fix the contrast, definition-list, overflow and keyboard-scroll defects those gates surfaced.
 - [x] Pass source/client secret gates: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.
 - [x] Publish application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694` to `origin/main`; CI run `31649243266` passed 2/2; verify READY production deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu`, exact SHA metadata, stable alias, HTTP boundaries/title, Playwright 12/12, nine deployed-JS assets clean, and zero recent error/HTTP-500 logs.
 - [ ] Obtain exact owner approval for hosted migrations `011`-`021`; apply to `qpuofpmagrmyamahqwxw` and verify ledger, lint, RLS/FORCE RLS, table/function/helper grants, actor/tenant/resource checks, immutable/redacted activity, provider-ingress CHECK evaluation, ordering/terminal behavior, recovery behavior, and health.

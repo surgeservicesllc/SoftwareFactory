@@ -27,6 +27,13 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
 - The bot fabric registers bots, roles, and assignments through caller-session reads and audited SECURITY DEFINER writes. The browser receives a credential reference *name* and a presence boolean; the credential value is resolved only in `lib/bots/credentials.ts`, only from `process.env`, and only to a boolean. `lib/bots/catalog.ts` is browser-safe public metadata.
 
+## Public marketing site
+
+- `app/(marketing)/` renders the public site with its own header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`. `robots.ts` disallows console paths and `sitemap.ts` lists marketing routes only.
+- Marketing pages are Server Components. `lib/marketing/queries.ts` reads the `marketing_*` schema through the caller's Supabase client, never throws, and reports whether the response came from Supabase or the seeded fallback so the interface can label it.
+- The marketing schema is content, not control plane: published rows are world-readable by explicit `anon` policy, RLS and FORCE RLS remain enabled, nothing grants a browser INSERT/UPDATE/DELETE, and no marketing table references a tenant table.
+- Newsletter subscription is the only public write. It runs through `subscribe_to_newsletter`, which validates and normalizes the address, is idempotent per email, and returns a constant status so the endpoint cannot enumerate subscribers.
+
 ## Persistence
 
 - Migrations `001`-`003` define the core control plane and audit/approval workflows.
@@ -39,6 +46,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
 - Local migrations `011`-`019` are one pending hardening chain. `011`-`013` close initial direct mutation paths, align `github_pat_` detection, add actor-attributed terminal change evidence, and reconcile repository grants. `014` propagates provider-authoritative repository names/default branches to exact linked projects. `015` recovers an already-created draft PR after an ambiguous database-completion response. `016` makes installation deletion terminal and orders installation lifecycle events by provider time. `017` removes remaining direct authenticated connection/project/link/change-request writes and introduces a narrow authenticated reservation RPC. `018` orders repository metadata events by provider time and preserves terminal deletion until an explicit newer restore. `019` grants the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed for table CHECK evaluation; recursive and text classifiers remain inaccessible. None is hosted yet; the complete chain requires exact owner approval and post-apply verification.
 - `020_bot_fabric_activity_types` adds the bot fabric audit labels in its own transaction, because PostgreSQL forbids using an enum label in the transaction that created it. `021_bot_fabric` adds `bots`, `bot_roles`, and `bot_assignments`: RLS and FORCE RLS with member-select policies, authenticated `select` grants only, audited SECURITY DEFINER mutation functions gated on `assert_bot_fabric_manager`, tenant-composite foreign keys to projects and roles, a credential-reference shape/denylist constraint, an HTTPS-only endpoint constraint, and a partial unique index enforcing one open posting per bot. Neither is hosted.
+- `20260813000100_marketing_content` adds the marketing schema described above. It is not hosted.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle

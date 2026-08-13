@@ -155,3 +155,24 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: Keep the global `a { color: inherit }` reset inside `@layer base`. Unlayered rules outrank every cascade layer, so an unlayered reset silently defeated `@layer components` classes: `.primary-action` rendered correctly as a button and at 1.19:1 contrast as a link.
 - Consequence: Component and utility classes control anchor color as intended. Accessibility scanning now covers `/bot-manager` in addition to the dashboard, so a regression of this class fails a gate instead of shipping.
+
+## ADR-023 - Marketing content is a separate, world-readable schema
+
+- Date: 2026-08-13
+- Status: Accepted for local implementation; hosted migration `20260813000100` pending
+- Decision: Serve the public marketing site from its own `marketing_*` schema rather than from tenant tables or hard-coded copy. Published rows carry an explicit `anon` SELECT policy, because marketing copy is public by design; RLS and FORCE RLS stay enabled and no marketing table grants INSERT, UPDATE, or DELETE to `anon` or `authenticated`. No marketing table references a tenant table or carries an `organization_id`. The single public write path is `subscribe_to_newsletter`, a SECURITY DEFINER function that validates and normalizes the address, is idempotent per email, and returns a constant status; `newsletter_subscribers` is excluded from the SELECT-policy loop, so a browser can never read it back.
+- Consequence: Marketing content can be edited without a deploy once the migration is hosted, and the public surface cannot be used to enumerate subscribers or reach tenant data. Widening the marketing schema's grants, or adding an `organization_id` to it, requires a superseding decision.
+
+## ADR-024 - Marketing pages state their content provenance
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `lib/marketing/queries.ts` never throws. An unconfigured or unreachable Supabase, or a missing page row, returns seeded content tagged `source: "seed"`, and the page renders a **Demo Data** notice. A missing page row falls back wholesale rather than mixing live and seeded sections.
+- Consequence: A marketing page always renders, and never presents seeded copy as live. Removing the fallback requires removing the notice with it; removing the notice alone would make the page lie.
+
+## ADR-025 - Two route groups separate the public site from the control plane
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `app/(marketing)/` carries the public header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`, with `robots.ts` disallowing console paths and `sitemap.ts` listing marketing routes only. The former console homepage is now `/solutions`, reached from the main navigation, and each shell owns exactly one skip link.
+- Consequence: The two visual systems and their metadata no longer share a layout. The console's lime palette is not reused on marketing pages; only shared primitives cross the boundary.

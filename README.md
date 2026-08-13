@@ -23,6 +23,19 @@ Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-
 - Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
 - OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**. Registering, readying, and assigning a bot does not change that: no worker executes assigned work.
 
+## Public marketing site
+
+The repository now serves two surfaces from one app, split by route group.
+
+- `app/(marketing)/` — the public site: `/`, `/platform`, `/features`, `/solutions`, `/pricing`, `/resources`, `/about`. Indexable, with its own header and footer.
+- `app/(console)/` — the authenticated control plane, keeping the sidebar shell and staying `noindex`. `robots.ts` disallows console paths; `sitemap.ts` lists marketing routes only.
+
+`/solutions` carries the former console homepage and is reached from the main navigation.
+
+Marketing copy lives in an eleven-table `marketing_*` schema. Published rows are world-readable through an explicit `anon` SELECT policy — RLS and FORCE RLS stay enabled, nothing grants a browser a write path, and no marketing table references a tenant table. Pages state their provenance: content read from Supabase renders plainly, seeded fallback content renders a **Demo Data** notice, and a missing page row falls back wholesale rather than mixing live and seeded sections.
+
+Newsletter subscription is the only public input. It goes through `subscribe_to_newsletter`, which validates and normalizes the address, is idempotent per email, and returns a constant status, so the endpoint cannot be used to test whether an address is already known. `anon` holds no SELECT on `newsletter_subscribers`.
+
 ## Bot fabric
 
 Connect any bot, give it a role you wrote, and move it between projects from `/bot-manager`.
@@ -85,6 +98,8 @@ Browser
       -> bot fabric (bots, roles, assignments)
         -> credential reference resolved server-side to a presence boolean
         -> no executor
+      -> marketing content (published rows, world-readable by policy)
+        -> falls back to seeded copy labelled Demo Data
 ```
 
 GitHub provider responses and webhook payloads are treated as untrusted. Supabase RLS remains an independent tenant boundary. Vercel deployment automation, merge automation, rollback automation, Codex execution, and Claude execution are not part of Phase 1B. The bot fabric is the registry a future worker would bind to; connecting one requires a separate owner-approved decision.

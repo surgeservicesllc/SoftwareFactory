@@ -5,6 +5,10 @@ import { AppShell } from "@/components/app-shell";
  * indexes; the marketing route group carries its own header and footer.
  */
 export const metadata = {
+  title: {
+    default: "Control plane · AI Software Factory",
+    template: "%s · Control plane · AI Software Factory",
+  },
   robots: { index: false, follow: false },
 };
 
