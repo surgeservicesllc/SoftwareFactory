@@ -24,7 +24,6 @@ jobs:
       NEXT_TELEMETRY_DISABLED: 1
       SOFTWAREFACTORY_WORKER_ENABLED: "true"
       SOFTWAREFACTORY_WORKER_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
-      SOFTWAREFACTORY_WORK_ROOT: ${{ runner.temp }}/softwarefactory-worker
       SOFTWAREFACTORY_CODEX_MODEL: gpt-5.3-codex
       SOFTWAREFACTORY_REQUIRED_CHECKS: Lint, typecheck, test, and build|Browser and accessibility tests
       SOFTWAREFACTORY_WORKER_RUNTIME: docker
@@ -54,6 +53,7 @@ jobs:
 
       - name: Claim and execute one durable run
         env:
+          SOFTWAREFACTORY_WORK_ROOT: ${{ runner.temp }}/softwarefactory-worker
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}
