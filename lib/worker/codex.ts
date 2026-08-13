@@ -320,20 +320,58 @@ export class CodexSdkAdapter {
         const streamed = await thread.runStreamed(prompt, { outputSchema: responseSchema, signal });
         let finalResponse = "";
         let terminalFailure: string | null = null;
-        for await (const event of streamed.events) {
-          if (event.type === "item.completed" && event.item.type === "agent_message") {
-            finalResponse = event.item.text;
+        const iterator = streamed.events[Symbol.asyncIterator]();
+        let completedIteration = false;
+        try {
+          while (true) {
+            let next: IteratorResult<ThreadEvent>;
+            try {
+              next = await iterator.next();
+            } catch (error) {
+              // The CLI can emit a useful, structured terminal error and then
+              // exit non-zero with only a generic stderr trailer. Preserve the
+              // safe provider message without masking event persistence errors.
+              if (terminalFailure) {
+                throw new Error(redactText(terminalFailure, {
+                  maximumLength: 1_000,
+                  secrets: [this.apiKey],
+                }));
+              }
+              throw error;
+            }
+            if (next.done) {
+              completedIteration = true;
+              break;
+            }
+            const event = next.value;
+            if (event.type === "item.completed" && event.item.type === "agent_message") {
+              finalResponse = event.item.text;
+            }
+            if (event.type === "turn.completed") {
+              attemptUsage = addUsage(attemptUsage, event);
+              cumulativeUsage = addUsage(cumulativeUsage, event);
+            }
+            if (event.type === "turn.failed") terminalFailure = event.error.message;
+            if (event.type === "error") terminalFailure = event.message;
+            const projection = eventProjection(event);
+            if (projection) await onEvent(projection);
           }
-          if (event.type === "turn.completed") {
-            attemptUsage = addUsage(attemptUsage, event);
-            cumulativeUsage = addUsage(cumulativeUsage, event);
+        } finally {
+          if (!completedIteration) {
+            try {
+              await iterator.return?.(undefined);
+            } catch {
+              // Preserve the primary provider or persistence failure. The
+              // worker process still has its outer abort and hard timeout.
+            }
           }
-          if (event.type === "turn.failed") terminalFailure = event.error.message;
-          if (event.type === "error") terminalFailure = event.message;
-          const projection = eventProjection(event);
-          if (projection) await onEvent(projection);
         }
-        if (terminalFailure) throw new Error(redactText(terminalFailure, { maximumLength: 1_000 }));
+        if (terminalFailure) {
+          throw new Error(redactText(terminalFailure, {
+            maximumLength: 1_000,
+            secrets: [this.apiKey],
+          }));
+        }
         const threadId = thread.id;
         if (!threadId) throw new Error("Codex did not return a resumable thread id.");
         if (attemptUsage.inputTokens > job.budget.maximumInputTokens

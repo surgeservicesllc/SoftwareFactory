@@ -423,4 +423,87 @@ describe("Codex SDK adapter", () => {
     await expect(session.run("No extra turn.", new AbortController().signal, vi.fn()))
       .rejects.toBeInstanceOf(CodexBudgetError);
   });
+
+  it("preserves a safe terminal provider error when the CLI exits with a generic trailer", async () => {
+    const client: CodexClientLike = {
+      startThread() {
+        return {
+          id: "thread-failed",
+          async runStreamed() {
+            async function* stream(): AsyncGenerator<ThreadEvent> {
+              yield { type: "thread.started", thread_id: "thread-failed" };
+              yield { type: "error", message: "The configured project cannot use this model." };
+              throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+            }
+            return { events: stream() };
+          },
+        };
+      },
+      resumeThread: vi.fn(),
+    };
+    const adapter = new CodexSdkAdapter("test-api-key-not-used", () => client);
+    const runDirectory = path.join(process.cwd(), "isolated-provider-failure-run");
+    const workspace: PreparedWorkspace = {
+      branch: branchForJob(job()),
+      directory: process.cwd(),
+      gitDirectory: path.join(runDirectory, "trusted-git"),
+      hooksDirectory: path.join(runDirectory, "empty-hooks"),
+      runDirectory,
+    };
+
+    await expect(adapter.createSession(job(), workspace).run(
+      "Do the work.",
+      new AbortController().signal,
+      vi.fn(),
+    )).rejects.toThrow("The configured project cannot use this model.");
+  });
+
+  it("does not mask event persistence failures and redacts the exact API key", async () => {
+    const unusualApiKey = "opaque credential with spaces 123456789";
+    const cleanup = vi.fn();
+    const client: CodexClientLike = {
+      startThread() {
+        return {
+          id: "thread-failed",
+          async runStreamed() {
+            async function* stream(): AsyncGenerator<ThreadEvent> {
+              try {
+                yield { type: "error", message: `Provider rejected ${unusualApiKey}` };
+                throw new Error("generic CLI trailer");
+              } finally {
+                cleanup();
+              }
+            }
+            return { events: stream() };
+          },
+        };
+      },
+      resumeThread: vi.fn(),
+    };
+    const adapter = new CodexSdkAdapter(unusualApiKey, () => client);
+    const runDirectory = path.join(process.cwd(), "isolated-provider-redaction-run");
+    const workspace: PreparedWorkspace = {
+      branch: branchForJob(job()),
+      directory: process.cwd(),
+      gitDirectory: path.join(runDirectory, "trusted-git"),
+      hooksDirectory: path.join(runDirectory, "empty-hooks"),
+      runDirectory,
+    };
+    const session = adapter.createSession(job(), workspace);
+
+    await expect(session.run(
+      "Do the work.",
+      new AbortController().signal,
+      vi.fn().mockRejectedValue(new Error("audit persistence failed")),
+    )).rejects.toThrow("audit persistence failed");
+    expect(cleanup).toHaveBeenCalledTimes(1);
+
+    await expect(session.run(
+      "Try again.",
+      new AbortController().signal,
+      vi.fn(),
+    )).rejects.toSatisfy((error: unknown) => (
+      String(error).includes("[REDACTED]") && !String(error).includes(unusualApiKey)
+    ));
+  });
 });

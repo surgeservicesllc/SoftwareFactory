@@ -12,6 +12,7 @@ describe("Phase 1C durable worker workflow", () => {
   it("runs only from default-branch dispatch or the scheduled recovery wake-up", () => {
     expect(workflow).toContain("repository_dispatch:");
     expect(workflow).toContain("softwarefactory_phase1c_command");
+    expect(workflow).toContain("softwarefactory_phase1c_preflight");
     expect(workflow).not.toContain("workflow_dispatch:");
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain('cron: "*/5 * * * *"');
@@ -42,8 +43,30 @@ describe("Phase 1C durable worker workflow", () => {
     expect(workflow).toContain("GITHUB_COMMIT_IDENTITY_EMAIL: surgeservicesllc@gmail.com");
     expect(workflow).not.toContain("NEXT_PUBLIC_OPENAI");
     const installStep = workflow.split("- name: Install the locked worker runtime")[1]
-      ?.split("- name: Claim and execute one durable run")[0] ?? "";
+      ?.split("- name: Verify the configured OpenAI project and model")[0] ?? "";
     expect(installStep).not.toContain("secrets.");
+  });
+
+  it("verifies OpenAI access before a dispatched run can consume a durable attempt", () => {
+    const preflightSection = workflow.split("- name: Verify the configured OpenAI project and model")[1]
+      ?.split("- name: Preload the pinned validation sandbox")[0] ?? "";
+    const modelStep = preflightSection.split("- name: Verify one bounded OpenAI response")[0] ?? "";
+    const preflightIndex = workflow.indexOf("- name: Verify the configured OpenAI project and model");
+    const claimIndex = workflow.indexOf("- name: Claim and execute one durable run");
+
+    expect(preflightIndex).toBeGreaterThan(0);
+    expect(claimIndex).toBeGreaterThan(preflightIndex);
+    expect(modelStep).not.toContain("if:");
+    expect(preflightSection).toContain("OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}");
+    expect(preflightSection).toContain("npm run worker:preflight");
+    expect(preflightSection).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(preflightSection).not.toContain("GITHUB_APP_PRIVATE_KEY");
+    expect(preflightSection).toContain("github.event.action == 'softwarefactory_phase1c_preflight'");
+    expect(preflightSection).toContain("npm run worker:preflight -- --execute");
+    expect(preflightSection).toContain("without claiming a run");
+    expect(workflow).toMatch(/Preload the pinned validation sandbox\r?\n\s+if: \$\{\{ github\.event\.action != 'softwarefactory_phase1c_preflight' \}\}/);
+    expect(workflow).toMatch(/Claim and execute one durable run\r?\n\s+if: \$\{\{ github\.event\.action != 'softwarefactory_phase1c_preflight' \}\}/);
+    expect(workflow).not.toContain("preflight_only");
   });
 
   it("claims one durable run through the fail-closed worker entrypoint", () => {

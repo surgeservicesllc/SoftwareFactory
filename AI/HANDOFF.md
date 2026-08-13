@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish verification and protected release without overstating live status. Phase 1E, Phase 2A, bot fabric, marketing/routes, and the execution-inert Phase 1D decision layer are published on `main`; Phase 1C remains a local branch three commits ahead and unpublished. Hosted schema effects `028`/`130001`-`130005` exist, but the Supabase migration ledger has exactly 26 rows through `027`; the historical duplicate `130002` makes a normal push unsafe. Local `130006`-`130011` are absent. No production observation, provider credential/live request, Actions secret/variable, worker heartbeat, or Codex run is verified. All automatic actions/execution switches remain OFF; Phase 1E operations, Phase 2A provider execution, bot-provider readiness, Phase 1D execution, and Phase 1C Codex execution remain **Not Connected**.
+Finish the Phase 1C provider-startup recovery and live acceptance without overstating status. The protected Supabase ledger reconciliation and forward-only chain through `130014` are complete on exact project `qpuofpmagrmyamahqwxw`; linked lint and focused runtime/catalog/ACL checks pass. Phase 1C is published on `main` at `7f504255fc9db3a67da936e112825252dc668670`; CI run `31745504157` passed both required jobs and Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv` is READY. All seven Actions secrets are configured. The first owner-approved live GREEN command was claimed, but Codex provider startup failed before any file change, commit, branch push, or pull request. Durable run `f4594556-6f72-4763-a480-6993939e3651` is failed after attempt 1 of 2 and is retryable. Activation is absent/OFF. A local unpublished recovery patch adds fail-closed preflight and structured terminal-error preservation. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected**. All automatic actions remain OFF and the global kill switch remains ON.
 
 ## Phase 1D state for the next agent
 
@@ -32,10 +32,7 @@ Rules that must survive any future change:
 5. **The Phase 1D control migration relaxes nothing.** Enabling any automatic action is a RED action
    requiring an owner-approved migration. Do not do it as a side effect of anything else.
 
-Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is not applied to hosted Supabase. Until it is promoted under an
-exact owner-approved, ledger-reconciled migration chain, the nine-action model exists in source
-and local behavioral tests only. Applying that execution-inert decision schema does not authorize
-or execute an automatic action.
+Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is applied to hosted Supabase as part of the owner-approved, ledger-reconciled forward chain through `130014`. Hosted resolution confirms all nine actions OFF and the global kill switch ON. Applying that execution-inert decision schema did not authorize or execute an automatic action.
 
 Manual Phase 1C execution may handle only authenticated owner-submitted GREEN/YELLOW commands. RED remains non-executable. Autonomous Mode is OFF, the global kill switch is ON, and auto approve/merge/deploy/rollback are OFF. The worker ends at an open draft PR plus observed CI; it never writes the default branch or performs delivery.
 
@@ -53,7 +50,7 @@ Phase 2A is a separate advisory path. It can route a bounded task to an official
 
 ## Phase 1E production operations
 
-The production-operations control plane is implemented in source and migration `028`. Its schema effect is present on hosted Supabase but its ledger row is missing, and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown** today.
+The production-operations control plane is implemented in source and migration `028`. Its schema effect and reconciled ledger row are present on hosted Supabase, but no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown** today.
 
 What it does: monitors production through one bounded HTTPS-probe adapter, derives project health with a stored reason, opens and deduplicates SEV1–SEV4 incidents, freezes autonomous releases automatically on SEV1/SEV2, resolves Last Known Good only from a validated deployment, evaluates rollback fail-closed, diagnoses deterministically, creates bounded repair work, orchestrates ten durable event types idempotently, gates resolution on real restoration evidence, and reports daily.
 
@@ -67,7 +64,7 @@ Invariants a future change must not break: `service_role` gains no new table pri
 
 Released to `main` as merge commit `b243e1ddf9ce8155c4440c56d7b846ccc3d74ce0`; CI run `31731632715` passed both jobs against that commit.
 
-Next Phase 1E steps: apply hosted `028` and `130002` as part of the exact pending chain after reauthenticating the Supabase CLI, configure an owner-authorized monitor target, and record the first real detection-to-resolution journey.
+Next Phase 1E steps: configure an owner-authorized monitor target and record the first real detection-to-resolution journey. Hosted ledger reconciliation is complete and must not be replayed.
 
 ## Implemented boundaries and migration state
 
@@ -90,16 +87,17 @@ Next Phase 1E steps: apply hosted `028` and `130002` as part of the exact pendin
 - `025`: generic secret-assignment detection, protected approval/reservation/token-order integrity, and serialized stable repository relinking.
 - `026`: revoke all `service_role` public-table privileges, then restore only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
 - `027`: hosted; immutable owner RED approval/single-use execution, exact candidate signed-delivery provenance/freshness, cross-App repository serialization, atomic history-preserving project handoff, and evidence-bound reverse handoff.
-- `028` and canonical `130001`-`130005`: schema effects present, ledger rows missing. Do not rerun their DDL; catalog-prove and ledger-repair only under exact owner approval.
+- `028` and canonical `130001`-`130005`: schema effects and reconciled ledger rows are present. Their DDL was not rerun; preserve the completed history-only repair evidence.
 
-### Published Phase 2A and local Phase 1C candidate
+### Published Phase 2A/Phase 1C and local recovery candidate
 
 - Command route/composer: connected-project selection, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, opaque dispatch, dispatch evidence, truthful RED/delayed states.
 - Orchestration: provider `openai`, model `gpt-5.3-codex`, role mapping, 45-minute/four-turn/token/one-repair/15-minute-CI budgets, and fixed inspect-to-report draft-PR workflow.
-- Provider layer already on `main`: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; `130001` schema is present but ledger-unreconciled, and execution remains OFF/**Not Connected**.
-- Schema: `130006` Phase 1D decision-only interlocks; `130007` provider compatibility; `130008` enum-only commit; `130009` core command/task/run/worker/evidence/RLS/RPC schema; `130010` provider-neutral roster, owner/risk/ACL/recovery/report hardening; and `130011` canonical dependencies, derived criteria, idempotent replay, and cumulative retry budgets. All are unhosted; only `130007`-`130011` are Phase 1C.
+- Provider layer already on `main`: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; `130001` schema and its reconciled ledger row are hosted, while advisory execution remains OFF/**Not Connected**.
+- Schema: `130006` Phase 1D decision-only interlocks; `130007` provider compatibility; `130008` enum-only commit; `130009` core command/task/run/worker/evidence/RLS/RPC schema; `130010` provider-neutral roster, owner/risk/ACL/recovery/report hardening; and `130011` canonical dependencies, derived criteria, idempotent replay, and cumulative retry budgets. All are hosted; `130012`-`130014` are forward-only containment/lint/emergency-stop corrections. Only `130007`-`130013` contain Phase 1C changes.
 - Worker: supported `@openai/codex-sdk`, isolated `CODEX_HOME`, controlled environment, exact repository/base-SHA workspace, `factory/*` branch, bounded Codex, pinned Docker validation, protected-path/secret scan, commit/push, draft-PR recovery, exact-head CI observation, bounded repair, redacted persistence.
 - Workflow: `.github/workflows/codex-worker.yml` runs one claim on opaque repository dispatch or every five minutes for recovery; branch-selectable manual dispatch is intentionally absent, workflow token permission is contents read, actions are commit-SHA pinned, checkout credentials are not persisted, and the job remains skipped unless the activation variable is literal `true`.
+- Recovery patch, still local/unpublished: before every claim, verify the installed Codex CLI is the reviewed `0.147.0` and perform a non-billable exact-model lookup using only the OpenAI secret. The distinct repository-dispatch event `softwarefactory_phase1c_preflight` additionally requests one bounded, non-stored response, then skips Docker preload and durable claim. The Codex adapter retains the redacted structured `turn.failed`/error message if the event iterator subsequently exits with a generic CLI trailer.
 - UI/APIs: bounded list/detail/status for Agents, Backlog, Runs, Reports, Dashboard, and Bot Manager; cancellation and eligible retry; worker status is heartbeat-derived rather than configuration-derived.
 
 ## Critical protected configuration
@@ -116,34 +114,33 @@ GitHub Actions does not permit secret names beginning `GITHUB_`. The reviewed wo
 
 The workflow maps the four App values to runtime `GITHUB_*` names only inside the worker step. Never print, persist, copy into source, or expose secret values. The public workflow identity is fixed to `surgeservicesllc <surgeservicesllc@gmail.com>`.
 
-The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal literal `true` or every repository-dispatch/schedule job is skipped. It is the final fail-closed activation gate, currently not verified enabled, and may change only under exact owner RED approval.
+The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal literal `true` or every repository-dispatch/schedule job is skipped. It is the final fail-closed activation gate. It was enabled only long enough for the first approved acceptance claim and is now absent/OFF; any further activation remains bounded by the exact owner approval.
 
 `SOFTWAREFACTORY_REQUIRED_CHECKS` must be a non-empty, unique pipe-delimited list of 1-20 exact check names. The reviewed workflow value is `Lint, typecheck, test, and build|Browser and accessibility tests`, matching `.github/workflows/ci.yml`. Before activation, verify no CI job rename drift. Missing/invalid configuration blocks worker startup; incomplete/missing/unstable checks or a changed draft PR cannot pass CI.
 
 ## Verification state
 
 - The frozen local candidate passes supported Node `24.19.0` lint/typecheck, 109 files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
-- No ledger repair, hosted `130006`-`130011`, real production observation/provider request, published Phase 1C workflow, Actions secrets/activation, active worker heartbeat, Codex thread, factory branch, Phase 1C commit/PR, structured live report, or stable exact-head required-check result exists.
+- Hosted history is reconciled through `130014`; linked lint is clean; seven Actions secrets are configured; published commit `7f504255fc9db3a67da936e112825252dc668670`, CI run `31745504157`, and READY Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv` pass.
+- First acceptance evidence: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, durable run `f4594556-6f72-4763-a480-6993939e3651`, and worker Actions run `31746057998`. A real heartbeat and provider thread identifier were recorded, then Codex startup failed. Attempt 1 of 2 is durably failed and retryable. No changed file, factory branch, commit, PR, validation, or exact-head CI evidence was created. Activation is OFF.
+- Focused/full verification and publication of the recovery patch remain pending. No production-monitor journey or successful live Phase 1C provider result exists.
 
 ## Immediate sequence
 
-1. Run and record fresh consolidated gates on the exact reconciled tree.
-2. Review the complete diff and migration ACL/RLS/function surface. Confirm RED cannot be claimed, browser input cannot widen provider/model/role/budget/workflow, and worker evidence remains append-only.
-3. Ask for one exact owner RED approval covering: ledger-only repair of catalog-proven `028`/`130001`-`130005`; application of absent `130006`-`130011`; configuration of seven protected Actions secrets; disabled publication; one bounded live GREEN Phase 1C command; and deactivation. Attach the exact Phase 1C target/risk/evidence/expiry/validation/containment matrix and require `APPROVE RED PHASE1C-20260813-A THROUGH 2026-08-14 00:30 EDT`. The phrase alone is not reusable approval. Applying `130006` does not authorize Phase 1D execution.
-4. Reauthenticate the currently unauthorized Supabase CLI as `surgeservicesllc@gmail.com`, reconfirm exact project/history/catalog/source hashes, repair only proven history rows, re-list/dry-run/lint, then apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`. Stop on any mismatch; never reset hosted production or rerun schema-present DDL.
-5. Verify hosted RLS/FORCE RLS, policies, table/function ACLs, safe projections, service-role RPCs, secret checks, triggers, append-only evidence, owner/cross-tenant/anonymous behavior, and rollback containment.
-6. Configure GitHub Actions secrets without rendering their values. Confirm activation remains absent/false and required-check names match CI. Publish the exact reviewed commit, then verify regular CI and matching Vercel deployment while every worker trigger skips.
-7. Under the same exact protected approval, set `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`; do not introduce or use a branch-selectable manual workflow dispatch.
-8. Submit one narrowly scoped GREEN owner command so the approved default-branch repository dispatch starts the worker (with the schedule only as durable recovery). Observe the active heartbeat during the one-shot run and follow command -> task -> neutral logical agent -> run/recovery -> Codex thread -> validation -> factory branch/commit -> open draft PR -> stable exact-head required checks -> structured report/activity.
-9. Restore activation to absent/false after acceptance unless continuing authority was separately approved.
-10. Prove no default-branch write, approval, merge, deployment, rollback, workflow/provider-setting mutation, secret disclosure, or RED execution occurred.
-11. Update repository memory with exact IDs and evidence before changing OpenAI/Codex from **Not Connected**.
+1. Finish focused tests, lint, typecheck, diff/secret review, and consolidated gates for the local recovery patch. Do not consume the remaining durable retry during code verification.
+2. Publish the exact reviewed recovery commit with activation absent/OFF; verify both required CI jobs and the matching READY Vercel deployment.
+3. Within the existing owner-approved window, enable the activation variable only for the distinct `softwarefactory_phase1c_preflight` repository-dispatch event. This may perform the pinned-CLI/exact-model checks and one bounded non-stored OpenAI response, but it must skip Docker preload and durable claim.
+4. Return activation to absent/OFF immediately after that diagnostic job is admitted. If preflight fails or its identity/model/result is ambiguous, stop; attempt 2 must remain unconsumed.
+5. Only after preflight passes, re-enable briefly and use the production Retry control for durable run `f4594556-6f72-4763-a480-6993939e3651`. This is its second and final allowed attempt.
+6. After claim, return activation to absent/OFF. Observe command -> task -> neutral logical agent -> run -> Codex thread -> validation -> factory branch/commit -> open draft PR -> stable exact-head required checks -> structured report/activity.
+7. Prove no default-branch write, approval, merge, deployment, rollback, workflow/provider-setting mutation, secret disclosure, or RED execution occurred.
+8. Update repository memory with exact success or failure evidence before changing OpenAI/Codex from **Not Connected**.
 
 ## Safe operating notes
 
 - Never print or commit App private keys, client/state/webhook secrets, OAuth/installation tokens, service role, or database credentials.
 - Service role is limited to narrow provider-ingress/terminal evidence boundaries and never proves RLS.
-- The currently selected Supabase CLI profile is wrong/unauthorized. Do not run a new linked database command until it is reauthenticated as `surgeservicesllc@gmail.com` and project `qpuofpmagrmyamahqwxw` is reconfirmed. No mutation used the wrong profile; never reset hosted production.
+- Before any new linked database command, reconfirm the authenticated release identity and exact project `qpuofpmagrmyamahqwxw`; never fall back to the previously wrong/unauthorized profile. No mutation used that profile, and hosted production must never be reset.
 - Preserve **Demo Data** and **Not Connected** language when live evidence is absent.
 - Keep default-branch writes, non-draft PRs, merge, deploy, rollback, workflow/administration writes, and autonomous execution unavailable.
 - `main` is currently unprotected and the published release commit is unsigned; changing branch protection or signature requirements is a separate protected owner-review action.
@@ -151,7 +148,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 
 ## Completion checklist
 
-- [x] Hosted migration history is current through `027`; pre-`027` history matched, prior dry run/lint/RLS/catalog/browser-grant checks pass, and live `027` owner approval/execution/rebind behavior passes.
+- [x] Hosted migration history is reconciled/current through `130014`; linked lint, focused RLS/catalog/ACL/runtime checks, and live `027` owner approval/execution/rebind behavior pass.
 - [x] Migration `026` is hosted; exact ACL mismatch count is zero, with four intended `service_role` ingress tables and no table privileges on the other 19.
 - [x] Current pre-release lint/typecheck, 56 files/436 tests, and 38-route build pass.
 - [x] Local and exact production E2E/responsive/accessibility pass 48/48; production focused signed-out race passes 30/30.

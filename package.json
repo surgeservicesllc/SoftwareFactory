@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "worker": "tsx scripts/worker.mts",
+    "worker:preflight": "tsx scripts/worker-preflight.mts",
     "worker:once": "tsx scripts/worker.mts --once",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },

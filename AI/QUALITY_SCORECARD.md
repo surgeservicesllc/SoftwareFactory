@@ -2,17 +2,17 @@
 
 Last reviewed: 2026-08-13
 
-Decision: **Phase 1D/Phase 2A source is published on `main` and Phase 1C is a local candidate three commits ahead and unpublished; hosted schema is ahead of an inconsistent ledger, so protected reconciliation, promotion, configuration, and live acceptance remain blocked. Phase 1D execution, provider execution, and OpenAI/Codex remain Not Connected.**
+Decision: **The Phase 1C schema and worker are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely on Codex provider startup before any repository mutation. Attempt 1 of 2 is durably failed and retryable; activation is OFF. A fail-closed recovery patch is local and unpublished. Phase 1D execution and provider execution also remain Not Connected.**
 
-Reason: hosted catalog evidence shows schema effects `028`/`130001`-`130005`, but the ledger has exactly 26 rows through `027`; the database therefore requires owner-approved history-only reconciliation before absent `130006`-`130011` can be applied. `130006` is the execution-inert Phase 1D schema; `130007`-`130011` are Phase 1C. No real production monitor/journey, provider request, Actions secret/variable, published Phase 1C workflow, heartbeat, Codex thread, draft PR, or required-CI evidence exists. The current Supabase CLI profile returns `403`. Passing local tests cannot close those live gaps.
+Reason: exact project `qpuofpmagrmyamahqwxw` is reconciled and current through forward migration `130014`; linked lint and focused catalog/runtime/ACL checks pass. All seven Actions secrets are configured. Published commit `7f504255fc9db3a67da936e112825252dc668670` passed CI run `31745504157`, and Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv` is READY. Live command `0c4d0ca8-1867-4d00-80cf-476401491a17` produced durable run `f4594556-6f72-4763-a480-6993939e3651` and worker Actions run `31746057998`; a real claim, heartbeat, and provider thread occurred, then provider startup failed before changed files, commit, branch, PR, validation, or exact-head CI. The local recovery patch adds pinned-CLI and exact-model preflight before every claim, a distinct no-claim response-probe event, and structured terminal-error preservation. A successful live draft-PR journey is still required.
 
-Phase 1E decision: **Production-operations control plane implemented and locally verified; unhosted and unobserved, so no live monitoring claim is made**
+Phase 1E decision: **Production-operations control plane implemented, hosted, and locally verified; unobserved, so no live monitoring claim is made**
 
-Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges, and its schema effect is present on hosted Supabase, but its ledger row is missing and no monitor has observed a real production target. Every Phase 1E surface therefore reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
+Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges. Its schema effect and reconciled ledger row are hosted, but no monitor has observed a real production target. Every Phase 1E surface therefore reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
 
 Phase 1D decision: **Decision layer complete and proven against a migrated database; every automatic action remains constrained OFF and no executor exists**
 
-Reason: unhosted migration `130006` completes the nine-action control model at organization and project scope, extends both interlocks, and relaxes nothing — every flag is created `false`, constrained `false`, and refused by the trigger. The decision modules classify an actual diff, require the correct gate set, run deterministic reviewing agents, and return the approval tri-state with absolute no-self-approval. Merge, deploy, and autonomous Codex execution are blocked by name. Applying the decision schema would not authorize or connect an executor.
+Reason: hosted migration `130006` completes the nine-action control model at organization and project scope, extends both interlocks, and relaxes nothing — every flag remains `false`, constrained `false`, and refused by the trigger. Hosted resolution through `130014` confirms all actions OFF and the global kill switch ON. The decision modules classify an actual diff, require the correct gate set, run deterministic reviewing agents, and return the approval tri-state with absolute no-self-approval. Merge, deploy, and autonomous Codex execution are blocked by name.
 
 ### Phase 1D completion
 
@@ -41,7 +41,7 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 | Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 91 tests across controls, diff risk, gates, agents, approval, and the stage machine |
 | Phase 1D end-to-end loop | `tests/integration/phase1d-loop-journey.behavior.test.ts` | Pass - a GREEN change reaches `APPROVED_AUTOMATICALLY` and then halts at `MERGE_EXECUTOR_NOT_CONNECTED`; a failed release drives incident, automatic freeze, Last Known Good, blocked rollback and bounded repair through Phase 1E's real functions, and the freeze is shown propagating back into the decision layer |
 | Phase 1D self-approval boundary | Same journey plus `tests/unit/autonomy-approval.test.ts` | Pass - the author is refused as approver at every risk level, including RED and including an owner |
-| Phase 1D hosted state | Ledger exactly 26 rows through `027` | **Not applied** - decision-only migration `20260813000600` is unhosted; all nine actions remain OFF |
+| Phase 1D hosted state | Ledger reconciled/current through `130014`; resolver checked live | Pass - decision-only migration `20260813000600` is hosted; all nine actions remain OFF and the global kill switch remains ON |
 
 | Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 82 files/819 tests on the merged tree |
 | Phase 1E coverage | `npm run test:coverage` | Pass - merged tree with Phase 2A: statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%. The Phase 1E tree alone measured 78.02/77.79/70.00/79.15 |
@@ -53,7 +53,7 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 | Phase 1E monitoring truth | `production_monitors_enabled_requires_connection`; provider registry; probe target validation | Pass - an unconnected monitor cannot be enabled; private/loopback/metadata targets are refused; no response body is read |
 | Phase 1E execution boundary | `autonomous_release_allowed`; `PHASE_1E_ROLLBACK_EXECUTOR_CONNECTED`; `PHASE_1E_REPAIR_WORKER_CONNECTED` | Pass - release authority returns false unconditionally with `EXECUTOR_NOT_CONNECTED`; no rollback, deployment, merge, or repair is executed |
 | Phase 1E synthetic journeys | Database CHECK constraints plus `tests/unit/operations-journey.test.ts` and the behavioral suite | Pass - destructive paths, undeclared writes, and uncovered profiles are refused by constraint; execution stops at the first failure; declared writes are recorded as skipped and never issued |
-| Phase 1E hosted state | Schema effects present; ledger unreconciled | `028`/`130002` objects exist but ledger rows do not; no production target or journey has been observed |
+| Phase 1E hosted state | Schema effects present; ledger reconciled | `028`/`130002` objects and ledger rows exist; no production target or journey has been observed |
 | Phase 1E release | Merge commit `b243e1ddf9ce8155c4440c56d7b846ccc3d74ce0` on `main`; CI run [`31731632715`](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31731632715) | Pass - both jobs green: lint/typecheck/tests/build, and browser/accessibility. Vercel Preview for the merged head deployed READY before the merge. |
 | `/solutions` routing | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build`, Playwright; plus live checks against `https://www.theagoras.com` | Pass - lint/typecheck; 83 files/824 tests; build lists twelve `/solutions` routes; Playwright 117/117 with axe on each moved page. Live: all twelve pages `200` with both landmarks and the shell offset, every former path `308` to its new home, `/solutions` `noindex` and disallowed |
 | `/solutions` routing contract | `tests/integration/console-routing.contract.test.ts` | Pass - 5 tests: no stray `app/(console)` group, a redirect for every console route, `/solutions` disallowed, no sitemap entry contradicting robots, a title on every console page. The sitemap assertion was mutation-checked |
@@ -69,8 +69,8 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 | Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Retained pass - 30/30 production runs; current exact-commit CI is green |
 | E2E/responsive/accessibility | Exact-main production Playwright plus CI browser job | Pass - production 48/48 desktop/tablet/mobile including axe; CI `31716263910` green |
 | Secret/client boundary | Prior full source/rebuilt-static scan plus current CI secret-boundary contracts and production 20-asset marker scan | Pass - no secret/helper committed; 20 deployed JavaScript assets clean |
-| Hosted Supabase identity | Exact project `qpuofpmagrmyamahqwxw`, current through `027`; earlier wrong/unauthorized CLI profile was not used for mutation | Live hosted `027` behavior passes; reconfirm identity before any future linked command |
-| Hosted migrations | Current through `027`; pre-`027` history/dry-run/lint baseline retained; live `027` approval/execution/rebind path passed | Hosted through `027` |
+| Hosted Supabase identity | Exact project `qpuofpmagrmyamahqwxw`, ledger current through `130014`; earlier wrong/unauthorized CLI profile was not used for mutation | Reconciled history, linked lint, focused runtime/catalog/ACL, and hosted autonomy resolver checks pass; reconfirm identity before any future linked command |
+| Hosted migrations | Catalog-proven `028`/`130001`-`130005` repaired history-only; forward migrations `130006`-`130014` applied without reset, down-migration, or DDL replay | Hosted through `130014` |
 | Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; linked lint clean | Pass |
 | Hosted RLS/catalog/browser grants | Post-`027`: 25/25 RLS+FORCE, 34 policies, zero policyless; narrow owner-read/no-browser-mutation grants on both handoff-evidence tables; 22 secret guards and raw browser denials retained | Pass |
 | Hosted service-role table grants | Verified pre-`027`: SELECT/INSERT/UPDATE on four GitHub ingress tables; no table privileges on other 19; `027` revokes direct access on its new evidence tables | Pass baseline; live `027` path uses narrow RPCs |
@@ -93,7 +93,7 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 | Acceptance cleanup | Prior PRs `#4`/`#5` and candidate acceptance PR `#8` were closed unmerged with isolated branches deleted; PR `#8` passed CI `31716958685` and Vercel Preview; `main` unchanged by acceptance writes | Pass |
 | Git provenance for application release | Commit `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31716263910`, both jobs green | Pass; docs-only successors retain this evidence unless application code changes |
 | Vercel production | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`; `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app`; stable alias; source exact main commit `799d2cea189b6860a03987ae75c25765f9ac4aca` | READY; production Playwright 48/48; 13/13 public routes `200`; invalid webhook `401` private/no-store; 30-minute logs clean; 20 JavaScript assets clean |
-| OpenAI/Codex | No live worker; Phase 1C exists only in the local reconciled candidate | **Not Connected** |
+| OpenAI/Codex | Published worker claimed one real run and emitted a transient heartbeat/provider thread, then failed on provider startup before repository mutation; no successful run or draft PR exists | **Not Connected** |
 | Anthropic/Claude | Advisory adapter source exists; no hosted schema, verified credential, enabled switch, or live run | **Not Connected** |
 | Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
 | Phase 1D observation scaffold | Autonomous Mode OFF, GREEN-only observation, global kill switch ON | Execution remains blocked |
@@ -102,19 +102,20 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 
 | Area | Current evidence | Status |
 | --- | --- | --- |
-| Command/orchestration | Connected-project-only intent; command type/criteria; stable idempotency; exact base SHA; fixed provider/model/role/budgets/workflow; independent SQL risk/config enforcement | Implemented locally |
-| Phase 2A advisory providers | Official Anthropic/OpenAI adapters; health/model discovery; deterministic routing; bounded fallback; independent review; advisory artifacts only | Published on `main`; `130001` schema present/ledger-unreconciled; keys/live run absent; execution OFF; **Not Connected** |
-| RED ceiling | SQL and worker exclude RED; owner approval does not widen Phase 1C | Implemented locally; hosted proof pending |
-| Durable schema | `028`/`130001`-`130005` schema-present/ledger-unreconciled; Phase 1D `130006`; Phase 1C compatibility `130007`, enums `130008`, execution `130009`, roster/recovery `130010`, dependencies/cumulative budgets `130011` | `130006`-`130011` implemented locally and **UNHOSTED** |
+| Command/orchestration | Connected-project-only intent; command type/criteria; stable idempotency; exact base SHA; fixed provider/model/role/budgets/workflow; independent SQL risk/config enforcement | Published and hosted; first live command persisted and was claimed safely |
+| Phase 2A advisory providers | Official Anthropic/OpenAI adapters; health/model discovery; deterministic routing; bounded fallback; independent review; advisory artifacts only | Published on `main`; `130001` hosted and ledger-reconciled; advisory execution OFF and no successful live advisory run; **Not Connected** |
+| RED ceiling | SQL and worker exclude RED; owner approval does not widen Phase 1C | Published and hosted; all autonomy controls remain OFF |
+| Durable schema | History-only reconciliation for schema-present `028`/`130001`-`130005`; Phase 1D `130006`; Phase 1C compatibility `130007`, enums `130008`, execution `130009`, roster/recovery `130010`, dependencies/cumulative budgets `130011`; forward corrections `130012`-`130014` | Hosted through `130014`; linked lint and focused runtime/catalog/ACL checks pass |
 | Logical agent identity | Eleven standard logical roles for existing/future organizations; provider-account identity remains separate; general Phase 1C work maps to Orchestrator | Implemented in `130010`; hosted proof pending |
 | Dependency and budget integrity | Canonical same-project pre-existing dependencies, atomic/idempotent persistence, derived criteria, total turn/input/output budgets across retries | Implemented in `130011`; hosted proof pending |
 | Recovery/report integrity | Coherent artifact replay, draft projection, bounded retry/resume, stale-lease/cancel terminalization, structured success/failure/cancellation reports | Implemented in `130010`/`130011`; hosted/live proof pending |
-| RLS/ACL | New tables declare RLS/FORCE RLS; browser table grants revoked; bounded member RPCs and service-role-only worker RPCs | Contract/behavior tests local; hosted catalog/user-session proof pending |
-| Codex integration | Pinned `@openai/codex-sdk` `0.147.0`; isolated home; bounded turns/tokens/time; workspace-write/no approval/no workspace network/web search | Implemented locally; no real provider call |
+| RLS/ACL | New tables declare RLS/FORCE RLS; browser table grants revoked; bounded member RPCs and service-role-only worker RPCs | Hosted catalog/function-identity/ACL and focused runtime checks pass; remaining cross-tenant/anonymous acceptance remains pending |
+| Codex integration | Pinned `@openai/codex-sdk` `0.147.0`; isolated home; bounded turns/tokens/time; workspace-write/no approval/no workspace network/web search | Published; first real provider startup failed safely before repository work |
 | Workspace/GitHub | Repository-ID token; exact base-SHA check; isolated `factory/*` branch; required commit identity; draft-PR-only publisher; exact-head CI polling | Implemented/tested locally; no live Phase 1C artifact |
 | Validation sandbox | Exact pinned Node image; restricted bootstrap; network-none diff/lint/typecheck/test/build; process/resource/output limits | Implemented/tested locally; live runner proof pending |
 | Policy scan | Path containment; forbidden/symlink/binary/secret/protected/file-count/size limits | Implemented/tested locally |
-| Durable worker workflow | Opaque repository dispatch, five-minute recovery, no branch-selectable manual trigger, read-only workflow token, no persisted checkout credentials | Implemented locally; protected secrets/workflow run pending |
+| Durable worker workflow | Opaque command dispatch, five-minute recovery, distinct `softwarefactory_phase1c_preflight` diagnostic dispatch, no branch-selectable manual trigger, read-only workflow token, no persisted checkout credentials | Published command/schedule worker; first claim failed safely on provider startup. Diagnostic event remains local/unpublished. |
+| Recovery preflight patch | Pinned CLI `0.147.0` plus non-billable exact-model lookup before every claim; distinct `softwarefactory_phase1c_preflight` bounded non-stored response that skips Docker preload/claim; structured terminal-error preservation | Implemented locally; focused/consolidated verification, publication, and live diagnostic proof pending |
 | Safe UI/APIs | Worker status, agent/task/run/report detail, timelines/artifacts/validation, cancel, retry, responsive real-data consoles | Implemented locally; hosted authenticated/E2E proof pending |
 | Consolidated lint/typecheck/tests/build | Frozen local candidate | Pass on Node `24.19.0`: 109 files/1,169 tests and production build with 74 page/route entries |
 | Consolidated coverage | Frozen local candidate | Pass - 75.06% statements / 69.97% branches / 72.60% functions / 76.66% lines |
@@ -124,12 +125,12 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 | Production dependency audit | Exact reconciled `npm audit --omit=dev` | Pass - 0 vulnerabilities |
 | Disabled worker smoke | Exact reconciled worker disabled/incomplete configuration | Pass - exits safely without executing |
 | Diff and independent severity audit | Exact reconciled tree | Pass - diff check clean except line-ending notices; focused migration/API security audits found no remaining P0/P1 blocker |
-| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | Ledger through `027`; `028`/`130001`-`130005` schema-present/ledger-unreconciled; `130006`-`130011` absent; current CLI profile `403` |
-| GitHub Actions secrets | Seven required `SOFTWAREFACTORY_*` secrets | **Not Connected / not verified configured** |
-| Worker activation gate | Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` | Not verified enabled; absent/false skips all jobs |
+| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | Ledger reconciled/current through `130014`; linked lint clean; forward-only containment preserved |
+| GitHub Actions secrets | Seven required `SOFTWAREFACTORY_*` secrets | Configured without rendering values; configuration alone is not connectivity |
+| Worker activation gate | Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` | Enabled only for the approved first claim, then removed; currently absent/OFF |
 | Required CI checks | `SOFTWAREFACTORY_REQUIRED_CHECKS` exact names for both CI jobs; complete stable set; required conclusions `success`; PR base/head recheck | Implemented locally; live proof pending |
-| Worker heartbeat | Fresh service-role worker registration/heartbeat | None; **Not Connected** |
-| Live Codex acceptance | Real command/thread/branch/commit/draft PR/validation/exact-head CI/report/audit | None; blocking |
+| Worker heartbeat | Fresh service-role worker registration/heartbeat | Observed transiently during Actions run `31746057998`; provider failure prevents a Connected claim and the heartbeat ages to stale |
+| Live Codex acceptance | Real command/thread/branch/commit/draft PR/validation/exact-head CI/report/audit | Attempt 1 of 2 failed safely and is retryable: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, run `f4594556-6f72-4763-a480-6993939e3651`; no branch/commit/PR; still blocking |
 | Autonomous safety | Kill switch ON; Autonomous Mode and auto approve/merge/deploy/rollback OFF | Pass by design; hosted `010` retained |
 | Commit identity | `surgeservicesllc <surgeservicesllc@gmail.com>` required for author/committer | Enforced in worker/workflow; live Phase 1C proof pending |
 
@@ -137,21 +138,19 @@ Reason: unhosted migration `130006` completes the nine-action control model at o
 
 - Candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, project `b1f23696-437e-4d89-b55f-d7a949980e8f`, signed webhook, handoff, reads, and prior draft-only write acceptance pass for exactly `surgeservicesllc/SoftwareFactory`.
 - Primary installation `153445938` remains rollback; its webhook defect remains tracked by GitHub Support `#4660724`.
-- Prior application release `799d2cea189b6860a03987ae75c25765f9ac4aca` passed CI run `31716263910` and is READY as Vercel deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`. It predates the Phase 2A and Phase 1E main integrations and does not contain the local Phase 1C tree.
+- Current Phase 1C-capable release `7f504255fc9db3a67da936e112825252dc668670` passed both jobs in CI run `31745504157` and is READY as Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv`. Its first live provider attempt failed safely, so publication does not make Codex Connected.
 - Phase 1B still lacks a live second tenant, reverse handoff, disconnect/loss, and remaining adverse provider matrix.
 
 ## Phase 1C release acceptance required
 
-1. Complete a fresh consolidated gate run on the exact reconciled Phase 1E/Phase 2A/Phase 1C release tree.
-2. Exact owner RED approval for ledger-only repair of catalog-proven `028`/`130001`-`130005`, application of absent `130006`-`130011`, protected Actions secret configuration, disabled publication, activation window, and one bounded live Phase 1C run. Phase 1D remains OFF.
-3. Hosted migration history/lint/RLS/FORCE RLS/policy/ACL/function/secret/append-only checks plus real owner/cross-tenant/anonymous RPC behavior.
-4. Verified presence (not values) of these Actions secrets: `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`.
-5. Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names and keep activation absent/false while publishing the exact reviewed default-branch commit and verifying matching green CI/Vercel deployment.
-6. Set `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true` only under the approved bounded window. The secret-bearing workflow has no branch-selectable manual dispatch.
-7. Submit one real manual GREEN owner command so the approved default-branch repository dispatch (or scheduled recovery) starts the worker; observe a fresh active heartbeat during execution and require stable exact-head success for both named checks.
-8. Restore activation absent/false after acceptance unless continued authority is separately approved.
-9. Durable evidence for repository/base SHA, neutral logical agent, lease, recovery state, timeline, validation, artifacts, changed paths, usage, structured report, activity, cancellation state, and final result.
-10. Proof that no default-branch write, PR approval/merge, deployment, rollback, RED execution, workflow/provider-setting change, or secret disclosure occurred.
+1. Complete focused and consolidated gates plus diff/secret review for the local provider-preflight and structured-error recovery patch.
+2. Publish that exact recovery commit while activation remains absent/OFF; verify matching green CI and READY Vercel evidence.
+3. Under the bounded owner approval, dispatch only the distinct `softwarefactory_phase1c_preflight` event. Require pinned CLI `0.147.0`, exact-model access, and one bounded non-stored response; Docker preload and durable claim must remain skipped.
+4. Return activation to absent/OFF after the diagnostic job is admitted. Any preflight failure or ambiguity stops the sequence without consuming the run's remaining attempt.
+5. Only after preflight passes, retry durable run `f4594556-6f72-4763-a480-6993939e3651` once and require the full factory branch/commit/open-draft-PR/validation/stable exact-head CI/report/audit journey.
+6. Restore activation absent/OFF immediately after claim and leave all Phase 1D automatic actions OFF with the global kill switch ON.
+7. Preserve durable repository/base SHA, neutral logical agent, lease, recovery state, timeline, validation, artifacts, changed paths, usage, structured report, activity, cancellation state, and final-result evidence.
+8. Prove no default-branch write, PR approval/merge, deployment, rollback, RED execution, workflow/provider-setting change, or secret disclosure occurred.
 
 ## Release-blocking invariants
 

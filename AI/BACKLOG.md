@@ -2,7 +2,7 @@
 
 Last triaged: 2026-08-13
 
-Checked Phase 1C items mean implemented in the local tree, not hosted or Connected. A live check is checked only when exact provider evidence exists.
+Checked Phase 1C items distinguish implementation/configuration/release milestones from connectivity. Phase 1C is not Connected until the complete live draft-PR/CI journey has exact provider evidence.
 
 ## Phase 1D autonomous-loop decision controls (execution-inert)
 
@@ -16,12 +16,12 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 - [x] Sequence the twelve pipeline stages and halt at the first block.
 - [x] Show all nine actions in the interface, with the reason each is off.
 - [x] Prove the interlocks against real PostgreSQL and demonstrate the loop end-to-end including the blocked stages.
-- [ ] Apply execution-inert Phase 1D migration `130006` only after the hosted ledger is reconciled. It relaxes nothing and grants no authority by itself. **Owner-gated.**
+- [x] Apply execution-inert Phase 1D migration `130006` only after the hosted ledger is reconciled. Hosted verification confirms all nine actions remain OFF and the global kill switch remains ON; the migration granted no execution authority.
 - [ ] **BLOCKED — enabling any automatic action.** RED under `policies/RISK_CLASSIFICATION.md`; needs a separate owner-approved migration after sustained non-production evidence.
 - [ ] **BLOCKED — auto-merge.** `AGENTS.md` forbids introducing the workflow in this line of phases.
 - [ ] **BLOCKED — deploy execution and preview validation.** No Vercel API connection; `VERCEL_TOKEN` unset.
 - [ ] **BLOCKED — rollback execution.** No adapter; `policies/AUTO_ROLLBACK.md` disables it.
-- [ ] **BLOCKED — autonomous Codex code and repair execution.** The manual Phase 1C worker is a local candidate and remains **Not Connected**; it is not an autonomous executor.
+- [ ] **BLOCKED — autonomous Codex code and repair execution.** The manual Phase 1C worker is published but remains **Not Connected** after a failed-safe first attempt; it is not an autonomous executor.
 - [x] Backlog Autopilot **selection**: orders eligible P0–P3 work by priority then lower risk, holds work behind unmet or unknown dependencies, refuses work above the ceiling, and does not pick up new work while a project is degraded, critical or paused. Every exclusion is returned with its reason.
 - [x] Revalidate CI, risk, reviews and conflicts against the current head before a merge would be attempted, and never infer branch protection as satisfied. A push after approval invalidates the approval; a push after verification invalidates the gates.
 - [x] Plan the response to a failure in the decision layer rather than leaving the ordering to whichever caller drives Phase 1E: freeze first (it only removes authority), rollback fail-closed, bounded repair, escalation for anything left.
@@ -30,7 +30,7 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 - [x] Deployment tracking **read** adapter with the real provider contract. It reports **Not Connected** with a reason while no token is configured, and exposes no create, promote, or rollback path.
 - [ ] **BLOCKED — Backlog Autopilot execution.** Selection is done; starting the selected work needs `auto_plan` enabled and a worker.
 
-## Phase 1C local implementation
+## Phase 1C published implementation and local recovery patch
 
 - [x] Add command type, bounded acceptance criteria, deterministic risk assessment, stable idempotency, connected-project filtering, and truthful queued/delayed/RED-blocked responses.
 - [x] Resolve repository binding only from the authenticated active tenant and persist exact connection, installation, repository IDs, default branch, and current base SHA.
@@ -58,19 +58,22 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 
 - [x] Frozen Node `24.19.0` candidate passes lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
 - [ ] Refresh current-tree coverage before protected publication; high-confidence source/static secret-value scans pass, with only allowlisted credential-reference labels present in the client bundle and no credential values.
-- [ ] Run the consolidated lint/typecheck/test/build, coverage, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled Phase 2A/1C tree.
-- [ ] Review the final diff for unrelated edits and confirm tracked files contain no credentials, private keys, service-role tokens, generated workspace state, or local environment files.
-- [ ] Obtain exact owner RED approval for the protected sequence: ledger-repair only catalog-proven schema-present `028`/`130001`-`130005` without rerunning DDL; apply absent `130006`-`130011`; configure the seven Actions secrets; publish while activation remains OFF; then activate and execute one bounded live GREEN command. Applying `130006` does not enable Phase 1D.
-- [ ] Reauthenticate Supabase CLI as `surgeservicesllc@gmail.com`, verify exact project ref `qpuofpmagrmyamahqwxw`, compare migration history, run linked dry run/lint, and stop on any identity/history mismatch.
-- [ ] Reconcile exact hosted catalog/source hashes and repair only migration-history rows for schema-present `028`/`130001`-`130005`. Re-list and dry-run; then apply only proven-absent `130006`-`130011`. Never use a normal `db push` before this repair.
+- [x] Run the consolidated lint/typecheck/test/build, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled pre-publication Phase 2A/1C tree.
+- [x] Review the published diff for unrelated edits and confirm tracked files contain no credentials, private keys, service-role tokens, generated workspace state, or local environment files.
+- [x] Obtain exact owner RED approval for the protected sequence: ledger-only repair, forward migrations, protected Actions secret configuration, disabled publication, bounded activation, one live GREEN acceptance command, and deactivation. Applying `130006` did not enable Phase 1D.
+- [x] Authenticate the protected Supabase release session, verify exact project ref `qpuofpmagrmyamahqwxw`, compare migration history, and run linked lint while stopping on identity/history mismatch.
+- [x] Reconcile exact hosted catalog/source mappings and repair only migration-history rows for schema-present `028`/`130001`-`130005`; then apply the proven-absent forward chain through `130014`. No schema-present DDL was rerun, and no reset or down-migration occurred.
 - [ ] Exercise real authenticated owner, cross-tenant, and anonymous member/detail/cancel/retry/status RPC behavior. Service role is not a valid user-under-test.
-- [ ] Configure protected repository secrets `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, and `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` without printing values.
-- [ ] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` equals `Lint, typecheck, test, and build|Browser and accessibility tests`, and confirm those exact names still match `.github/workflows/ci.yml` before publication/activation.
-- [ ] Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false through migration, secret configuration, publication, normal CI, and Vercel verification; prove repository-dispatch and schedule triggers skip.
-- [ ] Only after all prior gates, set the variable to `true` under exact owner RED approval, run the bounded acceptance, then return it to absent/false unless continuing authority is separately approved.
-- [ ] Publish the exact reviewed tree to the repository default branch with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>` and verify normal CI plus the matching READY Vercel deployment.
+- [x] Configure protected repository secrets `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, and `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` without rendering values.
+- [x] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` equals `Lint, typecheck, test, and build|Browser and accessibility tests`, matching `.github/workflows/ci.yml`.
+- [x] Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false through migration, secret configuration, publication, normal CI, and Vercel verification.
+- [x] Under exact owner RED approval, set the variable to `true` for the first bounded acceptance attempt and return it to absent/false after the run was claimed. The attempt failed safely before repository mutation; this is activation/deactivation evidence, not successful Phase 1C acceptance.
+- [x] Publish the exact reviewed tree to the repository default branch with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>` and verify CI run `31745504157` plus matching READY Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv` at commit `7f504255fc9db3a67da936e112825252dc668670`.
 - [ ] Confirm the worker status changes from **Not Connected** only after a fresh real heartbeat and returns safely to stale/Not Connected when heartbeat evidence expires.
-- [ ] Submit one safe manual GREEN owner command against `surgeservicesllc/SoftwareFactory` and record the real command/task/run/agent IDs, Codex thread, base SHA, `factory/*` branch, commit, open draft PR, validation, exact-head CI, usage, report, and activity evidence.
+- [ ] Complete one safe manual GREEN owner command against `surgeservicesllc/SoftwareFactory` and record the full command/task/run/agent, Codex thread, base SHA, `factory/*` branch, commit, open draft PR, validation, exact-head CI, usage, report, and activity evidence. First attempt evidence is command `0c4d0ca8-1867-4d00-80cf-476401491a17`, run `f4594556-6f72-4763-a480-6993939e3651`, and Actions run `31746057998`; it failed on provider startup at attempt 1 of 2 before any changed file, commit, branch, or PR and remains retryable.
+- [x] Confirm the first live failure was contained before repository mutation: no changed files, commit, pushed branch, PR, default-branch write, merge, deployment, or RED execution occurred, and activation returned to OFF.
+- [ ] Finish verification and publish the local recovery patch that checks pinned Codex CLI `0.147.0` plus exact model access before every claim, supports the distinct `softwarefactory_phase1c_preflight` event for bounded non-stored response verification without Docker preload or claim, and preserves structured terminal provider errors.
+- [ ] While activation is bounded, dispatch `softwarefactory_phase1c_preflight` first. Proceed to the durable run's one remaining retry only after that probe passes; otherwise stop without consuming attempt 2 and keep activation OFF.
 - [ ] Verify the live run did not change the default branch, approve or merge the PR, deploy, rollback, modify workflows/provider settings, or execute RED work.
 - [ ] Exercise cancellation, stale base SHA, dispatch failure/recovery schedule, lease expiry/reclaim, provider rate limit/unavailable, failed validation, CI failure/timeout, one retry, idempotent PR recovery, protected path denial, and likely-secret denial.
 - [ ] Update `AI/CURRENT_STATE.md`, `AI/HANDOFF.md`, and `AI/QUALITY_SCORECARD.md` with exact live evidence before calling OpenAI/Codex Connected or Phase 1C complete.
@@ -99,7 +102,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
 - [x] Pass lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe.
-- [ ] Apply hosted migrations `028` and `130002` as part of the exact pending chain to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
+- [x] Reconcile hosted ledger entries for schema-present `028` and `130002` without replaying their DDL as part of the exact protected chain on `qpuofpmagrmyamahqwxw`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
 - [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
@@ -134,7 +137,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Verify security before widening the grant matrix: `bots`, `bot_roles`, `bot_assignments` each enable RLS **and** FORCE RLS with tenant-scoped policies; the eleven marketing tables get both through a `format()` loop, and public read is `revoke all` followed by `grant select` behind a `using (published)` policy.
 - [x] Restyle `BotFabricConsole` and the marketing pages onto the design tokens; both arrived with sub-12px text and literal hex values.
 - [x] Merge the bot fabric console into Bot Manager alongside main's live request workspace rather than replacing it.
-- [ ] Ledger-reconcile schema-present `20260812002800`/`20260813000100`-`20260813000500`, then apply absent `20260813000600`-`20260813001100`. The ledger is exactly 26 rows through `027`; all repair/apply work remains RED pending exact owner approval.
+- [x] Ledger-reconcile schema-present `20260812002800`/`20260813000100`-`20260813000500`, then apply the forward chain through `20260813001400` under exact owner RED approvals. Hosted history is current, linked lint is clean, and no schema-present DDL was replayed.
 - [ ] Decide whether the marketing site should be publicly indexed before the domain is pointed at it. The marketing group sets `robots: index:true` while the root layout stays `index:false`.
 
 ## Solutions page global navigation
@@ -162,7 +165,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 ## Maintenance
 
 - [ ] Run final verification on the repository-supported Node version.
-- [ ] Before any new hosted database command, reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` and reconfirm project `qpuofpmagrmyamahqwxw`; do not use the currently selected wrong/unauthorized profile.
+- [ ] Before any new hosted database command, reconfirm the authenticated release identity and exact project `qpuofpmagrmyamahqwxw`; do not fall back to the previously wrong/unauthorized profile.
 - [x] Move Vitest configuration to native ESM (`vitest.config.mts`) to remove the prior config-loader warning.
 - [ ] Expand authenticated E2E once a safe disposable live-provider fixture exists.
 
