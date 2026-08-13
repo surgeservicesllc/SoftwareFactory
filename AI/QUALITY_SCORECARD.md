@@ -17,7 +17,7 @@ Reason: hosted migration `026`, owner onboarding, installation `153445938`, real
 | Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Retained pass - 30/30 production runs; current exact-commit CI is green |
 | E2E/responsive/accessibility | Exact-`0bd0485` production Playwright plus current exact-commit CI browser job | Pass - post-rotation production 48/48 desktop/tablet/mobile including axe; current CI green |
 | Verified application-release secret/client scan | Source plus rebuilt static artifacts | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
-| Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY` | Historical pass |
+| Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY`; currently selected local CLI profile is wrong/unauthorized for a fresh recheck and was not used for mutations | Prior hosted evidence remains recorded; reauthentication required before a new linked check |
 | Hosted migrations | Current through `026`; local=remote; dry run up to date | Pass |
 | Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; linked lint clean | Pass |
 | Hosted RLS/catalog/browser grants | 23/23 RLS+FORCE; 32 policies; zero policyless; 22 secret guards; tested raw authenticated/browser grants false | Pass |
@@ -35,7 +35,7 @@ Reason: hosted migration `026`, owner onboarding, installation `153445938`, real
 | Supabase Auth owner | `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory org/workspace owner onboarding succeeded | Pass for onboarding |
 | GitHub provider installation | Installation `153445938`, connected to `surgeservicesllc`, exactly `surgeservicesllc/SoftwareFactory` selected | Pass |
 | GitHub real connection | Connection `d17c63a9-d995-481e-98ce-b737efb32ce5`; project `b1f23696-437e-4d89-b55f-d7a949980e8f`; callback/sync/read/audit journey observed | Connected for the owner repository path |
-| GitHub webhook | Fresh secret in Sensitive Production/Preview; invalid signatures return `401`/no-store; owner UI reports update but reloads blank/inactive; documented App-JWT `PATCH /app/hook/config` returns `404`; no valid signed delivery exists | **Not Connected** |
+| GitHub webhook | Fresh secret in Sensitive Production/Preview; invalid signatures return `401`/no-store; owner UI reports update but reloads blank/inactive; documented App-JWT `PATCH /app/hook/config` returns `404`; GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and is OPEN; no valid signed delivery exists | **Not Connected** |
 | Local credential cleanup | Temporary downloaded App PEM and ignored provider-verification helper scripts deleted after use; no credential/helper artifact persisted | Pass |
 | Project/repository and file-to-draft-PR flow | Live branches/commits/checks/PRs/tree/README reads; ordinary draft `#6`; protected RED draft `#7`; likely-secret rejection; immutable Activity evidence | Pass for accepted owner scenarios; remaining adverse matrix pending |
 | Acceptance cleanup | Wrong-App-bot attribution on prior draft PRs `#4`/`#5` was detected; both PRs closed unmerged and isolated branches deleted; `main` unchanged | Pass |
@@ -65,7 +65,8 @@ Last independently verified pre-hardening production release:
 Hosted Supabase baseline:
   project: qpuofpmagrmyamahqwxw
   prior applied ledger: 001, 002, 003, 004, 005, 007, 008, 009, 010
-  current CLI identity: surgeservicesllc@gmail.com
+  prior verified CLI identity: surgeservicesllc@gmail.com
+  current selected CLI profile: unauthorized/wrong account for a fresh recheck; no mutations performed
   exact linked project: qpuofpmagrmyamahqwxw
   current ledger: through 026; local and remote match
   linked database lint: clean through 026
@@ -76,7 +77,7 @@ Historical baseline evidence remains useful for regression comparison; current h
 
 ## Security and production acceptance still required
 
-- Make GitHub retain the active webhook endpoint and observe a valid signed production delivery plus duplicate, stale, out-of-order, deletion, and restore handling. Invalid-signature rejection already passes.
+- Wait for GitHub repair under OPEN Support ticket `#4660724`, then make the App retain the active webhook endpoint and observe a valid signed production delivery plus duplicate, stale, out-of-order, deletion, and restore handling. Invalid-signature rejection already passes.
 - Verify a second authenticated tenant plus anonymous/RPC denial through real caller sessions. Only one actual user/email is authorized today; local behavioral tests do not replace the live matrix.
 - Verify stale SHA, unapproved/admin protected denial, approval expiry/lease, wrong tenant, renamed/same-name repository, revoked installation, insufficient permission, rate limit, stable retry, ambiguous completion recovery, disconnect/loss, and history preservation. Exact owner approval and likely-secret rejection already pass in the live owner journey.
 

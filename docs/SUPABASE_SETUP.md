@@ -1,6 +1,6 @@
 # Supabase setup
 
-Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). The Supabase CLI is authorized as `surgeservicesllc@gmail.com` and linked to this exact project. Provider health was verified as `ACTIVE_HEALTHY` on 2026-08-12.
+Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). The CLI was previously authorized as `surgeservicesllc@gmail.com` and linked to this exact project when provider health and the hosted-through-`026` evidence below were verified. The currently selected local CLI profile is unauthorized or associated with the wrong account for a fresh recheck and was not used for any mutation. Reauthenticate as `surgeservicesllc@gmail.com` and reconfirm the exact project ref before any new linked command. Provider health was last verified as `ACTIVE_HEALTHY` on 2026-08-12.
 
 The hosted ledger is current through migration `026`; local and remote history match. Linked dry run is up to date and lint is clean. Catalog checks report 23/23 public tables with RLS and FORCE RLS, 32 policies, zero policyless tables, 22 secret guards, and false tested raw authenticated/browser grants.
 

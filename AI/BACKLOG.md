@@ -34,7 +34,7 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Create ordinary draft PR `#6` and exact owner-approved protected RED draft PR `#7`; verify both remain draft/unmerged, likely-secret rejection, and immutable approval/provider/audit evidence. Earlier identity-mismatched PRs `#4`/`#5` were closed unmerged and their branches deleted.
 - [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases.
 - [x] Publish the strict server-only commit-identity boundary, configure `GITHUB_COMMIT_IDENTITY_NAME`/`GITHUB_COMMIT_IDENTITY_EMAIL` in Vercel Production and Preview, and verify both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>` on draft commits `e789303` and `6a808de`.
-- [ ] Make GitHub retain and activate the exact webhook endpoint, then observe valid, duplicate, stale, out-of-order, installation deletion, repository deletion, and explicit restore deliveries. A fresh secret is stored only in Sensitive Production/Preview and invalid signatures return `401`/no-store, but documented App-JWT `PATCH /app/hook/config` returns `404` and the owner UI reports success then reloads blank/inactive; the webhook remains **Not Connected**.
+- [ ] After GitHub repairs App `4573846` under OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), retain and activate the exact webhook endpoint, then observe valid, duplicate, stale, out-of-order, installation deletion, repository deletion, and explicit restore deliveries. Ticket subject **GitHub App 4573846 cannot retain its single webhook** was submitted 2026-08-13 under `surgeservicesllc` after the documented API/UI defect proof. A fresh secret is stored only in Sensitive Production/Preview and invalid signatures return `401`/no-store, but no active hook or valid signed delivery exists; the webhook remains **Not Connected**.
 - [ ] Verify explicit disconnect/loss state and history preservation.
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
 - [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
@@ -43,6 +43,7 @@ Checked items have repository/provider evidence only. The owner repository conne
 
 - Verified application release: `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, CI `31704289754`, Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`. Both CI jobs are green; post-rotation production Playwright passes 48/48, nine JavaScript assets have zero forbidden markers, and recent logs have zero errors. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
 - Hosted Supabase is current through `026`; local/remote history matches, dry run/lint are clean, and the exact four-table `service_role` ACL matrix has zero mismatches.
+- The currently selected local Supabase CLI profile is unauthorized or associated with the wrong account for a fresh recheck. It was not used for any mutation; the prior hosted-through-`026` evidence above remains recorded.
 - Connected provider installation `153445938`, scoped exactly to `surgeservicesllc/SoftwareFactory`; live connection/project/read/draft-write/audit path passes for the owner.
 - Current READY production: `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`, immutable `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`.
 - Temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no credential/helper artifact remains in the repository checkout.
@@ -59,6 +60,7 @@ Checked items have repository/provider evidence only. The owner repository conne
 ## Maintenance
 
 - [ ] Run final verification on the repository-supported Node version.
+- [ ] Before any new hosted database command, reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` and reconfirm project `qpuofpmagrmyamahqwxw`; do not use the currently selected wrong/unauthorized profile.
 - [x] Move Vitest configuration to native ESM (`vitest.config.mts`) to remove the prior config-loader warning.
 - [ ] Expand authenticated E2E once a safe disposable live-provider fixture exists.
 

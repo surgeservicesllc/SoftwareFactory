@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish the remaining Phase 1B acceptance gaps. Migration `026` is hosted with a zero-mismatch ACL matrix, `surgeservicesllc@gmail.com` completed owner Auth/onboarding, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection/project/read/draft-write/audit path passes. The provider webhook remains **Not Connected**, and the live second-tenant/failure matrix remains incomplete. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
+Finish the remaining Phase 1B acceptance gaps. Migration `026` is hosted with a zero-mismatch ACL matrix, `surgeservicesllc@gmail.com` completed owner Auth/onboarding, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection/project/read/draft-write/audit path passes. GitHub Support ticket `#4660724` is OPEN for the provider webhook defect; the webhook remains **Not Connected**, and the live second-tenant/failure matrix remains incomplete. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
 
 ## Current repository work
 
@@ -47,11 +47,11 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 
 ## Evidence
 
-- Supabase project `qpuofpmagrmyamahqwxw` is linked; hosted history is current through `026`, local=remote, dry run/lint are clean, and prior evidence records 23/23 RLS+FORCE, 32 policies/zero policyless, 22 secret guards, and false tested raw authenticated/browser grants.
+- Supabase project `qpuofpmagrmyamahqwxw` was verified with hosted history current through `026`, local=remote, dry run/lint clean, and prior evidence recording 23/23 RLS+FORCE, 32 policies/zero policyless, 22 secret guards, and false tested raw authenticated/browser grants. The currently selected local Supabase CLI profile is now unauthorized or associated with the wrong account for a fresh recheck and was not used for any mutation; reauthenticate as `surgeservicesllc@gmail.com` and reconfirm the exact project ref before any new linked command.
 - Exact post-`026` ACL mismatch count is zero. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19.
 - `surgeservicesllc@gmail.com` is confirmed/authenticated; SoftwareFactory organization/workspace onboarding and owner membership succeeded. This is the only actual user/email authorized for live acceptance; no second live tenant was created.
 - Provider installation `153445938` is connected to `surgeservicesllc` and selects exactly `surgeservicesllc/SoftwareFactory`. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` pass callback, sync, branches/commits/checks/PRs/tree/README reads, and immutable Activity verification.
-- The GitHub webhook is **Not Connected**: a GitHub App JWT validates App `4573846`, but documented `PATCH /app/hook/config` returns `404`; the owner UI reports update success but reloads blank/inactive. The fresh secret is stored only in Sensitive Production/Preview, invalid signatures return `401`/no-store, and no valid signed delivery is verified.
+- The GitHub webhook is **Not Connected**: a GitHub App JWT validates App `4573846`, but documented `PATCH /app/hook/config` returns `404`; the owner UI reports update success but reloads blank/inactive. GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` after the provider/UI defect proof and is OPEN. The fresh secret is stored only in Sensitive Production/Preview, invalid signatures return `401`/no-store, and no valid signed delivery is verified.
 - Verified application release recorded 2026-08-13: commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754` passed both jobs.
 - Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. Production Playwright passes 48/48, nine JavaScript assets contain zero forbidden markers, and recent logs contain zero errors.
 - `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured server-only in Vercel Production and Preview for the approved public identity. Ordinary draft PR `#6` (commit `e789303`) and owner-approved protected RED draft PR `#7` (commit `6a808de`) are open, draft, unmerged, and use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer.
@@ -62,7 +62,7 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 
 ## Immediate sequence
 
-1. Make GitHub retain the active webhook and complete valid signed-delivery/lifecycle acceptance; invalid signatures already fail closed.
+1. Wait for GitHub to repair App `4573846` under OPEN Support ticket `#4660724`, then activate the exact webhook and complete valid signed-delivery/lifecycle acceptance; invalid signatures already fail closed.
 2. Complete the live two-tenant/anonymous/RPC matrix. Only one actual user/email is currently authorized, so local behavioral tests are supporting—not substitute—evidence.
 3. Exercise remaining stale-SHA, idempotency/recovery, protected denial/expiry, wrong-tenant, revoked/permission/rate-limit, lifecycle ordering, disconnect/loss, and history-preservation cases.
 4. Report Phase 1B complete only after those gaps close; otherwise preserve the exact Connected/Not Connected distinctions above.
@@ -71,7 +71,7 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 
 - Never print or commit App private keys, client/state/webhook secrets, OAuth/installation tokens, service role, or database credentials.
 - Service role is limited to narrow provider-ingress/terminal evidence boundaries and never proves RLS.
-- Verify CLI identity and project ref before every linked database command. Never reset hosted production.
+- The currently selected Supabase CLI profile is wrong/unauthorized. Do not run a new linked database command until it is reauthenticated as `surgeservicesllc@gmail.com` and project `qpuofpmagrmyamahqwxw` is reconfirmed. No mutation used the wrong profile; never reset hosted production.
 - Preserve **Demo Data** and **Not Connected** language when live evidence is absent.
 - Keep default-branch writes, non-draft PRs, merge, deploy, rollback, workflow/administration writes, and autonomous execution unavailable.
 - `main` is currently unprotected and the published release commit is unsigned; changing branch protection or signature requirements is a separate protected owner-review action.

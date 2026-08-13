@@ -4,7 +4,7 @@ Last reviewed: 2026-08-13
 
 Phase: 1B - Production GitHub App Integration
 
-Overall status: **Hosted Supabase is verified through `026`, owner Auth/onboarding succeeds, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection, project, repository reads, ordinary/protected draft-only writes, likely-secret rejection, and immutable Activity evidence pass on exact application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY from that artifact after the webhook-secret rotation. The webhook remains Not Connected and the live second-tenant/failure matrix remains incomplete.**
+Overall status: **Hosted Supabase is verified through `026`, owner Auth/onboarding succeeds, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection, project, repository reads, ordinary/protected draft-only writes, likely-secret rejection, and immutable Activity evidence pass on exact application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY from that artifact after the webhook-secret rotation. GitHub Support ticket `#4660724` is OPEN for the provider defect, but the webhook remains Not Connected and the live second-tenant/failure matrix remains incomplete.**
 
 "Implemented" below means code/schema exists in the verified application release. It does not mean the provider workflow was observed or the schema is hosted.
 
@@ -30,7 +30,7 @@ Overall status: **Hosted Supabase is verified through `026`, owner Auth/onboardi
 
 ## Data and security state
 
-- Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was last verified `ACTIVE_HEALTHY`; the CLI is authorized as `surgeservicesllc@gmail.com` and linked to this exact project.
+- Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was last verified `ACTIVE_HEALTHY`. The currently selected local Supabase CLI profile is now unauthorized or associated with the wrong account for a fresh recheck; it was not used for any mutation. The prior verified hosted-through-`026` evidence below remains recorded, and any new linked database command must wait until the CLI is reauthenticated as `surgeservicesllc@gmail.com` and the exact project ref is reconfirmed.
 - Hosted migration history is current through `026`, including `001`-`005` and `007`-`026`; local and remote history match.
 - Hosted migrations `011`-`026` provide:
   - `011` closes initial direct connection/member mutations and aligns `github_pat_` detection.
@@ -58,11 +58,11 @@ Overall status: **Hosted Supabase is verified through `026`, owner Auth/onboardi
 
 | Provider/capability | Status | Evidence/meaning |
 | --- | --- | --- |
-| Supabase hosted project | Connected through migration `026`; local=remote | Post-`026` dry run and lint are clean. Prior catalog evidence is 23/23 RLS+FORCE with 32 policies, zero policyless tables, 22 secret guards, and tested raw browser grants false. Exact ACL mismatch count is zero; `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. |
+| Supabase hosted project | Previously verified through migration `026`; fresh CLI recheck unavailable under the currently selected wrong/unauthorized profile | Recorded post-`026` dry run and lint are clean. Prior catalog evidence is 23/23 RLS+FORCE with 32 policies, zero policyless tables, 22 secret guards, and tested raw browser grants false. Exact ACL mismatch count is zero; `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. No mutation used the current CLI profile. |
 | GitHub App object/secrets | Configured | App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) and protected server variable names exist. Production and Preview commit-identity variable names are configured without exposing secret material. |
 | GitHub provider installation | Connected; repository-scoped | Installation `153445938` is connected to `surgeservicesllc` and selects exactly `surgeservicesllc/SoftwareFactory`. |
 | GitHub App connection | Connected for the owner repository path | Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` passed callback, sync, branches/commits/checks/PRs/tree/file reads, ordinary/protected draft writes, secret rejection, and Activity verification. |
-| GitHub webhook | **Not Connected** | A GitHub App JWT validates App `4573846`, but documented `PATCH /app/hook/config` returns `404`; the owner UI reports success but reloads blank/inactive. Invalid signatures return `401`/no-store. No active hook or valid signed production delivery is verified. |
+| GitHub webhook | **Not Connected** | A GitHub App JWT validates App `4573846`, but documented `PATCH /app/hook/config` returns `404`; the owner UI reports success but reloads blank/inactive. GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and is OPEN. Invalid signatures return `401`/no-store. No active hook or valid signed production delivery is verified. |
 | Supabase Auth owner | Confirmed and authenticated | `surgeservicesllc@gmail.com` completed onboarding; the SoftwareFactory organization/workspace and owner membership exist. Only this real user/email is authorized for live acceptance. |
 | Vercel UI hosting | Current production READY | `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`, immutable `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Deploy/rollback adapter remains **Not Connected**. |
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
@@ -83,10 +83,11 @@ Overall status: **Hosted Supabase is verified through `026`, owner Auth/onboardi
 - Hosted evidence is current through `026`, and owner onboarding is confirmed. Installation `153445938`, connection `d17c63a9-d995-481e-98ce-b737efb32ce5`, and project `b1f23696-437e-4d89-b55f-d7a949980e8f` pass the live repository journey. Connections, Projects, Files, and Activity show real repository sync, branches, commits, checks, pull requests, tree/content, and immutable transitions.
 - Ordinary draft PR `#6` (commit `e789303`) and owner-approved protected RED draft PR `#7` (commit `6a808de`) are open, draft, and unmerged. Both use `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer. Earlier App-bot-attributed PRs `#4` and `#5` were closed unmerged and their isolated branches were deleted; `main` stayed unchanged.
 - A fake generic password assignment was rejected before any pull request. The webhook secret was freshly rotated in Sensitive Production/Preview; an invalid signature returns `401` with private no-store behavior. Documented App-JWT `PATCH /app/hook/config` still returns `404`, and the owner UI reports success but reloads blank/inactive, so no valid signed delivery exists.
+- GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` after the provider/UI defect evidence was reproduced. It is OPEN; the next webhook step is to wait for GitHub repair, then activate the exact endpoint and verify a valid signed delivery.
 - The temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no secret or helper artifact remains in the repository checkout.
 
 ## Release blockers
 
-1. Configure and verify the active GitHub App webhook; GitHub must retain the exact URL and accept a valid signed production delivery.
+1. Track OPEN GitHub Support ticket `#4660724`; after GitHub repairs App `4573846`, activate the exact webhook URL and verify a valid signed production delivery.
 2. Complete the live second-tenant/anonymous/RPC matrix and the remaining failure/disconnect/lifecycle cases. Only one actual user/email is authorized today, so local behavioral tests do not replace this live evidence.
 3. Keep Phase 1B incomplete, Phase 1C/Phase 2 **Not Connected**, Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF until those gaps close.

@@ -2,7 +2,7 @@
 
 Status: **The owner repository connection and draft-only file-change path are live; the provider webhook remains Not Connected and Phase 1B acceptance is incomplete.**
 
-The GitHub App exists, its server-only values are configured in Vercel, and installation `153445938` completed the authenticated production callback for owner `surgeservicesllc@gmail.com`. It is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` drive verified live Connections, Projects, Files, and Activity views. The webhook is a separate boundary and remains **Not Connected**.
+The GitHub App exists, its server-only values are configured in Vercel, and installation `153445938` completed the authenticated production callback for owner `surgeservicesllc@gmail.com`. It is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` drive verified live Connections, Projects, Files, and Activity views. GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) is OPEN for the provider webhook defect. The webhook is a separate boundary and remains **Not Connected**.
 
 ## Registered App
 
@@ -15,7 +15,7 @@ The GitHub App exists, its server-only values are configured in Vercel, and inst
 | Homepage URL | `https://softwarefactory-tan.vercel.app` |
 | Callback URL | `https://softwarefactory-tan.vercel.app/api/github/install/callback` |
 | Setup URL | Leave blank; the authenticated installation callback owns setup completion |
-| Webhook URL | Required value: `https://softwarefactory-tan.vercel.app/api/github/webhooks`; provider General page currently appears blank/inactive |
+| Webhook URL | Required value: `https://softwarefactory-tan.vercel.app/api/github/webhooks`; provider General page currently appears blank/inactive; GitHub Support ticket `#4660724` is OPEN |
 | Installation scope | Any account; the installing user chooses repositories in GitHub |
 | User authorization during installation | Enabled |
 | Expiring user authorization tokens | Enabled |
@@ -24,7 +24,7 @@ The GitHub App exists, its server-only values are configured in Vercel, and inst
 | Verified provider installation | Personal `surgeservicesllc` installation `153445938` |
 | Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
 
-The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. The webhook secret was freshly rotated in Sensitive Production and Preview scopes and the exact `0bd0485` artifact was redeployed. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. An invalid signature returns `401` with private no-store behavior, but no valid signed delivery exists. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
+The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. The webhook secret was freshly rotated in Sensitive Production and Preview scopes and the exact `0bd0485` artifact was redeployed. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. After this provider/UI defect was reproduced, GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and is OPEN. An invalid signature returns `401` with private no-store behavior, but no valid signed delivery exists. Treat the provider webhook as **Not Connected** until GitHub repairs the App state, the exact URL is retained as an active hook, and a signed delivery is accepted.
 
 ## Repository permissions
 
@@ -73,7 +73,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_COMMIT_IDENTITY_EMAIL` | Server-owned email used for both author and committer on every controlled file commit |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. The callback fix and explicit commit-identity boundary are deployed. The webhook remains blank/inactive and **Not Connected**.
+The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. The callback fix and explicit commit-identity boundary are deployed. The webhook remains blank/inactive and **Not Connected** while GitHub Support ticket `#4660724` awaits provider repair.
 
 The two commit-identity values are configuration, not request fields. They are configured in Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`, stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
 
@@ -168,6 +168,7 @@ Live acceptance created ordinary draft PR `#6` (commit `e789303`) and owner-appr
 Checked items below establish the Connected owner repository path. Do not mark the webhook Connected or Phase 1B complete until every remaining item is observed against the real service:
 
 - [x] Production release contains the current routes and migrations.
+- [x] Provider/UI defect evidence was submitted under `surgeservicesllc` in OPEN GitHub Support ticket `#4660724` on 2026-08-13.
 - [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
 - [x] An authenticated SoftwareFactory owner starts the installation flow.
 - [x] GitHub provider installation `153445938` is connected to `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
@@ -196,7 +197,7 @@ Checked items below establish the Connected owner repository path. Do not mark t
 - **Connection lost:** check installation revocation/suspension, selected repositories, and current permissions; then reconnect or sync.
 - **Permission denied:** compare the exact App settings above. Do not add administration/workflow permissions as a shortcut.
 - **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
-- **Webhook blank/inactive or App-auth configuration `404`:** no hook object currently exists. Enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible/available through App authentication before sending or observing a delivery.
+- **Webhook blank/inactive or App-auth configuration `404`:** no hook object currently exists. Track GitHub Support ticket `#4660724`; after GitHub repairs App `4573846`, enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible/available through App authentication before sending or observing a delivery.
 - **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
 - **Commit identity unavailable:** configure both server-only commit-identity variables with the exact approved deployment identity, redeploy, and verify both author and committer on a new draft-PR commit without printing the values in logs.
 - **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.
