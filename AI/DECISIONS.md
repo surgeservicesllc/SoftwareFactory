@@ -282,7 +282,14 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: `app/(marketing)/` carries the public header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`, with `robots.ts` disallowing console paths and `sitemap.ts` listing marketing routes only. The former console homepage is now `/solutions`, reached from the main navigation, and each shell owns exactly one skip link.
 - Consequence: The two visual systems and their metadata no longer share a layout. The console's lime palette is not reused on marketing pages; only shared primitives cross the boundary.
 
-## ADR-041 - Phase 1D ships the decision layer, not an executor
+## ADR-041 - The control plane is served under /solutions
+
+- Date: 2026-08-13
+- Status: Accepted; supersedes the route-group half of ADR-040
+- Decision: Every control-plane page lives under `/solutions` in `app/(portal)/`, and the `app/(console)/` group is removed. The portal layout renders the marketing global navigation above the console shell, offsetting the shell's fixed sidebar and header by `--shell-top: 73px`; the shell defaults that variable to `0`, so nothing else is affected. Permanent redirects map each former top-level path and its subpaths to the new home, and `lib/github/state.ts`'s return-path allowlist moves with them. The two shells' mobile menu buttons carry distinct accessible names, and the console `nav` is labelled "Console" rather than "Primary", because both landmarks now render on the same page.
+- Consequence: A visitor arriving from the public site keeps that wayfinding inside the console, and existing links, bookmarks, and in-flight provider callbacks continue to resolve. `/solutions` is no longer a marketing page: it is `noindex` by root-layout inheritance, disallowed in `robots.txt`, and absent from `sitemap.ts`. Adding a console page outside `app/(portal)/solutions/`, or re-listing a disallowed path in the sitemap, fails `tests/integration/console-routing.contract.test.ts`.
+
+## ADR-042 - Phase 1D ships the decision layer, not an executor
 
 - Date: 2026-08-13
 - Status: Accepted
@@ -290,7 +297,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: The objective's executor stages depend on things this tree does not have — a Phase 1C worker and a Vercel adapter — and `AGENTS.md` forbids introducing an auto-merge or production deployment workflow in this line of phases. The decision layer is the part that can be built honestly, and it is the part that makes an executor safe to add later.
 - Consequence: Tests assert the blockers by name, so a future phase that connects an executor fails them on purpose and has to update the assertions deliberately. Authority cannot be gained by accident.
 
-## ADR-042 - Risk is classified from the diff, not from a self-declaration
+## ADR-043 - Risk is classified from the diff, not from a self-declaration
 
 - Date: 2026-08-13
 - Status: Accepted
@@ -298,7 +305,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: `classifyRisk` answers "given these factors, how risky is this?" — it cannot answer "what factors does this change have?". Leaving that to the caller means the thing being judged supplies the evidence for its own judgement, which is exactly what an autonomous loop must not be trusted to do.
 - Consequence: Work that opens GREEN and ends up touching a migration is judged as what it became. An unrecognised change inherits the existing YELLOW default, so lack of a signal is never read as safety.
 
-## ADR-043 - Approval is evaluated after verification, and never by the author
+## ADR-044 - Approval is evaluated after verification, and never by the author
 
 - Date: 2026-08-13
 - Status: Accepted

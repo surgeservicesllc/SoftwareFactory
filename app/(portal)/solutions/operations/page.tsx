@@ -4,6 +4,10 @@ import { OperationsConsole } from "@/components/operations-console";
 import { Notice, PageHeader } from "@/components/ui";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+export const metadata = {
+  title: "Operations",
+};
+
 async function hasAuthenticatedUser() {
   try {
     const supabase = await createSupabaseServerClient();

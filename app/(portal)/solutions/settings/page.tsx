@@ -4,6 +4,10 @@ import { ProviderSettings } from "@/components/provider-settings";
 import { SafetyControls } from "@/components/safety-controls";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 
+export const metadata = {
+  title: "Safety",
+};
+
 const protectedThings = [
   "Money, billing, and budgets",
   "Production data, backups, and restores",

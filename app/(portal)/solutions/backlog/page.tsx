@@ -1,6 +1,10 @@
 import { BacklogConsole } from "@/components/backlog-console";
 import { PageHeader } from "@/components/ui";
 
+export const metadata = {
+  title: "Backlog",
+};
+
 export default function BacklogPage() {
   return (
     <>

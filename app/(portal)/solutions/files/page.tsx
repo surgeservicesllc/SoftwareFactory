@@ -3,6 +3,10 @@ import { Suspense } from "react";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { Card, PageHeader } from "@/components/ui";
 
+export const metadata = {
+  title: "Files",
+};
+
 export default function FilesPage() {
   return (
     <>

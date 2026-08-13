@@ -1,6 +1,10 @@
 import { ActivityConsole } from "@/components/activity-console";
 import { PageHeader } from "@/components/ui";
 
+export const metadata = {
+  title: "Activity",
+};
+
 export default function ActivityPage() {
   return (
     <>
