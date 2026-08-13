@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **The exact `7d22de6` hardening snapshot is published to GitHub `main`, both CI jobs pass, and the matching Vercel production deployment passes public Playwright 48/48 and security checks. A signed-out dashboard follow-up passes local `npm run check` at 53 files/394 tests, current coverage, Playwright 48/48, and a 30/30 focused regression but is not yet in production. Hosted migrations `011`-`025`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
+Status: **The exact application release `edaaf62` is published, both CI jobs pass, and the matching Vercel production deployment passes Playwright 48/48, the focused signed-out race 30/30, and HTTP/security/client/log checks. Hosted migrations `011`-`025`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
 
 Implemented in source:
 
@@ -24,7 +24,7 @@ Implemented in source:
 - Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
 - Repository forward migrations `011`-`025`, all unhosted.
 
-Published release evidence recorded 2026-08-13: GitHub `main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa` (tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, author/committer `surgeservicesllc@gmail.com`), green CI run `31692336607`, and READY Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` at the stable production alias.
+Verified application-release evidence recorded 2026-08-13: commit `edaaf625c497380611b80092526926b1457e15a0` (tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`), green CI run `31694775758`, and READY Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` at the stable production alias. Later documentation-only successors do not invalidate this runtime evidence unless application code changes.
 
 Remaining exit work:
 

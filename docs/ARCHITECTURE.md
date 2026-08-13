@@ -11,7 +11,7 @@ SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authentic
 | Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Trusted persistence boundary; CLI authorized as `surgeservicesllc@gmail.com` and linked to exact project `qpuofpmagrmyamahqwxw`; hosted through `010`, local hardening migrations `011`-`025` pending owner-approved promotion, authenticated tenant behavior pending |
 | GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Server-only; personal-account installation `153286187` on `surgeservicesllc` is scoped only to `surgeservicesllc/SoftwareFactory`, but in-product callback/connection remains pending |
 | GitHub webhook route | Verify raw-body HMAC, deduplicate delivery IDs, store redacted payloads, reconcile state | Implemented; live delivery not yet verified |
-| Vercel | Serve Next.js application and server functions | Exact project `surgeservices-projects/softwarefactory`; verified release snapshot: `7d22de665813d119488b4a26b0cd4084070b3eaa` on READY deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb`, public E2E 48/48; deploy/rollback adapter **Not Connected** |
+| Vercel | Serve Next.js application and server functions | Exact project `surgeservices-projects/softwarefactory`; verified application release: `edaaf625c497380611b80092526926b1457e15a0` on READY deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ`, production focused race 30/30 and E2E 48/48; deploy/rollback adapter **Not Connected** |
 | AI workers | Future task execution | Codex and Claude **Not Connected** |
 
 ## Authenticated request path

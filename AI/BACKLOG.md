@@ -22,11 +22,9 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 - [x] Pass current-tree lint/typecheck, the consolidated 53-file/394-test Vitest suite through migration `025`, and the 38-route production build (`/` dynamic).
 - [x] Pass coverage: statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37%.
-- [x] Pass production-server Playwright 48/48 across desktop/tablet/mobile including axe checks for published snapshot `7d22de6`; pass the local follow-up's focused signed-out browser-error regression 30/30.
-- [x] Re-run the full local production-server gate after the signed-out dashboard follow-up: 48/48 desktop/tablet/mobile including axe.
-- [x] Re-run the final source/client artifact scan after the signed-out dashboard follow-up: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present.
-- [x] Publish exact tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772` as `origin/main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa` with author/committer `surgeservicesllc@gmail.com`; CI run `31692336607` passed both jobs, and matching READY Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` passed production HTTP/security/client/log checks and Playwright 48/48 at the stable alias.
-- [ ] Publish the locally validated signed-out dashboard follow-up, rerun CI, and bind it to a new exact READY Vercel production deployment before treating it as production evidence.
+- [x] Pass local and exact production Playwright 48/48 across desktop/tablet/mobile including axe; pass the production focused signed-out browser-error race 30/30.
+- [x] Pass the final source/client artifact scan: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 local artifacts, zero tracked key/container files, and only `.env.example` present.
+- [x] Publish application tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4` as commit `edaaf625c497380611b80092526926b1457e15a0` with author/committer `surgeservicesllc@gmail.com`; CI run `31694775758` passed both jobs, and matching READY Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` passed production focused race 30/30, Playwright 48/48, HTTP/security/client/log checks, and the ten-asset privileged-marker scan at the stable alias.
 - [ ] Obtain exact owner approval for hosted migrations `011`-`025`; dry-run the full chain, apply to `qpuofpmagrmyamahqwxw`, and verify ledger, lint, RLS/FORCE RLS, table/function/helper grants, actor/tenant/resource checks, raw Activity/webhook denial and safe list RPCs, stable repository binding/relink concurrency, protected approval/token/lease invariants, generic assignment handling, immutable/redacted bounded activity, provider-ingress CHECK evaluation, ordering/terminal behavior, recovery behavior, and health.
 - [x] Restore Supabase CLI access as `surgeservicesllc@gmail.com`, link exact project `qpuofpmagrmyamahqwxw`, obtain clean linked database lint, and pass a complete `011`-`025` dry run without applying a migration.
 - [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test.
@@ -41,7 +39,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 ## Release evidence retained
 
-- Current published release: `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, CI `31692336607`, Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb`, production Playwright 48/48.
+- Verified application release: `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, CI `31694775758`, Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ`, production focused race 30/30 and Playwright 48/48. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
 - Hosted Supabase migrations through `010` and prior fail-closed observation-control checks.
 - Provider installation `153286187`, scoped only to `surgeservicesllc/SoftwareFactory`.
 - Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.

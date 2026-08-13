@@ -4,9 +4,9 @@ Last reviewed: 2026-08-13
 
 Phase: 1B - Production GitHub App Integration
 
-Overall status: **The Phase 1B hardening snapshot at `7d22de6` is published on GitHub `main`, both CI jobs pass, and its exact matching Vercel production deployment is READY with Playwright 48/48. A signed-out dashboard follow-up is validated locally at 53 files/394 tests but is not yet in that production snapshot. Hosted migrations `011`-`025`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
+Overall status: **Application release `edaaf62` is published, both CI jobs pass, and its exact matching Vercel production deployment is READY. Local and production Playwright pass 48/48, and the production signed-out race passes 30/30. Hosted migrations `011`-`025`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
 
-"Implemented" below means code/schema exists in the published release or the explicitly identified local follow-up. It does not mean the provider workflow was observed or the schema is hosted.
+"Implemented" below means code/schema exists in the verified application release. It does not mean the provider workflow was observed or the schema is hosted.
 
 ## Implemented application boundaries
 
@@ -25,7 +25,7 @@ Overall status: **The Phase 1B hardening snapshot at `7d22de6` is published on G
 - Projects selects repositories by stable provider ID and renders live repository sync time, branch protection/SHA, commit author/date, PR author/created/updated time and detail-fetched mergeability, default-branch checks, and per-PR checks fetched against each displayed head SHA.
 - Global browser headers include a restrictive CSP, framing/object denial, a narrow Supabase connection allowlist, and a narrow image allowlist; repository Markdown previews do not load external images.
 - No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D observation scaffold remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF.
-- The current local follow-up gives the signed-out dashboard a server-verified authentication hint so it skips protected browser fetches; its regression test passes 30/30 repeated runs. This follow-up is not part of the production deployment identified below.
+- The signed-out dashboard receives a server-verified authentication hint so it skips protected browser fetches; the focused production race regression passes 30/30 repeated runs.
 
 ## Data and security state
 
@@ -61,7 +61,7 @@ Overall status: **The Phase 1B hardening snapshot at `7d22de6` is published on G
 | GitHub provider installation | Installed; repository-scoped | Personal `surgeservicesllc` installation `153286187` selects only `surgeservicesllc/SoftwareFactory`. |
 | GitHub App connection | **Not Connected** | Authenticated SoftwareFactory callback/tenant persistence, live repo/project/file/draft-PR journey, and signed webhook delivery are not verified. |
 | GitHub webhook | **Not Connected** | Route exists; the provider webhook remains blank/inactive and no valid signed production delivery is verified. |
-| Vercel UI hosting | Exact current release verified | Exact `surgeservices-projects/softwarefactory` deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY for commit `7d22de665813d119488b4a26b0cd4084070b3eaa` and serves the stable alias. Public Playwright passes 48/48; the in-product deploy/rollback adapter remains **Not Connected**. |
+| Vercel UI hosting | Exact application release verified | Exact `surgeservices-projects/softwarefactory` deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is READY for commit `edaaf625c497380611b80092526926b1457e15a0` and serves the stable alias. Public Playwright passes 48/48 and the focused signed-out race passes 30/30; the in-product deploy/rollback adapter remains **Not Connected**. |
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -69,14 +69,15 @@ Overall status: **The Phase 1B hardening snapshot at `7d22de6` is published on G
 
 ## Verification evidence
 
-- On the current local follow-up, `npm run check` passes lint, typecheck, 53 files/394 Vitest tests, and the production build; the build compiled 38 routes on Node 22.23.1, with `/` dynamic.
+- `npm run check` passes lint, typecheck, 53 files/394 Vitest tests, and the production build; the build compiled 38 routes on Node 22.23.1, with `/` dynamic.
 - The dedicated integration suite passes 21 files/163 tests.
 - Current-tree coverage passes 53 files/394 tests: statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), and lines 71.37% (566/793).
-- The published production snapshot and the local follow-up each pass Playwright 48/48 across desktop, tablet, and mobile, including axe checks. The local signed-out browser-error regression additionally passes 30/30 repeated runs.
+- Local and exact production Playwright each pass 48/48 across desktop, tablet, and mobile, including axe checks. The production signed-out browser-error race additionally passes 30/30 repeated runs.
 - Current-tree source and rebuilt-static scans found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present. Code-variable and documented placeholder assignments were reviewed as non-credentials.
-- GitHub `main` points to `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`; both author and committer are `surgeservicesllc@gmail.com`. CI run `31692336607` passed both the quality and browser/accessibility jobs.
-- Matching Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY at immutable URL `https://softwarefactory-3yg1d1bsf-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app`.
-- Production checks passed 48/48, security headers were present, protected unauthenticated APIs were denied, an invalid webhook returned 401, nine JavaScript assets contained no privileged markers, and no recent deployment errors were found.
+- Verified application release `edaaf625c497380611b80092526926b1457e15a0` has tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`; both author and committer are `surgeservicesllc@gmail.com`. CI run `31694775758` passed both the quality and browser/accessibility jobs.
+- Matching Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is READY at immutable URL `https://softwarefactory-7j3j40j63-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app`.
+- Production checks passed the focused race 30/30 and full Playwright 48/48; tested pages returned 200 with CSP, HSTS, and X-Frame-Options; protected APIs and an invalid webhook returned 401; ten deployed assets (nine JavaScript and one CSS) contained no privileged markers; and deployment-log review found zero errors or HTTP 500s.
+- Later documentation-only successors do not supersede this application/runtime evidence unless application code changes.
 - No hosted migration or authenticated live-provider acceptance evidence has been produced for migrations `011`-`025` or the GitHub workflow.
 
 ## Release blockers

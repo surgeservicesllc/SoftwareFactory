@@ -2,26 +2,24 @@
 
 Hosting project: `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Stable alias: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app).
 
-The local release checkout is linked to this exact Vercel project, and the required encrypted environment-variable names are present without exposing their values. The release snapshot below proves the public hosting boundary for one exact commit; it does not prove authenticated Supabase or GitHub acceptance.
-
-A signed-out dashboard follow-up currently exists only in the local checkout. It passes `npm run check` at 53 files/394 tests, current coverage, local Playwright 48/48, and a focused 30/30 browser-error regression, but it is not part of the deployment recorded below and needs new exact CI/deployment evidence before promotion.
+The local release checkout is linked to this exact Vercel project, and the required encrypted environment-variable names are present without exposing their values. The application-release evidence below proves the public hosting boundary for one exact application commit; it does not prove authenticated Supabase or GitHub acceptance.
 
 Vercel hosts the Next.js application and server routes. The in-product Vercel deployment/rollback adapter remains **Not Connected**; CI has no deploy or merge credentials.
 
 ## Verified release evidence recorded 2026-08-13
 
-- GitHub `main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa` has tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`; both author and committer are `surgeservicesllc@gmail.com`.
-- GitHub Actions run `31692336607` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
-- Production deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` was verified READY for that exact commit at `https://softwarefactory-3yg1d1bsf-surgeservices-projects.vercel.app` and served at the stable alias.
-- Production Playwright passed 48/48 across desktop, tablet, and mobile, including axe checks.
-- Production security headers were present; protected unauthenticated API requests were denied; an invalid webhook request returned 401; all nine JavaScript assets were free of privileged markers; and the recent deployment-log review found no errors.
+- Application commit `edaaf625c497380611b80092526926b1457e15a0` has tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`; both author and committer are `surgeservicesllc@gmail.com`.
+- GitHub Actions run `31694775758` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
+- Production deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` was verified READY for that exact application commit at `https://softwarefactory-7j3j40j63-surgeservices-projects.vercel.app` and served at the stable alias.
+- Production focused signed-out race passed 30/30, and Playwright passed 48/48 across desktop, tablet, and mobile, including axe checks.
+- Tested pages returned 200 with CSP, HSTS, and X-Frame-Options; protected unauthenticated API requests and an invalid webhook returned 401; all ten deployed assets (nine JavaScript and one CSS) were free of privileged markers; and deployment-log review found zero errors or HTTP 500s.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
 - GitHub App server-only variable names are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`).
 - GitHub provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. The authenticated in-product callback/tenant connection remains pending, and the provider webhook remains blank/inactive with App-authenticated hook configuration returning `404`/no hook object.
 - Preview Supabase variables are not independently verified.
 - The live authenticated GitHub acceptance journey is still required before Phase 1B can be called complete.
 
-This evidence is bound to the exact commit/deployment above. It proves the public release scope only; it does not prove hosted migrations `011`-`025`, authenticated tenant isolation, the in-product GitHub connection, or webhook acceptance. A later release requires a new exact evidence record.
+This evidence is bound to the exact application commit/deployment above. It proves the public release scope only; it does not prove hosted migrations `011`-`025`, authenticated tenant isolation, the in-product GitHub connection, or webhook acceptance. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
 
 ## Project configuration
 

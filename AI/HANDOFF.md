@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening snapshot is published to GitHub `main` and deployed to the exact Vercel production project. A signed-out dashboard follow-up is locally validated but not yet published/deployed. The schema is not promoted to hosted Supabase and the authenticated provider journey has not passed. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
+Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening and signed-out dashboard fix are published and deployed as verified application release `edaaf62` in the exact Vercel production project. The schema is not promoted to hosted Supabase and the authenticated provider journey has not passed. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
 
 ## Current repository work
 
@@ -19,7 +19,7 @@ Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening snapshot i
 - Project/change authorization, project-picker matching, and webhook attribution use the immutable tenant-scoped repository UUID, not a mutable repository name. Active project linking is transaction-serialized and relinking is allowed only after archival. Projects renders provider sync/branch/commit/PR/check detail, including detail-fetched mergeability, per-PR head-SHA checks, and created/updated times.
 - Browser tenant lists come from caller-bound bounded RPC projections; authenticated raw Activity/webhook reads are revoked behind `list_activity`; commands enforce same-origin; global CSP/security headers restrict browser resource loads.
 - Generic non-placeholder secret assignments are blocked. Protected approval snapshots are bound to exact reservations and revalidated before the write-scoped GitHub token is minted.
-- The local follow-up supplies a server-verified signed-out hint to the dashboard so signed-out rendering skips protected browser fetches; it passes `npm run check` at 53 files/394 tests, current coverage, local Playwright 48/48, and the focused browser-error regression 30/30, but is not in the `7d22de6` production snapshot.
+- A server-verified signed-out hint lets the dashboard skip protected browser fetches; exact production passes the focused browser-error race 30/30 and full Playwright 48/48.
 
 ## Migration boundary
 
@@ -49,19 +49,18 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Supabase CLI is authorized as `surgeservicesllc@gmail.com`, exact project `qpuofpmagrmyamahqwxw` is linked, hosted ledger ends at `010`, linked database lint is clean, and a complete `011`-`025` dry run succeeds without applying a pending migration.
 - Personal provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. It has not completed the authenticated SoftwareFactory callback/tenant journey.
 - The GitHub webhook is **Not Connected**: no active hook and valid signed production delivery have been verified.
-- Published release evidence recorded 2026-08-13: `origin/main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, author/committer `surgeservicesllc@gmail.com`; CI run `31692336607` passed both jobs.
-- Exact Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY at `https://softwarefactory-3yg1d1bsf-surgeservices-projects.vercel.app` and serves `https://softwarefactory-tan.vercel.app`. Production Playwright passes 48/48; security headers, API denials, invalid-webhook 401, nine-JavaScript-asset marker scan, and recent-error review pass.
+- Verified application release recorded 2026-08-13: commit `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`; CI run `31694775758` passed both jobs.
+- Exact Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is READY at `https://softwarefactory-7j3j40j63-surgeservices-projects.vercel.app` and serves `https://softwarefactory-tan.vercel.app`. Production focused race passes 30/30 and Playwright passes 48/48; pages return 200 with CSP/HSTS/X-Frame-Options, protected APIs and invalid webhook return 401, ten deployed assets (nine JavaScript and one CSS) contain no privileged markers, and deployment logs contain zero errors or HTTP 500s.
 - Current local evidence on Node 22.23.1: `npm run check` passes lint, typecheck, 53 files/394 tests, and a production build with 38 routes (`/` dynamic); current coverage and local Playwright 48/48 pass; the focused signed-out browser-error regression passes 30/30 repeated runs.
 - Current-tree evidence: the dedicated integration suite passed 21 files/163 tests; coverage passed 53 files/394 tests at 70.36% statements, 71.34% branches, 62.58% functions, and 71.37% lines; local production-server Playwright passed 48/48 across desktop/tablet/mobile with axe checks. Current source/rebuilt-static scanning found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present.
 - Exact Vercel project `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present; secret values were not recorded.
 
 ## Immediate sequence
 
-1. Final-gate, publish, and deploy the signed-out dashboard follow-up; bind new CI/Vercel evidence to its exact commit.
-2. Obtain exact owner approval for hosted migrations `011`-`025` and webhook activation; apply/verify only the exact production targets.
-3. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
-4. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
-5. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
+1. Obtain exact owner approval for hosted migrations `011`-`025` and webhook activation; apply/verify only the exact production targets.
+2. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
+3. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
+4. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
 
 ## Safe operating notes
 
@@ -78,10 +77,9 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - [x] Hosted migration history through `010`; exact linked database lint is clean.
 - [x] Hardening migrations `011`-`025` and application/tests exist in the published repository release.
 - [x] Current-tree lint/typecheck, 53 files/394 tests, migration chain through `025`, and 38-route production build (`/` dynamic) pass.
-- [x] Published snapshot production-server E2E/responsive/accessibility passes 48/48; local follow-up focused signed-out regression passes 30/30.
-- [x] Full local production-server E2E passes 48/48 for the follow-up.
-- [x] Source/rebuilt-static secret/client gates pass for the local follow-up.
-- [ ] Local follow-up is pushed, CI passes, and a matching production deployment is verified; prior snapshot `7d22de6` remains verified production.
+- [x] Local and exact production E2E/responsive/accessibility pass 48/48; production focused signed-out race passes 30/30.
+- [x] Source/rebuilt-static secret/client gates pass; production ten-asset privileged-marker scan passes.
+- [x] Application release `edaaf62` is published, CI passes, and matching READY production deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is verified. Later documentation-only successors retain this runtime evidence unless application code changes.
 - [ ] Migrations `011`-`025` are explicitly owner-approved, hosted, and fully verified.
 - [ ] Real Supabase authenticated/two-tenant/anonymous/RPC behavior passes.
 - [ ] Real GitHub callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect journey passes.

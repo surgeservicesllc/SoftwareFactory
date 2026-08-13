@@ -2,20 +2,20 @@
 
 Last reviewed: 2026-08-13
 
-Phase 1B decision: **Published production snapshot verified; local follow-up and phase acceptance incomplete**
+Phase 1B decision: **Application release verified; phase acceptance incomplete**
 
-Reason: the published `7d22de6` snapshot, both CI jobs, and its exact Vercel production deployment/public acceptance pass. A signed-out dashboard follow-up passes `npm run check` at 53 files/394 tests, current coverage, local Playwright 48/48, a focused 30/30 regression, and current source/rebuilt-static scanning, but still needs publication, CI, and exact deployed verification. Hosted migrations `011`-`025`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
+Reason: application release `edaaf62`, both CI jobs, and its exact Vercel production deployment/public acceptance pass, including full Playwright 48/48 and the signed-out race 30/30. Hosted migrations `011`-`025`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; safe tenant/activity projections; raw Activity/webhook read closure; stable repository UUID binding/relink locking; protected RED approval/token/lease integrity; generic secret assignments; retry-safe draft-PR flow; lifecycle ordering; Projects provider detail; same-origin/CSP; repository migrations `011`-`025` | Base snapshot published/deployed; signed-out dashboard follow-up local; hosted schema promotion and live acceptance pending |
+| Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe tenant/activity projections; raw Activity/webhook read closure; stable repository UUID binding/relink locking; protected RED approval/token/lease integrity; generic secret assignments; retry-safe draft-PR flow; lifecycle ordering; Projects provider detail; same-origin/CSP; repository migrations `011`-`025` | Application release published/deployed; hosted schema promotion and live acceptance pending |
 | Current-tree lint/typecheck/Vitest | `npm run check` | Pass - lint/typecheck; 53 files/394 tests |
 | Current-tree integration suite | `npm run test:integration` | Pass - 21 files/163 tests |
 | Current-tree coverage | `npm run test:coverage` | Pass - 53 files/394 tests; statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), lines 71.37% (566/793) |
 | Current-tree migration chain | Full chain through migration `025` | Pass in the complete suite; hosted behavior pending |
 | Current-tree production build | `npm run check` | Pass - compiled 38 routes on Node 22.23.1; `/` is dynamic |
-| Signed-out dashboard regression | Focused browser-error test repeated | Pass - 30/30 local runs |
-| Current-tree E2E/responsive/accessibility | Local production-server Playwright | Pass - 48/48 desktop/tablet/mobile including axe; exact deployed follow-up verification pending |
+| Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Pass - 30/30 production runs |
+| E2E/responsive/accessibility | Local and exact production Playwright | Pass - 48/48 desktop/tablet/mobile including axe |
 | Current-tree secret/client scan | Source plus rebuilt static artifacts | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY` | Historical pass |
 | Hosted migrations | Hosted ledger through `010` | Pass through `010` only |
@@ -35,8 +35,8 @@ Reason: the published `7d22de6` snapshot, both CI jobs, and its exact Vercel pro
 | GitHub real connection | Authenticated SoftwareFactory callback/tenant connection/token/repository sync | **Not Connected** |
 | GitHub webhook | Route implemented; active hook/valid signed production delivery absent | **Not Connected** |
 | Project/repository and file-to-draft-PR flow | Code/tests exist; real journey absent | Pending live acceptance |
-| Git/main provenance for published snapshot | Commit `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, author/committer `surgeservicesllc@gmail.com`; CI run `31692336607`, both jobs green | Pass; local follow-up publication pending |
-| Vercel production for published snapshot | Exact project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`; READY deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` for exact SHA; immutable URL plus stable alias; production Playwright 48/48, security/API/client/log checks pass | Pass for snapshot's public release scope; local follow-up and authenticated integrations pending |
+| Git provenance for application release | Commit `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`; CI run `31694775758`, both jobs green | Pass; docs-only successors retain this evidence unless application code changes |
+| Vercel production for application release | Exact project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`; READY deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` for exact SHA; immutable URL plus stable alias; production focused race 30/30, Playwright 48/48, page/security/API/client/log checks pass | Pass for public application scope; authenticated integrations pending |
 | OpenAI/Codex | No live worker; Phase 1C not started | **Not Connected** |
 | Anthropic/Claude | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
@@ -83,3 +83,4 @@ Historical baseline evidence remains useful for regression comparison but cannot
 - Configuration, tests, provider installation, or Vercel READY status cannot be relabeled as a real SoftwareFactory GitHub connection.
 - A clean migration/lint result does not prove authenticated RLS behavior; both evidence layers are required.
 - A future code/provider/schema/deployment change invalidates affected evidence and requires this scorecard to be rerun.
+- A documentation-only successor does not supersede application/runtime evidence when application code, configuration, schema, and deployment remain unchanged.
