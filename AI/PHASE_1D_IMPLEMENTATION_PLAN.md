@@ -72,7 +72,7 @@ safely or honestly in this phase).
 | 12 | Approval decision tri-state | **MISSING** | `evaluateRiskAuthorization` returns a different, execution-oriented vocabulary |
 | 13 | No-self-approval rule | **MISSING** | Nothing compares author to approver |
 | 14 | Orchestrator stage machine | **MISSING** | — |
-| 15 | Branch-protection revalidation | **MISSING** | — |
+| 15 | Branch-protection revalidation | **COMPLETE** | `lib/autonomy/merge-readiness.ts` — conflicts, stale approval, stale gates, dismissed reviews, and required checks re-asked against the current head |
 | 16 | Merge executor | **BLOCKED** | `AGENTS.md` forbids an auto-merge workflow in this line of phases |
 | 17 | Deploy executor | **BLOCKED** | No Vercel API connection; `VERCEL_TOKEN` unset |
 | 18 | Preview validation | **BLOCKED** | Same |
@@ -124,6 +124,7 @@ and an agent must not perform it. That is the single reason this phase does not 
 | No self-approval | **COMPLETE** | same — the author is refused as approver at every scope |
 | Orchestrator stage machine | **COMPLETE** as a decision machine | `lib/autonomy/pipeline.ts` |
 | Merge / Deploy / Rollback execution | **BLOCKED, named** | Every path returns its exact blocker |
+| Merge revalidation | **COMPLETE** | `merge-readiness.ts` — a push after approval or verification invalidates it; protection is never inferred as satisfied |
 | Recovery decision machine | **COMPLETE** | `lib/autonomy/recovery.ts` — freeze first, rollback fail-closed on four conditions, bounded repair, escalation |
 | Never auto-reverse a destructive migration | **COMPLETE** | A destructive release resolves `OWNER_ONLY` regardless of controls, ceiling or approval |
 | Bounded retries | **COMPLETE** | `lib/autonomy/retries.ts` — per-stage caps, exponential backoff, escalate rather than retry once spent, and never retry a permanent failure |

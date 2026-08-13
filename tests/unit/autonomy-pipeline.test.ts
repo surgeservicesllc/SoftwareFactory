@@ -271,3 +271,51 @@ describe("a RED change never reaches an automatic approval", () => {
     expect(run.approval.ownerApprovalRequired).toBe(true);
   });
 });
+
+describe("the merge stage revalidates against the current head", () => {
+  const readiness = {
+    currentHeadSha: "current",
+    gatedHeadSha: "current",
+    approvedHeadSha: "current",
+    mergeability: "clean" as const,
+    pullRequestOpen: true,
+    requiredChecks: ["CI"],
+    checks: [{ name: "CI", status: "passed" as const }],
+  };
+
+  it("reports a stale approval ahead of the missing executor", () => {
+    // The executor is missing either way; a signature that describes an older
+    // commit is the thing an operator has to fix first.
+    const run = runPipeline(
+      input({ mergeReadiness: { ...readiness, approvedHeadSha: "older" } }),
+    );
+
+    expect(outcome(run, "merge")?.blocker).toBe("APPROVAL_STALE");
+  });
+
+  it("reports a conflict ahead of the missing executor", () => {
+    const run = runPipeline(input({ mergeReadiness: { ...readiness, mergeability: "dirty" } }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("MERGE_CONFLICT");
+  });
+
+  it("reports a failing required check ahead of the missing executor", () => {
+    const run = runPipeline(
+      input({
+        mergeReadiness: { ...readiness, checks: [{ name: "CI", status: "failed" as const }] },
+      }),
+    );
+
+    expect(outcome(run, "merge")?.blocker).toBe("REQUIRED_CHECK_FAILING");
+  });
+
+  it("falls back to the executor blocker once everything else is clean", () => {
+    const run = runPipeline(input({ mergeReadiness: readiness }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("MERGE_EXECUTOR_NOT_CONNECTED");
+  });
+
+  it("still blocks on the executor when no revalidation input is supplied", () => {
+    expect(outcome(runPipeline(input()), "merge")?.blocker).toBe("MERGE_EXECUTOR_NOT_CONNECTED");
+  });
+});
