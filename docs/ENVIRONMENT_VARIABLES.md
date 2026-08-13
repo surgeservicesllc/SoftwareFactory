@@ -39,11 +39,11 @@ Interactive Auth, organization, project, and repository reads use the caller's s
 | `GITHUB_COMMIT_IDENTITY_NAME` | Explicit name used for both author and committer on controlled draft-PR commits |
 | `GITHUB_COMMIT_IDENTITY_EMAIL` | Explicit email used for both author and committer on controlled draft-PR commits |
 
-Configure exactly one private-key representation. The application prefers `GITHUB_APP_PRIVATE_KEY_BASE64` when both exist. Current production deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. The primary repository connection is live, but primary App `4573846` remains blank/inactive at the webhook boundary and independently **Not Connected**.
+Configure exactly one private-key representation. Current production `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY from main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`. Primary App `4573846` remains active only as rollback and its webhook is independently impaired.
 
 ## Server-only candidate GitHub App configuration
 
-The pre-release dual-App cutover supports one optional candidate App. Candidate configuration is fail-closed and all-or-nothing: leave every candidate variable absent, or provide the complete isolated set. The candidate must not reuse the primary App ID, slug, client credentials, private key, state secret, or webhook secret. No candidate value may use a `NEXT_PUBLIC_` prefix.
+The deployed dual-App path supports one optional candidate App. Candidate configuration is fail-closed and all-or-nothing: leave every candidate variable absent, or provide the complete isolated set. The candidate must not reuse primary identity or cryptographic material. No candidate value may use a `NEXT_PUBLIC_` prefix.
 
 | Variable | Purpose | Current Vercel status |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ The pre-release dual-App cutover supports one optional candidate App. Candidate 
 | `GITHUB_CANDIDATE_APP_WEBHOOK_SECRET` | Candidate raw-body HMAC secret, minimum 32 bytes | Sensitive Production and Preview |
 | `GITHUB_CANDIDATE_APP_STATE_SECRET` | Candidate state-signing secret, minimum 32 bytes | Sensitive Production and Preview |
 
-The configured candidate identifies owner-only App `4582606` (`surge-softwarefactory-next`) and the same stable production callback boundary. Its provider General page retains the exact active webhook URL after reload. These variables are present, but production release `0bd0485` does not read them yet; the code is not deployed, the candidate is not installed, and no signed processed delivery or project handoff exists. The candidate and webhook capability therefore remain **Not Connected**.
+The configured candidate identifies owner-only App `4582606` (`surge-softwarefactory-next`). Production reads these server-only values; installation `153479019`, signed webhook processing, project handoff, and candidate-backed read/draft-write acceptance pass.
 
 Commit identity has no provider/App-bot fallback. `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured server-side in both Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`. Both values must pass strict server-side validation before the change route performs tenant persistence, token minting, or a GitHub mutation. The identity is never sent to the browser, stored in Supabase, or written to logs; it is sent only to GitHub in the Contents API's required `author` and `committer` objects. Live ordinary and protected draft commits have verified both fields.
 

@@ -34,7 +34,7 @@ This result is not an approval. The response separately reports `executionAllowe
 - the literal GREEN ceiling; and
 - explicit `false` values for auto approve, merge, deploy, and rollback.
 
-Migration `010_phase1d_observation_controls` keeps the kill switch ON and all execution controls OFF. Hosted history now extends through `026`; this does not make execution available, and migration `026` does not change the Phase 1D interlocks.
+Migration `010_phase1d_observation_controls` keeps the kill switch ON and all execution controls OFF. Hosted history now extends through `027`; neither the GitHub handoff nor migration `027` makes autonomous execution available.
 
 ## What is not built
 

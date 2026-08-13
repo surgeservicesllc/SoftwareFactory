@@ -19,7 +19,7 @@ npm run build
 
 | Gate | Result |
 | --- | --- |
-| Current local check | Pass - lint, typecheck, 56 files/436 Vitest tests, 38-route production build; candidate cutover tree is not committed or deployed |
+| Cutover check | Pass - lint, typecheck, 56 files/436 Vitest tests, 38-route build; deployed main CI is green |
 | Application release integration suite | Pass - 21 files/163 tests |
 | Migration `026` | Retained pass locally and hosted - pre-`027` history matched, dry run/lint clean, exact ACL mismatch count zero |
 | Current-tree coverage | Pass - statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82% |
@@ -28,19 +28,19 @@ npm run build
 | Verified application-release secret/client scan | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
 | Candidate cutover coverage and secret/client scan | Pending before publication; the full `npm run check` is green but does not replace these gates |
 | Prior local baseline before migrations `014`-`019` | 25 files/208 tests, 34-route build, and 12/12 local E2E passed; historical evidence only |
-| Hosted Supabase migration application | Pass through `026`; pre-`027` history matched and dry run was up to date; local `027` pending |
+| Hosted Supabase migration application | Pass through `027`; live approval/execution/rebind path verified |
 | Hosted RLS/catalog/browser grants | Pass - 23/23 RLS+FORCE, 32 policies, zero policyless, 22 secret guards, tested raw authenticated/browser grants false |
 | Hosted service-role table grants | Pass - exact matrix mismatch zero; SELECT/INSERT/UPDATE on four GitHub ingress tables, no table privileges on other 19 |
-| Hosted Supabase CLI/link | Current selected local profile is wrong/unauthorized and was not used for mutation; reauthenticate as `surgeservicesllc@gmail.com` and reconfirm exact project `qpuofpmagrmyamahqwxw` before applying `027` |
-| Hosted Supabase lint | Clean against hosted state through `026` |
-| GitHub publication/CI | Pass - application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI `31704289754`, both jobs green |
-| Exact production Playwright | Post-rotation `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` passes 48/48; exact-commit CI browser/accessibility job is green |
+| Hosted Supabase CLI/link | Earlier wrong/unauthorized profile was not used for mutation; reconfirm `surgeservicesllc@gmail.com` and project `qpuofpmagrmyamahqwxw` before future linked commands |
+| Hosted Supabase lint | Verified baseline clean through `026`; hosted `027` live behavior passes |
+| GitHub publication/CI | Pass - commit `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`; CI `31716263910`, both jobs green |
+| Exact production Playwright | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` passes 48/48; 13/13 routes, invalid webhook, logs, and 20-asset checks pass |
 | Owner Auth/onboarding | Pass - `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory workspace owner onboarding succeeded |
-| GitHub provider installation | Pass - installation `153445938`, connected to `surgeservicesllc`, exactly `surgeservicesllc/SoftwareFactory` selected |
-| Vercel configuration/runtime | `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`; nine JavaScript assets have zero forbidden markers and recent logs have zero errors |
-| Real in-product GitHub acceptance | Pass for the owner connection/project/read/draft-write/secret-rejection/audit path; webhook and live second-tenant matrix remain pending |
+| GitHub provider installations | Candidate `153479019` live; primary `153445938` active rollback; exact repository selected |
+| Vercel configuration/runtime | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and stable alias, source exact main commit `799d2cea189b6860a03987ae75c25765f9ac4aca` |
+| Real in-product GitHub acceptance | Candidate callback/sync/webhook/handoff/read/draft-write/audit pass; live second-tenant/reverse/adverse matrix pending |
 | Live controlled commit identity | Pass - ordinary draft PR `#6` commit `e789303` and protected draft PR `#7` commit `6a808de` use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer |
-| Candidate provider configuration | Pass for registration only - owner-only App `4582606` retains the exact callback/active webhook and has isolated Sensitive Production/Preview variable names; not installed and **Not Connected** |
+| Candidate provider acceptance | Pass - App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, signed webhook, handoff, and clean PR `#8` |
 | Dual-App/handoff tests | Pass within current full local check - App-slot/App-ID state, isolated config, persisted-App token routing, dual-signature/provenance webhook handling, owner handoff route, and migration `027` contracts/behavior |
 
 The repository and intended production/CI runtime require Node 22 or newer. The final local run used Node 22.23.1; older historical test evidence does not replace that run.
@@ -95,11 +95,11 @@ The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
 ## Hosted Supabase evidence
 
-Hosted ledger/dry-run/lint checks pass through `026`, the pre-`027` local and remote history matched, and the exact service-role ACL matrix has zero mismatches. Migration `027` is local only and must receive a fresh hosted ledger/lint/RLS/grant verification after the CLI is reauthenticated to the exact owner/project. The authenticated owner path passes. Only one actual user/email is authorized, so a second live tenant was intentionally not created; local behavioral tests cover tenant denial, but the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
+Hosted history is current through `027`; the pre-`027` history/lint/ACL baseline and live `027` path pass. Only one actual user/email is authorized, so the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
 
 ## Real GitHub acceptance
 
-Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). The primary owner callback/token/repository/project/read/draft-write/audit path passes. Candidate App `4582606` retaining an active provider webhook and local route/database tests do not prove candidate installation, a signed processed production delivery, owner handoff, post-handoff behavior, or live second-tenant behavior.
+Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). Candidate installation, signed delivery, owner handoff, post-handoff read/draft-write behavior, and cleanup pass. They do not prove the pending second-tenant, reverse-handoff, disconnect/loss, or remaining adverse matrix.
 
 ## Final evidence
 

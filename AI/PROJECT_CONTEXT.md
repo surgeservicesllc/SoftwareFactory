@@ -25,9 +25,10 @@ Phase 1B extends the Phase 1A foundation with:
 - a separate, short-lived owner-only RED approval path for an exact protected-file draft change, with its immutable snapshot revalidated before a write-scoped token is minted, without default-branch, merge, or deployment authority;
 - an explicit, server-only deployment commit identity used as both GitHub author and committer, with no App-bot fallback;
 - generic secret-assignment rejection even when an opaque value lacks a known provider token prefix; and
-- stable repository-ID project linking serialized against concurrent active duplicates while permitting an intentional relink after archival.
+- stable repository-ID project linking serialized against concurrent active duplicates while permitting an intentional relink after archival; and
+- a cryptographically isolated dual-App replacement path with exact owner RED approval, signed target-delivery provenance, atomic history-preserving handoff, and an evidence-bound reverse path while both installations remain active.
 
-The code/configuration existing is not the same as a verified connection. A GitHub repository connection may be called Connected only after the real callback, tenant persistence, repository scope, and live reads pass. The provider webhook is an independent capability and remains **Not Connected** until GitHub retains the active endpoint and a valid signed delivery succeeds.
+The code/configuration existing is not the same as a verified connection. A GitHub repository connection may be called Connected only after the real callback, tenant persistence, repository scope, and live reads pass. Each App webhook is an independent capability: it remains **Not Connected** until GitHub retains the active endpoint and a valid signed delivery succeeds for that exact App/installation. Candidate App `4582606` meets that boundary; primary App `4573846` does not.
 
 An inert Phase 1D observation-only scaffold may be developed while Phase 1B acceptance is pending. It does not change the current phase or authorize execution: the global kill switch stays ON, the ceiling is GREEN, automatic approval/merge/deploy/rollback stay OFF, and the worker remains **Not Connected**.
 

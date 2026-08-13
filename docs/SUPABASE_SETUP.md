@@ -1,8 +1,8 @@
 # Supabase setup
 
-Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). The CLI was previously authorized as `surgeservicesllc@gmail.com` and linked to this exact project when provider health and the hosted-through-`026` evidence below were verified. The currently selected local CLI profile is unauthorized or associated with the wrong account for a fresh recheck and was not used for any mutation. Reauthenticate as `surgeservicesllc@gmail.com` and reconfirm the exact project ref before any new linked command. Provider health was last verified as `ACTIVE_HEALTHY` on 2026-08-12.
+Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Hosted history is current through `027`. The earlier wrong/unauthorized local CLI profile was not used for mutation; always reauthenticate as `surgeservicesllc@gmail.com` and reconfirm this exact ref before future linked commands.
 
-The hosted ledger is current through migration `026`; its history matched the repository before local migration `027` was added. The prior linked dry run was up to date and lint was clean. Catalog checks report 23/23 public tables with RLS and FORCE RLS, 32 policies, zero policyless tables, 22 secret guards, and false tested raw authenticated/browser grants. Migration `027` is intentionally local-only until the CLI is reauthenticated to the exact owner/project and the candidate release is ready for coordinated promotion.
+The hosted ledger is current through migration `027`. Post-apply catalog verification reports 25/25 public tables with RLS and FORCE RLS, 34 policies, zero policyless tables, and narrow owner-read/no-browser-mutation grants on the two immutable handoff-evidence tables. The verified pre-`027` clean dry run/lint baseline, 22 secret guards, and false raw authenticated/browser grants remain intact; the live owner approval/execution/rebind path passed.
 
 Hosted migration `026` remediates the Supabase-managed default-ACL drift found after `025`. The exact post-apply ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on `github_installations`, `github_repositories`, `github_webhook_deliveries`, and `github_change_requests`, and no table privileges on the other 19 public tables.
 
@@ -54,9 +54,9 @@ npx supabase db reset
 7. Verify table/RPC/RLS/FORCE RLS state and application compatibility.
 8. Exercise allowed access plus cross-tenant and anonymous denial using user sessions, not service-role access.
 
-Current stop condition: the exact `service_role` table boundary is verified, but do not call the complete hosted tenant/provider boundary verified until authenticated cross-tenant, anonymous-denial, privileged-RPC, audit, provider-ingress, and real application-session checks pass.
+Current stop condition: the exact candidate owner/provider path passes, but do not call the complete hosted tenant/provider boundary verified until authenticated cross-tenant, anonymous-denial, remaining privileged-RPC, adverse lifecycle, reverse-handoff, and disconnect/loss checks pass.
 
-Migration `027` adds an owner-only atomic project handoff between two active same-account/same-repository GitHub installations. Its hosted promotion must verify the processed signed target-delivery precondition, pending-change/conflict denial, project/history preservation, immutable handoff evidence, reverse-handoff boundary, and unchanged RLS/service-role grants. It does not create or store provider credentials.
+Migration `027` is hosted. Its live apply verified exact owner approval/execution, a post-sync candidate-signed delivery, atomic project/history preservation, immutable evidence, and retained primary rollback rows. It does not create or store provider credentials. Reverse-handoff and disconnect/loss observation remain pending.
 
 ## RLS expectations
 

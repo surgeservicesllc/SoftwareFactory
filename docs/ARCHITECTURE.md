@@ -8,10 +8,10 @@ SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authentic
 | --- | --- | --- |
 | Browser UI | Present safe state and collect intent | Untrusted client |
 | Next.js server | Authenticate, authorize, validate, redact, and coordinate provider operations | Trusted application boundary |
-| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `026`; exact ACL matrix passes. Local migration `027` adds atomic handoff but is not hosted; owner session passes and the live second-tenant matrix remains pending |
-| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Primary installation `153445938` is live for exactly `surgeservicesllc/SoftwareFactory`; candidate App `4582606` is configured but not deployed/installed/connected |
-| GitHub webhook route | Verify raw-body HMAC, bind signing App provenance, deduplicate delivery IDs, store redacted payloads, reconcile state | Candidate-aware path passes locally; no candidate signed processed production delivery exists |
-| Vercel | Serve Next.js application and server functions | Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Deploy/rollback adapter **Not Connected** |
+| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `027`; live owner handoff passes; live second-tenant matrix remains pending |
+| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Candidate installation `153479019` is live for exactly `surgeservicesllc/SoftwareFactory`; primary `153445938` remains active rollback |
+| GitHub webhook route | Verify raw-body HMAC, bind signing App provenance, deduplicate delivery IDs, store redacted payloads, reconcile state | Candidate-signed post-sync, push, and check deliveries process; primary webhook remains impaired |
+| Vercel | Serve Next.js application and server functions | Production `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and stable alias, source main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`. Deploy/rollback adapter **Not Connected** |
 | AI workers | Future task execution | Codex and Claude **Not Connected** |
 
 ## Authenticated request path
@@ -64,7 +64,7 @@ There is no HTTP local-repository writer. The removed legacy `/api/files` route 
 
 ## Webhook path
 
-The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, applies an event-specific schema, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. The pre-release route matches either isolated App secret and rejects a signing-App ID that disagrees with the persisted installation App ID. Unknown events and unknown installations are retained as ignored evidence. Hosted migration `013` upserts bounded newly granted repository metadata, `014` keeps exact connection-linked projects aligned, `016` makes installation deletion terminal and provider-ordered, `018` provider-orders repository metadata while preserving terminal deletion until an explicit newer restore, and `021`/`023` attribute project activity through the immutable repository UUID with bounded actor/resource/state/check details. Migration `024` additionally revokes authenticated direct reads from both raw Activity and webhook-delivery tables. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
+The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, applies an event-specific schema, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. It matches either isolated App secret and rejects a signing-App ID that disagrees with the persisted installation App ID. Candidate installation `153479019` has processed signed production deliveries. Unknown events and installations are ignored safely. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
 
 ## Activity read path
 
@@ -74,7 +74,7 @@ Agents, commands, tasks, runs, and reports use caller-member, tenant-scoped list
 
 ## Data architecture
 
-Migrations `001`-`026` define the hosted control-plane history (with no `006`). Every one of 23 exposed public tables has RLS and FORCE RLS. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. Local migration `027` atomically rebinds an existing project to a verified second installation for the same account/repository, requires a processed signed target delivery on first handoff, preserves history, serializes change reservations, and records immutable evidence; it is not hosted.
+Migrations `001`-`027` define the hosted control-plane history (with no `006`). The verified pre-`027` baseline has 23/23 RLS+FORCE tables and zero service-role ACL mismatches. Hosted `027` adds two RLS/FORCE-RLS evidence tables and atomically rebinds a project to a verified same-account/repository installation after a fresh signed delivery. Its live handoff preserved project/history and retained the primary rollback path.
 
 Command mutation routes enforce same-origin requests. Global response headers set a restrictive Content Security Policy, deny framing/objects, restrict connections to SoftwareFactory/Supabase, allow images only from self/data/blob/GitHub avatars, and limit other browser capabilities. Repository Markdown previews suppress external images.
 

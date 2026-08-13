@@ -18,11 +18,11 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Restore live Projects sync/visibility, branch protection/SHA, commit/PR timestamps and authors, mergeability, default-branch checks, and per-PR head-SHA checks.
 - [x] Keep Autonomous Mode OFF, global kill switch ON, auto approve/merge/deploy/rollback OFF, and Codex/Claude **Not Connected**.
 - [x] Register owner-only candidate App `4582606` (`surge-softwarefactory-next`) with the exact callback, a retained active exact webhook URL, least-privilege Phase 1B permissions/events, and distinct Sensitive Production/Preview candidate variable names. This is provider/configuration evidence, not an installation or connection.
-- [x] Implement locally the isolated dual-App configuration/state/token/webhook boundaries and owner-only atomic reversible project handoff migration `027`, including a processed signed target-installation delivery gate and immutable handoff evidence.
+- [x] Deploy the isolated dual-App configuration/state/token/webhook boundaries and host owner-only atomic reversible project handoff migration `027`, including fresh processed target-installation delivery provenance, immutable exact RED approval/execution evidence, and cross-App serialization.
 
 ## Phase 1B release blockers
 
-- [x] Pass current pre-release lint/typecheck, 56 files/436 tests, and the 38-route production build. The dual-App/handoff tree is not yet committed or deployed.
+- [x] Pass cutover-tree lint/typecheck, 56 files/436 tests, and the 38-route production build; publish main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, whose CI run `31716263910` passed both jobs.
 - [x] Pass current-tree coverage: statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82%.
 - [ ] Rerun coverage for the candidate cutover tree before publication.
 - [x] Retain exact-production Playwright 48/48 across desktop/tablet/mobile including axe and focused signed-out browser-error race 30/30 from the preceding verified release; pass the current exact-commit CI browser/accessibility job.
@@ -38,22 +38,24 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Create ordinary draft PR `#6` and exact owner-approved protected RED draft PR `#7`; verify both remain draft/unmerged, likely-secret rejection, and immutable approval/provider/audit evidence. Earlier identity-mismatched PRs `#4`/`#5` were closed unmerged and their branches deleted.
 - [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases.
 - [x] Publish the strict server-only commit-identity boundary, configure `GITHUB_COMMIT_IDENTITY_NAME`/`GITHUB_COMMIT_IDENTITY_EMAIL` in Vercel Production and Preview, and verify both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>` on draft commits `e789303` and `6a808de`.
-- [ ] Review, commit, push, and deploy the dual-App/handoff tree, then apply and verify local migration `027` on hosted project `qpuofpmagrmyamahqwxw`. Until then, production remains exact application release `0bd0485` and hosted Supabase remains through `026`.
-- [ ] Install candidate App `4582606` for exactly `surgeservicesllc/SoftwareFactory`; verify callback, synchronized App/repository identity, repository reads, and a valid signed **processed** webhook delivery for that exact installation. The candidate endpoint is retained and active at GitHub, but the candidate is not installed and the webhook capability remains **Not Connected**.
-- [ ] Execute the owner-only exact-confirmation handoff from primary installation `153445938` to the verified candidate installation; confirm the same project and history remain intact, reads and draft-only writes route through the candidate App, and immutable handoff evidence is visible. Observe the rollback window and verify evidence-bound reverse handoff before any primary access is retired.
-- [ ] Keep OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) as the defect record for App `4573846`, whose single webhook still reloads blank/inactive. Do not make candidate success retroactively label the primary webhook Connected.
+- [x] Commit, push, and deploy the dual-App/handoff tree; apply hosted migration `027` to project `qpuofpmagrmyamahqwxw`; and prove its live owner approval/execution/rebind path.
+- [x] Install candidate App `4582606` as installation `153479019` for exactly `surgeservicesllc/SoftwareFactory`; verify callback, synchronized App/repository identity, repository/file reads, and a post-sync signed **processed** webhook delivery through connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`.
+- [x] Execute the exact owner-confirmed handoff from primary installation `153445938` to candidate installation `153479019`; preserve project `b1f23696-437e-4d89-b55f-d7a949980e8f` and prior history; verify immutable handoff evidence, candidate-backed reads, and draft-only write PR `#8`.
+- [x] Close acceptance PR `#8` unmerged after CI `31716958685` and Vercel Preview passed; delete `softwarefactory/20260813154335-9e3952f8-f9d`; verify `main` stayed unchanged by the temporary write.
+- [ ] Observe the rollback window and verify the evidence-bound reverse handoff before any primary access is retired. Primary installation `153445938` remains active.
+- [x] Keep OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) as the defect record for App `4573846`, whose single webhook still reloads blank/inactive. Candidate success does not retroactively label the primary webhook Connected.
 - [ ] Verify explicit disconnect/loss state and history preservation.
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
 - [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
 
 ## Release evidence retained
 
-- Verified application release: `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, CI `31704289754`, Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`. Both CI jobs are green; post-rotation production Playwright passes 48/48, nine JavaScript assets have zero forbidden markers, and recent logs have zero errors. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
-- Hosted Supabase is current through `026`; pre-`027` history matched, dry run/lint were clean, and the exact four-table `service_role` ACL matrix has zero mismatches.
-- Local migration `027` and the dual-App/handoff routes are pre-release only; they pass the current full local check but are not in hosted Supabase or production.
+- Verified application release: `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`, CI `31716263910`, Vercel deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`. Both CI jobs are green and the stable alias serves the READY deployment. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
+- Hosted Supabase is current through `027`. The verified pre-`027` dry-run/lint and exact four-table `service_role` ACL matrix remain recorded; live migration-`027` handoff behavior passed.
+- Candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, processed signed webhook, project handoff, candidate reads, and clean draft-only PR `#8` acceptance pass.
 - The currently selected local Supabase CLI profile is unauthorized or associated with the wrong account for a fresh recheck. It was not used for any mutation; the prior hosted-through-`026` evidence above remains recorded.
-- Connected provider installation `153445938`, scoped exactly to `surgeservicesllc/SoftwareFactory`; live connection/project/read/draft-write/audit path passes for the owner.
-- Current READY production: `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`, immutable `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`.
+- Connected candidate installation `153479019`, scoped exactly to `surgeservicesllc/SoftwareFactory`; live connection/webhook/project/read/draft-write/audit path passes for the owner. Primary installation `153445938` remains active as rollback.
+- Current READY production: `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`, immutable `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app`, stable alias, source `main` application commit `799d2cea189b6860a03987ae75c25765f9ac4aca`.
 - Temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no credential/helper artifact remains in the repository checkout.
 - Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
 - Prior local baseline before migrations `014`-`019`: 25 files/208 tests, 34-route build, local Playwright 12/12. Historical only and not proof for the current `020`-`023` tree.

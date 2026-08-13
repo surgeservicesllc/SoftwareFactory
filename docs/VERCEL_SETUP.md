@@ -8,19 +8,19 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 
 ## Verified release evidence recorded 2026-08-13
 
-- Application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` has tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`; both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>`.
-- GitHub Actions run `31704289754` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
-- Current production deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, serves the stable alias, and is sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation.
-- Post-rotation production Playwright passes 48/48 across desktop, tablet, and mobile, including axe checks. Nine deployed JavaScript assets contain zero forbidden markers, recent deployment logs contain zero errors, and CI run `31704289754` is green for the exact application commit.
+- Application commit `799d2cea189b6860a03987ae75c25765f9ac4aca` has tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`; both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>`.
+- GitHub Actions run `31716263910` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
+- Production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app`, serves the stable alias, and is sourced from exact main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`.
+- Production Playwright passes 48/48; 13/13 public routes return `200`; invalid webhook requests return `401` private/no-store; 30-minute logs contain zero errors/fatal/5xx; and 20 deployed JavaScript assets are clean.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
 - GitHub App server-only variable names are configured. `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured for both Production and Preview with the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`; no secret values are recorded.
-- GitHub installation `153445938` completed the production callback and is connected to `surgeservicesllc`, restricted to exactly `surgeservicesllc/SoftwareFactory`. Live Connections, Projects, Files, and Activity reads pass.
+- Candidate installation `153479019` and connection `85591f43-dd4e-46d2-8a1b-0f036b32639f` are connected to exactly `surgeservicesllc/SoftwareFactory`; live webhook, handoff, Connections, Projects, Files, draft-write, and Activity paths pass. Primary `153445938` remains active rollback.
 - Ordinary draft PR `#6` and owner-approved protected RED draft PR `#7` are open, draft, and unmerged; both commits have the approved author and committer. Earlier App-bot-attributed PRs `#4` and `#5` were closed unmerged and their isolated branches were deleted.
-- Primary App `4573846` remains blank/inactive under OPEN GitHub Support ticket `#4660724`. Candidate App `4582606` retains the exact active endpoint, and its distinct required `GITHUB_CANDIDATE_APP_*` names are Sensitive in Production and Preview. Production commit `0bd0485` does not read those candidate values; the App is not installed and no signed processed delivery is verified, so the webhook remains **Not Connected**.
+- Primary App `4573846` remains blank/inactive under OPEN GitHub Support ticket `#4660724`. Candidate App `4582606` is deployed, installed, and has exact processed signed webhook evidence; its distinct `GITHUB_CANDIDATE_APP_*` names remain Sensitive in Production and Preview.
 - The temporary downloaded App PEM and ignored webhook/helper scripts used for bounded verification were deleted; no credential or helper artifact was persisted in the repository.
 - Preview Supabase variables are not independently verified, and the live second-tenant caller matrix remains pending.
 
-This evidence is bound to the exact application commit/deployment above. The locally passing dual-App/handoff tree (56 files/436 tests, 38-route build) is not committed or deployed, and migration `027` is not hosted. The live primary owner GitHub journey is verified, but it does not prove a second tenant, candidate installation, signed delivery, or handoff. Later documentation-only successors do not supersede the release evidence; the candidate application release requires a new exact evidence record.
+This evidence is bound to the exact application commit/deployment above. Hosted migration `027`, candidate installation `153479019`, signed delivery, handoff, reads, and clean draft-only PR `#8` acceptance pass. It does not prove the pending second-tenant, reverse-handoff, or adverse lifecycle/disconnect matrix. Later documentation-only successors do not supersede this runtime evidence.
 
 ## Project configuration
 

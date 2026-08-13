@@ -2,47 +2,48 @@
 
 Last reviewed: 2026-08-13
 
-Phase 1B decision: **Candidate cutover passes locally; publication and live acceptance incomplete**
+Phase 1B decision: **Candidate cutover is live and verified; remaining tenant/adverse/rollback observations keep Phase 1B incomplete**
 
-Reason: hosted migration `026`, owner onboarding, primary installation `153445938`, real connection/project/reads, ordinary/protected draft-only writes, secret rejection, commit attribution, and immutable Activity evidence pass on production release `0bd0485`. Candidate App `4582606` now retains the exact active webhook configuration, and the isolated dual-App plus atomic handoff implementation passes the full local check. That tree and migration `027` are not committed/deployed/hosted; the candidate is not installed, no signed processed delivery exists, and no handoff occurred. The webhook capability, live second-tenant matrix, and remaining failure/disconnect acceptance therefore remain incomplete.
+Reason: hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, a post-sync processed signed delivery, atomic project handoff, preserved history, candidate-backed reads, and clean draft-only PR `#8` acceptance pass. Primary installation `153445938` remains active as rollback while its webhook defect stays isolated under Support `#4660724`. The live second-tenant, reverse-handoff, disconnect/loss, and remaining adverse matrix are incomplete; Phase 1C/2 remain Not Connected and automatic actions remain OFF.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe projections; stable repository UUID; protected approval/token/lease integrity; lifecycle/order/recovery; migrations `011`-`026` | Application/schema hosted; owner live path passes; remaining acceptance pending |
-| Current-tree lint/typecheck/Vitest/build | `npm run check` | Pass - lint/typecheck; 56 files/436 tests; 38 routes; pre-release dual-App/handoff tree |
-| Dual-App replacement boundary | Isolated candidate config; state binds App slot/ID; token routing uses persisted installation App ID; webhook verifies signing App provenance | Pass locally; not committed or deployed |
-| Migration `027` atomic handoff | Owner-only exact confirmation; same account/external repository; both installations live; no pending change; processed signed target delivery; immutable evidence; reversible while both installations remain active | Pass locally; not hosted |
+| Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe projections; stable repository UUID; protected approval/token/lease integrity; lifecycle/order/recovery; dual-App handoff; migrations `011`-`027` | Application/schema hosted; candidate owner path passes; remaining acceptance pending |
+| Cutover-tree lint/typecheck/Vitest/build | `npm run check` plus main CI | Pass - lint/typecheck; 56 files/436 tests; 38 routes; CI `31716263910` green |
+| Dual-App replacement boundary | Isolated candidate config; state binds App slot/ID; token routing uses persisted installation App ID; webhook verifies signing App provenance | Deployed and live for candidate installation `153479019` |
+| Migration `027` atomic handoff | Immutable exact-tuple owner RED approval/execution; same account/external repository; both installations live; post-sync processed signed target delivery; cross-App/pending-change serialization; preserved history; bounded reverse | Hosted and live handoff passed |
+| Hosted handoff database audit | Candidate sync `2026-08-13T15:26:56Z`; earliest qualifying delivery `2026-08-13T15:27:38Z` with exact App ID; immutable RED same-owner approval/execution succeeded; three request/approved/completed events; append-only triggers enabled; old installation/repository retained | Pass - project/link rebound to candidate while four completed change requests and five prior activity rows remain |
 | Verified application-release integration suite | `npm run test:integration` | Pass - 21 files/163 tests; focused `026` grant test passes separately |
 | Current-tree coverage | `npm run test:coverage` | Pass - statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82% |
 | Migration `026` | Narrowed exact table grants; function grants unchanged | Retained pass locally and hosted; pre-`027` history matched, dry run/lint clean, ACL mismatch count zero |
 | Current-tree production build | `npm run check` | Pass - compiled 38 routes on Node 22.23.1; `/` is dynamic |
 | Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Retained pass - 30/30 production runs; current exact-commit CI is green |
-| E2E/responsive/accessibility | Exact-`0bd0485` production Playwright plus current exact-commit CI browser job | Pass - post-rotation production 48/48 desktop/tablet/mobile including axe; current CI green |
-| Verified application-release secret/client scan | Source plus rebuilt static artifacts | Retained pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present; rerun required for candidate publication |
-| Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY`; currently selected local CLI profile is wrong/unauthorized for a fresh recheck and was not used for mutations | Prior hosted evidence remains recorded; reauthentication required before a new linked check |
-| Hosted migrations | Current through `026`; pre-`027` history matched and dry run was up to date; local `027` now awaits promotion | Hosted pass through `026`; `027` pending |
+| E2E/responsive/accessibility | Exact-main production Playwright plus CI browser job | Pass - production 48/48 desktop/tablet/mobile including axe; CI `31716263910` green |
+| Secret/client boundary | Prior full source/rebuilt-static scan plus current CI secret-boundary contracts and production 20-asset marker scan | Pass - no secret/helper committed; 20 deployed JavaScript assets clean |
+| Hosted Supabase identity | Exact project `qpuofpmagrmyamahqwxw`, current through `027`; earlier wrong/unauthorized CLI profile was not used for mutation | Live hosted `027` behavior passes; reconfirm identity before any future linked command |
+| Hosted migrations | Current through `027`; pre-`027` history/dry-run/lint baseline retained; live `027` approval/execution/rebind path passed | Hosted through `027` |
 | Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; linked lint clean | Pass |
-| Hosted RLS/catalog/browser grants | 23/23 RLS+FORCE; 32 policies; zero policyless; 22 secret guards; tested raw authenticated/browser grants false | Pass |
-| Hosted service-role table grants | SELECT/INSERT/UPDATE on four GitHub ingress tables; no table privileges on other 19; exact matrix mismatch zero | Pass |
+| Hosted RLS/catalog/browser grants | Post-`027`: 25/25 RLS+FORCE, 34 policies, zero policyless; narrow owner-read/no-browser-mutation grants on both handoff-evidence tables; 22 secret guards and raw browser denials retained | Pass |
+| Hosted service-role table grants | Verified pre-`027`: SELECT/INSERT/UPDATE on four GitHub ingress tables; no table privileges on other 19; `027` revokes direct access on its new evidence tables | Pass baseline; live `027` path uses narrow RPCs |
 | Safe browser projections | Base-table SELECT revoked for five sensitive domains; bounded caller-member RPCs; allowlisted activity evidence | Hosted; owner Activity caller path passes; live second-tenant matrix pending |
 | Stable repository authorization | Project connection/change/webhook attribution follows tenant-scoped repository UUID, not mutable name | Hosted via `021`; live rename/same-name acceptance pending |
 | Protected-resource writes | Exact active-owner RED approval is immutable, path/digest/SHA/branch-bound, and draft-only; no local HTTP writer | Live protected draft PR `#7` and immutable approval/provider evidence pass; live expiry/admin-denial matrix pending |
-| Draft-commit attribution | Deployed boundary strictly validates one server-only deployment identity before authorization/persistence and supplies it as both Contents API author and committer; no App-bot fallback or browser/database/log path | Pass - Production/Preview configured; draft commits `e789303` and `6a808de` verify both fields as `surgeservicesllc <surgeservicesllc@gmail.com>` |
+| Draft-commit attribution | Deployed boundary strictly validates one server-only deployment identity before authorization/persistence and supplies it as both Contents API author and committer; no App-bot fallback or browser/database/log path | Pass - draft commits `e789303`, `6a808de`, and candidate-backed `204ed79e` verify both fields as `surgeservicesllc <surgeservicesllc@gmail.com>` |
 | Idempotency/recovery | Same browser intent retains key; exact-binding reservation; five-minute pre-provider lease; existing draft-PR evidence recovery | Application plus migrations `015`/`017`/`022` hosted; live acceptance pending |
 | Lifecycle safety | Provider-time installation/repository ordering; terminal deletion; explicit newer restore remains unselected | Hosted via migrations `016`/`018`; live acceptance pending |
 | Service-role CHECK boundary | Only sensitive-JSON SECURITY DEFINER wrapper granted for provider-ingress constraints | Hosted via `019`; real provider-ingress insert/rejection acceptance pending |
 | Browser/request hardening | Command same-origin enforcement; restrictive CSP/security headers; external Markdown images suppressed | Build and public production checks pass; authenticated verification pending |
 | Projects provider detail | Sync freshness, branch protection/SHA, commit and PR timestamps/authors, mergeability, default-branch and per-PR head-SHA checks | Pass against the live selected repository |
-| GitHub App configuration | Primary App `4573846`; candidate App `4582606` (`surge-softwarefactory-next`) owner-only with retained exact callback/active webhook; distinct candidate variable names Sensitive in Production/Preview; commit identity remains configured | Primary is the live repository path; candidate is configured but **Not Connected** |
+| GitHub App configuration | Primary App `4573846`; candidate App `4582606` (`surge-softwarefactory-next`) owner-only with retained exact callback/active webhook; distinct candidate variable names Sensitive in Production/Preview; commit identity configured | Candidate is live; primary remains active rollback with impaired webhook |
 | Supabase Auth owner | `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory org/workspace owner onboarding succeeded | Pass for onboarding |
-| GitHub provider installation | Installation `153445938`, connected to `surgeservicesllc`, exactly `surgeservicesllc/SoftwareFactory` selected | Pass |
-| GitHub real connection | Connection `d17c63a9-d995-481e-98ce-b737efb32ce5`; project `b1f23696-437e-4d89-b55f-d7a949980e8f`; callback/sync/read/audit journey observed | Connected for the owner repository path |
-| GitHub webhook | Primary App `4573846` still reloads blank/inactive under OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724). Candidate App `4582606` retains the exact active endpoint, but candidate-aware ingress is not deployed, the App is not installed, and no valid signed processed production delivery exists. | **Not Connected** |
+| GitHub provider installations | Candidate `153479019` is live for exactly `surgeservicesllc/SoftwareFactory`; primary `153445938` remains active for rollback | Pass for candidate; rollback retained |
+| GitHub real connection | Candidate connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`; project `b1f23696-437e-4d89-b55f-d7a949980e8f`; callback/sync/handoff/read/write/audit journey observed | Connected for the owner repository path |
+| GitHub webhook | Candidate-signed deliveries for installation `153479019` process with exact App-ID provenance after sync and stream push/check Activity. Primary App `4573846` remains blank/inactive under OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724). | Candidate Connected; primary webhook impaired |
 | Local credential cleanup | Temporary downloaded App PEM and ignored provider-verification helper scripts deleted after use; no credential/helper artifact persisted | Pass |
-| Project/repository and file-to-draft-PR flow | Live branches/commits/checks/PRs/tree/README reads; ordinary draft `#6`; protected RED draft `#7`; likely-secret rejection; immutable Activity evidence | Pass for accepted owner scenarios; remaining adverse matrix pending |
-| Acceptance cleanup | Wrong-App-bot attribution on prior draft PRs `#4`/`#5` was detected; both PRs closed unmerged and isolated branches deleted; `main` unchanged | Pass |
-| Git provenance for application release | Commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754`, both jobs green | Pass; docs-only successors retain this evidence unless application code changes |
-| Vercel production | `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`; `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`; stable alias; source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` | READY; production Playwright 48/48; nine JavaScript assets have zero forbidden markers; recent logs have zero errors |
+| Project/repository and file-to-draft-PR flow | Candidate-backed branches/commits/checks/PRs/tree/file reads; ordinary draft `#6`; protected RED draft `#7`; candidate acceptance draft `#8`; likely-secret rejection; immutable Activity evidence | Pass for accepted owner scenarios; remaining adverse matrix pending |
+| Acceptance cleanup | Prior PRs `#4`/`#5` and candidate acceptance PR `#8` were closed unmerged with isolated branches deleted; PR `#8` passed CI `31716958685` and Vercel Preview; `main` unchanged by acceptance writes | Pass |
+| Git provenance for application release | Commit `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31716263910`, both jobs green | Pass; docs-only successors retain this evidence unless application code changes |
+| Vercel production | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`; `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app`; stable alias; source exact main commit `799d2cea189b6860a03987ae75c25765f9ac4aca` | READY; production Playwright 48/48; 13/13 public routes `200`; invalid webhook `401` private/no-store; 30-minute logs clean; 20 JavaScript assets clean |
 | OpenAI/Codex | No live worker; Phase 1C not started | **Not Connected** |
 | Anthropic/Claude | No live worker | **Not Connected** |
 | Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
@@ -70,9 +71,9 @@ Hosted Supabase baseline:
   prior verified CLI identity: surgeservicesllc@gmail.com
   current selected CLI profile: unauthorized/wrong account for a fresh recheck; no mutations performed
   exact linked project: qpuofpmagrmyamahqwxw
-  current hosted ledger: through 026; pre-027 local and remote history matched
-  local pending migration: 027
-  linked database lint: clean through 026
+  current hosted ledger: through 027; pre-027 local and remote history matched
+  local pending migration: none
+  linked database lint baseline: clean through 026; live 027 behavior verified
   current dry run: up to date; ACL matrix mismatch 0
 ```
 
@@ -80,7 +81,7 @@ Historical baseline evidence remains useful for regression comparison; current h
 
 ## Security and production acceptance still required
 
-- Publish/deploy the dual-App tree, host and verify migration `027`, install candidate App `4582606` for exactly the intended repository, and observe an exact signed processed production delivery before owner handoff. Then verify project/history continuity, candidate-backed reads/draft-only writes, reverse observation, disconnect/loss, and lifecycle handling. Keep Support ticket `#4660724` as the primary-App defect record.
+- Complete the evidence-bound reverse-handoff observation and disconnect/loss/lifecycle handling before retiring primary installation `153445938`. Keep Support ticket `#4660724` as the primary-App webhook defect record.
 - Verify a second authenticated tenant plus anonymous/RPC denial through real caller sessions. Only one actual user/email is authorized today; local behavioral tests do not replace the live matrix.
 - Verify stale SHA, unapproved/admin protected denial, approval expiry/lease, wrong tenant, renamed/same-name repository, revoked installation, insufficient permission, rate limit, stable retry, ambiguous completion recovery, disconnect/loss, and history preservation. Exact owner approval and likely-secret rejection already pass in the live owner journey.
 

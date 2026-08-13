@@ -37,8 +37,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
-- Hosted migrations `011`-`026` implement the hardening chain described above. Their pre-`027` history matched; dry run/lint and prior RLS/catalog/browser-grant checks pass. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub provider-ingress tables and no table privileges on the other 19.
-- Local migration `027` adds an owner-only atomic project handoff between two active installations for the same provider account and immutable external repository. It serializes with change reservations, requires a processed signed target-installation delivery before first handoff, preserves project/history identity, emits immutable evidence, and permits an evidence-bound reverse handoff. It is not hosted.
+- Hosted migrations `011`-`027` implement the hardening chain described above. The verified pre-`027` dry-run/lint, RLS/catalog/browser-grant, and zero-mismatch service-role ACL baseline remains recorded. Hosted `027` adds immutable RED handoff approvals/executions, external-repository serialization, exact target-delivery provenance/freshness checks, and the owner-only atomic reversible project rebind; its live candidate handoff path passed.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -47,7 +46,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - App private key, GitHub client/state/webhook secrets, Supabase service role, and future provider keys stay in Vercel server-only settings.
 - GitHub commit attribution comes from two dedicated server-only environment values. The route validates them before tenant persistence or provider contact, never accepts them from the browser, never stores/logs them, and supplies the same explicit identity as both Contents API `author` and `committer` with no App-bot fallback.
 - Installation-start state is HMAC signed, expires in ten minutes, and is bound to user, organization, allowlisted return path, and an HttpOnly nonce cookie.
-- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the deployed callback uses bounded documented `GET /user/installations` and requires an exact installation-ID match before proceeding. Installation `153445938` passed this production path.
+- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the deployed callback uses bounded documented `GET /user/installations` and requires an exact installation-ID/App match before proceeding. Primary installation `153445938` and candidate installation `153479019` passed this production path.
 - App JWTs are short-lived; installation tokens are further scoped to one repository ID and exact route permissions.
 
 ## Repository read/write boundary
@@ -84,11 +83,11 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 
 ## Dual-App replacement boundary
 
-- Primary App `4573846`/installation `153445938` remains the live project path while candidate App `4582606` is introduced independently. The primary webhook defect remains tracked under Support `#4660724`.
+- Candidate App `4582606`, installation `153479019`, and connection `85591f43-dd4e-46d2-8a1b-0f036b32639f` are the live project path. Primary App `4573846`/installation `153445938` remains active as the rollback path, and its webhook defect remains tracked under Support `#4660724`.
 - Candidate configuration is absent-or-complete and cryptographically isolated. Signed install state binds App slot plus App ID, callback verification uses that exact App, and all repository token minting follows the persisted installation `app_id`.
-- Webhook ingress may verify either configured secret but rejects a signing-App/persisted-installation App-ID mismatch. A retained provider endpoint is not sufficient evidence; the exact target installation must produce a processed signed delivery.
-- The owner handoff uses an exact confirmation and an atomic database RPC. Both installations and repository copies must remain active/selected and refer to the same GitHub account/external repository. Pending changes and conflicting links block the transition; project UUID, change history, and audit history are preserved.
-- The candidate path is pre-release: its code is not deployed, migration `027` is not hosted, the App is not installed, no signed processed delivery exists, and no handoff occurred.
+- Webhook ingress may verify either configured secret but rejects a signing-App/persisted-installation App-ID mismatch. Candidate installation `153479019` produced a processed signed delivery after synchronization, satisfying the first-handoff provenance/freshness gate; subsequent push and check-status deliveries are visible through bounded Activity evidence.
+- The owner handoff uses an immutable exact-tuple RED approval plus single-use execution and an atomic database RPC. Both installations and repository copies must remain active/selected and refer to the same GitHub account/external repository. Pending changes and conflicting links block the transition; the live handoff preserved project `b1f23696-437e-4d89-b55f-d7a949980e8f` and its change/audit history.
+- Candidate-backed read and draft-write acceptance passed through PR `#8`. The PR remained draft, CI and preview passed, it was closed unmerged, and its temporary branch was deleted. A reverse handoff and disconnect/loss observation remain pending before primary retirement.
 
 ## Security invariants
 
@@ -103,7 +102,7 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 
 ## Deployment topology
 
-- Vercel Production points at the hosted Supabase project and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary and protected draft commits verify the approved identity as both author and committer.
+- Vercel Production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` serves the stable alias from main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, points at the hosted Supabase project, and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary, protected, and candidate-backed draft commits verify the approved identity as both author and committer.
 - Preview GitHub values are configured; Preview Supabase isolation remains unverified.
 - CI performs read-only validation and does not deploy or merge.
 - Phase 1C needs a durable worker/sandbox outside request lifetimes; Phase 2 adds Claude only through supported API connections, never five browser-automated consumer logins.

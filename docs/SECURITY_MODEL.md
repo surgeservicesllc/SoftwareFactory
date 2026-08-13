@@ -33,7 +33,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 - Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
 - Store only a redacted subset plus hash/status metadata. Authenticated clients cannot directly read webhook-delivery or raw Activity rows; `list_activity` may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence, never the stored subset or unknown nested fields.
 - Unknown events/installations are ignored safely and cannot mutate another tenant.
-- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`026` are hosted; owner-handoff migration `027` is local only.
+- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`027` are hosted; live candidate handoff evidence passes.
 
 ## Repository mutations
 
@@ -59,7 +59,7 @@ Hosted migrations `011` and `017` remove direct authenticated writes so narrow a
 
 Hosted migration `019` exposes only the SECURITY DEFINER sensitive-JSON wrapper required by provider-ingress CHECK expressions; recursive/text classifiers remain inaccessible. Hosted migration `026` closes the separately discovered default-ACL table-grant drift.
 
-Migrations `020`-`026` are hosted; their matched-history, dry-run, lint, catalog, tested raw authenticated/browser grants, and exact service-role ACL evidence pass. Local migration `027` atomically preserves project/history while moving an owner-confirmed project between two active same-account/same-repository installations, blocks pending changes/conflicts, and requires a processed signed target delivery for first handoff; it is not hosted. Real caller-session, cross-tenant, anonymous, candidate-installation, handoff, and provider acceptance remains pending.
+Migrations `020`-`027` are hosted. The pre-`027` matched-history/lint/catalog/browser-grant/ACL evidence passes; `027` adds immutable owner approval/execution and atomically preserved project/history during the live candidate handoff after exact signed-delivery proof. Candidate callback/sync/webhook/read/draft-write acceptance passes. Cross-tenant, anonymous, reverse-handoff, disconnect/loss, and remaining adverse behavior remain pending.
 
 ## Supply chain and delivery
 
