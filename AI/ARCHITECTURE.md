@@ -24,7 +24,7 @@ GitHub Actions one-shot worker (trusted server process; not a Vercel request)
   -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, and separated route groups are published on `main`; the Phase 1C path exists only in the local reconciled tree. Hosted Supabase visibly has the published post-`027` schema objects but its migration ledger still has exactly 26 rows through `027`. The duplicate applied `130002` source version and unrecorded applied versions require protected history reconciliation before the absent Phase 1C migrations can be promoted. Production targets and provider credentials/live calls are unverified, both execution switches are OFF, and no live worker heartbeat/run exists. Phase 1E operations, outbound provider execution, bot-provider readiness, and OpenAI/Codex worker execution remain **Not Connected**.
+The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, and Phase 1D decision layer are published on `main`; Phase 1C exists only in a local branch three commits ahead and unpublished. Hosted Supabase has the schema effects of `028`/`130001`-`130005`, but its migration ledger still has exactly 26 rows through `027`. The historical duplicate `130002` and unrecorded applied versions require protected history reconciliation before absent forward migrations `130006`-`130011` can be promoted. Production targets, provider credentials/live calls, and worker evidence are unverified; all execution switches/actions remain OFF. Phase 1E operations, outbound provider execution, Phase 1D execution, bot-provider readiness, and OpenAI/Codex worker execution remain **Not Connected**.
 
 ## Phase 2A advisory provider boundary
 
@@ -40,7 +40,7 @@ The Phase 1E operations and synthetic journeys, Phase 2A provider layer, univers
 - The server resolves the immutable GitHub repository UUID, App/installation IDs, full name, default branch, and current branch SHA from the live project connection. Prompt text cannot select or override a repository.
 - Command type and prompt produce a deterministic risk floor. The most severe of requested risk, type floor, and protected prompt signals wins.
 - A fixed plan selects provider `openai`, model `gpt-5.3-codex`, logical role, 45-minute duration, four turns, 200,000 input tokens, 50,000 output tokens, one repair, and 15-minute CI observation.
-- Migrations `130007`/`130008` independently enforce the same provider/model/role/budget/workflow and raise risk from both prompt and acceptance criteria. Direct PostgREST callers cannot lower or widen the execution configuration; `130008` also requires an authenticated organization owner and an exact top-level parameter allowlist.
+- Migrations `130007`-`130011` independently enforce the same provider/model/role/budget/workflow and raise risk from prompt plus acceptance criteria. Direct PostgREST callers cannot lower or widen the execution configuration; `130010` requires an authenticated organization owner and exact top-level parameters, while `130011` adds canonical same-project dependencies and cumulative retry budgets.
 - Only manual GREEN/YELLOW work creates a claimable run. RED remains blocked even if legacy approval state changes.
 - Dispatch uses a short-lived repository-ID-scoped installation token and sends `softwarefactory_phase1c_command` with only `command_id`. Dispatch is a wake-up hint, never authorization; the schedule is a durable recovery path.
 
@@ -51,7 +51,7 @@ The Phase 1E operations and synthetic journeys, Phase 2A provider layer, univers
 - Service-role-only RPCs register/heartbeat/finish workers; claim and heartbeat runs; append events; record validation/artifacts; and complete, fail, or cancel a run. Direct table grants remain revoked.
 - Claims use a UUID lease token, worker ID, bounded expiry, attempt counter, retryability, and cancellation checks. Stale leases are reclaimable only through the database contract.
 - Member-facing list/detail/status RPCs expose bounded safe fields. Worker records, raw command input, raw model/provider failures, and service credentials are not broad browser-readable rows.
-- Run events, artifacts, and validations are append-only. Activity events record material state transitions. Migration `130008` also creates one provider-neutral standard roster per organization, serializes concurrent work by logical agent, and keeps provider/model only on execution runs.
+- Run events, artifacts, and validations are append-only. Activity events record material state transitions. Migration `130010` creates one provider-neutral standard roster per organization, serializes concurrent work by logical agent, and keeps provider/model only on execution runs. Migration `130011` persists dependencies atomically and prevents retry leases from resetting total turn/token budgets.
 
 ## Execution isolation
 
@@ -67,7 +67,7 @@ The Phase 1E operations and synthetic journeys, Phase 2A provider layer, univers
 
 ## GitHub publication boundary
 
-The worker mints repository-ID-scoped App tokens, commits as `surgeservicesllc <surgeservicesllc@gmail.com>`, pushes only the isolated `factory/*` branch, and creates or recovers only an open draft pull request. It records the branch, commits, PR, validation, changed paths, checks, and bounded Codex usage. Artifact replay must match immutable evidence, and migration `130007` persists the draft PR only when repository/project/run/base/head/URL/number are coherent.
+The worker mints repository-ID-scoped App tokens, commits as `surgeservicesllc <surgeservicesllc@gmail.com>`, pushes only the isolated `factory/*` branch, and creates or recovers only an open draft pull request. It records the branch, commits, PR, validation, changed paths, checks, and bounded Codex usage. Artifact replay must match immutable evidence, and migrations `130009`/`130010` persist the draft PR only when repository/project/run/base/head/URL/number are coherent.
 
 An eligible retry may start cleanly from no provider evidence or a branch-only pre-push intent, or resume only from one exact branch/commit and optional matching draft PR. Partial/conflicting evidence is non-retryable. On coherent recovery the worker revalidates the remote branch head and, when present, the live draft PR before observing CI; it preserves the provider thread/usage only when the durable branch/commit evidence matches.
 
@@ -75,15 +75,14 @@ There is no default-branch commit, approval, merge, release, deployment, rollbac
 
 ## Persistence
 
-- Hosted migrations `001`-`027` remain the verified Phase 1A/1B history.
-- Pending `028` adds the Phase 1E production-operations control plane without connecting a production target or production mutator.
-- Pending `130001` adds the Phase 2A provider configuration, routing, advisory-run, event, RLS/FORCE RLS, and owner/admin RPC boundary.
-- Pending `130002` adds Phase 1E synthetic journeys with database-enforced safe-step/profile constraints and observation-only execution.
-- Pending `130003`/`130004` add the bot-fabric event values and provider-neutral registry; pending `130005` adds the separate marketing schema. These published source layers remain unhosted and are not bot execution evidence.
-- Pending `130006` adds Phase 1C enum values only. It is separated so PostgreSQL commits new enum values before `130007` uses them.
-- Pending `130007` adds Phase 1C orchestration fields to commands/tasks/runs; task dependencies; worker heartbeat; append-only run events/artifacts/validations; safe status/list/detail RPCs; cancellation/retry; service-role lease/result RPCs; deterministic normalization/planning/queueing; RED blocks; RLS/FORCE RLS; exact grants; indexes; secret checks; and activity/report terminal evidence.
-- Pending `130008` initializes/backfills the provider-neutral eleven-role roster; rebinds factory-created provider-bound role references without erasing user assignments; maps general work to Orchestrator; enforces owner-only command submission and prompt-plus-criteria risk parity; reconciles provider-table service-role ACLs; hardens artifact, retry, stale-lease, cancellation, and recovery coherence; publishes bounded structured terminal reports; and narrows agent/report projections.
-- All nine pending migrations are unhosted and require an exact owner-approved protected promotion in order `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008`.
+- Hosted ledger migrations `001`-`027` remain the verified Phase 1A/1B history. Catalog evidence shows the effects of `028` and canonical `130001`-`130005` are present even though their ledger rows are missing; do not rerun that DDL.
+- Absent `130006` adds the Phase 1D decision schema only and preserves the global kill switch plus all nine actions OFF.
+- Absent `130007` carries additive/narrowing Phase 1C compatibility over the immutable hosted-source provider layer.
+- Absent `130008` adds Phase 1C enum values only; PostgreSQL must commit it before `130009` uses them.
+- Absent `130009` adds Phase 1C orchestration fields/tables, workers, append-only evidence, safe projections, lease/result RPCs, cancellation/retry, deterministic planning, RED blocks, RLS/FORCE RLS, exact grants, indexes, secret checks, and terminal evidence.
+- Absent `130010` initializes/backfills the provider-neutral eleven-role roster; enforces owner-only prompt-plus-criteria risk parity; reconciles provider ACLs; hardens artifact/retry/recovery/cancellation/report coherence; and narrows projections.
+- Absent `130011` persists canonical task dependencies in the submission transaction, derives non-empty criteria when omitted, validates idempotent replay, and enforces cumulative turns/input/output budgets across retry claims.
+- Protected promotion must ledger-repair only catalog-proven `028`/`130001`-`130005`, re-list/dry-run, then apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` under exact owner RED approval.
 
 ## Existing GitHub/App boundary
 
@@ -157,11 +156,11 @@ Owner/admin request -> /api/operations/* (same-origin, tenant-scoped, no-store)
 
 ## Deployment topology
 
-- Vercel Production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` serves the stable alias from main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, points at the hosted Supabase project, and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary, protected, and candidate-backed draft commits verify the approved identity as both author and committer.
+- Vercel Production serves remote `main` commit `62b5c5a`; latest audited READY deployment is `dpl_4ukaw6y622L6ST99XB9GVpty2cAd`. It points at the hosted Supabase project and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary, protected, and candidate-backed draft commits verify the approved identity as both author and committer.
 - Preview GitHub values are configured; Preview Supabase isolation remains unverified.
 - CI performs read-only validation and does not deploy or merge.
 - Phase 1C needs a durable worker/sandbox outside request lifetimes. Phase 2A uses supported server-side Anthropic/OpenAI API connections, never browser-automated consumer logins.
 
 ## Pending deployment and activation status
 
-The retained Vercel production deployment is READY, but it predates the Phase 1E, Phase 2A, bot-fabric, marketing, and route-group main integrations and does not contain the local Phase 1C tree. Those source layers are published on `main`, but migration `028` and migrations `130001` through `130008` are unhosted, no production target/journey/provider execution has been observed, and the Phase 1C worker/schema are inactive. The fail-closed sequence keeps the Phase 2A organization switch and Phase 1C worker activation OFF, obtains exact approval, applies/verifies pending migrations `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008`, configures worker secrets, verifies required checks, publishes and passes CI/Vercel while worker jobs stay skipped, then enables only the separately approved bounded capability and returns it to OFF afterward.
+The retained Vercel production deployment is READY but predates the later main integrations and local Phase 1C tree. Hosted schema is ahead of its ledger: `028`/`130001`-`130005` are schema-present/ledger-unreconciled, while `130006`-`130011` are absent. No production target/journey/provider execution or Phase 1C worker run has been observed. The fail-closed sequence keeps all execution OFF, obtains exact approval, repairs only proven history, applies/verifies `130006`-`130011`, configures worker secrets, publishes and passes CI/Vercel while worker jobs stay skipped, then enables only the separately approved bounded Phase 1C capability and returns it to OFF afterward. Phase 1D remains execution-inert throughout.

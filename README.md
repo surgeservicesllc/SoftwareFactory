@@ -8,13 +8,13 @@ Main commit `b1060b83a0698a83e202aafdf9792886cf60a8b3` contains the **Phase 2A a
 
 The working tree additionally contains a local **Phase 1C Codex execution implementation candidate**. It can persist a manually submitted GREEN/YELLOW owner command, bind it to the exact connected repository and base SHA, plan a fixed bounded run, wake a durable worker, run the supported `@openai/codex-sdk` in an isolated workspace, validate and policy-scan the diff, push a `factory/*` branch, create or recover only a draft pull request, observe exact-head CI, and record bounded results.
 
-Neither path is live yet. Hosted Supabase contains the schema effects of `028` and the published provider/synthetic/bot/marketing layers now represented by canonical migrations `130001`-`130005`, but its migration ledger still contains exactly 26 rows through `027`. Two historically published files shared version `130002`, so an owner-approved, catalog-proven ledger-only reconciliation must precede any forward migration. Local migrations `130006`-`130010` are absent from hosted Supabase. The repository currently has zero Actions secrets, zero Actions variables, and only the CI workflow on its default branch; no active worker heartbeat or real Codex run exists. OpenAI/Codex remains **Not Connected**.
+Neither path is live yet. Hosted Supabase contains the schema effects of `028` and the published provider/synthetic/bot/marketing layers now represented by canonical migrations `130001`-`130005`, but its migration ledger still contains exactly 26 rows through `027`. Two historically published files shared version `130002`, so an owner-approved, catalog-proven ledger-only reconciliation must precede any forward migration. Local migration `130006` adds only the execution-inert Phase 1D decision schema; Phase 1C is split across absent forward migrations `130007`-`130011`. The local branch is three commits ahead of `main` and unpublished. The repository has zero Actions secrets, zero Actions variables, and only the CI workflow on its default branch; no active worker heartbeat or real Codex run exists. OpenAI/Codex remains **Not Connected**.
 
-The latest complete pre-rebase local gate passed on bundled Node `24.19.0`: lint/typecheck, 99 test files/981 tests, and a clean production build with 62/62 page-data entries; focused post-rebase Phase 1C tests also pass. A fresh complete post-rebase gate, coverage, Playwright/axe, audit, disabled-worker smoke, and secret/static scans are still pending. These local results do not close the hosted or live-provider blockers above.
+The frozen local candidate passes on bundled Node `24.19.0`: lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke. These local results do not close the hosted or live-provider blockers above.
 
 The Phase 1B owner repository path remains connected for exactly `surgeservicesllc/SoftwareFactory` through candidate App `4582606`, installation `153479019`, and connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`. Primary installation `153445938` remains rollback while GitHub Support ticket `#4660724` tracks its webhook defect. Phase 1B still has tenant/adverse/reverse/disconnect acceptance gaps.
 
-Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), Vercel project `surgeservices-projects/softwarefactory`. Existing production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY from main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`; it predates the local Phase 1C tree.
+Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app), Vercel project `surgeservices-projects/softwarefactory`. Production serves remote `main` commit `62b5c5a`; latest audited READY deployment is `dpl_4ukaw6y622L6ST99XB9GVpty2cAd`. It does not contain the unpublished local Phase 1C tree.
 
 Only `surgeservicesllc@gmail.com` is the live SoftwareFactory owner. Repository and worker commits use `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer.
 
@@ -29,7 +29,7 @@ Only `surgeservicesllc@gmail.com` is the live SoftwareFactory owner. Repository 
 - The worker verifies the exact base SHA, uses an isolated `factory/*` branch, and publishes only an open draft PR.
 - Validation uses a pinned restricted Docker image. Changed files pass containment, binary/symlink, secret, protected-path, count, and size checks.
 - No Phase 1C path writes the default branch, approves or merges a PR, deploys, rolls back, modifies provider/workflow settings, or configures secrets.
-- Autonomous Mode is OFF, the global kill switch is ON, and auto approve/merge/deploy/rollback remain OFF.
+- The Phase 1D decision layer is present in source, but its forward migration is unhosted and it has no executor. Autonomous Mode is OFF, the global kill switch is ON, and all nine automatic actions remain OFF.
 - **Demo Data**, **Not Connected**, **Configured**, and **Queued** are evidence labels, not marketing labels. Queued intent is not a worker run.
 
 ## Technology
@@ -77,7 +77,7 @@ npm run worker
 npm run worker:once
 ```
 
-The worker is disabled by default and requires a dedicated safe work root, Docker, protected server-only credentials, catalog-proven ledger reconciliation for schema-present `028`/`130001`-`130005`, application of absent forward migrations `130006` -> `130007` -> `130008` -> `130009` -> `130010`, an exact required-check allowlist, and repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`. Missing/false skips every workflow job. Do not enable it against production without the exact protected release sequence in [`AI/PHASE_1C_IMPLEMENTATION_PLAN.md`](AI/PHASE_1C_IMPLEMENTATION_PLAN.md).
+The worker is disabled by default and requires a dedicated safe work root, Docker, protected server-only credentials, catalog-proven ledger reconciliation for schema-present `028`/`130001`-`130005`, application of absent forward migrations `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`, an exact required-check allowlist, and repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`. Migration `130006` remains decision-only and grants no automatic authority. Missing/false activation skips every workflow job. Do not enable it against production without the exact protected release sequence in [`AI/PHASE_1C_IMPLEMENTATION_PLAN.md`](AI/PHASE_1C_IMPLEMENTATION_PLAN.md).
 
 ## Architecture at a glance
 

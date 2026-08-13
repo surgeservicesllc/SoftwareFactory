@@ -6,7 +6,7 @@ Candidate App `4582606` (`surge-softwarefactory-next`) is the live Phase 1B owne
 
 Primary App `4573846` and installation `153445938` remain the rollback path. Its webhook defect remains tracked under GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724).
 
-The connected GitHub repository is a prerequisite for Phase 1C, not proof of a connected Codex worker. Hosted migration `028` and migrations `130001` through `130008`, Actions secrets, activation variable, active worker heartbeat, and live Phase 1C run are pending. OpenAI/Codex remains **Not Connected**.
+The connected GitHub repository is a prerequisite for Phase 1C, not proof of a connected Codex worker. Hosted ledger reconciliation for schema-present `028`/`130001`-`130005`, application of absent `130006`-`130011`, Actions secrets/activation, workflow publication, heartbeat, and a live Phase 1C run are pending. OpenAI/Codex remains **Not Connected**.
 
 ## Registered Apps
 
@@ -138,10 +138,10 @@ The worker polls the complete check set for the exact commit SHA using the requi
 ## Phase 1C acceptance checklist
 
 - [x] Local command/orchestration, SDK worker, workspace, validation, policy scan, publisher, workflow, schema, APIs, UI, and tests are implemented.
-- [x] Local migration `130008` adds the logical roster, owner/criteria boundary, per-agent serialization, provider compatibility/ACL reconciliation, coherent recovery, stale-lease/cancellation terminalization, and structured reports.
-- [x] Final reconciled supported Node `24.19.0` gates pass: `npm run check` (lint, strict typecheck, 97 test files/959 tests, production build with 62/62 page-data entries), coverage 72.37/66.79/68.80/74.13, Playwright/axe 117/117, production dependency audit 0, disabled-worker safe exit, high-confidence source/static secret-value scans clean, clean diff check except line-ending notices, and focused migration/API security audits with no remaining P0/P1 blocker.
+- [x] Local Phase 1C migrations are split into `130007` provider compatibility, `130008` enums, `130009` execution, `130010` logical roster/recovery/report hardening, and `130011` dependencies/cumulative budgets.
+- [x] Frozen supported Node `24.19.0` gates pass: `npm run check` (lint/typecheck, 109 test files/1,169 tests, build with 74 page/route entries), coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and disabled-worker safe exit.
 - [ ] Obtain exact owner RED approval for hosted migrations, seven protected secrets, workflow publication/activation, and one bounded live GREEN run.
-- [ ] Apply/verify hosted migrations `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` on exact project `qpuofpmagrmyamahqwxw`.
+- [ ] Ledger-repair only catalog-proven schema-present `028`/`130001`-`130005`, re-list/dry-run, then apply/verify absent `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` on exact project `qpuofpmagrmyamahqwxw`.
 - [ ] Configure the seven `SOFTWAREFACTORY_*` secrets without exposing values.
 - [ ] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names.
 - [ ] Publish the exact reviewed default-branch commit and verify normal CI/Vercel while activation remains absent/false and worker jobs skip.
@@ -156,7 +156,7 @@ The worker polls the complete check set for the exact commit SHA using the requi
 ## Troubleshooting
 
 - **Workflow job skipped:** confirm the protected Actions variable is exactly `true`. Missing/false is the intended safe default.
-- **Worker Not Connected:** require hosted `028` and `130001` through `130008`, valid protected configuration, an enabled approved window, and a fresh active heartbeat during a real run. A workflow file or completed idle one-shot registration is insufficient.
+- **Worker Not Connected:** require reconciled history, hosted `130006`-`130011`, valid protected configuration, published workflow, an enabled approved window, and a fresh active heartbeat during a real run. A workflow file or completed idle one-shot registration is insufficient.
 - **Dispatch delayed:** the command remains durable; inspect bounded dispatch evidence and let the scheduled wake claim it after provider recovery.
 - **GitHub not configured:** verify the claimed App ID has its matching protected App ID/private-key pair without printing values.
 - **Stale base SHA:** submit a new command so planning captures the current branch SHA; never force/rebase silently.

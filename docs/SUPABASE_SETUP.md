@@ -2,7 +2,7 @@
 
 Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Hosted migration history currently has exactly 26 rows through `027`, but the hosted schema visibly contains post-`027` Phase 1E/provider/synthetic/bot/marketing objects. Draft PR #15 records the independent 53-table/61-policy catalog comparison and prior duplicate-object push failure. The ledger is stale and a normal push is prohibited until an exact owner-approved history repair reconciles it. Phase 1C migrations remain unhosted.
 
-The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. Reauthenticate the Supabase CLI as that identity and reconfirm the exact project ref before any linked command. The previously selected wrong/unauthorized profile must not be used.
+The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. The currently selected Supabase CLI profile returns `403`; reauthenticate as that owner and reconfirm the exact project ref before any linked command. The unauthorized profile must not be used.
 
 ## Existing hosted boundary
 
@@ -12,17 +12,14 @@ Hosted `001`-`027` provide Auth/onboarding, tenant/project/control-plane tables,
 
 The hosted catalog contains the effects of `028`, provider `130001`, both historically colliding `130002` source files, bot fabric, and marketing. Do not execute these DDL files again. First map their exact source hashes and objects to the hosted catalog, then use only the owner-approved history-repair mechanism documented by Supabase.
 
-## Genuinely pending migrations
+## Forward migrations absent from hosted Supabase
 
-- `20260812002800_phase1e_production_operations.sql`: production-monitoring, incident, freeze, diagnosis, bounded repair-work, rollback-decision, reporting, and durable operations control-plane records. It does not connect a production target or authorize production mutation.
-- `20260813000100_provider_execution_layer.sql`: Phase 2A provider configuration, routing, advisory-run events/metadata, execution flag defaulting OFF, RLS/FORCE RLS, and owner/admin functions.
-- `20260813000200_phase1e_synthetic_journeys.sql`: project-scoped Basic/Standard/Critical journeys with database-enforced safe steps and profile coverage; read steps may be observed, while declared writes are recorded as skipped and never issued.
-- `20260813000300_bot_fabric_activity_types.sql`: bot-fabric activity-event enum additions committed before dependent bot-fabric use.
-- `20260813000400_bot_fabric.sql`: provider-neutral bot, role, and project-assignment registry with tenant isolation and configuration-only readiness; it is not an execution surface.
-- `20260813000500_marketing_content.sql`: separate public marketing-content schema and bounded write-only newsletter subscription path.
-- `20260813000600_phase1c_enums.sql`: Phase 1C enum values only. PostgreSQL must commit these before dependent use.
-- `20260813000700_phase1c_codex_execution.sql`: durable orchestration, worker heartbeat/leases, execution evidence, safe detail/status, cancellation/retry, service-role worker functions, independent risk/plan enforcement, logical agents, RED blocking, terminal reports/activity, RLS/FORCE RLS, and exact grants.
-- `20260813000800_logical_agent_roster.sql`: eleven-role logical roster and existing-row reconciliation, explicit provider-assignment preservation, owner-only submission and acceptance-criteria risk parity, per-agent lease serialization, provider-table ACL reconciliation, coherent branch/commit/draft-PR evidence and recovery, bounded retry/stale-lease/cancellation terminalization, structured reports, and safer projections.
+- `20260813000600_phase1d_autonomy_controls.sql`: execution-inert nine-action/two-scope decision schema; global kill ON and every action OFF.
+- `20260813000700_provider_phase1c_compatibility.sql`: additive/narrowing Phase 1C compatibility over immutable canonical provider migration `130001`.
+- `20260813000800_phase1c_enums.sql`: Phase 1C enum values only; commit before dependent use.
+- `20260813000900_phase1c_codex_execution.sql`: durable orchestration, workers/leases/evidence, safe projections, cancellation/retry, service-role RPCs, independent planning, RED blocks, RLS/FORCE RLS, and exact grants.
+- `20260813001000_logical_agent_roster.sql`: eleven-role roster, owner/risk/ACL hardening, per-agent serialization, coherent recovery, bounded terminal reports, and safe projections.
+- `20260813001100_phase1c_task_dependencies.sql`: canonical same-project dependencies, derived non-empty criteria, idempotent replay, and cumulative total turn/input/output budgets across retries.
 
 Their local presence does not make the database current or the worker Connected. Applying them is RED protected work because it changes production schema, RLS/authorization, service-role functions, provider execution state, and audit behavior.
 
@@ -32,16 +29,16 @@ Retain exact redirect origins for the production alias and local loopback callba
 
 ## Protected promotion workflow
 
-1. Keep the organization provider-execution flag and `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` OFF/false and obtain exact current owner approval naming project `qpuofpmagrmyamahqwxw`, migration `028`, migrations `130001` through `130008`, protected secret configuration, disabled publication, the bounded activation/run/deactivation window, risks, expiry, validation, and containment.
+1. Keep provider execution, all Phase 1D actions, and `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` OFF/false. Obtain exact owner approval naming project `qpuofpmagrmyamahqwxw`, ledger repair for catalog-proven `028`/`130001`-`130005`, apply of absent `130006`-`130011`, protected secrets, disabled publication, bounded Phase 1C activation/run/deactivation, risks, expiry, validation, and containment.
 2. Authenticate CLI as `surgeservicesllc@gmail.com`; verify account and exact project ref.
-3. Compare local/linked migration history. Stop on any unexpected entry or mismatch; never repair or reset hosted history to force alignment.
-4. Review all nine SQL files and run the complete local migration chain, behavior tests, lint, and linked dry run.
-5. Apply and ledger-verify `028`, then `130001`, `130002`, `130003`, `130004`, `130005`, `130006`, `130007`, and `130008` in timestamp order. Stop on any failure or unexpected catalog/history change.
+3. Compare exact local/linked history, catalog, and source hashes. Stop on any unexpected entry or mismatch; never reset hosted history or rerun schema-present DDL.
+4. Review the history-repair matrix and all six forward SQL files; run the complete local chain, behavior tests, lint, and dry run.
+5. Repair only the history for catalog-proven `028`/`130001`-`130005`; re-list and dry-run. Then apply and ledger-verify absent `130006`, `130007`, `130008`, `130009`, `130010`, and `130011` in timestamp order.
 6. Re-list linked migrations and run linked database lint.
 7. Verify every public table has RLS and FORCE RLS; inspect policies, table ACLs, function ACLs/search paths, foreign keys, indexes, constraints, triggers, and append-only guards.
 8. Confirm authenticated/anonymous users have no direct worker-table mutation or broad reads; confirm member projections are bounded.
 9. Confirm service role has only reviewed function execution and no unintended direct table privileges.
-10. Exercise owner, member, second-tenant, anonymous, cancel/retry/status/detail, and service-worker claim/lease/terminal behavior separately. Include owner-only submission, criteria-derived risk, neutral roster preservation/rebinding, per-agent serialization, coherent artifact replay/conflict rejection, stale-lease/cancellation reports, and bounded report PR projection. Never use service role as the user-under-test.
+10. Exercise owner, member, second-tenant, anonymous, cancel/retry/status/detail, and service-worker claim/lease/terminal behavior separately. Include owner-only submission, criteria-derived risk, dependency tenant/project/order constraints, idempotent dependency replay, neutral roster preservation/rebinding, per-agent serialization, cumulative retry budgets, coherent artifact replay/conflict rejection, stale-lease/cancellation reports, and bounded report PR projection. Never use service role as the user-under-test.
 11. Confirm existing Phase 1B installation/project/history is unchanged and the worker remains disabled until protected Actions configuration is complete.
 12. Record exact hosted evidence in repository memory.
 
@@ -68,8 +65,8 @@ The GitHub Actions worker uses `SOFTWAREFACTORY_SUPABASE_URL` and `SOFTWAREFACTO
 ## Troubleshooting
 
 - **Profile/project mismatch:** stop. Reauthenticate and reconfirm `qpuofpmagrmyamahqwxw`; do not mutate.
-- **Enum unsafe-use failure:** confirm bot-fabric enum migration `130003` completed before `130004`, and Phase 1C enum migration `130006` completed before `130007`.
-- **Roster/recovery/report function missing:** confirm `130008` applied only after `028` and `130001` through `130007` completed with ledger/catalog verification.
+- **Enum unsafe-use failure:** confirm catalog-proven bot-fabric `130003` precedes `130004`, and Phase 1C enum migration `130008` commits before `130009`.
+- **Roster/dependency/recovery function missing:** confirm `130010` follows `130009` and `130011` follows `130010`, after ledger/catalog reconciliation.
 - **Permission denied:** inspect session, active organization, function grant, role, lease tuple, and policy. Never disable RLS or grant broad table access.
 - **Migration history differs:** stop and investigate; do not rename/delete/repair production history casually.
 - **Worker says Not Connected:** a migration alone is insufficient; require protected secrets, a real workflow run, and fresh heartbeat.

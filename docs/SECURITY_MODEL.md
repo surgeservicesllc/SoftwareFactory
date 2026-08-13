@@ -19,7 +19,7 @@ Phase 1C adds a distinct trusted worker boundary. A dispatch event is never auth
 
 ## Risk and orchestration integrity
 
-The server computes the highest of requested risk, command-type floor, and protected prompt/acceptance-criteria signals. Migrations `130007`/`130008` independently recompute the floor, restrict top-level keys and payload sizes, reject likely secrets, require ownership, and reject any provider/model/role/budget/workflow not matching the fixed supported plan. Direct PostgREST callers cannot downgrade or widen a Phase 1C run.
+The server computes the highest of requested risk, command-type floor, and protected prompt/acceptance-criteria signals. Phase 1C migrations `130007`-`130011` independently recompute the floor, restrict keys/payload/dependencies, reject likely secrets, require ownership, and reject any provider/model/role/budget/workflow outside the fixed plan. Direct PostgREST callers cannot downgrade or widen a run, cross tenant/project dependency boundaries, or reset total retry budgets.
 
 Only manual GREEN/YELLOW commands become claimable. RED commands/tasks are forced back to blocked/awaiting approval and excluded from claim. An owner approval cannot turn RED into Phase 1C execution authority.
 
@@ -66,8 +66,8 @@ CI is observed against the exact head SHA. `SOFTWAREFACTORY_REQUIRED_CHECKS` mus
 
 ## Database and audit security
 
-- `028` establishes the Phase 1E operations schema; `130001` establishes the Phase 2A provider schema; `130002` adds Phase 1E synthetic journeys; `130003`/`130004` add the bot-fabric enum and registry; `130005` adds marketing; `130006` contains Phase 1C enum additions only; `130007` depends on their committed values; and `130008` reconciles and hardens the provider/worker schemas after all earlier migrations.
-- `130008` provisions an idempotent logical roster (Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, CEO Reporter) without overwriting user-created agents or explicit provider assignments. Provider-account identity remains separate, and general Phase 1C work maps to Orchestrator.
+- Hosted schema effects `028`/`130001`-`130005` require ledger-only reconciliation. Unhosted `130006` adds decision-only Phase 1D controls; `130007` adds provider compatibility; `130008` commits Phase 1C enums before `130009` execution; `130010` hardens roster/recovery/reporting; and `130011` adds dependencies plus cumulative retry budgets.
+- `130010` provisions an idempotent logical roster (Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, CEO Reporter) without overwriting user-created agents or explicit provider assignments. Provider-account identity remains separate, and general Phase 1C work maps to Orchestrator.
 - New tables use RLS/FORCE RLS, foreign keys, constraints, indexes, explicit policies, and revoked direct grants.
 - Service role reaches execution tables only through reviewed SECURITY DEFINER functions with pinned search paths and exact lease/resource validation.
 - Command/task/run details reach members through bounded JSON projections, not broad base-table grants.
@@ -92,7 +92,7 @@ Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal 
 
 ## Current evidence boundary
 
-The source and tests do not prove the live boundary. Hosted post-`027` schema exists but the migration ledger remains exactly 26 rows through `027`, so protected history reconciliation must precede the still-unhosted Phase 1C migration chain. No production target or synthetic journey has been observed; provider credentials/live calls, enabled provider execution, Actions secrets/activation, active worker heartbeat, Codex thread, factory branch, Phase 1C draft PR, and stable exact required-check result are absent. Both advisory provider execution and OpenAI/Codex worker execution remain **Not Connected** until their separate protected promotion and live acceptance evidence pass.
+The source and tests do not prove the live boundary. Hosted schema effects `028`/`130001`-`130005` exist but the ledger remains exactly 26 rows through `027`; protected history reconciliation must precede unhosted `130006`-`130011`. No production observation, provider call, Actions secret/variable, published Phase 1C workflow, heartbeat, Codex thread, factory branch, draft PR, or stable required-check result exists. Phase 1D remains execution-inert; provider and Codex execution remain **Not Connected**.
 
 ## Autonomous and delivery boundary
 

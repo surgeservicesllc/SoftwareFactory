@@ -2,7 +2,7 @@
 
 Date: 2026-08-13
 
-Status: local implementation candidate with final local gates green; protected promotion and live acceptance pending
+Status: local implementation candidate, three commits ahead of `main` and unpublished; protected reconciliation, promotion, configuration, and live acceptance pending
 
 ## Objective
 
@@ -18,10 +18,10 @@ Phase 1C does not authorize RED execution, default-branch writes, pull-request a
 | --- | --- | --- |
 | Auth/tenant/repository binding | Active-organization owner/member boundaries; connected project only; immutable repository/installation IDs and exact base SHA resolved server-side | Existing owner GitHub path live; Phase 1C hosted path pending |
 | Command composer/API | Type, acceptance criteria, requested risk, stable idempotency, same-origin, secret scan, fixed plan, truthful RED/delayed status | Local only |
-| Risk/plan enforcement | Owner-only submission; type/prompt/criteria/request maximum; SQL independently raises risk and fixes provider/model/role/budget/workflow | Migrations `130007`/`130008` unhosted |
-| Durable orchestration | Command/task/run, dependencies, provider-neutral logical agent, one active lease per agent, heartbeat, cancellation, bounded retry, result | Migrations `130006`/`130007`/`130008` unhosted |
-| Logical workforce | Idempotent eleven-role roster for existing/future organizations; provider-account identity stays separate; user-created agents/explicit assignments are preserved | Migration `130008` unhosted |
-| Worker evidence | Append-only events/artifacts/validations, coherent branch/commit/draft-PR recovery, stale-lease terminalization, structured bounded reports, safe projections | Migrations `130007`/`130008` unhosted |
+| Risk/plan enforcement | Owner-only submission; type/prompt/criteria/request maximum; SQL independently raises risk and fixes provider/model/role/budget/workflow | Compatibility `130007`, enums `130008`, execution `130009`, roster `130010`, and dependency/budget hardening `130011` are unhosted |
+| Durable orchestration | Command/task/run, canonical same-project dependencies, provider-neutral logical agent, one active lease per agent, heartbeat, cancellation, cumulative retry budgets, result | Migrations `130009`-`130011` unhosted |
+| Logical workforce | Idempotent eleven-role roster for existing/future organizations; provider-account identity stays separate; user-created agents/explicit assignments are preserved | Migration `130010` unhosted |
+| Worker evidence | Append-only events/artifacts/validations, coherent branch/commit/draft-PR recovery, stale-lease terminalization, structured bounded reports, safe projections | Migrations `130009`-`130011` unhosted |
 | Codex provider | Pinned `@openai/codex-sdk` `0.147.0`, model `gpt-5.3-codex`, bounded sandboxed session | API key/real call **Not Connected** |
 | Durable worker | Persistent/one-shot Node runner with service-role claim/heartbeat/cancel/result contract | Workflow exists locally; no heartbeat |
 | Git workspace | Repository-ID token, exact base-SHA verification, isolated `factory/*` branch, safe recovery | Local tests only |
@@ -29,8 +29,8 @@ Phase 1C does not authorize RED execution, default-branch writes, pull-request a
 | Policy scan | Containment, forbidden paths, symlink/binary/secret/protected/file/size caps | Local tests only |
 | Publication/CI | Commit owner identity, isolated push, create/recover exact draft PR, exact-head check polling against the required-check allowlist | No live Phase 1C PR/CI |
 | UI/APIs | Dashboard/Bot Manager worker truth; Agents/Backlog/Runs/Reports detail; cancel/retry/status | Local only; hosted/E2E pending |
-| Workflow wake-up | Opaque repository dispatch plus five-minute scheduled recovery; branch-selectable manual dispatch is omitted; final job gate requires `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true` | Local workflow; secrets/activation pending |
-| Autonomous safety | RED rejected; merge/deploy absent; kill switch/autonomous controls unchanged | Retained hosted safety through `027`/migration `010` |
+| Workflow wake-up | Opaque repository dispatch plus five-minute scheduled recovery; branch-selectable manual dispatch is omitted; final job gate requires `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true` | Local unpublished workflow; repository has zero secrets/variables and only CI on `main` |
+| Autonomous safety | RED rejected; merge/deploy absent; kill switch/autonomous controls unchanged | Phase 1D source is on `main`; its decision-only `130006` is unhosted, global kill remains ON, and all nine actions remain OFF |
 
 ## Fixed execution envelope
 
@@ -48,10 +48,12 @@ Phase 1C does not authorize RED execution, default-branch writes, pull-request a
 
 ## Protected release sequence
 
-1. Keep `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or false and preserve the final reconciled local evidence: supported bundled Node `24.19.0`; `npm run check` PASS (lint, strict typecheck, 97 test files/959 tests, production build with 62/62 page-data entries); coverage 72.37/66.79/68.80/74.13; Playwright/axe 117/117; production dependency audit 0; disabled-worker smoke safe exit; high-confidence source/static secret-value scans clean; clean diff check except line-ending notices; and focused migration/API security audits with no remaining P0/P1 blocker. Rerun affected gates after any code/schema/workflow change.
+1. Keep `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or false. The frozen local candidate on bundled Node `24.19.0` passes lint/typecheck, 109 test files/1,169 tests, build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke. Complete final tracked-file/secret/diff review before protected publication and rerun affected gates after any change.
 2. Review migrations, worker, workflow, and UI/API diff against all policies and verify no privilege or autonomous authority widened.
 3. Obtain one exact owner RED approval that names the exact Supabase project/migrations, the seven Actions secret names, the reviewed workflow publication, the bounded GREEN acceptance command, risks, expiry, validation, and containment/rollback plan.
-4. Reauthenticate Supabase CLI as `surgeservicesllc@gmail.com`, reconfirm `qpuofpmagrmyamahqwxw`, compare migration history, dry-run/lint, apply `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008`, and verify hosted RLS/FORCE RLS/policies/ACLs/functions/triggers, provider execution default OFF, owner boundaries, neutral roster, coherent recovery/reporting, secret checks, and caller-session behavior.
+   - Required confirmation phrase for the exact Phase 1C RED matrix: `APPROVE RED PHASE1C-20260813-A THROUGH 2026-08-14 00:30 EDT`.
+   - The phrase is not reusable and is invalid without the attached exact targets, source/catalog mapping, secret names (never values), execution window, validation, and containment plan.
+4. Reauthenticate the currently unauthorized Supabase CLI as `surgeservicesllc@gmail.com`, reconfirm `qpuofpmagrmyamahqwxw`, compare the exact history/catalog/source hashes, and repair only the ledger for catalog-proven schema-present `028`/`130001`-`130005`; do not rerun their DDL. Re-list and dry-run, then apply only absent forward migrations `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`. Verify RLS/FORCE RLS, policies, ACLs, functions/triggers, provider execution default OFF, Phase 1D interlocks, owner boundaries, canonical dependencies, neutral roster, coherent recovery/reporting, cumulative retry budgets, secret checks, and caller-session behavior.
 5. Configure protected GitHub Actions secrets without displaying values:
    - `SOFTWAREFACTORY_SUPABASE_URL`
    - `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`

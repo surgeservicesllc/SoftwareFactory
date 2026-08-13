@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish verification and protected release of the reconciled Phase 1E/Phase 2A/Phase 1C implementation without overstating live status. Phase 1E operations and synthetic journeys, the Phase 2A provider layer, universal bot fabric, public marketing site, and separated route groups are published on `main`; Phase 1C remains a local candidate. Hosted post-`027` schema objects exist, but the Supabase migration ledger has exactly 26 rows through `027`; duplicate applied version `130002` and five unrecorded applied versions make a normal push unsafe. Phase 1C migrations remain absent. No production monitor or synthetic-journey observation, bot/provider credential/live request, or Codex run is verified; both execution switches are OFF/unverified. Phase 1E monitoring/rollback/repair, Phase 2A provider execution, bot-provider readiness, and Phase 1C Codex execution remain **Not Connected**.
+Finish verification and protected release without overstating live status. Phase 1E, Phase 2A, bot fabric, marketing/routes, and the execution-inert Phase 1D decision layer are published on `main`; Phase 1C remains a local branch three commits ahead and unpublished. Hosted schema effects `028`/`130001`-`130005` exist, but the Supabase migration ledger has exactly 26 rows through `027`; the historical duplicate `130002` makes a normal push unsafe. Local `130006`-`130011` are absent. No production observation, provider credential/live request, Actions secret/variable, worker heartbeat, or Codex run is verified. All automatic actions/execution switches remain OFF; Phase 1E operations, Phase 2A provider execution, bot-provider readiness, Phase 1D execution, and Phase 1C Codex execution remain **Not Connected**.
 
 ## Phase 1D state for the next agent
 
@@ -32,8 +32,8 @@ Rules that must survive any future change:
 5. **The Phase 1D control migration relaxes nothing.** Enabling any automatic action is a RED action
    requiring an owner-approved migration. Do not do it as a side effect of anything else.
 
-The Phase 1D control migration is not applied to hosted Supabase. Until it is promoted under an
-exact owner-approved, uniquely versioned migration chain, the nine-action model exists in source
+Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is not applied to hosted Supabase. Until it is promoted under an
+exact owner-approved, ledger-reconciled migration chain, the nine-action model exists in source
 and local behavioral tests only. Applying that execution-inert decision schema does not authorize
 or execute an automatic action.
 
@@ -53,7 +53,7 @@ Phase 2A is a separate advisory path. It can route a bounded task to an official
 
 ## Phase 1E production operations
 
-The production-operations control plane is implemented in source and in migration `028`. **Migration `028` is not applied to hosted Supabase**, and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown** today.
+The production-operations control plane is implemented in source and migration `028`. Its schema effect is present on hosted Supabase but its ledger row is missing, and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown** today.
 
 What it does: monitors production through one bounded HTTPS-probe adapter, derives project health with a stored reason, opens and deduplicates SEV1–SEV4 incidents, freezes autonomous releases automatically on SEV1/SEV2, resolves Last Known Good only from a validated deployment, evaluates rollback fail-closed, diagnoses deterministically, creates bounded repair work, orchestrates ten durable event types idempotently, gates resolution on real restoration evidence, and reports daily.
 
@@ -90,15 +90,14 @@ Next Phase 1E steps: apply hosted `028` and `130002` as part of the exact pendin
 - `025`: generic secret-assignment detection, protected approval/reservation/token-order integrity, and serialized stable repository relinking.
 - `026`: revoke all `service_role` public-table privileges, then restore only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
 - `027`: hosted; immutable owner RED approval/single-use execution, exact candidate signed-delivery provenance/freshness, cross-App repository serialization, atomic history-preserving project handoff, and evidence-bound reverse handoff.
-- `028`: **not hosted.** Phase 1E production operations: ten RLS/FORCE-RLS tables, additive SEV1–SEV4 incident evidence, owner-scoped operations workflows, append-only evidence triggers, and zero new `service_role` table privileges.
-- `130002`: **not hosted.** Phase 1E synthetic journeys: per-project journey definitions whose step safety and profile coverage are CHECK constraints, so an unsafe journey cannot be stored even if the route is bypassed.
+- `028` and canonical `130001`-`130005`: schema effects present, ledger rows missing. Do not rerun their DDL; catalog-prove and ledger-repair only under exact owner approval.
 
 ### Published Phase 2A and local Phase 1C candidate
 
 - Command route/composer: connected-project selection, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, opaque dispatch, dispatch evidence, truthful RED/delayed states.
 - Orchestration: provider `openai`, model `gpt-5.3-codex`, role mapping, 45-minute/four-turn/token/one-repair/15-minute-CI budgets, and fixed inspect-to-report draft-PR workflow.
-- Provider layer already on main: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; migration `130001` remains unhosted and execution remains OFF/Not Connected.
-- Schema: `130006` enum-only commit; `130007` command/task/run fields, dependencies, workers, leases, events, artifacts, validations, reports/activity, RLS/FORCE RLS, exact grants, safe list/detail/status, cancellation/retry, service-role worker RPCs, authoritative SQL risk/configuration, and RED blocks; `130008` provider-neutral roster, owner-only submission, criteria-aware risk parity, agent serialization, provider-table ACL reconciliation, coherent artifact/retry/recovery, stale-lease/cancellation terminalization, structured reports, and bounded projections.
+- Provider layer already on `main`: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; `130001` schema is present but ledger-unreconciled, and execution remains OFF/**Not Connected**.
+- Schema: `130006` Phase 1D decision-only interlocks; `130007` provider compatibility; `130008` enum-only commit; `130009` core command/task/run/worker/evidence/RLS/RPC schema; `130010` provider-neutral roster, owner/risk/ACL/recovery/report hardening; and `130011` canonical dependencies, derived criteria, idempotent replay, and cumulative retry budgets. All are unhosted; only `130007`-`130011` are Phase 1C.
 - Worker: supported `@openai/codex-sdk`, isolated `CODEX_HOME`, controlled environment, exact repository/base-SHA workspace, `factory/*` branch, bounded Codex, pinned Docker validation, protected-path/secret scan, commit/push, draft-PR recovery, exact-head CI observation, bounded repair, redacted persistence.
 - Workflow: `.github/workflows/codex-worker.yml` runs one claim on opaque repository dispatch or every five minutes for recovery; branch-selectable manual dispatch is intentionally absent, workflow token permission is contents read, actions are commit-SHA pinned, checkout credentials are not persisted, and the job remains skipped unless the activation variable is literal `true`.
 - UI/APIs: bounded list/detail/status for Agents, Backlog, Runs, Reports, Dashboard, and Bot Manager; cancellation and eligible retry; worker status is heartbeat-derived rather than configuration-derived.
@@ -123,15 +122,15 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 
 ## Verification state
 
-- The final reconciled tree passes supported Node `24.19.0` lint/typecheck, 97 files/959 tests, a production build with 62/62 page-data entries, coverage 72.37/66.79/68.80/74.13, Playwright/axe 117/117 across desktop/tablet/mobile, dependency audit 0, safe disabled-worker smoke, clean high-confidence source/static secret-value scans, clean diff check, and focused migration/API security audits with no remaining P0/P1 blocker.
-- No hosted migration `028`/`130001` through `130008`, real Phase 1E production or synthetic-journey observation, live bot/Phase 2A provider request, production Phase 1C deployment, workflow execution with secrets, active worker heartbeat, Codex thread, factory branch, Phase 1C commit/PR, structured live report, or stable exact-head required-check result exists.
+- The frozen local candidate passes supported Node `24.19.0` lint/typecheck, 109 files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
+- No ledger repair, hosted `130006`-`130011`, real production observation/provider request, published Phase 1C workflow, Actions secrets/activation, active worker heartbeat, Codex thread, factory branch, Phase 1C commit/PR, structured live report, or stable exact-head required-check result exists.
 
 ## Immediate sequence
 
 1. Run and record fresh consolidated gates on the exact reconciled tree.
 2. Review the complete diff and migration ACL/RLS/function surface. Confirm RED cannot be claimed, browser input cannot widen provider/model/role/budget/workflow, and worker evidence remains append-only.
-3. Ask for one exact owner RED approval covering: apply migration `028` and migrations `130001` through `130008` to `qpuofpmagrmyamahqwxw`; configure the seven protected Actions secrets; publish while disabled; activate for one bounded live GREEN command; and disable after the window.
-4. Reauthenticate Supabase as `surgeservicesllc@gmail.com`, reconfirm exact project ref/history, dry-run and lint, then apply `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008`. Stop on identity/history/catalog mismatch; never reset hosted production.
+3. Ask for one exact owner RED approval covering: ledger-only repair of catalog-proven `028`/`130001`-`130005`; application of absent `130006`-`130011`; configuration of seven protected Actions secrets; disabled publication; one bounded live GREEN Phase 1C command; and deactivation. Attach the exact Phase 1C target/risk/evidence/expiry/validation/containment matrix and require `APPROVE RED PHASE1C-20260813-A THROUGH 2026-08-14 00:30 EDT`. The phrase alone is not reusable approval. Applying `130006` does not authorize Phase 1D execution.
+4. Reauthenticate the currently unauthorized Supabase CLI as `surgeservicesllc@gmail.com`, reconfirm exact project/history/catalog/source hashes, repair only proven history rows, re-list/dry-run/lint, then apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`. Stop on any mismatch; never reset hosted production or rerun schema-present DDL.
 5. Verify hosted RLS/FORCE RLS, policies, table/function ACLs, safe projections, service-role RPCs, secret checks, triggers, append-only evidence, owner/cross-tenant/anonymous behavior, and rollback containment.
 6. Configure GitHub Actions secrets without rendering their values. Confirm activation remains absent/false and required-check names match CI. Publish the exact reviewed commit, then verify regular CI and matching Vercel deployment while every worker trigger skips.
 7. Under the same exact protected approval, set `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`; do not introduce or use a branch-selectable manual workflow dispatch.

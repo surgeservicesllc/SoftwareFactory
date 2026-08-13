@@ -16,7 +16,7 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 - [x] Sequence the twelve pipeline stages and halt at the first block.
 - [x] Show all nine actions in the interface, with the reason each is off.
 - [x] Prove the interlocks against real PostgreSQL and demonstrate the loop end-to-end including the blocked stages.
-- [ ] Apply the Phase 1D control migration only after its version is unique in the reconciled migration chain. It relaxes nothing, so it grants no authority by itself. **Owner-gated.**
+- [ ] Apply execution-inert Phase 1D migration `130006` only after the hosted ledger is reconciled. It relaxes nothing and grants no authority by itself. **Owner-gated.**
 - [ ] **BLOCKED — enabling any automatic action.** RED under `policies/RISK_CLASSIFICATION.md`; needs a separate owner-approved migration after sustained non-production evidence.
 - [ ] **BLOCKED — auto-merge.** `AGENTS.md` forbids introducing the workflow in this line of phases.
 - [ ] **BLOCKED — deploy execution and preview validation.** No Vercel API connection; `VERCEL_TOKEN` unset.
@@ -32,8 +32,10 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 - [x] Add provider-neutral logical roles including architect and performance while keeping agent, provider, model, project, and account identities separate.
 - [x] Add durable task dependencies, worker status, run leases/heartbeats/attempts/cancellation/retryability, append-only events/artifacts/validations, and bounded terminal reports/activity.
 - [x] Add RLS/FORCE RLS, ownership constraints, indexes, secret checks, explicit table/function grants, caller-member safe projections, and service-role-only worker RPCs.
-- [x] Split Phase 1C enum additions into migration `130006` so PostgreSQL commits new enum values before execution migration `130007` uses them.
-- [x] Add migration `130008` with an idempotent provider-neutral eleven-role roster for existing/future organizations, rebind factory-created role references, reconcile provider-table ACLs, and keep provider/model on execution runs rather than logical identities.
+- [x] Preserve hosted-source `130001` and move additive/narrowing Phase 1C provider compatibility into forward migration `130007`.
+- [x] Split Phase 1C enum additions into migration `130008` so PostgreSQL commits new enum values before execution migration `130009` uses them.
+- [x] Add migration `130010` with an idempotent provider-neutral eleven-role roster for existing/future organizations, rebind factory-created role references, reconcile provider-table ACLs, and keep provider/model on execution runs rather than logical identities.
+- [x] Add migration `130011` for canonical same-project dependency submission, deterministic derived acceptance criteria, idempotent dependency replay, and cumulative turn/input/output budgets across retries.
 - [x] Harden database command submission to organization owners, include acceptance criteria in SQL risk parity, map general work to Orchestrator, and serialize concurrent work by logical agent.
 - [x] Harden immutable artifact replay, draft-PR projection, bounded retry/recovery states, remote recovery revalidation, stale-lease/cancellation terminalization, and structured success/failure/cancellation reports.
 - [x] Require a bounded `SOFTWAREFACTORY_REQUIRED_CHECKS` allowlist and verify exact CI names, complete returned check sets, stable repeated success evidence, and unchanged draft-PR base/head before reporting CI passed.
@@ -48,13 +50,13 @@ Checked Phase 1C items mean implemented in the local tree, not hosted or Connect
 
 ## Phase 1C verification and protected release blockers
 
-- [x] Final reconciled gates pass on Node `24.19.0`: `npm run check` (97 test files/959 tests and production build with 62/62 page-data entries), Playwright/axe 117/117, dependency audit 0, safe disabled-worker smoke, clean diff check, and focused migration/API security audits with no remaining P0/P1 blocker.
+- [x] Frozen Node `24.19.0` candidate passes lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
 - [ ] Refresh current-tree coverage before protected publication; high-confidence source/static secret-value scans pass, with only allowlisted credential-reference labels present in the client bundle and no credential values.
 - [ ] Run the consolidated lint/typecheck/test/build, coverage, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled Phase 2A/1C tree.
 - [ ] Review the final diff for unrelated edits and confirm tracked files contain no credentials, private keys, service-role tokens, generated workspace state, or local environment files.
-- [ ] Obtain exact owner RED approval for the protected sequence: reconcile the stale hosted migration ledger without re-running present schema DDL; apply only proven-absent Phase 1C forward migrations; configure the seven Actions secrets; publish while activation remains OFF; then activate and execute one bounded live GREEN command.
+- [ ] Obtain exact owner RED approval for the protected sequence: ledger-repair only catalog-proven schema-present `028`/`130001`-`130005` without rerunning DDL; apply absent `130006`-`130011`; configure the seven Actions secrets; publish while activation remains OFF; then activate and execute one bounded live GREEN command. Applying `130006` does not enable Phase 1D.
 - [ ] Reauthenticate Supabase CLI as `surgeservicesllc@gmail.com`, verify exact project ref `qpuofpmagrmyamahqwxw`, compare migration history, run linked dry run/lint, and stop on any identity/history mismatch.
-- [ ] Reconcile the exact hosted catalog/source hashes and repair only the migration-history rows for already-present post-`027` schema. Re-list and dry-run; then apply only Phase 1C migrations proven absent. Never use the current chain with a normal `db push` before this repair.
+- [ ] Reconcile exact hosted catalog/source hashes and repair only migration-history rows for schema-present `028`/`130001`-`130005`. Re-list and dry-run; then apply only proven-absent `130006`-`130011`. Never use a normal `db push` before this repair.
 - [ ] Exercise real authenticated owner, cross-tenant, and anonymous member/detail/cancel/retry/status RPC behavior. Service role is not a valid user-under-test.
 - [ ] Configure protected repository secrets `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, and `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` without printing values.
 - [ ] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` equals `Lint, typecheck, test, and build|Browser and accessibility tests`, and confirm those exact names still match `.github/workflows/ci.yml` before publication/activation.
@@ -126,7 +128,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Verify security before widening the grant matrix: `bots`, `bot_roles`, `bot_assignments` each enable RLS **and** FORCE RLS with tenant-scoped policies; the eleven marketing tables get both through a `format()` loop, and public read is `revoke all` followed by `grant select` behind a `using (published)` policy.
 - [x] Restyle `BotFabricConsole` and the marketing pages onto the design tokens; both arrived with sub-12px text and literal hex values.
 - [x] Merge the bot fabric console into Bot Manager alongside main's live request workspace rather than replacing it.
-- [ ] Apply the complete pending chain `20260812002800`, then `20260813000100` through `20260813000800`, to hosted Supabase. Hosted is current through `027`; all nine are unapplied and remain RED pending exact owner approval.
+- [ ] Ledger-reconcile schema-present `20260812002800`/`20260813000100`-`20260813000500`, then apply absent `20260813000600`-`20260813001100`. The ledger is exactly 26 rows through `027`; all repair/apply work remains RED pending exact owner approval.
 - [ ] Decide whether the marketing site should be publicly indexed before the domain is pointed at it. The marketing group sets `robots: index:true` while the root layout stays `index:false`.
 
 ## Solutions page global navigation

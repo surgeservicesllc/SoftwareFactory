@@ -24,8 +24,9 @@ The last command must exit safely without executing when the worker is disabled 
 | Gate | Current status |
 | --- | --- |
 | Runtime | Supported bundled Node `24.19.0` |
-| `npm run check` | Pass on Node `24.19.0`: lint, strict typecheck, 97 test files/959 tests, production build with 62/62 page-data entries |
-| Coverage | Pass: 72.37% statements, 66.79% branches, 68.80% functions, 74.13% lines |
+| `npm run check` | Pass on Node `24.19.0`: lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries |
+| Coverage | Pass: 75.06% statements, 69.97% branches, 72.60% functions, 76.66% lines |
+| Focused migration suites | Pass: 8 files/104 tests |
 | Playwright responsive/accessibility | Pass: 117/117 across desktop/tablet/mobile against the production build |
 | Production dependency audit | Pass: `npm audit --omit=dev` reports 0 vulnerabilities |
 | Changed-tree secret scan | Pass: 96 files, 0 high-confidence secret candidates |
@@ -33,14 +34,14 @@ The last command must exit safely without executing when the worker is disabled 
 | Disabled worker smoke | Pass: exits safely without executing |
 | Diff/independent audit | Pass: `git diff --check` clean except line-ending notices; final independent P0/P1 audit PASS |
 
-These results apply to the frozen pre-reconciliation Phase 1C tree. Phase 2A independently passed 45 files/365 tests and a 41-route build before integration. Neither baseline is final evidence for the reconciled tree; the complete suite must be rerun. They do not prove hosted migrations, provider credentials, enabled execution, Actions secret configuration, an active worker heartbeat, a live provider call, a Codex thread, or a Phase 1C draft PR/required-CI result.
+These results apply to the frozen local candidate. They do not prove hosted reconciliation/migrations, provider credentials, enabled execution, Actions configuration, workflow publication, an active worker heartbeat, a live provider call, a Codex thread, or a Phase 1C draft PR/required-CI result.
 
 ## Phase 1C unit/integration coverage
 
 The suites cover:
 
 - command type/criteria/idempotency, same-origin, owner-only submission, secret/key/size rejection, project binding, deterministic prompt-plus-criteria risk escalation, exact base SHA, fixed plan, opaque dispatch, delayed evidence, and RED blocking;
-- reconciled SQL `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` order, provider/synthetic-journey/bot-fabric/marketing compatibility, tables/constraints/indexes, RLS/FORCE RLS, policies/grants, safe detail/status, lease/result functions, append-only evidence, RED claim exclusion, and success/failure/cancellation/stale-lease report/activity behavior;
+- catalog/history reconciliation for schema-present `028`/`130001`-`130005`, followed by forward `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`; provider compatibility, Phase 1D interlocks, tables/constraints/indexes, RLS/FORCE RLS, dependencies, cumulative retry budgets, policies/grants, safe detail/status, lease/result functions, append-only evidence, RED claim exclusion, and terminal report/activity behavior;
 - provider-neutral eleven-role roster for existing/future organizations, preservation of user-created agents, general-to-Orchestrator mapping, provider/model run metadata, and per-agent claim serialization;
 - worker configuration, safe work root, controlled environment, disabled behavior, lease lifecycle, heartbeat/cancellation/retry, redaction, and bounded process output;
 - Codex SDK thread options, turns/tokens, structured summary, event projection, and terminal errors;
@@ -56,7 +57,7 @@ Static SQL/workflow contract tests are necessary but do not prove hosted catalog
 
 ## Hosted Supabase acceptance still required
 
-After exact owner approval, apply `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` to exact project `qpuofpmagrmyamahqwxw` and verify:
+After exact owner approval, catalog-prove and ledger-repair only schema-present `028`/`130001`-`130005`, re-list/dry-run, then apply absent `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` to exact project `qpuofpmagrmyamahqwxw` and verify:
 
 - linked migration history and lint;
 - all public tables RLS/FORCE RLS and intended policies;
@@ -68,7 +69,7 @@ After exact owner approval, apply `028` -> `130001` -> `130002` -> `130003` -> `
 - provider-neutral roster, one active lease per logical agent, coherent artifact/PR replay and rejection, stale-lease/cancellation terminalization, structured report content, and bounded reconstructed PR links; and
 - real owner, second-tenant, and anonymous behavior using caller sessions.
 
-Hosted schema evidence exists for the published post-`027` layers, but migration-history evidence is inconsistent: the owner dashboard shows exactly 26 ledger rows through `027` while those later objects exist. Phase 1C remains unhosted. A normal push is not acceptance evidence and is prohibited until the protected ledger reconciliation completes.
+Hosted schema evidence exists for `028`/`130001`-`130005`, but the owner dashboard shows exactly 26 ledger rows through `027`. Phase 1D `130006` and Phase 1C `130007`-`130011` remain unhosted. The current CLI profile returns `403`. A normal push is prohibited until owner-approved ledger reconciliation completes.
 
 ## Protected GitHub Actions acceptance still required
 

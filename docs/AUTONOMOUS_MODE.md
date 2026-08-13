@@ -58,7 +58,7 @@ RED commands remain durable but blocked. Protected files also require exact curr
 - provider/workflow/branch-protection/secret administration; and
 - Phase 2 multi-provider worker routing.
 
-Migration `010_phase1d_observation_controls` keeps the kill switch ON and all execution controls OFF. The unhosted Phase 1D control migration adds the five missing actions and the organization scope, extends both interlocks to cover them, and relaxes nothing. It must retain a unique reviewed version in the final migration chain. Hosted history extends through `027`; nothing in this chain makes autonomous execution available.
+Migration `010_phase1d_observation_controls` keeps the kill switch ON and execution controls OFF. Unhosted `20260813000600_phase1d_autonomy_controls.sql` adds the five missing actions and organization scope, extends both interlocks, and relaxes nothing. Hosted ledger history extends through `027`; applying this decision-only migration would still not make autonomous execution available.
 
 ## The decision layer
 

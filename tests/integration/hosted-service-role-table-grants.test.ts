@@ -9,8 +9,6 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const grantsMigration =
-  "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration = "20260813001100_phase1c_task_dependencies.sql";
 
 const publicTables = [

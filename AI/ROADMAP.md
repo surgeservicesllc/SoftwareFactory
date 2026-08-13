@@ -18,25 +18,25 @@ Remaining: live second-tenant/anonymous/RPC coverage, reverse handoff, disconnec
 
 ## Phase 1C - Codex execution
 
-Status: **Local reconciled implementation candidate; OpenAI/Codex Not Connected.**
+Status: **Local reconciled implementation candidate, three commits ahead of `main` and unpublished; OpenAI/Codex Not Connected.**
 
 Implemented locally:
 
 - authenticated connected-project command composer with type, acceptance criteria, deterministic risk, stable idempotency, exact base-SHA binding, and delayed-dispatch truth;
 - fixed provider/model/role/budget/workflow planning with an independent SQL enforcement boundary;
-- durable command/task/run/dependency, worker heartbeat, lease, retry, cancellation, event, artifact, validation, report, and activity persistence;
+- durable command/task/run/dependency, worker heartbeat, lease, cumulative retry-budget, cancellation, event, artifact, validation, report, and activity persistence;
 - an idempotent provider-neutral eleven-role roster for every organization, with provider/model retained only as run metadata;
 - supported `@openai/codex-sdk` adapter with bounded turns/tokens, isolated configuration, workspace-write sandbox, network/web search disabled, and redacted events;
 - exact-repository Git workspace, pinned-container validation, secret/protected-path policy scanning, isolated `factory/*` commit/push, draft-PR-only publication, exact-head CI observation, and one bounded repair;
 - safe list/detail/status APIs and real-data dashboard, Bot Manager, Backlog, Agents, Runs, and Reports views; and
 - reviewed GitHub Actions one-shot worker with opaque default-branch repository dispatch plus scheduled recovery and no branch-selectable manual trigger;
 - coherent branch/commit/draft-PR recovery, stale-lease terminalization, structured success/failure/cancellation reports, owner-only command submission, and an exact required-CI-check allowlist; and
-- final reconciled local gates green on bundled Node `24.19.0`: lint/typecheck, 97 files/959 tests, production build with 62/62 page-data entries, coverage 72.37/66.79/68.80/74.13, Playwright/axe 117/117, dependency audit 0, safe disabled-worker exit, clean high-confidence source/static secret-value scans, clean diff check apart from line-ending notices, and focused migration/API security audits with no remaining P0/P1 blocker.
+- frozen local candidate green on bundled Node `24.19.0`: lint/typecheck, 109 files/1,169 tests, build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker exit.
 
 Not yet complete:
 
-1. Obtain exact owner RED approval for hosted migration `028` and migrations `130001` through `130008`, protected Actions secret configuration, disabled publication, bounded activation, and the live run.
-2. Apply and verify `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` on exact Supabase project `qpuofpmagrmyamahqwxw`.
+1. Obtain exact owner RED approval for catalog-proven ledger repair of schema-present `028`/`130001`-`130005`, application of absent `130006`-`130011`, protected Actions secret configuration, disabled publication, bounded activation, and the live run.
+2. Reauthenticate the currently unauthorized Supabase CLI, verify exact project `qpuofpmagrmyamahqwxw`, repair only proven history rows without rerunning DDL, then apply and verify `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`.
 3. Configure the seven protected `SOFTWAREFACTORY_*` repository secrets without exposing values.
 4. Verify the workflow's `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly names both protected CI jobs and keep `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false.
 5. Publish the reviewed tree to the repository default branch and verify CI/Vercel while worker triggers remain skipped.
@@ -96,11 +96,11 @@ Exit work: apply hosted migration `028`, configure a real monitored production t
 
 ## Phase 2A - advisory multi-provider layer
 
-Status: **Implemented and published on `main`; hosted execution Not Connected.**
+Status: **Implemented and published on `main`; hosted schema effect present but ledger unreconciled; execution Not Connected.**
 
-Main commit `b1060b83a0698a83e202aafdf9792886cf60a8b3` contains official Anthropic/OpenAI adapters, provider health and model discovery, deterministic routing, controlled fallback, independent-review enforcement, advisory run persistence, owner execution controls, and provider UI. Migration `130001` remains unhosted, provider credentials and a live call are unverified, and organization execution defaults OFF. Phase 2A can return analysis artifacts only; it cannot write a repository, approve or merge, deploy, roll back, or enable Phase 1C/1D. Browser automation of consumer accounts is not an approved integration model.
+`main` contains official Anthropic/OpenAI adapters, provider health and model discovery, deterministic routing, controlled fallback, independent-review enforcement, advisory run persistence, owner execution controls, and provider UI. Hosted Supabase has the `130001` schema effect but its ledger is unreconciled; provider credentials and a live call are unverified, and organization execution defaults OFF. Phase 2A can return analysis artifacts only; it cannot write a repository, approve or merge, deploy, roll back, or enable Phase 1C/1D. Browser automation of consumer accounts is not an approved integration model.
 
-Remaining: apply/verify `130001` as part of the reviewed pending migration chain, configure a supported server-side provider credential, deliberately enable one organization under the applicable approval/cost controls, and record live health/routing/run evidence before calling either provider Connected.
+Remaining: catalog-prove and ledger-reconcile `130001`, apply forward compatibility `130007`, configure a supported server-side provider credential, deliberately enable one organization under the applicable approval/cost controls, and record live health/routing/run evidence before calling either provider Connected.
 
 ## Later measured autonomy
 

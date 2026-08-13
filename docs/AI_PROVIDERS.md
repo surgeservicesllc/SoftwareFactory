@@ -55,7 +55,7 @@ account and records the chosen entry. Anthropic ships a default because
 
 Two further owner steps are required before anything runs:
 
-1. Apply `20260813000100_provider_execution_layer.sql` only after `20260812002800_phase1e_production_operations.sql`, as the second file in the reviewed `028` -> `130001` through `130008` pending chain.
+1. Catalog-prove and ledger-reconcile the already-present `20260813000100_provider_execution_layer.sql` schema effect with `028`/`130002`-`130005`; do not rerun its DDL. Apply forward compatibility `130007` only after the owner-approved repair and inert `130006`.
 2. Enable outbound execution in Settings. It defaults OFF, and enabling it
    requires typing `ENABLE PROVIDER EXECUTION`. A configured credential is not
    by itself consent to spend money.

@@ -6,7 +6,7 @@ Vercel serves the Next.js UI and bounded request-time APIs. It is not the Phase 
 
 ## Existing production evidence
 
-The current production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY from commit `799d2cea189b6860a03987ae75c25765f9ac4aca`. It predates the Phase 2A main integration and local Phase 1C implementation. Its readiness is retained Phase 1B hosting evidence, not provider or Codex connectivity.
+Production serves remote `main` commit `62b5c5a`; latest audited READY deployment is `dpl_4ukaw6y622L6ST99XB9GVpty2cAd`. The unpublished local Phase 1C candidate is not deployed. Vercel readiness is hosting evidence, not provider or Codex connectivity.
 
 The exact Vercel project stores the existing Supabase/GitHub application values server-side and the explicit commit identity `surgeservicesllc <surgeservicesllc@gmail.com>`. No secret values are recorded here.
 
@@ -40,8 +40,8 @@ Phase 2A advisory provider calls do execute inside authenticated bounded server 
 
 Before deploying the local Phase 1C tree:
 
-- fresh consolidated local gates pass on the exact reconciled tree: Node `24.19.0`, 97 files/959 tests, production build with 62/62 page-data entries, coverage 72.37/66.79/68.80/74.13, and Playwright/axe 117/117;
-- migrations `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` have exact owner approval and are applied/verified on `qpuofpmagrmyamahqwxw` before the UI depends on them;
+- the frozen candidate passes on Node `24.19.0` with 109 files/1,169 tests, 74 page/route build entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, dependency audit 0, and safe disabled-worker smoke;
+- exact owner approval covers ledger repair of schema-present `028`/`130001`-`130005` and application/verification of absent `130006`-`130011` on `qpuofpmagrmyamahqwxw` before the UI depends on them;
 - the seven protected GitHub Actions secrets are configured under exact approval without exposing values;
 - `SOFTWAREFACTORY_REQUIRED_CHECKS` remains exactly `Lint, typecheck, test, and build|Browser and accessibility tests` and matches both CI job display names;
 - repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` remains absent/false so every worker trigger skips during publication and deployment;

@@ -12,21 +12,24 @@ Supabase migrations under `supabase/migrations/` become immutable schema history
 | `011`-`019` | Direct-write closure, GitHub audit/recovery/lifecycle, narrow provider-ingress helpers | Hosted |
 | `020`-`026` | Safe browser projections, immutable repository binding, protected approvals, Activity boundary, secret/lease integrity, narrow service-role table ACL | Hosted |
 | `027` | Dual-App owner approval and atomic history-preserving project handoff | Hosted and owner path verified |
-| `028_phase1e_production_operations` | Operations monitoring, incidents, freeze, diagnosis, bounded repair work, rollback decisions, and reports without a production mutator | **UNHOSTED**; source published on main |
-| `130001_provider_execution_layer` | Phase 2A provider configuration, routing decisions, advisory-run events/metadata, owner execution switch, RLS/FORCE RLS, and owner/admin RPCs | **UNHOSTED**; source published on main |
-| `130002_phase1e_synthetic_journeys` | Project-scoped Basic/Standard/Critical journeys with schema-enforced safe steps/profile coverage and observation-only execution | **UNHOSTED**; source published on main |
-| `130003_bot_fabric_activity_types` | Add bot-fabric activity-event values before dependent use | **UNHOSTED**; source published on main |
-| `130004_bot_fabric` | Provider-neutral bot/role/assignment registry, tenant isolation, configuration-only readiness, and audited transitions | **UNHOSTED**; source published on main |
-| `130005_marketing_content` | Separate public marketing-content schema and bounded write-only newsletter subscription path | **UNHOSTED**; source published on main |
-| `130006_phase1c_enums` | Add `architect`/`performance` roles and Phase 1C terminal/retry activity values | **UNHOSTED**; local Phase 1C candidate |
-| `130007_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | **UNHOSTED**; local Phase 1C candidate |
-| `130008_logical_agent_roster` | Eleven-role logical roster, owner/risk hardening, per-agent serialization, provider-table ACL reconciliation, coherent artifact/recovery rules, stale-lease/cancellation terminalization, structured reports and bounded projections | **UNHOSTED**; local Phase 1C candidate |
+| `028_phase1e_production_operations` | Operations monitoring, incidents, freeze, diagnosis, bounded repair work, rollback decisions, and reports without a production mutator | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130001_provider_execution_layer` | Phase 2A provider configuration, routing decisions, advisory-run events/metadata, owner execution switch, RLS/FORCE RLS, and owner/admin RPCs | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130002_phase1e_synthetic_journeys` | Project-scoped Basic/Standard/Critical journeys with schema-enforced safe steps/profile coverage and observation-only execution | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130003_bot_fabric_activity_types` | Add bot-fabric activity-event values before dependent use | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130004_bot_fabric` | Provider-neutral bot/role/assignment registry, tenant isolation, configuration-only readiness, and audited transitions | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130005_marketing_content` | Separate public marketing-content schema and bounded write-only newsletter subscription path | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
+| `130006_phase1d_autonomy_controls` | Execution-inert nine-action/two-scope decision controls; all actions remain constrained OFF | **UNHOSTED**; source on `main`; no executor |
+| `130007_provider_phase1c_compatibility` | Additive/narrowing compatibility over immutable hosted-source provider schema | **UNHOSTED**; local Phase 1C candidate |
+| `130008_phase1c_enums` | Add `architect`/`performance` roles and Phase 1C terminal/retry activity values | **UNHOSTED**; local Phase 1C candidate |
+| `130009_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | **UNHOSTED**; local Phase 1C candidate |
+| `130010_logical_agent_roster` | Eleven-role roster, owner/risk/ACL/recovery/report hardening and bounded projections | **UNHOSTED**; local Phase 1C candidate |
+| `130011_phase1c_task_dependencies` | Canonical same-project dependencies, derived criteria, idempotent replay, and cumulative retry budgets | **UNHOSTED**; local Phase 1C candidate |
 
 Production project `qpuofpmagrmyamahqwxw` currently has an inconsistent schema/history boundary. A read-only owner-dashboard inspection on 2026-08-13 enumerated exactly 26 migration-history rows through `027`, while the hosted catalog visibly contains the post-`027` operations, provider, synthetic, bot-fabric, and marketing objects. Draft PR #15 records a matching 53-table/61-policy catalog audit and a prior `42710` duplicate-trigger failure. The source also historically applied two files under version `130002`, which the ledger primary key can represent only once. Treat the published post-`027` layers as **SCHEMA PRESENT / LEDGER UNRECONCILED**, not unhosted. Treat Phase 1C migrations as unhosted. Do not run the ordinary promotion sequence until exact catalog-to-file reconciliation and an owner-approved ledger-only repair pass.
 
-## Why the `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` order is mandatory
+## Why history repair must precede `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`
 
-`028` establishes the Phase 1E operations schema. `130001` establishes the Phase 2A provider columns, tables, and functions that every later layer must preserve. `130002` adds the Phase 1E synthetic-journey schema. Bot-fabric enum migration `130003` must commit before dependent registry migration `130004`; marketing migration `130005` then adds its separate public schema. PostgreSQL does not safely allow a value added with `ALTER TYPE ... ADD VALUE` to be used before the transaction that added it commits, so Phase 1C migration `130006` contains only enum additions and must commit before `130007` performs dependent casts and creates the execution schema. `130008` is the forward roster, recovery, report, and provider-ACL compatibility migration over the provider and worker schemas; it must not be folded into or applied before `130007`. Always apply all nine in timestamp order.
+The schema effects of `028`/`130001`-`130005` already exist, so first prove their exact catalog/source mapping and repair only the missing history rows. `130006` adds the Phase 1D decision schema without enabling an action. `130007` carries Phase 1C compatibility without changing immutable `130001`. PostgreSQL does not safely allow a value added with `ALTER TYPE ... ADD VALUE` to be used before that transaction commits, so `130008` contains only enums and must commit before `130009`. `130010` then provisions/hardens the logical roster and recovery/report boundary. `130011` finally adds canonical dependencies and cumulative retry budgets over the completed execution schema.
 
 ## Phase 2A schema summary
 
@@ -34,7 +37,7 @@ Migration `130001` adds per-organization provider model configuration, immutable
 
 ## Phase 1C schema summary
 
-Migration `130007`:
+Migration `130009`:
 
 - adds command type, acceptance criteria, execution plan, and risk assessment;
 - adds task criteria, blocked reason, result summary, and dependency links;
@@ -49,7 +52,7 @@ Migration `130007`:
 - makes run events, artifacts, and validations append-only; and
 - appends redacted activity and bounded report evidence for terminal transitions.
 
-Migration `130008` then:
+Migration `130010` then:
 
 - provisions an idempotent provider-neutral roster for existing and future organizations: Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, and CEO Reporter;
 - preserves user-created agents and explicit Phase 2A provider assignments, rebinds eligible factory-created work to logical roles, and removes obsolete factory rows only when unreferenced;
@@ -61,21 +64,23 @@ Migration `130008` then:
 - creates or updates structured bounded reports for success, failure, cancellation, queued cancellation, and stale-lease terminalization; and
 - reconstructs safe report PR links from authoritative database rows while bounding changed-file, check, validation, finding, security, retry, and cancellation content.
 
+Migration `130011` then atomically stores canonical dependencies only for existing earlier tasks in the same organization/project, derives one deterministic acceptance criterion when none is supplied, repairs missing dependency rows on exact idempotent replay, and makes every retry claim receive only the remaining total turn/input/output budgets after persisted prior usage.
+
 ## Required local verification
 
 Apply the complete chain to a disposable database or run the repository migration behavior suite. Verify:
 
-1. `028` applies before the `130xxx` chain; `130001` establishes the provider layer; `130002` adds synthetic journeys; `130003` commits before `130004` uses the bot-fabric event values; `130005` adds marketing; `130006` commits before `130007` uses the Phase 1C enum values; and `130008` applies only after both provider and core Phase 1C schemas exist.
+1. Catalog/source hashes prove `028`/`130001`-`130005` before any history repair; `130006` preserves every Phase 1D interlock; `130007` applies provider compatibility; `130008` commits before `130009` uses Phase 1C enums; `130010` follows core execution; and `130011` follows roster/recovery hardening.
 2. Every public table has RLS and FORCE RLS; every new table has deliberate policies and grants.
 3. Authenticated callers cannot directly mutate or broadly select worker/evidence tables.
 4. Member list/detail/status functions enforce organization membership, size caps, and allowlisted fields.
 5. Service role can execute only the reviewed worker functions, not gain broad direct table rights.
-6. Only an organization owner can call `submit_command`; direct authenticated input cannot lower prompt/criteria-derived risk, exceed the exact key/size contract, contain likely secrets, or change provider/model/role/budget/workflow.
+6. Only an organization owner can call `submit_command`; direct authenticated input cannot lower prompt/criteria-derived risk, exceed the exact key/size/dependency contract, enumerate cross-tenant tasks, contain likely secrets, or change provider/model/role/budget/workflow.
 7. RED cannot queue/claim/run even if approval state changes.
 8. Every organization has the standard logical roster without overwriting user-created agents or explicit provider assignments, general Phase 1C work maps to Orchestrator, provider-account identity remains separate, and no logical agent can have two active leases.
 9. Repository binding, base SHA, lease token, worker ID, attempt, cancellation, branch/commit/PR coherence, and projected pull request are all revalidated; conflicting replay is rejected.
 10. Events/artifacts/validations reject update/delete and secret-bearing evidence.
-11. Completion, queued cancellation, and exhausted stale leases update state and create bounded structured report/activity evidence atomically; cancellation wins at the final safe boundary.
+11. Completion, queued cancellation, and exhausted stale leases update state and create bounded structured report/activity evidence atomically; cancellation wins at the final safe boundary, and retries cannot reset total provider budgets.
 12. Owner/cross-tenant/anonymous paths are tested with caller sessions, not service role as the user-under-test.
 
 Typical disposable local commands:

@@ -2,17 +2,17 @@
 
 Last reviewed: 2026-08-13
 
-Decision: **Phase 2A provider source is published on main and Phase 1C is a local reconciled candidate; the hosted schema is ahead of an inconsistent migration ledger, so protected reconciliation and live acceptance remain blocked. Provider execution and OpenAI/Codex remain Not Connected.**
+Decision: **Phase 1D/Phase 2A source is published on `main` and Phase 1C is a local candidate three commits ahead and unpublished; hosted schema is ahead of an inconsistent ledger, so protected reconciliation, promotion, configuration, and live acceptance remain blocked. Phase 1D execution, provider execution, and OpenAI/Codex remain Not Connected.**
 
-Reason: main contains the Phase 1E operations and synthetic journeys, Phase 2A Anthropic/OpenAI advisory-provider layer, universal bot-fabric registry, marketing site, and separated route groups, while the reconciled tree adds the supported Codex SDK worker and exact repository binding. Read-only hosted evidence shows post-`027` objects but exactly 26 ledger rows through `027`, so the database requires owner-approved history reconciliation before Phase 1C promotion. No real production monitor or synthetic journey, bot/provider request, or Codex execution exists; both provider/worker execution switches remain OFF, Actions secrets/variable are absent, and there is no active heartbeat or live Codex thread/draft PR/required-CI evidence. Passing local tests cannot close those gaps.
+Reason: hosted catalog evidence shows schema effects `028`/`130001`-`130005`, but the ledger has exactly 26 rows through `027`; the database therefore requires owner-approved history-only reconciliation before absent `130006`-`130011` can be applied. `130006` is the execution-inert Phase 1D schema; `130007`-`130011` are Phase 1C. No real production monitor/journey, provider request, Actions secret/variable, published Phase 1C workflow, heartbeat, Codex thread, draft PR, or required-CI evidence exists. The current Supabase CLI profile returns `403`. Passing local tests cannot close those live gaps.
 
 Phase 1E decision: **Production-operations control plane implemented and locally verified; unhosted and unobserved, so no live monitoring claim is made**
 
-Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges, and the detection-to-resolution pipeline is proven against the real migrated schema. Migration `028` is **not** applied to hosted Supabase and no monitor has observed a real production target, so every Phase 1E surface reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
+Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges, and its schema effect is present on hosted Supabase, but its ledger row is missing and no monitor has observed a real production target. Every Phase 1E surface therefore reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
 
 Phase 1D decision: **Decision layer complete and proven against a migrated database; every automatic action remains constrained OFF and no executor exists**
 
-Reason: the unhosted Phase 1D control migration completes the nine-action control model at both an organization and a project scope, extends both interlocks to cover the new columns, and relaxes nothing — every flag is created `false`, constrained `false`, and refused by the trigger. The decision modules classify an actual diff, require the correct gate set, run three deterministic reviewing agents, and return the approval tri-state with an absolute no-self-approval rule. Merge, deploy and autonomous Codex execution are reached, evaluated, and blocked by name. The migration must retain a unique reviewed version in the final chain and is **not** applied to hosted Supabase.
+Reason: unhosted migration `130006` completes the nine-action control model at organization and project scope, extends both interlocks, and relaxes nothing — every flag is created `false`, constrained `false`, and refused by the trigger. The decision modules classify an actual diff, require the correct gate set, run deterministic reviewing agents, and return the approval tri-state with absolute no-self-approval. Merge, deploy, and autonomous Codex execution are blocked by name. Applying the decision schema would not authorize or connect an executor.
 
 ### Phase 1D completion
 
@@ -41,7 +41,7 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 | Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 91 tests across controls, diff risk, gates, agents, approval, and the stage machine |
 | Phase 1D end-to-end loop | `tests/integration/phase1d-loop-journey.behavior.test.ts` | Pass - a GREEN change reaches `APPROVED_AUTOMATICALLY` and then halts at `MERGE_EXECUTOR_NOT_CONNECTED`; a failed release drives incident, automatic freeze, Last Known Good, blocked rollback and bounded repair through Phase 1E's real functions, and the freeze is shown propagating back into the decision layer |
 | Phase 1D self-approval boundary | Same journey plus `tests/unit/autonomy-approval.test.ts` | Pass - the author is refused as approver at every risk level, including RED and including an owner |
-| Phase 1D hosted state | Hosted Supabase is current through `027` | **Not applied** - migration `20260813000500` is unhosted |
+| Phase 1D hosted state | Ledger exactly 26 rows through `027` | **Not applied** - decision-only migration `20260813000600` is unhosted; all nine actions remain OFF |
 
 | Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 82 files/819 tests on the merged tree |
 | Phase 1E coverage | `npm run test:coverage` | Pass - merged tree with Phase 2A: statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%. The Phase 1E tree alone measured 78.02/77.79/70.00/79.15 |
@@ -53,7 +53,7 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 | Phase 1E monitoring truth | `production_monitors_enabled_requires_connection`; provider registry; probe target validation | Pass - an unconnected monitor cannot be enabled; private/loopback/metadata targets are refused; no response body is read |
 | Phase 1E execution boundary | `autonomous_release_allowed`; `PHASE_1E_ROLLBACK_EXECUTOR_CONNECTED`; `PHASE_1E_REPAIR_WORKER_CONNECTED` | Pass - release authority returns false unconditionally with `EXECUTOR_NOT_CONNECTED`; no rollback, deployment, merge, or repair is executed |
 | Phase 1E synthetic journeys | Database CHECK constraints plus `tests/unit/operations-journey.test.ts` and the behavioral suite | Pass - destructive paths, undeclared writes, and uncovered profiles are refused by constraint; execution stops at the first failure; declared writes are recorded as skipped and never issued |
-| Phase 1E hosted state | Hosted Supabase is current through `027` | **Not applied** - migrations `028` and `130002` are unhosted and no production target or journey has been observed |
+| Phase 1E hosted state | Schema effects present; ledger unreconciled | `028`/`130002` objects exist but ledger rows do not; no production target or journey has been observed |
 | Phase 1E release | Merge commit `b243e1ddf9ce8155c4440c56d7b846ccc3d74ce0` on `main`; CI run [`31731632715`](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31731632715) | Pass - both jobs green: lint/typecheck/tests/build, and browser/accessibility. Vercel Preview for the merged head deployed READY before the merge. |
 | `/solutions` routing | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build`, Playwright; plus live checks against `https://www.theagoras.com` | Pass - lint/typecheck; 83 files/824 tests; build lists twelve `/solutions` routes; Playwright 117/117 with axe on each moved page. Live: all twelve pages `200` with both landmarks and the shell offset, every former path `308` to its new home, `/solutions` `noindex` and disallowed |
 | `/solutions` routing contract | `tests/integration/console-routing.contract.test.ts` | Pass - 5 tests: no stray `app/(console)` group, a redirect for every console route, `/solutions` disallowed, no sitemap entry contradicting robots, a title on every console page. The sitemap assertion was mutation-checked |
@@ -63,7 +63,7 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 | Migration `027` atomic handoff | Immutable exact-tuple owner RED approval/execution; same account/external repository; both installations live; post-sync processed signed target delivery; cross-App/pending-change serialization; preserved history; bounded reverse | Hosted and live handoff passed |
 | Hosted handoff database audit | Candidate sync `2026-08-13T15:26:56Z`; earliest qualifying delivery `2026-08-13T15:27:38Z` with exact App ID; immutable RED same-owner approval/execution succeeded; three request/approved/completed events; append-only triggers enabled; old installation/repository retained | Pass - project/link rebound to candidate while four completed change requests and five prior activity rows remain |
 | Verified application-release integration suite | `npm run test:integration` | Pass - 21 files/163 tests; focused `026` grant test passes separately |
-| Current-tree coverage | `npm run test:coverage` | Pass - statements 72.37%, branches 66.79%, functions 68.80%, lines 74.13% |
+| Current-tree coverage | `npm run test:coverage` | Pass - statements 75.06%, branches 69.97%, functions 72.60%, lines 76.66% |
 | Migration `026` | Narrowed exact table grants; function grants unchanged | Retained pass locally and hosted; pre-`027` history matched, dry run/lint clean, ACL mismatch count zero |
 | Current-tree production build | `npm run check` | Pass - compiled 38 routes on Node 22.23.1; `/` is dynamic |
 | Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Retained pass - 30/30 production runs; current exact-commit CI is green |
@@ -103,11 +103,12 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 | Area | Current evidence | Status |
 | --- | --- | --- |
 | Command/orchestration | Connected-project-only intent; command type/criteria; stable idempotency; exact base SHA; fixed provider/model/role/budgets/workflow; independent SQL risk/config enforcement | Implemented locally |
-| Phase 2A advisory providers | Official Anthropic/OpenAI adapters; health/model discovery; deterministic routing; bounded fallback; independent review; advisory artifacts only | Published on main; `130001` unhosted; keys/live run absent; execution OFF; **Not Connected** |
+| Phase 2A advisory providers | Official Anthropic/OpenAI adapters; health/model discovery; deterministic routing; bounded fallback; independent review; advisory artifacts only | Published on `main`; `130001` schema present/ledger-unreconciled; keys/live run absent; execution OFF; **Not Connected** |
 | RED ceiling | SQL and worker exclude RED; owner approval does not widen Phase 1C | Implemented locally; hosted proof pending |
-| Durable schema | Provider layer `130001`; synthetic journeys `130002`; bot fabric `130003`/`130004`; marketing `130005`; Phase 1C enum-only `130006`; execution `130007`; roster/recovery/report/provider-ACL hardening `130008` | Implemented in source; all eight **UNHOSTED** |
-| Logical agent identity | Eleven standard logical roles for existing/future organizations; provider-account identity remains separate; general Phase 1C work maps to Orchestrator | Implemented in `130008`; hosted proof pending |
-| Recovery/report integrity | Coherent artifact replay, draft projection, bounded retry/resume, stale-lease/cancel terminalization, structured success/failure/cancellation reports | Implemented in `130008`; hosted/live proof pending |
+| Durable schema | `028`/`130001`-`130005` schema-present/ledger-unreconciled; Phase 1D `130006`; Phase 1C compatibility `130007`, enums `130008`, execution `130009`, roster/recovery `130010`, dependencies/cumulative budgets `130011` | `130006`-`130011` implemented locally and **UNHOSTED** |
+| Logical agent identity | Eleven standard logical roles for existing/future organizations; provider-account identity remains separate; general Phase 1C work maps to Orchestrator | Implemented in `130010`; hosted proof pending |
+| Dependency and budget integrity | Canonical same-project pre-existing dependencies, atomic/idempotent persistence, derived criteria, total turn/input/output budgets across retries | Implemented in `130011`; hosted proof pending |
+| Recovery/report integrity | Coherent artifact replay, draft projection, bounded retry/resume, stale-lease/cancel terminalization, structured success/failure/cancellation reports | Implemented in `130010`/`130011`; hosted/live proof pending |
 | RLS/ACL | New tables declare RLS/FORCE RLS; browser table grants revoked; bounded member RPCs and service-role-only worker RPCs | Contract/behavior tests local; hosted catalog/user-session proof pending |
 | Codex integration | Pinned `@openai/codex-sdk` `0.147.0`; isolated home; bounded turns/tokens/time; workspace-write/no approval/no workspace network/web search | Implemented locally; no real provider call |
 | Workspace/GitHub | Repository-ID token; exact base-SHA check; isolated `factory/*` branch; required commit identity; draft-PR-only publisher; exact-head CI polling | Implemented/tested locally; no live Phase 1C artifact |
@@ -115,14 +116,15 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 | Policy scan | Path containment; forbidden/symlink/binary/secret/protected/file-count/size limits | Implemented/tested locally |
 | Durable worker workflow | Opaque repository dispatch, five-minute recovery, no branch-selectable manual trigger, read-only workflow token, no persisted checkout credentials | Implemented locally; protected secrets/workflow run pending |
 | Safe UI/APIs | Worker status, agent/task/run/report detail, timelines/artifacts/validation, cancel, retry, responsive real-data consoles | Implemented locally; hosted authenticated/E2E proof pending |
-| Consolidated lint/typecheck/tests/build | Exact reconciled Phase 1E/2A/bot/marketing/1C tree | Pass on Node `24.19.0`: 97 files/959 tests and production build with 62/62 page-data entries |
-| Consolidated coverage | Exact reconciled tree | Pass - 72.37% statements / 66.79% branches / 68.80% functions / 74.13% lines |
+| Consolidated lint/typecheck/tests/build | Frozen local candidate | Pass on Node `24.19.0`: 109 files/1,169 tests and production build with 74 page/route entries |
+| Consolidated coverage | Frozen local candidate | Pass - 75.06% statements / 69.97% branches / 72.60% functions / 76.66% lines |
+| Focused migration suites | Frozen local candidate | Pass - 8 files/104 tests |
 | Secret/tracked-file/client scan | Exact reconciled production source and `.next/static` | Pass - 0 high-confidence credential values; one client-bundle match is an allowlisted environment-variable reference label, not a value |
 | Responsive/E2E/axe | Exact reconciled desktop/tablet/mobile against production build | Pass - 117/117 |
 | Production dependency audit | Exact reconciled `npm audit --omit=dev` | Pass - 0 vulnerabilities |
 | Disabled worker smoke | Exact reconciled worker disabled/incomplete configuration | Pass - exits safely without executing |
 | Diff and independent severity audit | Exact reconciled tree | Pass - diff check clean except line-ending notices; focused migration/API security audits found no remaining P0/P1 blocker |
-| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | Through `027`; Phase 1E `028` and `130001` through `130008` unhosted |
+| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | Ledger through `027`; `028`/`130001`-`130005` schema-present/ledger-unreconciled; `130006`-`130011` absent; current CLI profile `403` |
 | GitHub Actions secrets | Seven required `SOFTWAREFACTORY_*` secrets | **Not Connected / not verified configured** |
 | Worker activation gate | Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` | Not verified enabled; absent/false skips all jobs |
 | Required CI checks | `SOFTWAREFACTORY_REQUIRED_CHECKS` exact names for both CI jobs; complete stable set; required conclusions `success`; PR base/head recheck | Implemented locally; live proof pending |
@@ -141,7 +143,7 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 ## Phase 1C release acceptance required
 
 1. Complete a fresh consolidated gate run on the exact reconciled Phase 1E/Phase 2A/Phase 1C release tree.
-2. Exact owner RED approval for hosted migration `028` and migrations `130001` through `130008`, protected Actions secret configuration, disabled publication, activation window, and one bounded live run.
+2. Exact owner RED approval for ledger-only repair of catalog-proven `028`/`130001`-`130005`, application of absent `130006`-`130011`, protected Actions secret configuration, disabled publication, activation window, and one bounded live Phase 1C run. Phase 1D remains OFF.
 3. Hosted migration history/lint/RLS/FORCE RLS/policy/ACL/function/secret/append-only checks plus real owner/cross-tenant/anonymous RPC behavior.
 4. Verified presence (not values) of these Actions secrets: `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`.
 5. Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names and keep activation absent/false while publishing the exact reviewed default-branch commit and verifying matching green CI/Vercel deployment.
