@@ -19,12 +19,12 @@ npm run worker:once
 
 The last command must exit safely without executing when the worker is disabled or configuration is incomplete.
 
-## Pre-reconciliation Phase 1C baseline
+## Prior verified Phase 1C baseline
 
-| Gate | Current status |
+| Gate | Prior verified result |
 | --- | --- |
 | Runtime | Supported bundled Node `24.19.0` |
-| `npm run check` | Pass on Node `24.19.0`: lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries |
+| `npm run check` | Pass on Node `24.19.0`: lint/typecheck, 117 test files/1,282 tests, production build with 74 page/route entries |
 | Coverage | Pass: 75.06% statements, 69.97% branches, 72.60% functions, 76.66% lines |
 | Focused migration suites | Pass: 8 files/104 tests |
 | Playwright responsive/accessibility | Pass: 117/117 across desktop/tablet/mobile against the production build |
@@ -34,14 +34,15 @@ The last command must exit safely without executing when the worker is disabled 
 | Disabled worker smoke | Pass: exits safely without executing |
 | Diff/independent audit | Pass: `git diff --check` clean except line-ending notices; final independent P0/P1 audit PASS |
 
-These results apply to the frozen local candidate. They do not prove hosted reconciliation/migrations, provider credentials, enabled execution, Actions configuration, workflow publication, an active worker heartbeat, a live provider call, a Codex thread, or a Phase 1C draft PR/required-CI result.
+These are historical baseline results. Separately, the frozen current-update candidate passes local Node `24.19.0` lint/typecheck, 118 Vitest files/1,311 tests, coverage 76.70% statements / 71.47% branches / 74.04% functions / 78.11% lines, a 74/74-route production build, Playwright/axe 117/117, `npm audit --omit=dev` with 0 vulnerabilities, and clean diff-check. That is local final-candidate evidence only: publication commit, CI, matching Vercel deployment, and hosted `130015` verification remain pending. Hosted reconciliation through `130014`, workflow publication, and one transient live claim/heartbeat/provider thread are independently verified. None of this proves funded provider execution, a successful Codex turn, a Phase 1C factory branch/draft PR, or exact-head required-CI completion.
 
 ## Phase 1C unit/integration coverage
 
 The suites cover:
 
 - command type/criteria/idempotency, same-origin, owner-only submission, secret/key/size rejection, project binding, deterministic prompt-plus-criteria risk escalation, exact base SHA, fixed plan, opaque dispatch, delayed evidence, and RED blocking;
-- catalog/history reconciliation for schema-present `028`/`130001`-`130005`, followed by forward `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`; provider compatibility, Phase 1D interlocks, tables/constraints/indexes, RLS/FORCE RLS, dependencies, cumulative retry budgets, policies/grants, safe detail/status, lease/result functions, append-only evidence, RED claim exclusion, and terminal report/activity behavior;
+- catalog/history reconciliation for schema-present `028`/`130001`-`130005`, followed by hosted forward `130006` through `130014`; provider compatibility, Phase 1D interlocks, tables/constraints/indexes, RLS/FORCE RLS, dependencies, cumulative retry budgets, policies/grants, safe detail/status, lease/result functions, append-only evidence, RED claim exclusion, and terminal report/activity behavior;
+- local `130015` restoration of the two model checks from 120 to 128 characters, exact preserved constraint semantics, all four new immutable-function no-secret constraints, 128-character assignment/run/project-default behavior, valid and negative credential-shaped catalogue/assignment/routing scalar cases through catalogue/RPC/direct paths, provider runtime/API scalar rejection, dirty pre-migration catalogue fail-closed reads, preserved run-detail signature/security/search path/ACL, capped/allowlisted Phase 1C/Phase 2A routing evidence, absent/null rolling compatibility, authenticated raw routing-decision/event denial, and retained tenant-scoped model-catalogue reads;
 - provider-neutral eleven-role roster for existing/future organizations, preservation of user-created agents, general-to-Orchestrator mapping, provider/model run metadata, and per-agent claim serialization;
 - worker configuration, safe work root, controlled environment, disabled behavior, lease lifecycle, heartbeat/cancellation/retry, redaction, and bounded process output;
 - Codex SDK thread options, turns/tokens, structured summary, event projection, and terminal errors;
@@ -55,9 +56,9 @@ The suites cover:
 
 Static SQL/workflow contract tests are necessary but do not prove hosted catalog or runner/provider behavior.
 
-## Hosted Supabase acceptance still required
+## Hosted Supabase acceptance record and remaining cases
 
-After exact owner approval, catalog-prove and ledger-repair only schema-present `028`/`130001`-`130005`, re-list/dry-run, then apply absent `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` to exact project `qpuofpmagrmyamahqwxw` and verify:
+Hosted verification completed after exact owner approval: catalog-prove and ledger-repair only schema-present `028`/`130001`-`130005`, then apply forward-only migrations `130006` through `130014` to exact project `qpuofpmagrmyamahqwxw` and verify:
 
 - linked migration history and lint;
 - all public tables RLS/FORCE RLS and intended policies;
@@ -67,13 +68,17 @@ After exact owner approval, catalog-prove and ledger-repair only schema-present 
 - owner-only submission; owner/admin cancel/retry; and service-worker lease/result paths;
 - direct command SQL prompt/criteria risk and fixed configuration normalization, payload/secret limits, and RED exclusion;
 - provider-neutral roster, one active lease per logical agent, coherent artifact/PR replay and rejection, stale-lease/cancellation terminalization, structured report content, and bounded reconstructed PR links; and
-- real owner, second-tenant, and anonymous behavior using caller sessions.
+- real owner and anonymous read behavior using caller sessions.
 
-Hosted schema evidence exists for `028`/`130001`-`130005`, but the owner dashboard shows exactly 26 ledger rows through `027`. Phase 1D `130006` and Phase 1C `130007`-`130011` remain unhosted. The current CLI profile returns `403`. A normal push is prohibited until owner-approved ledger reconciliation completes.
+Hosted migration history is reconciled and current through `130014`; linked lint and focused catalog/runtime/ACL checks pass. The temporary release token used for that protected work was revoked and its temporary file deleted. Any future schema correction remains forward-only and requires its own exact approval.
+
+Authenticated production owner reads pass across Bot Manager, Runs/detail, Backlog/detail, all-eleven-role Agents/detail, Reports/detail, and Connections. Signed-out UI exposes no tenant records, and twelve hosted target/read RPCs deny anonymous callers with `401`/`42501`. An unrelated authenticated tenant does not exist in hosted membership, so its live isolation case and mutation-shaped/direct-table denial probes remain pending; local integration tests are not represented as live proof.
+
+Migration `130015` remains local. A fresh exact RED approval must precede applying only that migration, followed by exact definitions for both widened and all four new no-secret constraints; 128-character assignment/run/project regression; valid and negative credential-shaped catalogue/assignment/routing scalar checks through reviewed paths; the two raw-SELECT revokes and retained model-catalogue SELECT; run-detail identity/security/ACL; bounded routing; raw-table/tenant denial; linked lint; and health verification. Until then hosted run detail may omit `routing`, and the rolling-compatible application must render that as missing historical evidence rather than infer a reason; credential-shaped pre-migration catalogue rows fail closed.
 
 ## Protected GitHub Actions acceptance still required
 
-Verify the presence, not values, of the seven `SOFTWAREFACTORY_*` secrets documented in [Environment variables](ENVIRONMENT_VARIABLES.md). Confirm untrusted PR workflows cannot receive them, checkout does not persist credentials, the normal workflow token is read-only, and secrets enter only the worker step.
+Verify the presence, never values, of the six retained non-OpenAI `SOFTWAREFACTORY_*` secrets documented in [Environment variables](ENVIRONMENT_VARIABLES.md). Keep `SOFTWAREFACTORY_OPENAI_API_KEY` absent until a fresh funded replacement is configured through the protected path. Confirm untrusted PR workflows cannot receive secrets, checkout does not persist credentials, the normal workflow token is read-only, and worker secrets enter only their reviewed steps.
 
 Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` is exactly `Lint, typecheck, test, and build|Browser and accessibility tests` and still exactly matches the two CI job display names. Test missing/renamed/incomplete/non-success/unstable checks, truncated check enumeration, changed PR base/head, and the required identical passing fingerprint twice; every unsafe state must fail or time out.
 

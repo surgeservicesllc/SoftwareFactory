@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260813001400_resolve_emergency_stop.sql";
+const latestMigration = "20260813001500_expose_bounded_run_routing.sql";
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
@@ -323,6 +323,30 @@ describe("Phase 1C migration contract", () => {
         ) as closed
       `);
       expect(internal.rows[0]?.closed).toBe(true);
+
+      const runDetailCatalog = await db.query<{
+        function_config: string;
+        identity_arguments: string;
+        prosecdef: boolean;
+        provolatile: string;
+        result_type: string;
+      }>(`
+        select
+          pg_catalog.pg_get_function_identity_arguments(procedure.oid) as identity_arguments,
+          pg_catalog.pg_get_function_result(procedure.oid) as result_type,
+          coalesce(pg_catalog.array_to_string(procedure.proconfig, ','), '') as function_config,
+          procedure.prosecdef,
+          procedure.provolatile
+        from pg_catalog.pg_proc procedure
+        where procedure.oid = 'public.get_agent_run_detail(uuid,uuid)'::regprocedure
+      `);
+      expect(runDetailCatalog.rows).toEqual([{
+        function_config: "search_path=pg_catalog",
+        identity_arguments: "p_organization_id uuid, p_run_id uuid",
+        prosecdef: true,
+        provolatile: "s",
+        result_type: "TABLE(detail jsonb)",
+      }]);
     } finally {
       await db.close();
     }
@@ -427,6 +451,34 @@ describe("Phase 1C migration contract", () => {
         [organizationId],
       );
       expect(visibleWorkerStatus.rows[0]?.detail).not.toBeNull();
+
+      const runDetail = await db.query<{
+        detail: {
+          routing: {
+            candidates: unknown[];
+            policyVersion: string;
+            reasons: Array<{ code: string; detail: string; provider: string | null }>;
+            source: string;
+          };
+        };
+      }>("select detail from public.get_agent_run_detail($1,$2)", [organizationId, runId]);
+      expect(runDetail.rows[0]?.detail.routing).toEqual({
+        candidates: [],
+        policyVersion: "phase1c-fixed-policy-v1",
+        reasons: [
+          {
+            code: "PHASE1C_FIXED_PROVIDER_MODEL",
+            detail: "Phase 1C server policy fixed this run to openai / gpt-5.3-codex.",
+            provider: "openai",
+          },
+          {
+            code: "LOGICAL_AGENT_ROLE_BOUND",
+            detail: "Logical agent role qa was bound separately from provider identity.",
+            provider: null,
+          },
+        ],
+        source: "PHASE1C_FIXED_POLICY",
+      });
 
       await assumeRole(db, "authenticated", unrelatedOwnerId);
       for (const invocation of readInvocations) {

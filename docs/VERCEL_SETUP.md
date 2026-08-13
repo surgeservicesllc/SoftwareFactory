@@ -6,13 +6,13 @@ Vercel serves the Next.js UI and bounded request-time APIs. It is not the Phase 
 
 ## Existing production evidence
 
-Production serves remote `main` commit `62b5c5a`; latest audited READY deployment is `dpl_4ukaw6y622L6ST99XB9GVpty2cAd`. The unpublished local Phase 1C candidate is not deployed. Vercel readiness is hosting evidence, not provider or Codex connectivity.
+The prior verified production baseline before this update was commit `0c662a24393f682073e6002c5aff9339292226d8`; audited deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY and contains the published Phase 1C recovery path. The current routing/UI update is not covered by that evidence. Vercel readiness is hosting evidence, not provider or Codex connectivity.
 
 The exact Vercel project stores the existing Supabase/GitHub application values server-side and the explicit commit identity `surgeservicesllc <surgeservicesllc@gmail.com>`. No secret values are recorded here.
 
 ## Phase 1C application responsibilities
 
-After the reviewed tree is deployed, Vercel will:
+The deployed Phase 1C application uses Vercel to:
 
 - render connected-project command UI and real task/run/report/detail views;
 - authenticate, enforce same origin and active tenant, classify risk, resolve exact repository/base SHA, and persist a durable run;
@@ -36,16 +36,17 @@ Phase 2A advisory provider calls do execute inside authenticated bounded server 
 6. Confirm callback/webhook origins after any alias/domain change.
 7. Do not add worker provider/service-role/App private keys to client code, public environment, or build output.
 
-## Phase 1C publication checklist
+## Phase 1C publication evidence and acceptance checklist
 
-Before deploying the local Phase 1C tree:
+The prior verified production baseline before this update is published: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`. Hosted Supabase is current through `130014`; local `130015` and the rolling-compatible routing/UI update are not part of that deployment. Before the remaining live acceptance:
 
-- the frozen candidate passes on Node `24.19.0` with 109 files/1,169 tests, 74 page/route build entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, dependency audit 0, and safe disabled-worker smoke;
-- exact owner approval covers ledger repair of schema-present `028`/`130001`-`130005` and application/verification of absent `130006`-`130011` on `qpuofpmagrmyamahqwxw` before the UI depends on them;
-- the seven protected GitHub Actions secrets are configured under exact approval without exposing values;
+- run and record the complete current-update gate set, CI, and deployment with fresh counts; do not reuse the prior baseline's test or coverage figures;
+- preserve the verified hosted ledger and schema through `130014`; any new migration needs new exact approval and forward-only containment;
+- apply local `130015` only under fresh exact RED approval and verify both 120-to-128 model-constraint restorations, all four no-secret constraints for catalogue/assignment/routing scalars, valid and credential-shaped scalar cases, the bounded run-detail projection, both authenticated raw-table SELECT revokes, retained model-catalogue SELECT, and direct-denial behavior; the application accepts missing routing evidence and fails closed on credential-shaped pre-migration catalogue rows during rollout;
+- keep the compromised OpenAI secret absent; six non-OpenAI GitHub Actions secrets remain configured without exposing values, and only a fresh funded replacement may restore the seventh;
 - `SOFTWAREFACTORY_REQUIRED_CHECKS` remains exactly `Lint, typecheck, test, and build|Browser and accessibility tests` and matches both CI job display names;
 - repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` remains absent/false so every worker trigger skips during publication and deployment;
-- the exact commit uses `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer; and
+- every exact release commit uses `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer; and
 - rollback/containment keeps the worker disabled if deployment/database/provider evidence diverges.
 
 After deploying:

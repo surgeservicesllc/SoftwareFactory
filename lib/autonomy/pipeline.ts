@@ -209,7 +209,7 @@ function evaluateStage(stage: PipelineStage, context: StageContext): StageOutcom
         : blocked(
             stage,
             UNEXECUTABLE_STAGES.implement,
-            "Phase 1C is not started, so no worker can produce this change.",
+            "No autonomous execution worker is bound; manual Phase 1C cannot produce this loop change.",
           );
 
     case "verify":

@@ -1,8 +1,8 @@
 # Phase 1E implementation plan — production operations
 
-Audit date: 2026-08-13
-Audited tree: `818f18d` (branch `claude/softwarefactory-phase-1e-ops-mjdiiq`, identical to `origin/main`)
-Baseline verified before any Phase 1E edit: `npm run lint`, `npm run typecheck`, and `vitest run` (56 files / 436 tests) all pass.
+Original audit date: 2026-08-13
+Original audited tree: `818f18d` (branch `claude/softwarefactory-phase-1e-ops-mjdiiq`, then identical to `origin/main`)
+Current status: the Phase 1E schema is hosted in the reconciled production chain through `130014`. This document retains its original design audit while the maintained current-state files record later publication and acceptance evidence.
 
 ## 1. What the audit actually found
 
@@ -11,7 +11,7 @@ The Phase 1E objective assumes Phase 1A–1D are working and that the Factory al
 | Assumed input | Real state in this tree | Consequence for Phase 1E |
 | --- | --- | --- |
 | Phase 1B complete | Incomplete. Candidate GitHub App path is live; second-tenant, disconnect/loss, and adverse lifecycle matrix are open. | Monitoring may read GitHub, but no Phase 1E claim may depend on unfinished 1B evidence. |
-| Phase 1C Codex worker | **Not Connected; not started.** No worker, lease, sandbox, or queue exists. | Self-healing can create and bound repair work but cannot assign or run Codex. |
+| Phase 1C Codex worker | **Published but Not Connected.** Durable worker/lease/sandbox/queue paths exist; the first claim failed before repository mutation and a no-claim diagnostic reported exhausted provider credits. | Self-healing still cannot assign or run Codex autonomously; live manual acceptance needs a funded replacement and new current-base command. |
 | Phase 1D autonomy engine | Observation-only scaffold. `evaluateAutonomyObservation` always returns `executionAllowed: false`; migration `010` locks `organizations.autonomy_kill_switch_active` ON with a CHECK constraint and constrains every project to `autonomous_mode = false`, GREEN ceiling, and `auto_approve/auto_merge/auto_deploy/auto_rollback = false`. | No autonomous production executor exists to gate. Freeze is implementable; autonomous deploy and rollback execution are not. |
 | Phase 1D "Last Known Good deployment records" | Do not exist. `public.deployments` exists as a Phase 1A table with **zero** writers in application code. | Last Known Good must be defined and populated by Phase 1E itself, from validated deployment evidence only. |
 | Vercel deploy/rollback adapter | **Not Connected.** Vercel hosts the UI; there is no in-product deployment or rollback executor. | Rollback is recorded and evaluated, never executed, in this phase. |
@@ -144,9 +144,9 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 
 ### What the demonstration proves, and what it cannot
 
-The journey test walks Monitor → Detect → Incident → Freeze → Rollback decision → Diagnose → Repair task → Validate → Resolve against the real schema, and separately proves failed-rollback escalation to SEV1 with owner attention. Two stages of the stated target are asserted as **blocked rather than simulated**: the Codex fix (no execution worker) and the deploy (no deployment adapter). The test records the exact blockers instead of skipping them.
+The journey test walks Monitor → Detect → Incident → Freeze → Rollback decision → Diagnose → Repair task → Validate → Resolve against the real schema, and separately proves failed-rollback escalation to SEV1 with owner attention. Two stages of the stated target are asserted as **blocked rather than simulated**: the Codex fix (no connected or authorized autonomous repair worker) and the deploy (no deployment adapter). The test records the exact blockers instead of skipping them.
 
-This is a control-plane demonstration against a migrated database, not live production evidence. No monitor has yet observed a real production target, because that requires an owner-authorized target and hosted migration `028`. Until then every Phase 1E surface reports **Not Connected** or **Unknown** rather than implying observation.
+This is a control-plane demonstration against a migrated database, not live production evidence. Migration `028` is hosted in the reconciled chain through `130014`, but no monitor has yet observed an owner-authorized real production target. Until that observation exists, every Phase 1E surface reports **Not Connected** or **Unknown** rather than implying observation.
 
 
 ## 6. Completion status
@@ -172,12 +172,12 @@ Assessed against the nine objective sections, counting only what has evidence.
 | Integration | State |
 | --- | --- |
 | Outbound HTTPS probe (uptime, latency, critical route, auth, project-reported DB/job/integration, synthetic) | **Implemented**, target-validated, never observed against a real production target yet |
-| Supabase control plane (RLS, workflows, audit) | **Connected** in source; migrations `028`/`130002` are **not applied to hosted Supabase** |
+| Supabase control plane (RLS, workflows, audit) | **Connected** in source and schema; migrations `028`/`130002` are hosted and ledger-reconciled, but no real monitor target has been observed |
 | GitHub App | **Connected** for the owner repository path (Phase 1B) |
 | Vercel deployment status / rollback execution | **Not Connected** |
 | Error-rate and latency telemetry provider | **Not Connected** |
 | Direct database, job runner, and integration reads | **Not Connected** |
-| Codex execution worker | **Not Connected** (Phase 1C not started) |
+| Codex execution worker | **Not Connected** (published, but funded-provider success and a draft-PR acceptance run are absent) |
 | Scheduled monitoring | **Not Connected** (no authorized scheduler identity) |
 
 ### Security findings from this phase
@@ -190,7 +190,7 @@ Assessed against the nine objective sections, counting only what has evidence.
 
 ### Known limitations
 
-- Migrations `028`/`130002` are unhosted, so nothing in Phase 1E has run against real production. Every surface reports **Not Connected** or **Unknown** until that changes.
+- Migrations `028`/`130002` are hosted in the reconciled production chain through `130014`. A fresh live-target observation is still required before a monitor may be described as Connected or healthy.
 - Monitoring is owner-triggered rather than continuous; a scheduler identity must be authorized without widening `service_role`.
 - Synthetic write steps are declared and validated but never issued.
 - Health depends on what the monitored project's own endpoints report; SoftwareFactory does not read a monitored project's database or job runner directly.
@@ -199,4 +199,4 @@ Assessed against the nine objective sections, counting only what has evidence.
 
 Phase 2A (the provider execution layer) is already merged on `main` and its tests pass alongside Phase 1E. The two are complementary and do not conflict: Phase 2A routes AI work to providers, Phase 1E observes production and refuses to act on it. Phase 1E leaves Phase 2A's interlocks untouched — `ai_provider_execution_enabled` still defaults OFF, and no Phase 1E path invokes a provider.
 
-The natural next joins are: give the Production Investigator an optional Phase 2A provider run for narrative diagnosis, keeping the deterministic engine as the source of the structured verdict; and route repair work to a Phase 1C worker once one exists. Neither should be started before hosted migrations `028`/`130002` and a first real observed incident, because a diagnosis engine with no observed production data has nothing to diagnose.
+The natural next joins are: give the Production Investigator an optional Phase 2A provider run for narrative diagnosis, keeping the deterministic engine as the source of the structured verdict; and design a separately authorized repair-worker binding without treating manual Phase 1C as autonomous authority. Migrations `028`/`130002` are hosted, but neither join should begin before a first real observed incident and its explicit authority boundary, because a diagnosis engine with no observed production data has nothing to diagnose.

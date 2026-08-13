@@ -33,10 +33,23 @@ type RunFile = string | { path: string; status?: string; additions?: number; del
 type RunCommit = { sha: string; message?: string; url?: string | null };
 type RunValidation = { id?: string; name?: string; kind?: string; status: string; summary?: string | null; durationMs?: number | null };
 type RunCheck = { id?: string | number; name: string; status: string; conclusion?: string | null; url?: string | null };
+type RunRouting = {
+  source: string | null;
+  policyVersion: string;
+  reasons: { code: string; provider: "openai" | "anthropic" | null; detail: string }[];
+  candidates: {
+    provider: "openai" | "anthropic";
+    model: string | null;
+    eligible: boolean;
+    score: number | null;
+    ineligibleReasons: string[];
+  }[];
+};
 
 type RunDetail = Run & {
   command?: { id: string; prompt?: string } | null;
   providerRunReference?: string | null;
+  routing?: RunRouting | null;
   agent?: ({ id: string; name: string; role?: string | null } | null);
   baseBranch?: string | null;
   baseSha?: string | null;
@@ -154,6 +167,11 @@ export function RunsConsole() {
                   <p className="mt-0.5 text-sm text-muted">
                     {run.project?.name ?? "Project unavailable"} · {run.agent?.name ?? "Unassigned"} · {formatDateTime(run.startedAt ?? run.createdAt)}
                   </p>
+                  <p className="mt-1 break-words text-xs text-muted">
+                    {run.provider
+                      ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
+                      : "No provider/model routing target is recorded for this run."}
+                  </p>
                   <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 md:shrink-0">
@@ -234,13 +252,15 @@ export function RunsConsole() {
               <DetailFacts facts={[
                 { label: "Project", value: run.project?.name ?? "—" },
                 { label: "Agent", value: run.agent ? `${run.agent.name}${run.agent.role ? ` · ${run.agent.role}` : ""}` : "—" },
-                { label: "Provider / model", value: [run.provider, run.model].filter(Boolean).join(" / ") || "—" },
+                { label: "Provider / model", value: [run.provider ? providerDisplayName(run.provider) : null, run.model].filter(Boolean).join(" / ") || "—" },
                 { label: "Risk", value: run.risk?.toUpperCase() ?? "—" },
                 { label: "Base", value: [run.baseBranch, shortSha(run.baseSha)].filter(Boolean).join(" @ ") || "—" },
                 { label: "Branch", value: run.headBranch ?? run.branch ?? "—" },
                 { label: "Attempt", value: run.attempt !== null && run.attempt !== undefined ? `${run.attempt}${run.maxAttempts ? ` of ${run.maxAttempts}` : ""}` : "—" },
                 { label: "Duration", value: formatDuration(run.durationMs) },
               ]} />
+
+              <RunRoutingEvidence run={run} />
 
               {(run.blocker || run.errorMessage) ? (
                 <div className="flex items-start gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-3 text-sm text-[var(--danger)]">
@@ -319,6 +339,91 @@ export function RunsConsole() {
   );
 }
 
+function RunRoutingEvidence({ run }: { run: RunDetail }) {
+  return (
+    <section className="rounded-lg border border-line p-4" aria-labelledby={`run-routing-${run.id}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id={`run-routing-${run.id}`} className="font-semibold text-foreground">
+          Why this provider?
+        </h3>
+        <StatusBadge tone={run.provider ? "info" : "neutral"}>
+          {run.provider ? "Recorded" : "Not recorded"}
+        </StatusBadge>
+      </div>
+      {run.provider ? (
+        <>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="card-inset min-w-0 p-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">Selected provider</dt>
+              <dd className="mt-1 break-words text-sm text-foreground">{providerDisplayName(run.provider)}</dd>
+            </div>
+            <div className="card-inset min-w-0 p-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">Selected model</dt>
+              <dd className="mt-1 break-all text-sm text-foreground">{run.model ?? "Chosen by the provider at execution"}</dd>
+            </div>
+          </dl>
+          {run.routing ? (
+            <div className="mt-4 space-y-4">
+              <p className="min-w-0 break-words text-sm text-muted">
+                Source <span className="break-all font-mono text-foreground">{routingLabel(run.routing.source)}</span>
+                {" · "}policy <span className="break-all font-mono text-foreground">{run.routing.policyVersion}</span>
+              </p>
+              <ul className="space-y-2" aria-label="Provider selection reasons">
+                {run.routing.reasons.map((reason, index) => (
+                  <li key={`${reason.code}-${index}`} className="card-inset min-w-0 p-3 text-sm">
+                    <p className="break-words font-medium text-foreground">{reason.detail}</p>
+                    <p className="mt-1 break-all font-mono text-xs text-faint">
+                      {reason.code}{reason.provider ? ` · ${providerDisplayName(reason.provider)}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              {run.routing.candidates.length ? (
+                <ul className="grid gap-2 sm:grid-cols-2" aria-label="Provider routing candidates">
+                  {run.routing.candidates.map((candidate) => (
+                    <li key={`${candidate.provider}-${candidate.model ?? "default"}`} className="card-inset min-w-0 p-3 text-sm">
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                        <span className="min-w-0 break-all font-medium text-foreground">
+                          {providerDisplayName(candidate.provider)}{candidate.model ? ` / ${candidate.model}` : ""}
+                        </span>
+                        <StatusBadge tone={candidate.eligible ? "safe" : "neutral"}>
+                          {candidate.eligible ? "Eligible" : "Ineligible"}
+                        </StatusBadge>
+                      </div>
+                      <p className="mt-1 break-words text-xs text-faint">
+                        {candidate.score === null ? "No score recorded" : `Score ${candidate.score.toFixed(3)}`}
+                        {candidate.ineligibleReasons.length ? ` · ${candidate.ineligibleReasons.join(", ")}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="text-sm leading-6 text-muted">
+                This is bounded durable routing evidence, not current provider-health status.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-muted">
+              This legacy run records the selected target but has no bounded routing-decision evidence.
+              SoftwareFactory does not infer a source, reason, or candidate score.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-muted">
+          No provider/model routing target is present in this run&apos;s bounded projection. SoftwareFactory
+          does not substitute a configured provider, an agent preference, or demo data for missing run evidence.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function routingLabel(source: string | null) {
+  if (!source) return "not recorded";
+  return source.toLowerCase().replace(/_/g, " ");
+}
+
 function EvidenceSection({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {
   const entries = Children.toArray(children);
   return (
@@ -331,4 +436,10 @@ function EvidenceSection({ title, empty, children }: { title: string; empty: str
 
 function shortSha(value?: string | null) {
   return value ? value.slice(0, 7) : null;
+}
+
+function providerDisplayName(provider: string) {
+  if (provider === "anthropic") return "Anthropic / Claude";
+  if (provider === "openai") return "OpenAI / Codex";
+  return provider;
 }

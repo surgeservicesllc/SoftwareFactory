@@ -75,9 +75,10 @@ export function useProviderStatus() {
 }
 
 /**
- * Live AI provider connection states. Every badge here reflects a probe made
- * when the page loaded; nothing is hard coded, and an unconfigured provider
- * says exactly that rather than pretending to be offline for another reason.
+ * AI provider connection states. Connected reflects an enabled live probe;
+ * Disabled reflects the owner switch being OFF, so no provider probe ran. An
+ * unconfigured provider says exactly that rather than pretending to be offline
+ * for another reason.
  */
 export function ProviderStatusPanel() {
   const { payload, loadState, message, reload } = useProviderStatus();

@@ -13,7 +13,11 @@ vi.mock("@/lib/providers/registry", () => ({
   snapshotProviderHealth: harness.snapshotProviderHealth,
 }));
 
-import { loadObservedMetrics, loadProjectRoutingContext } from "@/lib/providers/service";
+import {
+  listModelConfigurations,
+  loadObservedMetrics,
+  loadProjectRoutingContext,
+} from "@/lib/providers/service";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
@@ -22,7 +26,7 @@ function queryResult(data: unknown) {
   return { data, error: null };
 }
 
-function routingClient(executionEnabled: boolean) {
+function routingClient(executionEnabled: boolean, catalogue: unknown[] = []) {
   const rpc = vi.fn().mockResolvedValue(queryResult([]));
   const from = vi.fn((table: string) => {
     if (table === "projects") {
@@ -49,7 +53,7 @@ function routingClient(executionEnabled: boolean) {
       };
     }
     if (table === "provider_model_configurations") {
-      const secondOrder = { limit: vi.fn().mockResolvedValue(queryResult([])) };
+      const secondOrder = { limit: vi.fn().mockResolvedValue(queryResult(catalogue)) };
       const firstOrder = { order: vi.fn().mockReturnValue(secondOrder) };
       return {
         select: vi.fn().mockReturnValue({
@@ -69,6 +73,32 @@ beforeEach(() => {
 });
 
 describe("provider service read and probe boundaries", () => {
+  it("fails closed before serializing a dirty pre-130015 catalogue row", async () => {
+    const secretLike = `sk-${"r".repeat(30)}`;
+    const { client } = routingClient(false, [{
+      id: "50000000-0000-4000-8000-000000000001",
+      provider: "openai",
+      model: "safe-model",
+      display_name: secretLike,
+      capabilities: [],
+      enabled: true,
+      is_default: false,
+      input_cost_per_million_micros: null,
+      output_cost_per_million_micros: null,
+    }]);
+
+    let failure: unknown;
+    try {
+      await listModelConfigurations(client, organizationId);
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain("browser-safe projection");
+    expect(String(failure)).not.toContain(secretLike);
+  });
+
   it("reads observed metrics only through the bounded caller-member RPC", async () => {
     const rpc = vi.fn().mockResolvedValue(queryResult([
       { provider: "openai", status: "succeeded", latency_ms: 100 },

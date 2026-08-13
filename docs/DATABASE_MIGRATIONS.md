@@ -12,22 +12,26 @@ Supabase migrations under `supabase/migrations/` become immutable schema history
 | `011`-`019` | Direct-write closure, GitHub audit/recovery/lifecycle, narrow provider-ingress helpers | Hosted |
 | `020`-`026` | Safe browser projections, immutable repository binding, protected approvals, Activity boundary, secret/lease integrity, narrow service-role table ACL | Hosted |
 | `027` | Dual-App owner approval and atomic history-preserving project handoff | Hosted and owner path verified |
-| `028_phase1e_production_operations` | Operations monitoring, incidents, freeze, diagnosis, bounded repair work, rollback decisions, and reports without a production mutator | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130001_provider_execution_layer` | Phase 2A provider configuration, routing decisions, advisory-run events/metadata, owner execution switch, RLS/FORCE RLS, and owner/admin RPCs | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130002_phase1e_synthetic_journeys` | Project-scoped Basic/Standard/Critical journeys with schema-enforced safe steps/profile coverage and observation-only execution | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130003_bot_fabric_activity_types` | Add bot-fabric activity-event values before dependent use | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130004_bot_fabric` | Provider-neutral bot/role/assignment registry, tenant isolation, configuration-only readiness, and audited transitions | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130005_marketing_content` | Separate public marketing-content schema and bounded write-only newsletter subscription path | **SCHEMA PRESENT / LEDGER UNRECONCILED** |
-| `130006_phase1d_autonomy_controls` | Execution-inert nine-action/two-scope decision controls; all actions remain constrained OFF | **UNHOSTED**; source on `main`; no executor |
-| `130007_provider_phase1c_compatibility` | Additive/narrowing compatibility over immutable hosted-source provider schema | **UNHOSTED**; local Phase 1C candidate |
-| `130008_phase1c_enums` | Add `architect`/`performance` roles and Phase 1C terminal/retry activity values | **UNHOSTED**; local Phase 1C candidate |
-| `130009_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | **UNHOSTED**; local Phase 1C candidate |
-| `130010_logical_agent_roster` | Eleven-role roster, owner/risk/ACL/recovery/report hardening and bounded projections | **UNHOSTED**; local Phase 1C candidate |
-| `130011_phase1c_task_dependencies` | Canonical same-project dependencies, derived criteria, idempotent replay, and cumulative retry budgets | **UNHOSTED**; local Phase 1C candidate |
+| `028_phase1e_production_operations` | Operations monitoring, incidents, freeze, diagnosis, bounded repair work, rollback decisions, and reports without a production mutator | Hosted; schema/catalog mapping proven and ledger reconciled without DDL replay |
+| `130001_provider_execution_layer` | Phase 2A provider configuration, routing decisions, advisory-run events/metadata, owner execution switch, RLS/FORCE RLS, and owner/admin RPCs | Hosted; schema/catalog mapping proven and ledger reconciled without DDL replay |
+| `130002_phase1e_synthetic_journeys` | Project-scoped Basic/Standard/Critical journeys with schema-enforced safe steps/profile coverage and observation-only execution | Hosted; ledger reconciled without DDL replay |
+| `130003_bot_fabric_activity_types` | Add bot-fabric activity-event values before dependent use | Hosted; ledger reconciled without DDL replay |
+| `130004_bot_fabric` | Provider-neutral bot/role/assignment registry, tenant isolation, configuration-only readiness, and audited transitions | Hosted; ledger reconciled without DDL replay |
+| `130005_marketing_content` | Separate public marketing-content schema and bounded write-only newsletter subscription path | Hosted; ledger reconciled without DDL replay |
+| `130006_phase1d_autonomy_controls` | Execution-inert nine-action/two-scope decision controls; all actions remain constrained OFF | Hosted; all actions OFF, kill switch ON, no executor |
+| `130007_provider_phase1c_compatibility` | Additive/narrowing compatibility over immutable hosted-source provider schema | Hosted |
+| `130008_phase1c_enums` | Add `architect`/`performance` roles and Phase 1C terminal/retry activity values | Hosted |
+| `130009_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | Hosted |
+| `130010_logical_agent_roster` | Eleven-role roster, owner/risk/ACL/recovery/report hardening and bounded projections | Hosted |
+| `130011_phase1c_task_dependencies` | Canonical same-project dependencies, derived criteria, idempotent replay, and cumulative retry budgets | Hosted |
+| `130012_fix_bot_nullif_functions` | Forward-only repair of invalid bot `pg_catalog.nullif` qualification without widening function or ACL boundaries | Hosted; runtime/audit verification passed |
+| `130013_fix_phase1c_function_lint` | Forward-only Phase 1C function lint repair with preserved locking/security/ACL behavior | Hosted; linked lint clean |
+| `130014_resolve_emergency_stop` | Expose the existing emergency-stop state in the autonomy resolver without enabling an action | Hosted; all actions OFF, kill switch ON |
+| `130015_expose_bounded_run_routing` | Restore assignment/run model checks from 120 to the original 128-character provider catalogue/API bound; add four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text; expose capped/allowlisted run-detail routing evidence with rolling compatibility; revoke authenticated raw routing-decision/event SELECT while retaining model-catalogue SELECT | Local/unhosted; fresh exact RED approval required |
 
-Production project `qpuofpmagrmyamahqwxw` currently has an inconsistent schema/history boundary. A read-only owner-dashboard inspection on 2026-08-13 enumerated exactly 26 migration-history rows through `027`, while the hosted catalog visibly contains the post-`027` operations, provider, synthetic, bot-fabric, and marketing objects. Draft PR #15 records a matching 53-table/61-policy catalog audit and a prior `42710` duplicate-trigger failure. The source also historically applied two files under version `130002`, which the ledger primary key can represent only once. Treat the published post-`027` layers as **SCHEMA PRESENT / LEDGER UNRECONCILED**, not unhosted. Treat Phase 1C migrations as unhosted. Do not run the ordinary promotion sequence until exact catalog-to-file reconciliation and an owner-approved ledger-only repair pass.
+Production project `qpuofpmagrmyamahqwxw` is reconciled and current through `130014`. Before repair, the ledger ended at `027` while catalog evidence proved the effects of `028`/`130001`-`130005`, including a historical duplicate `130002` source-version collision. Under exact owner RED approval, those proven rows were repaired in history only and their DDL was not rerun. Forward migrations `130006`-`130014` were then applied in order. Linked lint and focused catalog/runtime/ACL checks pass. Future corrections must use a new forward migration; never reset, down-migrate, replay `130004`, or casually edit repaired history.
 
-## Why history repair must precede `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`
+## Why history repair preceded `130006` -> `130014`
 
 The schema effects of `028`/`130001`-`130005` already exist, so first prove their exact catalog/source mapping and repair only the missing history rows. `130006` adds the Phase 1D decision schema without enabling an action. `130007` carries Phase 1C compatibility without changing immutable `130001`. PostgreSQL does not safely allow a value added with `ALTER TYPE ... ADD VALUE` to be used before that transaction commits, so `130008` contains only enums and must commit before `130009`. `130010` then provisions/hardens the logical roster and recovery/report boundary. `130011` finally adds canonical dependencies and cumulative retry budgets over the completed execution schema.
 
@@ -70,7 +74,7 @@ Migration `130011` then atomically stores canonical dependencies only for existi
 
 Apply the complete chain to a disposable database or run the repository migration behavior suite. Verify:
 
-1. Catalog/source hashes prove `028`/`130001`-`130005` before any history repair; `130006` preserves every Phase 1D interlock; `130007` applies provider compatibility; `130008` commits before `130009` uses Phase 1C enums; `130010` follows core execution; and `130011` follows roster/recovery hardening.
+1. Catalog/source hashes prove `028`/`130001`-`130005` before any history repair; `130006` preserves every Phase 1D interlock; `130007` applies provider compatibility; `130008` commits before `130009` uses Phase 1C enums; `130010` follows core execution; `130011` follows roster/recovery hardening; and local `130015` is tested after hosted-equivalent `130014`.
 2. Every public table has RLS and FORCE RLS; every new table has deliberate policies and grants.
 3. Authenticated callers cannot directly mutate or broadly select worker/evidence tables.
 4. Member list/detail/status functions enforce organization membership, size caps, and allowlisted fields.
@@ -82,6 +86,7 @@ Apply the complete chain to a disposable database or run the repository migratio
 10. Events/artifacts/validations reject update/delete and secret-bearing evidence.
 11. Completion, queued cancellation, and exhausted stale leases update state and create bounded structured report/activity evidence atomically; cancellation wins at the final safe boundary, and retries cannot reset total provider budgets.
 12. Owner/cross-tenant/anonymous paths are tested with caller sessions, not service role as the user-under-test.
+13. `130015` preserves the exact assignment model regex and other constraint semantics while accepting 128-character model identifiers across assignment, run, and project-default flows; installs four named immutable-function no-secret checks covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text; preserves `get_agent_run_detail(uuid, uuid)` signature, `SECURITY DEFINER`, pinned search path, and authenticated-only ACL; caps/allowlists Phase 1C and Phase 2A routing evidence; returns null/legacy absence without invented reasons; denies authenticated/anonymous raw reads of routing decisions/events; and retains the intended tenant-scoped model-configuration read. Valid boundary values and credential-shaped values are exercised through the reviewed catalogue/RPC/direct paths.
 
 Typical disposable local commands:
 
@@ -93,20 +98,20 @@ npm run test:integration
 
 `db reset` is destructive and may be used only against a verified disposable local database. Never run it against hosted production.
 
-## Protected hosted reconciliation and promotion
+## Completed protected reconciliation record
 
-Repairing production migration history or applying Phase 1C migrations is RED because it changes protected production database state, RLS/authorization, service-role RPCs, roster/recovery/report behavior, and audit state. It requires exact current owner approval naming the project, exact ledger rows and files, risks, expiry, validation, and containment plan. Supabase documents that `migration repair --status applied` changes only migration history and does not execute SQL; use that property only after proving the corresponding schema already exists.
+The production history repair and promotion through `130014` were completed under exact owner RED approvals. The executor authenticated as the exact owner, reconfirmed project `qpuofpmagrmyamahqwxw`, matched source hashes and catalog objects, repaired only catalog-proven history rows, and never replayed schema-present DDL. The forward chain was applied in order; the final ledger, definitions, RLS/FORCE RLS, table/function ACLs, append-only behavior, focused runtime, linked lint, all-actions-OFF/kill-switch-ON state, and application health passed. The temporary release token was revoked. This is a historical evidence record, not an instruction to repeat the repair.
 
-1. Authenticate the Supabase CLI as `surgeservicesllc@gmail.com`.
-2. Reconfirm exact project ref `qpuofpmagrmyamahqwxw`; stop if profile/project identity is ambiguous.
-3. Export and compare the exact remote history and catalog to every local post-`027` migration. Never infer applied state only from file order.
-4. Resolve the duplicate applied `130002` identity in source without re-executing either migration. Record the exact mapping and immutable source hashes in the approval evidence.
-5. Review the ledger-only repair, SQL, risk, grants, ownership, RLS/FORCE RLS, secret checks, and recovery/containment; run the complete local chain and tests.
-6. After exact approval, repair only history rows whose complete schema is proven present. Re-list history and run a linked dry run; it must show only genuinely absent forward Phase 1C migrations. Stop immediately on any mismatch or attempted reapplication.
-7. Re-list migrations and run linked database lint.
-8. Verify catalog, policies, table/function ACLs, indexes, constraints, trigger/function definitions, append-only behavior, and zero unintended service-role grants.
-9. Exercise owner, member, second-tenant, and anonymous caller behavior plus Phase 2A trusted persistence and service-role worker behavior separately, including provider execution default OFF, the standard roster, per-agent serialization, coherent recovery, cancellation/stale-lease reports, and safe report projection.
-10. Verify application health, both provider and worker execution remain disabled until separately activated, and no existing Phase 1B data/binding changed.
-11. Record exact hosted evidence in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`.
+Supabase documents that `migration repair --status applied` changes only migration history and does not execute SQL. That property was used only after complete schema proof. Do not repair these rows again, reset hosted production, down-migrate, or replay `130004`.
+
+## Pending `130015` forward promotion
+
+Hosted production remains at `130014`. Applying `20260813001500_expose_bounded_run_routing.sql` is a new RED action because it widens two production constraints, adds four scalar no-secret constraints, changes a caller-visible SECURITY DEFINER projection, and changes two authenticated table ACLs while preserving the intended model-catalogue read. No prior approval covers it.
+
+1. Obtain fresh exact owner approval naming project `qpuofpmagrmyamahqwxw`, exact file `20260813001500_expose_bounded_run_routing.sql`, frozen size 13,121 bytes, SHA-256 `3E1BEA8F5DAB912D5D7D6251E4503C319816B27EF2465DB5E8612E26A3DD1A13`, both 120-to-128 constraint changes, `provider_model_configurations_text_not_secret`, `provider_routing_decisions_policy_version_not_secret`, `provider_agent_assignments_model_not_secret`, `provider_routing_decisions_selected_model_not_secret`, both raw-SELECT revokes, retained model-catalogue SELECT, the run-detail projection, risk, expiry, validation, and forward-only containment.
+2. Authenticate as the exact owner, reconfirm project identity and ledger through `130014`, and stop on any identity/history/catalog/hash drift.
+3. Apply only `130015`; never reset, down-migrate, replay an earlier migration, or widen provider/autonomy execution.
+4. Verify the exact definitions of both widened and all four new no-secret constraints; exercise 128-character assignment/run/project-default behavior, valid scalar values, and rejection of credential-shaped catalogue model/display-name, assignment model, and routing policy-version/selected-model text through reviewed RPC/direct paths; verify both routing-table ACL revokes and retained model-catalogue SELECT; verify `get_agent_run_detail(uuid, uuid)` definition, signature, `SECURITY DEFINER`, pinned search path, and ACL; then exercise bounded Phase 1C/Phase 2A/legacy routing behavior plus raw-table, tenant, and anonymous denial.
+5. Re-list the ledger, run linked lint and health, confirm provider/worker execution remains OFF and the global kill switch remains ON, and record exact evidence. Stop on any mismatch and contain only with a new forward migration.
 
 Never run production migrations from untrusted pull-request code or a fork. A migration apply does not itself connect the Codex worker.

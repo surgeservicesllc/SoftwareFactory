@@ -6,7 +6,7 @@ Candidate App `4582606` (`surge-softwarefactory-next`) is the live Phase 1B owne
 
 Primary App `4573846` and installation `153445938` remain the rollback path. Its webhook defect remains tracked under GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724).
 
-The connected GitHub repository is a prerequisite for Phase 1C, not proof of a connected Codex worker. Hosted ledger reconciliation for schema-present `028`/`130001`-`130005`, application of absent `130006`-`130011`, Actions secrets/activation, workflow publication, heartbeat, and a live Phase 1C run are pending. OpenAI/Codex remains **Not Connected**.
+The connected GitHub repository is a prerequisite for Phase 1C, not proof of a connected Codex worker. Hosted ledger reconciliation and the forward chain through `130014` are complete, the reviewed worker is published, the prior verified production baseline before this update passed CI/Vercel, and six non-OpenAI worker secrets remain configured. The current routing/UI update and local `130015` still need their own gates/publication/approval/hosted evidence. The exposed OpenAI key and activation variable are absent. A real claim/heartbeat/provider thread failed safely before repository mutation; no-claim diagnostic `31748582858` then identified `credit_balance_exhausted`. The failed run's base is now stale, so acceptance requires funded-provider proof and a new current-base command. OpenAI/Codex remains **Not Connected**.
 
 ## Registered Apps
 
@@ -63,7 +63,7 @@ The payload contains no prompt, repository name, branch, user, token, provider k
 vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true'
 ```
 
-If repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is missing or not exactly `true`, every trigger skips the worker job. This variable is currently not verified enabled. Keep it absent/false through migrations, secret setup, publication, ordinary CI, and matching Vercel verification. Setting it to `true` is a protected RED activation that requires exact owner approval for the bounded acceptance window; restore it to absent/false afterward unless continued operation is separately approved.
+If repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is missing or not exactly `true`, every trigger skips the worker job. It is currently absent/OFF. Keep it absent/false through migration work, secret setup, publication, ordinary CI, and matching Vercel verification. Setting it to `true` is a protected RED activation that requires exact owner approval for the bounded acceptance window; restore it to absent/false afterward unless continued operation is separately approved.
 
 The workflow token has only contents read. Checkout and Node setup actions are pinned to exact commit SHAs, checkout uses `persist-credentials: false`, locked dependencies install with scripts ignored, and the exact Docker digest is preloaded before secrets are injected. A successful invocation claims at most one durable run.
 
@@ -81,7 +81,7 @@ GitHub does not allow Actions secret names beginning with `GITHUB_`. Configure e
 
 The worker step maps the last four to runtime `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_CANDIDATE_APP_ID`, and `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`. Values must never appear in source, workflow logs, issues, screenshots, artifacts, model prompts/output, or Supabase rows.
 
-These secret names are not verified configured. The worker remains **Not Connected**.
+The six Supabase/GitHub App secret names are verified configured without reading their values. `SOFTWAREFACTORY_OPENAI_API_KEY` was removed after its value was exposed and must remain absent until a fresh funded replacement is created through the protected path. Configuration alone is not connectivity; the worker remains **Not Connected**.
 
 ## Required CI check contract
 
@@ -139,15 +139,16 @@ The worker polls the complete check set for the exact commit SHA using the requi
 
 - [x] Local command/orchestration, SDK worker, workspace, validation, policy scan, publisher, workflow, schema, APIs, UI, and tests are implemented.
 - [x] Local Phase 1C migrations are split into `130007` provider compatibility, `130008` enums, `130009` execution, `130010` logical roster/recovery/report hardening, and `130011` dependencies/cumulative budgets.
-- [x] Frozen supported Node `24.19.0` gates pass: `npm run check` (lint/typecheck, 109 test files/1,169 tests, build with 74 page/route entries), coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and disabled-worker safe exit.
-- [ ] Obtain exact owner RED approval for hosted migrations, seven protected secrets, workflow publication/activation, and one bounded live GREEN run.
-- [ ] Ledger-repair only catalog-proven schema-present `028`/`130001`-`130005`, re-list/dry-run, then apply/verify absent `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` on exact project `qpuofpmagrmyamahqwxw`.
-- [ ] Configure the seven `SOFTWAREFACTORY_*` secrets without exposing values.
-- [ ] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names.
-- [ ] Publish the exact reviewed default-branch commit and verify normal CI/Vercel while activation remains absent/false and worker jobs skip.
-- [ ] Set repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` to exactly `true` only after the protected gate is approved and the release is verified.
-- [ ] Submit the real GREEN owner command through the authenticated UI/API and observe a fresh active heartbeat during its approved default-branch repository-dispatch run. The schedule is recovery only; the workflow has no branch-selectable manual dispatch.
-- [ ] Submit one narrow manual GREEN owner command and record command/task/run/agent/lease/thread IDs.
+- [x] Prior verified baseline gates are retained in `AI/QUALITY_SCORECARD.md`; they are not current-update evidence.
+- [ ] Run the complete final gate set for the current routing/UI update with fresh counts before publication.
+- [x] Obtain exact owner RED approvals for the hosted ledger repair, forward migrations through `130014`, protected secret configuration, workflow publication/activation, and one bounded live GREEN attempt.
+- [x] Ledger-repair only catalog-proven schema-present `028`/`130001`-`130005`, then apply and verify the forward-only chain `130006` -> `130014` on exact project `qpuofpmagrmyamahqwxw` without replaying `130004` or down-migrating.
+- [x] Configure six non-OpenAI `SOFTWAREFACTORY_*` secrets without exposing values. The exposed OpenAI key was removed; a fresh funded replacement remains pending.
+- [x] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names.
+- [x] Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, passing CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`, all while activation was absent/OFF. The current routing/UI update needs its own publication evidence.
+- [x] Exercise the exact activation gate for the approved first attempt and return it to absent/OFF after job admission.
+- [x] Submit the first real GREEN owner command and observe a fresh claim, heartbeat, lease, and provider thread. It failed safely before repository mutation.
+- [ ] After provider funding and a passing no-claim diagnostic, submit a new narrow GREEN owner command bound to current `main` and record command/task/run/agent/lease/thread IDs. Do not retry the stale failed run.
 - [ ] Verify exact base SHA, coherent factory branch/commit/PR projection, commit identity, open draft PR, validation, changed paths, usage, structured report/activity, stable exact required checks, and final PR base/head.
 - [ ] Verify no default-branch write, PR approval/merge, deployment, rollback, workflow/provider administration, RED execution, or secret disclosure.
 - [ ] Exercise dispatch failure/scheduled recovery, stale SHA, cancellation, lease expiry, provider failure/rate limit, validation/CI failure/timeout, retry, protected path, secret, binary/symlink, and oversized change denial.
@@ -156,7 +157,7 @@ The worker polls the complete check set for the exact commit SHA using the requi
 ## Troubleshooting
 
 - **Workflow job skipped:** confirm the protected Actions variable is exactly `true`. Missing/false is the intended safe default.
-- **Worker Not Connected:** require reconciled history, hosted `130006`-`130011`, valid protected configuration, published workflow, an enabled approved window, and a fresh active heartbeat during a real run. A workflow file or completed idle one-shot registration is insufficient.
+- **Worker Not Connected:** require reconciled history, hosted `130006`-`130014`, valid protected configuration, published workflow, an enabled approved window, and a successful end-to-end run. A workflow file, failed provider attempt, transient heartbeat, or completed idle one-shot registration is insufficient.
 - **Dispatch delayed:** the command remains durable; inspect bounded dispatch evidence and let the scheduled wake claim it after provider recovery.
 - **GitHub not configured:** verify the claimed App ID has its matching protected App ID/private-key pair without printing values.
 - **Stale base SHA:** submit a new command so planning captures the current branch SHA; never force/rebase silently.

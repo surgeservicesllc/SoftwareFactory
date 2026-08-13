@@ -53,12 +53,12 @@ time. The owner picks a real one: Settings runs live discovery against the
 account and records the chosen entry. Anthropic ships a default because
 `claude-opus-5` is a current, documented identifier.
 
-Two further owner steps are required before anything runs:
+The database prerequisite is complete: `130001` was catalog-proven and ledger-reconciled without replay, and the forward chain through `130014` is hosted. Do not rerun that historical DDL. Local `130015` restores the original 128-character assignment/run model bound, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded run-detail routing evidence, and revokes authenticated raw routing-decision/event reads while retaining tenant-scoped model-catalogue reads; it remains unhosted pending fresh exact RED approval and is not provider connectivity.
 
-1. Catalog-prove and ledger-reconcile the already-present `20260813000100_provider_execution_layer.sql` schema effect with `028`/`130002`-`130005`; do not rerun its DDL. Apply forward compatibility `130007` only after the owner-approved repair and inert `130006`.
-2. Enable outbound execution in Settings. It defaults OFF, and enabling it
-   requires typing `ENABLE PROVIDER EXECUTION`. A configured credential is not
-   by itself consent to spend money.
+Two owner actions remain before outbound advisory execution:
+
+1. Configure a supported server-side credential without exposing it. The prior OpenAI key is compromised, its worker secret is absent, and no successful provider execution credential is verified.
+2. Enable outbound execution in Settings. It defaults OFF, and enabling it requires typing `ENABLE PROVIDER EXECUTION`. A configured credential is not by itself consent to spend money.
 
 ## Routing
 
@@ -130,14 +130,8 @@ provider, so author and reviewer do not share one model's blind spots.
 - Run traces store redacted summaries, never prompts, responses, or
   credentials, and the database rejects an event message containing a likely
   secret.
-- All three provider tables carry RLS and FORCE RLS with member-select
-  policies. Authenticated roles have no direct write grant; writes go through
-  owner/admin SECURITY DEFINER functions that revalidate the tenant binding.
+- At hosted `130014`, `provider_model_configurations`, `provider_routing_decisions`, and `provider_run_events` carry RLS and FORCE RLS with tenant-member direct SELECT grants and no authenticated direct write grants. `provider_agent_assignments` has no authenticated direct SELECT; its browser surface uses a bounded caller-member function. Local/unhosted `130015` adds four database no-secret checks covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, removes direct authenticated SELECT from routing decisions/events, and deliberately retains model-configuration SELECT for Settings; bounded run detail becomes the browser routing-evidence path. The rolling application fails closed on credential-shaped pre-`130015` catalogue scalars and rejects credential-shaped default-model/model/display-name values before serialization or RPC. Mutations go through owner/admin SECURITY DEFINER functions that revalidate the tenant binding.
 
 ## Current status
 
-The provider layer is published on `main` at
-`b1060b83a0698a83e202aafdf9792886cf60a8b3`, but both providers remain **Not
-Connected**: no credential or successful provider health/run is verified,
-organization execution defaults OFF, and `20260813000100_provider_execution_layer.sql`
-is not hosted. See `AI/CURRENT_STATE.md` for the authoritative status.
+The provider layer is published and its `130001` schema is hosted in the reconciled production chain through `130014`. Both providers remain **Not Connected**: organization execution is OFF and no successful advisory provider health/run is verified. While that switch is OFF, provider status returns a local **Disabled** snapshot and makes no outbound health call; live model discovery also makes no outbound call, and only an owner/admin may request it after the switch is deliberately enabled. The exposed OpenAI key was removed from GitHub Actions and must not be restored; the no-claim worker diagnostic proved exact-model lookup but its bounded Responses call returned `credit_balance_exhausted`, which is failure evidence rather than connectivity. Local `130015` is unapplied: its complete scope widens the assignment/run model checks from 120 to the original 128-character catalogue/API bound while retaining other semantics, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds a capped/allowlisted routing-detail projection with absent/null rolling compatibility, revokes authenticated raw routing-decision/event SELECT, and retains model-configuration SELECT. Fresh approval and post-apply validation must cover all six changed/added constraints, valid and credential-shaped scalar cases, both ACL revokes, the retained grant, and the bounded function. See `AI/CURRENT_STATE.md` for the authoritative status.

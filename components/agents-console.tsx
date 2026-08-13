@@ -1,9 +1,14 @@
 "use client";
 
-import { Boxes } from "lucide-react";
-import { Children } from "react";
+import { AlertTriangle, Boxes, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Children, useCallback, useEffect, useState } from "react";
 
 import { ControlPlaneDetail, DetailFacts, useControlPlaneDetail } from "@/components/control-plane-detail";
+import type {
+  ProviderModelConfiguration,
+  ProviderStatusPayload,
+} from "@/components/provider-status-panel";
 import { TenantListShell, formatDateTime, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
 
@@ -28,6 +33,18 @@ type AgentDetail = Agent & {
   recentRuns?: Array<{ id: string; title?: string; status: string; startedAt?: string | null; completedAt?: string | null }>;
   runCounts?: { queued?: number; running?: number; succeeded?: number; failed?: number };
 };
+
+type ProviderCatalogState =
+  | { kind: "idle" | "loading" }
+  | { kind: "ready"; payload: ProviderStatusPayload }
+  | { kind: "error"; message: string };
+
+type AssignmentFeedback =
+  | { kind: "success" | "error"; message: string }
+  | null;
+
+const AUTOMATIC_ASSIGNMENT = "__automatic__";
+const ASSIGNMENT_SEPARATOR = "|";
 
 const requiredRoles = [
   ["orchestrator", "Orchestrator"],
@@ -58,12 +75,69 @@ function runStatusTone(status: string) {
   return "neutral";
 }
 
-function providerConnectionLabel(status?: string | null) {
+function assignmentConfigurationLabel(status?: string | null) {
   const normalized = status?.toLowerCase().replace(/\s+/g, "_");
-  if (normalized === "connected") return "Connected";
-  if (normalized === "stale") return "Stale";
-  if (normalized === "not_connected") return "Not Connected";
-  return "Status unavailable";
+  if (normalized === "configured") return "Configured";
+  if (normalized === "not_configured") return "Not configured";
+  return "Not recorded";
+}
+
+function providerDisplayName(provider?: string | null) {
+  if (provider === "anthropic") return "Anthropic / Claude";
+  if (provider === "openai") return "OpenAI / Codex";
+  return provider ?? "Automatic routing";
+}
+
+function assignmentValue(agent: Pick<Agent, "provider" | "model">) {
+  if (!agent.provider) return AUTOMATIC_ASSIGNMENT;
+  return `${agent.provider}${ASSIGNMENT_SEPARATOR}${agent.model ?? ""}`;
+}
+
+function parseAssignmentValue(value: string) {
+  if (value === AUTOMATIC_ASSIGNMENT) {
+    return { provider: null, model: null } as const;
+  }
+
+  const separatorIndex = value.indexOf(ASSIGNMENT_SEPARATOR);
+  if (separatorIndex <= 0) return null;
+  const provider = value.slice(0, separatorIndex);
+  const model = value.slice(separatorIndex + ASSIGNMENT_SEPARATOR.length);
+  if (provider !== "anthropic" && provider !== "openai") return null;
+  return { provider, model: model || null } as const;
+}
+
+function useAgentProviderCatalog(enabled: boolean) {
+  const [state, setState] = useState<ProviderCatalogState>({ kind: "idle" });
+
+  const load = useCallback(async () => {
+    if (!enabled) return;
+    setState({ kind: "loading" });
+    try {
+      const response = await fetch("/api/providers", { cache: "no-store" });
+      const body = (await response.json()) as ProviderStatusPayload & {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "Provider assignment data is unavailable.");
+      }
+      setState({ kind: "ready", payload: body });
+    } catch (error) {
+      setState({
+        kind: "error",
+        message: error instanceof Error
+          ? error.message
+          : "Provider assignment data is unavailable.",
+      });
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [enabled, load]);
+
+  return { state, reload: load } as const;
 }
 
 export function AgentsConsole() {
@@ -73,9 +147,109 @@ export function AgentsConsole() {
     "Agents could not be loaded.",
   );
   const detail = useControlPlaneDetail<AgentDetail>("agents", "agent");
+  const providerCatalog = useAgentProviderCatalog(state.kind === "ready");
+  const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
+  const [rosterPending, setRosterPending] = useState(false);
+  const [feedback, setFeedback] = useState<AssignmentFeedback>(null);
+
+  const providerPayload = providerCatalog.state.kind === "ready"
+    ? providerCatalog.state.payload
+    : null;
+  const organizationRole = providerPayload?.organization?.role ?? null;
+  const canManageAssignments = organizationRole === "owner" || organizationRole === "admin";
+  const assignableModels = (providerPayload?.providers ?? []).flatMap((provider) =>
+    provider.configuredModels.filter((model) => model.enabled),
+  );
+
+  async function initializeRoster() {
+    setRosterPending(true);
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "The standard roster could not be initialized.");
+      }
+      setFeedback({ kind: "success", message: "The standard logical-agent roster is ready." });
+      await reload();
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error
+          ? error.message
+          : "The standard roster could not be initialized.",
+      });
+    } finally {
+      setRosterPending(false);
+    }
+  }
+
+  async function assignProvider(agent: Agent, value: string) {
+    const assignment = parseAssignmentValue(value);
+    if (!assignment || !canManageAssignments) return;
+
+    setPendingAgentId(agent.id);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/agents/${encodeURIComponent(agent.id)}/assignment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(assignment),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "The provider assignment could not be saved.");
+      }
+
+      setFeedback({
+        kind: "success",
+        message: assignment.provider
+          ? `${agent.name} now prefers ${providerDisplayName(assignment.provider)}${assignment.model ? ` / ${assignment.model}` : ""}.`
+          : `${agent.name} now uses automatic per-run routing.`,
+      });
+      const detailRefresh = detail.state.kind !== "idle" && detail.state.id === agent.id
+        ? detail.open(agent.id)
+        : Promise.resolve();
+      await Promise.all([Promise.resolve(reload()), detailRefresh]);
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error
+          ? error.message
+          : "The provider assignment could not be saved.",
+      });
+    } finally {
+      setPendingAgentId(null);
+    }
+  }
+
+  const rosterAction = state.kind === "ready" && state.items.length === 0 ? (
+    <button
+      type="button"
+      className="btn btn-primary"
+      disabled={rosterPending}
+      onClick={() => void initializeRoster()}
+    >
+      {rosterPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+      Initialize standard roster
+    </button>
+  ) : null;
 
   return (
     <div className="space-y-4">
+      {state.kind === "ready" ? (
+        <ProviderAssignmentBoundary
+          catalog={providerCatalog.state}
+          canManage={canManageAssignments}
+          feedback={feedback}
+          onRetry={() => void providerCatalog.reload()}
+        />
+      ) : null}
+
       <TenantListShell
         state={state}
         reload={reload}
@@ -85,7 +259,8 @@ export function AgentsConsole() {
         signedOutDescription="Agents belong to your workspace."
         returnPath="/solutions/agents"
         emptyTitle="No agents yet"
-        emptyDescription="The standard provider-neutral roster is created when Phase 1C orchestration is initialized for your workspace."
+        emptyDescription="Initialize the provider-neutral roster to define the eleven standard logical roles for this workspace."
+        action={rosterAction}
       >
         {(agents) => {
           const roles = new Set(agents.map((agent) => agent.role));
@@ -112,20 +287,42 @@ export function AgentsConsole() {
                         <h3 className="font-semibold text-foreground">{agent.name}</h3>
                         <p className="text-sm text-faint">{agent.role.replace(/_/g, " ")}</p>
                       </div>
-                      <StatusBadge tone={statusTone(agent.status)}>{agent.status}</StatusBadge>
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusBadge tone={statusTone(agent.status)}>{agent.status}</StatusBadge>
+                        <StatusBadge tone={agent.provider ? "info" : "neutral"} dot={false}>
+                          {agent.provider ? "Assigned" : "Automatic"}
+                        </StatusBadge>
+                      </div>
                     </div>
 
                     {agent.description ? <p className="mt-3 flex-1 text-sm text-muted">{agent.description}</p> : null}
                     {agent.currentAssignment ? <p className="mt-3 text-sm text-foreground">Current: {agent.currentAssignment}</p> : null}
 
+                    <AgentAssignmentControl
+                      agent={agent}
+                      catalog={providerCatalog.state}
+                      models={assignableModels}
+                      canManage={canManageAssignments}
+                      pending={pendingAgentId === agent.id}
+                      onChange={(value) => void assignProvider(agent, value)}
+                    />
+
                     <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                       <div className="min-w-0">
                         <dt className="text-faint">Provider</dt>
-                        <dd className="truncate text-muted">{agent.provider ?? "None"}</dd>
+                        <dd className="truncate text-muted">{providerDisplayName(agent.provider)}</dd>
                       </div>
                       <div className="min-w-0">
-                        <dt className="text-faint">Connection</dt>
-                        <dd className="truncate text-muted">{providerConnectionLabel(agent.providerConnectionStatus)}</dd>
+                        <dt className="text-faint">Model</dt>
+                        <dd className="truncate text-muted">{agent.model ?? "Chosen per run"}</dd>
+                      </div>
+                      <div className="col-span-2 mt-1 min-w-0">
+                        <dt className="inline text-faint">Provider state </dt>
+                        <dd className="inline text-muted">{liveProviderStateLabel(agent.provider, providerCatalog.state)}</dd>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <dt className="inline text-faint">Assignment configuration </dt>
+                        <dd className="inline text-muted">{assignmentConfigurationLabel(agent.providerConnectionStatus)}</dd>
                       </div>
                       <div className="col-span-2 mt-1">
                         <dt className="inline text-faint">Last run </dt>
@@ -153,7 +350,11 @@ export function AgentsConsole() {
       </TenantListShell>
 
       <ControlPlaneDetail state={detail.state} title="Agent details" onClose={detail.close} onRetry={() => void detail.reload()}>
-        {(agent) => (
+        {(agent) => {
+          const projectedAgent = state.kind === "ready"
+            ? state.items.find((entry) => entry.id === agent.id) ?? agent
+            : agent;
+          return (
           <div className="space-y-6 p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -165,9 +366,9 @@ export function AgentsConsole() {
 
             <DetailFacts facts={[
               { label: "Logical role", value: agent.role.replace(/_/g, " ") },
-              { label: "Provider", value: agent.provider ?? "None" },
-              { label: "Model", value: agent.model ?? "None" },
-              { label: "Provider state", value: providerConnectionLabel(agent.providerConnectionStatus) },
+              { label: "Provider", value: providerDisplayName(projectedAgent.provider) },
+              { label: "Model", value: projectedAgent.model ?? "Chosen per run" },
+              { label: "Provider state", value: liveProviderStateLabel(projectedAgent.provider, providerCatalog.state) },
               { label: "Project", value: agent.project?.name ?? "Organization-wide" },
               { label: "Current assignment", value: agent.currentRuns?.[0]?.title ?? agent.currentAssignment ?? "None" },
               { label: "Last run", value: agent.lastRunAt ? formatDateTime(agent.lastRunAt) : "Never" },
@@ -203,10 +404,178 @@ export function AgentsConsole() {
               ))}
             </AgentSection>
           </div>
-        )}
+          );
+        }}
       </ControlPlaneDetail>
     </div>
   );
+}
+
+function ProviderAssignmentBoundary({
+  catalog,
+  canManage,
+  feedback,
+  onRetry,
+}: {
+  catalog: ProviderCatalogState;
+  canManage: boolean;
+  feedback: AssignmentFeedback;
+  onRetry: () => void;
+}) {
+  const roleKnown = catalog.kind === "ready" && Boolean(catalog.payload.organization?.role);
+
+  return (
+    <section className="card-inset p-4 sm:p-5" aria-labelledby="provider-assignment-title">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-accent" aria-hidden="true" />
+            <h2 id="provider-assignment-title" className="font-semibold text-foreground">
+              Logical-agent provider assignment
+            </h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            An assignment stores only a provider and model routing preference. The logical agent,
+            project, provider account, and server-side credential remain separate records. A saved
+            assignment does not prove a live provider connection or enable outbound execution.
+          </p>
+        </div>
+
+        <Link href="/solutions/settings" className="btn btn-secondary btn-sm shrink-0 self-start">
+          Provider settings
+        </Link>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Current provider states">
+        {catalog.kind === "ready" ? (
+          <>
+            <StatusBadge tone={catalog.payload.executionEnabled ? "warning" : "neutral"}>
+              {catalog.payload.executionEnabled ? "Execution enabled" : "Execution OFF"}
+            </StatusBadge>
+            {catalog.payload.providers.map((provider) => (
+              <span key={provider.provider} className="inline-flex items-center gap-2">
+                <span className="text-xs text-faint">{provider.label}</span>
+                <StatusBadge tone={provider.state === "connected" ? "safe" : "danger"}>
+                  {provider.state === "connected" ? "Connected" : "Not Connected"}
+                </StatusBadge>
+                {provider.state !== "connected" ? (
+                  <span className="text-xs text-faint">{provider.stateLabel}</span>
+                ) : null}
+              </span>
+            ))}
+          </>
+        ) : catalog.kind === "error" ? (
+          <>
+            <StatusBadge tone="danger">Not Connected</StatusBadge>
+            <span className="text-sm text-muted">{catalog.message}</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Retry provider status
+            </button>
+          </>
+        ) : (
+          <>
+            <Loader2 className="size-4 animate-spin text-accent" aria-hidden="true" />
+            <span className="text-sm text-muted">Checking the provider catalogue and live state...</span>
+          </>
+        )}
+      </div>
+
+      <p className="mt-3 flex items-start gap-2 text-sm text-muted">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
+        {canManage
+          ? "You can assign enabled catalogue models or return any agent to automatic per-run routing."
+          : roleKnown
+            ? "Assignments are read-only for this workspace role. An owner or administrator can change them."
+            : "Assignment controls stay unavailable until manager access and the bounded provider catalogue are verified."}
+      </p>
+
+      {feedback ? (
+        <p
+          className={`mt-3 rounded-lg border p-3 text-sm ${feedback.kind === "error" ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-text)]"}`}
+          role={feedback.kind === "error" ? "alert" : "status"}
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function AgentAssignmentControl({
+  agent,
+  catalog,
+  models,
+  canManage,
+  pending,
+  onChange,
+}: {
+  agent: Agent;
+  catalog: ProviderCatalogState;
+  models: ProviderModelConfiguration[];
+  canManage: boolean;
+  pending: boolean;
+  onChange: (value: string) => void;
+}) {
+  const value = assignmentValue(agent);
+  const currentIsAvailable = value === AUTOMATIC_ASSIGNMENT || models.some(
+    (model) => `${model.provider}${ASSIGNMENT_SEPARATOR}${model.model}` === value,
+  );
+  const controlsReady = catalog.kind === "ready" && canManage;
+  const helpId = `agent-assignment-help-${agent.id}`;
+
+  return (
+    <label className="mt-4 block">
+      <span className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-faint">
+        Provider and model
+        {pending ? <Loader2 className="size-4 animate-spin" aria-label="Saving assignment" /> : null}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={!controlsReady || pending}
+        aria-label={`Provider assignment for ${agent.name}`}
+        aria-describedby={helpId}
+        className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        <option value={AUTOMATIC_ASSIGNMENT}>Automatic routing (chosen per run)</option>
+        {!currentIsAvailable ? (
+          <option value={value}>
+            {providerDisplayName(agent.provider)} / {agent.model ?? "provider default"} (current, not enabled)
+          </option>
+        ) : null}
+        {models.map((model) => (
+          <option
+            key={`${model.provider}${ASSIGNMENT_SEPARATOR}${model.model}`}
+            value={`${model.provider}${ASSIGNMENT_SEPARATOR}${model.model}`}
+          >
+            {model.displayName} ({providerDisplayName(model.provider)})
+          </option>
+        ))}
+      </select>
+      <span id={helpId} className="mt-1.5 block text-xs leading-5 text-faint">
+        {catalog.kind === "error"
+          ? "Provider catalogue unavailable; the current assignment remains unchanged."
+          : catalog.kind !== "ready"
+            ? "Checking enabled provider models..."
+            : !canManage
+              ? "Read-only. Owner or administrator access is required to save an assignment."
+              : models.length === 0
+                ? "No enabled models are configured. Automatic routing remains selected."
+                : "Only enabled catalogue models are shown; credentials never enter this control."}
+      </span>
+    </label>
+  );
+}
+
+function liveProviderStateLabel(provider: string | null | undefined, catalog: ProviderCatalogState) {
+  if (!provider) return "Resolved per run; no provider connection is implied";
+  if (catalog.kind === "error") return "Not Connected - provider status unavailable";
+  if (catalog.kind !== "ready") return "Checking current provider state";
+
+  const status = catalog.payload.providers.find((entry) => entry.provider === provider);
+  if (status?.state === "connected") return "Connected - verified by the current live probe";
+  return `Not Connected${status?.stateLabel ? ` - ${status.stateLabel}` : ""}`;
 }
 
 function AgentSection({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {

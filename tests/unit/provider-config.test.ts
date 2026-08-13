@@ -121,6 +121,22 @@ describe("provider configuration", () => {
     expect(() => resolveProviderConfiguration("openai")).toThrow(/valid model identifier/i);
   });
 
+  it("rejects a credential-shaped default model without echoing it", () => {
+    const secretLike = `sk-${"z".repeat(30)}`;
+    process.env.OPENAI_DEFAULT_MODEL = secretLike;
+
+    let failure: unknown;
+    try {
+      resolveProviderConfiguration("openai");
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ProviderConfigurationError);
+    expect(String(failure)).toContain("OPENAI_DEFAULT_MODEL is not a valid model identifier");
+    expect(String(failure)).not.toContain(secretLike);
+  });
+
   it("clamps an out-of-range timeout to the default", () => {
     process.env.AI_PROVIDER_TIMEOUT_MS = "1";
     expect(resolveProviderConfiguration("anthropic").requestTimeoutMs).toBe(120_000);

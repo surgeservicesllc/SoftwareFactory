@@ -35,6 +35,16 @@ const detailFixtures = {
     agent: { ...agent, role: "backend" },
     provider: "openai",
     model: "gpt-5.3-codex",
+    routing: {
+      source: "PHASE1C_FIXED_POLICY",
+      policyVersion: "phase1c-fixed-policy-v1",
+      reasons: [{
+        code: "PHASE1C_FIXED_PROVIDER_MODEL",
+        provider: "openai",
+        detail: "Phase 1C uses the reviewed OpenAI/Codex target.",
+      }],
+      candidates: [],
+    },
     risk: "yellow",
     providerRunReference: null,
     baseBranch: "main",
@@ -101,7 +111,7 @@ const detailFixtures = {
     model: "gpt-5.3-codex",
     lastRunAt: timestamp,
     currentAssignment: "Build bounded detail routes",
-    providerConnectionStatus: "connected",
+    providerConnectionStatus: "configured",
     project: null,
     capabilities: ["backend", "api"],
     responsibilities: ["backend", "api"],
@@ -192,6 +202,23 @@ describe("Phase 1C safe detail routes", () => {
     });
   });
 
+  it("accepts the hosted 130014 run projection while bounded routing evidence is unhosted", async () => {
+    const legacyRun = Object.fromEntries(
+      Object.entries(detailFixtures.run).filter(([key]) => key !== "routing"),
+    );
+    harness.rpc.mockResolvedValue({ data: [{ detail: legacyRun }], error: null });
+
+    const response = await getRun(
+      new Request(`https://factory.example/api/runs/${entityId}`),
+      { params: Promise.resolve({ runId: entityId }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      run: { id: entityId, provider: "openai", model: "gpt-5.3-codex" },
+    });
+  });
+
   it("rejects a non-GitHub URL in nested run evidence", async () => {
     harness.rpc.mockResolvedValue({
       data: [{
@@ -211,6 +238,21 @@ describe("Phase 1C safe detail routes", () => {
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({ error: { code: "run_unavailable" } });
+  });
+
+  it("rejects live-connection wording in the assignment-only agent projection", async () => {
+    harness.rpc.mockResolvedValue({
+      data: [{ detail: { ...detailFixtures.agent, providerConnectionStatus: "connected" } }],
+      error: null,
+    });
+
+    const response = await getAgent(
+      new Request(`https://factory.example/api/agents/${entityId}`),
+      { params: Promise.resolve({ agentId: entityId }) },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "agent_unavailable" } });
   });
 
   it("accepts a legacy report without Phase 1C security evidence", async () => {

@@ -56,34 +56,37 @@ Checked Phase 1C items distinguish implementation/configuration/release mileston
 
 ## Phase 1C verification and protected release blockers
 
-- [x] Frozen Node `24.19.0` candidate passes lint/typecheck, 109 test files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
-- [ ] Refresh current-tree coverage before protected publication; high-confidence source/static secret-value scans pass, with only allowlisted credential-reference labels present in the client bundle and no credential values.
-- [x] Run the consolidated lint/typecheck/test/build, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled pre-publication Phase 2A/1C tree.
+- [x] Prior verified production baseline before this update (`0c662a24393f682073e6002c5aff9339292226d8`) passes lint/typecheck, 117 test files/1,282 tests, production build with 74 page/route entries, Playwright/axe 117/117, focused migration/security gates, production dependency audit 0, and safe disabled-worker smoke on Node `24.19.0`.
+- [x] Run the frozen current-update local final-candidate gates on Node `24.19.0`: lint/typecheck, 118 Vitest files/1,311 tests, coverage 76.70/71.47/74.04/78.11, 74/74-route production build, Playwright/axe 117/117, production dependency audit 0, and clean diff-check. This is not CI, Vercel, or hosted evidence.
+- [x] Run the consolidated lint/typecheck/test/build, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled Phase 2A/1C tree before publication.
 - [x] Review the published diff for unrelated edits and confirm tracked files contain no credentials, private keys, service-role tokens, generated workspace state, or local environment files.
 - [x] Obtain exact owner RED approval for the protected sequence: ledger-only repair, forward migrations, protected Actions secret configuration, disabled publication, bounded activation, one live GREEN acceptance command, and deactivation. Applying `130006` did not enable Phase 1D.
 - [x] Authenticate the protected Supabase release session, verify exact project ref `qpuofpmagrmyamahqwxw`, compare migration history, and run linked lint while stopping on identity/history mismatch.
 - [x] Reconcile exact hosted catalog/source mappings and repair only migration-history rows for schema-present `028`/`130001`-`130005`; then apply the proven-absent forward chain through `130014`. No schema-present DDL was rerun, and no reset or down-migration occurred.
-- [ ] Exercise real authenticated owner, cross-tenant, and anonymous member/detail/cancel/retry/status RPC behavior. Service role is not a valid user-under-test.
+- [x] Implement local forward migration `20260813001500_expose_bounded_run_routing.sql`: restore `provider_agent_assignments_model_check` and `agent_runs_model_check` from 120 to the original 128-character provider catalogue/API bound without changing their other semantics; add four named no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text; add rolling-compatible UI/schema handling for absent, null, fixed Phase 1C, and immutable Phase 2A routing evidence; revoke authenticated raw SELECT on routing decisions/events; and retain tenant-scoped model-catalogue SELECT. Provider runtime/API validation also rejects credential-shaped default-model/model/display-name scalar values before serialization or RPC. This is source-only evidence, not hosted proof.
+- [ ] **RED approval required — apply only the complete `130015`.** Hosted Supabase remains through `130014`. Obtain a fresh exact owner approval naming project `qpuofpmagrmyamahqwxw`, frozen SHA-256 `3E1BEA8F5DAB912D5D7D6251E4503C319816B27EF2465DB5E8612E26A3DD1A13` (13,121 bytes), both 120-to-128 constraint restorations, all four no-secret constraints, both ACL revokes, retained model-catalogue grant, run-detail projection, window, validation, and forward-only containment; then verify ledger, all six changed/added constraint definitions, 128-character assignment/run/project behavior, valid and negative credential-shaped scalar behavior through reviewed paths, exact table/function ACLs, function identity/signature/security/search path, bounded routing runtime, raw-table direct denial, RLS, lint, and health. Stop on any mismatch.
+- [x] Exercise authenticated production owner reads across Bot Manager, Runs/detail, Backlog/detail, Agents/detail, Reports/detail, and Connections; separately verify signed-out UI isolation and anonymous denial for twelve hosted Phase 1C target/read RPCs.
+- [ ] Create or supply an owner-authorized unrelated authenticated tenant/session and record its denial/empty behavior plus live anonymous/unrelated mutation-shaped and direct-table denial probes. Hosted membership currently contains only the owner, so local integration coverage is not represented as live proof. Service role is not a valid user-under-test.
 - [x] Configure the seven protected repository secrets for the first bounded acceptance without rendering values. After the OpenAI key was pasted into chat, treat it as compromised and remove `SOFTWAREFACTORY_OPENAI_API_KEY`; the other protected secret names remain non-rendered.
 - [x] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` equals `Lint, typecheck, test, and build|Browser and accessibility tests`, matching `.github/workflows/ci.yml`.
 - [x] Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false through migration, secret configuration, publication, normal CI, and Vercel verification.
 - [x] Under exact owner RED approval, set the variable to `true` for the first bounded acceptance attempt and return it to absent/false after the run was claimed. The attempt failed safely before repository mutation; this is activation/deactivation evidence, not successful Phase 1C acceptance.
 - [x] Publish the exact reviewed tree to the repository default branch with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>` and verify CI run `31745504157` plus matching READY Vercel deployment `dpl_AnVz76EfgBa9RpsrFYWiWNresvbv` at commit `7f504255fc9db3a67da936e112825252dc668670`.
 - [ ] Confirm the worker status changes from **Not Connected** only after a fresh real heartbeat and returns safely to stale/Not Connected when heartbeat evidence expires.
-- [ ] Complete one safe manual GREEN owner command against `surgeservicesllc/SoftwareFactory` and record the full command/task/run/agent, Codex thread, base SHA, `factory/*` branch, commit, open draft PR, validation, exact-head CI, usage, report, and activity evidence. First attempt evidence is command `0c4d0ca8-1867-4d00-80cf-476401491a17`, run `f4594556-6f72-4763-a480-6993939e3651`, and Actions run `31746057998`; it failed on provider startup at attempt 1 of 2 before any changed file, commit, branch, or PR. The run remains retryable and its second/final attempt is unconsumed.
+- [ ] Complete one safe manual GREEN owner command against `surgeservicesllc/SoftwareFactory` and record the full command/task/run/agent, Codex thread, base SHA, `factory/*` branch, commit, open draft PR, validation, exact-head CI, usage, report, and activity evidence. First attempt evidence is command `0c4d0ca8-1867-4d00-80cf-476401491a17`, run `f4594556-6f72-4763-a480-6993939e3651`, and Actions run `31746057998`; it failed on provider startup before any changed file, commit, branch, or PR. Its planned base predates current `main`, so do not retry it. Submit a new command bound to the then-current base only after funded-provider proof.
 - [x] Confirm the first live failure was contained before repository mutation: no changed files, commit, pushed branch, PR, default-branch write, merge, deployment, or RED execution occurred, and activation returned to OFF.
 - [x] Verify and publish the recovery patch at `bc95b9e3a5952864bd26da778a052f37400ea747`. It checks pinned Codex CLI `0.147.0` plus exact model access before every claim, supports the distinct `softwarefactory_phase1c_preflight` event for bounded non-stored response verification without Docker preload or claim, and preserves structured terminal provider errors.
-- [x] Dispatch published provider-only diagnostic run `31748582858`. The exact-model GET passed, the bounded non-stored Responses call returned only the safe code `credit_balance_exhausted`, Docker preload and durable claim were skipped, activation returned to OFF, and attempt 2 remained unconsumed.
+- [x] Dispatch published provider-only diagnostic run `31748582858`. The exact-model GET passed, the bounded non-stored Responses call returned only the safe code `credit_balance_exhausted`, Docker preload and durable claim were skipped, activation returned to OFF, and the stale failed run was not touched.
 - [x] Verify exact CI and matching Vercel evidence for recovery commit `bc95b9e3a5952864bd26da778a052f37400ea747`: CI run `31748567790` passed both required jobs and deployment `dpl_3hTUZ1aJy2b2BSdhTZMnZRMfxnhh` is READY.
 - [ ] Revoke the user-pasted OpenAI key at the provider, add credits or obtain a fresh funded replacement project key, and keep `SOFTWAREFACTORY_OPENAI_API_KEY` absent until that replacement is ready.
-- [ ] Configure only the fresh funded replacement key, rerun `softwarefactory_phase1c_preflight`, and proceed to the durable run's one remaining retry only after the exact-model and bounded Responses probes pass. Otherwise stop without consuming attempt 2 and keep activation OFF.
+- [ ] Configure only the fresh funded replacement key and rerun `softwarefactory_phase1c_preflight`. If both probes pass, submit a new safe GREEN command bound to the current base; never spend the stale failed run's remaining attempt. Otherwise stop and keep activation OFF.
 - [ ] Verify the live run did not change the default branch, approve or merge the PR, deploy, rollback, modify workflows/provider settings, or execute RED work.
 - [ ] Exercise cancellation, stale base SHA, dispatch failure/recovery schedule, lease expiry/reclaim, provider rate limit/unavailable, failed validation, CI failure/timeout, one retry, idempotent PR recovery, protected path denial, and likely-secret denial.
 - [x] Update `AI/CURRENT_STATE.md`, `AI/HANDOFF.md`, and `AI/QUALITY_SCORECARD.md` with the published recovery, no-claim `credit_balance_exhausted` diagnostic, secret containment, and unconsumed-retry evidence. OpenAI/Codex remains **Not Connected**.
 
 ## Phase 1B retained acceptance gaps
 
-- [ ] Complete the live second-tenant/anonymous/RPC matrix.
+- [ ] Complete the remaining live unrelated-authenticated and mutation-denial RPC/table matrix; owner reads and anonymous read denial are already recorded.
 - [ ] Verify evidence-bound reverse handoff before retiring primary installation `153445938`.
 - [ ] Verify explicit disconnect/loss behavior and preserved history.
 - [ ] Complete remaining stale-SHA, permission/revocation, rate-limit, lifecycle-ordering, terminal delete/restore, and ambiguous-recovery provider cases.
@@ -91,7 +94,7 @@ Checked Phase 1C items distinguish implementation/configuration/release mileston
 
 ## Phase 1E production operations
 
-Implemented and locally verified against the migrated schema. Nothing here is live production evidence.
+Implemented, hosted in the reconciled chain, and locally verified against the migrated schema. No real production target has been observed, so nothing here is live monitoring evidence.
 
 - [x] Add migration `028` with ten RLS/FORCE-RLS operations tables, additive SEV1–SEV4 incident columns, owner-scoped SECURITY DEFINER workflows, and zero new `service_role` table privileges.
 - [x] Build provider-neutral monitoring with one connected HTTPS-probe adapter, an explicit Not Connected reason and unblocking condition for every other provider, and a CHECK constraint preventing an unconnected monitor from being enabled.
@@ -114,9 +117,9 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 
 ## Deferred
 
-- Phase 1C live Codex/OpenAI worker execution: **Not Connected** until protected promotion and live acceptance.
+- Phase 1C live Codex/OpenAI worker execution: published and schema-current but **Not Connected** until a funded replacement credential passes no-claim preflight and a new current-base command completes live acceptance.
 - Phase 1D execution/autonomy beyond the inert observation scaffold: OFF.
-- Phase 2A provider execution: source is on `main`, but migration/credentials/live calls are absent and the owner switch remains OFF; **Not Connected**.
+- Phase 2A provider execution: source and hosted migration are present, but credentials/live calls are absent and the owner switch remains OFF; **Not Connected**.
 - Auto approval, merge, deployment, and rollback: OFF with no executor.
 - Phase 1E rollback and repair **execution**: deferred behind a provider adapter, the `AUTO_ROLLBACK.md` drills, and an owner-approved migration relaxing the migration-`010` constraint. Phase 1E records the decision; it never performs the action.
 
@@ -127,7 +130,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Verify the three new provider tables (`provider_model_configurations`, `provider_routing_decisions`, `provider_run_events`) each enable RLS **and** FORCE RLS with tenant-scoped policies before adding them to the service-role grant matrix.
 - [x] Restyle the three new provider components onto the design tokens; as merged they used sub-12px text and literal hex values, and `/settings` failed axe contrast at three viewports until fixed.
 - [x] Scope the runs sensitive-column guard to the GET handler, matching the existing commands-route assertion. The POST handler records provider run input/output/errors by design; the guarantee protected is that the *list view* never projects them.
-- [ ] Port the provider assignment control onto the RPC-backed `AgentsConsole`, and surface provider/model/routing on `RunsConsole`. Both need `list_agents`/`list_agent_runs` to return provider columns, which is a migration change. The branch's console tests were removed from `tests/unit/provider-surfaces.test.tsx` rather than asserted against UI this integration does not ship.
+- [x] Implement and locally gate the provider assignment control on the RPC-backed `AgentsConsole`, recorded provider/model evidence on `RunsConsole`, and a bounded "Why this provider?" view. Assignment configuration is not live provider health; legacy/missing routing evidence renders as absent rather than being invented. Publication and hosted `130015` promotion remain separate pending items above.
 - [ ] Provider execution stays OFF until an owner enables it per organization, and no provider key is set in this repository. Outbound AI execution remains **Not Connected**.
 
 ## Universal bot fabric and public marketing site

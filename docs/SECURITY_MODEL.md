@@ -66,7 +66,7 @@ CI is observed against the exact head SHA. `SOFTWAREFACTORY_REQUIRED_CHECKS` mus
 
 ## Database and audit security
 
-- Hosted schema effects `028`/`130001`-`130005` require ledger-only reconciliation. Unhosted `130006` adds decision-only Phase 1D controls; `130007` adds provider compatibility; `130008` commits Phase 1C enums before `130009` execution; `130010` hardens roster/recovery/reporting; and `130011` adds dependencies plus cumulative retry budgets.
+- The owner-approved production ledger repair and forward chain are complete through `130014`: `130006` adds decision-only Phase 1D controls; `130007` adds provider compatibility; `130008` commits Phase 1C enums before `130009` execution; `130010` hardens roster/recovery/reporting; `130011` adds dependencies plus cumulative retry budgets; and `130012`-`130014` are forward-only lint and emergency-stop repairs. Local `130015` restores two model checks from 120 to 128, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded run-detail routing evidence, revokes authenticated raw routing-decision/event SELECT, and retains tenant-scoped model-configuration SELECT; it is unhosted and needs fresh exact RED approval.
 - `130010` provisions an idempotent logical roster (Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, CEO Reporter) without overwriting user-created agents or explicit provider assignments. Provider-account identity remains separate, and general Phase 1C work maps to Orchestrator.
 - New tables use RLS/FORCE RLS, foreign keys, constraints, indexes, explicit policies, and revoked direct grants.
 - Service role reaches execution tables only through reviewed SECURITY DEFINER functions with pinned search paths and exact lease/resource validation.
@@ -92,7 +92,7 @@ Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal 
 
 ## Current evidence boundary
 
-The source and tests do not prove the live boundary. Hosted schema effects `028`/`130001`-`130005` exist but the ledger remains exactly 26 rows through `027`; protected history reconciliation must precede unhosted `130006`-`130011`. No production observation, provider call, Actions secret/variable, published Phase 1C workflow, heartbeat, Codex thread, factory branch, draft PR, or stable required-check result exists. Phase 1D remains execution-inert; provider and Codex execution remain **Not Connected**.
+Production migration history and schema are reconciled through `130014`, linked lint passed, Phase 1D remains execution-inert with every action OFF and the kill switch ON, and the Phase 1C workflow is published. The frozen routing/UI candidate passes its local final-candidate gates, while publication, CI/Vercel evidence, exact approval for local `130015`, and hosted verification remain pending. Six non-OpenAI worker secrets remain configured while the OpenAI secret and activation variable are absent. A bounded live worker attempt proved registration, heartbeat, claim, and provider-thread persistence but failed before any changed file, factory branch, commit, draft PR, or exact-head CI because the provider project had no remaining credits. The subsequent no-claim diagnostic identified `credit_balance_exhausted`. Provider execution therefore remains **Not Connected** until a funded replacement credential passes the diagnostic and a new current-base GREEN command completes.
 
 ## Autonomous and delivery boundary
 

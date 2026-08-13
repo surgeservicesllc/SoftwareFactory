@@ -1,6 +1,6 @@
 # Autonomous mode
 
-Manual Phase 1C Codex execution is not Autonomous Mode. The local worker may act only after an authenticated user explicitly submits one connected-project command. It must claim a durable GREEN/YELLOW run and can end only at a validated open draft pull request plus observed CI state.
+Manual Phase 1C Codex execution is not Autonomous Mode. The published worker may act only after an authenticated user explicitly submits one connected-project command. It must claim a durable GREEN/YELLOW run and can end only at a validated open draft pull request plus observed CI state.
 
 | Control | Scope | Enforced state/effect |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ Manual Phase 1C Codex execution is not Autonomous Mode. The local worker may act
 | Autonomous Mode | both | OFF and database-constrained at each scope; zero end-to-end worker runs are verified |
 | Maximum Autonomous Risk | both | GREEN, database-constrained at each scope; resolution takes the lower of the two |
 | Auto Plan | both | OFF and database-constrained |
-| Auto Code | both | OFF; a local manual Phase 1C worker candidate exists, but it is **Not Connected** and has no autonomous authority |
+| Auto Code | both | OFF; the published manual Phase 1C worker is **Not Connected** and has no autonomous authority |
 | Auto Test | both | OFF and database-constrained |
 | Auto Repair | both | OFF; a failure opens bounded repair work for a human instead |
 | Auto Review | both | OFF; review agents produce findings only |
@@ -17,7 +17,7 @@ Manual Phase 1C Codex execution is not Autonomous Mode. The local worker may act
 | Auto Merge | both | OFF; no merge endpoint, permission, or workflow |
 | Auto Deploy | both | OFF; Vercel control-plane adapter **Not Connected** |
 | Auto Rollback | both | OFF; no rollback executor |
-| Manual Phase 1C GREEN/YELLOW worker | — | Implemented locally; **Not Connected** until hosted schema, heartbeat, and a real bounded run are verified |
+| Manual Phase 1C GREEN/YELLOW worker | — | Published and schema-current; **Not Connected** until a funded-provider preflight and new current-base bounded run succeed |
 | Phase 1C RED worker | — | Prohibited; owner approval does not widen the Phase 1C execution ceiling |
 | Autonomous execution worker | — | **Not Connected** |
 
@@ -90,6 +90,6 @@ the property that matters at a gate.
 
 ## What is not built
 
-There is no closed autonomous execution loop. The decision layer now includes deterministic Backlog Autopilot selection, bounded retry decisions, failure recovery ordering, and a read-only deployment adapter that reports **Not Connected** when its provider is unavailable; none of these starts or mutates work. A durable, isolated manual Phase 1C worker candidate exists locally, and its hosted schema plus seven protected secret names are configured, but Codex/OpenAI execution remains **Not Connected** because the workflow is unpublished, activation is absent, and no heartbeat or live run exists. It accepts only a new authenticated owner command and can publish only an isolated branch and open draft pull request. There is no autonomous execution scheduler, approval executor, merge adapter, deployment mutator, connected post-deploy validator, or rollback executor.
+There is no closed autonomous execution loop. The decision layer includes deterministic Backlog Autopilot selection, bounded retry decisions, failure recovery ordering, and a read-only deployment adapter that reports **Not Connected** when its provider is unavailable; none of these starts or mutates work. The durable, isolated manual Phase 1C worker is published, but Codex/OpenAI execution remains **Not Connected**: activation is absent, the exposed OpenAI secret was removed, and the configured provider project reported `credit_balance_exhausted`. Its first real claim failed before repository mutation. That run is now stale against current `main` and must remain historical evidence; a new command is required after funded-provider proof. The manual worker accepts only an authenticated owner command and can publish only an isolated branch and open draft pull request. There is no autonomous execution scheduler, approval executor, merge adapter, deployment mutator, connected post-deploy validator, or rollback executor.
 
 Any future autonomous rollout requires Phase 1B acceptance, live Phase 1C worker evidence, sustained non-production observation, explicit allowlists and budgets, independent checks, branch protection, alerting, kill-switch drills, owner approval for the precise authority, and a separate reviewed decision, migration, and implementation that deliberately change the locked interlocks. Phase 1E migration `028` and the provider/bot/marketing/Phase 1C migration chain do not change migration `010` interlocks.

@@ -1,19 +1,19 @@
 # Architecture overview
 
-SoftwareFactory is a server-first Next.js control plane. Main contains a Phase 2A advisory Anthropic/OpenAI provider layer, and the local Phase 1C candidate adds a manually requested, durable Codex-to-draft-PR path. Neither adds merge, deployment, rollback, RED execution, or Autonomous Mode.
+SoftwareFactory is a server-first Next.js control plane. Main contains a Phase 2A advisory Anthropic/OpenAI provider layer and the published Phase 1C manually requested, durable Codex-to-draft-PR path. Neither adds merge, deployment, rollback, RED execution, or Autonomous Mode.
 
 ## Components
 
 | Component | Responsibility | Current status |
 | --- | --- | --- |
 | Browser UI | Collect bounded intent and show safe tenant projections | Untrusted client |
-| Next.js server | Auth, active tenant, same-origin, risk, plan, repository/base-SHA binding, persistence, opaque dispatch | Implemented locally |
+| Next.js server | Auth, active tenant, same-origin, risk, plan, repository/base-SHA binding, persistence, opaque dispatch | Published and deployed |
 | Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Hosted ledger reconciled through `130014`; linked lint and focused runtime/catalog verification pass |
-| Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, live health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Schema hosted; credentials/live requests unverified; execution OFF; **Not Connected** |
+| Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, consent-gated health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Schema hosted; credentials/live requests unverified. Execution OFF returns local Disabled status and suppresses outbound probes; **Not Connected** |
 | GitHub App adapter | Short-lived repository-ID-scoped tokens, repository dispatch, isolated push, draft PR, checks | Phase 1B owner path connected; Phase 1C live run pending |
-| GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Seven secrets configured; activation absent; workflow local pending publication; heartbeat **Not Connected** |
-| Codex SDK | Supported server-side engineering thread | Adapter local; real provider call **Not Connected** |
-| Vercel | Serve UI and request-time server routes | Existing production READY; never a Codex worker |
+| GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Published; six non-OpenAI secrets remain; OpenAI secret and activation absent; provider credits exhausted; **Not Connected** |
+| Codex SDK | Supported server-side engineering thread | Published; first provider thread failed pre-mutation; successful run **Not Connected** |
+| Vercel | Serve UI and request-time server routes | Prior verified production baseline before this update: `0c662a24393f682073e6002c5aff9339292226d8` READY; never a Codex worker |
 | Autonomous loop | Future independent execution policy | OFF; kill switch ON |
 
 ## Command path
@@ -56,7 +56,7 @@ Dispatch is not authorization. The worker must still claim an eligible row from 
 
 ## Persistence and browser projections
 
-Hosted migration history is reconciled through `130014`. `130006` adds only execution-inert Phase 1D controls; Phase 1C uses `130007` provider compatibility, `130008` enum additions, `130009` core execution, `130010` roster/recovery/report hardening, and `130011` canonical dependencies/cumulative retry budgets. Forward repair `130012` removes invalid `pg_catalog.nullif` qualification from three bot functions without changing their identity/security/ACL boundary; `130013` resolves the remaining Phase 1C linked-lint findings; and `130014` makes the database resolver report the owner emergency-stop flag. New tables use RLS and FORCE RLS. Direct browser table privileges are revoked; member-facing reads use bounded functions, while narrowly reviewed trusted functions retain only required grants. Run events, artifacts, and validations reject update/delete.
+Hosted migration history is reconciled through `130014`. `130006` adds only execution-inert Phase 1D controls; Phase 1C uses `130007` provider compatibility, `130008` enum additions, `130009` core execution, `130010` roster/recovery/report hardening, and `130011` canonical dependencies/cumulative retry budgets. Forward repair `130012` removes invalid `pg_catalog.nullif` qualification from three bot functions without changing their identity/security/ACL boundary; `130013` resolves the remaining Phase 1C linked-lint findings; and `130014` makes the database resolver report the owner emergency-stop flag. Local/unhosted `130015` restores the assignment/run model checks from 120 to the original 128-character provider catalogue/API contract while retaining their other semantics; adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text; adds a capped/allowlisted run-detail routing object; revokes authenticated raw routing-decision/event SELECT; and retains tenant-scoped model-configuration SELECT. The application accepts absent/null routing for rolling compatibility and fails closed on dirty pre-migration catalogue scalars. New tables use RLS and FORCE RLS. Sensitive browser reads use their deliberately selected RLS or bounded-function boundary, while narrowly reviewed trusted functions retain only required grants. Run events, artifacts, and validations reject update/delete.
 
 Browser detail endpoints expose allowlisted agent/task/run/report fields, event timelines, artifact references, validation summaries, dependencies, and heartbeat state. They do not expose service credentials, raw command/model payloads, raw provider errors, or broad base-table columns.
 
@@ -73,6 +73,6 @@ The worker may read one repository, push its own `factory/*` branch, create/reco
 
 ## Current live boundary
 
-Candidate GitHub App installation `153479019` is connected to exactly `surgeservicesllc/SoftwareFactory`, but that is Phase 1B repository evidence. Hosted ledger reconciliation and forward migrations through `130014` are complete, linked lint is clean, focused bot runtime/audit behavior passed `1/1/1`, and all seven Actions secrets are configured. The activation variable remains absent and the reviewed workflow remains local pending publication; no worker heartbeat, Codex thread, Phase 1C draft PR, or stable required-CI result exists. A clean one-shot exit could provide temporary availability evidence, not a real bounded-run result. Phase 1E execution, Phase 1D execution, advisory provider execution, bot-provider execution, and the Codex worker remain **Not Connected**.
+Candidate GitHub App installation `153479019` is connected to exactly `surgeservicesllc/SoftwareFactory`, but that is Phase 1B repository evidence. Hosted ledger reconciliation and forward migrations through `130014` are complete, linked lint is clean, focused bot runtime/audit behavior passed `1/1/1`, and the reviewed worker workflow is published. The frozen routing/UI candidate passes its complete local final-candidate gate set; publication, fresh CI/Vercel evidence, exact RED approval for local `130015`, and hosted verification remain pending. Six non-OpenAI worker secrets remain; the exposed OpenAI secret and activation variable are absent. A real claim recorded a heartbeat and provider thread, then failed safely before repository mutation; diagnostic `31748582858` subsequently identified `credit_balance_exhausted`. The failed run's planned base differs from the prior verified production baseline, so retry must fail closed and acceptance must use a new current-base command. No Phase 1C draft PR or stable exact-head required-CI result exists. Phase 1E execution, Phase 1D execution, advisory provider execution, bot-provider execution, and the Codex worker remain **Not Connected**.
 
 See [`AI/ARCHITECTURE.md`](../AI/ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), and [Autonomous mode](AUTONOMOUS_MODE.md).

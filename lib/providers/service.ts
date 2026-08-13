@@ -17,6 +17,7 @@ import {
   type ProviderId,
 } from "@/lib/providers/types";
 import type { RiskLevel } from "@/lib/risk";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -67,6 +68,27 @@ interface ModelConfigurationRow {
   output_cost_per_million_micros: string | number | null;
 }
 
+const BROWSER_SAFE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function assertBrowserSafeConfigurationRow(row: ModelConfigurationRow) {
+  const capabilities = Array.isArray(row.capabilities) ? row.capabilities : [];
+  const safe = isProviderId(row.provider)
+    && BROWSER_SAFE_MODEL_ID.test(row.model)
+    && row.display_name.trim().length >= 1
+    && row.display_name.length <= 160
+    && !containsLikelySecret(row.model)
+    && !containsLikelySecret(row.display_name)
+    && capabilities.every((entry) =>
+      typeof entry === "string"
+      && entry.trim().length >= 1
+      && entry.length <= 64
+      && !containsLikelySecret(entry),
+    );
+  if (!safe) {
+    throw new Error("Provider model metadata failed the browser-safe projection.");
+  }
+}
+
 function toNumber(value: string | number | null): number | null {
   if (value === null) return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -98,9 +120,9 @@ export async function listModelConfigurations(
 
   return Object.freeze(
     ((data ?? []) as ModelConfigurationRow[])
-      .filter((row) => isProviderId(row.provider))
-      .map((row) =>
-        Object.freeze({
+      .map((row) => {
+        assertBrowserSafeConfigurationRow(row);
+        return Object.freeze({
           id: row.id,
           provider: row.provider as ProviderId,
           model: row.model,
@@ -110,8 +132,8 @@ export async function listModelConfigurations(
           isDefault: row.is_default,
           inputCostPerMillionMicros: toNumber(row.input_cost_per_million_micros),
           outputCostPerMillionMicros: toNumber(row.output_cost_per_million_micros),
-        }),
-      ),
+        });
+      }),
   );
 }
 

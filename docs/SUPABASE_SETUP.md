@@ -1,18 +1,18 @@
 # Supabase setup
 
-Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Hosted migration history currently has exactly 26 rows through `027`, but the hosted schema visibly contains post-`027` Phase 1E/provider/synthetic/bot/marketing objects. Draft PR #15 records the independent 53-table/61-policy catalog comparison and prior duplicate-object push failure. The ledger is stale and a normal push is prohibited until an exact owner-approved history repair reconciles it. Phase 1C migrations remain unhosted.
+Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). The owner-approved history repair and forward-only migration sequence are complete through `20260813001400_resolve_emergency_stop.sql`. Post-apply catalog, RLS/FORCE RLS, ACL, function-boundary, bot-runtime, autonomy-OFF/kill-ON, and linked-lint checks passed. Do not reset, down-migrate, or replay the historical colliding DDL.
 
-The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. The currently selected Supabase CLI profile returns `403`; reauthenticate as that owner and reconfirm the exact project ref before any linked command. The unauthorized profile must not be used.
+The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. Any future linked command must re-confirm that identity and exact project ref; an unrelated CLI profile must not be used.
 
 ## Existing hosted boundary
 
 Hosted `001`-`027` provide Auth/onboarding, tenant/project/control-plane tables, RLS/FORCE RLS, GitHub App metadata and audited workflows, safe browser projections, immutable repository binding, protected draft approvals, narrow service-role ACLs, and dual-App handoff. Candidate installation `153479019` is connected for the owner repository path. Remaining second-tenant/reverse/disconnect/adverse Phase 1B acceptance gaps remain.
 
-## Schema-present but ledger-unreconciled migrations
+## Reconciled historical migrations
 
-The hosted catalog contains the effects of `028`, provider `130001`, both historically colliding `130002` source files, bot fabric, and marketing. Do not execute these DDL files again. First map their exact source hashes and objects to the hosted catalog, then use only the owner-approved history-repair mechanism documented by Supabase.
+The hosted catalog effects of `028`, provider `130001`, synthetic journeys, bot fabric, and marketing were matched to their exact source objects before their history rows were repaired. Do not execute those historical DDL files again.
 
-## Forward migrations absent from hosted Supabase
+## Hosted forward migrations
 
 - `20260813000600_phase1d_autonomy_controls.sql`: execution-inert nine-action/two-scope decision schema; global kill ON and every action OFF.
 - `20260813000700_provider_phase1c_compatibility.sql`: additive/narrowing Phase 1C compatibility over immutable canonical provider migration `130001`.
@@ -20,27 +20,23 @@ The hosted catalog contains the effects of `028`, provider `130001`, both histor
 - `20260813000900_phase1c_codex_execution.sql`: durable orchestration, workers/leases/evidence, safe projections, cancellation/retry, service-role RPCs, independent planning, RED blocks, RLS/FORCE RLS, and exact grants.
 - `20260813001000_logical_agent_roster.sql`: eleven-role roster, owner/risk/ACL hardening, per-agent serialization, coherent recovery, bounded terminal reports, and safe projections.
 - `20260813001100_phase1c_task_dependencies.sql`: canonical same-project dependencies, derived non-empty criteria, idempotent replay, and cumulative total turn/input/output budgets across retries.
+- `20260813001200_fix_bot_nullif_functions.sql`, `20260813001300_fix_phase1c_function_lint.sql`, and `20260813001400_resolve_emergency_stop.sql`: forward-only lint and emergency-stop repairs that preserve reviewed signatures, ACLs, and fail-closed autonomy state.
 
-Their local presence does not make the database current or the worker Connected. Applying them is RED protected work because it changes production schema, RLS/authorization, service-role functions, provider execution state, and audit behavior.
+These migrations are hosted and verified. Their presence does not make the worker Connected: the OpenAI secret and activation variable are absent, and no successful Codex-to-draft-PR acceptance run exists.
+
+## Local forward migration awaiting approval
+
+`20260813001500_expose_bounded_run_routing.sql` is local and unhosted. It restores `provider_agent_assignments_model_check` and `agent_runs_model_check` from the accidental 120-character narrowing to the original 128-character provider catalogue/API contract while retaining the assignment regex and all other semantics. It adds `provider_model_configurations_text_not_secret`, `provider_routing_decisions_policy_version_not_secret`, `provider_agent_assignments_model_not_secret`, and `provider_routing_decisions_selected_model_not_secret`, using immutable likely-secret checks for catalogue model/display-name, assignment model, and routing policy-version/selected-model text. It also preserves the `get_agent_run_detail(uuid, uuid)` signature/security/ACL boundary while adding capped, allowlisted Phase 1C/Phase 2A routing evidence and supporting commandless advisory runs; revokes authenticated raw SELECT on routing decisions/events; and retains tenant-scoped model-configuration SELECT. The application accepts an absent/null routing field against hosted `130014` and fails closed on credential-shaped pre-migration catalogue scalars.
+
+No existing approval authorizes this migration. Before applying it, obtain fresh exact RED approval naming the complete file, frozen size 13,121 bytes, SHA-256 `3E1BEA8F5DAB912D5D7D6251E4503C319816B27EF2465DB5E8612E26A3DD1A13`, both widened constraints, all four new no-secret constraints, both raw-SELECT revokes, retained model-catalogue SELECT, projection, target `qpuofpmagrmyamahqwxw`, window, validation, and containment. Apply only `130015`; verify ledger, all six changed/added constraint definitions, 128-character assignment/run/project behavior, valid and negative credential-shaped catalogue/assignment/routing scalar behavior through reviewed paths, exact table ACLs, function definition/signature/`SECURITY DEFINER`/search path/ACL, bounded routing behavior, raw-table/tenant/anonymous denial, retained model-catalogue reads, linked lint, health, all actions OFF, and kill switch ON. Stop on any mismatch and use only a new forward migration for containment.
 
 ## Hosted Auth configuration
 
 Retain exact redirect origins for the production alias and local loopback callbacks. Do not add wildcard redirects. Email sign-up/confirmation and the existing owner onboarding remain the application identity boundary; worker service role is never an interactive user.
 
-## Protected promotion workflow
+## Protected promotion record and future changes
 
-1. Keep provider execution, all Phase 1D actions, and `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` OFF/false. Obtain exact owner approval naming project `qpuofpmagrmyamahqwxw`, ledger repair for catalog-proven `028`/`130001`-`130005`, apply of absent `130006`-`130011`, protected secrets, disabled publication, bounded Phase 1C activation/run/deactivation, risks, expiry, validation, and containment.
-2. Authenticate CLI as `surgeservicesllc@gmail.com`; verify account and exact project ref.
-3. Compare exact local/linked history, catalog, and source hashes. Stop on any unexpected entry or mismatch; never reset hosted history or rerun schema-present DDL.
-4. Review the history-repair matrix and all six forward SQL files; run the complete local chain, behavior tests, lint, and dry run.
-5. Repair only the history for catalog-proven `028`/`130001`-`130005`; re-list and dry-run. Then apply and ledger-verify absent `130006`, `130007`, `130008`, `130009`, `130010`, and `130011` in timestamp order.
-6. Re-list linked migrations and run linked database lint.
-7. Verify every public table has RLS and FORCE RLS; inspect policies, table ACLs, function ACLs/search paths, foreign keys, indexes, constraints, triggers, and append-only guards.
-8. Confirm authenticated/anonymous users have no direct worker-table mutation or broad reads; confirm member projections are bounded.
-9. Confirm service role has only reviewed function execution and no unintended direct table privileges.
-10. Exercise owner, member, second-tenant, anonymous, cancel/retry/status/detail, and service-worker claim/lease/terminal behavior separately. Include owner-only submission, criteria-derived risk, dependency tenant/project/order constraints, idempotent dependency replay, neutral roster preservation/rebinding, per-agent serialization, cumulative retry budgets, coherent artifact replay/conflict rejection, stale-lease/cancellation reports, and bounded report PR projection. Never use service role as the user-under-test.
-11. Confirm existing Phase 1B installation/project/history is unchanged and the worker remains disabled until protected Actions configuration is complete.
-12. Record exact hosted evidence in repository memory.
+The protected repair/promotion was executed under exact owner approval, with before/after ledger evidence, catalog verification, linked lint, and forward-only containment. For any future production schema change: keep the worker and every autonomous action OFF; authenticate as the exact owner; bind the exact project, source hash, migration name, risk, expiry, validation, and containment in fresh approval; stop on drift; and use only a new forward migration. Re-run tenant, anonymous, ACL, RLS, function, append-only, lease, and report checks affected by that change.
 
 Never use `supabase db reset` against hosted production. It is allowed only for a confirmed disposable local database.
 
