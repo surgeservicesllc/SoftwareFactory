@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { SiteHeader } from "@/components/marketing/site-header";
+import { readViewer } from "@/lib/auth/viewer";
 
 /**
  * The console dashboard, reached from the public site's "Solutions" link.
@@ -16,11 +17,15 @@ import { SiteHeader } from "@/components/marketing/site-header";
  */
 const shellOffset = { "--shell-top": "73px" } as CSSProperties;
 
-export default function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function PortalLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const viewer = await readViewer();
+
   return (
     <div style={shellOffset}>
-      <SiteHeader />
-      <AppShell>{children}</AppShell>
+      <SiteHeader viewer={viewer} />
+      <AppShell viewer={viewer}>{children}</AppShell>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { readViewer } from "@/lib/auth/viewer";
 
 /**
  * Authenticated control plane. Keeps the sidebar shell and stays out of search
@@ -12,6 +13,9 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function ConsoleLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <AppShell>{children}</AppShell>;
+export default async function ConsoleLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const viewer = await readViewer();
+  return <AppShell viewer={viewer}>{children}</AppShell>;
 }
