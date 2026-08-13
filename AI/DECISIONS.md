@@ -232,3 +232,38 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: A Phase 2A provider run reads bounded context and returns an analysis artifact. It has no repository, merge, deployment, or approval authority; applying a recommendation remains the existing owner-driven branch, commit, and draft-pull-request flow. Outbound execution is gated by `organizations.ai_provider_execution_enabled`, which defaults OFF and is owner-only, so a configured credential is never by itself consent to spend. Fallback requires the project policy to allow it *and* the failure class to be declared fallback eligible; credential, authorization, cancellation, and content-policy failures are never fallback eligible. An independent-review step cannot be satisfied by the agent that produced the work under review, whichever provider executed it.
 - Consequence: Enabling a provider changes what SoftwareFactory can analyze, not what it can change. Fallback cannot be used to shop a refused request to a second provider or to paper over a broken credential, and a single agent cannot both implement and approve. Widening this boundary requires a separate owner-approved decision and a forward migration that deliberately changes the interlocks.
+
+## ADR-034 - The bot fabric is a control-plane registry, not an execution surface
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migrations `020` and `021` pending
+- Decision: Model provider-neutral bots, organization-authored roles, and bot-to-project assignments as first-class tenant records. A bot stores metadata plus the NAME of a server-side environment variable; the value is resolved only on the server, only to a presence boolean, and never enters a table, a browser response, a log, or audit metadata. Privileged reference names (Supabase service role, GitHub App private key and secrets, database URL, Vercel token, and any `NEXT_PUBLIC_` variable) are rejected by both the application allowlist and a table CHECK constraint. Readiness describes configuration only: `ready` means the reference and configuration resolve server-side, and the check performs no provider request. Assignment is declarative routing intent; a bot holds at most one open posting so moving it between projects is a single audited transition.
+- Consequence: Registering a bot, authoring a role, and posting a bot cannot start work. OpenAI/Codex and Anthropic/Claude remain **Not Connected**, Phase 1C and Phase 2 remain unstarted, and no executor is introduced. A future worker binds to these records only under a separate owner-approved decision; connecting one would require verified-session evidence before any surface may say "Connected".
+
+## ADR-035 - Cascade layers govern the anchor reset
+
+- Date: 2026-08-12
+- Status: Accepted
+- Decision: Keep the global `a { color: inherit }` reset inside `@layer base`. Unlayered rules outrank every cascade layer, so an unlayered reset silently defeated `@layer components` classes: `.primary-action` rendered correctly as a button and at 1.19:1 contrast as a link.
+- Consequence: Component and utility classes control anchor color as intended. Accessibility scanning now covers `/bot-manager` in addition to the dashboard, so a regression of this class fails a gate instead of shipping.
+
+## ADR-036 - Marketing content is a separate, world-readable schema
+
+- Date: 2026-08-13
+- Status: Accepted for local implementation; hosted migration `20260813000100` pending
+- Decision: Serve the public marketing site from its own `marketing_*` schema rather than from tenant tables or hard-coded copy. Published rows carry an explicit `anon` SELECT policy, because marketing copy is public by design; RLS and FORCE RLS stay enabled and no marketing table grants INSERT, UPDATE, or DELETE to `anon` or `authenticated`. No marketing table references a tenant table or carries an `organization_id`. The single public write path is `subscribe_to_newsletter`, a SECURITY DEFINER function that validates and normalizes the address, is idempotent per email, and returns a constant status; `newsletter_subscribers` is excluded from the SELECT-policy loop, so a browser can never read it back.
+- Consequence: Marketing content can be edited without a deploy once the migration is hosted, and the public surface cannot be used to enumerate subscribers or reach tenant data. Widening the marketing schema's grants, or adding an `organization_id` to it, requires a superseding decision.
+
+## ADR-037 - Marketing pages state their content provenance
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `lib/marketing/queries.ts` never throws. An unconfigured or unreachable Supabase, or a missing page row, returns seeded content tagged `source: "seed"`, and the page renders a **Demo Data** notice. A missing page row falls back wholesale rather than mixing live and seeded sections.
+- Consequence: A marketing page always renders, and never presents seeded copy as live. Removing the fallback requires removing the notice with it; removing the notice alone would make the page lie.
+
+## ADR-038 - Two route groups separate the public site from the control plane
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `app/(marketing)/` carries the public header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`, with `robots.ts` disallowing console paths and `sitemap.ts` listing marketing routes only. The former console homepage is now `/solutions`, reached from the main navigation, and each shell owns exactly one skip link.
+- Consequence: The two visual systems and their metadata no longer share a layout. The console's lime palette is not reused on marketing pages; only shared primitives cross the boundary.

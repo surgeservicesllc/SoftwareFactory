@@ -12,13 +12,18 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260813000100_provider_execution_layer.sql";
+  "20260813000400_marketing_content.sql";
 
 const publicTables = [
   "activity_events",
   "agent_runs",
   "agents",
   "approvals",
+  // Universal bot fabric. RLS and FORCE RLS with tenant-scoped policies in
+  // 20260813000300_bot_fabric.sql.
+  "bot_assignments",
+  "bot_roles",
+  "bots",
   "commands",
   "connections",
   "deployments",
@@ -30,6 +35,20 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "incidents",
+  // Public marketing content. 20260813000400_marketing_content.sql revokes all
+  // from anon/authenticated, enables RLS and FORCE RLS on each table, then
+  // grants select back behind a `using (published)` policy.
+  "marketing_features",
+  "marketing_logos",
+  "marketing_pages",
+  "marketing_plan_features",
+  "marketing_pricing_plans",
+  "marketing_resource_topics",
+  "marketing_resources",
+  "marketing_stats",
+  "marketing_team_members",
+  "marketing_testimonials",
+  "newsletter_subscribers",
   "organization_members",
   "organizations",
   "policies",

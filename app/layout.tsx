@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 
-import { AppShell } from "@/components/app-shell";
-
 import "./globals.css";
 
 const vercelHost =
@@ -13,16 +11,16 @@ export const metadata: Metadata = {
       (vercelHost ? `https://${vercelHost}` : "http://localhost:3000"),
   ),
   title: {
-    default: "SoftwareFactory — AI Engineering Control Plane",
-    template: "%s · SoftwareFactory",
+    default: "AI Software Factory — Build, Deploy and Scale with AI",
+    template: "%s · AI Software Factory",
   },
   description:
-    "A safety-first command center for software projects, AI agents, delivery controls, and engineering intelligence.",
-  applicationName: "SoftwareFactory",
+    "An end-to-end platform that helps teams plan, build, deploy and scale better software, faster, with AI agents and automation at every step.",
+  applicationName: "AI Software Factory",
   openGraph: {
-    title: "SoftwareFactory — AI Engineering Control Plane",
+    title: "AI Software Factory — Build, Deploy and Scale with AI",
     description:
-      "Coordinate software projects, agents, risk controls, and engineering intelligence from one command center.",
+      "Plan, build, test, deploy and scale from one platform, with AI agents and automation at every step.",
     type: "website",
     images: [
       {
@@ -35,10 +33,11 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SoftwareFactory — AI Engineering Control Plane",
-    description: "A safety-first command center for governed software automation.",
+    title: "AI Software Factory — Build, Deploy and Scale with AI",
+    description: "Plan, build, deploy and scale better software, faster, with AI at the core.",
     images: ["/og.png"],
   },
+  // The marketing route group opts back in; the console group stays noindex.
   robots: {
     index: false,
     follow: false,
@@ -57,7 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <AppShell>{children}</AppShell>
+        {children}
       </body>
     </html>
   );
