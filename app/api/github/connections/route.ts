@@ -9,7 +9,7 @@ export async function GET() {
     const { activeOrganization, supabase } = await requireGitHubUser();
     const { data: connections, error: connectionsError } = await supabase
       .from("connections")
-      .select("id,name,organization_id,status,external_account_label,last_verified_at,error_message")
+      .select("id,name,organization_id,status,external_account_label,last_verified_at")
       .eq("provider", "github")
       .eq("organization_id", activeOrganization.id)
       .order("created_at", { ascending: true });
@@ -44,6 +44,9 @@ export async function GET() {
         const active = connection.status === "connected"
           && installation?.status === "active"
           && !installation.suspended_at;
+        const connectionLost = connection.status === "error"
+          || Boolean(installation?.suspended_at)
+          || Boolean(installation && installation.status !== "active" && connection.status === "connected");
         const statusReason = active
           ? null
           : installation?.suspended_at
@@ -97,8 +100,8 @@ export async function GET() {
                 visibility: repository.visibility,
               }))
             : [],
-          status: active ? "connected" : "not_connected",
-          statusLabel: active ? "Connected" : "Not Connected",
+          status: active ? "connected" : connectionLost ? "error" : "not_connected",
+          statusLabel: active ? "Connected" : connectionLost ? "Error" : "Not Connected",
           statusReason,
         };
       }),

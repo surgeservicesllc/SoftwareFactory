@@ -302,6 +302,90 @@ describe("GitHub webhook route", () => {
     },
   );
 
+  it("retains only bounded pull-request activity details and its sender", async () => {
+    const body = JSON.stringify({
+      ...validAcceptedPayloads.pull_request,
+      arbitrary_provider_blob: "must-not-be-retained",
+      pull_request: {
+        ...validAcceptedPayloads.pull_request.pull_request,
+        body: "private issue context",
+        head: { repo: { clone_url: "https://credential.example/private" } },
+      },
+      sender: { id: 789, login: "octocat", site_admin: true },
+    });
+
+    const response = await POST(webhookRequest(body, undefined, "pull_request"));
+
+    expect(response.status).toBe(202);
+    const inserted = webhookHarness.insert.mock.calls[0]?.[0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(inserted.payload).toMatchObject({
+      action: "opened",
+      pull_request: {
+        draft: true,
+        id: 1003,
+        number: 42,
+        state: "open",
+      },
+      sender: { id: 789, login: "octocat" },
+    });
+    expect(JSON.stringify(inserted.payload)).not.toMatch(
+      /arbitrary_provider_blob|private issue context|clone_url|credential\.example|html_url|site_admin/,
+    );
+  });
+
+  it.each([
+    ["check_run", "check_run", 1001],
+    ["check_suite", "check_suite", 1002],
+    ["workflow_run", "workflow_run", 1004],
+  ] as const)(
+    "retains only bounded %s status evidence",
+    async (eventName, resourceKey, resourceId) => {
+      const eventPayload = validAcceptedPayloads[eventName];
+      const resource = (eventPayload as unknown as Record<string, Record<string, unknown>>)[
+        resourceKey
+      ];
+      const body = JSON.stringify({
+        ...eventPayload,
+        [resourceKey]: {
+          ...resource,
+          output: { text: "private logs" },
+        },
+        sender: { id: 789, login: "octocat" },
+      });
+
+      const response = await POST(webhookRequest(body, undefined, eventName));
+
+      expect(response.status).toBe(202);
+      const inserted = webhookHarness.insert.mock.calls[0]?.[0] as {
+        payload: Record<string, Record<string, unknown>>;
+      };
+      expect(inserted.payload[resourceKey]).toEqual({
+        conclusion: "success",
+        id: resourceId,
+        status: "completed",
+      });
+      expect(JSON.stringify(inserted.payload)).not.toContain("private logs");
+    },
+  );
+
+  it("rejects unrecognized check states instead of persisting arbitrary values", async () => {
+    const body = JSON.stringify({
+      ...validAcceptedPayloads.check_run,
+      check_run: {
+        conclusion: "secret_value",
+        id: 1001,
+        status: "private_state",
+      },
+    });
+
+    const response = await POST(webhookRequest(body, undefined, "check_run"));
+
+    expect(response.status).toBe(400);
+    expect(webhookHarness.from).not.toHaveBeenCalled();
+  });
+
   it("records a delayed event for a deleted installation as ignored", async () => {
     webhookHarness.installationStatus = "deleted";
     const body = JSON.stringify({

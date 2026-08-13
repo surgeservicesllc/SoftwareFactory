@@ -19,8 +19,12 @@ Phase 1B extends the Phase 1A foundation with:
 - short-lived, repository-scoped installation tokens;
 - branch, commit, pull-request, check, tree, and content reads;
 - signed/idempotent/redacted webhook ingestion;
-- transactional project-to-repository linking and live dashboard/project/file views; and
-- owner/admin-initiated file changes that create only a controlled branch, commit, and draft pull request.
+- transactional project-to-repository linking by immutable repository identity and live dashboard/project/file views;
+- caller-bound, bounded browser projections that keep sensitive control-plane columns, raw Activity metadata, and stored webhook-delivery evidence server-side;
+- owner/admin-initiated ordinary file changes that create only a controlled branch, commit, and draft pull request; and
+- a separate, short-lived owner-only RED approval path for an exact protected-file draft change, with its immutable snapshot revalidated before a write-scoped token is minted, without default-branch, merge, or deployment authority;
+- generic secret-assignment rejection even when an opaque value lacks a known provider token prefix; and
+- stable repository-ID project linking serialized against concurrent active duplicates while permitting an intentional relink after archival.
 
 The code/configuration existing is not the same as a verified connection. GitHub remains **Not Connected** until the real installation and complete production acceptance journey pass.
 

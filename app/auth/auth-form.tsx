@@ -21,7 +21,7 @@ export function AuthForm({
 }: AuthFormProps) {
   const router = useRouter();
   const [error, setError] = useState(
-    initialError ? "The authentication callback could not be verified." : "",
+    initialError ? "That sign-in link could not be verified. Try again." : "",
   );
   const [message, setMessage] = useState(
     checkEmail ? "Check your email to confirm your account, then sign in." : "",
@@ -54,7 +54,7 @@ export function AuthForm({
 
       setMessage(
         result.message ??
-          "If the account exists, a one-time sign-in link has been sent.",
+          "If that account exists, a one-time sign-in link is on its way.",
       );
     } catch {
       setError("A sign-in link could not be sent.");
@@ -88,7 +88,7 @@ export function AuthForm({
       };
 
       if (!response.ok) {
-        setError(result.error?.message ?? "The request could not be completed.");
+        setError(result.error?.message ?? "That did not work. Check your details and try again.");
         return;
       }
 
@@ -100,7 +100,7 @@ export function AuthForm({
       router.push(result.next ?? "/");
       router.refresh();
     } catch {
-      setError("Authentication is temporarily unavailable.");
+      setError("Sign-in is temporarily unavailable. Try again shortly.");
     } finally {
       setPending(false);
     }
@@ -110,58 +110,68 @@ export function AuthForm({
 
   return (
     <div className="mx-auto max-w-md py-8 sm:py-16">
-      <div className="panel rounded-xl p-5 sm:p-7">
-        <p className="eyebrow">Supabase authentication</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-          {signingUp ? "Create your control-plane account" : "Sign in to SoftwareFactory"}
+      <div className="card p-6 sm:p-8">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">
+          {signingUp ? "Create your account" : "Sign in"}
         </h1>
-        <p className="mt-2 text-xs leading-5 text-[#7f8b9a]">
-          Sessions are verified server-side. Organization and project access remains tenant-scoped by Row Level Security.
+        <p className="mt-2 text-muted">
+          {signingUp
+            ? "You will be the owner of your workspace."
+            : "Welcome back to SoftwareFactory."}
         </p>
 
         {error ? (
-          <p role="alert" className="mt-5 rounded-lg border border-[#533036] bg-[#26171a] px-3.5 py-3 text-xs text-[#f0a1a8]">
+          <p
+            role="alert"
+            className="mt-5 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] px-4 py-3 text-sm text-[var(--danger)]"
+          >
             {error}
           </p>
         ) : null}
         {message ? (
-          <p role="status" className="mt-5 rounded-lg border border-[#3d4827] bg-[#1b2112] px-3.5 py-3 text-xs text-[#d7ed91]">
+          <p
+            role="status"
+            className="mt-5 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-4 py-3 text-sm text-[var(--accent-text)]"
+          >
             {message}
           </p>
         ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={submit}>
           {signingUp ? (
-            <label className="block">
-              <span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">Display name</span>
+            <div>
+              <label htmlFor="auth-name" className="field-label">Your name</label>
               <input
+                id="auth-name"
                 autoComplete="name"
-                className="h-11 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-sm text-[#dce2e8] focus:border-[#647f29] focus:outline-none"
+                className="input"
                 maxLength={120}
                 name="displayName"
                 required
               />
-            </label>
+            </div>
           ) : null}
 
-          <label className="block">
-            <span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">Email</span>
+          <div>
+            <label htmlFor="auth-email" className="field-label">Email</label>
             <input
+              id="auth-email"
               autoComplete="email"
-              className="h-11 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-sm text-[#dce2e8] focus:border-[#647f29] focus:outline-none"
+              className="input"
               maxLength={254}
               name="email"
               ref={emailRef}
               required
               type="email"
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">Password</span>
+          <div>
+            <label htmlFor="auth-password" className="field-label">Password</label>
             <input
+              id="auth-password"
               autoComplete={signingUp ? "new-password" : "current-password"}
-              className="h-11 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-sm text-[#dce2e8] focus:border-[#647f29] focus:outline-none"
+              className="input"
               maxLength={128}
               minLength={signingUp ? 12 : 8}
               name="password"
@@ -169,35 +179,32 @@ export function AuthForm({
               type="password"
             />
             {signingUp ? (
-              <span className="mt-2 block text-[10px] leading-4 text-[#687586]">
-                Use at least 12 characters with letters and numbers.
-              </span>
+              <span className="field-hint">At least 12 characters.</span>
             ) : null}
-          </label>
+          </div>
 
-          <button
-            className="min-h-11 w-full rounded-lg bg-[#c6f135] px-4 text-xs font-bold text-[#0b1003] disabled:cursor-wait disabled:opacity-60"
-            disabled={pending}
-            type="submit"
-          >
-            {pending ? "Verifying…" : signingUp ? "Create account" : "Sign in"}
+          <button className="btn btn-primary w-full" disabled={pending} type="submit">
+            {pending ? "Just a moment…" : signingUp ? "Create account" : "Sign in"}
           </button>
 
           {!signingUp ? (
             <button
-              className="min-h-11 w-full rounded-lg border border-[#34411c] bg-[#c6f135]/[0.07] px-4 text-xs font-semibold text-[#dffb7b] disabled:cursor-wait disabled:opacity-60"
+              className="btn btn-secondary w-full"
               disabled={pending}
               onClick={sendMagicLink}
               type="button"
             >
-              Email me a one-time sign-in link
+              Email me a sign-in link instead
             </button>
           ) : null}
         </form>
 
-        <p className="mt-5 text-center text-xs text-[#7f8b9a]">
+        <p className="mt-6 text-center text-sm text-muted">
           {signingUp ? "Already have an account?" : "Need an account?"}{" "}
-          <Link className="font-semibold text-[#dffb7b] underline underline-offset-4" href={signingUp ? "/auth/sign-in" : "/auth/sign-up"}>
+          <Link
+            className="font-medium text-accent-text underline underline-offset-4"
+            href={signingUp ? "/auth/sign-in" : "/auth/sign-up"}
+          >
             {signingUp ? "Sign in" : "Create one"}
           </Link>
         </p>

@@ -156,6 +156,14 @@ describe("GitHub repository write safety", () => {
     expect(isProtectedGitHubWritePath("lib/constants.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("package.json")).toBe(true);
     expect(isProtectedGitHubWritePath("package-lock.json")).toBe(true);
+    expect(isProtectedGitHubWritePath(".gitignore")).toBe(true);
+    expect(isProtectedGitHubWritePath(".vercelignore")).toBe(true);
+    expect(isProtectedGitHubWritePath(".dockerignore")).toBe(true);
+    expect(isProtectedGitHubWritePath("playwright.config.ts")).toBe(true);
+    expect(isProtectedGitHubWritePath("vitest.config.mts")).toBe(true);
+    expect(isProtectedGitHubWritePath("eslint.config.mjs")).toBe(true);
+    expect(isProtectedGitHubWritePath("tsconfig.json")).toBe(true);
+    expect(isProtectedGitHubWritePath("tsconfig.build.json")).toBe(true);
     expect(isProtectedGitHubWritePath("src/security/guard.ts")).toBe(true);
     expect(isProtectedGitHubWritePath("packages/web/AI/BACKLOG.md")).toBe(true);
     expect(isProtectedGitHubWritePath("packages/web/policies/AUTO_MERGE_POLICY.md")).toBe(true);

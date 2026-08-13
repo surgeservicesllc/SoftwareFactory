@@ -141,3 +141,38 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted for local implementation; hosted migration `019` pending
 - Decision: PostgreSQL evaluates table CHECK expressions with the invoking role's function privileges. Grant the service-role provider-ingress boundary execute only on the SECURITY DEFINER `jsonb_has_sensitive_keys(jsonb)` wrapper used by those constraints. Keep its recursive implementation and the standalone text secret classifier inaccessible to service role.
 - Consequence: Service-role inserts still pass the same sensitive-JSON constraints without exposing broader classifier internals or widening authenticated mutation authority. Hosted behavior must be verified after exact owner-approved promotion.
+
+## ADR-021 - Browser list and activity reads use explicit safe projections
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migrations `020` and `023` pending
+- Decision: Remove authenticated direct SELECT from the agents, commands, tasks, agent-runs, and reports base tables. Serve those lists through caller-bound, tenant-member SECURITY DEFINER RPCs with a 100-row ceiling and allowlisted columns; return agent capabilities only when serialized JSON is at most 8 KiB. Treat activity metadata as an internal audit payload: the browser may receive only bounded allowlisted actor, source, resource, action, status, conclusion, and transition evidence; raw metadata/provider payloads stay server-side.
+- Consequence: Adding a UI field requires an explicit server/database projection decision rather than inheriting every base-table or audit column. Caller membership, row limits, output size, RLS behavior, and metadata redaction require hosted verification after promotion.
+
+## ADR-022 - Immutable GitHub repository identity is the authorization key
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migration `021` pending
+- Decision: Persist the tenant-scoped `github_repositories.id` UUID on each GitHub project connection and require every change request to match that exact project/connection/repository binding. Repository full names and default branches remain synchronized display/provider metadata, not authorization keys. Backfill only an unambiguous unique match.
+- Consequence: Repository rename cannot break or transfer authorization, and a stale same-name repository cannot inherit project access. Project creation, metadata propagation, file changes, and webhook project attribution must follow the stable UUID and fail closed when no exact binding exists.
+
+## ADR-023 - Protected files require exact owner approval before draft-PR execution
+
+- Date: 2026-08-12
+- Status: Accepted for local implementation; hosted migration `022` pending
+- Decision: Supersede ADR-011/ADR-014 only for protected-path handling: an active organization owner may authorize one exact protected-file change by entering the path-bound RED confirmation phrase and bounded rationale/rollback plan. Persist immutable requester/approver/executor, path, content digest, expected blob SHA, base branch, decision, and expiry evidence atomically before any provider write. Give reservations a five-minute lease, mark the provider-execution boundary before the first write, and permit reclaim only for the original exact intent while no provider execution or evidence exists.
+- Consequence: Admins and unapproved/expired/mismatched protected requests fail closed; likely secrets remain prohibited. Approval authorizes only the existing isolated branch, commit, and open draft-PR flow for at most 15 minutes. It never authorizes a default-branch write, merge, deployment, workflow permission, or autonomous action.
+
+## ADR-024 - Raw Activity and webhook evidence stay behind a bounded RPC
+
+- Date: 2026-08-13
+- Status: Accepted for local implementation; hosted migration `024` pending
+- Decision: Revoke authenticated direct SELECT on `activity_events` and `github_webhook_deliveries`. Expose Activity only through caller-member `list_activity`, capped at 100 rows and rebuilt from bounded allowlisted scalar evidence.
+- Consequence: Raw audit metadata and even stored redacted webhook subsets stay server-side. Any new browser-visible field requires an explicit projection change and hosted tenant/redaction verification.
+
+## ADR-025 - Protected execution integrity and repository relinking are serialized
+
+- Date: 2026-08-13
+- Status: Accepted for local implementation; hosted migration `025` pending
+- Decision: Bind each protected approval snapshot to its exact reserved change, revalidate it at provider entry, and mint the write-scoped installation token only after that durable boundary. Detect non-placeholder values assigned to generic secret-bearing keys. Serialize project linking by tenant/repository UUID, rejecting concurrent active duplicates while allowing relink after all prior projects are archived.
+- Consequence: Approval cannot be attached to a different or already-started change, privileged GitHub token minting cannot precede the database execution boundary, opaque credentials cannot evade prefix-only checks, and mutable repository names cannot race active-link ownership.

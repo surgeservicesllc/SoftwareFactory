@@ -34,7 +34,7 @@ This result is not an approval. The response separately reports `executionAllowe
 - the literal GREEN ceiling; and
 - explicit `false` values for auto approve, merge, deploy, and rollback.
 
-Migration `010_phase1d_observation_controls` adds the organization kill-switch column, locks it ON, constrains project rows to autonomous mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only RPC and immutable audit metadata. It is applied to the hosted database: preflight found zero unsafe projects, both constraints are validated, zero organizations have the switch OFF, zero unsafe projects remain, authenticated RPC execute is present, and anonymous execute is absent. This evidence does not make execution available. Post-`010` CLI lint remains unverified because the current Supabase CLI account returned `403`; the last clean linked lint is through `009`.
+Migration `010_phase1d_observation_controls` adds the organization kill-switch column, locks it ON, constrains project rows to autonomous mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only RPC and immutable audit metadata. It is applied to the hosted database: preflight found zero unsafe projects, both constraints are validated, zero organizations have the switch OFF, zero unsafe projects remain, authenticated RPC execute is present, and anonymous execute is absent. This evidence does not make execution available. Supabase CLI access is restored as `surgeservicesllc@gmail.com`, the exact hosted project is linked, and linked database lint is clean through the current hosted ledger ending at `010`; migrations `011`-`025` remain unhosted.
 
 ## What is not built
 

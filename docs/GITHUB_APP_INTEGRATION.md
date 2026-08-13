@@ -2,7 +2,7 @@
 
 Status: **Implemented with a repository-scoped provider installation; in-product connection and webhook remain Not Connected pending authenticated callback and end-to-end verification.**
 
-The GitHub App exists, its server-only values are configured in Vercel, and provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. That provider-side fact does not satisfy the product definition of Connected: the installation has not completed the authenticated SoftwareFactory callback, tenant connection persistence, repository synchronization, project linking, file read/change, draft pull request, or webhook acceptance journey.
+The GitHub App exists, its server-only values are configured in Vercel, and personal-account provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. That provider-side fact does not satisfy the product definition of Connected: the installation has not completed the authenticated SoftwareFactory callback, tenant connection persistence, repository synchronization, project linking, file read/change, draft pull request, or webhook acceptance journey.
 
 ## Registered App
 
@@ -21,7 +21,7 @@ The GitHub App exists, its server-only values are configured in Vercel, and prov
 | Expiring user authorization tokens | Enabled |
 | Device flow | Disabled |
 | Redirect on installation update | Enabled |
-| Verified provider installation | `153286187` on `surgeservicesllc` |
+| Verified provider installation | Personal `surgeservicesllc` installation `153286187` |
 | Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
 | Sole remaining App key fingerprint | `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` |
 
@@ -72,7 +72,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The production/preview GitHub variable names are configured in the Vercel project without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key; only its public fingerprint is recorded above. The last independently verified pre-hardening release was `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`; that historical deployment does not validate this working tree. Production Supabase public/runtime variables are configured. Preview Supabase configuration is not independently verified.
+The exact Vercel project `surgeservices-projects/softwarefactory` is linked, and the production/preview encrypted GitHub variable names are present without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key; only its public fingerprint is recorded above. The last independently verified pre-hardening release was `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`; that historical deployment does not validate this working tree. Production Supabase public/runtime variable names are present. Preview Supabase configuration is not independently verified.
 
 ## Connection flow
 
@@ -122,13 +122,13 @@ Migration `20260812000700_github_project_linking.sql` adds a transactional funct
 
 Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
 
-Local forward migrations `011`-`019` form one unhosted hardening chain. `011`-`013` close initial direct mutation paths, add actor-attributed terminal evidence, and reconcile newly granted repositories. `014` propagates a provider-authoritative rename/default branch only to exact connection-linked projects. `015` recovers a provider-created draft PR after an ambiguous completion response. `016` makes installation deletion terminal and orders installation lifecycle changes by provider time. `017` closes remaining direct authenticated connection/project/link/change-request writes and reserves exact live change intent through an authenticated RPC. `018` orders repository events by provider time and preserves terminal repository deletion until an explicit newer restore, which remains unselected pending access synchronization. `019` grants service role only the SECURITY DEFINER sensitive-JSON wrapper required when provider-ingress table CHECK constraints run, while leaving recursive and text classifiers inaccessible. None is hosted; exact owner approval and complete post-apply verification are required before production claims use them.
+Local forward migrations `011`-`025` form one unhosted hardening chain. `011`-`013` close initial direct mutation paths, add actor-attributed terminal evidence, and reconcile newly granted repositories. `014` propagates a provider-authoritative rename/default branch only to exact connection-linked projects. `015` recovers a provider-created draft PR after an ambiguous completion response. `016` makes installation deletion terminal and orders installation lifecycle changes by provider time. `017` closes remaining direct authenticated connection/project/link/change-request writes and reserves exact live change intent through an authenticated RPC. `018` orders repository events by provider time and preserves terminal repository deletion until an explicit newer restore, which remains unselected pending access synchronization. `019` grants service role only the SECURITY DEFINER sensitive-JSON wrapper required when provider-ingress table CHECK constraints run, while leaving recursive and text classifiers inaccessible. `020` removes authenticated direct reads of sensitive control-plane base tables in favor of bounded caller-member projections. `021` persists the immutable repository UUID as the project/change authorization key. `022` records exact short-lived owner-only RED protected-change approval before provider execution and adds a five-minute pre-provider reservation lease. `023` records bounded allowlisted GitHub activity details and attributes project events through the stable repository UUID. `024` revokes authenticated reads of raw Activity/webhook-delivery rows and exposes the caller-member, bounded `list_activity` projection. `025` rejects opaque generic secret assignments, enforces exact protected-approval/reservation integrity and provider-boundary-before-token ordering, and serializes active project linking by stable repository UUID while permitting relink after archival. None is hosted; exact owner approval and complete post-apply verification are required before production claims use them.
 
-All four GitHub tables use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
+All exposed GitHub integration tables, including the protected-approval table added by `022`, use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
 
 ## Controlled file edits
 
-The standard editor requires an owner/admin, an active project-to-connection mapping, the verified synchronized repository default branch, the expected blob SHA, a bounded idempotency key, and content that passes sensitive-data checks. Normalized repository full names are matched literally in application code, never through SQL `ILIKE` wildcard semantics.
+The ordinary editor requires an owner/admin, an active project-to-connection mapping bound to the immutable tenant-scoped repository UUID, the verified synchronized repository default branch, the expected blob SHA, a bounded idempotency key, and content that passes sensitive-data checks. Repository full names remain normalized display/freshness metadata; they are not the authorization key.
 
 It refuses:
 
@@ -137,13 +137,12 @@ It refuses:
 - archived/disabled/unselected repositories;
 - stale SHA overwrites;
 - files larger than 1 MiB or binary/non-UTF-8 files;
-- repository control/memory (`.github/**`, `CODEOWNERS`, `AGENTS.md`, `CLAUDE.md`, `AI/**`, `policies/**`);
-- all Supabase paths, every `app/api/**` route, server-side GitHub/Supabase libraries, Auth/session boundaries, and root proxy/middleware;
-- deployment, environment, and infrastructure controls such as `.env*`, `.vercel/**`, `vercel.json`, Docker/Compose, Terraform, and common platform manifests;
-- security-sensitive subject paths whose names identify authorization, permissions, roles, RLS, sessions/cookies, cryptography/encryption, secrets/credentials/private keys, webhooks, deployments/releases/rollback, DNS, or billing; and
+- unapproved protected resources, including repository control/memory, Supabase, every application API, server-side GitHub/Supabase code, Auth/session boundaries, deployment/environment/infrastructure controls, and security-sensitive subject paths;
 - likely credentials in content, title, or commit message.
 
-Successful writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing is merged or deployed.
+For a protected path, the route first returns an approval-required response. Only an active organization owner may continue, and only by providing the exact `APPROVE RED DRAFT PR FOR <path>` phrase, a 20-500 character rationale, and a 20-500 character rollback plan. Migrations `022`/`025` atomically bind immutable approval evidence to the exact reserved change, requester/approver/executor, organization/project/connection/repository UUID, path, content digest, expected blob SHA, base branch, and a maximum 15-minute expiry before provider execution. Admin-only, expired, mismatched, post-execution, or secret-bearing approval attempts fail closed. Generic secret-key assignments with non-placeholder values are blocked even when the value lacks a provider-specific token prefix.
+
+Successful ordinary or approved protected writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. A reservation expires after five minutes and is reclaimable only by its original requester for the exact immutable intent before any provider execution/evidence; the server persists and revalidates entry into the provider boundary before minting the write-scoped installation token or contacting GitHub. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing writes the default branch, merges, or deploys.
 
 ## Webhook guarantees
 
@@ -156,6 +155,7 @@ Successful writes create `softwarefactory/*` branch state, commit to that branch
 - Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
 - After migration `013` is hosted, upsert newly granted repository metadata through its service-role-only RPC before recording the repository-selection reconciliation.
 - After migrations `014`, `016`, and `018` are hosted, propagate repository rename/default-branch metadata only through the exact linked connection; order installation/repository transitions by provider timestamps; keep deletion terminal; and audit ignored stale or terminal events.
+- After migrations `021`, `023`, and `024` are hosted, project attribution follows the immutable repository UUID and accepted events project only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence through `list_activity`. Authenticated browser sessions cannot directly read raw Activity rows or even the stored redacted webhook subset; raw bodies and unknown metadata never become browser output.
 - Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
 
 ## Production acceptance checklist
@@ -165,16 +165,17 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - [ ] Production release contains the current routes and migrations.
 - [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
 - [ ] An authenticated SoftwareFactory owner/admin starts the installation flow.
-- [x] GitHub provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
+- [x] Personal GitHub provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
 - [ ] Callback verifies the installation and returns to Connections.
-- [ ] Connection shows the real account, installation ID, repository count, and fresh sync time.
+- [ ] Connection shows the real account, installation ID, repository-selection mode, repository count, and fresh sync time.
 - [ ] Manual sync handles success and revoked/insufficient-permission failure.
-- [ ] A project links transactionally to a selected repository and the synchronized default branch; a stale branch expectation fails closed.
+- [ ] A project links transactionally by stable repository ID to a selected repository and the synchronized default branch; concurrent duplicate active links and stale branch expectations fail closed, while relink after archival succeeds.
 - [ ] Dashboard count derives from the live tenant records.
-- [ ] Projects displays real branches, commits, pull requests, and checks.
+- [ ] Projects displays real repository sync freshness, branch protection/SHA, commits with authors/dates, pull requests with authors/created/updated times and detail-fetched mergeability, default-branch checks, and checks for each displayed PR head SHA.
 - [ ] Files reads a real repository file and its SHA.
 - [ ] A safe test edit creates only a controlled branch, commit, and draft PR.
-- [ ] A stale SHA, SQL-wildcard-like repository name, and representative paths from every protected-resource class fail closed.
+- [ ] A stale SHA, renamed/same-name repository mismatch, likely secret, unapproved/admin protected request, expired/mismatched owner approval, and invalid/expired/after-provider reservation reclaim all fail closed.
+- [ ] One exact owner-approved protected-file test creates only an isolated branch, commit, and draft PR, with immutable approval/execution evidence and no merge/deploy/default-branch write.
 - [ ] Pull request/webhook updates reconcile and create immutable activity evidence.
 - [ ] Delayed installation/repository events are ignored by provider time, deleted installation IDs stay terminal, and a newer explicit repository restore remains unselected until access sync.
 - [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.

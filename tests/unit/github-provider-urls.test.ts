@@ -43,6 +43,53 @@ describe("GitHub provider web URLs", () => {
       .toBe("https://github.com/example/repository");
   });
 
+  it("loads bounded per-pull details so mergeability is real provider data", async () => {
+    const listedPullRequest = {
+      base: { ref: "main" },
+      created_at: now,
+      draft: false,
+      head: { ref: "feature", sha },
+      html_url: "https://github.com/example/repository/pull/1",
+      id: 1,
+      number: 1,
+      state: "open",
+      title: "Change",
+      updated_at: now,
+      user: null,
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response([listedPullRequest]))
+      .mockResolvedValueOnce(response({
+        ...listedPullRequest,
+        mergeable: true,
+        mergeable_state: "clean",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listGitHubPullRequests("token", "example", "repository", { includeMergeability: true }))
+      .resolves.toEqual([expect.objectContaining({
+        mergeability: "mergeable",
+        mergeableState: "clean",
+      })]);
+    expect(String(fetchMock.mock.calls[1]?.[0]))
+      .toBe("https://api.github.com/repos/example/repository/pulls/1");
+  });
+
+  it("keeps list data with unknown mergeability when a detail lookup fails", async () => {
+    const listedPullRequest = {
+      base: { ref: "main" }, created_at: now, draft: false,
+      head: { ref: "feature", sha },
+      html_url: "https://github.com/example/repository/pull/1",
+      id: 1, number: 1, state: "open", title: "Change", updated_at: now, user: null,
+    };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response([listedPullRequest]))
+      .mockResolvedValueOnce(Response.json({ message: "temporary" }, { status: 503 })));
+
+    await expect(listGitHubPullRequests("token", "example", "repository", { includeMergeability: true }))
+      .resolves.toEqual([expect.objectContaining({ mergeability: "unknown", number: 1 })]);
+  });
+
   it("rejects an unsafe repository URL from installation synchronization", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
       repositories: [{

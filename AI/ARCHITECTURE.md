@@ -21,9 +21,10 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - Server Components are preferred for data-bearing views; client boundaries are narrow interactive forms/editors.
 - Auth/onboarding resolves the user and active tenant before live control-plane views.
 - Connections shows real Supabase/GitHub metadata only after exact active-organization reads; otherwise it says **Not Connected**.
-- Projects derives repository/default-branch state from an active unsuspended installation and selected healthy repository through an audited transaction. Retained rows alone do not count as connected.
-- Files reads the real repository tree/content at explicit refs only for projects whose live connection evidence remains valid, and turns owner/admin intent into a controlled draft-PR flow.
-- Activity reads immutable tenant events through caller-session RLS and returns a bounded browser shape without raw metadata.
+- Projects derives repository/default-branch authorization and UI matching from the immutable tenant-scoped GitHub repository UUID on the project connection. It renders live sync freshness, branch protection/SHA, commit and PR dates/authors, detail-fetched mergeability, default-branch checks, and per-PR checks against each displayed head SHA; retained rows alone do not count as connected.
+- Files reads the real repository tree/content at explicit refs only for projects whose live connection evidence remains valid. Ordinary owner/admin intent enters the controlled draft-PR flow; an exact protected-file intent additionally requires an active owner, path-bound RED confirmation, rationale, rollback plan, and unexpired recorded approval.
+- Activity reads immutable tenant events through the caller-member, 100-row `list_activity` RPC and returns an allowlisted bounded projection of actor/source/resource/action/status/conclusion/transition evidence. Authenticated direct SELECT on raw Activity and webhook-delivery rows is revoked.
+- Agents, commands, tasks, runs, and reports use caller-bound list RPCs that cap results at 100 and omit sensitive base-table columns. Agent capabilities are returned only when their serialized JSON is at most 8 KiB. Authenticated sessions do not receive direct SELECT on those base tables.
 - Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
 
 ## Persistence
@@ -36,7 +37,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
-- Local migrations `011`-`019` are one pending hardening chain. `011`-`013` close initial direct mutation paths, align `github_pat_` detection, add actor-attributed terminal change evidence, and reconcile repository grants. `014` propagates provider-authoritative repository names/default branches to exact linked projects. `015` recovers an already-created draft PR after an ambiguous database-completion response. `016` makes installation deletion terminal and orders installation lifecycle events by provider time. `017` removes remaining direct authenticated connection/project/link/change-request writes and introduces a narrow authenticated reservation RPC. `018` orders repository metadata events by provider time and preserves terminal deletion until an explicit newer restore. `019` grants the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed for table CHECK evaluation; recursive and text classifiers remain inaccessible. None is hosted yet; the complete chain requires exact owner approval and post-apply verification.
+- Local migrations `011`-`025` are one pending hardening chain. `011`-`013` close initial direct mutation paths, align `github_pat_` detection, add actor-attributed terminal change evidence, and reconcile repository grants. `014` propagates provider-authoritative repository names/default branches to exact linked projects. `015` recovers an already-created draft PR after an ambiguous database-completion response. `016` makes installation deletion terminal and orders installation lifecycle events by provider time. `017` removes remaining direct authenticated connection/project/link/change-request writes and introduces a narrow authenticated reservation RPC. `018` orders repository metadata events by provider time and preserves terminal deletion until an explicit newer restore. `019` grants the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed for table CHECK evaluation; recursive and text classifiers remain inaccessible. `020` removes authenticated SELECT on sensitive control-plane base tables and adds bounded caller-member list projections. `021` makes the immutable GitHub repository UUID the project/change authorization key. `022` records an exact owner-only RED protected-change approval before provider execution and adds a reclaimable five-minute pre-provider reservation lease. `023` enriches activity with bounded verified GitHub details and stable project attribution. `024` removes authenticated raw Activity/webhook reads behind `list_activity`. `025` hardens generic secret assignments, exact protected approval/reservation integrity and provider-boundary/token ordering, and transaction-serialized stable repository relinking. None is hosted yet; the complete chain requires exact owner approval and post-apply verification.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -53,11 +54,11 @@ Read routes normalize and schema-validate branches, commits, PRs, check runs, di
 
 Write flow:
 
-1. Same-origin, authenticated owner/admin request.
+1. Same-origin, authenticated owner/admin request. A protected path requires the active organization owner specifically.
 2. Verify active connection, selected non-archived repository, project mapping, and synchronized default branch. Repository full names are normalized and compared literally, without SQL wildcard semantics.
-3. Reject likely secrets and protected resource classes including repository memory/policies, Supabase, all application API routes, server-side provider/data libraries, Auth/session boundaries, and deployment/environment/infrastructure files; validate expected blob SHA and idempotency key.
-4. Reserve `github_change_requests` evidence through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository binding.
-5. Read current default-branch reference/file state.
+3. Reject likely secrets. For a protected resource class, require the exact `APPROVE RED DRAFT PR FOR <path>` phrase plus bounded rationale and rollback plan; bind approval to the path, content digest, expected blob SHA, branch, requester/approver/executor, and a maximum 15-minute decision window.
+4. Reserve `github_change_requests` evidence through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository UUID binding. Protected approval evidence is append-only, recorded atomically, and trigger-bound to that exact pre-provider reservation.
+5. Within the five-minute reservation lease, revalidate approval/intent and mark the persisted provider-execution boundary before minting the write-scoped GitHub installation token. An expired reservation is reclaimable only by the original requester for the exact intent and only while no provider execution/evidence exists.
 6. Create a unique `softwarefactory/*` branch.
 7. Commit using the expected blob SHA.
 8. Require an open draft pull request.
@@ -76,6 +77,7 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - Reconcile installation/repository/PR/check/status events through bounded database functions. Newly granted repository metadata uses the service-role-only `013` function after hosted promotion.
 - After `016`/`018` promotion, provider timestamps order lifecycle metadata, deletion is terminal for an installation ID, stale events are recorded as ignored, and a restored repository remains unselected until access is resynchronized.
 - Repository rename/default-branch updates reach only projects linked through the same tenant connection and emit redacted immutable evidence through `014`.
+- After `021`/`023` promotion, project attribution and metadata propagation follow the immutable repository UUID rather than mutable names; accepted GitHub activity may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition details.
 - Unknown events/installations are ignored safely, not used to create tenant ownership.
 
 ## Security invariants
@@ -87,6 +89,7 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - Important transitions append immutable events.
 - RED/protected actions require exact owner approval.
 - Auto approve/merge/deploy/rollback remain OFF.
+- Command mutations require same-origin requests. Global CSP/security headers deny framing and objects and restrict browser scripts, connections, images, forms, and other resource loads to required origins.
 
 ## Deployment topology
 

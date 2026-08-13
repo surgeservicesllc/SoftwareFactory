@@ -2,23 +2,17 @@
 
 import {
   ArrowRight,
-  Box,
   CheckCircle2,
-  Cloud,
-  Database,
   ExternalLink,
   GitFork,
-  KeyRound,
   Loader2,
   PlugZap,
   RefreshCw,
-  ShieldAlert,
-  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { NotConnectedBadge, Panel, StatusBadge } from "@/components/ui";
+import { BlockedState, Card, NotConnectedBadge, StatusBadge } from "@/components/ui";
 
 type Organization = { id: string; name: string; slug: string; role: string };
 type Repository = {
@@ -34,8 +28,8 @@ type Repository = {
 type GithubConnection = {
   id: string;
   name: string;
-  status: string;
-  statusLabel: "Connected" | "Not Connected";
+  status: "connected" | "not_connected" | "error";
+  statusLabel: "Connected" | "Not Connected" | "Error";
   statusReason: string | null;
   account: { login: string; type: string | null } | null;
   installation: { id: number; repositorySelection: string; suspendedAt: string | null; lastSyncedAt: string | null } | null;
@@ -43,6 +37,13 @@ type GithubConnection = {
 };
 
 type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
+
+const otherProviders = [
+  { name: "OpenAI model adapter", connected: false },
+  { name: "Anthropic model adapter", connected: false },
+  { name: "Vercel deployment adapter", connected: false },
+  { name: "Supabase control plane", connected: true },
+] as const;
 
 export function ConnectionsConsole() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -165,7 +166,7 @@ export function ConnectionsConsole() {
       const response = await fetch(`/api/github/connections/${connectionId}/sync`, { method: "POST" });
       const body = (await response.json()) as { error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "The GitHub connection could not be synchronized.");
-      setMessage("GitHub account, repositories, and default branches synchronized.");
+      setMessage("Repositories and branches are up to date.");
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "GitHub sync failed.");
@@ -174,10 +175,14 @@ export function ConnectionsConsole() {
     }
   }
 
+  /*
+   * Disconnecting revokes repository access for the whole organization, so it
+   * keeps a typed confirmation rather than a single click.
+   */
   async function disconnectConnection(connection: GithubConnection) {
     if (!connection.installation) return;
     const confirmation = window.prompt(
-      `Disconnect installation #${connection.installation.id} from SoftwareFactory? Project history will be preserved.\n\nType DISCONNECT GITHUB to continue.`,
+      `Disconnect GitHub installation #${connection.installation.id}?\n\nSoftwareFactory will lose access to these repositories. Your projects and history are kept.\n\nType DISCONNECT GITHUB to confirm.`,
     );
     if (confirmation !== "DISCONNECT GITHUB") return;
     setPending("disconnect");
@@ -190,7 +195,7 @@ export function ConnectionsConsole() {
       });
       const body = (await response.json()) as { affectedProjectCount?: number; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "The GitHub connection could not be disconnected.");
-      setMessage(`GitHub disconnected. ${body.affectedProjectCount ?? 0} affected project(s) retain their history.`);
+      setMessage(`GitHub disconnected. ${body.affectedProjectCount ?? 0} project(s) kept their history.`);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "GitHub disconnect failed safely.");
@@ -200,125 +205,235 @@ export function ConnectionsConsole() {
   }
 
   if (loadState === "loading") {
-    return <Panel className="grid min-h-64 place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" aria-label="Loading connections" /></Panel>;
-  }
-
-  if (loadState === "signed-out") {
-    return <SetupNotice title="Authentication required" description="Sign in with the SoftwareFactory owner account before connecting GitHub." action={<Link href="/sign-in?next=/connections" className="primary-action">Sign in<ArrowRight className="size-4" /></Link>} />;
-  }
-
-  if (loadState === "onboarding") {
     return (
-      <SetupNotice
-        title="Create the control-plane organization"
-        description="The first authenticated user becomes its owner. GitHub connections and projects remain tenant-scoped through Supabase RLS."
-        action={
-          <form onSubmit={createOrganization} className="mt-4 flex w-full max-w-md flex-col gap-2 sm:flex-row">
-            <input name="organizationName" required minLength={2} placeholder="Engineering organization" aria-label="Organization name" className="h-10 flex-1 rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-xs text-white focus:border-[#647f29] focus:outline-none" />
-            <button disabled={pending === "onboarding"} className="primary-action justify-center">{pending === "onboarding" ? <Loader2 className="size-4 animate-spin" /> : null}Create organization</button>
-          </form>
-        }
-      />
+      <Card className="grid min-h-64 place-items-center">
+        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading connections" />
+      </Card>
     );
   }
 
-  if (loadState === "selection") {
+  if (loadState === "signed-out") {
     return (
-      <SetupNotice
-        title="Select an organization"
-        description="Choose the tenant whose GitHub installations and projects you want to manage."
-        action={<div className="mt-4 flex flex-wrap justify-center gap-2">{organizations.map((item) => <button key={item.id} type="button" onClick={() => void selectOrganization(item.id)} disabled={pending !== null} className="secondary-action">{item.name}<ArrowRight className="size-3.5" /></button>)}</div>}
+      <BlockedState
+        icon={PlugZap}
+        title="Sign in first"
+        description="You need to be signed in as the owner before connecting GitHub."
+        href="/auth/sign-in?next=/connections"
+        label="Sign in"
       />
     );
   }
 
   if (loadState === "error") {
     return (
-      <SetupNotice
-        title="Connections unavailable"
-        description={message || "The live connection service could not be reached."}
-        action={<button type="button" onClick={() => void load()} className="secondary-action"><RefreshCw className="size-3.5" />Retry</button>}
-      />
+      <div className="space-y-4">
+        <BlockedState
+          icon={PlugZap}
+          title="Connections are unavailable"
+          description={message || "Your connections could not be loaded."}
+        />
+        <button type="button" onClick={() => void load()} className="btn btn-secondary">
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (loadState === "onboarding") {
+    return (
+      <Card className="mx-auto grid min-h-64 max-w-lg place-items-center p-8 text-center">
+        <div>
+          <PlugZap className="mx-auto size-8 text-faint" aria-hidden="true" />
+          <h2 className="mt-4 text-lg font-semibold text-foreground">Name your workspace</h2>
+          <p className="mt-2 text-muted">
+            This groups your projects and connections. You become its owner.
+          </p>
+          <form onSubmit={createOrganization} className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <input
+              name="organizationName"
+              required
+              minLength={2}
+              placeholder="Acme Engineering"
+              aria-label="Workspace name"
+              className="input flex-1"
+            />
+            <button disabled={pending === "onboarding"} className="btn btn-primary shrink-0">
+              {pending === "onboarding" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Create
+            </button>
+          </form>
+          {message ? <p className="mt-3 text-sm text-[var(--warning)]">{message}</p> : null}
+        </div>
+      </Card>
+    );
+  }
+
+  if (loadState === "selection") {
+    return (
+      <Card className="mx-auto grid min-h-64 max-w-lg place-items-center p-8 text-center">
+        <div>
+          <PlugZap className="mx-auto size-8 text-faint" aria-hidden="true" />
+          <h2 className="mt-4 text-lg font-semibold text-foreground">Choose a workspace</h2>
+          <p className="mt-2 text-muted">Pick the one whose GitHub connection you want to manage.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {organizations.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void selectOrganization(item.id)}
+                disabled={pending !== null}
+                className="btn btn-secondary"
+              >
+                {item.name}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <Panel className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#e4e9ed]"><KeyRound className="size-4 text-[#c6f135]" />Secret-safe GitHub App connection</div>
-          <p className="mt-2 max-w-2xl text-xs leading-5 text-[#748191]">Installation tokens are minted server-side, expire quickly, and are never returned to the browser or stored in Supabase. Database rows contain only installation and repository metadata.</p>
-          {message ? <p className="mt-3 flex items-start gap-2 text-[11px] text-[#d7b96d]" aria-live="polite"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{message}</p> : null}
-        </div>
-        <button type="button" onClick={connectGithub} disabled={pending !== null} className="primary-action justify-center">
-          {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
-          {connections.length ? "Connect another GitHub account" : "Connect GitHub"}
-        </button>
-      </Panel>
+    <div className="space-y-4">
+      {message ? (
+        <p className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning)]" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
 
       {connections.length ? (
-        <div className="space-y-4">
-          {connections.map((connection) => (
-            <Panel key={connection.id} className="overflow-hidden">
-              <div className="flex flex-col gap-4 border-b border-[#202a36] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-                <div>
-                  <div className="flex items-center gap-2"><GitFork className="size-4 text-[#c6f135]" /><h2 className="text-base font-semibold text-white">{connection.account?.login ?? connection.name}</h2><StatusBadge tone={connection.status === "connected" ? "safe" : "warning"}>{connection.statusLabel}</StatusBadge></div>
-                  {connection.statusReason ? <p className="mt-2 text-[10px] text-[#d7b96d]">{connection.statusReason}</p> : null}
-                  <dl className="mt-4 grid grid-cols-[110px_1fr] gap-x-4 gap-y-2 text-[11px]">
-                    <dt className="text-[#667485]">Type</dt><dd className="text-[#c5cdd6]">GitHub App{connection.account?.type ? ` · ${connection.account.type}` : ""}</dd>
-                    <dt className="text-[#667485]">Installation</dt><dd className="font-mono text-[#c5cdd6]">{connection.installation ? `#${connection.installation.id}` : "Not Connected"}</dd>
-                    <dt className="text-[#667485]">Repositories</dt><dd className="text-[#c5cdd6]">{connection.repositories.length}</dd>
-                    <dt className="text-[#667485]">Last sync</dt><dd className="text-[#c5cdd6]">{formatDate(connection.installation?.lastSyncedAt ?? null)}</dd>
-                  </dl>
+        connections.map((connection) => (
+          <Card key={connection.id} className="overflow-hidden">
+            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <GitFork className="size-5 shrink-0 text-foreground" aria-hidden="true" />
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {connection.account?.login ?? connection.name}
+                  </h2>
+                  <StatusBadge tone={connection.status === "connected" ? "safe" : connection.status === "error" ? "danger" : "warning"}>
+                    {connection.statusLabel}
+                  </StatusBadge>
                 </div>
-                <div className="flex gap-2">
-                  {connection.installation ? <><button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="secondary-action"><RefreshCw className={`size-3.5 ${pending === "sync" ? "animate-spin" : ""}`} />Sync</button>
-                  <a href={githubInstallationManagementUrl(connection)} target="_blank" rel="noreferrer" className="secondary-action">Manage<ExternalLink className="size-3.5" /></a>
-                  <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="secondary-action border-[#4a292e] text-[#ff9da3]">{pending === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}Disconnect</button></> : null}
-                </div>
+                {connection.statusReason ? (
+                  <p className="mt-2 text-sm text-[var(--warning)]">{connection.statusReason}</p>
+                ) : null}
+                <p className="mt-2 text-sm text-muted">
+                  {connection.repositories.length} repositor{connection.repositories.length === 1 ? "y" : "ies"} ·
+                  Last checked {formatDate(connection.installation?.lastSyncedAt ?? null)}
+                </p>
+                {connection.installation ? (
+                  <p className="mt-1 text-sm text-faint">
+                    Installation #{connection.installation.id} · Repository access: {formatRepositorySelection(connection.installation.repositorySelection)}
+                  </p>
+                ) : null}
               </div>
-              <div className="p-5 sm:p-6">
-                <p className="eyebrow">Repositories</p>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {connection.installation ? (
+                <div className="flex flex-wrap gap-2 sm:shrink-0">
+                  <button type="button" onClick={() => syncConnection(connection.id)} disabled={pending !== null} className="btn btn-secondary btn-sm">
+                    <RefreshCw className={`size-4 ${pending === "sync" ? "animate-spin" : ""}`} aria-hidden="true" />
+                    Refresh
+                  </button>
+                  <a href={githubInstallationManagementUrl(connection)} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                    Manage on GitHub
+                    <ExternalLink className="size-4" aria-hidden="true" />
+                  </a>
+                  <button type="button" onClick={() => void disconnectConnection(connection)} disabled={pending !== null} className="btn btn-danger btn-sm">
+                    {pending === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Disconnect
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {connection.repositories.length ? (
+              <div className="border-t border-line p-5">
+                <p className="label">Repositories SoftwareFactory can read</p>
+                <ul className="mt-3 grid gap-2 md:grid-cols-2">
                   {connection.repositories.map((repository) => (
-                    <a key={repository.id} href={repository.htmlUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-lg border border-[#283341] bg-[#0b1017] p-3.5 hover:border-[#3b4959]">
-                      <CheckCircle2 className="size-4 shrink-0 text-[#c6f135]" />
-                      <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold text-[#dce2e8]">{repository.fullName}</span><span className="mt-1 block font-mono text-[9px] text-[#667485]">{repository.defaultBranch} · {repository.private ? "private" : "public"}</span></span>
-                      <ExternalLink className="size-3.5 text-[#617080]" />
-                    </a>
+                    <li key={repository.id}>
+                      <a
+                        href={repository.htmlUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 rounded-lg border border-line p-3 transition-colors hover:border-line-strong"
+                      >
+                        <CheckCircle2 className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-foreground">{repository.fullName}</span>
+                          <span className="block text-sm text-faint">
+                            {repository.defaultBranch} · {repository.private ? "Private" : "Public"}
+                          </span>
+                        </span>
+                        <ExternalLink className="size-4 shrink-0 text-faint" aria-hidden="true" />
+                      </a>
+                    </li>
                   ))}
-                  {!connection.repositories.length ? <p className="text-xs text-[#748191]">No active selected repositories.</p> : null}
-                </div>
+                </ul>
               </div>
-            </Panel>
-          ))}
-        </div>
+            ) : (
+              <p className="border-t border-line p-5 text-sm text-muted">
+                No active selected repositories. Manage the installation on GitHub, select at least one repository, then refresh.
+              </p>
+            )}
+          </Card>
+        ))
       ) : (
-        <SetupNotice title="No GitHub App installation connected" description="Choose Connect GitHub, authorize the app, select the intended account or organization, and grant access only to the repositories SoftwareFactory should manage." />
+        <Card className="grid min-h-64 place-items-center p-8 text-center">
+          <div className="max-w-md">
+            <GitFork className="mx-auto size-8 text-faint" aria-hidden="true" />
+            <h2 className="mt-4 text-lg font-semibold text-foreground">Connect GitHub to begin</h2>
+            <p className="mt-2 text-muted">
+              You will authorize the app on GitHub, then choose exactly which repositories it may read.
+              You can change or remove that access at any time.
+            </p>
+            <button type="button" onClick={connectGithub} disabled={pending !== null} className="btn btn-primary mt-5">
+              {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+              Connect GitHub
+            </button>
+          </div>
+        </Card>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        {[
-          { name: "OpenAI model adapter", Icon: Waypoints, connected: false },
-          { name: "Anthropic model adapter", Icon: Waypoints, connected: false },
-          { name: "Vercel deployment adapter", Icon: Cloud, connected: false },
-          { name: "Supabase control plane", Icon: Database, connected: true },
-          { name: "Other providers", Icon: Box, connected: false },
-        ].map(({ name, Icon, connected }) => (
-          <Panel key={name} className="p-4"><Icon className="size-4 text-[#778493]" /><h3 className="mt-3 text-xs font-semibold text-[#d5dbe2]">{name}</h3><div className="mt-3">{connected ? <StatusBadge tone="safe">Connected</StatusBadge> : <NotConnectedBadge />}</div></Panel>
-        ))}
-      </div>
+      {connections.length ? (
+        <button type="button" onClick={connectGithub} disabled={pending !== null} className="btn btn-secondary">
+          {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+          Connect another account
+        </button>
+      ) : null}
+
+      <Card className="p-5">
+        <p className="label">Other providers</p>
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {otherProviders.map(({ name, connected }) => (
+            <li key={name} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{name}</span>
+              {connected ? <StatusBadge tone="safe">Connected</StatusBadge> : <NotConnectedBadge />}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <p className="text-sm text-muted">
+        Access tokens are created on the server, expire quickly, and are never sent to your browser or
+        stored in the database.{" "}
+        <Link href="/settings" className="font-medium text-accent-text underline underline-offset-4">
+          See what it may do
+        </Link>
+      </p>
     </div>
   );
 }
 
-function SetupNotice({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
-  return <Panel className="grid min-h-64 place-items-center p-6 text-center"><div className="max-w-lg"><span className="mx-auto grid size-11 place-items-center rounded-xl border border-[#2b3745] bg-[#151d27] text-[#91a334]"><PlugZap className="size-5" /></span><h2 className="mt-4 text-base font-semibold text-white">{title}</h2><p className="mt-2 text-xs leading-5 text-[#748191]">{description}</p>{action ? <div className="mt-4 flex justify-center">{action}</div> : null}</div></Panel>;
+function formatDate(value: string | null) {
+  if (!value) return "never";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "Not synchronized";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+function formatRepositorySelection(value: string) {
+  return value === "all" ? "All repositories" : value === "selected" ? "Selected repositories" : "Unknown";
 }
 
 export function readGitHubCallbackNotice(search: string) {

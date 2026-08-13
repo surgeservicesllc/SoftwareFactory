@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -34,8 +34,8 @@ describe("ConnectionsConsole", () => {
 
     render(<ConnectionsConsole />);
 
-    expect(await screen.findByRole("heading", { name: "Authentication required" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/sign-in?next=/connections");
+    expect(await screen.findByRole("heading", { name: "Sign in first" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", "/auth/sign-in?next=/connections");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -44,8 +44,8 @@ describe("ConnectionsConsole", () => {
 
     render(<ConnectionsConsole />);
 
-    expect(await screen.findByRole("heading", { name: "Create the control-plane organization" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Organization name")).toHaveAttribute("placeholder", "Engineering organization");
+    expect(await screen.findByRole("heading", { name: "Name your workspace" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Workspace name")).toHaveAttribute("placeholder", "Acme Engineering");
     expect(screen.queryByDisplayValue(/Surge/i)).not.toBeInTheDocument();
   });
 
@@ -85,6 +85,7 @@ describe("ConnectionsConsole", () => {
 
     expect(await screen.findByRole("heading", { name: "example-org" })).toBeInTheDocument();
     expect(screen.getAllByText("Connected")).toHaveLength(2);
+    expect(screen.getByText("Installation #456 · Repository access: Selected repositories")).toBeInTheDocument();
     expect(screen.getByText("example-org/application")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Manage/ })).toHaveAttribute(
       "href",
@@ -116,11 +117,42 @@ describe("ConnectionsConsole", () => {
 
     render(<ConnectionsConsole />);
 
-    expect(await screen.findByText("No active selected repositories.")).toBeInTheDocument();
+    expect(await screen.findByText(/^No active selected repositories\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Manage/ })).toHaveAttribute(
       "href",
       "https://github.com/settings/installations/456",
     );
+  });
+
+  it("renders a lost GitHub connection as Error instead of Not Connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/organizations") return organizationResponse();
+      return jsonResponse({
+        connections: [{
+          account: { login: "example-org", type: "Organization" },
+          id: "22222222-2222-4222-8222-222222222222",
+          installation: {
+            id: 456,
+            lastSyncedAt: "2026-08-12T20:00:00.000Z",
+            repositorySelection: "selected",
+            suspendedAt: "2026-08-12T20:05:00.000Z",
+          },
+          name: "example-org",
+          repositories: [],
+          status: "error",
+          statusLabel: "Error",
+          statusReason: "The GitHub App installation is suspended.",
+        }],
+      });
+    }));
+
+    render(<ConnectionsConsole />);
+
+    const connectionCard = (await screen.findByRole("heading", { name: "example-org" })).closest("section");
+    expect(connectionCard).not.toBeNull();
+    expect(within(connectionCard!).getByText("Error")).toBeInTheDocument();
+    expect(within(connectionCard!).getByText("The GitHub App installation is suspended.")).toBeInTheDocument();
+    expect(within(connectionCard!).queryByText("Not Connected")).not.toBeInTheDocument();
   });
 
   it("keeps the connect action visibly pending while authorization starts", async () => {
@@ -146,7 +178,7 @@ describe("ConnectionsConsole", () => {
 
     render(<ConnectionsConsole />);
 
-    expect(await screen.findByRole("heading", { name: "Connections unavailable" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Connections are unavailable" })).toBeInTheDocument();
     expect(screen.getByText("Tenant lookup failed safely.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
   });

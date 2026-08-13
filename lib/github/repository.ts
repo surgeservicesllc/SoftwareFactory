@@ -169,6 +169,9 @@ export function isProtectedGitHubWritePath(path: string) {
     || fileName === "claude.md"
     || fileName === "codeowners"
     || fileName === ".npmrc"
+    || fileName === ".gitignore"
+    || fileName === ".vercelignore"
+    || fileName === ".dockerignore"
     || fileName === ".yarnrc"
     || fileName === ".yarnrc.yml"
     || fileName === ".pnpmfile.cjs"
@@ -177,7 +180,8 @@ export function isProtectedGitHubWritePath(path: string) {
     || fileName.startsWith(".env")
     || fileName.startsWith("dockerfile")
     || fileName.startsWith("docker-compose")
-    || /^(next|nuxt|webpack|vite)\.config\.[a-z0-9]+$/.test(fileName)
+    || /^(next|nuxt|webpack|vite|vitest|playwright|eslint|jest|rollup|turbo)\.config\.[a-z0-9]+$/.test(fileName)
+    || /^tsconfig(?:\.[a-z0-9_-]+)?\.json$/.test(fileName)
     || normalized === ".github/codeowners"
     || normalized === "docs/codeowners"
     || segments.some((segment) => protectedDirectories.has(segment))
@@ -214,10 +218,39 @@ export async function listGitHubBranches(token: string, owner: string, repositor
   }));
 }
 
-export async function listGitHubPullRequests(token: string, owner: string, repository: string) {
+export async function listGitHubPullRequests(
+  token: string,
+  owner: string,
+  repository: string,
+  options: { includeMergeability?: boolean } = {},
+) {
   const raw = await githubApiRequest(`${repositoryPath(owner, repository)}/pulls?state=all&per_page=100`, { token });
   const pullRequests = parseOrThrow(z.array(pullRequestSchema), raw, "GitHub returned invalid pull request metadata.");
-  return pullRequests.map((pullRequest) => ({
+  // GitHub's list endpoint does not populate mergeability. Resolve it only
+  // for the bounded set rendered by the inspector so the UI does not present
+  // a permanent "Unknown" value while avoiding an unbounded API fan-out.
+  const detailResults = options.includeMergeability
+    ? await Promise.allSettled(pullRequests.slice(0, 6).map(async (pullRequest) => {
+      const detail = await githubApiRequest(
+        `${repositoryPath(owner, repository)}/pulls/${pullRequest.number}`,
+        { token },
+      );
+      return parseOrThrow(
+        pullRequestSchema,
+        detail,
+        "GitHub returned invalid pull request metadata.",
+      );
+    }))
+    : [];
+  const detailsByNumber = new Map(
+    detailResults.flatMap((result) => result.status === "fulfilled"
+      ? [[result.value.number, result.value] as const]
+      : []),
+  );
+
+  return pullRequests.map((listedPullRequest) => {
+    const pullRequest = detailsByNumber.get(listedPullRequest.number) ?? listedPullRequest;
+    return ({
     baseBranch: pullRequest.base.ref,
     author: pullRequest.user
       ? { avatarUrl: pullRequest.user.avatar_url ?? null, login: pullRequest.user.login }
@@ -239,7 +272,8 @@ export async function listGitHubPullRequests(token: string, owner: string, repos
     title: pullRequest.title,
     updatedAt: pullRequest.updated_at,
     url: pullRequest.html_url,
-  }));
+    });
+  });
 }
 
 export async function listGitHubCommits(

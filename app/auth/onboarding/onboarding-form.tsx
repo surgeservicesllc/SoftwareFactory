@@ -35,77 +35,83 @@ export function OnboardingForm() {
           router.push("/auth/sign-in?next=/auth/onboarding");
           return;
         }
-        setError(result.error?.message ?? "Organization onboarding failed.");
+        setError(result.error?.message ?? "Your workspace could not be created.");
         return;
       }
 
       router.push("/projects");
       router.refresh();
     } catch {
-      setError("Supabase onboarding is temporarily unavailable.");
+      setError("Setup is temporarily unavailable. Try again shortly.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-xl py-8 sm:py-16">
-      <div className="panel rounded-xl p-5 sm:p-7">
-        <p className="eyebrow">Authenticated onboarding</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-          Create your organization
+    <div className="mx-auto max-w-md py-8 sm:py-16">
+      <div className="card p-6 sm:p-8">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">
+          Name your workspace
         </h1>
-        <p className="mt-2 text-xs leading-5 text-[#7f8b9a]">
-          This establishes the first tenant boundary and makes you its owner. The server verifies your Supabase session; RLS scopes every subsequent read and write.
+        <p className="mt-2 text-muted">
+          This groups your projects and connections, and keeps them separate from everyone else&apos;s.
+          You become its owner.
         </p>
 
         {error ? (
-          <p role="alert" className="mt-5 rounded-lg border border-[#533036] bg-[#26171a] px-3.5 py-3 text-xs text-[#f0a1a8]">
+          <p
+            role="alert"
+            className="mt-5 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] px-4 py-3 text-sm text-[var(--danger)]"
+          >
             {error}
           </p>
         ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={submit}>
-          <label className="block">
-            <span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">Organization name</span>
+          <div>
+            <label htmlFor="organization-name" className="field-label">Workspace name</label>
             <input
+              id="organization-name"
               autoComplete="organization"
-              className="h-11 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 text-sm text-[#dce2e8] focus:border-[#647f29] focus:outline-none"
+              className="input"
               maxLength={120}
               name="organizationName"
               placeholder="Acme Engineering"
               required
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-2 block text-[11px] font-semibold text-[#aeb7c2]">Organization slug <span className="font-normal text-[#687586]">(optional)</span></span>
+          <div>
+            <label htmlFor="organization-slug" className="field-label">
+              Short name <span className="font-normal text-faint">(optional)</span>
+            </label>
             <input
+              id="organization-slug"
               autoCapitalize="none"
               autoCorrect="off"
-              className="h-11 w-full rounded-lg border border-[#2b3644] bg-[#0a0f16] px-3 font-mono text-sm text-[#dce2e8] focus:border-[#647f29] focus:outline-none"
+              className="input"
               maxLength={63}
               name="organizationSlug"
               pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
               placeholder="acme-engineering"
             />
-            <span className="mt-2 block text-[10px] leading-4 text-[#687586]">
-              Leave blank for a deterministic private default. Slugs contain lowercase letters, numbers, and single hyphens.
+            <span className="field-hint">
+              Leave blank and we will pick one. Lowercase letters, numbers, and hyphens only.
             </span>
-          </label>
+          </div>
 
-          <button
-            className="min-h-11 w-full rounded-lg bg-[#c6f135] px-4 text-xs font-bold text-[#0b1003] disabled:cursor-wait disabled:opacity-60"
-            disabled={pending}
-            type="submit"
-          >
-            {pending ? "Creating tenant…" : "Create organization"}
+          <button className="btn btn-primary w-full" disabled={pending} type="submit">
+            {pending ? "Creating…" : "Create workspace"}
           </button>
         </form>
 
-        <p className="mt-5 text-center text-xs text-[#7f8b9a]">
+        <p className="mt-6 text-center text-sm text-muted">
           Not signed in?{" "}
-          <Link className="font-semibold text-[#dffb7b] underline underline-offset-4" href="/auth/sign-in?next=/auth/onboarding">
+          <Link
+            className="font-medium text-accent-text underline underline-offset-4"
+            href="/auth/sign-in?next=/auth/onboarding"
+          >
             Sign in first
           </Link>
         </p>

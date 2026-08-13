@@ -2,6 +2,8 @@
 
 Hosting project: `surgeservices-projects/softwarefactory` (`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`). Stable alias: [https://softwarefactory-tan.vercel.app](https://softwarefactory-tan.vercel.app).
 
+The local release checkout is linked to this exact Vercel project, and the required encrypted environment-variable names are present without exposing their values. This configuration evidence does not mean the pending working tree has been deployed.
+
 Vercel hosts the Next.js application and server routes. The in-product Vercel deployment/rollback adapter remains **Not Connected**; CI has no deploy or merge credentials.
 
 ## Last independently verified release evidence

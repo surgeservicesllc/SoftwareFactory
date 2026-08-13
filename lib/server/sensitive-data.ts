@@ -22,12 +22,18 @@ const likelySecretPatterns = [
   /gh[pousr]_[A-Za-z0-9_]{20,}/,
   /github_pat_[A-Za-z0-9_]{20,}/i,
   /sk-[A-Za-z0-9_-]{20,}/,
+  /sk_(?:live|test)_[A-Za-z0-9]{16,}/i,
   /sb_secret_[A-Za-z0-9_-]{20,}/i,
   /vercel_[A-Za-z0-9_-]{20,}/i,
   /AKIA[0-9A-Z]{16}/,
   /bearer\s+[A-Za-z0-9._~+/-]{20,}/i,
   /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
 ];
+
+const sensitiveAssignmentPattern = /^\s*(?:(?:export\s+)?(?:const|let|var)\s+|export\s+)?["']?([A-Z][A-Z0-9_]*)["']?\s*[:=]\s*(.*?)\s*[,;]?\s*$/i;
+const sensitiveJsonAssignmentPattern = /["']([A-Z][A-Z0-9_]*)["']\s*:\s*(["'])(.*?)\2/gi;
+const placeholderAssignmentValuePattern = /^(?:<[^<>\r\n]+>|\$\{[A-Z_][A-Z0-9_]*\}|\$[A-Z_][A-Z0-9_]*|\$\{\{[^{}\r\n]+\}\}|\{\{[^{}\r\n]+\}\}|\[\s*(?:REDACTED|PLACEHOLDER|REPLACE[-_ ]?ME|CHANGE[-_ ]?ME|TODO|TBD|NOT[-_ ]?SET|UNSET)\s*\]|(?:YOUR|EXAMPLE|PLACEHOLDER|REPLACE[-_ ]?ME|CHANGE[-_ ]?ME|TODO|TBD|REDACTED|NOT[-_ ]?SET|UNSET)(?:[-_ ][A-Z0-9]+)*|X{3,}|(?:process\.env\.|env\.)[A-Z_][A-Z0-9_]*)$/i;
+const credentialUriPattern = /^[A-Z][A-Z0-9+.-]*:\/\/[^/:\s@]+:([^@\s]+)@[^\s/]+/i;
 
 export type SensitiveDataFinding = {
   path: string;
@@ -44,13 +50,64 @@ function isSensitiveKey(key: string) {
     || normalized.endsWith("password")
     || normalized.endsWith("apikey")
     || normalized.endsWith("privatekey")
+    || normalized.endsWith("privatekeybase64")
     || normalized.endsWith("credential")
+    || normalized.endsWith("servicerolekey")
+    || normalized.endsWith("secretaccesskey")
+    || normalized.endsWith("secretkey")
     || normalized.endsWith("secret")
     || normalized.endsWith("token");
 }
 
+function hasCredentialUriValue(key: string, value: string) {
+  const normalizedKey = normalizeKey(key);
+  if (!normalizedKey.endsWith("url") && !normalizedKey.endsWith("dsn")) return false;
+
+  const credentials = value.match(credentialUriPattern);
+  const password = credentials?.[1];
+  return Boolean(password && !placeholderAssignmentValuePattern.test(password));
+}
+
+function normalizeAssignedValue(rawValue: string) {
+  let value = rawValue.trim().replace(/[,;]\s*$/, "").trim();
+  value = value.replace(/\s+#.*$/, "").trim();
+
+  if (value.length >= 2) {
+    const firstCharacter = value[0];
+    const lastCharacter = value[value.length - 1];
+    if ((firstCharacter === '"' && lastCharacter === '"')
+      || (firstCharacter === "'" && lastCharacter === "'")) {
+      value = value.slice(1, -1).trim();
+    }
+  }
+
+  return value;
+}
+
+function containsSensitiveAssignment(value: string) {
+  const lineAssignmentDetected = value.split(/\r?\n/).some((line) => {
+    const assignment = line.match(sensitiveAssignmentPattern);
+    if (!assignment) return false;
+
+    const key = assignment[1] ?? "";
+    const assignedValue = normalizeAssignedValue(assignment[2] ?? "");
+    if (!assignedValue || placeholderAssignmentValuePattern.test(assignedValue)) return false;
+    return isSensitiveKey(key) || hasCredentialUriValue(key, assignedValue);
+  });
+  if (lineAssignmentDetected) return true;
+
+  for (const assignment of value.matchAll(sensitiveJsonAssignmentPattern)) {
+    const key = assignment[1] ?? "";
+    const assignedValue = normalizeAssignedValue(assignment[3] ?? "");
+    if (!assignedValue || placeholderAssignmentValuePattern.test(assignedValue)) continue;
+    if (isSensitiveKey(key) || hasCredentialUriValue(key, assignedValue)) return true;
+  }
+  return false;
+}
+
 export function containsLikelySecret(value: string) {
-  return likelySecretPatterns.some((pattern) => pattern.test(value));
+  return likelySecretPatterns.some((pattern) => pattern.test(value))
+    || containsSensitiveAssignment(value);
 }
 
 export function findSensitiveData(value: unknown, path = "$", depth = 0): SensitiveDataFinding | null {

@@ -5,7 +5,6 @@ import {
   Bot,
   Boxes,
   BriefcaseBusiness,
-  ChevronRight,
   CircleGauge,
   ClipboardList,
   FileText,
@@ -16,7 +15,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,39 +24,51 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 
-const navigation = [
-  { label: "Dashboard", href: "/", icon: CircleGauge },
-  { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "Bot Manager", href: "/bot-manager", icon: Bot },
-  { label: "Files", href: "/files", icon: FileText },
-  { label: "Agents", href: "/agents", icon: Boxes },
-  { label: "Backlog", href: "/backlog", icon: ClipboardList },
-  { label: "Runs", href: "/runs", icon: GitBranch },
-  { label: "Reports", href: "/reports", icon: ScrollText },
-  { label: "Connections", href: "/connections", icon: PlugZap },
-  { label: "Activity", href: "/activity", icon: Activity },
-  { label: "Settings", href: "/settings", icon: Settings },
+/**
+ * Grouped by what you are trying to do. Every destination now reads live
+ * tenant records, so there is no longer a "demo only" section to separate —
+ * an empty page says it is empty rather than showing illustrative rows.
+ */
+const navigationGroups = [
+  {
+    heading: null,
+    items: [
+      { label: "Dashboard", href: "/", icon: CircleGauge },
+      { label: "Projects", href: "/projects", icon: FolderKanban },
+      { label: "Files", href: "/files", icon: FileText },
+    ],
+  },
+  {
+    heading: "Work",
+    items: [
+      { label: "Bot Manager", href: "/bot-manager", icon: Bot },
+      { label: "Backlog", href: "/backlog", icon: ClipboardList },
+      { label: "Runs", href: "/runs", icon: GitBranch },
+      { label: "Agents", href: "/agents", icon: Boxes },
+    ],
+  },
+  {
+    heading: "Evidence & setup",
+    items: [
+      { label: "Reports", href: "/reports", icon: ScrollText },
+      { label: "Activity", href: "/activity", icon: Activity },
+      { label: "Connections", href: "/connections", icon: PlugZap },
+      { label: "Settings", href: "/settings", icon: Settings },
+    ],
+  },
 ] as const;
 
 function Logo() {
   return (
     <Link
       href="/"
-      className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4"
+      className="flex items-center gap-2.5 rounded-lg"
       aria-label="SoftwareFactory dashboard"
     >
-      <span className="relative grid size-9 place-items-center overflow-hidden rounded-[10px] bg-[#c6f135] text-[#0b1003] shadow-[0_0_24px_rgba(198,241,53,0.16)]">
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-[var(--accent-ink)]">
         <BriefcaseBusiness className="size-[18px]" strokeWidth={2.4} aria-hidden="true" />
-        <span className="absolute inset-x-1 bottom-0 h-px bg-black/20" />
       </span>
-      <span>
-        <span className="block text-[15px] font-semibold tracking-[-0.02em] text-white">
-          SoftwareFactory
-        </span>
-        <span className="mt-0.5 block font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#6f7d8d]">
-          Control plane
-        </span>
-      </span>
+      <span className="font-semibold tracking-[-0.01em] text-foreground">SoftwareFactory</span>
     </Link>
   );
 }
@@ -66,60 +77,52 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Primary" className="mt-8 flex-1 space-y-1">
-      {navigation.map(({ label, href, icon: Icon }) => {
-        const isActive = href === "/" ? pathname === href : pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "group flex min-h-10 items-center gap-3 rounded-lg border px-3 py-2 text-[13px] font-medium transition-colors",
-              isActive
-                ? "border-[#2e3a25] bg-[#c6f135]/[0.08] text-[#eaffaa]"
-                : "border-transparent text-[#8d99a8] hover:border-[#202a38] hover:bg-[#111722] hover:text-white",
-            )}
-          >
-            <Icon
-              className={cn(
-                "size-4 shrink-0",
-                isActive ? "text-[#c6f135]" : "text-[#647182] group-hover:text-[#9aa7b7]",
-              )}
-              strokeWidth={1.8}
-              aria-hidden="true"
-            />
-            <span>{label}</span>
-            {isActive ? (
-              <ChevronRight className="ml-auto size-3.5 text-[#79921f]" aria-hidden="true" />
-            ) : null}
-          </Link>
-        );
-      })}
+    <nav aria-label="Primary" className="flex-1 space-y-6">
+      {navigationGroups.map((group, groupIndex) => (
+        <div key={group.heading ?? `group-${groupIndex}`}>
+          {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
+          <ul className="space-y-0.5">
+            {group.items.map(({ label, href, icon: Icon }) => {
+              const isActive = href === "/" ? pathname === href : pathname.startsWith(href);
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={onNavigate}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
+                        : "text-muted hover:bg-surface-raised hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+                    {label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </nav>
   );
 }
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <div className="flex h-full flex-col px-4 py-5">
-      <div className="px-2">
+    <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
+      <div className="mb-7 px-2">
         <Logo />
       </div>
       <Navigation onNavigate={onNavigate} />
-      <div className="mt-6 rounded-xl border border-[#273121] bg-[#c6f135]/[0.045] p-3.5">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-[#dffb7b]">
-          <ShieldCheck className="size-4 text-[#c6f135]" aria-hidden="true" />
-          Guardrails active
-        </div>
-        <p className="mt-2 text-[11px] leading-5 text-[#788471]">
-          Phase 1A blocks autonomous production execution. All destructive controls are off.
+      <div className="mt-6 flex items-start gap-2.5 rounded-lg border border-line px-3 py-3 text-sm text-muted">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+        <p>
+          Safety lock on. SoftwareFactory can read your repository and open draft pull requests. It
+          cannot merge, deploy, or run anything on its own.
         </p>
-      </div>
-      <div className="mt-3 flex items-center justify-between px-2 font-mono text-[9px] uppercase tracking-[0.14em] text-[#4f5a68]">
-        <span>Foundation mode</span>
-        <span>v0.1</span>
       </div>
     </div>
   );
@@ -139,21 +142,21 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     <div className="min-h-screen">
       <a
         href="#main-content"
-        className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-[#c6f135] px-3 py-2 text-sm font-semibold text-black transition-transform focus:translate-y-0"
+        className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-[var(--accent-ink)] transition-transform focus:translate-y-0"
       >
         Skip to content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] border-r border-[#1c2531] bg-[#090d13]/95 backdrop-blur xl:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-line bg-surface xl:block">
         <Sidebar />
       </aside>
 
-      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b border-[#1c2531] bg-[#080b10]/90 px-4 backdrop-blur-xl xl:left-[248px] xl:px-7">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:left-64 xl:px-8">
         <div className="flex items-center gap-3 xl:hidden">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="grid size-10 place-items-center rounded-lg border border-[#263140] bg-[#101620] text-[#aab5c3]"
+            className="btn btn-secondary size-10 px-0"
             aria-label="Open navigation"
             aria-expanded={mobileOpen}
           >
@@ -161,43 +164,29 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           </button>
           <Logo />
         </div>
-        <div className="hidden items-center gap-2 xl:flex">
-          <span className="size-1.5 rounded-full bg-[#c6f135] shadow-[0_0_10px_#c6f135]" />
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#84917d]">
-            Safety lock engaged
-          </span>
-          <span className="mx-2 h-3 w-px bg-[#293341]" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#576271]">
-            Demo workspace
-          </span>
+        <div className="hidden items-center gap-2 text-sm text-muted xl:flex">
+          <ShieldCheck className="size-4 text-accent" aria-hidden="true" />
+          Execution locked — nothing runs without you
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/bot-manager"
-            className="hidden min-h-9 items-center gap-2 rounded-lg border border-[#34411c] bg-[#c6f135]/[0.07] px-3 text-xs font-semibold text-[#dffb7b] transition-colors hover:bg-[#c6f135]/[0.12] sm:flex"
-          >
-            <Sparkles className="size-3.5 text-[#c6f135]" aria-hidden="true" />
-            New command
-          </Link>
-          <div className="grid size-9 place-items-center rounded-full border border-[#2a3544] bg-[#151c27] font-mono text-[10px] font-bold text-[#9aa7b7]" aria-label="Owner profile placeholder">
-            OW
-          </div>
-        </div>
+        <Link href="/auth/sign-in" className="btn btn-secondary btn-sm">
+          <UserRound className="size-4" aria-hidden="true" />
+          Account
+        </Link>
       </header>
 
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 xl:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation"
           />
-          <aside className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,320px)] border-r border-[#25303e] bg-[#090d13] shadow-2xl">
+          <aside className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] border-r border-line bg-surface">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute right-3 top-4 grid size-9 place-items-center rounded-lg border border-[#263140] text-[#8d99a8]"
+              className="btn btn-secondary absolute right-3 top-4 size-9 px-0"
               aria-label="Close navigation"
             >
               <X className="size-4" aria-hidden="true" />
@@ -207,10 +196,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </div>
       ) : null}
 
-      <main id="main-content" className="min-h-screen pt-16 xl:pl-[248px]">
-        <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {children}
-        </div>
+      <main id="main-content" className="min-h-screen pt-16 xl:pl-64">
+        <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>
   );

@@ -37,6 +37,16 @@ export async function prepareGitHubRepositoryRequest(
   permissions: Record<string, "read" | "write">,
   managerOnly = false,
 ) {
+  const authorized = await authorizeGitHubRepositoryRequest(request, coordinates, managerOnly);
+  const token = await createGitHubRepositoryRequestToken(authorized.context, permissions);
+  return { ...authorized, token };
+}
+
+export async function authorizeGitHubRepositoryRequest(
+  request: Request,
+  coordinates: { owner: string; repo: string },
+  managerOnly = false,
+) {
   const connectionId = new URL(request.url).searchParams.get("connectionId");
   if (!z.string().uuid().safeParse(connectionId).success) {
     throw new GitHubAuthorizationError(
@@ -64,9 +74,23 @@ export async function prepareGitHubRepositoryRequest(
       "Organization owner or administrator access is required.",
     );
   }
-  let installationToken;
+  return {
+    connectionId: connectionId!,
+    context,
+    owner,
+    repository,
+    supabase,
+    user,
+  };
+}
+
+export async function createGitHubRepositoryRequestToken(
+  context: Awaited<ReturnType<typeof requireGitHubConnection>>,
+  permissions: Record<string, "read" | "write">,
+) {
+  if (!context.repository) throw new Error("repository_context_missing");
   try {
-    installationToken = await createGitHubInstallationToken(
+    const installationToken = await createGitHubInstallationToken(
       getGitHubAppConfiguration(),
       context.installationId,
       {
@@ -74,19 +98,11 @@ export async function prepareGitHubRepositoryRequest(
         repositoryIds: [context.repository.externalId],
       },
     );
+    return installationToken.token;
   } catch (error) {
     if (error instanceof GitHubApiError) {
       await markDiscoveredConnectionLoss(context.connectionId, error);
     }
     throw error;
   }
-  return {
-    connectionId: connectionId!,
-    context,
-    owner,
-    repository,
-    supabase,
-    token: installationToken.token,
-    user,
-  };
 }

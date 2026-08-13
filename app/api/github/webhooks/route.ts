@@ -59,10 +59,29 @@ const pullRequestSchema = z.object({
   draft: z.boolean().optional(),
   html_url: z.string().url(),
 });
+const checkStatusSchema = z.enum([
+  "completed",
+  "in_progress",
+  "pending",
+  "queued",
+  "requested",
+  "waiting",
+]);
+const checkConclusionSchema = z.enum([
+  "action_required",
+  "cancelled",
+  "failure",
+  "neutral",
+  "skipped",
+  "stale",
+  "startup_failure",
+  "success",
+  "timed_out",
+]);
 const checkSchema = z.object({
   id: externalIdSchema,
-  status: z.string().min(1).max(32),
-  conclusion: z.string().min(1).max(64).nullable().optional(),
+  status: checkStatusSchema,
+  conclusion: checkConclusionSchema.nullable().optional(),
 });
 const webhookEnvelopeSchema = z.object({
   action: actionSchema.optional(),
@@ -188,10 +207,35 @@ function redactedPayload(payload: WebhookPayload) {
     commit_status: payload.state && payload.sha
       ? { sha: payload.sha, state: payload.state }
       : null,
-    pull_request: payload.pull_request ?? null,
-    check_run: payload.check_run ?? null,
-    check_suite: payload.check_suite ?? null,
-    workflow_run: payload.workflow_run ?? null,
+    pull_request: payload.pull_request
+      ? {
+        draft: payload.pull_request.draft ?? false,
+        id: payload.pull_request.id,
+        number: payload.pull_request.number,
+        state: payload.pull_request.state,
+      }
+      : null,
+    check_run: payload.check_run
+      ? {
+        conclusion: payload.check_run.conclusion ?? null,
+        id: payload.check_run.id,
+        status: payload.check_run.status,
+      }
+      : null,
+    check_suite: payload.check_suite
+      ? {
+        conclusion: payload.check_suite.conclusion ?? null,
+        id: payload.check_suite.id,
+        status: payload.check_suite.status,
+      }
+      : null,
+    workflow_run: payload.workflow_run
+      ? {
+        conclusion: payload.workflow_run.conclusion ?? null,
+        id: payload.workflow_run.id,
+        status: payload.workflow_run.status,
+      }
+      : null,
     sender: payload.sender ? { id: payload.sender.id, login: payload.sender.login } : null,
   };
 }

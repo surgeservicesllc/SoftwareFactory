@@ -3,21 +3,12 @@
 import { FolderGit2, GitPullRequestArrow, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { MetricCard, Panel, StatusBadge } from "@/components/ui";
+import { MetricCard, SetupSteps, StatusBadge, type SetupStep } from "@/components/ui";
+import { isBrowserSupabaseConfigured } from "@/lib/supabase/browser-config";
 
 type Project = { id: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
 type PullRequest = { id: number; state: string };
 type State = "loading" | "signed-out" | "setup" | "ready" | "error";
-
-function isBrowserSupabaseConfigured() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-    && (
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim()
-      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
-    ),
-  );
-}
 
 export function LiveDashboardMetrics() {
   const supabaseConfigured = isBrowserSupabaseConfigured();
@@ -40,7 +31,8 @@ export function LiveDashboardMetrics() {
       if (response.status === 409) { setState("setup"); return; }
       const body = (await response.json()) as { projects?: Project[]; connectedCount?: number; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Live project metrics could not be loaded.");
-      const liveProjects = (body.projects ?? []).filter(
+      const allProjects = body.projects ?? [];
+      const liveProjects = allProjects.filter(
         (project) => project.connectionStatus === "connected"
           && project.githubRepository
           && project.connectionId,
@@ -87,6 +79,7 @@ export function LiveDashboardMetrics() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load, supabaseConfigured]);
+
   const githubConnected = state === "ready" && connectedCount > 0;
   const statusLabel = useMemo(
     () => state === "ready"
@@ -101,14 +94,101 @@ export function LiveDashboardMetrics() {
     [githubConnected, state],
   );
 
+  /*
+   * Setup progress is derived conservatively from the single /api/projects
+   * read the metrics already need. A retained project does not prove a live
+   * GitHub connection; only a currently connected project advances the path.
+   */
+  const steps = useMemo<SetupStep[]>(() => {
+    const projectLinked = githubConnected;
+    return [
+      {
+        title: "Connect GitHub",
+        description: "Authorize the GitHub App and pick which repositories SoftwareFactory may read.",
+        href: "/connections",
+        action: "Connect",
+        done: githubConnected,
+      },
+      {
+        title: "Add a project",
+        description: "Link one of those repositories so its branches, commits, and pull requests appear here.",
+        href: "/projects",
+        action: "Add project",
+        done: projectLinked,
+      },
+      {
+        title: "Open your files",
+        description: "Browse the repository, edit a file, and send the change out as a draft pull request.",
+        href: "/files",
+        action: "Browse files",
+        done: false,
+      },
+    ];
+  }, [githubConnected]);
+
+  const currentStep = steps.findIndex((step) => !step.done);
+  const allSetUp = connectedCount > 0 && state === "ready";
+
   return (
-    <section className="mb-6" aria-labelledby="live-metrics-title">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 id="live-metrics-title" className="eyebrow">Live control-plane metrics</h2><p className="mt-1 text-[10px] text-[#657283]">Tenant-scoped records with on-demand GitHub reads; never mixed into demo totals.</p></div><div className="flex items-center gap-2"><StatusBadge tone={githubConnected ? "safe" : state === "error" ? "danger" : "neutral"}>{statusLabel}</StatusBadge><button type="button" onClick={() => void load()} disabled={state === "loading"} className="secondary-action" aria-label="Refresh live dashboard metrics">{state === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}Refresh</button></div></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Connected projects" value={state === "ready" ? String(connectedCount) : "—"} detail={state === "ready" ? "Live projects stored in Supabase" : statusLabel} icon={FolderGit2} tone={connectedCount ? "safe" : "neutral"} demo={false} />
-        <MetricCard label="Open pull requests" value={githubConnected && openPullRequests !== null ? String(openPullRequests) : "—"} detail={state === "ready" ? !githubConnected ? "GitHub Not Connected" : openPullRequests === null ? "Incomplete — one or more GitHub reads failed" : `Live across ${projects.length} connected project${projects.length === 1 ? "" : "s"}` : statusLabel} icon={GitPullRequestArrow} tone={openPullRequests === null ? "warning" : "info"} demo={false} />
-        <Panel className="p-4 sm:col-span-2"><p className="eyebrow">Live source boundary</p><p className="mt-3 text-xs leading-5 text-[#8490a0]">Only connected projects and GitHub pull requests appear here. Agent work, deployments, tests, incidents, and owner attention below remain clearly labeled Demo Data until their providers are verified.</p>{warnings.length ? <p className="mt-3 text-[10px] leading-5 text-[#d7b96d]">{warnings.length} live repository source{warnings.length === 1 ? " is" : "s are"} unavailable. No partial PR total is shown.</p> : null}</Panel>
-      </div>
-    </section>
+    <div className="space-y-8">
+      <section aria-labelledby="setup-title">
+        <div className="mb-3">
+          <h2 id="setup-title" className="text-lg font-semibold text-foreground">
+            {allSetUp ? "Your setup" : "Get started in three steps"}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            {allSetUp
+              ? "Everything below is connected. Jump back into any step to make a change."
+              : "Nothing here runs on its own. You connect a repository, and SoftwareFactory shows you what is in it."}
+          </p>
+        </div>
+        <SetupSteps steps={steps} current={currentStep === -1 ? steps.length - 1 : currentStep} />
+      </section>
+
+      <section aria-labelledby="live-metrics-title">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 id="live-metrics-title" className="text-lg font-semibold text-foreground">Live numbers</h2>
+            <p className="mt-1 text-sm text-muted">Read from your own Supabase records and from GitHub.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge tone={githubConnected ? "safe" : state === "error" ? "danger" : "neutral"}>{statusLabel}</StatusBadge>
+            <button type="button" onClick={() => void load()} disabled={state === "loading"} className="btn btn-secondary btn-sm" aria-label="Refresh live dashboard metrics">
+              {state === "loading" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MetricCard
+            label="Connected projects"
+            value={state === "ready" ? String(connectedCount) : "—"}
+            detail={state === "ready" ? "Live projects stored in Supabase" : statusLabel}
+            icon={FolderGit2}
+            tone={connectedCount ? "safe" : "neutral"}
+            demo={false}
+          />
+          <MetricCard
+            label="Open pull requests"
+            value={githubConnected && openPullRequests !== null ? String(openPullRequests) : "—"}
+            detail={state === "ready"
+              ? !githubConnected
+                ? "GitHub Not Connected"
+                : openPullRequests === null
+                ? "Incomplete — a GitHub read failed"
+                : `Live across ${projects.length} connected project${projects.length === 1 ? "" : "s"}`
+              : statusLabel}
+            icon={GitPullRequestArrow}
+            tone={openPullRequests === null ? "warning" : "info"}
+            demo={false}
+          />
+        </div>
+        {warnings.length ? (
+          <p className="mt-3 text-sm text-[var(--warning)]">
+            {warnings.length} live repository source{warnings.length === 1 ? " is" : "s are"} unavailable, so no partial pull-request total is shown.
+          </p>
+        ) : null}
+      </section>
+    </div>
   );
 }

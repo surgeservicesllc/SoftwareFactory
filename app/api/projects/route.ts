@@ -34,7 +34,7 @@ type ProjectRow = {
   health_status: string;
   autonomous_mode: boolean;
   maximum_autonomous_risk: string;
-  project_connections?: Array<{ connection_id: string; is_primary: boolean }> | null;
+  project_connections?: Array<{ connection_id: string; github_repository_id: string | null; is_primary: boolean }> | null;
 };
 
 type GitHubConnectionRow = {
@@ -53,6 +53,8 @@ type GitHubInstallationRow = {
 };
 
 type GitHubRepositoryRow = {
+  id: string;
+  external_repository_id: number;
   installation_id: string;
   organization_id: string;
   full_name: string;
@@ -67,7 +69,7 @@ export async function GET() {
     const { data, error } = await client
       .from("projects")
       .select(
-        "id,name,description,status,github_repository,default_branch,health_status,autonomous_mode,maximum_autonomous_risk,project_connections(connection_id,is_primary)",
+        "id,name,description,status,github_repository,default_branch,health_status,autonomous_mode,maximum_autonomous_risk,project_connections(connection_id,github_repository_id,is_primary)",
       )
       .eq("organization_id", activeOrganization.id)
       .neq("status", "archived")
@@ -112,7 +114,7 @@ export async function GET() {
     const { data: repositoryData, error: repositoryError } = installationIds.length
       ? await client
         .from("github_repositories")
-        .select("installation_id,organization_id,full_name,selected,archived,disabled")
+        .select("id,external_repository_id,installation_id,organization_id,full_name,selected,archived,disabled")
         .eq("organization_id", activeOrganization.id)
         .in("installation_id", installationIds)
       : { data: [], error: null };
@@ -130,17 +132,19 @@ export async function GET() {
       const primaryConnectionId = project.project_connections?.find(
         (connection) => connection.is_primary,
       )?.connection_id ?? null;
+      const githubRepositoryId = project.project_connections?.find(
+        (connection) => connection.is_primary,
+      )?.github_repository_id ?? null;
       const connection = primaryConnectionId
         ? connectionById.get(primaryConnectionId)
         : undefined;
       const installation = primaryConnectionId
         ? installationByConnectionId.get(primaryConnectionId)
         : undefined;
-      const normalizedRepository = project.github_repository?.toLowerCase() ?? null;
-      const repository = installation && normalizedRepository
+      const repository = installation && githubRepositoryId
         ? repositories.find(
           (candidate) => candidate.installation_id === installation.id
-            && candidate.full_name.toLowerCase() === normalizedRepository,
+            && candidate.id === githubRepositoryId,
         )
         : undefined;
       const connected = Boolean(
@@ -161,6 +165,7 @@ export async function GET() {
         description: project.description,
         status: project.status,
         githubRepository: project.github_repository,
+        githubRepositoryId: repository?.external_repository_id ?? null,
         defaultBranch: project.default_branch,
         healthStatus: project.health_status,
         autonomousMode: project.autonomous_mode,

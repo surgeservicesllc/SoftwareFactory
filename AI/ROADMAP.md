@@ -11,21 +11,23 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **Hardening passes all current local gates; publication/deployment, hosted migrations `011`-`019`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
+Status: **Latest hardening passes lint, typecheck, 52 files/392 tests, coverage, the production build, production-server Playwright 48/48, and final secret/client scans; publication/deployment, hosted migrations `011`-`025`, authenticated tenant behavior, active webhook, and full live acceptance remain pending.**
 
 Implemented in source:
 
 - Supabase Auth/onboarding/active organization and caller-RLS tenant surfaces.
 - GitHub App installation/callback/token/sync/disconnect boundaries and bounded repository reads.
 - Signed/idempotent/redacted webhook ingress, provider-time lifecycle ordering, and terminal deletion safeguards.
-- Transactional project linking and provider-authoritative repository/default-branch propagation.
-- Controlled branch + commit + draft-PR file changes with broad protected-path rejection, stable same-intent idempotency, exact-binding reservation, terminal audit evidence, and provider-evidence completion recovery.
-- Local forward migrations `011`-`019`, all unhosted.
+- Transactional project linking and provider-authoritative repository/default-branch propagation by immutable repository UUID.
+- Bounded caller-member list RPC projections, raw Activity/webhook direct-read closure, same-origin command creation, allowlisted activity details, restrictive browser CSP, installation-ID/repository-selection visibility, and live Projects metadata/check visibility including stable repository-ID matching, detail-fetched PR mergeability, and per-PR head-SHA checks.
+- Controlled branch + commit + draft-PR file changes with stable same-intent idempotency, exact-binding reservation, terminal audit evidence, provider-evidence completion recovery, and generic secret-assignment detection. Protected-file changes require an exact, short-lived, owner-only RED approval revalidated before write-token minting; merge/default-branch/deploy authority remains absent.
+- Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
+- Local forward migrations `011`-`025`, all unhosted.
 
 Exit work:
 
-1. Push the locally verified tree, pass CI, and verify the resulting exact production deployment.
-2. Obtain exact owner approval and apply/verify migrations `011`-`019` on the hosted Supabase project (hosted ledger currently ends at `010`; last clean linked lint ends at `009`).
+1. Push the exact locally verified tree, pass CI, and verify the resulting exact production deployment.
+2. Restore the database login-role authorization currently returning `403`, obtain exact owner approval, and apply/verify migrations `011`-`025` on hosted project `qpuofpmagrmyamahqwxw`. The CLI is authorized as `surgeservicesllc@gmail.com`, the ledger ends at `010`, linked lint is clean, and the successful dry run covers only `011`-`024` because it predates `025`.
 3. Verify hosted two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
 4. Complete production Auth/onboarding and the real GitHub installation -> tenant connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss journey.
 

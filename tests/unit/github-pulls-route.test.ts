@@ -47,6 +47,25 @@ describe("GitHub pull-request route permissions", () => {
       "installation-token",
       "example",
       "repository",
+      { includeMergeability: false },
+    );
+  });
+
+  it("loads bounded mergeability details only when requested by the inspector", async () => {
+    const request = new Request(
+      "https://factory.example/api/github/repositories/example/repository/pulls?includeMergeability=true",
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ owner: "example", repo: "repository" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.listPullRequests).toHaveBeenCalledWith(
+      "installation-token",
+      "example",
+      "repository",
+      { includeMergeability: true },
     );
   });
 });

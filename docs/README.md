@@ -1,6 +1,6 @@
 # Documentation index
 
-SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. The repository contains the Phase 1B application and database boundaries, while the real GitHub App installation and complete production workflow remain unverified. Until that acceptance run succeeds, the UI and memory must continue to say **Not Connected**.
+SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. A personal-account, repository-scoped provider installation exists, and the repository contains the Phase 1B application/database boundaries through local migration `025`, but the authenticated in-product callback/connection, hosted migrations after `010`, active webhook, and complete production workflow remain unverified. Until that acceptance run succeeds, the UI and memory must continue to say **Not Connected**.
 
 ## Developer and operator guides
 

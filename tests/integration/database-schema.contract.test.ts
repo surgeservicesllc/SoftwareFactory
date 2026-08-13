@@ -25,6 +25,11 @@ const requiredTables = [
   "activity_events",
   "policies",
   "approvals",
+  "github_installations",
+  "github_repositories",
+  "github_webhook_deliveries",
+  "github_change_requests",
+  "github_protected_change_approvals",
 ] as const;
 
 function escapeRegExp(value: string): string {

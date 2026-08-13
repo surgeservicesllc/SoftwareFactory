@@ -21,6 +21,7 @@ export async function GET(
         prepared.token,
         prepared.owner,
         prepared.repository,
+        { includeMergeability: new URL(request.url).searchParams.get("includeMergeability") === "true" },
       ),
     });
   } catch (error) {

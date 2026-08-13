@@ -8,8 +8,11 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
+import { tenantRpcListResponse } from "@/lib/server/tenant-list";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
+import { assertSameOriginRequest } from "@/lib/supabase/request";
+import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
 
@@ -32,6 +35,7 @@ type SubmissionResult = {
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginRequest(request);
     const rawBody = await readBoundedJson(request);
     const parsed = commandRequestSchema.safeParse(rawBody);
 
@@ -65,12 +69,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
+    const { activeOrganization, client: supabase } = await requireActiveOrganization();
+    const { data: activeProject, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", parsed.data.projectId)
+      .eq("organization_id", activeOrganization.id)
+      .maybeSingle();
+    if (projectError) return databaseErrorResponse(projectError);
+    if (!activeProject) {
       return jsonNoStore(
-        { error: { code: "unauthorized", message: "Authentication is required." } },
-        { status: 401 },
+        {
+          error: {
+            code: "project_not_in_active_organization",
+            message: "The project does not belong to the active organization.",
+          },
+        },
+        { status: 409 },
       );
     }
 
@@ -109,6 +124,8 @@ export async function POST(request: Request) {
       { status: result.was_created ? 202 : 200 },
     );
   } catch (error) {
+    const boundaryResponse = supabaseBoundaryErrorResponse(error);
+    if (boundaryResponse) return boundaryResponse;
     if (error instanceof ApiRequestError) {
       return requestErrorResponse(error);
     }
@@ -131,3 +148,41 @@ export async function POST(request: Request) {
   }
 }
 
+
+type CommandRow = {
+  id: string;
+  project_id: string | null;
+  prompt: string;
+  requested_risk: string;
+  status: string;
+  submitted_at: string;
+  completed_at: string | null;
+  project_name: string | null;
+};
+
+/**
+ * Lists the commands the caller's organization has saved. `parameters` is
+ * excluded: it is caller-supplied and screened for secrets on write, but it
+ * has no reason to travel back to the browser in a list view.
+ */
+export async function GET(request: Request) {
+  return tenantRpcListResponse<CommandRow>({
+    request,
+    rpc: "list_commands",
+    unavailableCode: "commands_unavailable",
+    unavailableMessage: "Saved requests could not be loaded.",
+    shape: (rows) => ({
+        commands: rows.map((row) => ({
+          id: row.id,
+          prompt: row.prompt,
+          risk: row.requested_risk,
+          status: row.status,
+          submittedAt: row.submitted_at,
+          completedAt: row.completed_at,
+          project: row.project_id
+            ? { id: row.project_id, name: row.project_name ?? "Project" }
+            : null,
+        })),
+      }),
+  });
+}
