@@ -130,7 +130,7 @@ logical agent that produced the implementation, and (when the workflow step dema
 whose producing provider is the same. Artifacts are exchanged as typed records persisted by
 SoftwareFactory, not as shared chat history.
 
-### 2.5 Persistence (migration `020`)
+### 2.5 Persistence (`20260813000100_provider_execution_layer.sql`)
 
 - `provider_model_configurations` - per-organization model catalog, capabilities, enabled
   flag, default flag, declared cost.
@@ -153,7 +153,7 @@ has not happened they show an empty state, not invented data.
 
 1. Plan document (this file).
 2. Core provider library + unit tests.
-3. Migration `020` + RLS behavioral tests.
+3. Provider-layer migration `20260813000100_provider_execution_layer.sql` + RLS behavioral tests.
 4. API routes + route tests.
 5. UI surfaces + component tests.
 6. `/AI` and `/docs` updates, full gate run, commit, push, draft PR.
@@ -184,7 +184,7 @@ the section 4 definition of done:
 | Structured, explainable, override-respecting routing that never silently degrades | Met. `OVERRIDE_TARGET_UNAVAILABLE` is covered by test. |
 | Policy-bounded, recorded fallback | Met. Credential, authorization, cancellation, and content-policy failures are ineligible by declaration. |
 | Independent review cannot be self-satisfied | Met and enforced in `workflow.ts`. |
-| RLS, FORCE RLS, RPC-only writes, audit evidence on new tables | Met in migration `020`; **not hosted**. |
+| RLS, FORCE RLS, RPC-only writes, audit evidence on new tables | Met in `20260813000100_provider_execution_layer.sql`; **not hosted**. |
 | lint, typecheck, tests, production build | Met: 45 files / 365 tests, 41-route build. |
 | `/AI` documents state exactly what is and is not live | Met. |
 
@@ -203,7 +203,7 @@ the section 4 definition of done:
 | 9 UI | Complete for Connections, Agents, Runs, Settings, Bot Manager. Dashboard and Reports still show their existing **Demo Data** sections and are listed in the backlog. |
 | 10 Security and RLS | Complete locally; hosted verification pending |
 | 11 Testing | Complete against the contract; provider wire formats need a credential |
-| 12 Completion demonstration | **Blocked** - the three end-to-end flows need a live credential and hosted migration `020` |
+| 12 Completion demonstration | **Blocked** - the three end-to-end flows need a live credential and hosted migration `20260813000100_provider_execution_layer.sql` |
 
 ### What an owner must do to finish section 12
 

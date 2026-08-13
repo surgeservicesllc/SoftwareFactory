@@ -1,29 +1,35 @@
 # Documentation index
 
-SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history now includes migration `027`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Candidate App `4582606` is installed as `153479019` with connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, scoped exactly to `surgeservicesllc/SoftwareFactory`. Its post-sync signed webhook, atomic handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f`, candidate-backed file read, and draft-only PR `#8` write path passed. PR `#8` remained draft, passed CI and Vercel Preview, was closed unmerged, and its temporary branch was deleted. Primary installation `153445938` remains active as the rollback path. The live second-tenant and remaining adverse lifecycle/disconnect matrix are still pending, so Phase 1B is not complete; Phase 1C and Phase 2 remain **Not Connected**, and automatic actions remain OFF.
+SoftwareFactory main contains the Phase 1E operations and synthetic-journey source, Phase 2A advisory Anthropic/OpenAI provider layer, universal bot-fabric registry, public marketing route group, and separated console routes; the reconciled working tree adds a local Phase 1C Codex execution candidate. Hosted Supabase remains through `027`; migration `028` and migrations `130001` through `130008` are unhosted, no production target or journey has been observed, provider credentials/live calls are unverified, both execution switches are OFF/unverified, no active worker heartbeat exists, and no live Codex run has completed. Phase 1E production operations, provider execution, bot-provider readiness, and OpenAI/Codex worker execution are therefore **Not Connected**.
+
+Final reconciled local gates are green on bundled Node `24.19.0` (97 files/959 tests, production build with 62/62 page-data entries, coverage 72.37/66.79/68.80/74.13, 117/117 Playwright/axe, dependency audit 0, source/static secret-value scans, diff check, disabled-worker safe exit, and focused migration/API security audits). See [Testing](TESTING.md) and [`AI/QUALITY_SCORECARD.md`](../AI/QUALITY_SCORECARD.md) for exact evidence. Local results do not prove hosted or live-provider acceptance.
+
+The candidate Phase 1B GitHub App path remains connected for exactly `surgeservicesllc/SoftwareFactory`. Manual Phase 1C does not enable Autonomous Mode, RED execution, merge, deployment, or rollback.
 
 ## Developer and operator guides
 
-- [Local setup](LOCAL_SETUP.md) — install, configure, and run the application.
-- [Architecture](ARCHITECTURE.md) — server, database, GitHub, and trust boundaries.
-- [Environment variables](ENVIRONMENT_VARIABLES.md) — public versus server-only configuration.
-- [Supabase setup](SUPABASE_SETUP.md) — hosted/local configuration, Auth redirects, and RLS expectations.
-- [Database migrations](DATABASE_MIGRATIONS.md) — migration inventory, verification, and promotion rules.
-- [GitHub App integration](GITHUB_APP_INTEGRATION.md) — exact App registration, routes, permissions, secret handling, and acceptance checks.
-- [Vercel setup](VERCEL_SETUP.md) — project identity, environment scopes, and manual promotion.
-- [Testing](TESTING.md) — Phase 1B quality and live-integration evidence.
-- [Security guide](SECURITY.md) and [security model](SECURITY_MODEL.md) — tenant isolation, GitHub tokens/webhooks, audit, and incident handling.
-- [Autonomous mode](AUTONOMOUS_MODE.md) — controls remain OFF; Phase 1B does not merge or deploy.
+- [Local setup](LOCAL_SETUP.md) - install, configure, and run the application.
+- [Architecture](ARCHITECTURE.md) - request, database, worker, Codex, GitHub, and trust boundaries.
+- [Environment variables](ENVIRONMENT_VARIABLES.md) - public, Vercel server-only, worker runtime, and GitHub Actions secret names.
+- [Supabase setup](SUPABASE_SETUP.md) - hosted identity, Auth, RLS, and the protected `028` -> `130001` through `130008` promotion.
+- [AI providers](AI_PROVIDERS.md) - Phase 2A advisory adapters, routing, fallback, configuration, and authority boundary.
+- [Database migrations](DATABASE_MIGRATIONS.md) - migration inventory, enum split, validation, and promotion rules.
+- [GitHub App integration](GITHUB_APP_INTEGRATION.md) - App setup, repository permissions, opaque worker dispatch, draft-PR publication, and acceptance.
+- [Vercel setup](VERCEL_SETUP.md) - hosting boundary and why Codex never runs in a request handler.
+- [Testing](TESTING.md) - local, hosted, runner, and real-provider evidence requirements.
+- [Security guide](SECURITY.md) and [security model](SECURITY_MODEL.md) - tenant, secret, lease, sandbox, repository, audit, and incident controls.
+- [Autonomous mode](AUTONOMOUS_MODE.md) - manual Phase 1C execution is distinct from the still-disabled Phase 1D loop.
 
 ## Status vocabulary
 
-- **Demo Data:** seeded/static information, not production telemetry.
-- **Not Connected:** no end-to-end verified provider installation/session is available.
-- **Configured:** required code or secret references exist, but connectivity is not necessarily verified.
-- **Queued:** intent was persisted; no worker execution is implied.
+- **Demo Data:** seeded/static information, not live telemetry.
+- **Not Connected:** no verified end-to-end provider session, current heartbeat, or live execution evidence.
+- **Configured:** code or protected configuration exists; connectivity is unproven.
+- **Queued:** intent and a durable run exist; no worker claim is implied.
+- **Draft PR:** reviewable source-control output; not a merge or deployment.
 
-Configuration, a successful build, or a provider object existing in an account does not prove an end-to-end connection. `AI/CURRENT_STATE.md` is the evidence-based status record.
+Configuration, a successful build, a workflow file, a stored secret name, a queued row, or a mocked SDK response does not prove a Connected worker. [`AI/CURRENT_STATE.md`](../AI/CURRENT_STATE.md) and [`AI/QUALITY_SCORECARD.md`](../AI/QUALITY_SCORECARD.md) are the evidence records.
 
 ## Repository governance
 
-Agents must read `AGENTS.md`, its required `AI/` memory files, and required `policies/` before material work. Authoritative code, migrations, provider configuration, and current test output take precedence over stale documentation.
+Agents must read [`AGENTS.md`](../AGENTS.md), all required `AI/` memory, and the policies before material work. Authoritative code, migrations, protected provider configuration, and current test/provider evidence take precedence over stale documentation. Protected database, workflow, and secret changes require exact owner approval.

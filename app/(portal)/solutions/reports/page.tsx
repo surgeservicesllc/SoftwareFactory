@@ -14,8 +14,7 @@ export default function ReportsPage() {
       />
       <ReportsConsole />
       <p className="mt-4 text-sm text-muted">
-        Reports count only what your own audit records prove. Nothing here is written by a model
-        narrating results it did not verify.
+        Reports use bounded persisted command, run, validation, pull-request, CI, and audit evidence. Missing evidence stays visibly missing.
       </p>
     </>
   );

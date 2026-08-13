@@ -1,92 +1,104 @@
 # Environment variables
 
-Copy `.env.example` to `.env.local` for development. Real environment files are ignored and must never be committed. An empty provider value must produce **Not Connected**, not a weaker authentication path.
+Copy `.env.example` to `.env.local` only for local development. Real environment files are ignored and must never be committed. Empty or invalid provider configuration must produce **Not Connected**, never a weaker fallback.
 
-## Browser-public configuration
+## Browser-public variables
 
-Only the following variables may be exposed through `NEXT_PUBLIC_`. They are intentionally public but still require RLS and server authorization.
-
-| Variable | Purpose | Production status |
-| --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Canonical application URL | Use `https://softwarefactory-tan.vercel.app` in production |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project API URL | Configured in Vercel Production |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred browser credential constrained by RLS | Configured in Vercel Production |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Legacy fallback for the browser credential | Optional; prefer the publishable key |
-
-Never place a service-role key, provider token, client secret, private key, state secret, or webhook secret in a `NEXT_PUBLIC_` variable.
-
-## Server-only Supabase configuration
-
-| Variable | Purpose | Rules/status |
-| --- | --- | --- |
-| `SUPABASE_SERVICE_ROLE_KEY` | Narrow webhook and audited privileged GitHub synchronization/RPC boundary | Configured in Vercel Production; bypasses RLS and must stay server-only |
-
-Interactive Auth, organization, project, and repository reads use the caller's session plus RLS. Service-role access does not replace tenant checks and is not a fix for an RLS error.
-
-## Server-only GitHub App configuration
+Only these values may use `NEXT_PUBLIC_`:
 
 | Variable | Purpose |
 | --- | --- |
-| `GITHUB_APP_ID` | Numeric App identity |
-| `GITHUB_APP_SLUG` | Installation URL slug |
-| `GITHUB_APP_CLIENT_ID` | OAuth client identity |
-| `GITHUB_APP_CLIENT_SECRET` | One-time callback code exchange |
-| `GITHUB_APP_PRIVATE_KEY_BASE64` | Preferred Vercel-safe PEM representation |
-| `GITHUB_APP_PRIVATE_KEY` | Alternative raw/escaped PEM representation |
-| `GITHUB_APP_CALLBACK_URL` | Exact environment callback URL |
-| `GITHUB_APP_WEBHOOK_SECRET` | Raw-body HMAC verification secret, minimum 32 bytes |
-| `GITHUB_APP_STATE_SECRET` | Installation state signing secret, minimum 32 bytes and distinct from webhook secret |
-| `GITHUB_COMMIT_IDENTITY_NAME` | Explicit name used for both author and committer on controlled draft-PR commits |
-| `GITHUB_COMMIT_IDENTITY_EMAIL` | Explicit email used for both author and committer on controlled draft-PR commits |
+| `NEXT_PUBLIC_APP_URL` | Canonical application origin |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase API URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred browser credential constrained by RLS |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Optional legacy browser credential fallback |
 
-Configure exactly one private-key representation. Current production `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY from main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`. Primary App `4573846` remains active only as rollback and its webhook is independently impaired.
+Never put a service-role key, OpenAI key, App private key, OAuth/client/state/webhook secret, database password, or installation token in a `NEXT_PUBLIC_` variable.
 
-## Server-only candidate GitHub App configuration
+## Vercel server-only application variables
 
-The deployed dual-App path supports one optional candidate App. Candidate configuration is fail-closed and all-or-nothing: leave every candidate variable absent, or provide the complete isolated set. The candidate must not reuse primary identity or cryptographic material. No candidate value may use a `NEXT_PUBLIC_` prefix.
+The Next.js application uses:
 
-| Variable | Purpose | Current Vercel status |
-| --- | --- | --- |
-| `GITHUB_CANDIDATE_APP_ID` | Candidate numeric App identity | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_SLUG` | Candidate installation URL slug | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_CLIENT_ID` | Candidate OAuth client identity | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_CLIENT_SECRET` | Candidate one-time callback code exchange | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` | Preferred candidate PEM representation | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_PRIVATE_KEY` | Alternative raw/escaped candidate PEM | Not configured in Vercel; use instead of, never alongside, the Base64 form |
-| `GITHUB_CANDIDATE_APP_CALLBACK_URL` | Exact candidate callback URL | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_WEBHOOK_SECRET` | Candidate raw-body HMAC secret, minimum 32 bytes | Sensitive Production and Preview |
-| `GITHUB_CANDIDATE_APP_STATE_SECRET` | Candidate state-signing secret, minimum 32 bytes | Sensitive Production and Preview |
+- `SUPABASE_SERVICE_ROLE_KEY` for narrow server-only webhook/audited privileged RPCs;
+- primary `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, one of `GITHUB_APP_PRIVATE_KEY_BASE64`/`GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CALLBACK_URL`, `GITHUB_APP_WEBHOOK_SECRET`, and `GITHUB_APP_STATE_SECRET`;
+- optional complete, isolated candidate equivalents prefixed `GITHUB_CANDIDATE_APP_`; and
+- `GITHUB_COMMIT_IDENTITY_NAME=surgeservicesllc` plus `GITHUB_COMMIT_IDENTITY_EMAIL=surgeservicesllc@gmail.com` for controlled GitHub commits.
 
-The configured candidate identifies owner-only App `4582606` (`surge-softwarefactory-next`). Production reads these server-only values; installation `153479019`, signed webhook processing, project handoff, and candidate-backed read/draft-write acceptance pass.
+Vercel values are scoped server-side. Candidate configuration is absent-or-complete and cannot reuse primary cryptographic material. Commit identity is public attribution but still server owned; request data cannot override it.
 
-Commit identity has no provider/App-bot fallback. `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured server-side in both Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`. Both values must pass strict server-side validation before the change route performs tenant persistence, token minting, or a GitHub mutation. The identity is never sent to the browser, stored in Supabase, or written to logs; it is sent only to GitHub in the Contents API's required `author` and `committer` objects. Live ordinary and protected draft commits have verified both fields.
+The Phase 2A advisory APIs may use these additional server-only Vercel variables:
 
-## Safety/deferred providers
+- `ANTHROPIC_API_KEY`, optional `ANTHROPIC_DEFAULT_MODEL`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_PROVIDER_DISABLED`;
+- `OPENAI_API_KEY`, required `OPENAI_DEFAULT_MODEL` when OpenAI advisory execution is configured, optional `OPENAI_BASE_URL`, and `OPENAI_PROVIDER_DISABLED`; and
+- `AI_PROVIDER_TIMEOUT_MS` for the bounded advisory request timeout.
 
-| Variable | Purpose | Status |
-| --- | --- | --- |
-| `VERCEL_TOKEN` | Future in-product Vercel API adapter | **Not Connected**; not required to host the UI |
-| `OPENAI_API_KEY` | Future Codex/OpenAI worker | **Not Connected**; Phase 1C |
-| `ANTHROPIC_API_KEY` | Future Claude worker | **Not Connected**; Phase 2 |
+These variables authorize advisory provider calls only after the organization execution switch is enabled. They never authorize repository writes or Phase 1C. The Phase 1C Codex worker does not run inside a Vercel request handler and uses its own protected GitHub Actions secret mapping.
 
-The GitHub-backed editor uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR. Its commit author and committer are the same explicitly configured server-only deployment identity. No HTTP route can write directly to the local repository or protected memory/policy files.
+## Phase 1C worker runtime variables
 
-## CLI-only Supabase values
+The Node worker validates all required values before registration:
 
-These values are for protected local/operator tooling, not application runtime:
-
-| Variable | Purpose |
+| Variable | Purpose/default |
 | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | Authenticate Supabase CLI |
-| `SUPABASE_PROJECT_ID` | Identify/link the intended project (`qpuofpmagrmyamahqwxw` in production) |
-| `SUPABASE_DB_PASSWORD` | Protected database operation authentication when required |
+| `SOFTWAREFACTORY_WORKER_ENABLED` | Must be literal `true` to execute; default `false` |
+| `SOFTWAREFACTORY_WORKER_RUNTIME` | Must be literal `docker` |
+| `SOFTWAREFACTORY_WORKER_ID` | Unique bounded worker identity |
+| `SOFTWAREFACTORY_WORK_ROOT` | Dedicated safe run directory, never root/home/repository root |
+| `SOFTWAREFACTORY_WORKER_POLL_MS` | Persistent-worker poll interval, default 5000 ms |
+| `SOFTWAREFACTORY_WORKER_HEARTBEAT_MS` | Lease heartbeat interval, default 10000 ms |
+| `SOFTWAREFACTORY_CODEX_MODEL` | Reviewed model, currently `gpt-5.3-codex` |
+| `SOFTWAREFACTORY_REQUIRED_CHECKS` | Required exact CI job names, pipe-delimited; reviewed value is `Lint, typecheck, test, and build|Browser and accessibility tests` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Runtime Supabase URL; public value used server-side here |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only worker RPC credential |
+| `OPENAI_API_KEY` | Supported Codex SDK provider credential |
+| `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY_BASE64` | Primary installation-token identity/key |
+| `GITHUB_CANDIDATE_APP_ID` / `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` | Candidate installation-token identity/key |
+| `GITHUB_COMMIT_IDENTITY_NAME` | Must resolve to `surgeservicesllc` for release |
+| `GITHUB_COMMIT_IDENTITY_EMAIL` | Must resolve to `surgeservicesllc@gmail.com` for release |
 
-Prefer the CLI credential store or a protected operator environment. Do not put real values in `.env.example`, workflow YAML, shell history, fixtures, screenshots, logs, or issue text.
+The worker checks that the Supabase credential is a service-role credential, that URLs and identities are valid, and that the work root is safe. General Git/npm/Codex child processes receive a narrow environment rather than the full parent secret environment.
+
+`SOFTWAREFACTORY_REQUIRED_CHECKS` is required and fail closed. Parsing trims and deduplicates pipe-delimited names and requires 1-20 unique entries, each no longer than 300 characters. Both reviewed names must continue to exactly match the job display names in `.github/workflows/ci.yml`; a missing, empty, renamed, duplicate-only, oversized, or drifting value prevents safe acceptance.
+
+## GitHub Actions repository secrets
+
+GitHub does not permit Actions secret names beginning with `GITHUB_`. Store worker secrets using exactly these repository secret names:
+
+| Actions secret | Mapped runtime variable |
+| --- | --- |
+| `SOFTWAREFACTORY_SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` |
+| `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SERVICE_ROLE_KEY` |
+| `SOFTWAREFACTORY_OPENAI_API_KEY` | `OPENAI_API_KEY` |
+| `SOFTWAREFACTORY_GITHUB_APP_ID` | `GITHUB_APP_ID` |
+| `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64` | `GITHUB_APP_PRIVATE_KEY_BASE64` |
+| `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID` | `GITHUB_CANDIDATE_APP_ID` |
+| `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` | `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` |
+
+`.github/workflows/codex-worker.yml` performs this mapping only on the final worker step. It does not pass secrets to checkout, Node setup, dependency install, or validation-image preload. The public commit identity is set in workflow environment, not stored as a secret.
+
+The workflow sets `SOFTWAREFACTORY_REQUIRED_CHECKS` to `Lint, typecheck, test, and build|Browser and accessibility tests`. It is public policy configuration, not a secret. Do not change it independently of the exact CI job display names or the worker publisher tests.
+
+These seven Actions secrets are currently **not verified configured**. A workflow file without them is not a Connected worker. Creating or changing them is RED protected-resource work requiring exact owner approval.
+
+The workflow also requires the non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` to equal the literal `true`. Missing, empty, or any other value skips the worker job for repository dispatch and schedule triggers. Branch-selectable manual workflow dispatch is intentionally absent. The variable is currently not verified enabled. Keep it absent/false while migrations and secrets are verified and while the reviewed commit is published, normal CI passes, and the matching Vercel deployment is verified. Change it to `true` only for the exact owner-approved activation window, then return it to absent/false after acceptance unless separately approved continued operation exists.
+
+## CLI-only Supabase variables
+
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_PROJECT_ID` (production is `qpuofpmagrmyamahqwxw`)
+- `SUPABASE_DB_PASSWORD` when required
+
+Prefer the CLI credential store or protected operator environment. Reauthenticate as `surgeservicesllc@gmail.com` and verify the exact project before every linked production command.
+
+## Other deferred providers
+
+- `VERCEL_TOKEN`: in-product deployment adapter **Not Connected**.
+- Anthropic/OpenAI Phase 2A adapters exist, but no credential or live call is verified and provider execution defaults OFF; both remain **Not Connected**.
 
 ## Rotation and validation
 
-- Revoke/rotate immediately if a credential may have entered Git, logs, screenshots, or a client bundle.
-- Use separate preview and production credentials/data. Production Supabase values are verified configured; Preview Supabase values are not independently verified.
-- Restart/redeploy after secret changes, then verify behavior without printing values.
-- Validate the production client bundle contains no privileged variable names or values.
-- A provider object or environment variable alone is not a Connected result.
+- Never print secret values in shell/tool output, workflow logs, screenshots, issues, reports, prompts, or database rows.
+- Revoke/rotate at the provider if a value may have entered Git, logs, screenshots, artifacts, or a client bundle.
+- Keep Preview/Development and Production credentials/data deliberately isolated.
+- Verify only secret names/presence, then exercise behavior without revealing values.
+- A configured name or provider object is not connection evidence; require a current heartbeat and real successful run.

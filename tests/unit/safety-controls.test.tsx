@@ -50,7 +50,7 @@ describe("SafetyControls", () => {
   it("allows GREEN only", () => {
     render(<SafetyControls />);
 
-    const tiers = screen.getByRole("heading", { name: /highest risk it may consider/i })
+    const tiers = screen.getByRole("heading", { name: /highest risk autonomous mode may consider/i })
       .parentElement!;
     expect(within(tiers).getAllByText("Allowed")).toHaveLength(1);
     expect(within(tiers).getAllByText("Blocked")).toHaveLength(2);
@@ -59,5 +59,18 @@ describe("SafetyControls", () => {
   it("never claims an action ran", () => {
     render(<SafetyControls />);
     expect(screen.getByText(/cannot approve, merge, deploy, roll back/i)).toBeInTheDocument();
+  });
+
+  it("keeps autonomous authority off without blocking manually requested Phase 1C runs", () => {
+    const { container } = render(<SafetyControls />);
+
+    expect(screen.getByText(/autonomous mode off/i)).toBeInTheDocument();
+    expect(screen.getByText(/manual green or yellow request may run/i)).toBeInTheDocument();
+    expect(screen.getByText("GREEN")).toBeInTheDocument();
+    expect(screen.getByText("Auto merge")).toBeInTheDocument();
+    expect(screen.getByText(/no merge endpoint/i)).toBeInTheDocument();
+    expect(screen.getByText(/would_be_eligible or blocked/i)).toBeInTheDocument();
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector("button")).toBeNull();
   });
 });

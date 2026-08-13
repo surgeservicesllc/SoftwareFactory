@@ -5,6 +5,7 @@ import { z } from "zod";
 import { GitHubApiError, githubApiRequest } from "@/lib/github/client";
 import { getGitHubCommitIdentity } from "@/lib/github/config";
 import { githubWebUrlSchema } from "@/lib/github/schemas";
+export { isProtectedGitHubWritePath } from "@/lib/github/write-policy";
 
 const repositoryCoordinatePattern = /^[A-Za-z0-9_.-]+$/;
 const shaPattern = /^[0-9a-f]{40,64}$/;
@@ -135,70 +136,6 @@ export function normalizeRepositoryPath(value: string) {
     throw new GitHubApiError(400, "invalid_path", "The repository path is invalid.");
   }
   return normalized;
-}
-
-export function isProtectedGitHubWritePath(path: string) {
-  const normalized = normalizeRepositoryPath(path).toLowerCase();
-  const segments = normalized.split("/");
-  const fileName = segments.at(-1) ?? "";
-  const protectedSubject = /(^|[._-])(auth|authentication|authorize|authorization|oauth|identity|mfa|sso|rbac|access|permission|permissions|role|roles|rls|session|sessions|cookie|middleware|crypto|cryptography|encrypt|encryption|decrypt|security|secret|credential|private[-_]?key|webhook|workflow|deploy|deployment|release|rollback|recovery|backup|dns|domain|billing|payment|stripe|autonomy|autonomous|safety|guardrail|risk|approval|audit|incident|policy|protected|provider|installation)([._-]|$)/;
-  const protectedDirectories = new Set([
-    ".circleci",
-    ".github",
-    ".gitlab",
-    ".openai",
-    ".vercel",
-    "ai",
-    "database",
-    "db",
-    "helm",
-    "infra",
-    "infrastructure",
-    "k8s",
-    "kubernetes",
-    "migrations",
-    "policies",
-    "schema",
-    "supabase",
-    "terraform",
-  ]);
-  const containsProtectedRoute = segments.some((segment, index) => (
-    (segment === "app" && ["api", "auth", "settings"].includes(segments[index + 1] ?? ""))
-    || (segment === "lib" && ["github", "server", "supabase"].includes(segments[index + 1] ?? ""))
-  ));
-  return fileName === "agents.md"
-    || fileName === "claude.md"
-    || fileName === "codeowners"
-    || fileName === ".npmrc"
-    || fileName === ".gitignore"
-    || fileName === ".vercelignore"
-    || fileName === ".dockerignore"
-    || fileName === ".yarnrc"
-    || fileName === ".yarnrc.yml"
-    || fileName === ".pnpmfile.cjs"
-    || fileName === "package.json"
-    || ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].includes(fileName)
-    || fileName.startsWith(".env")
-    || fileName.startsWith("dockerfile")
-    || fileName.startsWith("docker-compose")
-    || /^(next|nuxt|webpack|vite|vitest|playwright|eslint|jest|rollup|turbo)\.config\.[a-z0-9]+$/.test(fileName)
-    || /^tsconfig(?:\.[a-z0-9_-]+)?\.json$/.test(fileName)
-    || normalized === ".github/codeowners"
-    || normalized === "docs/codeowners"
-    || segments.some((segment) => protectedDirectories.has(segment))
-    || containsProtectedRoute
-    || normalized.startsWith("components/safety-controls.")
-    || normalized === "lib/autonomy.ts"
-    || normalized === "lib/constants.ts"
-    || normalized === "lib/risk.ts"
-    || normalized === "proxy.ts"
-    || normalized === "middleware.ts"
-    || normalized === "vercel.json"
-    || normalized === "netlify.toml"
-    || normalized === "fly.toml"
-    || normalized === "wrangler.toml"
-    || segments.includes("config")
-    || segments.some((segment) => protectedSubject.test(segment));
 }
 
 function encodedPath(path: string) {

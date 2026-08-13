@@ -1,6 +1,7 @@
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
-import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+import { Card, PageHeader, SectionTitle } from "@/components/ui";
+import { WorkerStatusBadge } from "@/components/worker-status";
 
 export const metadata = {
   title: "Bot Manager",
@@ -10,7 +11,7 @@ const lifecycle = [
   ["You describe what you want", "In plain words, against one project."],
   ["The server checks it", "Identity, ownership, and risk are verified before anything is stored."],
   ["It is written down", "Your request and an audit record are saved together."],
-  ["It stops there", "No worker is connected, so nothing runs."],
+  ["A worker claims it", "Only a recently-heartbeating worker can claim queued work. Without one, the request remains queued."],
 ] as const;
 
 export default function BotManagerPage() {
@@ -18,8 +19,8 @@ export default function BotManagerPage() {
     <>
       <PageHeader
         title="Bot Manager"
-        description="Register the bots you use, then ask for a piece of engineering work. Requests are recorded, reviewed, and kept — not run."
-        action={<StatusBadge tone="neutral">Worker Not Connected</StatusBadge>}
+        description="Commands and tasks are queued durably. A connected worker records run evidence and opens a draft pull request for you to review."
+        action={<WorkerStatusBadge />}
       />
 
       <BotFabricConsole />

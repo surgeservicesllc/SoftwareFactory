@@ -67,9 +67,7 @@ describe("safe activity list RPC", () => {
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    expect(migrationFiles.at(-1)).toBe(
-      "20260813000500_phase1d_autonomy_controls.sql",
-    );
+    expect(migrationFiles.at(-1)).toBe("20260813001100_phase1c_task_dependencies.sql");
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }

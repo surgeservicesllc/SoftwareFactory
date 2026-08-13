@@ -45,9 +45,7 @@ async function applyFullMigrationChain(db: PGlite) {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((file) => /^\d+.*\.sql$/.test(file))
     .sort();
-  expect(migrationFiles.at(-1)).toBe(
-    "20260813000500_phase1d_autonomy_controls.sql",
-  );
+  expect(migrationFiles.at(-1)).toBe("20260813001100_phase1c_task_dependencies.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

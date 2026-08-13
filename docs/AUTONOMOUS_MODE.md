@@ -1,6 +1,6 @@
 # Autonomous mode
 
-SoftwareFactory now contains a **Phase 1D observation-only scaffold**. It can describe whether a freshly evidenced GREEN candidate would satisfy policy, but it cannot execute or authorize an external action. The current product phase remains Phase 1B until its live acceptance gates pass.
+Manual Phase 1C Codex execution is not Autonomous Mode. The local worker may act only after an authenticated user explicitly submits one connected-project command. It must claim a durable GREEN/YELLOW run and can end only at a validated open draft pull request plus observed CI state.
 
 | Control | Scope | Enforced state/effect |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ SoftwareFactory now contains a **Phase 1D observation-only scaffold**. It can de
 | Autonomous Mode | both | OFF and database-constrained at each scope; zero end-to-end worker runs are verified |
 | Maximum Autonomous Risk | both | GREEN, database-constrained at each scope; resolution takes the lower of the two |
 | Auto Plan | both | OFF and database-constrained |
-| Auto Code | both | OFF; requires the Phase 1C worker, which is **Not Connected** |
+| Auto Code | both | OFF; a local manual Phase 1C worker candidate exists, but it is **Not Connected** and has no autonomous authority |
 | Auto Test | both | OFF and database-constrained |
 | Auto Repair | both | OFF; a failure opens bounded repair work for a human instead |
 | Auto Review | both | OFF; review agents produce findings only |
@@ -17,7 +17,9 @@ SoftwareFactory now contains a **Phase 1D observation-only scaffold**. It can de
 | Auto Merge | both | OFF; no merge endpoint, permission, or workflow |
 | Auto Deploy | both | OFF; Vercel control-plane adapter **Not Connected** |
 | Auto Rollback | both | OFF; no rollback executor |
-| Execution Worker | — | **Not Connected** |
+| Manual Phase 1C GREEN/YELLOW worker | — | Implemented locally; **Not Connected** until hosted schema, heartbeat, and a real bounded run are verified |
+| Phase 1C RED worker | — | Prohibited; owner approval does not widen the Phase 1C execution ceiling |
+| Autonomous execution worker | — | **Not Connected** |
 
 ## Resolution: most restrictive wins
 
@@ -35,28 +37,28 @@ instead of silently contradicting the setting.
 `security invoker`, so it cannot be used to read across a tenant boundary, and it returns every
 action OFF while no executor is connected.
 
-## Observation decision
+## Observation scaffold
 
-`lib/autonomy.ts` is a pure testable prerequisite function; it is not exposed as a runtime executor. A hypothetical candidate can report `WOULD_BE_ELIGIBLE` only when all of the following explicit inputs are true:
+`lib/autonomy.ts` remains a pure observation-only prerequisite function. It may describe `WOULD_BE_ELIGIBLE` for hypothetical fresh GREEN evidence but always returns `executionAllowed: false` with the global kill switch, observation-only mode, and executor-not-connected blockers. Hosted project controls accept only OFF/false and GREEN values.
 
-- a future observation input explicitly represents enabled mode; the current persisted project flag remains OFF;
-- the fresh classification is GREEN;
-- no protected resource is touched;
-- required evidence is current;
-- required checks are passing; and
-- no owner-attention condition exists.
+## Manual Phase 1C distinction
 
-This result is not an approval. The response separately reports `executionAllowed: false` with three hard blockers: `GLOBAL_KILL_SWITCH_ACTIVE`, `OBSERVATION_ONLY`, and `EXECUTOR_NOT_CONNECTED`. Missing or stale evidence produces `BLOCKED`.
+The Phase 1C path requires a new authenticated command for each run. It has fixed budgets, one repository/base SHA, a short database lease, cancellation checks, deterministic validation, protected-path/secret scans, and draft-PR-only publication. There is no loop that discovers work, approves its own action, merges, deploys, monitors production, or rolls back.
 
-## Control API and persistence
+RED commands remain durable but blocked. Protected files also require exact current approved-path evidence, and no protected approval can authorize RED execution in this phase.
 
-`GET /api/projects/:projectId/controls` returns tenant-scoped control state plus the hard safety envelope. `PATCH` is same-origin, authenticated, active-tenant scoped, owner-only, bounded, validated, and optimistic-concurrency capable. It accepts only:
+## What remains disabled
 
-- only the literal `false` autonomous-mode value;
-- the literal GREEN ceiling; and
-- explicit `false` values for auto approve, merge, deploy, and rollback.
+- automatic command generation or scheduling;
+- automatic approval;
+- pull-request approval or merge;
+- default-branch mutation;
+- production deployment or environment mutation;
+- health-driven rollback;
+- provider/workflow/branch-protection/secret administration; and
+- Phase 2 multi-provider worker routing.
 
-Migration `010_phase1d_observation_controls` keeps the kill switch ON and all execution controls OFF. Migration `20260813000500_phase1d_autonomy_controls` adds the five missing actions and the organization scope, extends both interlocks to cover them, and relaxes nothing. Hosted history extends through `027`; nothing in this chain makes autonomous execution available.
+Migration `010_phase1d_observation_controls` keeps the kill switch ON and all execution controls OFF. The unhosted Phase 1D control migration adds the five missing actions and the organization scope, extends both interlocks to cover them, and relaxes nothing. It must retain a unique reviewed version in the final migration chain. Hosted history extends through `027`; nothing in this chain makes autonomous execution available.
 
 ## The decision layer
 
@@ -81,12 +83,12 @@ Two rules are worth stating plainly because they are what make the record meanin
   level, including when they are the owner. An owner approving their own change does so as a
   second, separately attributed act.
 
-The reviewing agents are deterministic rules engines, not model calls. Phase 1C is Not Connected,
+The reviewing agents are deterministic rules engines, not model calls. Phase 1C is **Not Connected**,
 and a rules engine can be tested, reproduces exactly, and cannot hallucinate an approval — which is
 the property that matters at a gate.
 
 ## What is not built
 
-There is no closed autonomous execution loop. Codex/OpenAI worker execution is **Not Connected**, and there is no durable leasing worker, isolated workspace, approval executor, merge adapter, deployment adapter, post-deploy monitor, or rollback executor. The existing GitHub editor remains an authenticated owner/admin-initiated workflow that creates only an isolated branch, commit, and draft pull request.
+There is no closed autonomous execution loop. A durable, isolated manual Phase 1C worker candidate exists locally, but Codex/OpenAI execution remains **Not Connected** because its hosted schema, protected configuration, activation, heartbeat, and live run are unverified. It accepts only a new authenticated owner command and can publish only an isolated branch and open draft pull request. There is no autonomous backlog discovery or scheduling, approval executor, merge adapter, deployment adapter, connected post-deploy validator, or rollback executor.
 
-Any future execution rollout requires Phase 1B acceptance, Phase 1C worker evidence, non-production observation, exact allowlists, independent validation, owner approval for the precise authority, and a separate migration/decision that deliberately changes the locked interlocks.
+Any future autonomous rollout requires Phase 1B acceptance, live Phase 1C worker evidence, sustained non-production observation, explicit allowlists and budgets, independent checks, branch protection, alerting, kill-switch drills, owner approval for the precise authority, and a separate reviewed decision, migration, and implementation that deliberately change the locked interlocks. Phase 1E migration `028` and the provider/bot/marketing/Phase 1C migration chain do not change migration `010` interlocks.

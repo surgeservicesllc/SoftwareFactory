@@ -55,7 +55,7 @@ account and records the chosen entry. Anthropic ships a default because
 
 Two further owner steps are required before anything runs:
 
-1. Apply migration `020` to the hosted Supabase project.
+1. Apply `20260813000100_provider_execution_layer.sql` only after `20260812002800_phase1e_production_operations.sql`, as the second file in the reviewed `028` -> `130001` through `130008` pending chain.
 2. Enable outbound execution in Settings. It defaults OFF, and enabling it
    requires typing `ENABLE PROVIDER EXECUTION`. A configured credential is not
    by itself consent to spend money.
@@ -136,6 +136,8 @@ provider, so author and reviewer do not share one model's blind spots.
 
 ## Current status
 
-Both providers are **Not Configured**: no credential exists in any verified
-environment, so no live provider request has been made. Migration `020` is not
-hosted. See `AI/CURRENT_STATE.md` for the authoritative status.
+The provider layer is published on `main` at
+`b1060b83a0698a83e202aafdf9792886cf60a8b3`, but both providers remain **Not
+Connected**: no credential or successful provider health/run is verified,
+organization execution defaults OFF, and `20260813000100_provider_execution_layer.sql`
+is not hosted. See `AI/CURRENT_STATE.md` for the authoritative status.

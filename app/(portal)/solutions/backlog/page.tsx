@@ -10,7 +10,7 @@ export default function BacklogPage() {
     <>
       <PageHeader
         title="Backlog"
-        description="Work waiting on refinement, evidence, approval, or execution."
+        description="Real planned work with priority, risk, dependencies, assignment, runs, and pull-request evidence."
       />
       <BacklogConsole />
     </>

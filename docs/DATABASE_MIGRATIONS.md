@@ -1,106 +1,107 @@
 # Database migrations
 
-Supabase migrations under `supabase/migrations/` are immutable schema history after they are applied. Corrections use a new forward migration.
+Supabase migrations under `supabase/migrations/` become immutable schema history after application. Corrections use a new forward migration. Never renumber, delete, edit, reset, or repair hosted history casually.
 
-## Current inventory
+## Inventory and hosted state
 
-| Sequence | Purpose | Hosted state on 2026-08-13 |
+| Sequence | Purpose | State on 2026-08-13 |
 | --- | --- | --- |
-| `001_control_plane_schema` | Core tenant/control-plane types and tables | Applied |
-| `002_row_level_security` | RLS/FORCE RLS, policies, grants, tenant helpers | Applied |
-| `003_control_plane_workflows` | Audited command/project/approval workflows and immutable activity events | Applied |
-| `004_github_integration` | GitHub installations, repositories, webhook deliveries, change requests, sync/disconnect/webhook RPCs | Applied |
-| `005_authenticated_onboarding` | Authenticated organization onboarding and profile/member hardening | Applied |
-| `007_github_project_linking` | Transactional active GitHub repository-to-project linking | Applied |
-| `008_fix_github_sync_ambiguity` | Additive qualification fix for hosted lint ambiguity in `sync_github_installation` | Applied and linked lint clean |
-| `009_harden_github_project_and_sync` | Serialize external-installation sync, re-resolve authoritative binding, and force synchronized-default-branch project linking | Applied and linked lint clean |
-| `010_phase1d_observation_controls` | Lock the global kill switch ON and constrain Phase 1D to GREEN observation with all automatic actions OFF | Applied transactionally; hosted safety checks pass |
-| `011_harden_direct_mutation_boundaries` | Remove direct authenticated connection/member mutations and align database secret detection with `github_pat_` | Applied |
-| `012_github_change_audit` | Add actor-attributed immutable completed/failed GitHub change-request evidence, including bounded branch/commit failure evidence | Applied |
-| `013_reconcile_github_repository_grants` | Add service-role-only bounded upsert of repositories newly granted through a verified webhook | Applied |
-| `014_sync_linked_project_repository_metadata` | Propagate provider-authoritative repository rename/default-branch changes to exact connection-linked projects with immutable redacted activity evidence | Applied |
-| `015_recover_draft_pr_completion` | Recover a reserved change request from actor-attributed branch/commit/existing-draft-PR evidence after an ambiguous completion response | Applied |
-| `016_guard_github_installation_terminal_state` | Make deletion terminal for an installation ID and order installation lifecycle events by provider time | Applied |
-| `017_close_authenticated_control_plane_writes` | Remove remaining direct authenticated writes to connections/projects/links/change requests and reserve exact live changes through a narrow authenticated RPC | Applied |
-| `018_order_github_repository_events` | Order repository metadata events by provider time; preserve terminal deletion and require explicit newer restore before unselected resynchronization | Applied |
-| `019_allow_service_role_sensitive_json_checks` | Grant the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed by table CHECK evaluation; keep recursive/text helpers inaccessible | Applied |
-| `020_safe_tenant_list_reads` | Revoke authenticated SELECT on sensitive control-plane base tables and add bounded caller-member safe-projection list RPCs | Applied |
-| `021_bind_projects_to_github_repository_ids` | Persist the immutable tenant-scoped GitHub repository UUID on project connections and require exact change/project/repository binding | Applied |
-| `022_owner_approved_protected_draft_changes` | Record immutable exact owner RED approval before protected-file provider execution and add a reclaimable five-minute pre-provider reservation lease | Applied |
-| `023_github_activity_details` | Project bounded verified GitHub activity details and attribute project events through the stable repository UUID | Applied |
-| `024_safe_activity_list_reads` | Revoke authenticated direct reads of raw Activity/webhook rows and expose a caller-member, 100-row `list_activity` projection with bounded allowlisted evidence | Applied |
-| `025_harden_sensitive_assignments_and_protected_approval_integrity` | Detect non-placeholder generic secret assignments, bind protected approvals to exact pre-provider reservations, order write-token creation after the provider boundary, and serialize stable repository relinking | Applied |
-| `026_narrow_hosted_service_role_table_grants` | Revoke hosted default-ACL table grants from `service_role` and restore SELECT/INSERT/UPDATE only on four GitHub ingress tables | Applied and verified |
-| `027_handoff_github_project_connection` | Immutable owner RED approval/execution and atomic handoff between active same-account/repository installations; requires fresh signed target-delivery evidence, preserves history, serializes conflicts, and supports evidence-bound reverse | Applied; live candidate handoff verified |
+| `001`-`003` | Core control plane, RLS/FORCE RLS, audited workflows | Hosted |
+| `004`-`009` (no `006`) | GitHub integration, Auth onboarding, project linking, sync hardening | Hosted |
+| `010` | Lock Phase 1D kill switch ON and automatic controls OFF | Hosted |
+| `011`-`019` | Direct-write closure, GitHub audit/recovery/lifecycle, narrow provider-ingress helpers | Hosted |
+| `020`-`026` | Safe browser projections, immutable repository binding, protected approvals, Activity boundary, secret/lease integrity, narrow service-role table ACL | Hosted |
+| `027` | Dual-App owner approval and atomic history-preserving project handoff | Hosted and owner path verified |
+| `028_phase1e_production_operations` | Operations monitoring, incidents, freeze, diagnosis, bounded repair work, rollback decisions, and reports without a production mutator | **UNHOSTED**; source published on main |
+| `130001_provider_execution_layer` | Phase 2A provider configuration, routing decisions, advisory-run events/metadata, owner execution switch, RLS/FORCE RLS, and owner/admin RPCs | **UNHOSTED**; source published on main |
+| `130002_phase1e_synthetic_journeys` | Project-scoped Basic/Standard/Critical journeys with schema-enforced safe steps/profile coverage and observation-only execution | **UNHOSTED**; source published on main |
+| `130003_bot_fabric_activity_types` | Add bot-fabric activity-event values before dependent use | **UNHOSTED**; source published on main |
+| `130004_bot_fabric` | Provider-neutral bot/role/assignment registry, tenant isolation, configuration-only readiness, and audited transitions | **UNHOSTED**; source published on main |
+| `130005_marketing_content` | Separate public marketing-content schema and bounded write-only newsletter subscription path | **UNHOSTED**; source published on main |
+| `130006_phase1c_enums` | Add `architect`/`performance` roles and Phase 1C terminal/retry activity values | **UNHOSTED**; local Phase 1C candidate |
+| `130007_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | **UNHOSTED**; local Phase 1C candidate |
+| `130008_logical_agent_roster` | Eleven-role logical roster, owner/risk hardening, per-agent serialization, provider-table ACL reconciliation, coherent artifact/recovery rules, stale-lease/cancellation terminalization, structured reports and bounded projections | **UNHOSTED**; local Phase 1C candidate |
 
-There is no `006` in the current Phase 1B chain. Do not rename applied migrations to close the numeric gap; ordering is determined by the full timestamp filename.
+Production project `qpuofpmagrmyamahqwxw` is verified only through `027`. Migration `028` and migrations `130001` through `130008` are pending protected changes. Their presence in source, on main, or in passing migration tests is not hosted evidence.
 
-## Current hosted status
+## Why the `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` order is mandatory
 
-Project `qpuofpmagrmyamahqwxw` is current through hosted migration `027`, including `001`-`005` and `007`-`027`; history matched before the additive `027` promotion.
+`028` establishes the Phase 1E operations schema. `130001` establishes the Phase 2A provider columns, tables, and functions that every later layer must preserve. `130002` adds the Phase 1E synthetic-journey schema. Bot-fabric enum migration `130003` must commit before dependent registry migration `130004`; marketing migration `130005` then adds its separate public schema. PostgreSQL does not safely allow a value added with `ALTER TYPE ... ADD VALUE` to be used before the transaction that added it commits, so Phase 1C migration `130006` contains only enum additions and must commit before `130007` performs dependent casts and creates the execution schema. `130008` is the forward roster, recovery, report, and provider-ACL compatibility migration over the provider and worker schemas; it must not be folded into or applied before `130007`. Always apply all nine in timestamp order.
 
-`20260812001000_phase1d_observation_controls.sql` was applied transactionally through the Supabase SQL Editor after preflight returned `unsafe_project_rows=0`. Post-application hosted queries confirmed the organization kill-switch default is true, both constraints are validated, zero organizations have the switch OFF, zero unsafe projects exist, authenticated users have execute on the owner-only controls RPC, and anonymous users do not. This applies locked observation controls only; it does not connect an executor.
+## Phase 2A schema summary
 
-The hosted ledger is current through `027`. Post-apply catalog verification reports 25/25 public tables with RLS and FORCE RLS, 34 policies, zero policyless tables, and narrow owner-read/no-browser-mutation grants on the two immutable handoff-evidence tables. The verified pre-`027` history/dry-run/lint baseline and 22 secret guards remain intact.
+Migration `130001` adds per-organization provider model configuration, immutable routing decisions, append-only provider run events, provider/model/usage/routing metadata on runs, and an owner-controlled organization execution flag defaulting OFF. Its write functions revalidate organization role and tenant identity; new tables use RLS and FORCE RLS. This schema enables only advisory artifacts and does not grant repository or delivery authority.
 
-Migration `026` remediates the Supabase-managed default ACL drift found after `025`. Exact post-apply verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19. Never reset or repair hosted migration history.
+## Phase 1C schema summary
 
-Migration `027` is hosted. It requires immutable exact-tuple owner RED approval followed by single-use execution, live same-account/same-repository source and target installations, no reserved change or conflicting active link, and a fresh processed signed target delivery. The live audit passed: candidate sync at `2026-08-13T15:26:56Z`, qualifying delivery at `15:27:38Z` with exact App ID, three approval lifecycle events, enabled append-only triggers, preserved project/link identity and four completed change requests plus five prior activity rows. Primary installation/repository rows remain active for reverse handoff.
+Migration `130007`:
 
-## Creating a migration
+- adds command type, acceptance criteria, execution plan, and risk assessment;
+- adds task criteria, blocked reason, result summary, and dependency links;
+- extends runs with command/connection/repository identity, risk, logical role, provider/model, exact base/head branches and SHAs, lease/attempt/cancellation/retry/result/usage/check/change evidence;
+- adds `task_dependencies`, `phase1c_workers`, `phase1c_run_events`, `phase1c_run_artifacts`, and `phase1c_run_validations` with foreign keys, indexes, size/shape/secret constraints, RLS, and FORCE RLS;
+- revokes direct table access and exposes bounded caller-member worker status and agent/task/run/report detail functions;
+- exposes service-role-only worker registration, heartbeat, claim, run heartbeat, event, validation, artifact, and terminal-completion functions;
+- adds owner/admin cancellation and eligible retry functions plus dispatch-outcome evidence;
+- wraps command submission with authoritative SQL risk escalation and fixed provider/model/role/budget/workflow validation;
+- creates logical role agents and queued runs only for manual GREEN/YELLOW work;
+- prevents RED commands/tasks from becoming executable, including through legacy approval transitions;
+- makes run events, artifacts, and validations append-only; and
+- appends redacted activity and bounded report evidence for terminal transitions.
 
-```bash
-npx supabase migration new descriptive_name
-```
+Migration `130008` then:
 
-Each migration should include, where applicable, ownership, foreign keys, indexed query paths, constraints, timestamps, RLS/FORCE RLS, explicit policies/grants, audited state transitions, and pinned search paths for security-definer functions. Never store provider secrets or tokens in tables.
+- provisions an idempotent provider-neutral roster for existing and future organizations: Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, and CEO Reporter;
+- preserves user-created agents and explicit Phase 2A provider assignments, rebinds eligible factory-created work to logical roles, and removes obsolete factory rows only when unreferenced;
+- reconciles provider-table service-role ACLs with the trusted Phase 2A persistence boundary rather than granting broad table access;
+- maps general/`other` work to Orchestrator and serializes claims so one logical agent cannot hold concurrent active leases;
+- makes `submit_command` owner-only, limits parameter/criteria size and top-level keys, rejects likely secrets, computes SQL risk from prompt plus acceptance criteria, and retains fixed provider/model/role/budget/workflow;
+- validates exact lease-bound branch/commit/draft-PR artifacts and their `pull_requests` projection; accepts exact replay, rejects partial/conflicting evidence, and only resumes coherent state after revalidating remote branch SHA and PR identity;
+- bounds retry to retryable failed attempts, terminalizes exhausted stale leases and cancellations with immutable evidence, and lets cancellation win at completion;
+- creates or updates structured bounded reports for success, failure, cancellation, queued cancellation, and stale-lease terminalization; and
+- reconstructs safe report PR links from authoritative database rows while bounding changed-file, check, validation, finding, security, retry, and cancellation content.
 
-## Local verification
+## Required local verification
 
-Apply the complete chain to a disposable local database:
+Apply the complete chain to a disposable database or run the repository migration behavior suite. Verify:
+
+1. `028` applies before the `130xxx` chain; `130001` establishes the provider layer; `130002` adds synthetic journeys; `130003` commits before `130004` uses the bot-fabric event values; `130005` adds marketing; `130006` commits before `130007` uses the Phase 1C enum values; and `130008` applies only after both provider and core Phase 1C schemas exist.
+2. Every public table has RLS and FORCE RLS; every new table has deliberate policies and grants.
+3. Authenticated callers cannot directly mutate or broadly select worker/evidence tables.
+4. Member list/detail/status functions enforce organization membership, size caps, and allowlisted fields.
+5. Service role can execute only the reviewed worker functions, not gain broad direct table rights.
+6. Only an organization owner can call `submit_command`; direct authenticated input cannot lower prompt/criteria-derived risk, exceed the exact key/size contract, contain likely secrets, or change provider/model/role/budget/workflow.
+7. RED cannot queue/claim/run even if approval state changes.
+8. Every organization has the standard logical roster without overwriting user-created agents or explicit provider assignments, general Phase 1C work maps to Orchestrator, provider-account identity remains separate, and no logical agent can have two active leases.
+9. Repository binding, base SHA, lease token, worker ID, attempt, cancellation, branch/commit/PR coherence, and projected pull request are all revalidated; conflicting replay is rejected.
+10. Events/artifacts/validations reject update/delete and secret-bearing evidence.
+11. Completion, queued cancellation, and exhausted stale leases update state and create bounded structured report/activity evidence atomically; cancellation wins at the final safe boundary.
+12. Owner/cross-tenant/anonymous paths are tested with caller sessions, not service role as the user-under-test.
+
+Typical disposable local commands:
 
 ```bash
 npx supabase db reset
 npx supabase db lint
+npm run test:integration
 ```
 
-Verify:
+`db reset` is destructive and may be used only against a verified disposable local database. Never run it against hosted production.
 
-1. migrations apply from empty state in timestamp order;
-2. required tables, functions, constraints, indexes, and foreign keys exist;
-3. every exposed table reports both RLS and FORCE RLS;
-4. intended user/session operations succeed;
-5. a second tenant and anonymous session are denied;
-6. privileged workflows verify tenant/actor/resource before mutation;
-7. important mutations append immutable, redacted activity evidence; and
-8. list/activity projections expose only approved bounded fields, while authenticated direct reads of raw Activity/webhook rows fail;
-9. stable repository IDs authorize project/change attribution and serialize active project relinking;
-10. protected approval snapshots and write-token ordering cannot cross the durable provider boundary; and
-11. no test claiming tenant isolation uses service role as the user-under-test.
+## Protected hosted promotion
 
-Useful catalog queries:
+Applying `028` and `130001` through `130008` to production is RED because it changes RLS/authorization, service-role RPCs, operations/provider state, synthetic/bot/marketing schemas, roster/recovery/report behavior, audit state, and the production schema. It requires exact current owner approval naming the project, files, risks, expiry, validation, and containment plan.
 
-```sql
-select schemaname, tablename, rowsecurity
-from pg_tables
-where schemaname = 'public'
-order by tablename;
+1. Authenticate the Supabase CLI as `surgeservicesllc@gmail.com`.
+2. Reconfirm exact project ref `qpuofpmagrmyamahqwxw`; stop if profile/project identity is ambiguous.
+3. Compare local and remote history and verify only reviewed `028` and `130001` through `130008` are pending.
+4. Review SQL, risk, grants, ownership, RLS/FORCE RLS, secret checks, and recovery/containment.
+5. Run the complete local chain, migration tests, lint, and linked dry run.
+6. Apply and confirm the ledger commit for `028`, then `130001`, `130002`, `130003`, `130004`, `130005`, `130006`, `130007`, and `130008` through the approved path. Stop immediately on any mismatch or failure.
+7. Re-list migrations and run linked database lint.
+8. Verify catalog, policies, table/function ACLs, indexes, constraints, trigger/function definitions, append-only behavior, and zero unintended service-role grants.
+9. Exercise owner, member, second-tenant, and anonymous caller behavior plus Phase 2A trusted persistence and service-role worker behavior separately, including provider execution default OFF, the standard roster, per-agent serialization, coherent recovery, cancellation/stale-lease reports, and safe report projection.
+10. Verify application health, both provider and worker execution remain disabled until separately activated, and no existing Phase 1B data/binding changed.
+11. Record exact hosted evidence in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`.
 
-select schemaname, tablename, policyname, cmd, roles
-from pg_policies
-where schemaname = 'public'
-order by tablename, policyname;
-```
-
-## Hosted promotion
-
-1. Verify CLI account and exact project ref.
-2. Compare local/remote migration lists.
-3. Review the SQL, risk tier, tenant checks, grants, and recovery/containment plan.
-4. Run local reset/lint and affected tests.
-5. Use a linked dry run where supported.
-6. Apply with protected credentials outside untrusted CI.
-7. Rerun linked migration list, database lint, catalog/RLS checks, and application health.
-8. Record exact evidence in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`.
-
-Never run production migrations from pull-request CI or an untrusted fork. Never use `db reset` for a hosted project. A destructive or irreversible production migration is RED and needs exact owner approval and verified recovery measures.
+Never run production migrations from untrusted pull-request code or a fork. A migration apply does not itself connect the Codex worker.

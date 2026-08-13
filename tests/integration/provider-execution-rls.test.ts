@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
@@ -9,30 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-const migrationFiles = [
-  "20260812000100_control_plane_schema.sql",
-  "20260812000200_row_level_security.sql",
-  "20260812000300_control_plane_workflows.sql",
-  "20260812000400_github_integration.sql",
-  "20260812000500_authenticated_onboarding.sql",
-  "20260812000700_github_project_linking.sql",
-  "20260812000800_fix_github_sync_ambiguity.sql",
-  "20260812000900_harden_github_project_and_sync.sql",
-  "20260812001000_phase1d_observation_controls.sql",
-  "20260812001100_harden_direct_mutation_boundaries.sql",
-  "20260812001200_github_change_audit.sql",
-  "20260812001300_reconcile_github_repository_grants.sql",
-  "20260812001400_sync_linked_project_repository_metadata.sql",
-  "20260812001500_recover_draft_pr_completion.sql",
-  "20260812001600_guard_github_installation_terminal_state.sql",
-  "20260812001700_close_authenticated_control_plane_writes.sql",
-  "20260812001800_order_github_repository_events.sql",
-  "20260812001900_allow_service_role_sensitive_json_checks.sql",
-  "20260813000100_provider_execution_layer.sql",
-] as const;
+const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
 
 const providerTables = [
   "provider_model_configurations",
+  "provider_agent_assignments",
   "provider_routing_decisions",
   "provider_run_events",
 ] as const;
@@ -48,9 +29,6 @@ const projectOneId = "40000000-0000-4000-8000-000000000001";
 const projectTwoId = "40000000-0000-4000-8000-000000000002";
 const taskOneId = "80000000-0000-4000-8000-000000000001";
 const taskTwoId = "80000000-0000-4000-8000-000000000002";
-const commandOneId = "90000000-0000-4000-8000-000000000001";
-const commandTwoId = "90000000-0000-4000-8000-000000000002";
-
 type ApplicationRole = "anon" | "authenticated" | "service_role";
 
 async function source(path: string) {
@@ -139,6 +117,10 @@ describe("Phase 2A provider execution layer", () => {
       create role service_role nologin bypassrls;
     `);
 
+    const migrationFiles = (await readdir(migrationsRoot))
+      .filter((file) => /^\d+.*\.sql$/.test(file))
+      .sort();
+    expect(migrationFiles.at(-1)).toBe("20260813000800_logical_agent_roster.sql");
     for (const migrationFile of migrationFiles) {
       await db.exec(await source(`supabase/migrations/${migrationFile}`));
     }
@@ -159,13 +141,9 @@ describe("Phase 2A provider execution layer", () => {
         ('${projectOneId}', '${organizationOneId}', 'Tenant One Project', 'active', '${ownerOneId}'),
         ('${projectTwoId}', '${organizationTwoId}', 'Tenant Two Project', 'active', '${ownerTwoId}');
 
-      insert into public.commands (id, organization_id, project_id, submitted_by, prompt) values
-        ('${commandOneId}', '${organizationOneId}', '${projectOneId}', '${ownerOneId}', 'Review the change'),
-        ('${commandTwoId}', '${organizationTwoId}', '${projectTwoId}', '${ownerTwoId}', 'Review the change');
-
-      insert into public.tasks (id, organization_id, project_id, command_id, title, created_by) values
-        ('${taskOneId}', '${organizationOneId}', '${projectOneId}', '${commandOneId}', 'Review the change', '${ownerOneId}'),
-        ('${taskTwoId}', '${organizationTwoId}', '${projectTwoId}', '${commandTwoId}', 'Review the change', '${ownerTwoId}');
+      insert into public.tasks (id, organization_id, project_id, title, created_by) values
+        ('${taskOneId}', '${organizationOneId}', '${projectOneId}', 'Review the change', '${ownerOneId}'),
+        ('${taskTwoId}', '${organizationTwoId}', '${projectTwoId}', 'Review the change', '${ownerTwoId}');
     `);
   }, 120_000);
 
@@ -209,7 +187,9 @@ describe("Phase 2A provider execution layer", () => {
 
     const granted = new Set(result.rows.map((row) => `${row.table_name}:${row.privilege_type}`));
     for (const table of providerTables) {
-      expect(granted.has(`${table}:SELECT`), `${table} select`).toBe(true);
+      expect(granted.has(`${table}:SELECT`), `${table} select`).toBe(
+        table !== "provider_agent_assignments",
+      );
       for (const privilege of ["INSERT", "UPDATE", "DELETE"]) {
         expect(granted.has(`${table}:${privilege}`), `${table} ${privilege}`).toBe(false);
       }
@@ -231,8 +211,8 @@ describe("Phase 2A provider execution layer", () => {
     );
     expect(second.rows).toHaveLength(first.rows.length);
 
-    reviewerAgentId = first.rows.find((row) => row.name === "Security Reviewer")!.id;
-    implementerAgentId = first.rows.find((row) => row.name === "Backend Engineer")!.id;
+    reviewerAgentId = first.rows.find((row) => row.name === "Security")!.id;
+    implementerAgentId = first.rows.find((row) => row.name === "Backend")!.id;
     expect(reviewerAgentId).toBeTruthy();
     expect(implementerAgentId).toBeTruthy();
   });
@@ -301,6 +281,15 @@ describe("Phase 2A provider execution layer", () => {
     );
     expect(assigned.rows[0]).toEqual({ provider: "anthropic", model: "claude-opus-5" });
 
+    await resetRole(db);
+    const neutralAgent = await db.query<{ provider: string | null; model: string | null }>(
+      "select provider, model from public.agents where id = $1",
+      [reviewerAgentId],
+    );
+    expect(neutralAgent.rows[0]).toEqual({ provider: null, model: null });
+
+    await assumeRole(db, "authenticated", ownerOneId);
+
     await expect(
       db.query("select * from public.set_agent_provider_assignment($1,$2,$3)", [
         reviewerAgentId,
@@ -344,6 +333,10 @@ describe("Phase 2A provider execution layer", () => {
 
   it("records a routed run with its evidence, trace, and activity event", async () => {
     await assumeRole(db, "authenticated", ownerOneId);
+    await db.query("select * from public.set_provider_execution_enabled($1,$2)", [
+      organizationOneId,
+      true,
+    ]);
     const recorded = await db.query<{ routing_decision_id: string; agent_run_id: string }>(
       recordRunSql,
       runArguments({ 3: reviewerAgentId }),
@@ -352,6 +345,8 @@ describe("Phase 2A provider execution layer", () => {
     const { routing_decision_id: routingId, agent_run_id: runId } = recorded.rows[0]!;
     expect(routingId).toBeTruthy();
     expect(runId).toBeTruthy();
+
+    await resetRole(db);
 
     const run = await db.query<{
       provider: string;
@@ -369,6 +364,15 @@ describe("Phase 2A provider execution layer", () => {
       status: "succeeded",
       latency_ms: 4200,
       routing_decision_id: routingId,
+    });
+
+    const commonDimensions = await db.query<{ risk_level: string; logical_agent_role: string }>(
+      "select risk_level, logical_agent_role from public.agent_runs where id = $1",
+      [runId],
+    );
+    expect(commonDimensions.rows[0]).toEqual({
+      risk_level: "green",
+      logical_agent_role: "security",
     });
 
     const events = await db.query<{ sequence: number; event_type: string }>(

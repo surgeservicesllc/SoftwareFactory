@@ -65,6 +65,34 @@ create unique index provider_model_configurations_single_default
 create index provider_model_configurations_org_provider_idx
   on public.provider_model_configurations (organization_id, provider, enabled);
 
+-- Provider preference is routing metadata, not logical-agent identity. Keep it
+-- in a separate tenant-bound record so assigning Claude/OpenAI cannot mutate
+-- the provider-neutral roster consumed by the Phase 1C planner.
+create table public.provider_agent_assignments (
+  agent_id uuid primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  provider public.connection_provider not null,
+  model text check (
+    model is null or (
+      char_length(btrim(model)) between 1 and 120
+      and model ~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+    )
+  ),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint provider_agent_assignments_agent_fk foreign key (agent_id, organization_id)
+    references public.agents(id, organization_id) on delete cascade,
+  constraint provider_agent_assignments_ai_provider_only
+    check (provider in ('openai'::public.connection_provider, 'anthropic'::public.connection_provider))
+);
+
+comment on table public.provider_agent_assignments is
+  'Optional provider/model routing preference for a provider-neutral logical agent. Contains no credential material.';
+
+create index provider_agent_assignments_org_provider_idx
+  on public.provider_agent_assignments (organization_id, provider);
+
 -- ---------------------------------------------------------------------------
 -- Routing evidence
 -- ---------------------------------------------------------------------------
@@ -134,15 +162,15 @@ create index provider_routing_decisions_org_provider_idx
 -- ---------------------------------------------------------------------------
 
 alter table public.agent_runs
-  add column provider public.connection_provider,
-  add column model text check (model is null or char_length(btrim(model)) between 1 and 128),
+  add column provider text check (provider is null or provider in ('anthropic', 'openai')),
+  add column model text check (model is null or char_length(btrim(model)) between 1 and 120),
   add column task_kind text check (
     task_kind is null or task_kind in (
       'plan', 'architecture_review', 'implementation_proposal',
       'implementation_review', 'security_review', 'qa_assessment', 'status_report'
     )
   ),
-  add column usage jsonb,
+  add column usage jsonb not null default '{}'::jsonb,
   add column latency_ms integer check (latency_ms is null or latency_ms >= 0),
   add column routing_decision_id uuid,
   add column fallback_from_provider public.connection_provider,
@@ -203,6 +231,8 @@ create index provider_run_events_run_sequence_idx
 
 alter table public.provider_model_configurations enable row level security;
 alter table public.provider_model_configurations force row level security;
+alter table public.provider_agent_assignments enable row level security;
+alter table public.provider_agent_assignments force row level security;
 alter table public.provider_routing_decisions enable row level security;
 alter table public.provider_routing_decisions force row level security;
 alter table public.provider_run_events enable row level security;
@@ -210,6 +240,10 @@ alter table public.provider_run_events force row level security;
 
 create policy provider_model_configurations_select_members
   on public.provider_model_configurations for select to authenticated
+  using (public.is_organization_member(organization_id));
+
+create policy provider_agent_assignments_select_members
+  on public.provider_agent_assignments for select to authenticated
   using (public.is_organization_member(organization_id));
 
 create policy provider_routing_decisions_select_members
@@ -222,9 +256,10 @@ create policy provider_run_events_select_members
 
 -- Writes travel exclusively through the audited functions below, matching the
 -- boundary established for every other control-plane table.
-revoke all on table public.provider_model_configurations from anon, authenticated;
-revoke all on table public.provider_routing_decisions from anon, authenticated;
-revoke all on table public.provider_run_events from anon, authenticated;
+revoke all on table public.provider_model_configurations from public, anon, authenticated, service_role;
+revoke all on table public.provider_agent_assignments from public, anon, authenticated, service_role;
+revoke all on table public.provider_routing_decisions from public, anon, authenticated, service_role;
+revoke all on table public.provider_run_events from public, anon, authenticated, service_role;
 
 grant select on table public.provider_model_configurations to authenticated;
 grant select on table public.provider_routing_decisions to authenticated;
@@ -236,9 +271,6 @@ grant select on table public.provider_run_events to authenticated;
 
 -- A logical agent name identifies a role within one organization, so seeding
 -- the roster twice must be a no-op rather than a duplicate roster.
-create unique index agents_organization_name_unique
-  on public.agents (organization_id, lower(btrim(name)));
-
 -- Seed the standard logical agent roster for an organization. Agents are
 -- roles; this never creates or references a provider account.
 create or replace function public.ensure_default_agents(p_organization_id uuid)
@@ -258,6 +290,12 @@ begin
     raise exception using errcode = '42501', message = 'organization owner or administrator access is required';
   end if;
 
+  -- Serialize concurrent idempotent setup without imposing a global name
+  -- uniqueness rule on user-created logical agents.
+  perform organization.id from public.organizations organization
+  where organization.id = p_organization_id
+  for update;
+
   for seed in
     select *
     from (
@@ -276,11 +314,18 @@ begin
     ) as roster(agent_name, agent_role, agent_description)
   loop
     insert into public.agents (organization_id, name, role, description, status, capabilities, created_by)
-    values (
+    select
       p_organization_id, seed.agent_name, seed.agent_role, seed.agent_description,
       'idle'::public.agent_status, '[]'::jsonb, caller_id
-    )
-    on conflict do nothing;
+    where not exists (
+      select 1 from public.agents agent
+      where agent.organization_id = p_organization_id
+        and agent.project_id is null
+        and agent.name = seed.agent_name
+        and agent.role = seed.agent_role
+        and agent.provider is null
+        and agent.model is null
+    );
   end loop;
 
   return query
@@ -298,7 +343,7 @@ create or replace function public.set_agent_provider_assignment(
   p_provider text default null,
   p_model text default null
 )
-returns setof public.agents
+returns table (id uuid, name text, provider text, model text)
 language plpgsql
 security definer
 set search_path = pg_catalog
@@ -328,9 +373,9 @@ begin
       raise exception using errcode = '22023', message = 'a model cannot be assigned without a provider';
     end if;
 
-    update public.agents
-    set provider = null, model = null, updated_at = now()
-    where id = p_agent_id;
+    delete from public.provider_agent_assignments assignment
+    where assignment.agent_id = p_agent_id
+      and assignment.organization_id = agent_record.organization_id;
   else
     if p_provider not in ('anthropic', 'openai') then
       raise exception using errcode = '22023', message = 'provider must be anthropic or openai';
@@ -349,9 +394,15 @@ begin
         message = 'the model is not an enabled configuration for this organization and provider';
     end if;
 
-    update public.agents
-    set provider = p_provider, model = p_model, updated_at = now()
-    where id = p_agent_id;
+    insert into public.provider_agent_assignments (
+      agent_id, organization_id, provider, model, created_by
+    ) values (
+      p_agent_id, agent_record.organization_id, normalized_provider, p_model, auth.uid()
+    )
+    on conflict (agent_id) do update set
+      provider = excluded.provider,
+      model = excluded.model,
+      updated_at = now();
   end if;
 
   perform public.record_activity_event(
@@ -364,7 +415,13 @@ begin
     jsonb_build_object('provider', p_provider, 'model', p_model)
   );
 
-  return query select agent.* from public.agents agent where agent.id = p_agent_id;
+  return query
+    select agent.id, agent.name, assignment.provider::text, assignment.model
+    from public.agents agent
+    left join public.provider_agent_assignments assignment
+      on assignment.agent_id = agent.id
+      and assignment.organization_id = agent.organization_id
+    where agent.id = p_agent_id;
 end;
 $function$;
 
@@ -538,6 +595,9 @@ declare
   new_run_id uuid;
   event_entry jsonb;
   event_sequence integer := 0;
+  persisted_task_risk public.risk_level;
+  project_risk_ceiling public.risk_level;
+  execution_enabled boolean;
 begin
   if caller_id is null then
     raise exception using errcode = '42501', message = 'authentication is required';
@@ -565,6 +625,51 @@ begin
     where agent.id = p_agent_id and agent.organization_id = p_organization_id
   ) then
     raise exception using errcode = 'P0002', message = 'agent not found in this organization';
+  end if;
+
+  select task.risk_level, project.maximum_autonomous_risk,
+    organization.ai_provider_execution_enabled
+  into persisted_task_risk, project_risk_ceiling, execution_enabled
+  from public.tasks task
+  join public.projects project
+    on project.id = task.project_id and project.organization_id = task.organization_id
+  join public.organizations organization on organization.id = task.organization_id
+  where task.id = p_task_id
+    and task.organization_id = p_organization_id
+    and task.project_id = p_project_id;
+
+  if persisted_task_risk is distinct from p_risk_level then
+    raise exception using errcode = '22023', message = 'provider run risk must match the persisted task';
+  end if;
+  if p_decision = 'ROUTED' and not execution_enabled then
+    raise exception using errcode = '55000', message = 'outbound provider execution is disabled';
+  end if;
+  -- Phase 2A has no durable, exact RED approval record. A RED task may retain
+  -- blocked routing evidence but may not manufacture an executed provider run.
+  if p_decision = 'ROUTED' and p_risk_level = 'red'::public.risk_level then
+    raise exception using errcode = '42501', message = 'RED provider execution requires a separately approved phase';
+  end if;
+  if p_decision = 'ROUTED' and p_risk_level > project_risk_ceiling then
+    raise exception using errcode = '42501', message = 'provider run risk exceeds the project ceiling';
+  end if;
+  if p_decision = 'ROUTED' and p_run_status not in (
+    'succeeded'::public.run_status,
+    'failed'::public.run_status,
+    'cancelled'::public.run_status
+  ) then
+    raise exception using errcode = '22023',
+      message = 'a completed provider attempt requires a terminal run status';
+  end if;
+  if p_decision = 'ROUTED' and not exists (
+    select 1
+    from public.provider_model_configurations configuration
+    where configuration.organization_id = p_organization_id
+      and configuration.provider = nullif(p_selected_provider, '')::public.connection_provider
+      and configuration.model = nullif(p_selected_model, '')
+      and configuration.enabled
+  ) then
+    raise exception using errcode = '23514',
+      message = 'the routed model is not enabled for this organization and provider';
   end if;
 
   if public.jsonb_has_sensitive_keys(coalesce(p_reasons, '[]'::jsonb))
@@ -612,7 +717,7 @@ begin
     p_provider_run_reference, coalesce(p_input, '{}'::jsonb), p_output, p_error_message,
     now() - (coalesce(p_latency_ms, 0) || ' milliseconds')::interval, now(),
     nullif(p_selected_provider, '')::public.connection_provider,
-    nullif(p_selected_model, ''), p_task_kind, p_usage, p_latency_ms, new_routing_id,
+    nullif(p_selected_model, ''), p_task_kind, coalesce(p_usage, '{}'::jsonb), p_latency_ms, new_routing_id,
     nullif(p_fallback_from_provider, '')::public.connection_provider,
     case when p_run_status = 'cancelled'::public.run_status then now() else null end
   )
@@ -659,14 +764,14 @@ begin
 end;
 $function$;
 
-revoke all on function public.ensure_default_agents(uuid) from public, anon;
-revoke all on function public.set_agent_provider_assignment(uuid, text, text) from public, anon;
-revoke all on function public.upsert_provider_model_configuration(uuid, text, text, text, jsonb, boolean, boolean, bigint, bigint) from public, anon;
-revoke all on function public.set_provider_execution_enabled(uuid, boolean) from public, anon;
+revoke all on function public.ensure_default_agents(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.set_agent_provider_assignment(uuid, text, text) from public, anon, authenticated, service_role;
+revoke all on function public.upsert_provider_model_configuration(uuid, text, text, text, jsonb, boolean, boolean, bigint, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.set_provider_execution_enabled(uuid, boolean) from public, anon, authenticated, service_role;
 revoke all on function public.record_provider_run(
   uuid, uuid, uuid, uuid, text, public.risk_level, text, text, text, text, text, text,
   jsonb, jsonb, text, public.run_status, text, jsonb, jsonb, jsonb, integer, text, jsonb
-) from public, anon;
+) from public, anon, authenticated, service_role;
 
 grant execute on function public.ensure_default_agents(uuid) to authenticated;
 grant execute on function public.set_agent_provider_assignment(uuid, text, text) to authenticated;

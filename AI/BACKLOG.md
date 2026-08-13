@@ -2,9 +2,9 @@
 
 Last triaged: 2026-08-13
 
-Checked items have repository/provider evidence only. The owner repository connection is live, but checked items do not make the webhook Connected or Phase 1B complete.
+Checked Phase 1C items mean implemented in the local tree, not hosted or Connected. A live check is checked only when exact provider evidence exists.
 
-## Phase 1D autonomous-loop controls
+## Phase 1D autonomous-loop decision controls (execution-inert)
 
 - [x] Complete the nine-action control model (plan, code, test, repair, review, approve, merge, deploy, rollback) at both an organization and a project scope.
 - [x] Resolve the two scopes most-restrictive-wins, with the envelope (kill switch, emergency stop, release freeze, missing executor) overriding both.
@@ -16,69 +16,64 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Sequence the twelve pipeline stages and halt at the first block.
 - [x] Show all nine actions in the interface, with the reason each is off.
 - [x] Prove the interlocks against real PostgreSQL and demonstrate the loop end-to-end including the blocked stages.
-- [ ] Apply hosted migration `20260813000500`. It relaxes nothing, so it grants no authority by itself. **Owner-gated.**
+- [ ] Apply the Phase 1D control migration only after its version is unique in the reconciled migration chain. It relaxes nothing, so it grants no authority by itself. **Owner-gated.**
 - [ ] **BLOCKED — enabling any automatic action.** RED under `policies/RISK_CLASSIFICATION.md`; needs a separate owner-approved migration after sustained non-production evidence.
 - [ ] **BLOCKED — auto-merge.** `AGENTS.md` forbids introducing the workflow in this line of phases.
 - [ ] **BLOCKED — deploy execution and preview validation.** No Vercel API connection; `VERCEL_TOKEN` unset.
 - [ ] **BLOCKED — rollback execution.** No adapter; `policies/AUTO_ROLLBACK.md` disables it.
-- [ ] **BLOCKED — Codex code and repair execution.** Phase 1C not started.
+- [ ] **BLOCKED — autonomous Codex code and repair execution.** The manual Phase 1C worker is a local candidate and remains **Not Connected**; it is not an autonomous executor.
 - [ ] **BLOCKED — Backlog Autopilot.** Depends on the two rows above.
 
-## Phase 1B implementation
+## Phase 1C local implementation
 
-- [x] Supabase Auth/onboarding, active organization, tenant-scoped APIs, RLS/FORCE RLS foundations, and immutable Activity reads.
-- [x] GitHub App install/callback state/nonce/user/App verification, ephemeral user-token revocation, and short-lived repository/permission-scoped installation tokens.
-- [x] Tenant-authorized repository/branch/commit/PR/check/tree/file reads and live Connections/Projects/Files/dashboard surfaces.
-- [x] Signed, bounded, schema-validated, delivery-idempotent, redacted webhook ingress.
-- [x] Transactional project linking and isolated branch + expected-SHA commit + open draft-PR-only file changes.
-- [x] Remove the local HTTP writer and block broad protected/security-sensitive repository paths.
-- [x] Add callback redirect errors, strict GitHub web URL validation, connection-loss persistence, truthful disconnected UI, and stable same-intent browser idempotency.
-- [x] Add and host migrations `011`-`025` for direct-write closure, terminal/audited change evidence, repository-grant reconciliation, linked-project metadata propagation, draft-PR completion recovery, provider-time installation/repository ordering, terminal deletion, exact-binding change reservation, the minimal service-role sensitive-JSON CHECK-helper grant, safe tenant/Activity list projections, stable repository UUID binding and relink locking, owner-approved protected RED draft changes with approval/token/lease integrity, generic secret-assignment detection, and bounded GitHub activity details.
-- [x] Enforce same-origin command mutations and global CSP/security headers; suppress external repository Markdown image loads.
-- [x] Restore live Projects sync/visibility, branch protection/SHA, commit/PR timestamps and authors, mergeability, default-branch checks, and per-PR head-SHA checks.
-- [x] Keep Autonomous Mode OFF, global kill switch ON, auto approve/merge/deploy/rollback OFF, and Codex/Claude **Not Connected**.
-- [x] Register owner-only candidate App `4582606` (`surge-softwarefactory-next`) with the exact callback, a retained active exact webhook URL, least-privilege Phase 1B permissions/events, and distinct Sensitive Production/Preview candidate variable names. This is provider/configuration evidence, not an installation or connection.
-- [x] Deploy the isolated dual-App configuration/state/token/webhook boundaries and host owner-only atomic reversible project handoff migration `027`, including fresh processed target-installation delivery provenance, immutable exact RED approval/execution evidence, and cross-App serialization.
+- [x] Add command type, bounded acceptance criteria, deterministic risk assessment, stable idempotency, connected-project filtering, and truthful queued/delayed/RED-blocked responses.
+- [x] Resolve repository binding only from the authenticated active tenant and persist exact connection, installation, repository IDs, default branch, and current base SHA.
+- [x] Fix provider, model, logical role, budgets, draft-PR workflow, and plan server-side; independently enforce the same boundary in SQL.
+- [x] Add provider-neutral logical roles including architect and performance while keeping agent, provider, model, project, and account identities separate.
+- [x] Add durable task dependencies, worker status, run leases/heartbeats/attempts/cancellation/retryability, append-only events/artifacts/validations, and bounded terminal reports/activity.
+- [x] Add RLS/FORCE RLS, ownership constraints, indexes, secret checks, explicit table/function grants, caller-member safe projections, and service-role-only worker RPCs.
+- [x] Split Phase 1C enum additions into migration `130006` so PostgreSQL commits new enum values before execution migration `130007` uses them.
+- [x] Add migration `130008` with an idempotent provider-neutral eleven-role roster for existing/future organizations, rebind factory-created role references, reconcile provider-table ACLs, and keep provider/model on execution runs rather than logical identities.
+- [x] Harden database command submission to organization owners, include acceptance criteria in SQL risk parity, map general work to Orchestrator, and serialize concurrent work by logical agent.
+- [x] Harden immutable artifact replay, draft-PR projection, bounded retry/recovery states, remote recovery revalidation, stale-lease/cancellation terminalization, and structured success/failure/cancellation reports.
+- [x] Require a bounded `SOFTWAREFACTORY_REQUIRED_CHECKS` allowlist and verify exact CI names, complete returned check sets, stable repeated success evidence, and unchanged draft-PR base/head before reporting CI passed.
+- [x] Add supported `@openai/codex-sdk` server-side adapter with isolated `CODEX_HOME`, bounded turns/tokens/time, structured output, workspace-write sandbox, approval `never`, network disabled, and web search disabled.
+- [x] Add exact-base-SHA Git workspace preparation, `factory/*` branches, short-lived repository-ID-scoped App tokens, explicit owner commit identity, and safe branch recovery.
+- [x] Add pinned-container dependency bootstrap and network-none deterministic diff/lint/typecheck/test/build validation with bounded output and one repair attempt.
+- [x] Add path containment, forbidden path, symlink, binary, secret, protected-resource, file-count, per-file-size, and aggregate-size enforcement.
+- [x] Add draft-PR-only publication, existing-draft recovery, exact-head CI observation, and durable result evidence with no merge/deploy authority.
+- [x] Add GitHub Actions one-shot worker on opaque repository dispatch and a five-minute recovery schedule with read-only workflow token permissions; omit branch-selectable manual dispatch from the secret-bearing workflow.
+- [x] Add tenant-safe agent/task/run/report detail APIs, worker status, run cancellation/retry, and production-data consoles for Dashboard, Bot Manager, Backlog, Agents, Runs, and Reports.
+- [x] Keep Autonomous Mode OFF, global kill switch ON, RED non-executable, and auto approve/merge/deploy/rollback OFF.
 
-## Phase 1B release blockers
+## Phase 1C verification and protected release blockers
 
-- [x] Pass cutover-tree lint/typecheck, 56 files/436 tests, and the 38-route production build; publish main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, whose CI run `31716263910` passed both jobs.
-- [x] Pass current-tree coverage: statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82%.
-- [ ] Rerun coverage for the candidate cutover tree before publication.
-- [x] Retain exact-production Playwright 48/48 across desktop/tablet/mobile including axe and focused signed-out browser-error race 30/30 from the preceding verified release; pass the current exact-commit CI browser/accessibility job.
-- [x] Retain the published application-release source/client artifact scan: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present.
-- [ ] Rerun source, tracked-file, and rebuilt-client secret scans for the candidate cutover tree before publication.
-- [x] Publish application tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0` as commit `0bd048565a9e002848c5553ccbe43ab0e217780e` with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754` passed both jobs, and matching Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at its immutable URL and the stable alias.
-- [x] Apply hosted migrations `011`-`026` to `qpuofpmagrmyamahqwxw`; verify pre-`027` history matched, dry run/lint were clean, and prior RLS/catalog/browser-grant checks remain recorded.
-- [x] Verify the exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
-- [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test. Only one actual user/email is authorized; a live second tenant was intentionally not created, while local behavioral tests cover the boundary.
-- [x] Confirm and authenticate `surgeservicesllc@gmail.com`; complete SoftwareFactory organization/workspace owner onboarding.
-- [x] Publish the bounded documented `GET /user/installations` exact-ID callback fix and verify tenant persistence for installation `153445938`.
-- [x] Link real connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f`; verify live repository sync, branches, commits, pull requests, checks, tree, and `README.md` reads.
-- [x] Create ordinary draft PR `#6` and exact owner-approved protected RED draft PR `#7`; verify both remain draft/unmerged, likely-secret rejection, and immutable approval/provider/audit evidence. Earlier identity-mismatched PRs `#4`/`#5` were closed unmerged and their branches deleted.
-- [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases.
-- [x] Publish the strict server-only commit-identity boundary, configure `GITHUB_COMMIT_IDENTITY_NAME`/`GITHUB_COMMIT_IDENTITY_EMAIL` in Vercel Production and Preview, and verify both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>` on draft commits `e789303` and `6a808de`.
-- [x] Commit, push, and deploy the dual-App/handoff tree; apply hosted migration `027` to project `qpuofpmagrmyamahqwxw`; and prove its live owner approval/execution/rebind path.
-- [x] Install candidate App `4582606` as installation `153479019` for exactly `surgeservicesllc/SoftwareFactory`; verify callback, synchronized App/repository identity, repository/file reads, and a post-sync signed **processed** webhook delivery through connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`.
-- [x] Execute the exact owner-confirmed handoff from primary installation `153445938` to candidate installation `153479019`; preserve project `b1f23696-437e-4d89-b55f-d7a949980e8f` and prior history; verify immutable handoff evidence, candidate-backed reads, and draft-only write PR `#8`.
-- [x] Close acceptance PR `#8` unmerged after CI `31716958685` and Vercel Preview passed; delete `softwarefactory/20260813154335-9e3952f8-f9d`; verify `main` stayed unchanged by the temporary write.
-- [ ] Observe the rollback window and verify the evidence-bound reverse handoff before any primary access is retired. Primary installation `153445938` remains active.
-- [x] Keep OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) as the defect record for App `4573846`, whose single webhook still reloads blank/inactive. Candidate success does not retroactively label the primary webhook Connected.
-- [ ] Verify explicit disconnect/loss state and history preservation.
-- [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
-- [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
+- [x] Final reconciled gates pass on Node `24.19.0`: `npm run check` (97 test files/959 tests and production build with 62/62 page-data entries), Playwright/axe 117/117, dependency audit 0, safe disabled-worker smoke, clean diff check, and focused migration/API security audits with no remaining P0/P1 blocker.
+- [ ] Refresh current-tree coverage before protected publication; high-confidence source/static secret-value scans pass, with only allowlisted credential-reference labels present in the client bundle and no credential values.
+- [ ] Run the consolidated lint/typecheck/test/build, coverage, browser/accessibility, audit, worker-smoke, migration-chain, secret/static, and severity gates on the exact reconciled Phase 2A/1C tree.
+- [ ] Review the final diff for unrelated edits and confirm tracked files contain no credentials, private keys, service-role tokens, generated workspace state, or local environment files.
+- [ ] Obtain exact owner RED approval for the protected sequence: apply migration `028` and migrations `130001` through `130008` to `qpuofpmagrmyamahqwxw`; configure the seven Actions secrets; publish while activation remains OFF; then activate and execute one bounded live GREEN command.
+- [ ] Reauthenticate Supabase CLI as `surgeservicesllc@gmail.com`, verify exact project ref `qpuofpmagrmyamahqwxw`, compare migration history, run linked dry run/lint, and stop on any identity/history mismatch.
+- [ ] Apply only `20260812002800_phase1e_production_operations.sql`, `20260813000100_provider_execution_layer.sql`, `20260813000200_phase1e_synthetic_journeys.sql`, `20260813000300_bot_fabric_activity_types.sql`, `20260813000400_bot_fabric.sql`, `20260813000500_marketing_content.sql`, `20260813000600_phase1c_enums.sql`, `20260813000700_phase1c_codex_execution.sql`, then `20260813000800_logical_agent_roster.sql`; verify hosted history, synthetic step safety, provider execution default OFF, roster, owner boundary, recovery/report behavior, schema, constraints, indexes, RLS/FORCE RLS, policies, ACLs, grants, secret checks, triggers, and immutable evidence.
+- [ ] Exercise real authenticated owner, cross-tenant, and anonymous member/detail/cancel/retry/status RPC behavior. Service role is not a valid user-under-test.
+- [ ] Configure protected repository secrets `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_OPENAI_API_KEY`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, and `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` without printing values.
+- [ ] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` equals `Lint, typecheck, test, and build|Browser and accessibility tests`, and confirm those exact names still match `.github/workflows/ci.yml` before publication/activation.
+- [ ] Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false through migration, secret configuration, publication, normal CI, and Vercel verification; prove repository-dispatch and schedule triggers skip.
+- [ ] Only after all prior gates, set the variable to `true` under exact owner RED approval, run the bounded acceptance, then return it to absent/false unless continuing authority is separately approved.
+- [ ] Publish the exact reviewed tree to the repository default branch with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>` and verify normal CI plus the matching READY Vercel deployment.
+- [ ] Confirm the worker status changes from **Not Connected** only after a fresh real heartbeat and returns safely to stale/Not Connected when heartbeat evidence expires.
+- [ ] Submit one safe manual GREEN owner command against `surgeservicesllc/SoftwareFactory` and record the real command/task/run/agent IDs, Codex thread, base SHA, `factory/*` branch, commit, open draft PR, validation, exact-head CI, usage, report, and activity evidence.
+- [ ] Verify the live run did not change the default branch, approve or merge the PR, deploy, rollback, modify workflows/provider settings, or execute RED work.
+- [ ] Exercise cancellation, stale base SHA, dispatch failure/recovery schedule, lease expiry/reclaim, provider rate limit/unavailable, failed validation, CI failure/timeout, one retry, idempotent PR recovery, protected path denial, and likely-secret denial.
+- [ ] Update `AI/CURRENT_STATE.md`, `AI/HANDOFF.md`, and `AI/QUALITY_SCORECARD.md` with exact live evidence before calling OpenAI/Codex Connected or Phase 1C complete.
 
-## Release evidence retained
+## Phase 1B retained acceptance gaps
 
-- Verified application release: `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`, CI `31716263910`, Vercel deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`. Both CI jobs are green and the stable alias serves the READY deployment. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
-- Hosted Supabase is current through `027`. The verified pre-`027` dry-run/lint and exact four-table `service_role` ACL matrix remain recorded; live migration-`027` handoff behavior passed.
-- Candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, processed signed webhook, project handoff, candidate reads, and clean draft-only PR `#8` acceptance pass.
-- The currently selected local Supabase CLI profile is unauthorized or associated with the wrong account for a fresh recheck. It was not used for any mutation; the prior hosted-through-`026` evidence above remains recorded.
-- Connected candidate installation `153479019`, scoped exactly to `surgeservicesllc/SoftwareFactory`; live connection/webhook/project/read/draft-write/audit path passes for the owner. Primary installation `153445938` remains active as rollback.
-- Current READY production: `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`, immutable `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app`, stable alias, source `main` application commit `799d2cea189b6860a03987ae75c25765f9ac4aca`.
-- Temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no credential/helper artifact remains in the repository checkout.
-- Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
-- Prior local baseline before migrations `014`-`019`: 25 files/208 tests, 34-route build, local Playwright 12/12. Historical only and not proof for the current `020`-`023` tree.
+- [ ] Complete the live second-tenant/anonymous/RPC matrix.
+- [ ] Verify evidence-bound reverse handoff before retiring primary installation `153445938`.
+- [ ] Verify explicit disconnect/loss behavior and preserved history.
+- [ ] Complete remaining stale-SHA, permission/revocation, rate-limit, lifecycle-ordering, terminal delete/restore, and ambiguous-recovery provider cases.
+- [ ] Keep Support ticket `#4660724` as the primary App webhook defect record until resolved.
 
 ## Phase 1E production operations
 
@@ -96,24 +91,24 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
 - [x] Pass lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe.
-- [ ] Apply hosted migrations `028` and `029` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
+- [ ] Apply hosted migrations `028` and `130002` as part of the exact pending chain to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
 - [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
 - [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
 
-## Explicitly deferred
+## Deferred
 
-- Phase 1C durable Codex/OpenAI worker, sandboxing, leasing, budgets, and execution: **Not Connected; do not start.**
+- Phase 1C live Codex/OpenAI worker execution: **Not Connected** until protected promotion and live acceptance.
 - Phase 1D execution/autonomy beyond the inert observation scaffold: OFF.
-- Phase 2 Anthropic/Claude agents: **Not Connected; do not start.**
+- Phase 2A provider execution: source is on `main`, but migration/credentials/live calls are absent and the owner switch remains OFF; **Not Connected**.
 - Auto approval, merge, deployment, and rollback: OFF with no executor.
 - Phase 1E rollback and repair **execution**: deferred behind a provider adapter, the `AUTO_ROLLBACK.md` drills, and an owner-approved migration relaxing the migration-`010` constraint. Phase 1E records the decision; it never performs the action.
 
 ## Phase 2A provider layer integration
 
-- [x] Integrate `claude/github-connection-confirm-qe3tqm` into `main`: `lib/providers/*` adapter contract, `/api/providers*` routes, `/api/runs` POST, `/api/agents` POST + `[agentId]/assignment`, `/api/runs/preview`, `ProviderSettings`/`ProviderStatusPanel`/`TaskRunLauncher`, and migration `20260813000100_provider_execution_layer.sql`. See ADR-032 and ADR-033.
+- [x] Publish the Phase 2A integration on `main` at `b1060b83a0698a83e202aafdf9792886cf60a8b3`: `lib/providers/*` adapter contract, `/api/providers*` routes, `/api/runs` POST, `/api/agents` POST + `[agentId]/assignment`, `/api/runs/preview`, `ProviderSettings`/`ProviderStatusPanel`/`TaskRunLauncher`, and migration `20260813000100_provider_execution_layer.sql`. See ADR-032 and ADR-033.
 - [x] Keep the hardened read path: `/api/runs` and `/api/agents` GET still use the `tenantRpcListResponse` safe-projection RPCs. The branch's versions read directly from tables and would have reverted that boundary, so only its POST handlers were taken.
 - [x] Verify the three new provider tables (`provider_model_configurations`, `provider_routing_decisions`, `provider_run_events`) each enable RLS **and** FORCE RLS with tenant-scoped policies before adding them to the service-role grant matrix.
 - [x] Restyle the three new provider components onto the design tokens; as merged they used sub-12px text and literal hex values, and `/settings` failed axe contrast at three viewports until fixed.
@@ -127,11 +122,11 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Split the app into two route groups. `app/layout.tsx` no longer renders the shell; `app/(console)/layout.tsx` supplies it, so `app/(marketing)/*` renders without console chrome. The root layout stays `robots: index:false` and the marketing group opts back in.
 - [x] `/` is now the public marketing landing and the console home moved to `/solutions`. The navigation Dashboard entry, the shell logo link, and the active-route check all point at `/solutions`.
 - [x] Keep **main's** console pages through the move. Git rename detection carried each `app/*/page.tsx` into `app/(console)/`, and every page was verified byte-identical to main afterwards; the branch's 17-hour-old copies were not adopted. `/solutions` serves main's current dashboard, not the branch's stale duplicate, and it lives in the console group so it keeps the app shell.
-- [x] Renumber three colliding migrations. The branch's `20260812002000`/`20260812002100` collided with main's hosted `safe_tenant_list_reads` and `bind_projects_to_github_repository_ids`, and its `20260813000100` collided with the provider layer. Hosted filenames are immutable, so the unapplied branch migrations became `20260813000200_bot_fabric_activity_types`, `20260813000300_bot_fabric`, and `20260813000400_marketing_content`.
+- [x] Renumber three colliding migrations. The branch's `20260812002000`/`20260812002100` collided with main's hosted `safe_tenant_list_reads` and `bind_projects_to_github_repository_ids`, and its `20260813000100` collided with the provider layer; the later synthetic-journey migration then occupied `130002`. Hosted filenames are immutable, so the unapplied branch migrations became `20260813000300_bot_fabric_activity_types`, `20260813000400_bot_fabric`, and `20260813000500_marketing_content`.
 - [x] Verify security before widening the grant matrix: `bots`, `bot_roles`, `bot_assignments` each enable RLS **and** FORCE RLS with tenant-scoped policies; the eleven marketing tables get both through a `format()` loop, and public read is `revoke all` followed by `grant select` behind a `using (published)` policy.
 - [x] Restyle `BotFabricConsole` and the marketing pages onto the design tokens; both arrived with sub-12px text and literal hex values.
 - [x] Merge the bot fabric console into Bot Manager alongside main's live request workspace rather than replacing it.
-- [ ] Apply migrations `20260813000100`-`20260813000400` to hosted Supabase. Hosted is current through `027`; these four are unapplied and remain RED pending exact owner approval.
+- [ ] Apply the complete pending chain `20260812002800`, then `20260813000100` through `20260813000800`, to hosted Supabase. Hosted is current through `027`; all nine are unapplied and remain RED pending exact owner approval.
 - [ ] Decide whether the marketing site should be publicly indexed before the domain is pointed at it. The marketing group sets `robots: index:true` while the root layout stays `index:false`.
 
 ## Solutions page global navigation
