@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-13
 
-Phase: 1B - Production GitHub App Integration
+Phase: 1B - Production GitHub App Integration (live) · 1E - Production Operations (control plane implemented, not hosted)
 
 Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboarding succeeds, and candidate App `4582606` (`surge-softwarefactory-next`) is installed as `153479019` with connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, scoped exactly to `surgeservicesllc/SoftwareFactory`. A candidate-signed delivery was processed after synchronization, then project `b1f23696-437e-4d89-b55f-d7a949980e8f` was atomically handed off with its UUID and prior change/audit history preserved. Candidate-backed repository/file reads pass, and the live draft-only write path created PR `#8` with commit `204ed79e712cd262a7d631cda0febc7231f042be`; CI and Vercel Preview passed, the PR remained draft and unmerged, then it was closed and its temporary branch was deleted. Primary App `4573846` still has the webhook defect tracked by OPEN Support ticket `#4660724`, while installation `153445938` remains active as the rollback path. Main release `799d2cea189b6860a03987ae75c25765f9ac4aca` passed CI `31716263910` and is READY as Vercel deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ`. Phase 1B remains incomplete only for the live second-tenant and remaining adverse lifecycle/disconnect/reverse-observation matrix. Phase 1C and Phase 2 remain Not Connected; Autonomous Mode and all automatic actions remain OFF.**
 
@@ -36,6 +36,21 @@ Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboardin
 - Global browser headers include a restrictive CSP, framing/object denial, a narrow Supabase connection allowlist, and a narrow image allowlist; repository Markdown previews do not load external images.
 - No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D observation scaffold remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF.
 - The signed-out dashboard receives a server-verified authentication hint so it skips protected browser fetches; the focused production race regression passes 30/30 repeated runs.
+
+## Phase 1E production-operations state
+
+Phase 1E adds a production-operations control plane in source and in migration `028`. **Migration `028` is not applied to hosted Supabase and no monitor has observed a real production target**, so every Phase 1E surface currently reports **Not Connected** or **Unknown**. Nothing below claims live production observation.
+
+- Ten new tables (`production_monitors`, `monitor_observations`, `project_health_snapshots`, `release_freezes`, `deployment_validations`, `rollback_operations`, `production_diagnoses`, `repair_attempts`, `operations_events`, `operations_audit_events`) carry RLS and FORCE RLS with browser SELECT only. Every write goes through an owner- or admin-scoped SECURITY DEFINER workflow, so `service_role` gains **no new table privileges** and the verified `026` ACL matrix is unchanged.
+- The only connected monitoring adapter is a bounded HTTPS probe. Vercel deployment status, error-rate and latency telemetry, database liveness, jobs, and integrations are each recorded as **Not Connected** with the exact reason and the condition that would unblock them. A CHECK constraint makes it impossible to enable a monitor whose adapter is not connected.
+- Project health is `healthy/degraded/critical/unknown/paused`, derived from connected monitors, open incidents, and failed deployments, with append-only history and a stored reason. A project with no connected monitor resolves to **UNKNOWN**, never HEALTHY.
+- Incidents are created automatically from breached failure thresholds, carry SEV1–SEV4, deduplicate by fingerprint into one open incident per project, and escalate severity upward only. SEV1/SEV2 automatically freezes autonomous releases.
+- Last Known Good resolves only from a deployment whose own post-deploy validation passed. Rollback eligibility is evaluated fail-closed against `policies/AUTO_ROLLBACK.md` and always records `EXECUTOR_NOT_CONNECTED`; **no rollback is executed and no database or data migration is ever reversed**. A failed rollback cannot be recorded without escalating to SEV1 with owner attention — enforced by a CHECK constraint.
+- The Production Investigator is a deterministic rules engine, not a model: it returns cause, cited evidence, subsystem, confidence, recommended action, and risk, and never produces or stores intermediate reasoning.
+- Self-healing creates bounded repair work (three attempts, escalation on the third failure) and records assignment as **Not Connected** because Phase 1C has no worker. A RED repair or work above the project risk ceiling is refused, so the GREEN/YELLOW/RED policy is not bypassed.
+- Incident resolution is refused while monitors still fail, without a passing same-project validation, without root cause and corrective action, and — for SEV1/SEV2 — without a prevention reference. A successful deployment alone resolves nothing.
+- `autonomous_release_allowed` returns false unconditionally and enumerates live blockers; `EXECUTOR_NOT_CONNECTED` is unconditional, so no configuration change can make it return true. Phase 1D interlocks are untouched: the kill switch stays locked ON and every project stays at Autonomous Mode OFF with a GREEN ceiling and all automatic actions OFF.
+- Scheduled monitoring is **Not Connected**: checks are owner-triggered because no scheduler identity is authorized, and authorizing one must not widen `service_role`.
 
 ## Data and security state
 
@@ -78,6 +93,11 @@ Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboardin
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
 | Auto approve/merge/deploy/rollback | OFF | No autonomous production authority or executor exists. |
+| Production monitoring (HTTPS probe) | Implemented; **no observed target** | The adapter exists and is tested, but migration `028` is unhosted and no owner-authorized production target has been monitored. |
+| Vercel deployment/error/latency/job/integration telemetry | **Not Connected** | No provider connection exists. Each is listed in the UI with its reason and unblocking condition. |
+| Rollback execution | **Not Connected** | Every rollback decision records `EXECUTOR_NOT_CONNECTED`. Nothing is executed. |
+| Codex repair execution | **Not Connected** | Repair work is created and left unassigned. |
+| Scheduled monitoring | **Not Connected** | Checks are owner-triggered; no scheduler identity is authorized. |
 
 ## Verification evidence
 
@@ -96,8 +116,18 @@ Overall status: **Hosted Supabase is current through `027`. Owner Auth/onboardin
 - GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, remains OPEN as the primary-App defect record. Primary installation `153445938` stays active as the rollback boundary.
 - The temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no secret or helper artifact remains in the repository checkout.
 
+## Phase 1E verification evidence
+
+- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (62 files / 537 tests), and a 60-entry production build all pass. Coverage is statements 78.02%, branches 77.79%, functions 70.00%, lines 79.15%.
+- Playwright passes 51/51 across desktop, tablet, and mobile including axe, with `/operations` added to the audited route set.
+- `tests/integration/phase1e-operations.behavior.test.ts` (27 tests) exercises the real migrated schema: threshold detection, deduplication, upward-only severity, automatic freeze, owner-only resume with acknowledgement, Last Known Good resolution, blocked and failed rollbacks, bounded repair attempts, resolution gating, event idempotency and dead-lettering, cross-tenant denial, anonymous denial, append-only enforcement, and sensitive-value rejection.
+- `tests/integration/phase1e-incident-journey.behavior.test.ts` walks the ordered end-to-end journey and separately proves failed-rollback escalation to SEV1 with owner attention, plus refusal to resolve on a successful deployment alone. The Codex-fix and deploy stages are asserted as **blocked with named reasons**, not simulated.
+- `tests/integration/phase1e-operations.contract.test.ts` (16 tests) guards same-origin and role checks on every mutation, the execution envelope on every response, absence of any provider deployment call, no new `service_role` table grants, and the preserved Phase 1D interlocks.
+- This is control-plane evidence against a migrated database. It is **not** live production evidence: migration `028` is unhosted and no real production target has been observed.
+
 ## Release blockers
 
 1. Observe the rollback window and exercise the evidence-bound reverse handoff plus explicit disconnect/loss behavior before retiring any primary-App access. Keep Support ticket `#4660724` open as the primary-App defect record.
 2. Complete the live second-tenant/anonymous/RPC matrix and remaining stale-SHA, approval-expiry, revoked/insufficient-permission, rate-limit, ordering, deletion/restore, idempotency, and recovery cases.
 3. Keep Phase 1B incomplete, Phase 1C/Phase 2 **Not Connected**, Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF until those gaps close.
+4. Apply hosted migration `028` and configure an owner-authorized production target before any Phase 1E surface may claim observation. Until then Phase 1E is implemented but unproven against real production.

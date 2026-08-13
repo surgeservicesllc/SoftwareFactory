@@ -50,6 +50,32 @@ Status: **Observation-only scaffold; execution not started and controls remain O
 - Autonomous Mode constrained OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF, evaluator always `executionAllowed: false`.
 - Hosted migration `010` contains the current fail-closed controls. No action executor exists.
 
+## Phase 1E - production operations
+
+Status: **Control plane implemented and locally verified; no production-mutating executor exists and hosted migration `028` is not applied.**
+
+Implemented in source and proven against the migrated schema:
+
+- Provider-neutral monitoring with exactly one connected adapter (a bounded HTTPS probe that refuses private, loopback, and metadata addresses and never reads a response body). Every other provider is listed with the reason it is Not Connected and the condition that would unblock it. A monitor cannot be enabled unless its adapter is connected.
+- Project health `healthy/degraded/critical/unknown/paused` derived from real signals, with append-only history and a stored reason. No connected monitor resolves to UNKNOWN, never HEALTHY.
+- SEV1–SEV4 incidents created automatically from breached failure thresholds, deduplicated by fingerprint into one open incident per project, with upward-only severity escalation.
+- Automatic release freeze on SEV1/SEV2, owner-only resume and organization-wide stop, and an unconditional `EXECUTOR_NOT_CONNECTED` blocker on release authority.
+- Last Known Good resolved only from a deployment whose own post-deploy validation passed; rollback eligibility evaluated fail-closed against `policies/AUTO_ROLLBACK.md`; a failed rollback cannot be recorded without escalating to SEV1 with owner attention.
+- A deterministic Production Investigator returning cause, cited evidence, subsystem, confidence, recommended action, and risk, with no intermediate reasoning produced or stored.
+- Bounded self-healing: three attempts maximum, escalation on the third failure, and refusal to route RED or above-ceiling work around the risk policy. Assignment is recorded as Not Connected.
+- A durable, idempotent operations event queue covering all ten required event types.
+- Gated incident resolution: restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
+- Daily operational reporting, portfolio and per-project operations views, and an immutable operations audit trail.
+
+Not implemented, and blocked rather than simulated:
+
+1. Deployment and rollback execution — no provider adapter exists, `policies/AUTO_ROLLBACK.md` disables automatic rollback, and migration `010` pins `auto_rollback` off.
+2. Codex repair execution — Phase 1C is **Not Connected**.
+3. Vercel deployment, error-rate, latency, job, and integration telemetry — no connected provider.
+4. Continuous scheduled monitoring — checks are owner-triggered because no scheduler identity is authorized; adding one must not widen `service_role`.
+
+Exit work: apply hosted migration `028`, configure a real monitored production target under owner authorization, and record live detection-to-resolution evidence. Until then no Phase 1E surface may claim observation.
+
 ## Phase 2 - Claude and governed delivery
 
 Status: **Not Connected; not started.**

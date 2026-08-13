@@ -115,3 +115,35 @@ Status: **COMPLETE and must stay complete.** 25/25 public tables have RLS + FORC
 | Live production incident acceptance evidence | Requires a real failing production target and owner authorization to probe it | Owner supplies a monitored target; until then monitors ship disabled and unconfigured. |
 
 Nothing in the shipped UI or reports may present any blocked capability as available. Each renders **Not Connected** with the reason above.
+
+## 5. Delivered in this change
+
+| Objective section | Delivered status | Where |
+| --- | --- | --- |
+| §2 Monitoring control plane | **PARTIAL by design.** One connected adapter (bounded HTTPS probe) plus a provider registry that names every unconnected provider and its unblocking condition. A monitor cannot be enabled unless its adapter is connected — enforced by a CHECK constraint, not by convention. | `production_monitors`, `monitor_observations`, `lib/operations/probe.ts`, `lib/operations/providers.ts`, `lib/operations/target.ts` |
+| §3 Project health | **COMPLETE.** `healthy/degraded/critical/unknown/paused` derived from real signals, with append-only history and a stored reason for every state. Absence of evidence resolves to UNKNOWN. | `evaluate_project_health`, `project_health_snapshots`, `lib/operations/health.ts` |
+| §4 Incident engine | **COMPLETE.** SEV1–SEV4, automatic creation, fingerprint deduplication into one open incident per project, upward-only severity escalation, and full evidence columns. | `open_production_incident`, `incidents` additions, `lib/operations/severity.ts`, `lib/operations/fingerprint.ts` |
+| §5 Automatic protection | **COMPLETE.** SEV1/SEV2 freezes autonomous releases automatically; freeze is idempotent; resume and stop-all are owner-only, require a written reason, and are audited. | `freeze_project_releases`, `resume_project_releases`, `stop_autonomous_operations`, `/api/operations/controls` |
+| §6 Auto rollback | **DECISION PATH COMPLETE; EXECUTION BLOCKED.** Last Known Good resolves only from a deployment whose own validation passed. Eligibility is evaluated fail-closed against `AUTO_ROLLBACK.md`. A failed rollback cannot be recorded without escalating to SEV1 with owner attention — enforced by a CHECK constraint. No database or data migration is ever reversed. | `last_known_good_deployment`, `record_rollback_decision`, `record_rollback_outcome`, `lib/operations/rollback.ts` |
+| §7 Production Investigator | **COMPLETE as a deterministic engine.** Returns likely cause, cited evidence, affected subsystem, confidence, recommended action, and risk. Confidence requires corroboration. No intermediate reasoning is produced, stored, or returned. | `lib/operations/investigator.ts`, `production_diagnoses` |
+| §8 Self-healing | **CREATION COMPLETE; EXECUTION BLOCKED.** Diagnosis creates bounded repair work capped at three attempts; the third failure escalates instead of retrying. Eligibility never bypasses GREEN/YELLOW/RED — a RED repair is refused without owner approval and work above the project ceiling is refused. Assignment is recorded as `not_connected`. | `create_repair_attempt`, `record_repair_failure`, `lib/operations/repair.ts` |
+| §9 Synthetic testing | **PARTIAL.** Basic/Standard/Critical profiles with destructive-step rejection and mandatory reversal notes for safe writes, enforced in TypeScript, plus the synthetic monitor kind in the schema. Journey definitions are validated but not yet stored per project. | `lib/operations/synthetic.ts`, `production_monitors.profile` |
+| §10 Operations UI | **COMPLETE.** Portfolio health, project health with reasons, incidents, monitors, provider status, audit trail, owner controls, and per-project production detail. | `app/operations/page.tsx`, `components/operations-console.tsx`, `components/project-operations-panel.tsx` |
+| §11 Event automation | **COMPLETE.** All ten event types, durable queue, unique dedupe key per organization, claim/complete with `for update skip locked`, idempotent completion, bounded attempts, and dead-lettering. Each event's planned actions are declared as data, marking deferred ones explicitly. | `operations_events`, `enqueue/claim/complete_operations_event`, `lib/operations/events.ts` |
+| §12 Incident resolution | **COMPLETE.** Resolution is refused while monitors still fail, without a passing same-project validation, without root cause and corrective action, and — for SEV1/SEV2 — without a prevention reference. A successful deployment alone resolves nothing. | `resolve_production_incident`, `incidents_resolution_requires_cause` |
+| §13 Reporting | **COMPLETE.** Daily report covers portfolio health, incidents, observed unavailability, failed deployments, rollbacks, repairs, recurring failures, frozen projects, owner decisions, and top risks. Executed rollbacks and repairs are reported as zero with `executor: not_connected`. | `generate_operations_report`, `/api/operations/reports`, `/api/operations/projects/[projectId]` |
+| §14 Security and testing | **COMPLETE.** All ten new tables carry RLS + FORCE RLS with no browser writes; `service_role` gains no new table privileges; evidence tables are append-only; probes cannot reach private or metadata addresses. | migration `028`, `tests/integration/phase1e-*.test.ts` |
+
+### Evidence
+
+- `npm run lint`, `npm run typecheck`: pass.
+- `vitest run`: 62 files / 537 tests pass, including 27 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
+- `npm run build`: 60 app entries compile, including 11 new operations APIs and the Operations page.
+- Playwright: 51/51 across desktop, tablet, and mobile including axe, with `/operations` added.
+- The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.
+
+### What the demonstration proves, and what it cannot
+
+The journey test walks Monitor → Detect → Incident → Freeze → Rollback decision → Diagnose → Repair task → Validate → Resolve against the real schema, and separately proves failed-rollback escalation to SEV1 with owner attention. Two stages of the stated target are asserted as **blocked rather than simulated**: the Codex fix (no execution worker) and the deploy (no deployment adapter). The test records the exact blockers instead of skipping them.
+
+This is a control-plane demonstration against a migrated database, not live production evidence. No monitor has yet observed a real production target, because that requires an owner-authorized target and hosted migration `028`. Until then every Phase 1E surface reports **Not Connected** or **Unknown** rather than implying observation.
