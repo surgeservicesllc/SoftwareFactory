@@ -75,7 +75,7 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
-- [x] Pass lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe.
+- [x] Pass lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe.
 - [ ] Apply hosted migrations `028` and `029` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
 - [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
@@ -100,6 +100,19 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Scope the runs sensitive-column guard to the GET handler, matching the existing commands-route assertion. The POST handler records provider run input/output/errors by design; the guarantee protected is that the *list view* never projects them.
 - [ ] Port the provider assignment control onto the RPC-backed `AgentsConsole`, and surface provider/model/routing on `RunsConsole`. Both need `list_agents`/`list_agent_runs` to return provider columns, which is a migration change. The branch's console tests were removed from `tests/unit/provider-surfaces.test.tsx` rather than asserted against UI this integration does not ship.
 - [ ] Provider execution stays OFF until an owner enables it per organization, and no provider key is set in this repository. Outbound AI execution remains **Not Connected**.
+
+## Universal bot fabric and public marketing site
+
+- [x] Integrate `claude/universal-bot-interface-0caeda` into `main`: `lib/bots/*`, `/api/bots`, `/api/bot-roles`, `/api/bot-assignments`, `BotFabricConsole`, and the public marketing route group. See ADR-036 through ADR-040.
+- [x] Split the app into two route groups. `app/layout.tsx` no longer renders the shell; `app/(console)/layout.tsx` supplies it, so `app/(marketing)/*` renders without console chrome. The root layout stays `robots: index:false` and the marketing group opts back in.
+- [x] `/` is now the public marketing landing and the console home moved to `/solutions`. The navigation Dashboard entry, the shell logo link, and the active-route check all point at `/solutions`.
+- [x] Keep **main's** console pages through the move. Git rename detection carried each `app/*/page.tsx` into `app/(console)/`, and every page was verified byte-identical to main afterwards; the branch's 17-hour-old copies were not adopted. `/solutions` serves main's current dashboard, not the branch's stale duplicate, and it lives in the console group so it keeps the app shell.
+- [x] Renumber three colliding migrations. The branch's `20260812002000`/`20260812002100` collided with main's hosted `safe_tenant_list_reads` and `bind_projects_to_github_repository_ids`, and its `20260813000100` collided with the provider layer. Hosted filenames are immutable, so the unapplied branch migrations became `20260813000200_bot_fabric_activity_types`, `20260813000300_bot_fabric`, and `20260813000400_marketing_content`.
+- [x] Verify security before widening the grant matrix: `bots`, `bot_roles`, `bot_assignments` each enable RLS **and** FORCE RLS with tenant-scoped policies; the eleven marketing tables get both through a `format()` loop, and public read is `revoke all` followed by `grant select` behind a `using (published)` policy.
+- [x] Restyle `BotFabricConsole` and the marketing pages onto the design tokens; both arrived with sub-12px text and literal hex values.
+- [x] Merge the bot fabric console into Bot Manager alongside main's live request workspace rather than replacing it.
+- [ ] Apply migrations `20260813000100`-`20260813000400` to hosted Supabase. Hosted is current through `027`; these four are unapplied and remain RED pending exact owner approval.
+- [ ] Decide whether the marketing site should be publicly indexed before the domain is pointed at it. The marketing group sets `robots: index:true` while the root layout stays `index:false`.
 
 ## Maintenance
 

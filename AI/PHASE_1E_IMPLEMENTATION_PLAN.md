@@ -137,9 +137,9 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### Evidence
 
 - `npm run lint`, `npm run typecheck`: pass.
-- `vitest run`: 69 files / 635 tests pass, including 28 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
-- `npm run build`: 64 app entries compile, including 11 new operations APIs and the Operations page.
-- Playwright: 51/51 across desktop, tablet, and mobile including axe, with `/operations` added.
+- `vitest run`: 82 files / 819 tests pass on the merged tree, including 28 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
+- `npm run build`: compiles cleanly, including 12 operations APIs and the Operations page.
+- Playwright: 117/117 across desktop, tablet, and mobile including axe on the merged tree.
 - The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.
 
 ### What the demonstration proves, and what it cannot
@@ -163,7 +163,7 @@ Assessed against the nine objective sections, counting only what has evidence.
 | §6 Synthetics + operations UI | ~90% | Journeys are stored, safety-enforced, and executed for read paths; the operations UI covers every required view. Declared writes are recorded rather than executed. |
 | §7 Automation | 100% | All ten event types, durable queue, idempotent completion, bounded attempts, dead-lettering. |
 | §8 Resolution + reporting | 100% | Gated resolution and the daily report with every required section. |
-| §9 Security + testing | 100% | RLS + FORCE RLS on 39/39 tables, no new `service_role` grants, append-only evidence, server-only secrets, RED operations owner-gated, and the full test matrix. |
+| §9 Security + testing | 100% | RLS + FORCE RLS on 53/53 tables, no new `service_role` grants, append-only evidence, server-only secrets, RED operations owner-gated, and the full test matrix. |
 
 **Overall: roughly 85% of the objective is implemented, and the remaining ~15% is execution authority that this phase must not grant.** Rollback execution, Codex repair execution, and autonomous deployment are each blocked by a named, tested interlock rather than missing by oversight.
 

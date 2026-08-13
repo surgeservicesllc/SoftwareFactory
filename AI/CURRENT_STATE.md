@@ -121,8 +121,8 @@ Phase 1E adds a production-operations control plane in source and in migration `
 
 ## Phase 1E verification evidence
 
-- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (69 files / 635 tests), and a 64-entry production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
-- Playwright passes 51/51 across desktop, tablet, and mobile including axe, with `/operations` added to the audited route set.
+- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (82 files / 819 tests on the merged tree), and a clean production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
+- Playwright passes 117/117 across desktop, tablet, and mobile including axe on the merged tree, with `/operations` in the audited route set.
 - `tests/integration/phase1e-operations.behavior.test.ts` (28 tests) exercises the real migrated schema: threshold detection, deduplication, upward-only severity, automatic freeze, owner-only resume with acknowledgement, Last Known Good resolution, blocked and failed rollbacks, bounded repair attempts, resolution gating, event idempotency and dead-lettering, cross-tenant denial, anonymous denial, append-only enforcement, and sensitive-value rejection.
 - `tests/integration/phase1e-incident-journey.behavior.test.ts` walks the ordered end-to-end journey and separately proves failed-rollback escalation to SEV1 with owner attention, plus refusal to resolve on a successful deployment alone. The Codex-fix and deploy stages are asserted as **blocked with named reasons**, not simulated.
 - `tests/integration/phase1e-operations.contract.test.ts` (16 tests) guards same-origin and role checks on every mutation, the execution envelope on every response, absence of any provider deployment call, no new `service_role` table grants, and the preserved Phase 1D interlocks.

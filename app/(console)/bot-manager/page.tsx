@@ -1,5 +1,10 @@
+import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+
+export const metadata = {
+  title: "Bot Manager",
+};
 
 const lifecycle = [
   ["You describe what you want", "In plain words, against one project."],
@@ -13,11 +18,13 @@ export default function BotManagerPage() {
     <>
       <PageHeader
         title="Bot Manager"
-        description="Ask for a piece of engineering work. It gets recorded, reviewed, and kept — not run."
+        description="Register the bots you use, then ask for a piece of engineering work. Requests are recorded, reviewed, and kept — not run."
         action={<StatusBadge tone="neutral">Worker Not Connected</StatusBadge>}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <BotFabricConsole />
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <BotManagerWorkspace />
 
         <Card className="h-fit p-5">

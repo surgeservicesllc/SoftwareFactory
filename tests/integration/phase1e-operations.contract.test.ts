@@ -200,7 +200,7 @@ describe("Phase 1D interlocks survive Phase 1E", () => {
   });
 
   it("tells the operator plainly that execution is Not Connected", () => {
-    const page = source("app/operations/page.tsx");
+    const page = source("app/(console)/operations/page.tsx");
     expect(page).toMatch(/Not Connected/);
     expect(page).toMatch(/cannot deploy, roll back, or run a fix/i);
   });

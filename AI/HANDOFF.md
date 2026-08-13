@@ -121,5 +121,5 @@ The verified pre-`027` dry run/lint and exact hosted ACL matrix remain recorded:
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [ ] Documentation and scorecard reflect final evidence without claiming Phase 1C.
-- [x] Phase 1E control plane passes lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
+- [x] Phase 1E control plane passes lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [ ] Hosted migration `028` is applied and a real production target is observed before any Phase 1E surface claims live monitoring.

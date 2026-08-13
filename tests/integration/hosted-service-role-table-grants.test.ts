@@ -12,13 +12,19 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260813000200_phase1e_synthetic_journeys.sql";
+  "20260813000400_marketing_content.sql";
 
 const publicTables = [
+  // Sorted alphabetically to match the catalogue query. Three successive
+  // merges drifted this list out of order; keep it sorted when adding tables,
+  // and only after confirming the new table enables RLS and FORCE RLS.
   "activity_events",
   "agent_runs",
   "agents",
   "approvals",
+  "bot_assignments",
+  "bot_roles",
+  "bots",
   "commands",
   "connections",
   "deployment_validations",
@@ -31,9 +37,18 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "incidents",
+  "marketing_features",
+  "marketing_logos",
+  "marketing_pages",
+  "marketing_plan_features",
+  "marketing_pricing_plans",
+  "marketing_resource_topics",
+  "marketing_resources",
+  "marketing_stats",
+  "marketing_team_members",
+  "marketing_testimonials",
   "monitor_observations",
-  // Phase 1E production-operations tables. Each is created with RLS and FORCE
-  // RLS enabled in 20260812002800_phase1e_production_operations.sql.
+  "newsletter_subscribers",
   "operations_audit_events",
   "operations_events",
   "organization_members",
@@ -45,8 +60,6 @@ const publicTables = [
   "project_connections",
   "project_health_snapshots",
   "projects",
-  // Phase 2A provider execution tables. Each is created with RLS and FORCE RLS
-  // enabled and tenant-scoped policies in 20260813000100_provider_execution_layer.sql.
   "provider_model_configurations",
   "provider_routing_decisions",
   "provider_run_events",

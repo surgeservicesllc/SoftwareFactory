@@ -1,0 +1,90 @@
+import { Settings2 } from "lucide-react";
+import Link from "next/link";
+
+const FOOTER_COLUMNS = [
+  {
+    heading: "Product",
+    links: [
+      { label: "Platform", href: "/platform" },
+      { label: "Features", href: "/features" },
+      { label: "Solutions", href: "/solutions" },
+      { label: "Pricing", href: "/pricing" },
+    ],
+  },
+  {
+    heading: "Resources",
+    links: [
+      { label: "Guides & Tutorials", href: "/resources" },
+      { label: "Documentation", href: "/resources" },
+      { label: "Templates", href: "/resources" },
+      { label: "Case Studies", href: "/resources" },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Leadership", href: "/about" },
+      { label: "Contact Sales", href: "/about" },
+      { label: "Sign In", href: "/sign-in" },
+    ],
+  },
+] as const;
+
+export function SiteFooter() {
+  const year = new Date().getFullYear();
+
+  return (
+    <footer className="mt-20 border-t border-[#161d2a] bg-[#070a0f]">
+      <div className="mx-auto w-full max-w-[1400px] px-4 py-12 sm:px-6 lg:px-8">
+        <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+          <div className="max-w-sm">
+            <div className="flex items-center gap-3">
+              <span className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-[#2d3550] bg-gradient-to-br from-[#161a2e] to-[#0e1120]">
+                <Settings2 className="size-6 text-[#7c8cff]" strokeWidth={1.5} aria-hidden="true" />
+                <span className="absolute font-mono text-[8px] font-bold text-[#c9d2ff]">AI</span>
+              </span>
+              <span className="leading-none">
+                <span className="block text-[15px] font-bold text-white">AI SOFTWARE</span>
+                <span className="mt-1 block font-mono text-[9px] font-semibold uppercase tracking-[0.42em] text-[#8fa0ff]">
+                  Factory
+                </span>
+              </span>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-[#7f8c9e]">
+              An end-to-end platform that helps teams plan, build, deploy and scale better
+              software—faster, with AI at the core.
+            </p>
+          </div>
+
+          {FOOTER_COLUMNS.map((column) => (
+            <nav key={column.heading} aria-label={column.heading}>
+              <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#7f8c9e]">
+                {column.heading}
+              </h2>
+              <ul className="mt-4 space-y-2.5">
+                {column.links.map((link) => (
+                  <li key={`${column.heading}-${link.label}`}>
+                    <Link
+                      href={link.href}
+                      className="text-sm text-[#93a0b2] transition-colors hover:text-white"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
+
+        <div className="mt-10 flex flex-col gap-3 border-t border-[#151c28] pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-[#7f8c9e]">© {year} AI Software Factory. All rights reserved.</p>
+          <p className="text-xs text-[#7f8c9e]">
+            Autonomous production execution is disabled. Workers remain Not Connected.
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}

@@ -34,7 +34,7 @@ const navigationGroups = [
   {
     heading: null,
     items: [
-      { label: "Dashboard", href: "/", icon: CircleGauge },
+      { label: "Dashboard", href: "/solutions", icon: CircleGauge },
       { label: "Operations", href: "/operations", icon: HeartPulse },
       { label: "Projects", href: "/projects", icon: FolderKanban },
       { label: "Files", href: "/files", icon: FileText },
@@ -63,7 +63,7 @@ const navigationGroups = [
 function Logo() {
   return (
     <Link
-      href="/"
+      href="/solutions"
       className="flex items-center gap-2.5 rounded-lg"
       aria-label="SoftwareFactory dashboard"
     >
@@ -85,7 +85,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
           <ul className="space-y-0.5">
             {group.items.map(({ label, href, icon: Icon }) => {
-              const isActive = href === "/" ? pathname === href : pathname.startsWith(href);
+              const isActive = href === "/solutions" ? pathname === href : pathname.startsWith(href);
               return (
                 <li key={href}>
                   <Link
