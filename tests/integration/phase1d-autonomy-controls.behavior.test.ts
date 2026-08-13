@@ -304,6 +304,114 @@ describe("Phase 1D autonomy controls", () => {
     });
   });
 
+
+  describe("decisions are auditable", () => {
+    it("records a decision through the function and returns its id", async () => {
+      await db.exec("reset role");
+      await db.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+      await db.exec("set role authenticated");
+
+      const { rows } = await db.query<{ record_autonomy_decision: string }>(
+        `select public.record_autonomy_decision(
+           $1::uuid, 'merge', 'APPROVED_AUTOMATICALLY', 'green'::public.risk_level,
+           '{}'::text[], 'phase1d-decision-v1', 'abc1234', $2::uuid, $3::uuid, false, 'merge'
+         )`,
+        [projectId, ownerId, memberId],
+      );
+
+      expect(rows[0].record_autonomy_decision).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    it("refuses an approval whose approver is its author", async () => {
+      const message = await rejects(() =>
+        db.query(
+          `select public.record_autonomy_decision(
+             $1::uuid, 'merge', 'APPROVED_AUTOMATICALLY', 'green'::public.risk_level,
+             '{}'::text[], 'phase1d-decision-v1', 'abc1234', $2::uuid, $2::uuid, false, 'merge'
+           )`,
+          [projectId, ownerId],
+        ),
+      );
+
+      expect(message).toMatch(/no_self_approval/i);
+    });
+
+    it("refuses an approval that claims a blocker", async () => {
+      const message = await rejects(() =>
+        db.query(
+          `select public.record_autonomy_decision(
+             $1::uuid, 'merge', 'APPROVED_AUTOMATICALLY', 'green'::public.risk_level,
+             '{GATES_NOT_SATISFIED}'::text[], 'phase1d-decision-v1', null, null, null, false, null
+           )`,
+          [projectId],
+        ),
+      );
+
+      expect(message).toMatch(/blockers_match_decision/i);
+    });
+
+    it("refuses a refusal with no named blocker", async () => {
+      const message = await rejects(() =>
+        db.query(
+          `select public.record_autonomy_decision(
+             $1::uuid, 'merge', 'NOT_APPROVED', 'green'::public.risk_level,
+             '{}'::text[], 'phase1d-decision-v1', null, null, null, false, null
+           )`,
+          [projectId],
+        ),
+      );
+
+      expect(message).toMatch(/blockers_match_decision/i);
+    });
+
+    it("is append-only: a recorded decision cannot be edited or deleted", async () => {
+      await db.exec("reset role");
+
+      const update = await rejects(() =>
+        db.exec("update public.autonomy_decisions set decision = 'NOT_APPROVED'"),
+      );
+      const remove = await rejects(() => db.exec("delete from public.autonomy_decisions"));
+
+      for (const message of [update, remove]) {
+        expect(message).toMatch(/append-only/i);
+      }
+    });
+
+    it("keeps RLS and FORCE RLS on, with no browser write path", async () => {
+      await db.exec("reset role");
+      const { rows } = await db.query<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+        `select relrowsecurity, relforcerowsecurity from pg_class
+         where relname = 'autonomy_decisions' and relnamespace = 'public'::regnamespace`,
+      );
+      expect(rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+
+      for (const role of ["anon", "authenticated"] as const) {
+        for (const privilege of ["INSERT", "UPDATE", "DELETE"]) {
+          const { rows: grants } = await db.query<{ has: boolean }>(
+            `select has_table_privilege($1, 'public.autonomy_decisions', $2) as has`,
+            [role, privilege],
+          );
+          expect(grants[0].has, `${role} must not ${privilege}`).toBe(false);
+        }
+      }
+    });
+
+    it("lets an anonymous caller neither read nor record", async () => {
+      await db.exec("reset role");
+      const { rows } = await db.query<{ has: boolean }>(
+        `select has_function_privilege('anon',
+           'public.record_autonomy_decision(uuid, text, text, public.risk_level, text[], text, text, uuid, uuid, boolean, text)',
+           'execute') as has`,
+      );
+      expect(rows[0].has).toBe(false);
+
+      const { rows: reads } = await db.query<{ has: boolean }>(
+        `select has_table_privilege('anon', 'public.autonomy_decisions', 'SELECT') as has`,
+      );
+      expect(reads[0].has).toBe(false);
+    });
+  });
+
   describe("the browser cannot write controls", () => {
     it.each(["projects", "organizations"] as const)(
       "grants anon no write on %s",
