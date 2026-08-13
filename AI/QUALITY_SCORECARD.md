@@ -4,20 +4,23 @@ Last reviewed: 2026-08-12
 
 Phase 1B decision: **Not release-ready yet**
 
-Reason: local gates, GitHub publication/CI, and exact-tree production hosting pass, but hosted migrations `011`-`019`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
+Reason: local gates pass for the Phase 1B hardening and the new bot fabric control plane, but hosted migrations `011`-`021`, hosted authenticated tenant behavior, in-product GitHub callback/connection, active webhook delivery, and the complete live provider journey remain pending.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; active-tenant GitHub boundaries; strict provider schemas/URLs; truthful UI; retry-safe draft-PR flow; lifecycle ordering; local migrations `011`-`019` | Implemented; all current local gates pass; live acceptance pending |
-| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 38 files/263 tests (unit 23/145, integration 15/118) |
-| Current-tree coverage | `npm run test:coverage` | Pass - 38 files/263 tests; 66.08% statements, 65.13% branches, 58.62% functions, 67.16% lines; required risk/constants thresholds pass |
+| Current-tree lint/typecheck/full Vitest | Consolidated local run | Pass - lint/typecheck; 45 files/364 tests |
+| Current-tree coverage | `npm run test:coverage` | Pass - 70.96% statements, 69.49% branches, 67.59% functions, 72.11% lines; `lib/bots` 94.35% statements; required risk/constants thresholds pass |
 | Current-tree migration chain | Full-chain RLS behavioral matrix through migration `019` | Pass - 5/5 |
-| Current-tree production build | `npm run build` | Pass - 34 routes |
-| Current-tree E2E/responsive/accessibility | `npm run test:e2e` after relocating an ignored stale OneDrive coverage cache | Pass - 12/12 desktop/tablet/mobile including axe |
+| Current-tree production build | `npm run build` | Pass - 40 routes |
+| Current-tree E2E/responsive/accessibility | `npm run test:e2e` across dashboard and bot fabric | Pass - 24/24 desktop/tablet/mobile including axe; two contrast defects the new bot-fabric gate surfaced were fixed |
 | Current-tree secret/client scan | Tracked and untracked non-fixture source plus rebuilt `.next/static` | Pass - no credential/private-key markers in non-fixture source; only explicit fake detector fixtures matched; no privileged env names/key markers/`service_role` in client assets |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY` | Historical pass |
 | Hosted migrations | Hosted ledger through `010` | Pass through `010` only |
 | Local migrations `011`-`019` | Authorization/grants, audit, reconciliation, metadata propagation, recovery, lifecycle ordering, reservation, CHECK-helper grant | Local only; exact owner approval/application/post-apply verification pending |
+| Local migrations `020`-`021` | Bot fabric audit labels; bots/roles/assignments with RLS/FORCE RLS, select-only grants, audited definer mutations, credential-reference and HTTPS constraints, one open posting per bot | Local only; exact owner approval/application/post-apply verification pending |
+| Bot credential boundary | Reference names only, allowlist plus control-plane denylist in application and table CHECK; presence resolved server-side to a boolean | Pass in current local tests; no credential value is stored, returned, or logged |
+| Bot execution | No worker binds to bots, roles, or assignments | **Not Connected** - readiness is configuration evidence only |
 | Hosted database lint | Last successful linked public-schema lint through `009`: `[]`; post-`010` CLI received `403` | Pass through `009`; later state unverified |
 | Hosted RLS catalog | Prior 22 tables / 22 RLS / 22 FORCE RLS / 43 policies / 22 secret guards | Catalog evidence retained; current authenticated behavior pending |
 | Protected-resource writes | Broad subject/path/dependency/provider/control-plane classes blocked; no local HTTP writer; required risk/constants thresholds pass | Pass in current local tests; live-provider acceptance pending |
@@ -65,7 +68,7 @@ Application-release evidence is provider-resolved through deployment metadata ra
 ## Security and production acceptance still required
 
 - Preserve the passing current-tree quality/secret evidence for the exact committed tree and rerun affected checks after any change.
-- Apply migrations `011`-`019` only after exact owner approval; verify all grants/search paths, RLS/FORCE RLS, two-tenant/anonymous denial, provider-ingress CHECK evaluation, actor attribution, immutable/redacted activity, lifecycle ordering, and recovery behavior.
+- Apply migrations `011`-`021` only after exact owner approval; verify all grants/search paths, RLS/FORCE RLS, two-tenant/anonymous denial, provider-ingress CHECK evaluation, actor attribution, immutable/redacted activity, lifecycle ordering, and recovery behavior.
 - Complete a real authenticated production session and the entire GitHub callback/token/repository/project/read/edit/draft-PR/disconnect journey.
 - Observe valid, invalid, duplicate, stale, out-of-order, deletion, and restore webhook deliveries in production.
 - Verify stale SHA, protected path, likely secret, wrong tenant, revoked installation, insufficient permission, rate limit, stable retry, and ambiguous completion recovery.
@@ -74,6 +77,7 @@ Application-release evidence is provider-resolved through deployment metadata ra
 ## Release-blocking invariants
 
 - Any exposed secret, disabled RLS, cross-tenant access, direct default-branch write, non-draft/merge/deploy action, stale event reactivation, duplicate ambiguous retry, or unapproved protected production action is a failure.
+- A registered, ready, or assigned bot relabelled as connected, running, or executing work is a failure. Readiness describes configuration; no executor exists.
 - Configuration, tests, provider installation, or Vercel READY status cannot be relabeled as a real SoftwareFactory GitHub connection.
 - A clean migration/lint result does not prove authenticated RLS behavior; both evidence layers are required.
 - A future code/provider/schema/deployment change invalidates affected evidence and requires this scorecard to be rerun.

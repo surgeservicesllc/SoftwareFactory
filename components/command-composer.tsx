@@ -202,7 +202,9 @@ export function CommandComposer() {
                         : tier === "YELLOW"
                           ? "border-[#5a4725] bg-[#2e2312] text-[#ffbe55]"
                           : "border-[#5a3035] bg-[#311a1e] text-[#ff7d84]"
-                      : "border-[#293442] bg-[#10161f] text-[#627080]",
+                      // #627080 on this surface renders at 3.58:1, below the
+                      // WCAG AA 4.5:1 minimum for text this size.
+                      : "border-[#293442] bg-[#10161f] text-[#93a0af]",
                   )}
                 >
                   {tier}

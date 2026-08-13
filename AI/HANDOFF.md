@@ -8,6 +8,9 @@ Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening increment 
 
 ## Current repository work
 
+- The bot fabric adds `bots`, `bot_roles`, and `bot_assignments` plus `/bot-manager`, `/api/bots*`, `/api/bot-roles*`, and `/api/bot-assignments*`. Bots are provider-neutral and store a credential *reference name*, never a value. Readiness is configuration-only and makes no provider request. Assignment is routing intent with no executor.
+- Two accessibility defects surfaced by the new bot-fabric axe gate are fixed: the global anchor reset moved into `@layer base` (an unlayered rule was defeating `@layer components`, rendering `.primary-action` links at 1.19:1), and the command composer's unselected risk chips moved to `#93a0af`.
+
 - Callback browser failures return to Connections with bounded safe messages; JSON consumers retain no-store structured errors.
 - GitHub-returned browser URLs are constrained to HTTPS `github.com` origins; binary/invalid UTF-8 reads fail safely; pull-list tokens request only necessary permissions.
 - Revoked/insufficient-permission token failures are persisted best-effort as connection loss without treating rate limits as revocation.
@@ -18,7 +21,7 @@ Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening increment 
 
 ## Migration boundary
 
-Hosted Supabase is applied only through `010`. Local migrations `011`-`019` are not hosted:
+Hosted Supabase is applied only through `010`. Local migrations `011`-`021` are not hosted:
 
 - `011`: initial direct mutation closure and `github_pat_` detection.
 - `012`: actor-attributed terminal change audit.
@@ -29,6 +32,8 @@ Hosted Supabase is applied only through `010`. Local migrations `011`-`019` are 
 - `017`: remaining direct connection/project/link/change-request write closure plus authenticated exact-binding reservation RPC.
 - `018`: provider-time repository lifecycle and terminal delete/explicit restore handling.
 - `019`: minimal service-role execute on the SECURITY DEFINER sensitive-JSON CHECK wrapper; recursive/text helpers remain inaccessible.
+- `020`: bot fabric activity-event labels, added in their own transaction.
+- `021`: bot fabric tables, RLS/FORCE RLS, select-only authenticated grants, audited SECURITY DEFINER mutations, credential-reference and HTTPS constraints, and one open posting per bot.
 
 This complete authorization/audit/provider-ingress chain requires exact current owner approval before production application. After apply, verify the hosted ledger, linked lint, RLS/FORCE RLS, table/function/helper grants, caller/tenant/resource checks, immutable/redacted activity, provider-ingress CHECK evaluation, out-of-order/terminal transitions, recovery/idempotency, and application health.
 
@@ -41,14 +46,14 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Application commit `427190d050796e3f5ff5cf6154adc2c34e2e5694`, authored `NewWorldVenture`, is on GitHub `main`; CI run `31649243266` passed 2/2.
 - The automatic Git-triggered deployment `dpl_H6SvxkXj3LKiLoCjZ1PWarQs3umq` was blocked by Vercel Hobby commit-author access. The supported detached, tracked-files-only, owner-authenticated deployment `dpl_9oqg94scmdn5X86r7yyrgmsVtmBu` is READY Production and stores the exact application SHA in `softwarefactoryGitCommitSha` metadata.
 - Deployment URL `https://softwarefactory-i3pm08bpx-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app` pass production validation: five public routes 200 with expected title, representative authenticated APIs 401, removed `/api/files` 404, Playwright 12/12, nine deployed JavaScript assets clean, and recent error/HTTP-500 logs zero.
-- Current tree: lint/typecheck pass; full Vitest passes 38 files/263 tests (unit 23/145, integration 15/118); full-chain RLS behavior passes 5/5 through migration `019`; production build passes with 34 routes.
-- Current coverage passes 38 files/263 tests: 66.08% statements, 65.13% branches, 58.62% functions, and 67.16% lines; required risk/constants thresholds pass.
-- Current Playwright passes 12/12 across desktop/tablet/mobile including axe checks after relocating an ignored stale OneDrive coverage cache.
+- Current tree: lint/typecheck pass; full Vitest passes 45 files/364 tests; full-chain RLS behavior passes 5/5 through migration `019`; production build passes with 40 routes.
+- Current coverage: 70.96% statements, 69.49% branches, 67.59% functions, and 72.11% lines; required risk/constants thresholds pass; `lib/bots` covers 94.35% of statements.
+- Current Playwright passes 24/24 across desktop/tablet/mobile including axe checks on the dashboard and the bot fabric.
 - Source/client secret gates pass: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures in `github-repository-grants` and `github-rls-behavior` matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.
 
 ## Immediate sequence
 
-1. Obtain exact owner approval for hosted migrations `011`-`019` and webhook activation; apply/verify only the exact production targets.
+1. Obtain exact owner approval for hosted migrations `011`-`021` and webhook activation; apply/verify only the exact production targets.
 2. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
 3. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
 4. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
@@ -60,6 +65,7 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Verify CLI identity and project ref before every linked database command. Never reset hosted production.
 - Preserve **Demo Data** and **Not Connected** language when live evidence is absent.
 - Keep default-branch writes, non-draft PRs, merge, deploy, rollback, workflow/administration writes, and autonomous execution unavailable.
+- A bot may be registered, ready, and assigned without any worker existing. Never describe a bot as connected, running, or working; readiness is configuration evidence only.
 
 ## Completion checklist
 
@@ -69,7 +75,7 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - [x] Current-tree coverage and E2E/responsive/accessibility gates pass and exact results are recorded.
 - [x] Current-tree secret/client gate passes and its exact result is recorded.
 - [x] Application tree is pushed, CI passes 2/2, and provider metadata resolves the READY production deployment to its exact SHA.
-- [ ] Migrations `011`-`019` are explicitly owner-approved, hosted, and fully verified.
+- [ ] Migrations `011`-`021` are explicitly owner-approved, hosted, and fully verified.
 - [ ] Real Supabase authenticated/two-tenant/anonymous/RPC behavior passes.
 - [ ] Real GitHub callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect journey passes.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected-path/idempotency/recovery/out-of-order/terminal states pass.

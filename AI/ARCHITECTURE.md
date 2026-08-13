@@ -25,6 +25,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - Files reads the real repository tree/content at explicit refs only for projects whose live connection evidence remains valid, and turns owner/admin intent into a controlled draft-PR flow.
 - Activity reads immutable tenant events through caller-session RLS and returns a bounded browser shape without raw metadata.
 - Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
+- The bot fabric registers bots, roles, and assignments through caller-session reads and audited SECURITY DEFINER writes. The browser receives a credential reference *name* and a presence boolean; the credential value is resolved only in `lib/bots/credentials.ts`, only from `process.env`, and only to a boolean. `lib/bots/catalog.ts` is browser-safe public metadata.
 
 ## Persistence
 
@@ -37,6 +38,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
 - Local migrations `011`-`019` are one pending hardening chain. `011`-`013` close initial direct mutation paths, align `github_pat_` detection, add actor-attributed terminal change evidence, and reconcile repository grants. `014` propagates provider-authoritative repository names/default branches to exact linked projects. `015` recovers an already-created draft PR after an ambiguous database-completion response. `016` makes installation deletion terminal and orders installation lifecycle events by provider time. `017` removes remaining direct authenticated connection/project/link/change-request writes and introduces a narrow authenticated reservation RPC. `018` orders repository metadata events by provider time and preserves terminal deletion until an explicit newer restore. `019` grants the service-role provider-ingress boundary only the SECURITY DEFINER sensitive-JSON wrapper needed for table CHECK evaluation; recursive and text classifiers remain inaccessible. None is hosted yet; the complete chain requires exact owner approval and post-apply verification.
+- `020_bot_fabric_activity_types` adds the bot fabric audit labels in its own transaction, because PostgreSQL forbids using an enum label in the transaction that created it. `021_bot_fabric` adds `bots`, `bot_roles`, and `bot_assignments`: RLS and FORCE RLS with member-select policies, authenticated `select` grants only, audited SECURITY DEFINER mutation functions gated on `assert_bot_fabric_manager`, tenant-composite foreign keys to projects and roles, a credential-reference shape/denylist constraint, an HTTPS-only endpoint constraint, and a partial unique index enforcing one open posting per bot. Neither is hosted.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -64,6 +66,13 @@ Write flow:
 9. Complete or fail the audited request record. If GitHub created the draft PR but database completion was ambiguous, recover that same provider evidence rather than create a second PR.
 
 There is no merge or deployment step.
+
+## Bot fabric boundary
+
+- A bot is metadata plus an opaque secret reference. Reference names are validated against an allowlist (known provider variables plus the reserved `BOT_CREDENTIAL_*` namespace) and a denylist of control-plane credentials, in both the application and a table CHECK constraint.
+- Readiness is computed from configuration alone: catalog membership, model presence, HTTPS endpoint where required, and whether the referenced variable is populated on this server. No provider request is made, so `ready` never implies a verified session.
+- Assignment binds one bot to one project under one role. It is routing intent; there is no executor, and audit metadata records `executor_connected: false`.
+- Connecting a real worker to these records is a later, separately approved phase. It would require verified-session evidence before any surface may report "Connected".
 There is also no HTTP local-repository write path; the legacy route, UI, and environment switch are removed.
 
 ## Webhook boundary

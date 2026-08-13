@@ -18,8 +18,20 @@ Production UI: [https://softwarefactory-tan.vercel.app](https://softwarefactory-
 - Protected paths and likely credential content are rejected by the standard file-change route.
 - A retry of the same file-change intent reuses its idempotency key, and provider-created draft-PR evidence can recover a lost database-completion response without creating a second PR.
 - GitHub lifecycle reconciliation treats deletion as terminal for an installation ID and applies installation/repository metadata only with provider ordering evidence.
+- A bot record stores the NAME of a server-side credential variable, never a credential value. Control-plane variables (Supabase service role, GitHub App secrets, database URL, deployment tokens, anything `NEXT_PUBLIC_`) cannot be referenced.
+- Bot readiness describes configuration only. It resolves the referenced variable to a presence boolean and makes no provider request, so "Ready to assign" never means a provider session exists.
 - Auto approve, auto merge, auto deploy, and auto rollback remain OFF.
-- OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**.
+- OpenAI/Codex execution and Anthropic/Claude execution remain **Not Connected**. Registering, readying, and assigning a bot does not change that: no worker executes assigned work.
+
+## Bot fabric
+
+Connect any bot, give it a role you wrote, and move it between projects from `/bot-manager`.
+
+- **Bots** are provider-neutral: Claude (Anthropic), Codex/GPT (OpenAI), Gemini (Google), Grok (xAI), Mistral, DeepSeek, Groq, OpenRouter, a self-hosted gateway, or any custom OpenAI-compatible HTTPS endpoint. Pick a provider tile and the name, model, and credential variable are pre-filled; the model field accepts any identifier your provider supports.
+- **Credentials stay out of the product.** Set the value once as a server-side environment variable (see `.env.example`) and reference it by name. The server answers only "is this populated?"; the value never reaches a table, a response, or a log. Name your own references as `BOT_CREDENTIAL_<NAME>`.
+- **Roles** are yours to write: name, mission instructions, risk ceiling, and capability labels. Nine starter roles — orchestrator, product, frontend, backend, database, QA, security reviewer, release manager, docs — can be adopted in one click and then edited.
+- **Assignment** posts one bot to one project under one role. A bot holds at most one open posting, so moving it to another project or changing its role is a single click and a single audited transition. Pause or return a bot to the bench at any time.
+- Every registration, edit, readiness check, role change, assignment, move, and release appends an immutable, redacted activity event.
 
 ## Technology
 
@@ -70,9 +82,12 @@ Browser
       -> GitHub App adapter (server-only secrets + short-lived tokens)
         -> selected repository reads
         -> controlled branch + commit + draft PR
+      -> bot fabric (bots, roles, assignments)
+        -> credential reference resolved server-side to a presence boolean
+        -> no executor
 ```
 
-GitHub provider responses and webhook payloads are treated as untrusted. Supabase RLS remains an independent tenant boundary. Vercel deployment automation, merge automation, rollback automation, Codex execution, and Claude execution are not part of Phase 1B.
+GitHub provider responses and webhook payloads are treated as untrusted. Supabase RLS remains an independent tenant boundary. Vercel deployment automation, merge automation, rollback automation, Codex execution, and Claude execution are not part of Phase 1B. The bot fabric is the registry a future worker would bind to; connecting one requires a separate owner-approved decision.
 
 ## Documentation
 

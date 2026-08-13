@@ -74,9 +74,17 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/*
+ * Keep the anchor reset in the base layer. Unlayered rules outrank every
+ * cascade layer, so an unlayered `color: inherit` here silently defeated the
+ * component classes below: `.primary-action` rendered dark-on-lime as a button
+ * and body-colored text on lime as a link, failing contrast.
+ */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 ::selection {

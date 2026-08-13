@@ -3,6 +3,13 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
   !process.env.PLAYWRIGHT_WEB_SERVER_COMMAND;
+// Sandboxes and CI images often ship a Chromium build that does not match the
+// revision this Playwright version downloads. Pointing at that binary is safer
+// than re-downloading; unset, Playwright resolves its own managed browser.
+const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+const launchOptions = chromiumExecutable
+  ? { executablePath: chromiumExecutable }
+  : undefined;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -33,6 +40,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
+        launchOptions,
       },
     },
     {
@@ -40,12 +48,14 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 834, height: 1112 },
+        launchOptions,
       },
     },
     {
       name: "mobile-chromium",
       use: {
         ...devices["Pixel 5"],
+        launchOptions,
       },
     },
   ],

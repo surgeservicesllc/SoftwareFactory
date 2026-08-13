@@ -25,6 +25,9 @@ const requiredTables = [
   "activity_events",
   "policies",
   "approvals",
+  "bots",
+  "bot_roles",
+  "bot_assignments",
 ] as const;
 
 function escapeRegExp(value: string): string {

@@ -44,11 +44,19 @@ Status: **Observation-only scaffold; execution not started and controls remain O
 - Autonomous Mode constrained OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF, evaluator always `executionAllowed: false`.
 - Hosted migration `010` contains the current fail-closed controls. No action executor exists.
 
+## Bot fabric - provider-neutral control plane
+
+Status: **Implemented locally; migrations `020`-`021` unhosted; no executor.**
+
+- Provider-neutral bot registration, organization-authored roles, and bot-to-project assignment, with credentials held as server-side references rather than stored values.
+- This is the registry a future worker will bind to. It confers no execution authority: readiness describes configuration, assignment describes intent, and OpenAI/Codex and Anthropic/Claude remain **Not Connected**.
+- Binding a real worker to these records requires a separate owner-approved phase decision and verified-session evidence.
+
 ## Phase 2 - Claude and governed delivery
 
 Status: **Not Connected; not started.**
 
-- Future supported Anthropic API connections and logical roles, not consumer-account browser automation.
+- Future supported Anthropic API connections and logical roles, not consumer-account browser automation. The bot fabric supplies the role and assignment model; it does not start this phase.
 - Preview validation and separately approved governance precede any delivery automation.
 
 ## Later measured autonomy
