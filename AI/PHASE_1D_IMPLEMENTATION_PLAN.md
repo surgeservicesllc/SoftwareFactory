@@ -124,6 +124,9 @@ and an agent must not perform it. That is the single reason this phase does not 
 | No self-approval | **COMPLETE** | same — the author is refused as approver at every scope |
 | Orchestrator stage machine | **COMPLETE** as a decision machine | `lib/autonomy/pipeline.ts` |
 | Merge / Deploy / Rollback execution | **BLOCKED, named** | Every path returns its exact blocker |
+| Bounded retries | **COMPLETE** | `lib/autonomy/retries.ts` — per-stage caps, exponential backoff, escalate rather than retry once spent, and never retry a permanent failure |
+| Backlog Autopilot selection | **COMPLETE** | `lib/autonomy/autopilot.ts` — orders eligible P0–P3 work by priority then lower risk, and explains every exclusion |
+| Deployment tracking (read) | **COMPLETE, provider Not Connected** | `lib/deploy/vercel.ts` — real read contract; reports **Not Connected** with a reason while `VERCEL_TOKEN` is unset |
 
 ## 5. Explicitly BLOCKED, with unblocking conditions
 
@@ -131,7 +134,7 @@ and an agent must not perform it. That is the single reason this phase does not 
 | --- | --- | --- |
 | Turning any automatic action ON | Hosted migration `010` CHECK constraint plus the locked organization kill switch | Owner-approved migration that deliberately relaxes the interlock, after sustained non-production evidence |
 | Auto-merge | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases | An owner-approved policy revision |
-| Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset | An owner-authorized Vercel connection with a server-only token |
+| Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset in every environment checked | An owner-authorized Vercel connection with a server-only token. The **read** adapter is built and will report live data the moment a token exists; no write path exists at all. |
 | Rollback execution | No deploy adapter; `policies/AUTO_ROLLBACK.md` disables it | Adapter, the six drills in that policy, and an owner-approved migration |
 | Codex code and repair execution | Phase 1C not started | A Phase 1C worker with leases, sandbox, budgets, and redacted traces |
 | Backlog Autopilot execution | Depends on the two rows above | Both unblocked |
@@ -151,3 +154,17 @@ an executor will see those assertions fail and have to update them deliberately.
 
 This is a control-plane demonstration against a migrated database. It is not evidence that any
 autonomous action ran in production, because none can.
+
+
+## 7. Credential state observed at implementation time
+
+Every provider credential this loop would need is absent from the environment
+this phase was built in: `VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`,
+`SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, `OPENAI_API_KEY`, and
+`ANTHROPIC_API_KEY` are all unset.
+
+That is worth recording plainly: the executor stages are not merely
+policy-blocked, they are **materially impossible** here. Applying the hosted
+migration, reading real deployment state, and running a Codex worker each
+require a credential that does not exist in this environment, so no amount of
+further implementation in this phase could have closed them.

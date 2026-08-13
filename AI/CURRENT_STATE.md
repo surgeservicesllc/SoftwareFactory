@@ -130,6 +130,10 @@ Phase 1E adds a production-operations control plane in source and in migration `
 - Review, QA and Security agents are deterministic analysers, not model calls: Phase 1C is not started, and a rules engine cannot hallucinate an approval. Blocking findings stop progression; advisory findings are recorded and do not.
 - Approval returns `APPROVED_AUTOMATICALLY`, `OWNER_APPROVAL_REQUIRED`, or `NOT_APPROVED`. Owner approval is evaluated after the gates, so nothing can be approved past a failing check, and an unsound change is never escalated to a person. No-self-approval is absolute at every risk level, including for an owner.
 - The orchestrator sequences twelve stages and halts at the first blocked one. `implement`, `merge` and `deploy` are reached, evaluated, and blocked by name.
+- Retries are bounded per stage with exponential backoff. Exhausting the budget escalates rather than retrying again, and a permanent failure never retries at all — re-running a change refused on policy grounds cannot produce a different answer.
+- Backlog Autopilot **selects** work: eligible items are ordered by priority and then by lower risk, work is held behind unmet or unknown dependencies, work above the ceiling is refused, and nothing new is picked up for a project that is degraded, critical or paused. Every exclusion carries its reason. Selection confers no authority to start the work.
+- A read-only deployment adapter implements the real provider contract and reports **Not Connected** with a reason while no token is configured. It exposes no create, promote, or rollback path; adding one is a separate owner-approved decision.
+- Every provider credential the loop would need — `VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` — is unset in the environment this phase was built in. The executor stages are materially impossible here, not merely policy-blocked.
 
 ## Phase 1D verification evidence
 
