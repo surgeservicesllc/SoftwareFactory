@@ -170,3 +170,58 @@ has not happened they show an empty state, not invented data.
 - lint, typecheck, unit + integration tests and a production build pass.
 - `AI/CURRENT_STATE.md`, `AI/ROADMAP.md`, `AI/DECISIONS.md`, `AI/HANDOFF.md`,
   `AI/QUALITY_SCORECARD.md` and `AI/BACKLOG.md` state exactly what is and is not live.
+
+---
+
+## 5. Outcome (2026-08-13)
+
+Everything in section 2 is implemented and passing local gates. Status against
+the section 4 definition of done:
+
+| Done criterion | Result |
+| --- | --- |
+| Provider interface with two real adapters, no unproven live claims | Met. Both adapters use the official SDKs; both report **Not Configured** because no credential exists here. |
+| Structured, explainable, override-respecting routing that never silently degrades | Met. `OVERRIDE_TARGET_UNAVAILABLE` is covered by test. |
+| Policy-bounded, recorded fallback | Met. Credential, authorization, cancellation, and content-policy failures are ineligible by declaration. |
+| Independent review cannot be self-satisfied | Met and enforced in `workflow.ts`. |
+| RLS, FORCE RLS, RPC-only writes, audit evidence on new tables | Met in migration `020`; **not hosted**. |
+| lint, typecheck, tests, production build | Met: 45 files / 365 tests, 41-route build. |
+| `/AI` documents state exactly what is and is not live | Met. |
+
+### Completion by section
+
+| Section | Status |
+| --- | --- |
+| 1 Audit | Complete |
+| 2 Provider abstraction | Complete |
+| 3 Anthropic connection | Complete in code; **Not Configured** without a credential |
+| 4 Claude worker and persistence | Complete for advisory runs |
+| 5 Logical agents | Complete |
+| 6 Intelligent routing | Complete |
+| 7 Multi-agent work | Complete |
+| 8 Fallback | Complete |
+| 9 UI | Complete for Connections, Agents, Runs, Settings, Bot Manager. Dashboard and Reports still show their existing **Demo Data** sections and are listed in the backlog. |
+| 10 Security and RLS | Complete locally; hosted verification pending |
+| 11 Testing | Complete against the contract; provider wire formats need a credential |
+| 12 Completion demonstration | **Blocked** - the three end-to-end flows need a live credential and hosted migration `020` |
+
+### What an owner must do to finish section 12
+
+1. Approve and apply migrations `011`-`020` to the hosted Supabase project.
+2. Set `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY` plus `OPENAI_DEFAULT_MODEL`,
+   as server-only values.
+3. Enable outbound execution in Settings.
+
+Until then the three demonstration flows cannot be run, and this document does
+not claim them.
+
+### Limitations carried forward
+
+- Cancellation is request-scoped: the in-process run registry lives only as
+  long as the server process, though run state itself is durable in Supabase.
+- Project routing policy is fixed at safe defaults (`AUTO`, both providers
+  allowed, fallback off) because there is no project-level policy column yet.
+- OpenAI models carry no declared price, so their estimated cost reads
+  **Not declared** rather than a number.
+- A provider run is advisory. Repository-mutating agent work remains out of
+  scope and gated by the Phase 1D interlocks.

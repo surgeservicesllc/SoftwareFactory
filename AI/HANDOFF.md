@@ -46,6 +46,26 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Current Playwright passes 12/12 across desktop/tablet/mobile including axe checks after relocating an ignored stale OneDrive coverage cache.
 - Source/client secret gates pass: no credential/private-key marker in tracked or untracked non-fixture source; only explicit fake detector fixtures in `github-repository-grants` and `github-rls-behavior` matched; rebuilt `.next/static` contains no privileged environment name, key marker, or `service_role` marker.
 
+## Phase 2A provider layer
+
+What is real: one adapter contract implemented by the Anthropic Messages API
+and OpenAI Responses API on the official SDKs; a pure routing engine with
+recorded reasons and scored candidates; policy-bounded single-attempt
+fallback; an enforced independent-review rule; migration `020` with RLS and
+owner/admin RPC-only writes; and Connections, Agents, Runs, Settings, and Bot
+Manager reading live state.
+
+What is not real yet: no AI provider credential exists in any verified
+environment, so both providers correctly report **Not Configured** and no live
+provider request has been made. Migration `020` is not hosted. The owner
+execution switch defaults OFF.
+
+Boundaries to keep: a provider run is advisory and has no repository, merge,
+deployment, or approval authority. Fallback is never available for credential,
+authorization, cancellation, or content-policy failures. An implementation
+agent can never satisfy the independent review of its own work. Do not add a
+built-in OpenAI default model; the owner selects one from live discovery.
+
 ## Immediate sequence
 
 1. Obtain exact owner approval for hosted migrations `011`-`019` and webhook activation; apply/verify only the exact production targets.

@@ -35,6 +35,18 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
 - [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
 
+## Phase 2A follow-up
+
+| Priority | Item | Risk | Notes |
+| --- | --- | --- | --- |
+| P0 | Obtain owner approval and apply hosted migration `020` with `011`-`019`, then re-verify RLS, grants, and audit behavior against the hosted project | RED | Protected production action; the local RLS matrix passes 15/15 but proves nothing hosted. |
+| P0 | Set a server-side `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY` plus `OPENAI_DEFAULT_MODEL`, then record a live health probe for each | YELLOW | Until then both providers correctly report **Not Configured**. |
+| P1 | Observe the full plan -> implementation proposal -> independent review -> QA chain against live providers and attach the run evidence | YELLOW | The chain is implemented and unit tested against stubs only. |
+| P1 | Add a durable worker so a run survives beyond the request that created it | YELLOW | Cancellation is currently request-scoped; durable run state is already in Supabase. |
+| P1 | Make project routing policy configurable: default provider, allowed providers, and whether fallback is permitted | YELLOW | Today these are fixed safe defaults (`AUTO`, both providers allowed, fallback off). |
+| P2 | Let an owner declare per-model prices for providers with no cited price table | GREEN | The schema already carries the columns; the UI currently reports **Not declared**. |
+| P2 | Surface provider usage and cost totals on Reports and the Dashboard | GREEN | Run-level usage is recorded and shown on Runs. |
+
 ## Historical evidence retained
 
 - Hosted Supabase migrations through `010` and prior fail-closed observation-control checks.

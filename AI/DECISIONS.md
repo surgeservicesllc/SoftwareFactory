@@ -141,3 +141,17 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted for local implementation; hosted migration `019` pending
 - Decision: PostgreSQL evaluates table CHECK expressions with the invoking role's function privileges. Grant the service-role provider-ingress boundary execute only on the SECURITY DEFINER `jsonb_has_sensitive_keys(jsonb)` wrapper used by those constraints. Keep its recursive implementation and the standalone text secret classifier inaccessible to service role.
 - Consequence: Service-role inserts still pass the same sensitive-JSON constraints without exposing broader classifier internals or widening authenticated mutation authority. Hosted behavior must be verified after exact owner-approved promotion.
+
+## ADR-021 - AI providers are interchangeable behind one adapter contract
+
+- Date: 2026-08-13
+- Status: Accepted for local implementation; hosted migration `020` and live provider evidence pending
+- Decision: Every AI provider implements one `ProviderAdapter` contract (`createRun`, `getRun`, `cancelRun`, `listEvents`, `getResult`, `listModels`, `checkHealth`) and returns one schema-validated artifact. Adapters use the official provider SDKs with server-only credentials read from the environment; a missing credential resolves to **Not Configured** rather than an error. Routing is a pure function whose decision carries structured reasons and scored candidates, with precedence owner request, then agent assignment, then project default, then automatic score. Two rules sit above that precedence and cannot be overridden: a provider that does not declare a required capability is never selected, and a provider that is not `connected` is never selected. An explicit request for an unavailable provider fails as `OVERRIDE_TARGET_UNAVAILABLE`.
+- Consequence: Adding a provider is an adapter plus a capability declaration, not a change to the Orchestrator. A routing decision is reproducible and auditable from its recorded inputs. No caller can silently obtain a different provider than the one it asked for, and no provider is chosen because it happened to be the fallback.
+
+## ADR-022 - Phase 2A provider runs are advisory and separately switched on
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: A Phase 2A provider run reads bounded context and returns an analysis artifact. It has no repository, merge, deployment, or approval authority; applying a recommendation remains the existing owner-driven branch, commit, and draft-pull-request flow. Outbound execution is gated by `organizations.ai_provider_execution_enabled`, which defaults OFF and is owner-only, so a configured credential is never by itself consent to spend. Fallback requires the project policy to allow it *and* the failure class to be declared fallback eligible; credential, authorization, cancellation, and content-policy failures are never fallback eligible. An independent-review step cannot be satisfied by the agent that produced the work under review, whichever provider executed it.
+- Consequence: Enabling a provider changes what SoftwareFactory can analyze, not what it can change. Fallback cannot be used to shop a refused request to a second provider or to paper over a broken credential, and a single agent cannot both implement and approve. Widening this boundary requires a separate owner-approved decision and a forward migration that deliberately changes the interlocks.

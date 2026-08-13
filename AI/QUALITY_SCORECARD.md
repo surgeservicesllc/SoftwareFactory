@@ -62,6 +62,32 @@ Hosted Supabase baseline:
 
 Application-release evidence is provider-resolved through deployment metadata rather than inferred from the latest Git tip, so a documentation-only successor does not make the runtime SHA claim stale. It does not verify hosted migrations `011`-`019` or the live GitHub workflow.
 
+## Phase 2A provider layer evidence
+
+| Check | Result |
+| --- | --- |
+| Lint, typecheck | Pass |
+| Vitest | 45 files / 365 tests pass |
+| Provider RLS behavioral matrix through migration `020` | 15 / 15 pass |
+| Production build | Pass, 41 routes |
+| Client bundle credential scan | No credential marker in rebuilt `.next/static` |
+| Live Anthropic request | **Not performed** - no credential in any verified environment |
+| Live OpenAI request | **Not performed** - no credential in any verified environment |
+| Hosted migration `020` | **Not applied** |
+
+Phase 2A tests cover routing precedence and its absolute capability and
+availability rules, fallback eligibility by failure class, reviewer
+independence, workflow progression and handoff scoping, schema validation of
+untrusted provider output, error normalization that does not leak provider
+internals, cost estimation that reports unknown rather than zero, secret-free
+configuration resolution, adapter lifecycle including cancellation and
+timeout, and the Connections, Agents, and Runs surfaces in their loading,
+empty, error, and populated states.
+
+Adapters are exercised against stub implementations of the shared contract.
+That proves the contract, the lifecycle, and the routing and fallback policy;
+it does not prove either provider's wire format, which needs a credential.
+
 ## Security and production acceptance still required
 
 - Preserve the passing current-tree quality/secret evidence for the exact committed tree and rerun affected checks after any change.
