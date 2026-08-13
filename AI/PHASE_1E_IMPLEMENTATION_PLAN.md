@@ -127,7 +127,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 | §6 Auto rollback | **DECISION PATH COMPLETE; EXECUTION BLOCKED.** Last Known Good resolves only from a deployment whose own validation passed. Eligibility is evaluated fail-closed against `AUTO_ROLLBACK.md`. A failed rollback cannot be recorded without escalating to SEV1 with owner attention — enforced by a CHECK constraint. No database or data migration is ever reversed. | `last_known_good_deployment`, `record_rollback_decision`, `record_rollback_outcome`, `lib/operations/rollback.ts` |
 | §7 Production Investigator | **COMPLETE as a deterministic engine.** Returns likely cause, cited evidence, affected subsystem, confidence, recommended action, and risk. Confidence requires corroboration. No intermediate reasoning is produced, stored, or returned. | `lib/operations/investigator.ts`, `production_diagnoses` |
 | §8 Self-healing | **CREATION COMPLETE; EXECUTION BLOCKED.** Diagnosis creates bounded repair work capped at three attempts; the third failure escalates instead of retrying. Eligibility never bypasses GREEN/YELLOW/RED — a RED repair is refused without owner approval and work above the project ceiling is refused. Assignment is recorded as `not_connected`. | `create_repair_attempt`, `record_repair_failure`, `lib/operations/repair.ts` |
-| §9 Synthetic testing | **PARTIAL.** Basic/Standard/Critical profiles with destructive-step rejection and mandatory reversal notes for safe writes, enforced in TypeScript, plus the synthetic monitor kind in the schema. Journey definitions are validated but not yet stored per project. | `lib/operations/synthetic.ts`, `production_monitors.profile` |
+| §9 Synthetic testing | **COMPLETE for read paths; writes recorded not executed.** Journeys are stored per project with Basic/Standard/Critical profiles, and safety is enforced by CHECK constraint as well as in TypeScript: destructive paths and undeclared writes cannot be stored at all, and a declared safe write needs a reversal note. Execution stops at the first failing step; a declared write is recorded as `skipped` because Phase 1E has no authority to mutate a monitored production system. | migration `029`, `synthetic_journeys`, `lib/operations/journey.ts`, `/api/operations/synthetics` |
 | §10 Operations UI | **COMPLETE.** Portfolio health, project health with reasons, incidents, monitors, provider status, audit trail, owner controls, and per-project production detail. | `app/operations/page.tsx`, `components/operations-console.tsx`, `components/project-operations-panel.tsx` |
 | §11 Event automation | **COMPLETE.** All ten event types, durable queue, unique dedupe key per organization, claim/complete with `for update skip locked`, idempotent completion, bounded attempts, and dead-lettering. Each event's planned actions are declared as data, marking deferred ones explicitly. | `operations_events`, `enqueue/claim/complete_operations_event`, `lib/operations/events.ts` |
 | §12 Incident resolution | **COMPLETE.** Resolution is refused while monitors still fail, without a passing same-project validation, without root cause and corrective action, and — for SEV1/SEV2 — without a prevention reference. A successful deployment alone resolves nothing. | `resolve_production_incident`, `incidents_resolution_requires_cause` |
@@ -147,3 +147,56 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 The journey test walks Monitor → Detect → Incident → Freeze → Rollback decision → Diagnose → Repair task → Validate → Resolve against the real schema, and separately proves failed-rollback escalation to SEV1 with owner attention. Two stages of the stated target are asserted as **blocked rather than simulated**: the Codex fix (no execution worker) and the deploy (no deployment adapter). The test records the exact blockers instead of skipping them.
 
 This is a control-plane demonstration against a migrated database, not live production evidence. No monitor has yet observed a real production target, because that requires an owner-authorized target and hosted migration `028`. Until then every Phase 1E surface reports **Not Connected** or **Unknown** rather than implying observation.
+
+
+## 6. Completion status
+
+Assessed against the nine objective sections, counting only what has evidence.
+
+| Area | Completion | Basis |
+| --- | --- | --- |
+| §1 Audit | 100% | This document, produced before any edit. |
+| §2 Monitoring + health | ~70% | Health derivation, history, and reasons are complete. One of five signal families has a connected adapter: the HTTPS probe covers uptime, latency, critical routes, auth, and project-reported database/job/integration endpoints. Vercel deployment status and error-rate telemetry have no provider. |
+| §3 Incident engine | 100% | Automatic creation, fingerprint dedupe, SEV1–SEV4, upward-only escalation, and every required evidence field. |
+| §4 Protection + rollback | ~60% | Freeze, resume, stop, reversal of stop, Last Known Good, eligibility, and failed-rollback escalation are complete. Rollback **execution** does not exist. |
+| §5 Investigator + self-healing | ~50% | Structured diagnosis and bounded repair-work creation with risk gating are complete. Codex execution, isolated branch, fix, tests, review, and PR do not exist. |
+| §6 Synthetics + operations UI | ~90% | Journeys are stored, safety-enforced, and executed for read paths; the operations UI covers every required view. Declared writes are recorded rather than executed. |
+| §7 Automation | 100% | All ten event types, durable queue, idempotent completion, bounded attempts, dead-lettering. |
+| §8 Resolution + reporting | 100% | Gated resolution and the daily report with every required section. |
+| §9 Security + testing | 100% | RLS + FORCE RLS on 39/39 tables, no new `service_role` grants, append-only evidence, server-only secrets, RED operations owner-gated, and the full test matrix. |
+
+**Overall: roughly 85% of the objective is implemented, and the remaining ~15% is execution authority that this phase must not grant.** Rollback execution, Codex repair execution, and autonomous deployment are each blocked by a named, tested interlock rather than missing by oversight.
+
+### Live integrations
+
+| Integration | State |
+| --- | --- |
+| Outbound HTTPS probe (uptime, latency, critical route, auth, project-reported DB/job/integration, synthetic) | **Implemented**, target-validated, never observed against a real production target yet |
+| Supabase control plane (RLS, workflows, audit) | **Connected** in source; migrations `028`/`029` are **not applied to hosted Supabase** |
+| GitHub App | **Connected** for the owner repository path (Phase 1B) |
+| Vercel deployment status / rollback execution | **Not Connected** |
+| Error-rate and latency telemetry provider | **Not Connected** |
+| Direct database, job runner, and integration reads | **Not Connected** |
+| Codex execution worker | **Not Connected** (Phase 1C not started) |
+| Scheduled monitoring | **Not Connected** (no authorized scheduler identity) |
+
+### Security findings from this phase
+
+1. **`service_role` scope held.** Provider ingestion runs through SECURITY DEFINER workflows rather than table grants, so `service_role` still holds table privileges on exactly the four GitHub ingress tables. Verified by test, not by inspection.
+2. **Probe SSRF surface bounded.** Monitor targets are restricted to public HTTPS origins on the standard port with no credentials, refusing loopback, private, carrier-grade-NAT, link-local, and cloud-metadata addresses. Redirects are not followed and no response body is read.
+3. **Residual limitation, recorded not hidden.** A public hostname that resolves to a private address at DNS time is not detected; catching it needs resolve-then-connect-by-IP handling.
+4. **Safety in the schema, not only the route.** Monitor enablement, rollback escalation, incident resolution, and synthetic step safety are CHECK constraints, so bypassing the application cannot bypass them.
+5. **No secret path widened.** No new credential, environment variable, or browser-reachable privilege was introduced.
+
+### Known limitations
+
+- Migration `028`/`029` are unhosted, so nothing in Phase 1E has run against real production. Every surface reports **Not Connected** or **Unknown** until that changes.
+- Monitoring is owner-triggered rather than continuous; a scheduler identity must be authorized without widening `service_role`.
+- Synthetic write steps are declared and validated but never issued.
+- Health depends on what the monitored project's own endpoints report; SoftwareFactory does not read a monitored project's database or job runner directly.
+
+### Phase 2A readiness
+
+Phase 2A (the provider execution layer) is already merged on `main` and its tests pass alongside Phase 1E. The two are complementary and do not conflict: Phase 2A routes AI work to providers, Phase 1E observes production and refuses to act on it. Phase 1E leaves Phase 2A's interlocks untouched — `ai_provider_execution_enabled` still defaults OFF, and no Phase 1E path invokes a provider.
+
+The natural next joins are: give the Production Investigator an optional Phase 2A provider run for narrative diagnosis, keeping the deterministic engine as the source of the structured verdict; and route repair work to a Phase 1C worker once one exists. Neither should be started before hosted migration `028`/`029` and a first real observed incident, because a diagnosis engine with no observed production data has nothing to diagnose.

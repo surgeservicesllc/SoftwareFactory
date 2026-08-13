@@ -91,20 +91,35 @@ type AuditRow = {
   created_at: string;
 };
 
+type JourneyRow = {
+  id: string;
+  project_name: string;
+  monitor_id: string;
+  name: string;
+  profile: string;
+  base_url: string;
+  steps: Array<{ kind: string; name: string; method: string }>;
+  enabled: boolean;
+  monitor_connection_state: string;
+  last_outcome: string;
+  last_observed_at: string | null;
+};
+
 export async function GET() {
   try {
     const context = await operationsContext();
     const organizationId = context.activeOrganization.id;
 
-    const [summary, projects, incidents, monitors, audit] = await Promise.all([
+    const [summary, projects, incidents, monitors, audit, journeys] = await Promise.all([
       context.client.rpc("operations_portfolio_summary", { p_organization_id: organizationId }),
       context.client.rpc("list_operations_projects", { p_organization_id: organizationId, p_limit: 100 }),
       context.client.rpc("list_production_incidents", { p_organization_id: organizationId, p_limit: 50 }),
       context.client.rpc("list_production_monitors", { p_organization_id: organizationId, p_limit: 100 }),
       context.client.rpc("list_operations_audit_events", { p_organization_id: organizationId, p_limit: 50 }),
+      context.client.rpc("list_synthetic_journeys", { p_organization_id: organizationId, p_limit: 50 }),
     ]);
 
-    for (const result of [summary, projects, incidents, monitors, audit]) {
+    for (const result of [summary, projects, incidents, monitors, audit, journeys]) {
       if (result.error) return databaseErrorResponse(result.error);
     }
 
@@ -194,6 +209,23 @@ export async function GET() {
         entityId: row.entity_id,
         summary: row.summary,
         createdAt: row.created_at,
+      })),
+      journeys: ((journeys.data ?? []) as JourneyRow[]).map((row) => ({
+        id: row.id,
+        projectName: row.project_name,
+        monitorId: row.monitor_id,
+        name: row.name,
+        profile: row.profile,
+        baseUrl: row.base_url,
+        stepCount: Array.isArray(row.steps) ? row.steps.length : 0,
+        // Declared writes are stored but never issued against production.
+        writeSteps: Array.isArray(row.steps)
+          ? row.steps.filter((step) => step.method === "POST").length
+          : 0,
+        enabled: row.enabled,
+        connectionLabel: row.monitor_connection_state === "connected" ? "Connected" : "Not Connected",
+        lastOutcome: row.last_outcome,
+        lastObservedAt: row.last_observed_at,
       })),
       providers: MONITOR_PROVIDERS.map((provider) => ({
         id: provider.id,

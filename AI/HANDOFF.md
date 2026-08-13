@@ -43,7 +43,7 @@ Invariants a future change must not break: `service_role` gains no new table pri
 
 Released to `main` as merge commit `b243e1ddf9ce8155c4440c56d7b846ccc3d74ce0`; CI run `31731632715` passed both jobs against that commit.
 
-Next Phase 1E steps: apply hosted `028` after reauthenticating the Supabase CLI, configure an owner-authorized monitor target, and record the first real detection-to-resolution journey.
+Next Phase 1E steps: apply hosted `028` and `029` after reauthenticating the Supabase CLI, configure an owner-authorized monitor target, and record the first real detection-to-resolution journey.
 
 ## Migration boundary
 
@@ -67,6 +67,7 @@ Hosted Supabase is current through `027`; its history matched the repository bef
 - `026`: revoke all `service_role` public-table privileges, then restore only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
 - `027`: hosted; immutable owner RED approval/single-use execution, exact candidate signed-delivery provenance/freshness, cross-App repository serialization, atomic history-preserving project handoff, and evidence-bound reverse handoff.
 - `028`: **not hosted.** Phase 1E production operations: ten RLS/FORCE-RLS tables, additive SEV1–SEV4 incident evidence, owner-scoped operations workflows, append-only evidence triggers, and zero new `service_role` table privileges.
+- `029`: **not hosted.** Phase 1E synthetic journeys: per-project journey definitions whose step safety and profile coverage are CHECK constraints, so an unsafe journey cannot be stored even if the route is bypassed.
 
 The verified pre-`027` dry run/lint and exact hosted ACL matrix remain recorded: `service_role` had only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19. Migration `027` adds two explicitly RLS/FORCE-RLS evidence tables with narrow owner SELECT and no browser mutation grants; its live owner handoff path passed.
 
