@@ -3,6 +3,7 @@
 import { ArrowUp, CheckCircle2, Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { TaskRunLauncher } from "@/components/task-run-launcher";
 import { cn } from "@/lib/cn";
 
 const examples = [
@@ -16,7 +17,7 @@ const examples = [
 type SubmissionState =
   | { kind: "idle" }
   | { kind: "pending" }
-  | { kind: "success"; id: string }
+  | { kind: "success"; id: string; taskId: string | null; projectId: string; prompt: string }
   | { kind: "error"; message: string };
 
 type ProjectOption = {
@@ -85,6 +86,7 @@ export function CommandComposer() {
       });
       const body = (await response.json()) as {
         command?: { id?: string };
+        task?: { id?: string };
         commandId?: string;
         error?: string;
         message?: string;
@@ -102,7 +104,13 @@ export function CommandComposer() {
       }
 
       const id = body.command?.id ?? body.commandId ?? "queued";
-      setState({ kind: "success", id });
+      setState({
+        kind: "success",
+        id,
+        taskId: body.task?.id ?? null,
+        projectId,
+        prompt: trimmed,
+      });
       setInstruction("");
     } catch (error) {
       setState({
@@ -126,8 +134,8 @@ export function CommandComposer() {
             <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.15em] text-[#819164]">Command intake</span>
           </div>
           <span className="inline-flex items-center gap-1.5 text-[10px] text-[#687586]">
-            <span className="size-1.5 rounded-full bg-[#ff6b72]" aria-hidden="true" />
-            Worker Not Connected
+            <span className="size-1.5 rounded-full bg-[#c6f135]" aria-hidden="true" />
+            Provider routing available
           </span>
         </div>
       </div>
@@ -165,7 +173,7 @@ export function CommandComposer() {
           aria-describedby="command-help command-status"
         />
         <p id="command-help" className="mt-1 px-1 text-[10px] leading-5 text-[#637081]">
-          Submissions are stored as queued intent in Supabase. Nothing is executed until a future authenticated worker, policy check, and approval flow are connected.
+          A submission is stored as an audited command and task. From there you can preview the routing decision, and run it on a provider once an owner has enabled outbound execution. A provider run produces analysis only.
         </p>
 
         <div className="mt-5 flex flex-wrap gap-2" aria-label="Example commands">
@@ -228,10 +236,19 @@ export function CommandComposer() {
             </p>
           ) : null}
           {state.kind === "success" ? (
-            <p className="flex items-start gap-2 rounded-lg border border-[#36491d] bg-[#18220f] p-3 text-[10px] leading-5 text-[#c5dd77]">
-              <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#c6f135]" aria-hidden="true" />
-              Command {state.id} was saved as queued control-plane intent. No AI worker executed it.
-            </p>
+            <>
+              <p className="flex items-start gap-2 rounded-lg border border-[#36491d] bg-[#18220f] p-3 text-[10px] leading-5 text-[#c5dd77]">
+                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#c6f135]" aria-hidden="true" />
+                Command {state.id} was saved as an audited command and task. Nothing has run yet.
+              </p>
+              {state.taskId ? (
+                <TaskRunLauncher
+                  projectId={state.projectId}
+                  taskId={state.taskId}
+                  instructions={state.prompt}
+                />
+              ) : null}
+            </>
           ) : null}
           {state.kind === "error" ? (
             <p className="flex items-start gap-2 rounded-lg border border-[#502c31] bg-[#2b181c] p-3 text-[10px] leading-5 text-[#e59399]">

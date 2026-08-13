@@ -1,6 +1,7 @@
 import { ExternalLink, LockKeyhole, Settings2, Shield, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 
+import { ProviderSettings } from "@/components/provider-settings";
 import { SafetyControls } from "@/components/safety-controls";
 import { PageHeader, Panel, SectionTitle, StatusBadge } from "@/components/ui";
 
@@ -15,12 +16,16 @@ export default function SettingsPage() {
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel className="p-5 sm:p-6">
-          <SectionTitle title="Autonomous controls" description="GREEN-only observation is scaffolded; every externally mutating capability is locked OFF." />
-          <div className="mt-5">
-            <SafetyControls />
-          </div>
-        </Panel>
+        <div className="space-y-4">
+          <Panel className="p-5 sm:p-6">
+            <SectionTitle title="Autonomous controls" description="GREEN-only observation is scaffolded; every externally mutating capability is locked OFF." />
+            <div className="mt-5">
+              <SafetyControls />
+            </div>
+          </Panel>
+
+          <ProviderSettings />
+        </div>
 
         <div className="space-y-4">
           <Panel className="p-5">

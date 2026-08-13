@@ -62,89 +62,7 @@ export const demoReport = {
   ],
 };
 
-export const agents = [
-  {
-    name: "Orchestrator",
-    role: "Work coordinator",
-    description: "Plans work, delegates bounded tasks, enforces policy gates, and assembles evidence.",
-    capabilities: ["Planning", "Delegation", "Risk routing", "Audit events"],
-  },
-  {
-    name: "Product",
-    role: "Product strategist",
-    description: "Translates outcomes into scoped requirements, acceptance criteria, and prioritized work.",
-    capabilities: ["Discovery", "Requirements", "Prioritization", "Acceptance criteria"],
-  },
-  {
-    name: "Frontend",
-    role: "Interface engineer",
-    description: "Builds accessible, responsive interfaces and client-side product behavior.",
-    capabilities: ["Next.js", "Accessibility", "Responsive UI", "Performance"],
-  },
-  {
-    name: "Backend",
-    role: "Application engineer",
-    description: "Designs APIs, service boundaries, validation, and secure server-side workflows.",
-    capabilities: ["APIs", "Validation", "Authorization", "Observability"],
-  },
-  {
-    name: "Database",
-    role: "Data engineer",
-    description: "Owns schema quality, migrations, data integrity, RLS, and query performance.",
-    capabilities: ["Postgres", "Supabase", "RLS", "Migrations"],
-  },
-  {
-    name: "QA",
-    role: "Quality engineer",
-    description: "Builds test strategies, validates behavior, and records trustworthy release evidence.",
-    capabilities: ["Unit tests", "Integration tests", "E2E", "Regression analysis"],
-  },
-  {
-    name: "Security",
-    role: "Security reviewer",
-    description: "Reviews threat boundaries, sensitive changes, dependencies, and secret handling.",
-    capabilities: ["Threat modeling", "Code review", "Secret scanning", "Policy checks"],
-  },
-  {
-    name: "Release",
-    role: "Delivery controller",
-    description: "Coordinates validation, deployment readiness, rollback plans, and release evidence.",
-    capabilities: ["Release gates", "Deployments", "Rollback", "Post-deploy checks"],
-  },
-  {
-    name: "CEO Reporter",
-    role: "Executive analyst",
-    description: "Summarizes outcomes, blockers, risk, owner decisions, and recommended next actions.",
-    capabilities: ["Executive reporting", "Metrics", "Risk summaries", "Recommendations"],
-  },
-] as const;
 
-export const connections = [
-  {
-    name: "GitHub",
-    description: "Repositories, pull requests, checks, issues, and future GitHub App events.",
-  },
-  {
-    name: "OpenAI",
-    description: "Provider-neutral model access configured only through server-side secrets.",
-  },
-  {
-    name: "Anthropic",
-    description: "Optional provider connection, kept separate from agent definitions.",
-  },
-  {
-    name: "Vercel",
-    description: "Deployment projects, previews, production health, and release status.",
-  },
-  {
-    name: "Supabase",
-    description: "Authentication, Postgres data, RLS, activity records, and application state.",
-  },
-  {
-    name: "Other",
-    description: "A provider-neutral extension point for future tools and engineering systems.",
-  },
-] as const;
 
 export const demoBacklog = [
   { id: "SF-101", title: "Connect GitHub App event ingestion", priority: "P0", risk: "YELLOW", status: "Ready" },
@@ -154,8 +72,3 @@ export const demoBacklog = [
   { id: "SF-105", title: "Add immutable agent run artifacts", priority: "P2", risk: "GREEN", status: "Planned" },
 ] as const;
 
-export const demoRuns = [
-  { id: "RUN-4F91", command: "Audit repository security", agent: "Security", state: "Awaiting approval", risk: "YELLOW", duration: "6m 42s" },
-  { id: "RUN-4F90", command: "Validate mobile performance", agent: "Frontend", state: "Completed", risk: "GREEN", duration: "12m 08s" },
-  { id: "RUN-4F8F", command: "Prepare release evidence", agent: "Release", state: "Completed", risk: "GREEN", duration: "4m 11s" },
-] as const;

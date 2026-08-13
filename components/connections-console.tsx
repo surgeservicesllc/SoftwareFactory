@@ -13,11 +13,11 @@ import {
   PlugZap,
   RefreshCw,
   ShieldAlert,
-  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { ProviderStatusPanel } from "@/components/provider-status-panel";
 import { NotConnectedBadge, Panel, StatusBadge } from "@/components/ui";
 
 type Organization = { id: string; name: string; slug: string; role: string };
@@ -297,10 +297,10 @@ export function ConnectionsConsole() {
         <SetupNotice title="No GitHub App installation connected" description="Choose Connect GitHub, authorize the app, select the intended account or organization, and grant access only to the repositories SoftwareFactory should manage." />
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <ProviderStatusPanel />
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {[
-          { name: "OpenAI model adapter", Icon: Waypoints, connected: false },
-          { name: "Anthropic model adapter", Icon: Waypoints, connected: false },
           { name: "Vercel deployment adapter", Icon: Cloud, connected: false },
           { name: "Supabase control plane", Icon: Database, connected: true },
           { name: "Other providers", Icon: Box, connected: false },
