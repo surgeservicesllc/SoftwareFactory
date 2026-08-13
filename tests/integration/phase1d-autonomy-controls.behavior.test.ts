@@ -257,6 +257,20 @@ describe("Phase 1D autonomy controls", () => {
       expect(rows[0].risk_ceiling_source).toBe("organization");
     });
 
+    it("reports the owner emergency stop distinctly from an automatic freeze", async () => {
+      await db.exec("reset role");
+      const { rows } = await db.query<{ emergency_stop_active: boolean; release_frozen: boolean }>(
+        `select emergency_stop_active, release_frozen
+         from public.resolved_autonomy_controls('${projectId}'::uuid)`,
+      );
+
+      // Both start false, and they are separate signals: an owner's deliberate
+      // stop and an automatic SEV1 freeze need different words and different
+      // actions to clear.
+      expect(rows[0].emergency_stop_active).toBe(false);
+      expect(rows[0].release_frozen).toBe(false);
+    });
+
     it("returns nothing for a project that does not exist", async () => {
       await db.exec("reset role");
       const { rows } = await db.query(
