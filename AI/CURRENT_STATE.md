@@ -4,7 +4,7 @@ Last reviewed: 2026-08-13
 
 Phase: 1B - Production GitHub App Integration
 
-Overall status: **Application release `edaaf62` is published, both CI jobs pass, and its exact matching Vercel production deployment is READY. Local and production Playwright pass 48/48, and the production signed-out race passes 30/30. Hosted migrations `011`-`025`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
+Overall status: **Hosted Supabase is verified through `026`, and owner Auth/onboarding now succeeds. Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY from `main` `3434387`, but its GitHub callback failed on nonexistent `GET /user/installations/{id}`. A bounded list-and-exact-ID fix passes locally but is unpublished. GitHub and webhook remain Not Connected.**
 
 "Implemented" below means code/schema exists in the verified application release. It does not mean the provider workflow was observed or the schema is hosted.
 
@@ -30,8 +30,8 @@ Overall status: **Application release `edaaf62` is published, both CI jobs pass,
 ## Data and security state
 
 - Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was last verified `ACTIVE_HEALTHY`; the CLI is authorized as `surgeservicesllc@gmail.com` and linked to this exact project.
-- Hosted migrations are applied only through `010`: `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010`.
-- Repository migrations `011`-`025` are **not hosted**:
+- Hosted migration history is current through `026`, including `001`-`005` and `007`-`026`; local and remote history match.
+- Hosted migrations `011`-`026` provide:
   - `011` closes initial direct connection/member mutations and aligns `github_pat_` detection.
   - `012` adds actor-attributed completed/failed change evidence.
   - `013` adds bounded service-role repository-grant reconciliation.
@@ -47,21 +47,23 @@ Overall status: **Application release `edaaf62` is published, both CI jobs pass,
   - `023` projects bounded verified GitHub activity details and attributes project events through the stable repository UUID.
   - `024` revokes authenticated direct reads of raw Activity/webhook-delivery rows and exposes a caller-member, 100-row `list_activity` safe projection.
   - `025` detects opaque generic secret assignments, binds protected approval snapshots to exact pre-provider reservations, enforces provider-boundary-before-write-token ordering, and serializes stable repository relinking while allowing relink after archival.
-- Promoting this authorization/audit/provider-ingress chain is a protected production action requiring exact owner approval and post-apply ledger, lint, grants, RLS/FORCE RLS, raw Activity/webhook denial, tenant/list-projection behavior, stable repository binding/relink concurrency, generic secret assignment behavior, approval/token/lease invariants, audit/detail redaction, ordering, recovery, CHECK-evaluation, and health verification.
-- Linked database lint is clean against hosted state through `010`. A complete linked dry run successfully plans exactly `011`-`025` and applies nothing; production application still requires exact owner approval.
-- Hosted catalog evidence before this increment reported 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 row-secret guards. Authenticated two-tenant/anonymous/RPC behavior remains pending.
+- `026` revokes all public-table privileges from `service_role` and restores only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
+- Post-apply verification reports an up-to-date dry run, clean linked lint, 23/23 public tables with RLS and FORCE RLS, 32 policies, zero policyless tables, 22 secret guards, and false tested raw authenticated/browser grants.
+- Post-`026` hosted verification reports an exact ACL-matrix mismatch count of zero. `service_role` has only SELECT/INSERT/UPDATE on `github_installations`, `github_repositories`, `github_webhook_deliveries`, and `github_change_requests`, and no table privileges on the other 19 public tables.
+- Authenticated two-tenant/RPC behavior and the complete real application session remain pending.
 - Privileged GitHub/Supabase secrets remain in server-side Vercel settings, not source, browser code, logs, fixtures, or database rows.
 
 ## Provider and release truth
 
 | Provider/capability | Status | Evidence/meaning |
 | --- | --- | --- |
-| Supabase hosted project | Connected through hosted migration `010`; broader behavioral gate pending | CLI authorized as `surgeservicesllc@gmail.com`, exact project linked, ledger through `010`, linked lint clean. Repository migrations `011`-`025` are not hosted; the complete linked dry run succeeds without applying them. |
+| Supabase hosted project | Connected through migration `026`; local=remote | Post-`026` dry run and lint are clean. Prior catalog evidence is 23/23 RLS+FORCE with 32 policies, zero policyless tables, 22 secret guards, and tested raw browser grants false. Exact ACL mismatch count is zero; `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. |
 | GitHub App object/secrets | Configured | App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) and protected server variable names exist. Configuration is not a live tenant connection. |
-| GitHub provider installation | Installed; repository-scoped | Personal `surgeservicesllc` installation `153286187` selects only `surgeservicesllc/SoftwareFactory`. |
-| GitHub App connection | **Not Connected** | Authenticated SoftwareFactory callback/tenant persistence, live repo/project/file/draft-PR journey, and signed webhook delivery are not verified. |
-| GitHub webhook | **Not Connected** | Route exists; the provider webhook remains blank/inactive and no valid signed production delivery is verified. |
-| Vercel UI hosting | Exact application release verified | Exact `surgeservices-projects/softwarefactory` deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is READY for commit `edaaf625c497380611b80092526926b1457e15a0` and serves the stable alias. Public Playwright passes 48/48 and the focused signed-out race passes 30/30; the in-product deploy/rollback adapter remains **Not Connected**. |
+| GitHub provider installation | Installed; repository-scoped | Latest installation `153442281` is App-JWT verified on `surgeservicesllc` and selects only `surgeservicesllc/SoftwareFactory`. |
+| GitHub App connection | **Not Connected** | Production callback failed because deployed code used nonexistent `GET /user/installations/{id}`. The local unpublished fix uses bounded `GET /user/installations` plus exact-ID lookup; tenant persistence and the live repository journey remain unverified. |
+| GitHub webhook | **Not Connected** | A GitHub App JWT validates App `4573846`, but `/app/hook/config` returns 404 and the UI does not retain activation. No active hook or valid signed production delivery is verified. |
+| Supabase Auth owner | Confirmed and authenticated | `surgeservicesllc@gmail.com` completed onboarding; the SoftwareFactory organization/workspace and owner membership exist. No GitHub connection or project has been verified. |
+| Vercel UI hosting | Current production READY | `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77`, immutable `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app`, stable alias, source `main` `3434387`. The local callback fix is not deployed; deploy/rollback adapter remains **Not Connected**. |
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -69,21 +71,19 @@ Overall status: **Application release `edaaf62` is published, both CI jobs pass,
 
 ## Verification evidence
 
-- `npm run check` passes lint, typecheck, 53 files/394 Vitest tests, and the production build; the build compiled 38 routes on Node 22.23.1, with `/` dynamic.
-- The dedicated integration suite passes 21 files/163 tests.
-- Current-tree coverage passes 53 files/394 tests: statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), and lines 71.37% (566/793).
+- Current local `npm run check` passes lint/typecheck, 54 files/398 Vitest tests, and a 38-route production build.
+- Hosted migration `026` is applied with local and remote history matching; post-apply dry run/lint and the exact ACL matrix pass.
 - Local and exact production Playwright each pass 48/48 across desktop, tablet, and mobile, including axe checks. The production signed-out browser-error race additionally passes 30/30 repeated runs.
 - Current-tree source and rebuilt-static scans found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present. Code-variable and documented placeholder assignments were reviewed as non-credentials.
 - Verified application release `edaaf625c497380611b80092526926b1457e15a0` has tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`; both author and committer are `surgeservicesllc@gmail.com`. CI run `31694775758` passed both the quality and browser/accessibility jobs.
-- Matching Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is READY at immutable URL `https://softwarefactory-7j3j40j63-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app`.
+- Production deployment `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and the stable alias, sourced from `main` `3434387`. It predates the local callback fix. GitHub still does not retain an active webhook.
 - Production checks passed the focused race 30/30 and full Playwright 48/48; tested pages returned 200 with CSP, HSTS, and X-Frame-Options; protected APIs and an invalid webhook returned 401; ten deployed assets (nine JavaScript and one CSS) contained no privileged markers; and deployment-log review found zero errors or HTTP 500s.
 - Later documentation-only successors do not supersede this application/runtime evidence unless application code changes.
-- No hosted migration or authenticated live-provider acceptance evidence has been produced for migrations `011`-`025` or the GitHub workflow.
+- Hosted evidence is current through `026`, and owner onboarding is confirmed. A successful post-fix callback, an active signed webhook, and authenticated live-provider acceptance remain absent.
 
 ## Release blockers
 
-1. Obtain exact owner approval for production migrations `011`-`025` and webhook secret/provider activation; apply only to `qpuofpmagrmyamahqwxw`, and run every post-apply check.
-2. Complete real production sign-in, email confirmation, onboarding, active-organization, and caller-session acceptance.
-3. Complete the authenticated GitHub callback, tenant connection/repository sync, project link, branch/commit/PR/check views, file read, safe edit/draft PR, stale/protected/idempotent/recovery cases, and disconnect/loss handling.
-4. Configure/verify the active GitHub webhook and observe valid, invalid, duplicate, out-of-order, deletion, and restore behavior in production.
+1. Publish the bounded callback fix, verify its exact deployment, then retry installation `153442281` from the authenticated owner session.
+2. Configure and verify the active GitHub App webhook; GitHub must retain the exact URL and accept a valid signed production delivery.
+3. Complete tenant isolation/RPC acceptance and the GitHub connection/repository/project/read/edit/draft-PR/disconnect journey.
 5. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.

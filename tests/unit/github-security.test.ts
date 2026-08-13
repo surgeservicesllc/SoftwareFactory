@@ -27,6 +27,7 @@ import {
   GitHubApiError,
   githubApiRequest,
   MAX_GITHUB_RESPONSE_BYTES,
+  verifyUserCanAccessInstallation,
 } from "@/lib/github/client";
 import { sha256Hex, verifyGitHubWebhookSignature } from "@/lib/github/webhook";
 import { containsLikelySecret } from "@/lib/server/sensitive-data";
@@ -285,6 +286,75 @@ describe("GitHub repository write safety", () => {
 });
 
 describe("GitHub provider boundaries", () => {
+  const accessibleInstallation = (id: number) => ({
+    account: {
+      avatar_url: null,
+      id: id + 10_000,
+      login: `owner-${id}`,
+      type: "User",
+    },
+    app_id: 4573846,
+    app_slug: "surge-softwarefactory",
+    created_at: "2026-08-13T12:00:00Z",
+    events: ["push"],
+    id,
+    permissions: { metadata: "read" },
+    repository_selection: "selected",
+    suspended_at: null,
+    target_type: "User",
+  });
+
+  it("verifies user access through GitHub's documented installation-list endpoint", async () => {
+    const installationId = 153286187;
+    const firstPage = Array.from({ length: 100 }, (_, index) => accessibleInstallation(index + 1));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ installations: firstPage, total_count: 101 }))
+      .mockResolvedValueOnce(Response.json({
+        installations: [accessibleInstallation(installationId)],
+        total_count: 101,
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(verifyUserCanAccessInstallation("ephemeral-user-token", installationId))
+      .resolves.toMatchObject({ app_id: 4573846, id: installationId });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0]))
+      .toBe("https://api.github.com/user/installations?per_page=100&page=1");
+    expect(String(fetchMock.mock.calls[1]?.[0]))
+      .toBe("https://api.github.com/user/installations?per_page=100&page=2");
+    expect(fetchMock.mock.calls.map((call) => String(call[0])))
+      .not.toContain(`https://api.github.com/user/installations/${installationId}`);
+  });
+
+  it("fails closed when the user installation list omits the callback installation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      installations: [accessibleInstallation(123)],
+      total_count: 1,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(verifyUserCanAccessInstallation("ephemeral-user-token", 456))
+      .rejects.toMatchObject({
+        code: "github_installation_not_authorized",
+        status: 403,
+      });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed on malformed user installation authorization metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+      installations: [{ id: 153286187 }],
+      total_count: 1,
+    })));
+
+    await expect(verifyUserCanAccessInstallation("ephemeral-user-token", 153286187))
+      .rejects.toMatchObject({
+        code: "github_installations_invalid",
+        status: 502,
+      });
+  });
+
   it("requests a repository-scoped installation token with explicit permissions", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {

@@ -10,16 +10,16 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 
 - Application commit `edaaf625c497380611b80092526926b1457e15a0` has tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`; both author and committer are `surgeservicesllc@gmail.com`.
 - GitHub Actions run `31694775758` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
-- Production deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` was verified READY for that exact application commit at `https://softwarefactory-7j3j40j63-surgeservices-projects.vercel.app` and served at the stable alias.
+- Current production deployment `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app`, serves the stable alias, and is sourced from `main` `3434387`. It does not contain the local callback fix.
 - Production focused signed-out race passed 30/30, and Playwright passed 48/48 across desktop, tablet, and mobile, including axe checks.
 - Tested pages returned 200 with CSP, HSTS, and X-Frame-Options; protected unauthenticated API requests and an invalid webhook returned 401; all ten deployed assets (nine JavaScript and one CSS) were free of privileged markers; and deployment-log review found zero errors or HTTP 500s.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
 - GitHub App server-only variable names are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`).
-- GitHub provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. The authenticated in-product callback/tenant connection remains pending, and the provider webhook remains blank/inactive with App-authenticated hook configuration returning `404`/no hook object.
+- GitHub provider installation `153442281` is App-JWT verified on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. Production callback failed because it used nonexistent `GET /user/installations/{id}`; the bounded list/exact-ID correction is local and unpublished. The provider webhook remains blank/inactive and **Not Connected**.
 - Preview Supabase variables are not independently verified.
 - The live authenticated GitHub acceptance journey is still required before Phase 1B can be called complete.
 
-This evidence is bound to the exact application commit/deployment above. It proves the public release scope only; it does not prove hosted migrations `011`-`025`, authenticated tenant isolation, the in-product GitHub connection, or webhook acceptance. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
+This evidence is bound to the exact application commit/deployment above. Hosted migrations through `026` have separate database evidence, but this runtime evidence does not prove authenticated tenant isolation, the in-product GitHub connection, or webhook acceptance. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
 
 ## Project configuration
 

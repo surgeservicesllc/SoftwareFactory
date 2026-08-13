@@ -67,7 +67,9 @@ describe("safe activity list RPC", () => {
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260812002500_harden_sensitive_assignments_and_protected_approval_integrity.sql");
+    expect(migrationFiles.at(-1)).toBe(
+      "20260812002600_narrow_hosted_service_role_table_grants.sql",
+    );
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }

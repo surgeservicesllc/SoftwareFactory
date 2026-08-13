@@ -176,3 +176,17 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted for local implementation; hosted migration `025` pending
 - Decision: Bind each protected approval snapshot to its exact reserved change, revalidate it at provider entry, and mint the write-scoped installation token only after that durable boundary. Detect non-placeholder values assigned to generic secret-bearing keys. Serialize project linking by tenant/repository UUID, rejecting concurrent active duplicates while allowing relink after all prior projects are archived.
 - Consequence: Approval cannot be attached to a different or already-started change, privileged GitHub token minting cannot precede the database execution boundary, opaque credentials cannot evade prefix-only checks, and mutable repository names cannot race active-link ownership.
+
+## ADR-026 - Reconcile hosted service-role table grants explicitly
+
+- Date: 2026-08-13
+- Status: Accepted, applied, and verified in hosted Supabase
+- Decision: Hosted verification after applying migrations `011`-`025` found Supabase-managed default ACL drift granting `service_role` ALL table privileges on 22 public tables. Add one forward migration that revokes all `service_role` privileges on every public table, then grants only SELECT, INSERT, and UPDATE on `github_installations`, `github_repositories`, `github_webhook_deliveries`, and `github_change_requests`. Preserve the separately reviewed function EXECUTE boundary.
+- Consequence: Post-apply verification reports zero ACL-matrix mismatches: `service_role` retains only SELECT/INSERT/UPDATE on the four GitHub ingress tables and has no table privileges on the other 19. Phase 1B remains incomplete for Auth/provider acceptance; no reset or history repair is permitted.
+
+## ADR-027 - Verify user installation access through the documented bounded list endpoint
+
+- Date: 2026-08-13
+- Status: Accepted locally; publication and production retry pending
+- Decision: GitHub does not provide `GET /user/installations/{id}`. After exchanging the callback code, request bounded documented `GET /user/installations`, then require an exact match for the callback installation ID and App before minting an installation token or persisting tenant state.
+- Consequence: Installation `153442281` is provider-scoped and App-JWT verified, but GitHub remains **Not Connected** until this local fix is published and the authenticated production callback succeeds. A list result without the exact ID fails closed.

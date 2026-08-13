@@ -15,27 +15,28 @@ npm run test:e2e
 npm run build
 ```
 
-## Last verified baseline and current-tree status (2026-08-13)
+## Last verified application release and current hosted status (2026-08-13)
 
 | Gate | Result |
 | --- | --- |
-| Current release check | Pass - lint, typecheck, 53 files/394 Vitest tests, production build compiled 38 routes with `/` dynamic |
-| Current integration suite | Pass - 21 files/163 tests |
-| Current migration chain | Pass in the complete suite through local migration `025`; hosted behavior remains pending |
-| Current-tree coverage | Pass - 53 files/394 tests; statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), lines 71.37% (566/793) |
+| Current local check | Pass - lint, typecheck, 54 files/398 Vitest tests, 38-route production build |
+| Application release integration suite | Pass - 21 files/163 tests |
+| Migration `026` | Pass locally and hosted - local=remote, dry run/lint clean, exact ACL mismatch count zero |
+| Current local coverage | Pass - statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37% |
 | Local and exact production E2E/responsive/accessibility | Pass - Playwright 48/48 across desktop/tablet/mobile, including axe checks |
 | Signed-out dashboard race | Pass - focused browser-error test repeated 30/30 against production |
-| Current-tree secret/client scan | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
+| Verified application-release secret/client scan | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
 | Prior local baseline before migrations `014`-`019` | 25 files/208 tests, 34-route build, and 12/12 local E2E passed; historical evidence only |
-| Hosted Supabase migration application | Pass through `010`; transactional preflight `unsafe_project_rows=0` and hosted safety checks passed |
-| Local migrations `011`-`025` | Not hosted; exact owner approval and post-apply ledger/lint/grant/RLS/RPC/raw-Activity/webhook-denial/list-projection/repository-binding/relink/approval-token-lease/secret-assignment/activity-detail/ordering/recovery/CHECK-helper checks pending |
-| Hosted Supabase CLI/link | Authorized as `surgeservicesllc@gmail.com`; linked to exact project `qpuofpmagrmyamahqwxw`; hosted ledger still through `010` |
-| Migration dry run | Complete linked `011`-`025` plan succeeds; no migration applied |
-| Hosted Supabase lint | Linked database lint is clean against hosted state through `010` |
+| Hosted Supabase migration application | Pass through `026`; local=remote, dry run up to date |
+| Hosted RLS/catalog/browser grants | Pass - 23/23 RLS+FORCE, 32 policies, zero policyless, 22 secret guards, tested raw authenticated/browser grants false |
+| Hosted service-role table grants | Pass - exact matrix mismatch zero; SELECT/INSERT/UPDATE on four GitHub ingress tables, no table privileges on other 19 |
+| Hosted Supabase CLI/link | Authorized as `surgeservicesllc@gmail.com`; linked to exact project `qpuofpmagrmyamahqwxw` |
+| Hosted Supabase lint | Clean against hosted state through `026` |
 | GitHub publication/CI | Pass - application commit `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`; CI `31694775758`, both jobs green |
 | Exact production Playwright | Pass - focused race 30/30 and full 48/48 at `https://softwarefactory-tan.vercel.app` on READY deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` for the exact application SHA |
-| GitHub provider installation | Pass — personal `surgeservicesllc` installation `153286187`, `surgeservicesllc/SoftwareFactory` only; webhook still blank/inactive |
-| Vercel configuration/runtime | Exact `surgeservices-projects/softwarefactory` project linked; exact deployment READY; tested pages 200 with CSP/HSTS/X-Frame-Options; protected APIs and invalid webhook 401; ten deployed assets (nine JavaScript and one CSS) contain no privileged markers; zero error/500 logs |
+| Owner Auth/onboarding | Pass - `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory workspace owner onboarding succeeded |
+| GitHub provider installation | Pass for scope - installation `153442281`, App-JWT verified, `surgeservicesllc/SoftwareFactory` only; production callback failed on nonexistent endpoint |
+| Vercel configuration/runtime | `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` READY at immutable URL and stable alias, source `main` `3434387`; callback fix not deployed |
 | Real in-product GitHub acceptance | Pending; App connection/webhook remain **Not Connected** |
 
 The repository and intended production/CI runtime require Node 22 or newer. The final local run used Node 22.23.1; older historical test evidence does not replace that run.
@@ -87,7 +88,7 @@ The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
 ## Hosted Supabase evidence
 
-Hosted migration `010` is in the ledger. Its transactional preflight/application checks returned zero unsafe projects, kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated RPC execute true, and anonymous execute false. The CLI is authorized as `surgeservicesllc@gmail.com`, linked to exact project `qpuofpmagrmyamahqwxw`, and linked database lint is clean. A complete linked dry run successfully plans exactly `011`-`025` and applies nothing. Next, obtain exact owner approval, apply the full chain, then test two authenticated tenants plus anonymous denial without service role as the user-under-test.
+Hosted ledger/dry-run/lint checks pass through `026`, local and remote match, and the exact service-role ACL matrix has zero mismatches. Next, test two authenticated tenants plus anonymous denial without service role as the user-under-test.
 
 ## Real GitHub acceptance
 

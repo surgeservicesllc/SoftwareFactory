@@ -2,9 +2,9 @@
 
 Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). The Supabase CLI is authorized as `surgeservicesllc@gmail.com` and linked to this exact project. Provider health was verified as `ACTIVE_HEALTHY` on 2026-08-12.
 
-Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` have been applied, and the hosted ledger still ends at `010_phase1d_observation_controls`. Migration `010` was applied transactionally after `unsafe_project_rows=0`; hosted checks confirmed kill-switch default true, both constraints validated, zero switch-off organizations, zero unsafe projects, authenticated controls-RPC execute, and anonymous execute denied. With the restored exact CLI identity/link, linked database lint is clean. A linked push dry run successfully plans the complete `011`-`025` chain and applies nothing. Authenticated cross-tenant, broader privileged-RPC, and real application-session verification remain pending.
+The hosted ledger is current through migration `026`; local and remote history match. Linked dry run is up to date and lint is clean. Catalog checks report 23/23 public tables with RLS and FORCE RLS, 32 policies, zero policyless tables, 22 secret guards, and false tested raw authenticated/browser grants.
 
-Local forward migrations `011`-`025` are not in that hosted ledger. They alter authorization/grants, audit behavior, change reservation/recovery, linked-project metadata propagation, privileged webhook lifecycle ordering, the narrow service-role helper grant needed for sensitive-JSON CHECK evaluation, authenticated base-table read access, stable repository authorization/relinking, owner-approved protected-change approval/token/lease integrity, generic secret assignment detection, and bounded Activity projection. Do not apply them to `qpuofpmagrmyamahqwxw` without exact current owner approval for the complete chain. After application, verify the ledger, linked lint, direct table grants, function/helper grants and pinned search paths, caller/tenant/resource checks, raw Activity/webhook denial plus safe `list_activity` output/limits, stable repository binding/relink concurrency, approval/expiry/lease/token-order invariants, generic assignment rejection/placeholder allowance, immutable bounded/redacted activity evidence, repository-grant reconciliation, stale/terminal event ordering, retry/recovery behavior, provider-ingress CHECK evaluation, and application health before promotion.
+Hosted migration `026` remediates the Supabase-managed default-ACL drift found after `025`. The exact post-apply ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on `github_installations`, `github_repositories`, `github_webhook_deliveries`, and `github_change_requests`, and no table privileges on the other 19 public tables.
 
 ## Hosted Auth configuration
 
@@ -30,7 +30,7 @@ Do not add wildcard redirect URLs. Local and production callbacks must remain ex
 
 The repository implements email/password sign-up/sign-in, existing-user magic link, sign-out, callback exchange, onboarding, organization creation, membership resolution, and active-organization selection. Magic-link submission uses `shouldCreateUser: false`; a new user must complete sign-up/confirmation first.
 
-A real authenticated production session and end-to-end GitHub installation have not yet been verified. Do not treat Auth configuration or a healthy project as proof of that journey.
+`surgeservicesllc@gmail.com` is confirmed and authenticated. SoftwareFactory organization/workspace onboarding and owner membership succeeded. A GitHub connection/project has not yet been persisted because the current production callback failed; tenant/provider end-to-end acceptance remains unverified.
 
 ## Local workflow
 
@@ -54,7 +54,7 @@ npx supabase db reset
 7. Verify table/RPC/RLS/FORCE RLS state and application compatibility.
 8. Exercise allowed access plus cross-tenant and anonymous denial using user sessions, not service-role access.
 
-Current stop condition: do not call the hosted data boundary fully verified until migrations `011`-`025` are exactly approved/applied and authenticated cross-tenant, anonymous-denial, privileged-RPC, audit, and real application-session checks pass. The hosted ledger remains through `010`; linked lint and the complete `011`-`025` dry run are clean, and no pending migration has been applied.
+Current stop condition: the exact `service_role` table boundary is verified, but do not call the complete hosted tenant/provider boundary verified until authenticated cross-tenant, anonymous-denial, privileged-RPC, audit, provider-ingress, and real application-session checks pass.
 
 ## RLS expectations
 

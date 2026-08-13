@@ -37,7 +37,7 @@ Interactive Auth, organization, project, and repository reads use the caller's s
 | `GITHUB_APP_WEBHOOK_SECRET` | Raw-body HMAC verification secret, minimum 32 bytes |
 | `GITHUB_APP_STATE_SECRET` | Installation state signing secret, minimum 32 bytes and distinct from webhook secret |
 
-Configure exactly one private-key representation. The application prefers `GITHUB_APP_PRIVATE_KEY_BASE64` when both exist. GitHub values are configured for Vercel Production and Preview, but this is configuration evidence only; the App remains **Not Connected** until installation and the full production acceptance workflow pass.
+Configure exactly one private-key representation. The application prefers `GITHUB_APP_PRIVATE_KEY_BASE64` when both exist. Current production deployment `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY from `main` `3434387`, but does not contain the local callback fix. The webhook remains blank/inactive. The App remains **Not Connected** until the corrected callback and full acceptance workflow pass.
 
 ## Safety/deferred providers
 

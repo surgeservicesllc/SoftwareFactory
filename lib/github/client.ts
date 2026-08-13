@@ -57,6 +57,11 @@ const repositoriesSchema = z.object({
   repositories: z.array(repositorySchema),
 });
 
+const userInstallationsSchema = z.object({
+  total_count: z.number().int().nonnegative(),
+  installations: z.array(installationSchema).max(100),
+});
+
 const accessTokenSchema = z.object({
   token: z.string().min(20),
   expires_at: z.string().datetime({ offset: true }),
@@ -315,12 +320,33 @@ export async function exchangeGitHubUserCode(
 }
 
 export async function verifyUserCanAccessInstallation(userToken: string, installationId: number) {
-  const raw = await githubApiRequest(`/user/installations/${installationId}`, { token: userToken });
-  const parsed = installationSchema.safeParse(raw);
-  if (!parsed.success || parsed.data.id !== installationId) {
-    throw new GitHubApiError(403, "github_installation_not_authorized", "The GitHub installation is not authorized for this user.");
+  for (let page = 1; page <= 5; page += 1) {
+    const raw = await githubApiRequest(`/user/installations?per_page=100&page=${page}`, {
+      token: userToken,
+    });
+    const parsed = userInstallationsSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new GitHubApiError(
+        502,
+        "github_installations_invalid",
+        "GitHub returned invalid installation authorization metadata.",
+      );
+    }
+
+    const installation = parsed.data.installations.find((candidate) => candidate.id === installationId);
+    if (installation) return installation;
+
+    const observed = page * 100;
+    if (parsed.data.installations.length < 100 || observed >= parsed.data.total_count) {
+      break;
+    }
   }
-  return parsed.data;
+
+  throw new GitHubApiError(
+    403,
+    "github_installation_not_authorized",
+    "The GitHub installation is not authorized for this user.",
+  );
 }
 
 export async function revokeGitHubUserToken(

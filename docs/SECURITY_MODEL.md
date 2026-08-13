@@ -32,7 +32,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 - Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
 - Store only a redacted subset plus hash/status metadata. Authenticated clients cannot directly read webhook-delivery or raw Activity rows; `list_activity` may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence, never the stored subset or unknown nested fields.
 - Unknown events/installations are ignored safely and cannot mutate another tenant.
-- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. The required forward migrations are local and not hosted yet.
+- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`026` are hosted.
 
 ## Repository mutations
 
@@ -52,13 +52,13 @@ Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_
 
 ## Audit and privacy
 
-Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Local migration `012` makes completed and failed GitHub change requests explicitly actor-attributed and retains only bounded branch/commit failure evidence; `014` audits exact linked-project metadata propagation; `015` audits completion recovery; `016`/`018` audit applied, stale, ignored, and terminal provider transitions; `022` records immutable protected approval and provider-boundary/lease transitions; `023` records bounded verified GitHub activity detail with stable project attribution; and `024` revokes authenticated reads of raw Activity/webhook rows behind the bounded caller-member `list_activity` RPC. None is hosted yet. Webhook payloads and change records deliberately avoid raw credentials and full file bodies.
+Important operations append actor, tenant, target, event type, timestamp, request/correlation data, and redacted evidence. Activity events are immutable. Migrations `012`, `014`-`016`, `018`, and `022`-`024` are hosted; webhook payloads and change records deliberately avoid raw credentials and full file bodies.
 
-Local migrations `011` and `017` remove direct authenticated writes to connections, memberships, projects, project links, and GitHub change requests so narrow audited workflows remain the intended mutation path. Until the complete local chain is explicitly approved and applied to hosted Supabase, that hosted hardening is pending rather than assumed.
+Hosted migrations `011` and `017` remove direct authenticated writes so narrow audited workflows remain the intended mutation path.
 
-Local migration `019` addresses the separate provider-ingress CHECK-expression boundary: service role may execute only the SECURITY DEFINER sensitive-JSON wrapper referenced by table constraints. Its recursive implementation and the standalone text classifier remain inaccessible. This grant is local/unhosted and requires exact owner-approved promotion plus a real service-role insert/rejection matrix.
+Hosted migration `019` exposes only the SECURITY DEFINER sensitive-JSON wrapper required by provider-ingress CHECK expressions; recursive/text classifiers remain inaccessible. Hosted migration `026` closes the separately discovered default-ACL table-grant drift.
 
-Local migration `020` closes browser-visible base-table column access with bounded list RPCs. Migration `021` makes the stable repository UUID the authorization/attribution key. Migration `022` adds owner-only protected approval and pre-provider lease invariants. Migration `023` adds allowlisted GitHub activity detail. Migration `024` makes that Activity projection the only authenticated read surface for raw audit/webhook state. Migration `025` hardens generic secret assignments, exact approval/reservation integrity, provider-boundary/token ordering, and serialized repository relinking. All are local/unhosted and require caller-session, cross-tenant, anonymous, rename/same-name/archive/relink concurrency, expiry/reclaim, token-order, immutability, assignment-rejection, and redaction verification after promotion.
+Migrations `020`-`026` are hosted; local/remote history, dry run, lint, catalog, tested raw authenticated/browser grants, and the exact service-role ACL matrix pass. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. Real caller-session, cross-tenant, anonymous, and provider acceptance remains pending.
 
 ## Supply chain and delivery
 

@@ -2,7 +2,7 @@
 
 Status: **Implemented with a repository-scoped provider installation; in-product connection and webhook remain Not Connected pending authenticated callback and end-to-end verification.**
 
-The GitHub App exists, its server-only values are configured in Vercel, and personal-account provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. That provider-side fact does not satisfy the product definition of Connected: the installation has not completed the authenticated SoftwareFactory callback, tenant connection persistence, repository synchronization, project linking, file read/change, draft pull request, or webhook acceptance journey.
+The GitHub App exists, its server-only values are configured in Vercel, and latest provider installation `153442281` is App-JWT verified on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. Owner `surgeservicesllc@gmail.com` is confirmed/authenticated and SoftwareFactory workspace onboarding succeeded. Production callback failed because deployed code called nonexistent `GET /user/installations/{id}`. A local unpublished patch instead calls documented bounded `GET /user/installations` and performs an exact-ID lookup. These facts do not satisfy the product definition of Connected.
 
 ## Registered App
 
@@ -21,11 +21,11 @@ The GitHub App exists, its server-only values are configured in Vercel, and pers
 | Expiring user authorization tokens | Enabled |
 | Device flow | Disabled |
 | Redirect on installation update | Enabled |
-| Verified provider installation | Personal `surgeservicesllc` installation `153286187` |
+| Verified provider installation | Personal `surgeservicesllc` installation `153442281` |
 | Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
 | Sole remaining App key fingerprint | `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` |
 
-The application webhook route and Vercel secret configuration exist, and the App permissions/events are configured. However, the GitHub App General form remains blank/inactive and App-authenticated hook configuration returns `404` with no hook object. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
+The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. However, `/app/hook/config` returns `404` and the provider UI does not retain activation. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
 
 ## Repository permissions
 
@@ -72,7 +72,7 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The exact Vercel project `surgeservices-projects/softwarefactory` is linked, and the production/preview encrypted GitHub variable names are present without printing their values. The protected private-key value was rotated to the sole remaining GitHub App key; only its public fingerprint is recorded above. Release evidence recorded 2026-08-13 binds application commit `edaaf625c497380611b80092526926b1457e15a0` to READY deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` and the stable production alias; production focused race passes 30/30 and Playwright passes 48/48. This hosting evidence does not validate the authenticated in-product GitHub connection or inactive webhook. Production Supabase public/runtime variable names are present. Preview Supabase configuration is not independently verified.
+The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and the stable alias, sourced from `main` `3434387`. It does not contain the callback fix. The webhook remains blank/inactive and **Not Connected**.
 
 ## Connection flow
 
@@ -81,7 +81,7 @@ The exact Vercel project `surgeservices-projects/softwarefactory` is linked, and
 3. The server creates signed state valid for ten minutes and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
 4. The browser follows the returned GitHub installation URL.
 5. GitHub returns `code`, `installation_id`, and signed `state` to the callback.
-6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, verifies that user can access the installation and that it belongs to this App, then reads installation/repository state using an App installation token.
+6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, lists the user's installations through bounded documented `GET /user/installations`, selects the exact returned installation ID, verifies it belongs to this App, then reads repository state using an App installation token. This corrected flow is local and unpublished.
 7. The ephemeral user OAuth token is never persisted or returned and is revoked best-effort after verification.
 8. An audited database workflow serializes by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, stores only installation/account/repository metadata, and updates the provider-neutral connection.
 9. The UI displays Connected only when the connection and installation are both active.
@@ -122,7 +122,7 @@ Migration `20260812000700_github_project_linking.sql` adds a transactional funct
 
 Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
 
-Repository migrations `011`-`025` form one unhosted hardening chain. `011`-`013` close initial direct mutation paths, add actor-attributed terminal evidence, and reconcile newly granted repositories. `014` propagates a provider-authoritative rename/default branch only to exact connection-linked projects. `015` recovers a provider-created draft PR after an ambiguous completion response. `016` makes installation deletion terminal and orders installation lifecycle changes by provider time. `017` closes remaining direct authenticated connection/project/link/change-request writes and reserves exact live change intent through an authenticated RPC. `018` orders repository events by provider time and preserves terminal repository deletion until an explicit newer restore, which remains unselected pending access synchronization. `019` grants service role only the SECURITY DEFINER sensitive-JSON wrapper required when provider-ingress table CHECK constraints run, while leaving recursive and text classifiers inaccessible. `020` removes authenticated direct reads of sensitive control-plane base tables in favor of bounded caller-member projections. `021` persists the immutable repository UUID as the project/change authorization key. `022` records exact short-lived owner-only RED protected-change approval before provider execution and adds a five-minute pre-provider reservation lease. `023` records bounded allowlisted GitHub activity details and attributes project events through the stable repository UUID. `024` revokes authenticated reads of raw Activity/webhook-delivery rows and exposes the caller-member, bounded `list_activity` projection. `025` rejects opaque generic secret assignments, enforces exact protected-approval/reservation integrity and provider-boundary-before-token ordering, and serializes active project linking by stable repository UUID while permitting relink after archival. None is hosted; exact owner approval and complete post-apply verification are required before production claims use them.
+Repository migrations `011`-`026` are hosted; local and remote match, dry run/lint are clean, and prior RLS/catalog/browser-grant checks pass. The exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
 
 All exposed GitHub integration tables, including the protected-approval table added by `022`, use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
 
@@ -153,9 +153,9 @@ Successful ordinary or approved protected writes create `softwarefactory/*` bran
 - Deduplicate by delivery ID; reject reuse of an ID with different payload bytes.
 - Store a SHA-256 hash plus an allowlisted/redacted payload subset, not the raw payload.
 - Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
-- After migration `013` is hosted, upsert newly granted repository metadata through its service-role-only RPC before recording the repository-selection reconciliation.
-- After migrations `014`, `016`, and `018` are hosted, propagate repository rename/default-branch metadata only through the exact linked connection; order installation/repository transitions by provider timestamps; keep deletion terminal; and audit ignored stale or terminal events.
-- After migrations `021`, `023`, and `024` are hosted, project attribution follows the immutable repository UUID and accepted events project only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence through `list_activity`. Authenticated browser sessions cannot directly read raw Activity rows or even the stored redacted webhook subset; raw bodies and unknown metadata never become browser output.
+- Hosted migration `013` supports service-role-only reconciliation of newly granted repository metadata after signature and tenant validation.
+- Hosted migrations `014`, `016`, and `018` propagate exact linked metadata, order transitions by provider time, preserve terminal deletion, and audit stale/terminal outcomes.
+- Hosted migrations `021`, `023`, and `024` use immutable repository identity and bounded `list_activity`; authenticated browser sessions cannot directly read raw Activity or webhook evidence.
 - Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
 
 ## Production acceptance checklist
@@ -165,7 +165,7 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - [ ] Production release contains the current routes and migrations.
 - [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
 - [ ] An authenticated SoftwareFactory owner/admin starts the installation flow.
-- [x] Personal GitHub provider installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
+- [x] Latest GitHub provider installation `153442281` is App-JWT verified on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
 - [ ] Callback verifies the installation and returns to Connections.
 - [ ] Connection shows the real account, installation ID, repository-selection mode, repository count, and fresh sync time.
 - [ ] Manual sync handles success and revoked/insufficient-permission failure.

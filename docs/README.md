@@ -1,6 +1,6 @@
 # Documentation index
 
-SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. A personal-account, repository-scoped provider installation exists, and the repository contains the Phase 1B application/database boundaries through local migration `025`, but the authenticated in-product callback/connection, hosted migrations after `010`, active webhook, and complete production workflow remain unverified. Until that acceptance run succeeds, the UI and memory must continue to say **Not Connected**.
+SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history is verified through `026`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Latest installation `153442281` is repository-scoped and App-JWT verified, but production callback failed on nonexistent `GET /user/installations/{id}`. The bounded documented list/exact-ID fix is local and unpublished; the webhook remains blank/inactive. GitHub must continue to say **Not Connected**.
 
 ## Developer and operator guides
 
