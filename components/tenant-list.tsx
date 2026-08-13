@@ -27,16 +27,18 @@ export function useTenantList<Item>(
   path: string,
   pick: (body: Record<string, unknown>) => Item[],
   unavailableMessage: string,
+  enabled = true,
 ) {
   const configured = isBrowserSupabaseConfigured();
+  const canLoad = configured && enabled;
   const [state, setState] = useState<TenantListState<Item>>(
-    () => configured ? { kind: "loading" } : { kind: "signed-out" },
+    () => canLoad ? { kind: "loading" } : { kind: "signed-out" },
   );
 
   const load = useCallback(async () => {
     // Without browser Supabase configuration the request can only fail, so
     // present the sign-in path instead of a failed call and a broken page.
-    if (!configured) return setState({ kind: "signed-out" });
+    if (!canLoad) return setState({ kind: "signed-out" });
     setState({ kind: "loading" });
     try {
       const response = await fetch(path, { cache: "no-store" });
@@ -55,12 +57,13 @@ export function useTenantList<Item>(
     }
     // `pick` is defined inline by callers; depending on it would reload forever.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configured, path, unavailableMessage]);
+  }, [canLoad, path, unavailableMessage]);
 
   useEffect(() => {
+    if (!canLoad) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [canLoad, load]);
 
   return { state, reload: load };
 }

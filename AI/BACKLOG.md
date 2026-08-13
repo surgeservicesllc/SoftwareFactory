@@ -20,14 +20,15 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 ## Phase 1B release blockers
 
-- [x] Pass current-tree lint/typecheck, the consolidated 52-file/392-test Vitest suite through migration `025`, and the production build with 38 generated static routes.
+- [x] Pass current-tree lint/typecheck, the consolidated 53-file/394-test Vitest suite through migration `025`, and the 38-route production build (`/` dynamic).
 - [x] Pass coverage: statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37%.
-- [x] Pass production-server Playwright 48/48 across desktop/tablet/mobile including axe checks.
-- [x] Pass final source/client secret gates: zero actual credential candidates, zero privileged/static marker matches, zero unexpected sensitive files; one benign Vercel environment identifier reviewed.
-- [ ] Commit/push the exact reviewed hardening tree to `origin/main`, verify CI, record exact provenance, and verify the resulting Vercel production deployment/alias/HTTP/E2E evidence.
+- [x] Pass production-server Playwright 48/48 across desktop/tablet/mobile including axe checks for published snapshot `7d22de6`; pass the local follow-up's focused signed-out browser-error regression 30/30.
+- [x] Re-run the full local production-server gate after the signed-out dashboard follow-up: 48/48 desktop/tablet/mobile including axe.
+- [x] Re-run the final source/client artifact scan after the signed-out dashboard follow-up: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present.
+- [x] Publish exact tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772` as `origin/main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa` with author/committer `surgeservicesllc@gmail.com`; CI run `31692336607` passed both jobs, and matching READY Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` passed production HTTP/security/client/log checks and Playwright 48/48 at the stable alias.
+- [ ] Publish the locally validated signed-out dashboard follow-up, rerun CI, and bind it to a new exact READY Vercel production deployment before treating it as production evidence.
 - [ ] Obtain exact owner approval for hosted migrations `011`-`025`; dry-run the full chain, apply to `qpuofpmagrmyamahqwxw`, and verify ledger, lint, RLS/FORCE RLS, table/function/helper grants, actor/tenant/resource checks, raw Activity/webhook denial and safe list RPCs, stable repository binding/relink concurrency, protected approval/token/lease invariants, generic assignment handling, immutable/redacted bounded activity, provider-ingress CHECK evaluation, ordering/terminal behavior, recovery behavior, and health.
-- [x] Restore Supabase CLI access as `surgeservicesllc@gmail.com`, link exact project `qpuofpmagrmyamahqwxw`, and obtain a clean linked database lint. Dry run `011`-`024` passed before `025` existed.
-- [ ] Restore the database login-role authorization currently returning `403`, then pass a full `011`-`025` dry run before approved application.
+- [x] Restore Supabase CLI access as `surgeservicesllc@gmail.com`, link exact project `qpuofpmagrmyamahqwxw`, obtain clean linked database lint, and pass a complete `011`-`025` dry run without applying a migration.
 - [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test.
 - [ ] Complete production sign-up/email confirmation/sign-in/onboarding/active-organization acceptance.
 - [ ] Complete the authenticated SoftwareFactory owner callback for provider installation `153286187`, persist the tenant connection, and verify identity, permissions, selected repository count, freshness, and audit evidence.
@@ -38,8 +39,9 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
 - [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
 
-## Historical evidence retained
+## Release evidence retained
 
+- Current published release: `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, CI `31692336607`, Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb`, production Playwright 48/48.
 - Hosted Supabase migrations through `010` and prior fail-closed observation-control checks.
 - Provider installation `153286187`, scoped only to `surgeservicesllc/SoftwareFactory`.
 - Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
@@ -57,3 +59,10 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [ ] Run final verification on the repository-supported Node version.
 - [x] Move Vitest configuration to native ESM (`vitest.config.mts`) to remove the prior config-loader warning.
 - [ ] Expand authenticated E2E once a safe disposable live-provider fixture exists.
+
+## Owner review - protected delivery controls
+
+These are recorded for deliberate owner review and are not evidence that Phase 1B provider acceptance passed:
+
+- [ ] Decide whether to enable protection/required checks and require verified signatures on `main`; the branch is currently unprotected and the published release commit is unsigned. Any settings change is a protected owner-approved action.
+- [ ] Review unexpected `theagoras.com` Vercel aliases, verify ownership and routing intent, and remove or retain them only through an explicitly approved protected routing change.

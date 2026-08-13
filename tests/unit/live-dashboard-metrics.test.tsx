@@ -22,13 +22,15 @@ beforeEach(() => {
 
 describe("LiveDashboardMetrics", () => {
   it("does not present live counts to a signed-out visitor", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: { code: "unauthorized" } }, 401)));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
 
-    render(<LiveDashboardMetrics />);
+    render(<LiveDashboardMetrics authenticated={false} />);
 
     expect((await screen.findAllByText("Sign in required")).length).toBeGreaterThan(0);
     expect(screen.getByText("Connected projects").closest("article")).toHaveTextContent("—");
     expect(screen.queryByText("Demo Data")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not issue a failing request when local Supabase is unconfigured", async () => {
@@ -36,7 +38,7 @@ describe("LiveDashboardMetrics", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LiveDashboardMetrics />);
+    render(<LiveDashboardMetrics authenticated />);
 
     expect((await screen.findAllByText("Sign in required")).length).toBeGreaterThan(0);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -61,7 +63,7 @@ describe("LiveDashboardMetrics", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LiveDashboardMetrics />);
+    render(<LiveDashboardMetrics authenticated />);
 
     expect(await screen.findByText("Live · Supabase + GitHub")).toBeInTheDocument();
     expect(screen.getByText("Connected projects").closest("article")).toHaveTextContent("1");
@@ -88,7 +90,7 @@ describe("LiveDashboardMetrics", () => {
       return jsonResponse({ error: { message: "GitHub rate limit reached." } }, 429);
     }));
 
-    render(<LiveDashboardMetrics />);
+    render(<LiveDashboardMetrics authenticated />);
 
     await screen.findByText("Live · Supabase + GitHub");
     await waitFor(() => expect(screen.getByText("Open pull requests").closest("article")).toHaveTextContent("Incomplete"));
@@ -114,7 +116,7 @@ describe("LiveDashboardMetrics", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LiveDashboardMetrics />);
+    render(<LiveDashboardMetrics authenticated />);
 
     expect(await screen.findByText(/Live .* Supabase .* GitHub Not Connected/)).toBeInTheDocument();
     expect(screen.getByText("Connected projects").closest("article")).toHaveTextContent("0");

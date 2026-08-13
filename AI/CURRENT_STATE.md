@@ -4,9 +4,9 @@ Last reviewed: 2026-08-13
 
 Phase: 1B - Production GitHub App Integration
 
-Overall status: **The latest Phase 1B hardening implementation passes lint, typecheck, 52 files/392 tests, coverage, production build, production-server Playwright 48/48 across desktop/tablet/mobile with axe checks, and final source/rebuilt-static secret scans. Publication, deployment, hosted migrations `011`-`025`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
+Overall status: **The Phase 1B hardening snapshot at `7d22de6` is published on GitHub `main`, both CI jobs pass, and its exact matching Vercel production deployment is READY with Playwright 48/48. A signed-out dashboard follow-up is validated locally at 53 files/394 tests but is not yet in that production snapshot. Hosted migrations `011`-`025`, authenticated tenant behavior, webhook activation, and live GitHub acceptance remain pending.**
 
-"Implemented" below means code/schema exists in the working tree. It does not mean the provider workflow was observed or the schema is hosted.
+"Implemented" below means code/schema exists in the published release or the explicitly identified local follow-up. It does not mean the provider workflow was observed or the schema is hosted.
 
 ## Implemented application boundaries
 
@@ -25,12 +25,13 @@ Overall status: **The latest Phase 1B hardening implementation passes lint, type
 - Projects selects repositories by stable provider ID and renders live repository sync time, branch protection/SHA, commit author/date, PR author/created/updated time and detail-fetched mergeability, default-branch checks, and per-PR checks fetched against each displayed head SHA.
 - Global browser headers include a restrictive CSP, framing/object denial, a narrow Supabase connection allowlist, and a narrow image allowlist; repository Markdown previews do not load external images.
 - No direct default-branch write, merge, deployment, rollback, Codex worker, or Claude worker exists. The Phase 1D observation scaffold remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF.
+- The current local follow-up gives the signed-out dashboard a server-verified authentication hint so it skips protected browser fetches; its regression test passes 30/30 repeated runs. This follow-up is not part of the production deployment identified below.
 
 ## Data and security state
 
 - Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was last verified `ACTIVE_HEALTHY`; the CLI is authorized as `surgeservicesllc@gmail.com` and linked to this exact project.
 - Hosted migrations are applied only through `010`: `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010`.
-- Local migrations `011`-`025` are **not hosted**:
+- Repository migrations `011`-`025` are **not hosted**:
   - `011` closes initial direct connection/member mutations and aligns `github_pat_` detection.
   - `012` adds actor-attributed completed/failed change evidence.
   - `013` adds bounded service-role repository-grant reconciliation.
@@ -47,7 +48,7 @@ Overall status: **The latest Phase 1B hardening implementation passes lint, type
   - `024` revokes authenticated direct reads of raw Activity/webhook-delivery rows and exposes a caller-member, 100-row `list_activity` safe projection.
   - `025` detects opaque generic secret assignments, binds protected approval snapshots to exact pre-provider reservations, enforces provider-boundary-before-write-token ordering, and serializes stable repository relinking while allowing relink after archival.
 - Promoting this authorization/audit/provider-ingress chain is a protected production action requiring exact owner approval and post-apply ledger, lint, grants, RLS/FORCE RLS, raw Activity/webhook denial, tenant/list-projection behavior, stable repository binding/relink concurrency, generic secret assignment behavior, approval/token/lease invariants, audit/detail redaction, ordering, recovery, CHECK-evaluation, and health verification.
-- Linked database lint is clean against hosted state through `010`. A linked dry run successfully planned `011`-`024` before `025` existed and applied nothing. The current full `011`-`025` attempt is blocked by a database login-role `403`.
+- Linked database lint is clean against hosted state through `010`. A complete linked dry run successfully plans exactly `011`-`025` and applies nothing; production application still requires exact owner approval.
 - Hosted catalog evidence before this increment reported 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 row-secret guards. Authenticated two-tenant/anonymous/RPC behavior remains pending.
 - Privileged GitHub/Supabase secrets remain in server-side Vercel settings, not source, browser code, logs, fixtures, or database rows.
 
@@ -55,12 +56,12 @@ Overall status: **The latest Phase 1B hardening implementation passes lint, type
 
 | Provider/capability | Status | Evidence/meaning |
 | --- | --- | --- |
-| Supabase hosted project | Connected through hosted migration `010`; broader behavioral gate pending | CLI authorized as `surgeservicesllc@gmail.com`, exact project linked, ledger through `010`, linked lint clean. Local `011`-`025` are not hosted; dry-run evidence covers only `011`-`024`. |
+| Supabase hosted project | Connected through hosted migration `010`; broader behavioral gate pending | CLI authorized as `surgeservicesllc@gmail.com`, exact project linked, ledger through `010`, linked lint clean. Repository migrations `011`-`025` are not hosted; the complete linked dry run succeeds without applying them. |
 | GitHub App object/secrets | Configured | App `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) and protected server variable names exist. Configuration is not a live tenant connection. |
 | GitHub provider installation | Installed; repository-scoped | Personal `surgeservicesllc` installation `153286187` selects only `surgeservicesllc/SoftwareFactory`. |
 | GitHub App connection | **Not Connected** | Authenticated SoftwareFactory callback/tenant persistence, live repo/project/file/draft-PR journey, and signed webhook delivery are not verified. |
 | GitHub webhook | **Not Connected** | Route exists; the provider webhook remains blank/inactive and no valid signed production delivery is verified. |
-| Vercel UI hosting | Exact project linked; historical baseline verified | Exact `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present. Pre-hardening commit `f12814bd94001e5c9fe9637e0350e14816de8d13` on deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju` passed public Playwright 12/12. This does not validate the working tree. |
+| Vercel UI hosting | Exact current release verified | Exact `surgeservices-projects/softwarefactory` deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY for commit `7d22de665813d119488b4a26b0cd4084070b3eaa` and serves the stable alias. Public Playwright passes 48/48; the in-product deploy/rollback adapter remains **Not Connected**. |
 | Vercel deploy/rollback adapter | **Not Connected** | Hosting the UI is not an in-product deployment or rollback executor. |
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
@@ -68,19 +69,20 @@ Overall status: **The latest Phase 1B hardening implementation passes lint, type
 
 ## Verification evidence
 
-- `npm run check` passes lint, typecheck, 52 files/392 Vitest tests, and the production build; the build compiled and generated 38 static routes on Node 22.23.1.
+- On the current local follow-up, `npm run check` passes lint, typecheck, 53 files/394 Vitest tests, and the production build; the build compiled 38 routes on Node 22.23.1, with `/` dynamic.
 - The dedicated integration suite passes 21 files/163 tests.
-- Coverage passes 52 files/392 tests: statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), and lines 71.37% (566/793).
-- Production-server Playwright passes 48/48 across desktop, tablet, and mobile, including axe checks.
-- Final source and rebuilt-static scans found zero actual credential candidates, zero privileged/static marker matches, and zero unexpected sensitive files. One `VERCEL_PROJECT_PRODUCTION_URL` environment identifier was reviewed as benign.
-- Prior stable-production Playwright 12/12 is historical baseline evidence only.
-- No hosted or live-provider acceptance evidence has been produced for migrations `011`-`025` or the new application hardening.
+- Current-tree coverage passes 53 files/394 tests: statements 70.36% (603/857), branches 71.34% (488/684), functions 62.58% (97/155), and lines 71.37% (566/793).
+- The published production snapshot and the local follow-up each pass Playwright 48/48 across desktop, tablet, and mobile, including axe checks. The local signed-out browser-error regression additionally passes 30/30 repeated runs.
+- Current-tree source and rebuilt-static scans found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present. Code-variable and documented placeholder assignments were reviewed as non-credentials.
+- GitHub `main` points to `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`; both author and committer are `surgeservicesllc@gmail.com`. CI run `31692336607` passed both the quality and browser/accessibility jobs.
+- Matching Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY at immutable URL `https://softwarefactory-3yg1d1bsf-surgeservices-projects.vercel.app` and stable alias `https://softwarefactory-tan.vercel.app`.
+- Production checks passed 48/48, security headers were present, protected unauthenticated APIs were denied, an invalid webhook returned 401, nine JavaScript assets contained no privileged markers, and no recent deployment errors were found.
+- No hosted migration or authenticated live-provider acceptance evidence has been produced for migrations `011`-`025` or the GitHub workflow.
 
 ## Release blockers
 
-1. Publish the exact verified tree and verify its exact Vercel deployment, CI, aliases, HTTP boundaries, public E2E, logs, and client artifacts.
-2. Obtain exact owner approval for production migrations `011`-`025` and webhook secret/provider activation; dry-run the full chain, apply only to `qpuofpmagrmyamahqwxw`, and run every post-apply check.
-3. Complete real production sign-in, email confirmation, onboarding, active-organization, and caller-session acceptance.
-4. Complete the authenticated GitHub callback, tenant connection/repository sync, project link, branch/commit/PR/check views, file read, safe edit/draft PR, stale/protected/idempotent/recovery cases, and disconnect/loss handling.
-5. Configure/verify the active GitHub webhook and observe valid, invalid, duplicate, out-of-order, deletion, and restore behavior in production.
-6. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.
+1. Obtain exact owner approval for production migrations `011`-`025` and webhook secret/provider activation; apply only to `qpuofpmagrmyamahqwxw`, and run every post-apply check.
+2. Complete real production sign-in, email confirmation, onboarding, active-organization, and caller-session acceptance.
+3. Complete the authenticated GitHub callback, tenant connection/repository sync, project link, branch/commit/PR/check views, file read, safe edit/draft PR, stale/protected/idempotent/recovery cases, and disconnect/loss handling.
+4. Configure/verify the active GitHub webhook and observe valid, invalid, duplicate, out-of-order, deletion, and restore behavior in production.
+5. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.

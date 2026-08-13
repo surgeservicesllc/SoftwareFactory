@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
 import { RecentActivityCard } from "@/components/recent-activity-card";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /** The three facts about safety that people actually need, stated plainly. */
 const safetyFacts = [
@@ -12,7 +13,22 @@ const safetyFacts = [
   { label: "AI worker", value: "Not Connected", tone: "neutral" as const },
 ];
 
-export default function DashboardPage() {
+async function hasAuthenticatedUser() {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.auth.getUser();
+    return !error && Boolean(data.user);
+  } catch {
+    return false;
+  }
+}
+
+export default async function DashboardPage() {
+  // This is only a server-rendering hint used to avoid issuing protected
+  // browser requests for a visitor who is already known to be signed out.
+  // Every API still validates auth.getUser() and RLS independently.
+  const authenticated = await hasAuthenticatedUser();
+
   return (
     <>
       <PageHeader
@@ -20,7 +36,7 @@ export default function DashboardPage() {
         description="What is connected, what it can see, and what it is allowed to do."
       />
 
-      <LiveDashboardMetrics />
+      <LiveDashboardMetrics authenticated={authenticated} />
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
         <Card className="flex flex-col p-5">
@@ -47,7 +63,7 @@ export default function DashboardPage() {
           </Link>
         </Card>
 
-        <RecentActivityCard />
+        <RecentActivityCard authenticated={authenticated} />
       </div>
 
       <p className="mt-6 flex items-start gap-2.5 text-sm text-muted">

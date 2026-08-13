@@ -10,16 +10,17 @@ type Project = { id: string; githubRepository: string | null; defaultBranch: str
 type PullRequest = { id: number; state: string };
 type State = "loading" | "signed-out" | "setup" | "ready" | "error";
 
-export function LiveDashboardMetrics() {
+export function LiveDashboardMetrics({ authenticated }: { authenticated: boolean }) {
   const supabaseConfigured = isBrowserSupabaseConfigured();
-  const [state, setState] = useState<State>(() => supabaseConfigured ? "loading" : "signed-out");
+  const canLoad = supabaseConfigured && authenticated;
+  const [state, setState] = useState<State>(() => canLoad ? "loading" : "signed-out");
   const [projects, setProjects] = useState<Project[]>([]);
   const [connectedCount, setConnectedCount] = useState(0);
   const [openPullRequests, setOpenPullRequests] = useState<number | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
   const load = useCallback(async () => {
-    if (!supabaseConfigured) {
+    if (!canLoad) {
       setState("signed-out");
       return;
     }
@@ -72,13 +73,13 @@ export function LiveDashboardMetrics() {
     } catch {
       setState("error");
     }
-  }, [supabaseConfigured]);
+  }, [canLoad]);
 
   useEffect(() => {
-    if (!supabaseConfigured) return;
+    if (!canLoad) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load, supabaseConfigured]);
+  }, [canLoad, load]);
 
   const githubConnected = state === "ready" && connectedCount > 0;
   const statusLabel = useMemo(

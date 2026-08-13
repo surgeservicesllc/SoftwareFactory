@@ -15,11 +15,12 @@ type ActivityEvent = {
   project: { id: string; name: string } | null;
 };
 
-export function RecentActivityCard() {
+export function RecentActivityCard({ authenticated }: { authenticated: boolean }) {
   const { state } = useTenantList<ActivityEvent>(
     "/api/activity?limit=5",
     (body) => (body.events as ActivityEvent[]) ?? [],
     "Activity could not be loaded.",
+    authenticated,
   );
 
   const message = state.kind === "signed-out"

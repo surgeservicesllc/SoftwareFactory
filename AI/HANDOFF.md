@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish Phase 1B end to end. The current working tree contains a new fail-closed GitHub/Supabase hardening increment, but it is not yet final-gated, published, deployed, or promoted to hosted Supabase. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
+Finish Phase 1B end to end. The fail-closed GitHub/Supabase hardening snapshot is published to GitHub `main` and deployed to the exact Vercel production project. A signed-out dashboard follow-up is locally validated but not yet published/deployed. The schema is not promoted to hosted Supabase and the authenticated provider journey has not passed. GitHub remains **Not Connected**. Do not begin Phase 1C or Phase 2, and do not enable Phase 1D execution. Auto approve, merge, deploy, and rollback remain OFF.
 
 ## Current repository work
 
@@ -19,10 +19,11 @@ Finish Phase 1B end to end. The current working tree contains a new fail-closed 
 - Project/change authorization, project-picker matching, and webhook attribution use the immutable tenant-scoped repository UUID, not a mutable repository name. Active project linking is transaction-serialized and relinking is allowed only after archival. Projects renders provider sync/branch/commit/PR/check detail, including detail-fetched mergeability, per-PR head-SHA checks, and created/updated times.
 - Browser tenant lists come from caller-bound bounded RPC projections; authenticated raw Activity/webhook reads are revoked behind `list_activity`; commands enforce same-origin; global CSP/security headers restrict browser resource loads.
 - Generic non-placeholder secret assignments are blocked. Protected approval snapshots are bound to exact reservations and revalidated before the write-scoped GitHub token is minted.
+- The local follow-up supplies a server-verified signed-out hint to the dashboard so signed-out rendering skips protected browser fetches; it passes `npm run check` at 53 files/394 tests, current coverage, local Playwright 48/48, and the focused browser-error regression 30/30, but is not in the `7d22de6` production snapshot.
 
 ## Migration boundary
 
-Hosted Supabase is applied only through `010`. Local migrations `011`-`025` are not hosted:
+Hosted Supabase is applied only through `010`. Repository migrations `011`-`025` are not hosted:
 
 - `011`: initial direct mutation closure and `github_pat_` detection.
 - `012`: actor-attributed terminal change audit.
@@ -45,18 +46,19 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 ## Evidence
 
 - Supabase project `qpuofpmagrmyamahqwxw` was last verified `ACTIVE_HEALTHY`; hosted ledger ends at `010`.
-- Supabase CLI is authorized as `surgeservicesllc@gmail.com`, exact project `qpuofpmagrmyamahqwxw` is linked, hosted ledger ends at `010`, and linked database lint is clean. A successful dry run covered `011`-`024` before `025` existed; the current full `011`-`025` attempt is blocked by a database login-role `403`, and no pending migration was applied.
+- Supabase CLI is authorized as `surgeservicesllc@gmail.com`, exact project `qpuofpmagrmyamahqwxw` is linked, hosted ledger ends at `010`, linked database lint is clean, and a complete `011`-`025` dry run succeeds without applying a pending migration.
 - Personal provider installation `153286187` exists on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. It has not completed the authenticated SoftwareFactory callback/tenant journey.
 - The GitHub webhook is **Not Connected**: no active hook and valid signed production delivery have been verified.
-- Last independently verified pre-hardening release: commit `f12814bd94001e5c9fe9637e0350e14816de8d13`, Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
-- Current local evidence on Node 22.23.1: `npm run check` passes lint, typecheck, 52 files/392 tests, and a production build with 38 generated static routes; the dedicated integration suite passes 21 files/163 tests; coverage passes at 70.36% statements, 71.34% branches, 62.58% functions, and 71.37% lines; production-server Playwright passes 48/48 across desktop/tablet/mobile with axe checks.
-- Final source/rebuilt-static scans found zero actual credential candidates, zero privileged/static marker matches, and zero unexpected sensitive files; one `VERCEL_PROJECT_PRODUCTION_URL` identifier was reviewed as benign.
-- Exact Vercel project `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present, but this tree is not deployed.
+- Published release evidence recorded 2026-08-13: `origin/main` commit `7d22de665813d119488b4a26b0cd4084070b3eaa`, tree `9ede78e7d5c4f28269a0a11dc1a4e381c53a3772`, author/committer `surgeservicesllc@gmail.com`; CI run `31692336607` passed both jobs.
+- Exact Vercel deployment `dpl_6Aiygdb9r1B4PCUefLahBKgadAHb` is READY at `https://softwarefactory-3yg1d1bsf-surgeservices-projects.vercel.app` and serves `https://softwarefactory-tan.vercel.app`. Production Playwright passes 48/48; security headers, API denials, invalid-webhook 401, nine-JavaScript-asset marker scan, and recent-error review pass.
+- Current local evidence on Node 22.23.1: `npm run check` passes lint, typecheck, 53 files/394 tests, and a production build with 38 routes (`/` dynamic); current coverage and local Playwright 48/48 pass; the focused signed-out browser-error regression passes 30/30 repeated runs.
+- Current-tree evidence: the dedicated integration suite passed 21 files/163 tests; coverage passed 53 files/394 tests at 70.36% statements, 71.34% branches, 62.58% functions, and 71.37% lines; local production-server Playwright passed 48/48 across desktop/tablet/mobile with axe checks. Current source/rebuilt-static scanning found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present.
+- Exact Vercel project `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present; secret values were not recorded.
 
 ## Immediate sequence
 
-1. Review/stage/commit/push the exact verified tree; pass CI and verify the exact resulting Vercel deployment, alias, HTTP boundaries, public E2E, logs, and rebuilt client artifacts.
-2. Obtain exact owner approval for hosted migrations `011`-`025` and webhook activation; dry-run the full migration chain and apply/verify only the exact production targets.
+1. Final-gate, publish, and deploy the signed-out dashboard follow-up; bind new CI/Vercel evidence to its exact commit.
+2. Obtain exact owner approval for hosted migrations `011`-`025` and webhook activation; apply/verify only the exact production targets.
 3. Complete production Auth confirmation/sign-in/onboarding and two-tenant/anonymous/RPC acceptance.
 4. Complete authenticated GitHub callback, sync, project link, live reads, one safe draft PR, idempotent/recovery/failure cases, signed webhook lifecycle cases, and disconnect/loss.
 5. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
@@ -68,15 +70,18 @@ This complete authorization/audit/provider-ingress chain requires exact current 
 - Verify CLI identity and project ref before every linked database command. Never reset hosted production.
 - Preserve **Demo Data** and **Not Connected** language when live evidence is absent.
 - Keep default-branch writes, non-draft PRs, merge, deploy, rollback, workflow/administration writes, and autonomous execution unavailable.
+- `main` is currently unprotected and the published release commit is unsigned; changing branch protection or signature requirements is a separate protected owner-review action.
+- Unexpected `theagoras.com` aliases require owner review before any retain/remove routing action; do not mutate protected routing without exact approval.
 
 ## Completion checklist
 
 - [x] Hosted migration history through `010`; exact linked database lint is clean.
-- [x] Local hardening migrations `011`-`025` and application/tests exist in the working tree.
-- [x] Current-tree lint/typecheck, 52 files/392 tests, migration chain through `025`, coverage, and 38-static-route production build pass.
-- [x] Current-tree production-server E2E/responsive/accessibility passes 48/48.
-- [x] Current-tree source/rebuilt-static secret/client gate passes.
-- [ ] Exact tree is pushed, CI passes, and matching production deployment is verified.
+- [x] Hardening migrations `011`-`025` and application/tests exist in the published repository release.
+- [x] Current-tree lint/typecheck, 53 files/394 tests, migration chain through `025`, and 38-route production build (`/` dynamic) pass.
+- [x] Published snapshot production-server E2E/responsive/accessibility passes 48/48; local follow-up focused signed-out regression passes 30/30.
+- [x] Full local production-server E2E passes 48/48 for the follow-up.
+- [x] Source/rebuilt-static secret/client gates pass for the local follow-up.
+- [ ] Local follow-up is pushed, CI passes, and a matching production deployment is verified; prior snapshot `7d22de6` remains verified production.
 - [ ] Migrations `011`-`025` are explicitly owner-approved, hosted, and fully verified.
 - [ ] Real Supabase authenticated/two-tenant/anonymous/RPC behavior passes.
 - [ ] Real GitHub callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect journey passes.
