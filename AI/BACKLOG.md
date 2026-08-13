@@ -40,7 +40,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 ## Release evidence retained
 
-- Verified application release: `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, CI `31694775758`, Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ`, production focused race 30/30 and Playwright 48/48. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
+- Verified application release: `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, CI `31694775758`, Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ`, production focused race 30/30 and Playwright 48/48. Later documentation-only successors do not supersede this runtime evidence unless application code changes. Live commit attribution is verified only on an isolated draft branch.
 - Hosted Supabase is current through `026`; local/remote history matches, dry run/lint are clean, and the exact four-table `service_role` ACL matrix has zero mismatches.
 - Latest provider installation `153442281`, App-JWT verified and scoped only to `surgeservicesllc/SoftwareFactory`.
 - Current READY production: `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77`, immutable `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app`, stable alias, source `main` `3434387`; callback fix unpublished.
