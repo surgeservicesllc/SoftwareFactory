@@ -24,6 +24,25 @@ type ProjectRow = {
   project_connections: Array<{ connection_id: string; is_primary: boolean }> | null;
 };
 
+type InstallationRow = {
+  id: string;
+  status: string;
+  suspended_at: string | null;
+  github_repositories: Array<{
+    full_name: string;
+    selected: boolean;
+    archived: boolean;
+    disabled: boolean;
+  }> | null;
+};
+
+type ConnectionRow = {
+  id: string;
+  provider: string;
+  status: string;
+  github_installations: InstallationRow | InstallationRow[] | null;
+};
+
 type RunRow = { status: string; failure_kind: string | null; created_at: string };
 type TaskRow = { status: string; risk_level: string; requires_owner_approval: boolean; source: string };
 type PullRequestRow = { status: string };
@@ -56,8 +75,14 @@ export async function GET() {
           .eq("organization_id", activeOrganization.id)
           .limit(200),
         client
+          // Connectivity must be derived from the same live evidence the
+          // Projects surface uses: a connected connection, an active
+          // unsuspended installation, and a selected healthy repository.
           .from("connections")
-          .select("id,provider,status")
+          .select(
+            "id,provider,status,github_installations(id,status,suspended_at,"
+              + "github_repositories(full_name,selected,archived,disabled))",
+          )
           .eq("organization_id", activeOrganization.id)
           .limit(100),
         client
@@ -124,23 +149,39 @@ export async function GET() {
       ].find(Boolean);
       if (firstError) return databaseErrorResponse(firstError);
 
-      const connectedConnectionIds = new Set(
-        rows<{ id: string; provider: string; status: string }>(connectionsResult.data)
-          .filter((connection) => connection.provider === "github" && connection.status === "connected")
-          .map((connection) => connection.id),
-      );
+      /** Repository full names each connection can actually operate on right now. */
+      const liveRepositoriesByConnection = new Map<string, Set<string>>();
+      for (const connection of rows<ConnectionRow>(connectionsResult.data)) {
+        if (connection.provider !== "github" || connection.status !== "connected") continue;
 
-      const projects: ProjectSnapshot[] = rows<ProjectRow>(projectsResult.data).map((project) => ({
-        id: project.id,
-        status: project.status,
-        healthStatus: project.health_status,
-        connected: Boolean(
-          project.github_repository
-          && project.project_connections?.some(
-            (link) => link.is_primary && connectedConnectionIds.has(link.connection_id),
+        const installations = Array.isArray(connection.github_installations)
+          ? connection.github_installations
+          : connection.github_installations
+            ? [connection.github_installations]
+            : [];
+        const names = new Set<string>();
+        for (const installation of installations) {
+          if (installation.status !== "active" || installation.suspended_at) continue;
+          for (const repository of installation.github_repositories ?? []) {
+            if (!repository.selected || repository.archived || repository.disabled) continue;
+            names.add(repository.full_name.toLowerCase());
+          }
+        }
+        if (names.size > 0) liveRepositoriesByConnection.set(connection.id, names);
+      }
+
+      const projects: ProjectSnapshot[] = rows<ProjectRow>(projectsResult.data).map((project) => {
+        const primary = project.project_connections?.find((link) => link.is_primary);
+        const repositories = primary ? liveRepositoriesByConnection.get(primary.connection_id) : undefined;
+        return {
+          id: project.id,
+          status: project.status,
+          healthStatus: project.health_status,
+          connected: Boolean(
+            project.github_repository && repositories?.has(project.github_repository.toLowerCase()),
           ),
-        ),
-      }));
+        };
+      });
 
       const runs: RunSnapshot[] = rows<RunRow>(runsResult.data).map((run) => ({
         status: run.status,

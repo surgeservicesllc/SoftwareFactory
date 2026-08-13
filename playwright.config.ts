@@ -1,6 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+
+// Escape hatch for sandboxes that ship a Chromium build which does not match
+// the pinned @playwright/test revision. CI leaves this unset and uses the
+// browser `playwright install` downloads.
+const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?.trim();
+const chromiumLaunch = chromiumExecutable
+  ? { launchOptions: { executablePath: chromiumExecutable } }
+  : {};
 const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
   !process.env.PLAYWRIGHT_WEB_SERVER_COMMAND;
 
@@ -33,6 +41,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
+        ...chromiumLaunch,
       },
     },
     {
@@ -40,12 +49,14 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 834, height: 1112 },
+        ...chromiumLaunch,
       },
     },
     {
       name: "mobile-chromium",
       use: {
         ...devices["Pixel 5"],
+        ...chromiumLaunch,
       },
     },
   ],

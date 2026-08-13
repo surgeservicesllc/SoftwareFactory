@@ -225,7 +225,7 @@ describe("GitHub App server/API contract", () => {
     const projects = source("app/api/projects/route.ts");
     const projectConsole = source("components/projects-console.tsx");
     const fileManager = source("components/github-file-manager.tsx");
-    const dashboard = source("components/live-dashboard-metrics.tsx");
+    const dashboard = source("app/api/dashboard/route.ts");
 
     expect(projects).toContain('.eq("organization_id", activeOrganization.id)');
     expect(projects).toContain('connection?.status === "connected"');
@@ -236,8 +236,16 @@ describe("GitHub App server/API contract", () => {
     expect(projects).toContain('connectionStatus: connected ? "connected" : "not_connected"');
     expect(projectConsole).toContain('project.connectionStatus === "connected"');
     expect(fileManager).toContain('project.connectionStatus === "connected"');
-    expect(dashboard).toContain('project.connectionStatus === "connected"');
-    expect(dashboard).not.toContain("body.connectedCount ?? liveProjects.length");
+
+    // The dashboard count must be derived from the same live evidence as the
+    // Projects surface, so the two can never disagree about connectivity.
+    expect(dashboard).toContain('.eq("organization_id", activeOrganization.id)');
+    expect(dashboard).toContain('connection.status !== "connected"');
+    expect(dashboard).toContain('installation.status !== "active"');
+    expect(dashboard).toContain("installation.suspended_at");
+    expect(dashboard).toContain("repository.selected");
+    expect(dashboard).toContain("repository.archived");
+    expect(dashboard).toContain("repository.disabled");
   });
 
   it("offers safe file changes but no merge or default-branch mutation endpoint", () => {

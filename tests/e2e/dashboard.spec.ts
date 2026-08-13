@@ -36,9 +36,18 @@ test("loads the truthful control-plane dashboard without browser errors", async 
   await expect(page).toHaveTitle(/SoftwareFactory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
-  await expect(page.getByText(/Demo Data/i).first()).toBeVisible();
-  await expect(page.getByText(/Not Connected/i).first()).toBeVisible();
   expect(browserErrors, browserErrors.join("\n")).toEqual([]);
+});
+
+test("shows an unauthenticated visitor no fabricated metrics", async ({ page }) => {
+  await page.goto("/");
+
+  // Every dashboard figure is tenant-scoped, so a signed-out visitor is asked
+  // to sign in rather than shown zeroes that would read as real measurements.
+  await expect(page.getByText(/Sign in to view the dashboard/i)).toBeVisible();
+  await expect(page.getByRole("link", { name: /sign in/i }).first()).toBeVisible();
+  await expect(page.getByText("Connected projects")).toHaveCount(0);
+  await expect(page.getByText(/Demo Data/i)).toHaveCount(0);
 });
 
 test("exposes every primary destination through accessible navigation", async ({

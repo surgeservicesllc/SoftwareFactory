@@ -74,9 +74,17 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/*
+ * Kept in the base layer on purpose. An unlayered `a` rule would beat every
+ * layered component class regardless of specificity, which silently stripped
+ * the foreground colour from `.primary-action` links and made them fail
+ * contrast on their lime background.
+ */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 ::selection {

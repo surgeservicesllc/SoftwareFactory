@@ -14,6 +14,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -83,6 +84,10 @@ type State = "loading" | "signed-out" | "setup" | "ready" | "error";
 const emptyInspector: InspectorData = { branches: [], commits: [], pullRequests: [], checkRuns: [], warnings: [] };
 
 export function ProjectsConsole() {
+  const [query, setQuery] = useState("");
+  const [connectionFilter, setConnectionFilter] = useState("");
+  const [sort, setSort] = useState<"name" | "status" | "health">("name");
+
   const [state, setState] = useState<State>("loading");
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -184,6 +189,23 @@ export function ProjectsConsole() {
     }
   }
 
+  const visibleProjects = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return projects
+      .filter((project) => {
+        const matchesQuery = !normalized
+          || project.name.toLowerCase().includes(normalized)
+          || (project.githubRepository ?? "").toLowerCase().includes(normalized);
+        const matchesConnection = !connectionFilter || project.connectionStatus === connectionFilter;
+        return matchesQuery && matchesConnection;
+      })
+      .toSorted((left, right) => {
+        if (sort === "status") return left.status.localeCompare(right.status) || left.name.localeCompare(right.name);
+        if (sort === "health") return left.healthStatus.localeCompare(right.healthStatus) || left.name.localeCompare(right.name);
+        return left.name.localeCompare(right.name);
+      });
+  }, [connectionFilter, projects, query, sort]);
+
   if (state === "loading") return <Panel className="grid min-h-64 place-items-center"><Loader2 className="size-6 animate-spin text-[#c6f135]" aria-label="Loading projects" /></Panel>;
   if (state === "signed-out") return <ProjectNotice title="Sign in to load live projects" description="Projects are scoped to your authenticated SoftwareFactory organization." href="/sign-in?next=/projects" label="Sign in" />;
   if (state === "setup") return <ProjectNotice title="Complete organization setup" description="Create or select an organization before linking a repository." href="/connections" label="Open connections" />;
@@ -192,11 +214,42 @@ export function ProjectsConsole() {
   return (
     <div className="space-y-5">
       {projects.length ? (
-        <div className="space-y-4">
-          {projects.map((project) => (
-            <ProjectInspector key={project.id} project={project} connection={connections.find((item) => item.id === project.connectionId) ?? null} />
-          ))}
-        </div>
+        <>
+          <Panel className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="relative block min-w-0 sm:w-64">
+              <span className="sr-only">Search projects</span>
+              <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#5e6a79]" aria-hidden="true" />
+              <input className="form-control h-8 pl-9 text-[10px]" onChange={(event) => setQuery(event.target.value)} placeholder="Search name or repository…" type="search" value={query} />
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5">
+                <span className="font-mono text-[8px] uppercase tracking-[0.12em] text-[#5c6978]">Connection</span>
+                <select value={connectionFilter} onChange={(event) => setConnectionFilter(event.target.value)} className="h-8 rounded-md border border-[#2b3644] bg-[#0a0f16] px-2 text-[10px] text-[#c4ccd5]">
+                  <option value="">All</option>
+                  <option value="connected">Connected</option>
+                  <option value="not_connected">Not Connected</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5">
+                <span className="font-mono text-[8px] uppercase tracking-[0.12em] text-[#5c6978]">Sort</span>
+                <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-8 rounded-md border border-[#2b3644] bg-[#0a0f16] px-2 text-[10px] text-[#c4ccd5]">
+                  <option value="name">Name</option>
+                  <option value="status">Status</option>
+                  <option value="health">Health</option>
+                </select>
+              </label>
+            </div>
+          </Panel>
+          {visibleProjects.length ? (
+            <div className="space-y-4">
+              {visibleProjects.map((project) => (
+                <ProjectInspector key={project.id} project={project} connection={connections.find((item) => item.id === project.connectionId) ?? null} />
+              ))}
+            </div>
+          ) : (
+            <Panel className="p-6 text-center text-xs text-[#718091]">No project matches this search or filter.</Panel>
+          )}
+        </>
       ) : null}
 
       {!connectedConnections.length ? (
@@ -332,7 +385,8 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
         </dl>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {isConnected ? <Link href={`/files?project=${project.id}`} className="primary-action">Browse real files<FolderTree className="size-4" aria-hidden="true" /></Link> : <Link href="/connections" className="primary-action">Restore connection<ArrowRight className="size-4" aria-hidden="true" /></Link>}
+          <Link href={`/projects/${project.id}`} className="primary-action">Open project<ArrowRight className="size-4" aria-hidden="true" /></Link>
+          {isConnected ? <Link href={`/files?project=${project.id}`} className="secondary-action">Browse real files<FolderTree className="size-3.5" aria-hidden="true" /></Link> : <Link href="/connections" className="secondary-action">Restore connection<ArrowRight className="size-3.5" aria-hidden="true" /></Link>}
           {repository?.htmlUrl ? <a href={repository.htmlUrl} target="_blank" rel="noreferrer" className="secondary-action">Open GitHub<ExternalLink className="size-3.5" aria-hidden="true" /></a> : null}
           <button type="button" onClick={() => void refresh()} disabled={loading || !isConnected} className="secondary-action">{loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}Refresh live data</button>
         </div>
