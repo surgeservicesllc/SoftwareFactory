@@ -281,3 +281,27 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted
 - Decision: `app/(marketing)/` carries the public header/footer shell and is indexable; `app/(console)/` keeps the sidebar shell and stays `noindex`, with `robots.ts` disallowing console paths and `sitemap.ts` listing marketing routes only. The former console homepage is now `/solutions`, reached from the main navigation, and each shell owns exactly one skip link.
 - Consequence: The two visual systems and their metadata no longer share a layout. The console's lime palette is not reused on marketing pages; only shared primitives cross the boundary.
+
+## ADR-041 - Phase 1D ships the decision layer, not an executor
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: Phase 1D implements the control model, diff risk classification, gate sets, reviewing agents, the approval tri-state, and the orchestrator stage machine. It implements no merge, deploy, or code executor, and it relaxes no interlock. `implement`, `merge` and `deploy` are reached, evaluated, and blocked by a named blocker rather than skipped.
+- Rationale: The objective's executor stages depend on things this tree does not have — a Phase 1C worker and a Vercel adapter — and `AGENTS.md` forbids introducing an auto-merge or production deployment workflow in this line of phases. The decision layer is the part that can be built honestly, and it is the part that makes an executor safe to add later.
+- Consequence: Tests assert the blockers by name, so a future phase that connects an executor fails them on purpose and has to update the assertions deliberately. Authority cannot be gained by accident.
+
+## ADR-042 - Risk is classified from the diff, not from a self-declaration
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `lib/autonomy/diff-risk.ts` derives risk factors from changed paths plus credential- and destructive-SQL-shaped content, and the loop reclassifies when the change is finished. A diff that classifies higher than it was declared blocks and must be re-gated.
+- Rationale: `classifyRisk` answers "given these factors, how risky is this?" — it cannot answer "what factors does this change have?". Leaving that to the caller means the thing being judged supplies the evidence for its own judgement, which is exactly what an autonomous loop must not be trusted to do.
+- Consequence: Work that opens GREEN and ends up touching a migration is judged as what it became. An unrecognised change inherits the existing YELLOW default, so lack of a signal is never read as safety.
+
+## ADR-043 - Approval is evaluated after verification, and never by the author
+
+- Date: 2026-08-13
+- Status: Accepted
+- Decision: `evaluateApproval` checks controls, then the change's soundness (gates, findings, risk escalation), then who is approving. Owner approval cannot satisfy a failing gate, an unsound change is returned as `NOT_APPROVED` rather than escalated to a person, and the author of a change is refused as its approver at every risk level including RED and including when they are the owner.
+- Rationale: `OWNER_APPROVAL_REQUIRED` and `NOT_APPROVED` mean operationally different things — one waits for a person, the other waits for a better change. Collapsing them would send unverified work to a human and retry things that need a decision. Allowing self-approval would make the audit record describe a signature nobody independent gave.
+- Consequence: An owner who wants to approve their own change does so as a second, separately attributed act.

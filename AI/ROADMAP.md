@@ -45,10 +45,23 @@ Status: **Not Connected; not started.**
 
 ## Phase 1D - autonomous-loop controls
 
-Status: **Observation-only scaffold; execution not started and controls remain OFF.**
+Status: **Decision layer complete and locally verified; every automatic action remains constrained OFF and no executor exists.**
 
-- Autonomous Mode constrained OFF, global kill switch ON, GREEN ceiling, all automatic actions OFF, evaluator always `executionAllowed: false`.
-- Hosted migration `010` contains the current fail-closed controls. No action executor exists.
+Implemented in source and proven against the migrated schema:
+
+- The complete nine-action control model — plan, code, test, repair, review, approve, merge, deploy, rollback — at both an organization and a project scope. Migration `010` shipped four actions at one scope; migration `20260813000500` adds the rest without relaxing anything.
+- Most-restrictive-wins resolution. An action survives only where both scopes enable it, the ceiling is the lower of the two, and the envelope (kill switch, emergency stop, release freeze, missing executor) forces every action off regardless of either scope. `resolved_autonomy_controls` holds the same rule in the database so no caller can resolve it more permissively.
+- Risk classification of an actual diff, not of a hand-supplied factor list. Deciding your own risk is the judgement an autonomous loop must not be trusted with, so factors are derived from changed paths plus credential- and destructive-shaped content. A change is reclassified when finished and an escalation past its declaration blocks it.
+- The GREEN gate set and the enhanced set that YELLOW and RED add on top of it. A missing result is a blocker, never a pass; `not_connected` stays distinct from `not_run`.
+- Deterministic Review, QA and Security agents. Blocking findings stop progression; advisory findings are recorded and do not.
+- The approval tri-state `APPROVED_AUTOMATICALLY` / `OWNER_APPROVAL_REQUIRED` / `NOT_APPROVED`, evaluated after the gates so nobody can approve past a failing check, and an unsound change is never escalated to a person. No-self-approval is absolute at every risk level.
+- A twelve-stage orchestrator that halts at the first blocked stage and names its blocker.
+
+Not implemented, and blocked rather than simulated:
+
+- **Enabling any automatic action.** Both scopes are held by validated CHECK constraints and a trigger. Relaxing them is a RED action requiring an owner-approved migration.
+- **Merge, deploy, and Codex execution.** Each is reached, evaluated, and blocked by name (`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED`, `CODEX_WORKER_NOT_CONNECTED`). Tests assert the blockers, so connecting an executor fails them deliberately rather than silently granting authority.
+- Hosted migration `20260813000500` is **not applied**.
 
 ## Phase 1E - production operations
 
