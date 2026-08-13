@@ -8,7 +8,7 @@ SoftwareFactory is a server-first Next.js control plane. Main contains a Phase 2
 | --- | --- | --- |
 | Browser UI | Collect bounded intent and show safe tenant projections | Untrusted client |
 | Next.js server | Auth, active tenant, same-origin, risk, plan, repository/base-SHA binding, persistence, opaque dispatch | Implemented locally |
-| Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Hosted through `027`; pending `028` and `130001` through `130008` unhosted |
+| Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Published post-`027` schema present; ledger still exactly through `027`; protected history reconciliation and Phase 1C promotion pending |
 | Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, live health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Source on main; migration/credentials/live requests absent; execution OFF; **Not Connected** |
 | GitHub App adapter | Short-lived repository-ID-scoped tokens, repository dispatch, isolated push, draft PR, checks | Phase 1B owner path connected; Phase 1C live run pending |
 | GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Workflow local; secrets/heartbeat **Not Connected** |

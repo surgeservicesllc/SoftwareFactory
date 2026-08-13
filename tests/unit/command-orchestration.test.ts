@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   assessCommandRisk,
   normalizeAcceptanceCriteria,
+  normalizeDependencyTaskIds,
+  resolveAcceptanceCriteria,
 } from "@/lib/orchestration/command";
 
 describe("command orchestration input", () => {
@@ -62,5 +64,34 @@ describe("command orchestration input", () => {
       "",
       "No direct main write",
     ])).toEqual(["Tests pass", "No direct main write"]);
+  });
+
+  it("preserves explicit acceptance criteria after normalization", () => {
+    expect(resolveAcceptanceCriteria("fix_bug", ["  Regression test passes.  "]))
+      .toEqual(["Regression test passes."]);
+  });
+
+  it.each([
+    ["fix_bug", "The reported defect is fixed and verified without unrelated regressions."],
+    ["build_feature", "The requested feature works as described and passes applicable validation."],
+    ["audit", "The audit findings are documented with cited evidence and prioritized follow-up."],
+    ["test", "The requested test coverage passes and protects the specified behavior."],
+    ["mobile", "The requested mobile behavior is verified at supported responsive widths."],
+    ["security", "The requested security change is verified against the applicable authorization boundary."],
+    ["performance", "The requested performance improvement is measured and preserves existing behavior."],
+    ["other", "The requested outcome is implemented and verified without unrelated changes."],
+  ] as const)("derives deterministic acceptance for %s", (commandType, expected) => {
+    expect(resolveAcceptanceCriteria(commandType, [])).toEqual([expected]);
+  });
+
+  it("canonicalizes dependency task identifiers for durable replay", () => {
+    expect(normalizeDependencyTaskIds([
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    ])).toEqual([
+      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    ]);
   });
 });

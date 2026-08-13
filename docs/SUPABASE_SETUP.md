@@ -1,6 +1,6 @@
 # Supabase setup
 
-Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Hosted history is verified through migration `027` only. Phase 1E migration `028` and Phase 2A/synthetic-journey/bot-fabric/marketing/Phase 1C migrations `130001` through `130008` are **UNHOSTED**.
+Production project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Hosted migration history currently has exactly 26 rows through `027`, but the hosted schema visibly contains post-`027` Phase 1E/provider/synthetic/bot/marketing objects. Draft PR #15 records the independent 53-table/61-policy catalog comparison and prior duplicate-object push failure. The ledger is stale and a normal push is prohibited until an exact owner-approved history repair reconciles it. Phase 1C migrations remain unhosted.
 
 The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. Reauthenticate the Supabase CLI as that identity and reconfirm the exact project ref before any linked command. The previously selected wrong/unauthorized profile must not be used.
 
@@ -8,7 +8,11 @@ The only live SoftwareFactory owner is `surgeservicesllc@gmail.com`. Reauthentic
 
 Hosted `001`-`027` provide Auth/onboarding, tenant/project/control-plane tables, RLS/FORCE RLS, GitHub App metadata and audited workflows, safe browser projections, immutable repository binding, protected draft approvals, narrow service-role ACLs, and dual-App handoff. Candidate installation `153479019` is connected for the owner repository path. Remaining second-tenant/reverse/disconnect/adverse Phase 1B acceptance gaps remain.
 
-## Pending migrations
+## Schema-present but ledger-unreconciled migrations
+
+The hosted catalog contains the effects of `028`, provider `130001`, both historically colliding `130002` source files, bot fabric, and marketing. Do not execute these DDL files again. First map their exact source hashes and objects to the hosted catalog, then use only the owner-approved history-repair mechanism documented by Supabase.
+
+## Genuinely pending migrations
 
 - `20260812002800_phase1e_production_operations.sql`: production-monitoring, incident, freeze, diagnosis, bounded repair-work, rollback-decision, reporting, and durable operations control-plane records. It does not connect a production target or authorize production mutation.
 - `20260813000100_provider_execution_layer.sql`: Phase 2A provider configuration, routing, advisory-run events/metadata, execution flag defaulting OFF, RLS/FORCE RLS, and owner/admin functions.

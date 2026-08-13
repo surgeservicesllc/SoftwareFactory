@@ -6,6 +6,7 @@ import type { ThreadEvent, ThreadOptions } from "@openai/codex-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CodexBudgetError,
   codexClientOptions,
   CodexSdkAdapter,
   type CodexClientLike,
@@ -352,7 +353,74 @@ describe("Codex SDK adapter", () => {
     expect(result).toMatchObject({
       threadId: "thread-1",
       summary: "Done",
-      usage: { inputTokens: 100, outputTokens: 30, reasoningOutputTokens: 10 },
+      usage: { turns: 1, inputTokens: 100, outputTokens: 30, reasoningOutputTokens: 10 },
     });
+  });
+
+  it("enforces a retry's remaining budget while preserving cumulative prior usage", async () => {
+    const events: ThreadEvent[] = [
+      { type: "thread.started", thread_id: "thread-retry" },
+      { type: "turn.started" },
+      { type: "item.completed", item: { id: "message-1", type: "agent_message", text: JSON.stringify({ summary: "Done", tests: [], risks: [] }) } },
+      { type: "turn.completed", usage: { input_tokens: 100, cached_input_tokens: 20, cache_write_input_tokens: 0, output_tokens: 30, reasoning_output_tokens: 10 } },
+    ];
+    const client: CodexClientLike = {
+      startThread() {
+        let threadId: string | null = null;
+        return {
+          get id() { return threadId; },
+          async runStreamed() {
+            async function* stream() {
+              for (const event of events) {
+                if (event.type === "thread.started") threadId = event.thread_id;
+                yield event;
+              }
+            }
+            return { events: stream() };
+          },
+        };
+      },
+      resumeThread: vi.fn(),
+    };
+    const retryJob = job({
+      attempt: 2,
+      priorUsage: {
+        turns: 2,
+        inputTokens: 900,
+        cachedInputTokens: 100,
+        outputTokens: 100,
+        reasoningOutputTokens: 40,
+      },
+      budget: {
+        ...job().budget,
+        maximumTurns: 1,
+        maximumInputTokens: 200,
+        maximumOutputTokens: 50,
+      },
+    });
+    const adapter = new CodexSdkAdapter("test-api-key-not-used", () => client);
+    const runDirectory = path.join(process.cwd(), "isolated-retry-run");
+    const workspace: PreparedWorkspace = {
+      branch: branchForJob(retryJob),
+      directory: process.cwd(),
+      gitDirectory: path.join(runDirectory, "trusted-git"),
+      hooksDirectory: path.join(runDirectory, "empty-hooks"),
+      runDirectory,
+    };
+    const session = adapter.createSession(retryJob, workspace);
+
+    await expect(session.run("Small retry.", new AbortController().signal, vi.fn()))
+      .resolves.toMatchObject({
+        usage: {
+          turns: 3,
+          inputTokens: 1_000,
+          cachedInputTokens: 120,
+          outputTokens: 130,
+          reasoningOutputTokens: 50,
+        },
+      });
+    expect(session.turns).toBe(3);
+    await expect(session.run("No extra turn.", new AbortController().signal, vi.fn()))
+      .rejects.toBeInstanceOf(CodexBudgetError);
   });
 });

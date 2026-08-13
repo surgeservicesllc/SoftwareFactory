@@ -23,6 +23,23 @@ export type LogicalAgentRole = z.infer<typeof logicalAgentRoleSchema>;
 
 const shaSchema = z.string().regex(/^[0-9a-f]{40}$/i);
 const repositoryPartSchema = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/);
+const zeroUsage = {
+  turns: 0,
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  outputTokens: 0,
+  reasoningOutputTokens: 0,
+} as const;
+
+export const workerUsageSchema = z.object({
+  turns: z.number().int().min(0).default(0),
+  inputTokens: z.number().int().min(0).default(0),
+  cachedInputTokens: z.number().int().min(0).default(0),
+  outputTokens: z.number().int().min(0).default(0),
+  reasoningOutputTokens: z.number().int().min(0).default(0),
+}).strict();
+
+export type WorkerUsage = z.infer<typeof workerUsageSchema>;
 
 export const workerJobSchema = z.object({
   runId: z.string().uuid(),
@@ -59,8 +76,8 @@ export const workerJobSchema = z.object({
     // the remaining slice of that durable total-run budget.
     maximumDurationMs: z.number().int().min(1).max(3_600_000),
     maximumTurns: z.number().int().min(1).max(8),
-    maximumInputTokens: z.number().int().min(1_000).max(2_000_000),
-    maximumOutputTokens: z.number().int().min(500).max(500_000),
+    maximumInputTokens: z.number().int().min(1).max(2_000_000),
+    maximumOutputTokens: z.number().int().min(1).max(500_000),
     maximumRepairAttempts: z.number().int().min(0).max(3),
     ciTimeoutMs: z.number().int().min(30_000).max(1_800_000),
   }).strict(),
@@ -71,18 +88,14 @@ export const workerJobSchema = z.object({
   }).strict().nullable().default(null),
   attempt: z.number().int().min(1).max(10),
   cancellationRequested: z.boolean().default(false),
+  priorUsage: workerUsageSchema.default(zeroUsage),
   recovery: z.object({
     branch: z.string().regex(/^factory\/[a-f0-9-]{36}-[a-z0-9][a-z0-9-]{0,39}$/),
     commitSha: shaSchema,
     pullRequestNumber: z.number().int().positive().nullable(),
     pullRequestUrl: githubWebUrlSchema.nullable(),
     providerRunReference: z.string().trim().min(1).max(255).nullable(),
-    usage: z.object({
-      inputTokens: z.number().int().min(0),
-      cachedInputTokens: z.number().int().min(0),
-      outputTokens: z.number().int().min(0),
-      reasoningOutputTokens: z.number().int().min(0),
-    }).strict(),
+    usage: workerUsageSchema,
   }).strict().refine(
     (value) => (value.pullRequestNumber === null) === (value.pullRequestUrl === null),
     { message: "Recovery pull request evidence must be complete or absent." },
@@ -117,13 +130,6 @@ export type WorkerEvent = Readonly<{
   kind: WorkerEventKind;
   message: string;
   details?: Record<string, string | number | boolean | null>;
-}>;
-
-export type WorkerUsage = Readonly<{
-  inputTokens: number;
-  cachedInputTokens: number;
-  outputTokens: number;
-  reasoningOutputTokens: number;
 }>;
 
 export type WorkerResult = Readonly<{
@@ -189,7 +195,7 @@ export interface WorkerStore {
       changedFiles?: readonly string[];
     },
   ): Promise<void>;
-  cancel(job: WorkerJob, workerId: string, reason: string): Promise<void>;
+  cancel(job: WorkerJob, workerId: string, reason: string, usage?: WorkerUsage): Promise<void>;
 }
 
 export interface InstallationTokenProvider {

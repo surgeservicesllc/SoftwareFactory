@@ -68,7 +68,7 @@ After exact owner approval, apply `028` -> `130001` -> `130002` -> `130003` -> `
 - provider-neutral roster, one active lease per logical agent, coherent artifact/PR replay and rejection, stale-lease/cancellation terminalization, structured report content, and bounded reconstructed PR links; and
 - real owner, second-tenant, and anonymous behavior using caller sessions.
 
-Hosted evidence is currently absent because migration `028` and migrations `130001` through `130008` are unhosted.
+Hosted schema evidence exists for the published post-`027` layers, but migration-history evidence is inconsistent: the owner dashboard shows exactly 26 ledger rows through `027` while those later objects exist. Phase 1C remains unhosted. A normal push is not acceptance evidence and is prohibited until the protected ledger reconciliation completes.
 
 ## Protected GitHub Actions acceptance still required
 

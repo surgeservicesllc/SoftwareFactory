@@ -2,9 +2,9 @@
 
 Last reviewed: 2026-08-13
 
-Decision: **Phase 2A provider source is published on main and Phase 1C is a local reconciled candidate; hosted release and live acceptance remain blocked. Provider execution and OpenAI/Codex remain Not Connected.**
+Decision: **Phase 2A provider source is published on main and Phase 1C is a local reconciled candidate; the hosted schema is ahead of an inconsistent migration ledger, so protected reconciliation and live acceptance remain blocked. Provider execution and OpenAI/Codex remain Not Connected.**
 
-Reason: main contains the Phase 1E operations and synthetic journeys, Phase 2A Anthropic/OpenAI advisory-provider layer, universal bot-fabric registry, marketing site, and separated route groups, while the reconciled tree adds the supported Codex SDK worker and exact repository binding. Phase 1E `028` and migrations `130001` through `130008` are pending. Hosted Supabase is only through `027`; no real production monitor or synthetic journey, bot/provider request, or Codex execution exists; both provider/worker execution switches remain OFF/unverified; protected Actions secrets are unverified; and there is no active heartbeat or live Codex thread/draft PR/required-CI evidence. Passing local tests cannot close those gaps.
+Reason: main contains the Phase 1E operations and synthetic journeys, Phase 2A Anthropic/OpenAI advisory-provider layer, universal bot-fabric registry, marketing site, and separated route groups, while the reconciled tree adds the supported Codex SDK worker and exact repository binding. Read-only hosted evidence shows post-`027` objects but exactly 26 ledger rows through `027`, so the database requires owner-approved history reconciliation before Phase 1C promotion. No real production monitor or synthetic journey, bot/provider request, or Codex execution exists; both provider/worker execution switches remain OFF, Actions secrets/variable are absent, and there is no active heartbeat or live Codex thread/draft PR/required-CI evidence. Passing local tests cannot close those gaps.
 
 Phase 1E decision: **Production-operations control plane implemented and locally verified; unhosted and unobserved, so no live monitoring claim is made**
 
@@ -45,7 +45,7 @@ Reason: the unhosted Phase 1D control migration completes the nine-action contro
 
 | Phase 1E gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` on the Phase 1E tree | Pass - lint/typecheck; 82 files/819 tests on the merged tree |
 | Phase 1E coverage | `npm run test:coverage` | Pass - merged tree with Phase 2A: statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%. The Phase 1E tree alone measured 78.02/77.79/70.00/79.15 |
-| Phase 1E E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe, `/operations` included | Pass - 117/117 on the merged tree |
+| Phase 1E E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe, `/solutions/operations` included | Pass - 117/117 on the merged tree |
 | Phase 1E detection pipeline | `tests/integration/phase1e-operations.behavior.test.ts` against the migrated schema | Pass - 30 tests: threshold detection, dedupe, upward-only severity, automatic freeze, owner-only resume, Last Known Good, blocked/failed rollback, bounded repairs, resolution gating, event idempotency, RLS, append-only |
 | Phase 1E end-to-end journey | `tests/integration/phase1e-incident-journey.behavior.test.ts` | Pass - ordered Monitor→Detect→Incident→Freeze→Rollback→Diagnose→Repair→Validate→Resolve, plus failed-rollback escalation to SEV1; Codex-fix and deploy stages asserted as blocked, not simulated |
 | Phase 1E boundary contracts | `tests/integration/phase1e-operations.contract.test.ts` | Pass - 18 tests: same-origin and role checks on every mutation, execution envelope on every response, no provider deployment call, no new `service_role` table grants, Phase 1D interlocks preserved |

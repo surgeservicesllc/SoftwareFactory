@@ -36,6 +36,8 @@ import { GitHubApiError } from "@/lib/github/client";
 const organizationId = "44444444-4444-4444-8444-444444444444";
 const projectId = "11111111-1111-4111-8111-111111111111";
 const commandId = "22222222-2222-4222-8222-222222222222";
+const dependencyTaskA = "88888888-8888-4888-8888-888888888888";
+const dependencyTaskB = "99999999-9999-4999-8999-999999999999";
 
 const target = {
   app_id: 4582606,
@@ -159,7 +161,9 @@ describe("POST /api/commands", () => {
     });
     expect(rpc).toHaveBeenNthCalledWith(2, "submit_command", expect.objectContaining({
       p_parameters: expect.objectContaining({
+        acceptanceCriteria: ["The dashboard copy is reviewed."],
         agentRole: "qa",
+        dependencyTaskIds: [],
         model: "gpt-5.3-codex",
         provider: "openai",
         repositoryBinding: expect.objectContaining({ baseSha: "a".repeat(40) }),
@@ -182,8 +186,59 @@ describe("POST /api/commands", () => {
     expect(await response.json()).toMatchObject({
       execution: { started: false, workerDispatch: "requested" },
       idempotentReplay: false,
-      orchestration: { baseBranch: "main", effectiveRisk: "green" },
+      orchestration: {
+        baseBranch: "main",
+        dependencyTaskIds: [],
+        effectiveRisk: "green",
+      },
     });
+  });
+
+  it("canonicalizes dependency task references before durable persistence", async () => {
+    const rpc = configuredClient({});
+
+    const response = await POST(commandRequest("https://factory.example", {
+      dependencyTaskIds: [dependencyTaskB, dependencyTaskA, dependencyTaskB],
+    }));
+
+    expect(response.status).toBe(202);
+    expect(rpc).toHaveBeenNthCalledWith(2, "submit_command", expect.objectContaining({
+      p_parameters: expect.objectContaining({
+        dependencyTaskIds: [dependencyTaskA, dependencyTaskB],
+      }),
+    }));
+    expect(await response.json()).toMatchObject({
+      orchestration: { dependencyTaskIds: [dependencyTaskA, dependencyTaskB] },
+    });
+  });
+
+  it("derives deterministic acceptance criteria when the caller submits none", async () => {
+    const rpc = configuredClient({});
+
+    const response = await POST(commandRequest("https://factory.example", {
+      acceptanceCriteria: [],
+      commandType: "mobile",
+      prompt: "Make the experience work at narrow widths.",
+    }));
+
+    expect(response.status).toBe(202);
+    expect(rpc).toHaveBeenNthCalledWith(2, "submit_command", expect.objectContaining({
+      p_parameters: expect.objectContaining({
+        acceptanceCriteria: [
+          "The requested mobile behavior is verified at supported responsive widths.",
+        ],
+      }),
+    }));
+  });
+
+  it("rejects non-canonical dependency task identifiers before tenant access", async () => {
+    const response = await POST(commandRequest("https://factory.example", {
+      dependencyTaskIds: ["ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB"],
+    }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "invalid_command" } });
+    expect(requireActiveOrganization).not.toHaveBeenCalled();
   });
 
   it("keeps the durable queue successful when worker notification is delayed", async () => {

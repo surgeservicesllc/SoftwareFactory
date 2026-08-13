@@ -21,11 +21,13 @@ const pullRequestSchema = z.object({
   state: z.literal("open"),
   draft: z.literal(true),
   head: z.object({ sha: z.string().regex(/^[0-9a-f]{40}$/i) }).passthrough(),
+  base: z.object({
+    ref: z.string().min(1).max(255),
+    sha: z.string().regex(/^[0-9a-f]{40}$/i),
+  }).passthrough(),
 }).passthrough();
 
-const pullRequestDetailSchema = pullRequestSchema.extend({
-  base: z.object({ ref: z.string().min(1).max(255) }).passthrough(),
-});
+const pullRequestDetailSchema = pullRequestSchema;
 
 const checksSchema = z.object({
   total_count: z.number().int().min(0).max(100),
@@ -257,7 +259,8 @@ export class GitHubDraftPublisher {
       || parsed.data.number !== pullRequestNumber
       || parsed.data.html_url !== expectedUrl
       || parsed.data.head.sha.toLowerCase() !== commitSha.toLowerCase()
-      || parsed.data.base.ref !== job.repository.baseBranch) {
+      || parsed.data.base.ref !== job.repository.baseBranch
+      || parsed.data.base.sha.toLowerCase() !== job.repository.baseSha.toLowerCase()) {
       throw new GitHubWorkerError(
         "github_pr_changed",
         "The recovered draft pull request no longer matches its immutable run evidence.",
@@ -302,7 +305,10 @@ export class GitHubDraftPublisher {
         signal,
       });
       const parsed = pullRequestSchema.safeParse(raw);
-      if (!parsed.success || parsed.data.head.sha.toLowerCase() !== commitSha.toLowerCase()) {
+      if (!parsed.success
+        || parsed.data.head.sha.toLowerCase() !== commitSha.toLowerCase()
+        || parsed.data.base.ref !== job.repository.baseBranch
+        || parsed.data.base.sha.toLowerCase() !== job.repository.baseSha.toLowerCase()) {
         throw new GitHubWorkerError("github_pr_invalid", "GitHub returned invalid draft pull request evidence.");
       }
       return Object.freeze({
@@ -320,7 +326,11 @@ export class GitHubDraftPublisher {
         );
         const parsed = z.array(pullRequestSchema).safeParse(raw);
         recovered = parsed.success
-          ? parsed.data.find((pullRequest) => pullRequest.head.sha.toLowerCase() === commitSha.toLowerCase()) ?? null
+          ? parsed.data.find((pullRequest) => (
+              pullRequest.head.sha.toLowerCase() === commitSha.toLowerCase()
+              && pullRequest.base.ref === job.repository.baseBranch
+              && pullRequest.base.sha.toLowerCase() === job.repository.baseSha.toLowerCase()
+            )) ?? null
           : null;
       } catch {
         // Preserve the original ambiguous mutation failure below.
@@ -394,7 +404,8 @@ export class GitHubDraftPublisher {
           const pullRequest = pullRequestDetailSchema.safeParse(await this.request(pullRequestPath, { token, signal }));
           if (!pullRequest.success || pullRequest.data.number !== pullRequestNumber
             || pullRequest.data.head.sha.toLowerCase() !== commitSha.toLowerCase()
-            || pullRequest.data.base.ref !== job.repository.baseBranch) {
+            || pullRequest.data.base.ref !== job.repository.baseBranch
+            || pullRequest.data.base.sha.toLowerCase() !== job.repository.baseSha.toLowerCase()) {
             throw new GitHubWorkerError("github_pr_changed", "The draft pull request changed before CI evidence stabilized.", 409);
           }
           return Object.freeze({ status: "passed", checks: Object.freeze(lastChecks) });

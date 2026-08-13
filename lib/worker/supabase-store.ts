@@ -3,10 +3,12 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { safeErrorMessage } from "@/lib/worker/redact";
 import {
   workerJobSchema,
+  workerUsageSchema,
   type WorkerEvent,
   type WorkerJob,
   type WorkerResult,
   type WorkerStore,
+  type WorkerUsage,
 } from "@/lib/worker/types";
 
 type RpcClient = Pick<SupabaseClient, "rpc">;
@@ -65,11 +67,25 @@ function singleRow<T>(value: unknown): T | null {
   return value && typeof value === "object" ? value as T : null;
 }
 
+function mapUsage(value: unknown): WorkerUsage {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return workerUsageSchema.parse({
+    turns: record.turns ?? 0,
+    inputTokens: record.inputTokens ?? 0,
+    cachedInputTokens: record.cachedInputTokens ?? 0,
+    outputTokens: record.outputTokens ?? 0,
+    reasoningOutputTokens: record.reasoningOutputTokens ?? 0,
+  });
+}
+
 function mapClaim(row: ClaimRow): WorkerJob {
   const separator = row.repository_full_name.indexOf("/");
   if (separator <= 0 || row.repository_full_name.indexOf("/", separator + 1) >= 0) {
     throw new Error("The claimed repository full name is invalid.");
   }
+  const priorUsage = mapUsage(row.recovery_usage);
   return workerJobSchema.parse({
     runId: row.run_id,
     organizationId: row.organization_id,
@@ -117,6 +133,7 @@ function mapClaim(row: ClaimRow): WorkerJob {
       : null,
     attempt: row.attempt_number,
     cancellationRequested: row.cancellation_requested,
+    priorUsage,
     recovery: row.recovery_head_branch
       && row.recovery_head_sha
       ? {
@@ -127,12 +144,7 @@ function mapClaim(row: ClaimRow): WorkerJob {
             : Number(row.recovery_pull_request_number),
           pullRequestUrl: row.recovery_pull_request_url,
           providerRunReference: row.recovery_provider_run_reference,
-          usage: row.recovery_usage ?? {
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            outputTokens: 0,
-            reasoningOutputTokens: 0,
-          },
+          usage: priorUsage,
         }
       : null,
   });
@@ -278,6 +290,7 @@ export class SupabaseWorkerStore implements WorkerStore {
       p_summary: result.summary,
       p_provider_run_reference: result.threadId,
       p_usage: {
+        turns: result.usage.turns,
         inputTokens: result.usage.inputTokens,
         cachedInputTokens: result.usage.cachedInputTokens,
         outputTokens: result.usage.outputTokens,
@@ -312,7 +325,7 @@ export class SupabaseWorkerStore implements WorkerStore {
       p_outcome: "failed",
       p_summary: null,
       p_provider_run_reference: failure.providerRunReference ?? null,
-      p_usage: failure.usage ?? {},
+      p_usage: failure.usage ?? job.priorUsage,
       p_changed_files: failure.changedFiles ?? [],
       p_checks: failure.checks ?? [],
       p_error_code: failure.code,
@@ -322,7 +335,7 @@ export class SupabaseWorkerStore implements WorkerStore {
     if (error) databaseFailure("Run failure", error);
   }
 
-  async cancel(job: WorkerJob, workerId: string, reason: string) {
+  async cancel(job: WorkerJob, workerId: string, reason: string, usage: WorkerUsage = job.priorUsage) {
     const { error } = await this.client.rpc("complete_phase1c_run", {
       p_worker_id: workerId,
       p_run_id: job.runId,
@@ -330,7 +343,7 @@ export class SupabaseWorkerStore implements WorkerStore {
       p_outcome: "cancelled",
       p_summary: reason,
       p_provider_run_reference: null,
-      p_usage: {},
+      p_usage: usage,
       p_changed_files: [],
       p_checks: [],
       p_error_code: "cancelled",

@@ -9,13 +9,19 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260813000800_logical_agent_roster.sql";
+const latestMigration = "20260813001100_phase1c_task_dependencies.sql";
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
 const connectionId = "30000000-0000-4000-8000-000000000001";
 const installationId = "40000000-0000-4000-8000-000000000001";
 const repositoryId = "50000000-0000-4000-8000-000000000001";
+const unrelatedOwnerId = "00000000-0000-4000-8000-000000000201";
+const unrelatedOrganizationId = "10000000-0000-4000-8000-000000000002";
+const unrelatedProjectId = "20000000-0000-4000-8000-000000000002";
+const reportId = "60000000-0000-4000-8000-000000000001";
+
+type ApplicationRole = "anon" | "authenticated" | "service_role";
 
 async function database() {
   const db = new PGlite({ extensions: { pgcrypto } });
@@ -93,6 +99,30 @@ async function seedExecutableProject(db: PGlite) {
   await db.exec("set role authenticated");
 }
 
+async function seedUnrelatedTenant(db: PGlite) {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', '', false)");
+  await db.exec(`
+    insert into auth.users (id) values ('${unrelatedOwnerId}');
+    insert into public.organizations (id, name, slug, created_by)
+    values (
+      '${unrelatedOrganizationId}', 'Unrelated Factory',
+      'phase1c-unrelated-tenant', '${unrelatedOwnerId}'
+    );
+    insert into public.projects (id, organization_id, name, status, created_by)
+    values (
+      '${unrelatedProjectId}', '${unrelatedOrganizationId}',
+      'Unrelated Project', 'active', '${unrelatedOwnerId}'
+    );
+  `);
+}
+
+async function assumeRole(db: PGlite, role: ApplicationRole, userId: string | null = null) {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', $1, false)", [userId ?? ""]);
+  await db.exec(`set role ${role}`);
+}
+
 function parameters(commandType: string, role: string) {
   return {
     acceptanceCriteria: ["The requested outcome is verified."],
@@ -106,6 +136,7 @@ function parameters(commandType: string, role: string) {
       maximumTurns: 4,
     },
     commandType,
+    dependencyTaskIds: [] as string[],
     executionMode: "manual",
     model: "gpt-5.3-codex",
     plan: {
@@ -142,8 +173,12 @@ async function registerWorker(db: PGlite, workerId: string) {
 async function claimRun(db: PGlite, workerId: string) {
   return db.query<{
     attempt_number: number;
+    command_id: string;
     lease_token: string;
     maximum_duration_ms: number;
+    maximum_input_tokens: number;
+    maximum_output_tokens: number;
+    maximum_turns: number;
     recovery_head_branch: string | null;
     recovery_head_sha: string | null;
     recovery_provider_run_reference: string | null;
@@ -151,6 +186,7 @@ async function claimRun(db: PGlite, workerId: string) {
     recovery_pull_request_url: string | null;
     recovery_usage: Record<string, unknown>;
     run_id: string;
+    task_id: string;
   }>("select * from public.claim_phase1c_run($1,$2,$3,$4)", [
     workerId, "openai", "gpt-5.3-codex", 120,
   ]);
@@ -177,7 +213,43 @@ const browserFunctions = [
   "request_phase1c_run_cancellation(uuid,uuid,text)",
   "retry_phase1c_run(uuid,uuid,text)",
   "record_phase1c_dispatch_outcome(uuid,uuid,text,text)",
+  "list_agents(uuid,integer)",
+  "list_tasks(uuid,integer)",
+  "list_agent_runs(uuid,integer)",
+  "list_reports(uuid,integer)",
+  "ensure_default_agents(uuid)",
+  "get_provider_agent_assignment(uuid,uuid)",
+  "list_provider_run_metrics(uuid,integer)",
 ] as const;
+
+const durableExecutionTables = [
+  { assignment: "created_at = created_at", name: "task_dependencies" },
+  { assignment: "updated_at = updated_at", name: "phase1c_workers" },
+  { assignment: "message = message", name: "phase1c_run_events" },
+  { assignment: "reference = reference", name: "phase1c_run_artifacts" },
+  { assignment: "output_summary = output_summary", name: "phase1c_run_validations" },
+] as const;
+
+async function expectDirectTableDenial(db: PGlite) {
+  for (const table of durableExecutionTables) {
+    await expect(
+      db.query(`select * from public.${table.name} limit 1`),
+      `${table.name} SELECT`,
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.query(`insert into public.${table.name} default values`),
+      `${table.name} INSERT`,
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.query(`update public.${table.name} set ${table.assignment}`),
+      `${table.name} UPDATE`,
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.query(`delete from public.${table.name}`),
+      `${table.name} DELETE`,
+    ).rejects.toThrow(/permission denied/i);
+  }
+}
 
 const workerFunctions = [
   "register_phase1c_worker(text,text,jsonb)",
@@ -225,6 +297,7 @@ describe("Phase 1C migration contract", () => {
         const privilege = await db.query<{ allowed: boolean }>(`
           select has_function_privilege('authenticated', 'public.${signature}', 'EXECUTE')
             and not has_function_privilege('anon', 'public.${signature}', 'EXECUTE')
+            and not has_function_privilege('service_role', 'public.${signature}', 'EXECUTE')
             and not has_function_privilege('public', 'public.${signature}', 'EXECUTE') as allowed
         `);
         expect(privilege.rows[0]?.allowed, signature).toBe(true);
@@ -285,6 +358,178 @@ describe("Phase 1C migration contract", () => {
       await db.close();
     }
   });
+
+  it("denies unrelated and anonymous callers across Phase 1C RPCs and direct tables", async () => {
+    const db = await database();
+    try {
+      await seedExecutableProject(db);
+      await seedUnrelatedTenant(db);
+      const submission = await submitAudit(db, "phase1c-tenant-denial");
+      const taskId = submission.rows[0]!.task_id;
+
+      await db.exec("reset role");
+      const execution = await db.query<{ agent_id: string; run_id: string }>(`
+        select run.agent_id, run.id as run_id
+        from public.agent_runs run
+        where run.command_id = $1
+      `, [submission.rows[0]!.command_id]);
+      const { agent_id: agentId, run_id: runId } = execution.rows[0]!;
+      await db.query(`
+        insert into public.reports (
+          id, organization_id, project_id, generated_by_agent_id,
+          type, status, title, summary, content
+        ) values ($1,$2,$3,$4,'quality','draft',$5,$6,$7::jsonb)
+      `, [
+        reportId,
+        organizationId,
+        projectId,
+        agentId,
+        "Phase 1C tenant boundary report",
+        "Bounded evidence for the caller's organization.",
+        JSON.stringify({ findings: [], runIds: [runId], sections: [] }),
+      ]);
+
+      await assumeRole(db, "service_role");
+      const worker = await db.query<{ worker_id: string }>(
+        "select worker_id from public.register_phase1c_worker($1,$2,$3::jsonb)",
+        ["worker.tenant-boundary", "1.0.0", JSON.stringify({ providers: ["openai"] })],
+      );
+      expect(worker.rows[0]?.worker_id).toBe("worker.tenant-boundary");
+
+      const readInvocations = [
+        { name: "list_agents", sql: "select * from public.list_agents($1,$2)", values: [organizationId, 100] },
+        { name: "list_tasks", sql: "select * from public.list_tasks($1,$2)", values: [organizationId, 100] },
+        { name: "list_agent_runs", sql: "select * from public.list_agent_runs($1,$2)", values: [organizationId, 100] },
+        { name: "list_reports", sql: "select * from public.list_reports($1,$2)", values: [organizationId, 100] },
+        { name: "get_agent_run_detail", sql: "select * from public.get_agent_run_detail($1,$2)", values: [organizationId, runId] },
+        { name: "get_task_detail", sql: "select * from public.get_task_detail($1,$2)", values: [organizationId, taskId] },
+        { name: "get_agent_detail", sql: "select * from public.get_agent_detail($1,$2)", values: [organizationId, agentId] },
+        { name: "get_report_detail", sql: "select * from public.get_report_detail($1,$2)", values: [organizationId, reportId] },
+        {
+          name: "get_provider_agent_assignment",
+          sql: "select * from public.get_provider_agent_assignment($1,$2)",
+          values: [organizationId, agentId],
+        },
+        {
+          name: "list_provider_run_metrics",
+          sql: "select * from public.list_provider_run_metrics($1,$2)",
+          values: [organizationId, 50],
+        },
+      ] as const;
+
+      await assumeRole(db, "authenticated", ownerId);
+      for (const invocation of readInvocations) {
+        const visible = await db.query(invocation.sql, [...invocation.values]);
+        expect(visible.rows.length, `${invocation.name} owner control`).toBeGreaterThan(0);
+      }
+      const visibleWorkerStatus = await db.query<{ detail: Record<string, unknown> | null }>(
+        "select detail from public.get_phase1c_worker_status($1)",
+        [organizationId],
+      );
+      expect(visibleWorkerStatus.rows[0]?.detail).not.toBeNull();
+
+      await assumeRole(db, "authenticated", unrelatedOwnerId);
+      for (const invocation of readInvocations) {
+        const hidden = await db.query(invocation.sql, [...invocation.values]);
+        expect(hidden.rows, `${invocation.name} unrelated tenant`).toEqual([]);
+      }
+      const hiddenWorkerStatus = await db.query<{ detail: Record<string, unknown> | null }>(
+        "select detail from public.get_phase1c_worker_status($1)",
+        [organizationId],
+      );
+      expect(hiddenWorkerStatus.rows).toEqual([{ detail: null }]);
+
+      const crossTenantMutations = [
+        {
+          name: "submit_command",
+          sql: "select * from public.submit_command($1,$2,$3,$4::jsonb,$5)",
+          values: [
+            projectId,
+            "Audit the dashboard behavior.",
+            "green",
+            JSON.stringify(parameters("audit", "qa")),
+            "phase1c-cross-tenant-submit",
+          ],
+        },
+        {
+          name: "resolve_phase1c_command_target",
+          sql: "select * from public.resolve_phase1c_command_target($1,$2)",
+          values: [organizationId, projectId],
+        },
+        {
+          name: "request_phase1c_run_cancellation",
+          sql: "select * from public.request_phase1c_run_cancellation($1,$2,$3)",
+          values: [organizationId, runId, "Unrelated tenant cancellation request."],
+        },
+        {
+          name: "retry_phase1c_run",
+          sql: "select * from public.retry_phase1c_run($1,$2,$3)",
+          values: [organizationId, runId, "Unrelated tenant retry request."],
+        },
+        {
+          name: "record_phase1c_dispatch_outcome",
+          sql: "select * from public.record_phase1c_dispatch_outcome($1,$2,$3,$4)",
+          values: [organizationId, submission.rows[0]!.command_id, "requested", null],
+        },
+        {
+          name: "ensure_default_agents",
+          sql: "select * from public.ensure_default_agents($1)",
+          values: [organizationId],
+        },
+      ] as const;
+      for (const invocation of crossTenantMutations) {
+        await expect(
+          db.query(invocation.sql, [...invocation.values]),
+          `${invocation.name} unrelated tenant`,
+        ).rejects.toThrow(/access|owner|administrator/i);
+      }
+
+      const anonymousInvocations = [
+        ...readInvocations,
+        ...crossTenantMutations,
+        {
+          name: "get_phase1c_worker_status",
+          sql: "select * from public.get_phase1c_worker_status($1)",
+          values: [organizationId],
+        },
+      ] as const;
+      await assumeRole(db, "anon");
+      for (const invocation of anonymousInvocations) {
+        await expect(
+          db.query(invocation.sql, [...invocation.values]),
+          `${invocation.name} anonymous`,
+        ).rejects.toThrow(/permission denied/i);
+      }
+      await expect(db.query(
+        "select * from public.register_phase1c_worker($1,$2,$3::jsonb)",
+        ["worker.anonymous", "1.0.0", "{}"],
+      )).rejects.toThrow(/permission denied/i);
+      await expectDirectTableDenial(db);
+
+      await assumeRole(db, "authenticated", ownerId);
+      await expect(db.query(
+        "select * from public.register_phase1c_worker($1,$2,$3::jsonb)",
+        ["worker.authenticated", "1.0.0", "{}"],
+      )).rejects.toThrow(/permission denied/i);
+      await expectDirectTableDenial(db);
+
+      await assumeRole(db, "service_role");
+      await expect(
+        db.query("select * from public.list_agents($1,$2)", [organizationId, 50]),
+      ).rejects.toThrow(/permission denied/i);
+      await expectDirectTableDenial(db);
+
+      await db.exec("reset role");
+      const persistedWorker = await db.query<{ count: string }>(`
+        select count(*)::text as count from public.phase1c_workers
+        where worker_id = 'worker.tenant-boundary'
+      `);
+      expect(persistedWorker.rows[0]?.count).toBe("1");
+    } finally {
+      await db.exec("reset role").catch(() => undefined);
+      await db.close();
+    }
+  }, 120_000);
 
   it("classifies direct RPC calls authoritatively and never queues RED work", async () => {
     const db = await database();
@@ -758,6 +1003,102 @@ describe("Phase 1C migration contract", () => {
     }
   });
 
+  it("persists canonical dependencies, repairs exact replays, and claims only after prerequisites complete", async () => {
+    const db = await database();
+    const prerequisiteIds = [
+      "71000000-0000-4000-8000-000000000001",
+      "71000000-0000-4000-8000-000000000002",
+    ];
+    const workerId = "worker.dependencies";
+    try {
+      await seedExecutableProject(db);
+      await db.exec("reset role");
+      await db.query(`
+        insert into public.tasks (
+          id, organization_id, project_id, title, status, risk_level, created_by
+        ) values
+          ($1, $3, $4, 'First prerequisite', 'backlog', 'green', $5),
+          ($2, $3, $4, 'Second prerequisite', 'backlog', 'green', $5)
+      `, [prerequisiteIds[0], prerequisiteIds[1], organizationId, projectId, ownerId]);
+
+      await assumeRole(db, "authenticated", ownerId);
+      const submittedParameters = parameters("audit", "qa");
+      submittedParameters.acceptanceCriteria = [];
+      submittedParameters.dependencyTaskIds = prerequisiteIds;
+      const first = await db.query<{
+        task_id: string;
+        was_created: boolean;
+      }>("select task_id, was_created from public.submit_command($1,$2,$3,$4::jsonb,$5)", [
+        projectId,
+        "Audit the dependent workflow.",
+        "green",
+        JSON.stringify(submittedParameters),
+        "phase1c-dependency-contract",
+      ]);
+      expect(first.rows[0]!.was_created).toBe(true);
+
+      await db.exec("reset role");
+      const persisted = await db.query<{
+        acceptance_criteria: string[];
+        created_by: string;
+        dependency_id: string;
+      }>(`
+        select dependency.depends_on_task_id::text as dependency_id,
+          dependency.created_by::text,
+          command.acceptance_criteria
+        from public.task_dependencies dependency
+        join public.tasks task on task.id = dependency.task_id
+        join public.commands command on command.id = task.command_id
+        where dependency.task_id = $1
+        order by dependency.depends_on_task_id
+      `, [first.rows[0]!.task_id]);
+      expect(persisted.rows).toEqual(prerequisiteIds.map((dependencyId) => ({
+        acceptance_criteria: [
+          "The audit findings are documented with cited evidence and prioritized follow-up.",
+        ],
+        created_by: ownerId,
+        dependency_id: dependencyId,
+      })));
+
+      await db.query(`delete from public.task_dependencies
+        where task_id = $1 and depends_on_task_id = $2`, [
+        first.rows[0]!.task_id, prerequisiteIds[1],
+      ]);
+      const unorderedWithDuplicate = [prerequisiteIds[1], prerequisiteIds[0], prerequisiteIds[1]];
+      const canonicalReplayIds = [...new Set(unorderedWithDuplicate)].sort();
+      expect(canonicalReplayIds).toEqual(prerequisiteIds);
+      const replayParameters = parameters("audit", "qa");
+      replayParameters.acceptanceCriteria = [];
+      replayParameters.dependencyTaskIds = canonicalReplayIds;
+      await assumeRole(db, "authenticated", ownerId);
+      const replay = await db.query<{ task_id: string; was_created: boolean }>(
+        "select task_id, was_created from public.submit_command($1,$2,$3,$4::jsonb,$5)",
+        [projectId, "Audit the dependent workflow.", "green", JSON.stringify(replayParameters),
+          "phase1c-dependency-contract"],
+      );
+      expect(replay.rows[0]).toEqual({ task_id: first.rows[0]!.task_id, was_created: false });
+
+      await registerWorker(db, workerId);
+      expect((await claimRun(db, workerId)).rows).toHaveLength(0);
+      await db.exec("reset role");
+      const repaired = await db.query<{ dependency_ids: string[] }>(`
+        select array_agg(depends_on_task_id::text order by depends_on_task_id) as dependency_ids
+        from public.task_dependencies where task_id = $1
+      `, [first.rows[0]!.task_id]);
+      expect(repaired.rows[0]!.dependency_ids).toEqual(prerequisiteIds);
+
+      await db.query(`update public.tasks set status = 'completed', completed_at = now()
+        where id = any($1::uuid[])`, [prerequisiteIds]);
+      await registerWorker(db, workerId);
+      const claimed = await claimRun(db, workerId);
+      expect(claimed.rows).toHaveLength(1);
+      expect(claimed.rows[0]!.task_id).toBe(first.rows[0]!.task_id);
+    } finally {
+      await db.exec("reset role").catch(() => undefined);
+      await db.close();
+    }
+  });
+
   it("reports neutral provider status as unavailable and serializes work by logical agent", async () => {
     const db = await database();
     try {
@@ -955,6 +1296,89 @@ describe("Phase 1C migration contract", () => {
       `, [organizationId, first.run_id]);
       expect(activity.rows[0]!.agent_completed).toBe(1);
       expect(activity.rows[0]!.pull_created).toBe(1);
+    } finally {
+      await db.exec("reset role").catch(() => undefined);
+      await db.close();
+    }
+  });
+
+  it("carries cumulative usage into remaining retry budgets and rejects exhausted retries and claims", async () => {
+    const db = await database();
+    const workerId = "worker.cumulative-budget";
+    const partialUsage = {
+      cachedInputTokens: 1_000,
+      inputTokens: 120_000,
+      outputTokens: 30_000,
+      reasoningOutputTokens: 500,
+      turns: 2,
+    };
+    const exhaustedUsage = {
+      cachedInputTokens: 1_500,
+      inputTokens: 130_000,
+      outputTokens: 31_000,
+      reasoningOutputTokens: 750,
+      turns: 4,
+    };
+    try {
+      await seedExecutableProject(db);
+      await submitAudit(db, "cumulative-budget-contract");
+      await registerWorker(db, workerId);
+      const first = (await claimRun(db, workerId)).rows[0]!;
+      await db.query(
+        "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        [workerId, first.run_id, first.lease_token, "failed", "Provider failed before commit evidence.",
+          null, JSON.stringify(partialUsage), "[]", "[]", "provider_timeout",
+          "The provider timed out before a commit was created.", true],
+      );
+
+      await assumeRole(db, "authenticated", ownerId);
+      await db.query("select * from public.retry_phase1c_run($1,$2,$3)", [
+        organizationId, first.run_id, "Retry within the remaining cumulative provider budget.",
+      ]);
+      await registerWorker(db, workerId);
+      const second = (await claimRun(db, workerId)).rows[0]!;
+      expect(second).toMatchObject({
+        attempt_number: 2,
+        maximum_input_tokens: 80_000,
+        maximum_output_tokens: 20_000,
+        maximum_turns: 2,
+        recovery_head_branch: null,
+        recovery_head_sha: null,
+        recovery_provider_run_reference: null,
+        recovery_pull_request_number: null,
+        recovery_pull_request_url: null,
+        recovery_usage: partialUsage,
+      });
+
+      await db.query(
+        "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        [workerId, second.run_id, second.lease_token, "failed", "Cumulative turn budget exhausted.",
+          null, JSON.stringify(exhaustedUsage), "[]", "[]", "provider_timeout",
+          "The provider exhausted the configured cumulative turn budget.", true],
+      );
+      await assumeRole(db, "authenticated", ownerId);
+      await expect(db.query("select * from public.retry_phase1c_run($1,$2,$3)", [
+        organizationId, second.run_id, "This retry must be rejected as exhausted.",
+      ])).rejects.toThrow(/not eligible for a bounded retry/i);
+
+      await db.exec("reset role");
+      const exhausted = await db.query<{ retryable: boolean; usage: Record<string, number> }>(`
+        select retryable, usage from public.agent_runs where id = $1
+      `, [second.run_id]);
+      expect(exhausted.rows[0]).toEqual({ retryable: false, usage: exhaustedUsage });
+
+      // Simulate a corrupted queue transition to prove claim independently
+      // rejects persisted usage that has consumed any configured total.
+      await db.query(`update public.agent_runs set status = 'queued', retryable = true,
+        attempt_number = 1, lease_worker_id = null, lease_token = null,
+        lease_expires_at = null, completed_at = null where id = $1`, [second.run_id]);
+      await db.query(`update public.tasks set status = 'queued', started_at = null,
+        completed_at = null where id = $1`, [second.task_id]);
+      await db.query("update public.commands set status = 'queued', completed_at = null where id = $1", [
+        second.command_id,
+      ]);
+      await registerWorker(db, "worker.exhausted-claim");
+      await expect(claimRun(db, "worker.exhausted-claim")).rejects.toThrow(/run budget is exhausted/i);
     } finally {
       await db.exec("reset role").catch(() => undefined);
       await db.close();

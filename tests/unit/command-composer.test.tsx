@@ -57,6 +57,9 @@ describe("CommandComposer", () => {
           }],
         });
       }
+      if (String(input) === "/api/tasks?limit=100") {
+        return jsonResponse({ tasks: [] });
+      }
       if (String(input) === "/api/commands" && init?.method === "POST") {
         attempts += 1;
         if (attempts === 1) throw new TypeError("The response was lost");
@@ -91,5 +94,69 @@ describe("CommandComposer", () => {
     expect(bodies[0]?.idempotencyKey).toBe("command:33333333-3333-4333-8333-333333333333");
     expect(bodies[1]?.idempotencyKey).toBe(bodies[0]?.idempotencyKey);
     expect(randomUUID).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits sorted project-scoped dependencies and leaves server derivation explicit", async () => {
+    const projectId = "11111111-1111-4111-8111-111111111111";
+    const otherProjectId = "22222222-2222-4222-8222-222222222222";
+    const dependencyTaskA = "88888888-8888-4888-8888-888888888888";
+    const dependencyTaskB = "99999999-9999-4999-8999-999999999999";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/projects") {
+        return jsonResponse({
+          projects: [{
+            connectionStatus: "connected",
+            id: projectId,
+            name: "Application",
+            status: "active",
+          }],
+        });
+      }
+      if (String(input) === "/api/tasks?limit=100") {
+        return jsonResponse({
+          tasks: [
+            { id: dependencyTaskB, project: { id: projectId, name: "Application" }, status: "queued", title: "Foundation B" },
+            { id: dependencyTaskA, project: { id: projectId, name: "Application" }, status: "completed", title: "Foundation A" },
+            { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", project: { id: projectId, name: "Application" }, status: "failed", title: "Failed work" },
+            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", project: { id: otherProjectId, name: "Other" }, status: "queued", title: "Other project work" },
+          ],
+        });
+      }
+      if (String(input) === "/api/commands" && init?.method === "POST") {
+        return jsonResponse({
+          command: { id: "44444444-4444-4444-8444-444444444444" },
+          execution: { workerDispatch: "requested" },
+          orchestration: { effectiveRisk: "green", repository: "example/application" },
+          requiresOwnerApproval: false,
+        }, 202);
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<CommandComposer />);
+
+    const dependencyB = await screen.findByRole("checkbox", { name: /Foundation B/ });
+    const dependencyA = screen.getByRole("checkbox", { name: /Foundation A/ });
+    expect(screen.queryByText("Failed work")).not.toBeInTheDocument();
+    expect(screen.queryByText("Other project work")).not.toBeInTheDocument();
+
+    await user.click(dependencyB);
+    await user.click(dependencyA);
+    await user.type(screen.getByLabelText("What do you want done?"), "Build the dependent outcome");
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+    expect(await screen.findByText(/is queued for example\/application as GREEN/)).toBeInTheDocument();
+
+    const commandCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input) === "/api/commands" && init?.method === "POST",
+    );
+    expect(commandCall).toBeDefined();
+    const body = JSON.parse(String(commandCall?.[1]?.body)) as {
+      acceptanceCriteria: string[];
+      dependencyTaskIds: string[];
+    };
+    expect(body.acceptanceCriteria).toEqual([]);
+    expect(body.dependencyTaskIds).toEqual([dependencyTaskA, dependencyTaskB]);
   });
 });

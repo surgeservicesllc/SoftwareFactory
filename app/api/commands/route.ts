@@ -12,7 +12,9 @@ import {
   acceptanceCriterionSchema,
   assessCommandRisk,
   commandTypeSchema,
-  normalizeAcceptanceCriteria,
+  dependencyTaskIdSchema,
+  normalizeDependencyTaskIds,
+  resolveAcceptanceCriteria,
 } from "@/lib/orchestration/command";
 import { dispatchPhase1CWorker } from "@/lib/orchestration/dispatch";
 import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
@@ -35,6 +37,7 @@ const commandRequestSchema = z.object({
   prompt: z.string().trim().min(1).max(4000),
   commandType: commandTypeSchema.default("other"),
   acceptanceCriteria: z.array(acceptanceCriterionSchema).max(12).default([]),
+  dependencyTaskIds: z.array(dependencyTaskIdSchema).max(20).default([]),
   risk: z.enum(["green", "yellow", "red"]).default("green"),
   parameters: z.object({}).strict().default({}),
   idempotencyKey: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/).optional(),
@@ -80,7 +83,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const acceptanceCriteria = normalizeAcceptanceCriteria(parsed.data.acceptanceCriteria);
+    const acceptanceCriteria = resolveAcceptanceCriteria(
+      parsed.data.commandType,
+      parsed.data.acceptanceCriteria,
+    );
+    const dependencyTaskIds = normalizeDependencyTaskIds(parsed.data.dependencyTaskIds);
     const sensitiveFinding = findSensitiveData({
       acceptanceCriteria,
       prompt: parsed.data.prompt,
@@ -195,6 +202,7 @@ export async function POST(request: Request) {
       agentRole: executionPlan.agentRole,
       budget: executionPlan.budget,
       commandType: parsed.data.commandType,
+      dependencyTaskIds,
       executionMode: "manual",
       model: executionPlan.model,
       plan: executionPlan.plan,
@@ -284,6 +292,7 @@ export async function POST(request: Request) {
           baseBranch: target.base_branch,
           baseSha,
           commandType: parsed.data.commandType,
+          dependencyTaskIds,
           effectiveRisk: riskAssessment.effectiveRisk.toLowerCase(),
           model: executionPlan.model,
           repository: target.repository_full_name,

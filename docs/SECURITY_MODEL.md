@@ -92,7 +92,7 @@ Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal 
 
 ## Current evidence boundary
 
-The source and tests do not prove the live boundary. Hosted Supabase is only through `027`; migration `028` and migrations `130001` through `130008` remain unhosted; no production target or synthetic journey has been observed; provider credentials/live calls, enabled provider execution, Actions secrets/activation, active worker heartbeat, Codex thread, factory branch, Phase 1C draft PR, and stable exact required-check result are absent. Both advisory provider execution and OpenAI/Codex worker execution remain **Not Connected** until their separate protected promotion and live acceptance evidence pass.
+The source and tests do not prove the live boundary. Hosted post-`027` schema exists but the migration ledger remains exactly 26 rows through `027`, so protected history reconciliation must precede the still-unhosted Phase 1C migration chain. No production target or synthetic journey has been observed; provider credentials/live calls, enabled provider execution, Actions secrets/activation, active worker heartbeat, Codex thread, factory branch, Phase 1C draft PR, and stable exact required-check result are absent. Both advisory provider execution and OpenAI/Codex worker execution remain **Not Connected** until their separate protected promotion and live acceptance evidence pass.
 
 ## Autonomous and delivery boundary
 

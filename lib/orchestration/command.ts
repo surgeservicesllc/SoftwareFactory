@@ -21,6 +21,21 @@ export const commandTypeSchema = z.enum([
 export type CommandType = z.infer<typeof commandTypeSchema>;
 
 export const acceptanceCriterionSchema = z.string().trim().min(3).max(500);
+export const dependencyTaskIdSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  "Dependency task identifiers must be lowercase UUIDs.",
+);
+
+const derivedAcceptanceCriterionByCommandType = Object.freeze({
+  audit: "The audit findings are documented with cited evidence and prioritized follow-up.",
+  build_feature: "The requested feature works as described and passes applicable validation.",
+  fix_bug: "The reported defect is fixed and verified without unrelated regressions.",
+  mobile: "The requested mobile behavior is verified at supported responsive widths.",
+  other: "The requested outcome is implemented and verified without unrelated changes.",
+  performance: "The requested performance improvement is measured and preserves existing behavior.",
+  security: "The requested security change is verified against the applicable authorization boundary.",
+  test: "The requested test coverage passes and protects the specified behavior.",
+} satisfies Record<CommandType, string>);
 
 const riskFloorByCommandType = Object.freeze({
   audit: "GREEN",
@@ -120,4 +135,23 @@ export function normalizeAcceptanceCriteria(criteria: readonly string[]) {
     .map((criterion) => criterion.trim())
     .filter(Boolean);
   return [...new Set(normalized)];
+}
+
+/**
+ * Keeps the application route aligned with the authoritative SQL fallback.
+ * Direct database callers receive the same criterion from the migration.
+ */
+export function resolveAcceptanceCriteria(
+  commandType: CommandType,
+  criteria: readonly string[],
+) {
+  const normalized = normalizeAcceptanceCriteria(criteria);
+  return normalized.length
+    ? normalized
+    : [derivedAcceptanceCriterionByCommandType[commandType]];
+}
+
+/** Canonical form persisted in command parameters and compared on replay. */
+export function normalizeDependencyTaskIds(taskIds: readonly string[]) {
+  return [...new Set(taskIds)].sort((left, right) => left.localeCompare(right));
 }

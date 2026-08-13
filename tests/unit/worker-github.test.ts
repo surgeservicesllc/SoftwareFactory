@@ -63,6 +63,7 @@ describe("GitHubDraftPublisher", () => {
       state: "open",
       draft: true,
       head: { sha: commitSha },
+      base: { ref: "main", sha: "a".repeat(40) },
     });
     const publisher = new GitHubDraftPublisher(request);
 
@@ -94,6 +95,7 @@ describe("GitHubDraftPublisher", () => {
         state: "open",
         draft: true,
         head: { sha: commitSha },
+        base: { ref: "main", sha: "a".repeat(40) },
       }]);
     const publisher = new GitHubDraftPublisher(request);
 
@@ -111,7 +113,7 @@ describe("GitHubDraftPublisher", () => {
       state: "open",
       draft: true,
       head: { sha: commitSha },
-      base: { ref: "main" },
+      base: { ref: "main", sha: "a".repeat(40) },
     });
     const publisher = new GitHubDraftPublisher(request);
 
@@ -120,6 +122,23 @@ describe("GitHubDraftPublisher", () => {
     )).resolves.toMatchObject({ number: 12, headSha: commitSha });
     await expect(publisher.verifyExistingDraft(
       job(), 12, "https://github.com/example/application/pull/99", commitSha, "token",
+    )).rejects.toMatchObject({ code: "github_pr_changed" });
+  });
+
+  it("rejects an open draft whose provider base SHA is no longer the planned base", async () => {
+    const commitSha = "b".repeat(40);
+    const request = vi.fn().mockResolvedValue({
+      number: 12,
+      html_url: "https://github.com/example/application/pull/12",
+      state: "open",
+      draft: true,
+      head: { sha: commitSha },
+      base: { ref: "main", sha: "c".repeat(40) },
+    });
+    const publisher = new GitHubDraftPublisher(request);
+
+    await expect(publisher.verifyExistingDraft(
+      job(), 12, "https://github.com/example/application/pull/12", commitSha, "token",
     )).rejects.toMatchObject({ code: "github_pr_changed" });
   });
 
@@ -144,7 +163,7 @@ describe("GitHubDraftPublisher", () => {
         state: "open",
         draft: true,
         head: { sha: "b".repeat(40) },
-        base: { ref: "main" },
+        base: { ref: "main", sha: "a".repeat(40) },
       });
     let now = 0;
     const publisher = new GitHubDraftPublisher(
@@ -202,7 +221,7 @@ describe("GitHubDraftPublisher", () => {
         state: "open",
         draft: true,
         head: { sha: "c".repeat(40) },
-        base: { ref: "main" },
+        base: { ref: "main", sha: "a".repeat(40) },
       });
     let now = 0;
     const publisher = new GitHubDraftPublisher(

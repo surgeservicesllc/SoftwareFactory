@@ -310,6 +310,52 @@ export class GitWorkspaceManager {
     }
   }
 
+  async assertRemoteBaseSha(
+    workspace: PreparedWorkspace,
+    repository: Pick<WorkerJob["repository"], "owner" | "name" | "baseBranch" | "baseSha">,
+    token: string,
+    signal?: AbortSignal,
+  ) {
+    await this.assertTrustedMetadata(workspace.directory, workspace.gitDirectory);
+    const git = {
+      gitDirectory: workspace.gitDirectory,
+      hooksDirectory: workspace.hooksDirectory,
+    } as const;
+    const expectedOrigin = `https://github.com/${repository.owner}/${repository.name}.git`;
+    const origin = await successfulGit(
+      workspace.directory,
+      ["remote", "get-url", "origin"],
+      { signal, ...git },
+    );
+    if (origin !== expectedOrigin) {
+      throw new WorkspaceError(
+        "workspace_remote_mismatch",
+        "The reviewed workspace no longer points to the planned GitHub repository.",
+      );
+    }
+    const authentication = gitAuthenticationEnvironment(token);
+    const remoteBase = await successfulGit(
+      workspace.directory,
+      ["ls-remote", "--refs", "origin", `refs/heads/${repository.baseBranch}`],
+      {
+        env: authentication.environment,
+        signal,
+        secrets: authentication.secrets,
+        ...git,
+      },
+    );
+    const lines = remoteBase.split(/\r?\n/).filter(Boolean);
+    const observedSha = lines.length === 1
+      ? lines[0]?.split(/\s+/)[0]?.toLowerCase()
+      : undefined;
+    if (observedSha !== repository.baseSha.toLowerCase()) {
+      throw new WorkspaceError(
+        "stale_base_sha",
+        "The repository base branch changed after the run was planned. Re-plan from the current SHA.",
+      );
+    }
+  }
+
   async changedFiles(workspace: PreparedWorkspace, baseSha: string, signal?: AbortSignal) {
     const commands = [
       ["diff", "--name-only", "-z", `${baseSha}...HEAD`],

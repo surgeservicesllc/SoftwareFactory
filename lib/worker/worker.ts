@@ -1,4 +1,9 @@
-import { CodexSdkAdapter, type CodexTurnResult } from "@/lib/worker/codex";
+import {
+  CodexBudgetError,
+  CodexSdkAdapter,
+  type CodexSession,
+  type CodexTurnResult,
+} from "@/lib/worker/codex";
 import { GitHubDraftPublisher, GitHubWorkerError } from "@/lib/worker/github";
 import { PolicyScanError, scanChangedFiles } from "@/lib/worker/policy-scan";
 import { ProcessExecutionError } from "@/lib/worker/process";
@@ -37,7 +42,8 @@ export type WorkerDependencies = Readonly<{
   store: WorkerStore;
   tokenProvider: InstallationTokenProvider;
   workspace: Pick<GitWorkspaceManager,
-    "prepare" | "currentHead" | "changedFiles" | "commit" | "assertImmutableCommit" | "push">;
+    "prepare" | "currentHead" | "changedFiles" | "commit" | "assertImmutableCommit"
+    | "assertRemoteBaseSha" | "push">;
   codex: Pick<CodexSdkAdapter, "createSession" | "initialPrompt">;
   validator: Pick<DeterministicValidator, "bootstrap" | "run">;
   publisher: Pick<GitHubDraftPublisher, "createOrRecoverDraft" | "verifyExistingDraft" | "waitForChecks">;
@@ -64,6 +70,7 @@ async function recordCodexEvidence(result: CodexTurnResult, event: EventWriter) 
 
 function failureCode(error: unknown) {
   if (error instanceof GitHubWorkerError) return error.code;
+  if (error instanceof CodexBudgetError) return error.code;
   if (error instanceof WorkspaceError || error instanceof PolicyScanError) return error.code;
   if (error instanceof ProcessExecutionError) return error.code;
   if (error instanceof WorkerDeadlineError) return error.code;
@@ -172,13 +179,9 @@ export class SoftwareFactoryWorker {
     let observedChecks: WorkerResult["checks"] = [];
     let observedChangedFiles: readonly string[] = [];
     let observedProviderRunReference: string | null = job.recovery?.providerRunReference ?? null;
-    let observedUsage = job.recovery?.usage ?? {
-      inputTokens: 0,
-      cachedInputTokens: 0,
-      outputTokens: 0,
-      reasoningOutputTokens: 0,
-    };
+    let observedUsage = job.priorUsage;
     let preparedWorkspace: PreparedWorkspace | null = null;
+    let activeCodexSession: CodexSession | null = null;
     let validationRound = 0;
 
     try {
@@ -242,6 +245,12 @@ export class SoftwareFactoryWorker {
           controller.signal,
         );
         await assertExecutionActive();
+        await this.dependencies.workspace.assertRemoteBaseSha(
+          workspace,
+          job.repository,
+          installationToken.token,
+          controller.signal,
+        );
         const pullRequest = job.recovery.pullRequestNumber !== null
           && job.recovery.pullRequestUrl !== null
           ? await this.dependencies.publisher.verifyExistingDraft(
@@ -300,6 +309,20 @@ export class SoftwareFactoryWorker {
           );
         }
         await assertExecutionActive();
+        await this.dependencies.workspace.assertRemoteBaseSha(
+          workspace,
+          job.repository,
+          installationToken.token,
+          controller.signal,
+        );
+        await this.dependencies.publisher.verifyExistingDraft(
+          job,
+          pullRequest.number,
+          pullRequest.url,
+          job.recovery.commitSha,
+          installationToken.token,
+          controller.signal,
+        );
         await this.dependencies.store.complete(job, this.workerId, Object.freeze({
           branch: job.recovery.branch,
           commitSha: job.recovery.commitSha,
@@ -307,7 +330,7 @@ export class SoftwareFactoryWorker {
           pullRequestUrl: pullRequest.url,
           threadId: job.recovery.providerRunReference,
           summary: "Recovered the exact validated draft pull request and observed stable passing CI.",
-          usage: job.recovery.usage,
+          usage: job.priorUsage,
           checks: ci.checks,
           changedFiles: recoveryScan.changedFiles,
           validation: [],
@@ -322,6 +345,7 @@ export class SoftwareFactoryWorker {
       }
 
       const session = this.dependencies.codex.createSession(job, workspace);
+      activeCodexSession = session;
       await event({ kind: "agent_started", message: "Codex engineering execution started." });
       let codexResult = await session.run(
         this.dependencies.codex.initialPrompt(job),
@@ -388,9 +412,21 @@ export class SoftwareFactoryWorker {
       await event({ kind: "commit_created", message: "Created a commit on the isolated factory branch.", details: { commitSha } });
       installationToken = await this.dependencies.tokenProvider.createToken(job, controller.signal);
       await assertExecutionActive();
+      await this.dependencies.workspace.assertRemoteBaseSha(
+        workspace,
+        job.repository,
+        installationToken.token,
+        controller.signal,
+      );
       await this.dependencies.workspace.push(workspace, installationToken.token, commitSha, controller.signal);
       await event({ kind: "branch_pushed", message: "Pushed the isolated factory branch." });
       await assertExecutionActive();
+      await this.dependencies.workspace.assertRemoteBaseSha(
+        workspace,
+        job.repository,
+        installationToken.token,
+        controller.signal,
+      );
       let pullRequest = await this.dependencies.publisher.createOrRecoverDraft(
         job,
         workspace.branch,
@@ -479,8 +515,20 @@ export class SoftwareFactoryWorker {
         });
         installationToken = await this.dependencies.tokenProvider.createToken(job, controller.signal);
         await assertExecutionActive();
+        await this.dependencies.workspace.assertRemoteBaseSha(
+          workspace,
+          job.repository,
+          installationToken.token,
+          controller.signal,
+        );
         await this.dependencies.workspace.push(workspace, installationToken.token, commitSha, controller.signal);
         await assertExecutionActive();
+        await this.dependencies.workspace.assertRemoteBaseSha(
+          workspace,
+          job.repository,
+          installationToken.token,
+          controller.signal,
+        );
         pullRequest = await this.dependencies.publisher.createOrRecoverDraft(
           job,
           workspace.branch,
@@ -514,9 +562,27 @@ export class SoftwareFactoryWorker {
         validation,
       });
       await assertExecutionActive();
+      await this.dependencies.workspace.assertRemoteBaseSha(
+        workspace,
+        job.repository,
+        installationToken.token,
+        controller.signal,
+      );
+      await this.dependencies.publisher.verifyExistingDraft(
+        job,
+        pullRequest.number,
+        pullRequest.url,
+        commitSha,
+        installationToken.token,
+        controller.signal,
+      );
       controller.signal.throwIfAborted();
       await this.dependencies.store.complete(job, this.workerId, result);
     } catch (error) {
+      if (activeCodexSession) {
+        observedUsage = activeCodexSession.usage;
+        observedProviderRunReference = activeCodexSession.threadId ?? observedProviderRunReference;
+      }
       const cancelled = ownerCancellation || error instanceof WorkerCancellationError;
       const actualError = deadlineExceeded
         ? new WorkerDeadlineError()
@@ -537,7 +603,7 @@ export class SoftwareFactoryWorker {
         ? "The run was cancelled or exceeded its bounded execution window."
         : safeErrorMessage(actualError);
       if (cancelled) {
-        await this.dependencies.store.cancel(job, this.workerId, message);
+        await this.dependencies.store.cancel(job, this.workerId, message, observedUsage);
       } else {
         await this.dependencies.store.fail(job, this.workerId, {
           code: failureCode(actualError),

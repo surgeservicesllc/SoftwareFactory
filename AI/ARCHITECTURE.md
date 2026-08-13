@@ -24,7 +24,7 @@ GitHub Actions one-shot worker (trusted server process; not a Vercel request)
   -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, and separated route groups are published on `main`; the Phase 1C path exists only in the local reconciled tree. Hosted Supabase is through `027`; migration `028` and migrations `130001` through `130008` are unapplied, production targets and provider credentials/live calls are unverified, both execution switches are OFF/unverified, and no live worker heartbeat/run exists. Phase 1E operations, outbound provider execution, bot-provider readiness, and OpenAI/Codex worker execution remain **Not Connected**.
+The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, and separated route groups are published on `main`; the Phase 1C path exists only in the local reconciled tree. Hosted Supabase visibly has the published post-`027` schema objects but its migration ledger still has exactly 26 rows through `027`. The duplicate applied `130002` source version and unrecorded applied versions require protected history reconciliation before the absent Phase 1C migrations can be promoted. Production targets and provider credentials/live calls are unverified, both execution switches are OFF, and no live worker heartbeat/run exists. Phase 1E operations, outbound provider execution, bot-provider readiness, and OpenAI/Codex worker execution remain **Not Connected**.
 
 ## Phase 2A advisory provider boundary
 

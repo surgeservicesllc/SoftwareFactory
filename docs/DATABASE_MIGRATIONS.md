@@ -22,7 +22,7 @@ Supabase migrations under `supabase/migrations/` become immutable schema history
 | `130007_phase1c_codex_execution` | Durable command/task/run orchestration, worker leases/evidence, safe RPCs, risk/config enforcement, cancellation/retry, reports/activity | **UNHOSTED**; local Phase 1C candidate |
 | `130008_logical_agent_roster` | Eleven-role logical roster, owner/risk hardening, per-agent serialization, provider-table ACL reconciliation, coherent artifact/recovery rules, stale-lease/cancellation terminalization, structured reports and bounded projections | **UNHOSTED**; local Phase 1C candidate |
 
-Production project `qpuofpmagrmyamahqwxw` is verified only through `027`. Migration `028` and migrations `130001` through `130008` are pending protected changes. Their presence in source, on main, or in passing migration tests is not hosted evidence.
+Production project `qpuofpmagrmyamahqwxw` currently has an inconsistent schema/history boundary. A read-only owner-dashboard inspection on 2026-08-13 enumerated exactly 26 migration-history rows through `027`, while the hosted catalog visibly contains the post-`027` operations, provider, synthetic, bot-fabric, and marketing objects. Draft PR #15 records a matching 53-table/61-policy catalog audit and a prior `42710` duplicate-trigger failure. The source also historically applied two files under version `130002`, which the ledger primary key can represent only once. Treat the published post-`027` layers as **SCHEMA PRESENT / LEDGER UNRECONCILED**, not unhosted. Treat Phase 1C migrations as unhosted. Do not run the ordinary promotion sequence until exact catalog-to-file reconciliation and an owner-approved ledger-only repair pass.
 
 ## Why the `028` -> `130001` -> `130002` -> `130003` -> `130004` -> `130005` -> `130006` -> `130007` -> `130008` order is mandatory
 
@@ -88,16 +88,16 @@ npm run test:integration
 
 `db reset` is destructive and may be used only against a verified disposable local database. Never run it against hosted production.
 
-## Protected hosted promotion
+## Protected hosted reconciliation and promotion
 
-Applying `028` and `130001` through `130008` to production is RED because it changes RLS/authorization, service-role RPCs, operations/provider state, synthetic/bot/marketing schemas, roster/recovery/report behavior, audit state, and the production schema. It requires exact current owner approval naming the project, files, risks, expiry, validation, and containment plan.
+Repairing production migration history or applying Phase 1C migrations is RED because it changes protected production database state, RLS/authorization, service-role RPCs, roster/recovery/report behavior, and audit state. It requires exact current owner approval naming the project, exact ledger rows and files, risks, expiry, validation, and containment plan. Supabase documents that `migration repair --status applied` changes only migration history and does not execute SQL; use that property only after proving the corresponding schema already exists.
 
 1. Authenticate the Supabase CLI as `surgeservicesllc@gmail.com`.
 2. Reconfirm exact project ref `qpuofpmagrmyamahqwxw`; stop if profile/project identity is ambiguous.
-3. Compare local and remote history and verify only reviewed `028` and `130001` through `130008` are pending.
-4. Review SQL, risk, grants, ownership, RLS/FORCE RLS, secret checks, and recovery/containment.
-5. Run the complete local chain, migration tests, lint, and linked dry run.
-6. Apply and confirm the ledger commit for `028`, then `130001`, `130002`, `130003`, `130004`, `130005`, `130006`, `130007`, and `130008` through the approved path. Stop immediately on any mismatch or failure.
+3. Export and compare the exact remote history and catalog to every local post-`027` migration. Never infer applied state only from file order.
+4. Resolve the duplicate applied `130002` identity in source without re-executing either migration. Record the exact mapping and immutable source hashes in the approval evidence.
+5. Review the ledger-only repair, SQL, risk, grants, ownership, RLS/FORCE RLS, secret checks, and recovery/containment; run the complete local chain and tests.
+6. After exact approval, repair only history rows whose complete schema is proven present. Re-list history and run a linked dry run; it must show only genuinely absent forward Phase 1C migrations. Stop immediately on any mismatch or attempted reapplication.
 7. Re-list migrations and run linked database lint.
 8. Verify catalog, policies, table/function ACLs, indexes, constraints, trigger/function definitions, append-only behavior, and zero unintended service-role grants.
 9. Exercise owner, member, second-tenant, and anonymous caller behavior plus Phase 2A trusted persistence and service-role worker behavior separately, including provider execution default OFF, the standard roster, per-agent serialization, coherent recovery, cancellation/stale-lease reports, and safe report projection.

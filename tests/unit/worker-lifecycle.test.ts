@@ -84,13 +84,13 @@ function codexSession() {
   return {
     threadId: null,
     turns: 0,
-    usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+    usage: { turns: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
     run: vi.fn().mockResolvedValue({
       threadId: "thread-1",
       summary: "Fixed the responsive navigation and added coverage.",
       tests: ["Focused tests passed."],
       risks: [],
-      usage: { inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
+      usage: { turns: 1, inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
     }),
   } satisfies CodexSession;
 }
@@ -123,6 +123,18 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     const store = storeFor(claimed);
     const workspace = await preparedWorkspace();
     const session = codexSession();
+    const assertRemoteBaseSha = vi.fn().mockResolvedValue(undefined);
+    const push = vi.fn().mockResolvedValue(undefined);
+    const createOrRecoverDraft = vi.fn().mockResolvedValue({
+      number: 12,
+      url: "https://github.com/example/repository/pull/12",
+      headSha: "b".repeat(40),
+    });
+    const verifyExistingDraft = vi.fn().mockResolvedValue({
+      number: 12,
+      url: "https://github.com/example/repository/pull/12",
+      headSha: "b".repeat(40),
+    });
     const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
       store,
       tokenProvider: { createToken: vi.fn().mockResolvedValue({ token: "installation-token", expiresAt: "2026-08-13T19:00:00.000Z" }) },
@@ -132,7 +144,8 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
         commit: vi.fn().mockResolvedValue("b".repeat(40)),
         assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
-        push: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha,
+        push,
       },
       codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work") },
       validator: {
@@ -140,8 +153,8 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         run: vi.fn().mockResolvedValue(passingValidation),
       },
       publisher: {
-        createOrRecoverDraft: vi.fn().mockResolvedValue({ number: 12, url: "https://github.com/example/repository/pull/12", headSha: "b".repeat(40) }),
-        verifyExistingDraft: vi.fn(),
+        createOrRecoverDraft,
+        verifyExistingDraft,
         waitForChecks: vi.fn().mockResolvedValue({ status: "passed", checks: [{ id: 1, name: "CI", status: "completed", conclusion: "success", url: "https://github.com/example/repository/actions/runs/1" }] }),
       },
     });
@@ -162,12 +175,123 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       pullRequestNumber: 12,
       summary: "Fixed the responsive navigation and added coverage.",
     }));
+    expect(assertRemoteBaseSha).toHaveBeenCalledTimes(3);
+    expect(assertRemoteBaseSha).toHaveBeenNthCalledWith(
+      1, workspace, claimed.repository, "installation-token", expect.any(AbortSignal),
+    );
+    expect(assertRemoteBaseSha.mock.invocationCallOrder[0]!)
+      .toBeLessThan(push.mock.invocationCallOrder[0]!);
+    expect(assertRemoteBaseSha.mock.invocationCallOrder[1]!)
+      .toBeLessThan(createOrRecoverDraft.mock.invocationCallOrder[0]!);
+    expect(assertRemoteBaseSha.mock.invocationCallOrder[2]!)
+      .toBeLessThan(verifyExistingDraft.mock.invocationCallOrder[0]!);
+    expect(verifyExistingDraft.mock.invocationCallOrder[0]!)
+      .toBeLessThan(store.complete.mock.invocationCallOrder[0]!);
     expect(store.event).not.toHaveBeenCalledWith(
       claimed,
       "worker-1",
       expect.objectContaining({ kind: "completed" }),
     );
     expect(store.fail).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on a stale base immediately before the first provider mutation", async () => {
+    const claimed = job();
+    const store = storeFor(claimed);
+    const workspace = await preparedWorkspace();
+    const push = vi.fn();
+    const createOrRecoverDraft = vi.fn();
+    const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
+      store,
+      tokenProvider: { createToken: vi.fn().mockResolvedValue({ token: "installation-token", expiresAt: "2026-08-13T19:00:00.000Z" }) },
+      workspace: {
+        prepare: vi.fn().mockResolvedValue(workspace),
+        currentHead: vi.fn().mockResolvedValue("b".repeat(40)),
+        changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
+        commit: vi.fn().mockResolvedValue("b".repeat(40)),
+        assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha: vi.fn().mockRejectedValue(new WorkspaceError(
+          "stale_base_sha",
+          "The repository base branch changed after the run was planned.",
+        )),
+        push,
+      },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      validator: {
+        bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
+        run: vi.fn().mockResolvedValue(passingValidation),
+      },
+      publisher: { createOrRecoverDraft, verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
+    });
+
+    await expect(worker.runOnce()).resolves.toBe("processed");
+
+    expect(push).not.toHaveBeenCalled();
+    expect(createOrRecoverDraft).not.toHaveBeenCalled();
+    expect(store.complete).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
+      code: "stale_base_sha",
+      retryable: false,
+    }));
+  });
+
+  it("refuses terminal success when the planned base changes after stable CI", async () => {
+    const claimed = job();
+    const store = storeFor(claimed);
+    const workspace = await preparedWorkspace();
+    const staleBase = new WorkspaceError(
+      "stale_base_sha",
+      "The repository base branch changed after the run was planned.",
+    );
+    const assertRemoteBaseSha = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(staleBase);
+    const push = vi.fn().mockResolvedValue(undefined);
+    const createOrRecoverDraft = vi.fn().mockResolvedValue({
+      number: 12,
+      url: "https://github.com/example/repository/pull/12",
+      headSha: "b".repeat(40),
+    });
+    const verifyExistingDraft = vi.fn();
+    const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
+      store,
+      tokenProvider: { createToken: vi.fn().mockResolvedValue({ token: "installation-token", expiresAt: "2026-08-13T19:00:00.000Z" }) },
+      workspace: {
+        prepare: vi.fn().mockResolvedValue(workspace),
+        currentHead: vi.fn().mockResolvedValue("b".repeat(40)),
+        changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
+        commit: vi.fn().mockResolvedValue("b".repeat(40)),
+        assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha,
+        push,
+      },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      validator: {
+        bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
+        run: vi.fn().mockResolvedValue(passingValidation),
+      },
+      publisher: {
+        createOrRecoverDraft,
+        verifyExistingDraft,
+        waitForChecks: vi.fn().mockResolvedValue({
+          status: "passed",
+          checks: [{ id: 1, name: "CI", status: "completed", conclusion: "success", url: null }],
+        }),
+      },
+    });
+
+    await expect(worker.runOnce()).resolves.toBe("processed");
+
+    expect(push).toHaveBeenCalledOnce();
+    expect(createOrRecoverDraft).toHaveBeenCalledOnce();
+    expect(assertRemoteBaseSha).toHaveBeenCalledTimes(3);
+    expect(verifyExistingDraft).not.toHaveBeenCalled();
+    expect(store.complete).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
+      code: "stale_base_sha",
+      retryable: false,
+    }));
   });
 
   it("retains failing validation evidence even when no pull request is published", async () => {
@@ -196,6 +320,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         changedFiles: vi.fn(),
         commit: vi.fn(),
         assertImmutableCommit: vi.fn(),
+        assertRemoteBaseSha: vi.fn(),
         push: vi.fn(),
       },
       codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
@@ -225,7 +350,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
       store,
       tokenProvider: { createToken: vi.fn() },
-      workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), push: vi.fn() },
+      workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
       codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
@@ -248,7 +373,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
       store,
       tokenProvider: { createToken: vi.fn() },
-      workspace: { prepare: vi.fn(), currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), push: vi.fn() },
+      workspace: { prepare: vi.fn(), currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
       codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
@@ -276,6 +401,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
         commit: vi.fn().mockResolvedValue("b".repeat(40)),
         assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha: vi.fn().mockResolvedValue(undefined),
         push: vi.fn().mockRejectedValue(new WorkspaceError("git_push_failed", "Push outcome is unknown.")),
       },
       codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
@@ -309,7 +435,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
       store,
       tokenProvider: { createToken: vi.fn() },
-      workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), push: vi.fn() },
+      workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
       codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
@@ -332,13 +458,14 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       pullRequestNumber: 12,
       pullRequestUrl: "https://github.com/example/repository/pull/12",
       providerRunReference: "thread-1",
-      usage: { inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
+      usage: { turns: 1, inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
     } as const;
     const claimed = job({ attempt: 2, recovery });
     const store = storeFor(claimed);
     const createSession = vi.fn();
     const commit = vi.fn();
     const push = vi.fn();
+    const assertRemoteBaseSha = vi.fn().mockResolvedValue(undefined);
     const createOrRecoverDraft = vi.fn();
     const verifyExistingDraft = vi.fn().mockResolvedValue({
       number: 12,
@@ -354,6 +481,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
         commit,
         assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha,
         push,
       },
       codex: { createSession, initialPrompt: vi.fn() },
@@ -377,6 +505,14 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     expect(commit).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
     expect(createOrRecoverDraft).not.toHaveBeenCalled();
+    expect(assertRemoteBaseSha).toHaveBeenCalledTimes(2);
+    expect(verifyExistingDraft).toHaveBeenCalledTimes(2);
+    expect(assertRemoteBaseSha.mock.invocationCallOrder[0]!)
+      .toBeLessThan(verifyExistingDraft.mock.invocationCallOrder[0]!);
+    expect(assertRemoteBaseSha.mock.invocationCallOrder[1]!)
+      .toBeLessThan(verifyExistingDraft.mock.invocationCallOrder[1]!);
+    expect(verifyExistingDraft.mock.invocationCallOrder[1]!)
+      .toBeLessThan(store.complete.mock.invocationCallOrder[0]!);
     expect(store.complete).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
       commitSha: recovery.commitSha,
       pullRequestNumber: 12,
@@ -412,6 +548,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
         commit: vi.fn().mockResolvedValueOnce(firstSha).mockResolvedValueOnce(repairedSha),
         assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha: vi.fn().mockResolvedValue(undefined),
         push: vi.fn().mockResolvedValue(undefined),
       },
       codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work") },

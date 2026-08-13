@@ -124,8 +124,18 @@ export interface CodexSession {
   run(prompt: string, signal: AbortSignal, onEvent: (event: WorkerEvent) => Promise<void>): Promise<CodexTurnResult>;
 }
 
+export class CodexBudgetError extends Error {
+  readonly code = "budget_exhausted";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CodexBudgetError";
+  }
+}
+
 function zeroUsage(): WorkerUsage {
   return Object.freeze({
+    turns: 0,
     inputTokens: 0,
     cachedInputTokens: 0,
     outputTokens: 0,
@@ -135,6 +145,7 @@ function zeroUsage(): WorkerUsage {
 
 function addUsage(left: WorkerUsage, event: Extract<ThreadEvent, { type: "turn.completed" }>): WorkerUsage {
   return Object.freeze({
+    turns: left.turns,
     inputTokens: left.inputTokens + event.usage.input_tokens,
     cachedInputTokens: left.cachedInputTokens + event.usage.cached_input_tokens,
     outputTokens: left.outputTokens + event.usage.output_tokens,
@@ -279,28 +290,33 @@ export class CodexSdkAdapter {
       modelReasoningEffort: "high",
     };
     let thread: ThreadLike | null = null;
-    let cumulativeUsage = zeroUsage();
+    let attemptUsage = zeroUsage();
+    let cumulativeUsage = Object.freeze({ ...job.priorUsage });
     let turnCount = 0;
 
     return {
       get threadId() { return thread?.id ?? null; },
       get usage() { return cumulativeUsage; },
-      get turns() { return turnCount; },
+      get turns() { return cumulativeUsage.turns; },
       run: async (prompt, signal, onEvent) => {
         if (turnCount >= job.budget.maximumTurns) {
-          throw new Error("The Codex turn budget is exhausted.");
+          throw new CodexBudgetError("The Codex turn budget is exhausted.");
         }
-        if (cumulativeUsage.inputTokens >= job.budget.maximumInputTokens
-          || cumulativeUsage.outputTokens >= job.budget.maximumOutputTokens) {
-          throw new Error("The Codex token budget is exhausted.");
+        if (attemptUsage.inputTokens >= job.budget.maximumInputTokens
+          || attemptUsage.outputTokens >= job.budget.maximumOutputTokens) {
+          throw new CodexBudgetError("The Codex token budget is exhausted.");
         }
         const estimatedPromptTokens = Math.ceil(prompt.length / 4);
-        if (cumulativeUsage.inputTokens + estimatedPromptTokens > job.budget.maximumInputTokens) {
-          throw new Error("The next Codex turn would exceed the input token budget.");
+        if (attemptUsage.inputTokens + estimatedPromptTokens > job.budget.maximumInputTokens) {
+          throw new CodexBudgetError("The next Codex turn would exceed the input token budget.");
         }
 
         thread ??= client.startThread(threadOptions);
         turnCount += 1;
+        cumulativeUsage = Object.freeze({
+          ...cumulativeUsage,
+          turns: cumulativeUsage.turns + 1,
+        });
         const streamed = await thread.runStreamed(prompt, { outputSchema: responseSchema, signal });
         let finalResponse = "";
         let terminalFailure: string | null = null;
@@ -308,7 +324,10 @@ export class CodexSdkAdapter {
           if (event.type === "item.completed" && event.item.type === "agent_message") {
             finalResponse = event.item.text;
           }
-          if (event.type === "turn.completed") cumulativeUsage = addUsage(cumulativeUsage, event);
+          if (event.type === "turn.completed") {
+            attemptUsage = addUsage(attemptUsage, event);
+            cumulativeUsage = addUsage(cumulativeUsage, event);
+          }
           if (event.type === "turn.failed") terminalFailure = event.error.message;
           if (event.type === "error") terminalFailure = event.message;
           const projection = eventProjection(event);
@@ -317,9 +336,9 @@ export class CodexSdkAdapter {
         if (terminalFailure) throw new Error(redactText(terminalFailure, { maximumLength: 1_000 }));
         const threadId = thread.id;
         if (!threadId) throw new Error("Codex did not return a resumable thread id.");
-        if (cumulativeUsage.inputTokens > job.budget.maximumInputTokens
-          || cumulativeUsage.outputTokens > job.budget.maximumOutputTokens) {
-          throw new Error("Codex exceeded the configured token budget.");
+        if (attemptUsage.inputTokens > job.budget.maximumInputTokens
+          || attemptUsage.outputTokens > job.budget.maximumOutputTokens) {
+          throw new CodexBudgetError("Codex exceeded the configured token budget.");
         }
         const structured = parseStructuredResult(finalResponse);
         return Object.freeze({

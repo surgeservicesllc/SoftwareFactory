@@ -4,7 +4,7 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish verification and protected release of the reconciled Phase 1E/Phase 2A/Phase 1C implementation without overstating live status. Phase 1E operations and synthetic journeys, the Phase 2A provider layer, universal bot fabric, public marketing site, and separated route groups are published on `main`; Phase 1C remains a local candidate. Hosted Supabase is through `027`; migration `028` and migrations `130001` through `130008` are unhosted. No production monitor or synthetic-journey observation, bot/provider credential/live request, or Codex run is verified; both execution switches are OFF/unverified. Phase 1E monitoring/rollback/repair, Phase 2A provider execution, bot-provider readiness, and Phase 1C Codex execution remain **Not Connected**.
+Finish verification and protected release of the reconciled Phase 1E/Phase 2A/Phase 1C implementation without overstating live status. Phase 1E operations and synthetic journeys, the Phase 2A provider layer, universal bot fabric, public marketing site, and separated route groups are published on `main`; Phase 1C remains a local candidate. Hosted post-`027` schema objects exist, but the Supabase migration ledger has exactly 26 rows through `027`; duplicate applied version `130002` and five unrecorded applied versions make a normal push unsafe. Phase 1C migrations remain absent. No production monitor or synthetic-journey observation, bot/provider credential/live request, or Codex run is verified; both execution switches are OFF/unverified. Phase 1E monitoring/rollback/repair, Phase 2A provider execution, bot-provider readiness, and Phase 1C Codex execution remain **Not Connected**.
 
 ## Phase 1D state for the next agent
 

@@ -53,6 +53,13 @@ type ProjectOption = {
   status: string;
 };
 
+type TaskOption = {
+  id: string;
+  project: { id: string; name: string } | null;
+  status: string;
+  title: string;
+};
+
 type PendingIntent = {
   fingerprint: string;
   idempotencyKey: string;
@@ -71,6 +78,10 @@ function acceptanceCriteriaFromText(value: string) {
     .filter(Boolean);
 }
 
+function canonicalTaskIds(taskIds: readonly string[]) {
+  return [...new Set(taskIds)].sort((left, right) => left.localeCompare(right));
+}
+
 export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   const [instruction, setInstruction] = useState("");
   const [commandType, setCommandType] = useState<CommandType>("other");
@@ -80,6 +91,9 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [projectId, setProjectId] = useState("");
   const [projectsState, setProjectsState] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [tasks, setTasks] = useState<TaskOption[]>([]);
+  const [tasksState, setTasksState] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [dependencyTaskIds, setDependencyTaskIds] = useState<string[]>([]);
   const pendingIntent = useRef<PendingIntent | null>(null);
 
   function markEdited() {
@@ -101,8 +115,22 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
         setProjects(availableProjects);
         setProjectId(availableProjects[0]?.id ?? "");
         setProjectsState("ready");
+
+        try {
+          const tasksResponse = await fetch("/api/tasks?limit=100", { cache: "no-store" });
+          const tasksBody = (await tasksResponse.json()) as { tasks?: TaskOption[] };
+          if (!tasksResponse.ok) throw new Error("Dependency selection unavailable");
+          if (!active) return;
+          setTasks(tasksBody.tasks ?? []);
+          setTasksState("ready");
+        } catch {
+          if (active) setTasksState("unavailable");
+        }
       } catch {
-        if (active) setProjectsState("unavailable");
+        if (active) {
+          setProjectsState("unavailable");
+          setTasksState("unavailable");
+        }
       }
     }
     void loadProjects();
@@ -115,6 +143,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
     event.preventDefault();
     const trimmed = instruction.trim();
     const acceptanceCriteria = acceptanceCriteriaFromText(acceptanceText);
+    const canonicalDependencyTaskIds = canonicalTaskIds(dependencyTaskIds);
     if (!trimmed) {
       setState({ kind: "error", message: "Describe the engineering outcome before queuing it." });
       return;
@@ -131,6 +160,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
     const fingerprint = JSON.stringify({
       acceptanceCriteria,
       commandType,
+      dependencyTaskIds: canonicalDependencyTaskIds,
       projectId,
       prompt: trimmed,
       risk: riskLevel,
@@ -151,6 +181,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
         body: JSON.stringify({
           acceptanceCriteria,
           commandType,
+          dependencyTaskIds: canonicalDependencyTaskIds,
           idempotencyKey: pendingIntent.current.idempotencyKey,
           parameters: {},
           projectId,
@@ -193,6 +224,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
       });
       setInstruction("");
       setAcceptanceText("");
+      setDependencyTaskIds([]);
       onSaved?.();
     } catch (error) {
       setState({
@@ -208,6 +240,9 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
       : projectsState === "unavailable"
         ? "Sign in to choose a project"
         : "No connected projects yet";
+  const dependencyOptions = tasks.filter(
+    (task) => task.project?.id === projectId && !["cancelled", "failed"].includes(task.status),
+  );
 
   return (
     <form onSubmit={submitCommand} className="card p-5 sm:p-6">
@@ -254,6 +289,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
             value={projectId}
             onChange={(event) => {
               setProjectId(event.target.value);
+              setDependencyTaskIds([]);
               markEdited();
             }}
             disabled={projectsState !== "ready" || projects.length === 0}
@@ -292,7 +328,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
 
       <div className="mt-5">
         <label htmlFor="acceptance-criteria" className="field-label">
-          Acceptance criteria <span className="font-normal text-faint">(optional, one per line)</span>
+          Acceptance criteria <span className="font-normal text-faint">(optional, one per line; derived from work type when blank)</span>
         </label>
         <textarea
           id="acceptance-criteria"
@@ -307,6 +343,56 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
           className="input resize-y"
         />
       </div>
+
+      <fieldset className="mt-5">
+        <legend className="field-label">Depends on existing work <span className="font-normal text-faint">(optional)</span></legend>
+        <p className="mb-2 text-sm text-muted">
+          Selected work must belong to this project and complete before the new run can start.
+        </p>
+        {tasksState === "loading" ? (
+          <p className="rounded-lg border border-line p-3 text-sm text-muted">Loading project backlog…</p>
+        ) : tasksState === "unavailable" ? (
+          <p className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
+            Existing work could not be loaded. You can still queue this command without dependencies.
+          </p>
+        ) : dependencyOptions.length === 0 ? (
+          <p className="rounded-lg border border-line p-3 text-sm text-faint">No eligible backlog items exist for this project.</p>
+        ) : (
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+            {dependencyOptions.map((task) => {
+              const checked = dependencyTaskIds.includes(task.id);
+              const selectionFull = dependencyTaskIds.length >= 20;
+              return (
+                <li key={task.id}>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md px-2 py-2 text-sm hover:bg-surface-raised">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!checked && selectionFull}
+                      onChange={(event) => {
+                        setDependencyTaskIds((current) => canonicalTaskIds(
+                          event.target.checked
+                            ? [...current, task.id]
+                            : current.filter((taskId) => taskId !== task.id),
+                        ));
+                        markEdited();
+                      }}
+                      className="mt-0.5 size-4"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">{task.title}</span>
+                      <span className="block text-faint">{task.status.replace(/_/g, " ")}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {dependencyTaskIds.length ? (
+          <p className="mt-2 text-xs text-faint">{dependencyTaskIds.length} of 20 dependencies selected.</p>
+        ) : null}
+      </fieldset>
 
       <fieldset className="mt-5">
         <legend className="field-label">Requested minimum risk tier</legend>
