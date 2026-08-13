@@ -40,8 +40,35 @@ would lose work whenever a function ended. Instead:
 - **Closing the browser changes nothing.** No run depends on an open page, a
   websocket, or a signed-in session.
 
-Ticks are driven by the `vercel.json` cron entry every five minutes and can also
-be invoked by any external scheduler.
+## Tick cadence is a deployment constraint, not a design choice
+
+A run advances by one bounded step per tick, so tick frequency sets how quickly
+work moves. The committed `vercel.json` cron runs **once per day**, because the
+Vercel Hobby plan rejects any cron that would fire more than daily — a more
+frequent entry fails the deployment outright.
+
+A daily tick is a safety floor, not a working cadence. A run that needs six
+steps would take six days. To actually operate the loop, do one of:
+
+- **Point an external scheduler at the endpoint.** Any scheduler that can send
+  an authenticated request works. Both of these are equivalent:
+
+  ```bash
+  curl -X POST https://<host>/api/worker/tick \
+    -H "Authorization: Bearer $WORKER_TICK_SECRET"
+
+  curl https://<host>/api/worker/tick \
+    -H "Authorization: Bearer $WORKER_TICK_SECRET"
+  ```
+
+  A five-minute interval is a reasonable starting point.
+
+- **Move the project to a Vercel plan that allows frequent crons**, then change
+  the `schedule` field accordingly.
+
+Ticks are idempotent and lease-guarded, so running several schedulers at once is
+safe: each tick claims only unleased work, and a duplicate tick finds nothing to
+do rather than double-executing a run.
 
 ## Where validation actually happens
 
@@ -127,6 +154,6 @@ input:
 | Capability | Required value | Until then |
 | --- | --- | --- |
 | Codex worker | server-only `OPENAI_API_KEY` | Provider reports **Not Connected**; no run starts |
-| Worker scheduling | server-only `WORKER_TICK_SECRET` (or Vercel's `CRON_SECRET`) | Queued runs are never claimed |
+| Worker scheduling | server-only `WORKER_TICK_SECRET` (or Vercel's `CRON_SECRET`), plus a scheduler running more often than daily | Queued runs are never claimed, or advance only once per day |
 | Commanded execution | `execution_enabled` ON, by an owner | Commands are planned and persisted only |
 | Deployment visibility | server-only `VERCEL_TOKEN` | Deployment metrics report unavailable, not zero |

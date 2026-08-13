@@ -28,7 +28,7 @@ Phase 2 (Claude/Anthropic execution) is out of scope and has no adapter.
 3. Complete production Supabase Auth and onboarding.
 4. Complete the authenticated owner callback for installation `153286187`, persist and sync the connection, link the project, inspect live repository state, create one safe controlled draft PR, and test disconnect and connection-loss paths.
 5. Configure and verify the blank/inactive GitHub webhook endpoint, then observe a signed delivery and its audit record.
-6. Configure `OPENAI_API_KEY` and `WORKER_TICK_SECRET` as server-only values, redeploy, and confirm `/api/worker/tick` reports configured.
+6. Configure `OPENAI_API_KEY` and `WORKER_TICK_SECRET` as server-only values, redeploy, and confirm `/api/worker/tick` reports configured. Then arrange a scheduler that fires more often than daily: the Vercel Hobby plan rejects any cron above one firing per day, so the committed schedule is only a floor. Ticks are idempotent and lease-guarded, so an external scheduler can run alongside it safely.
 7. Have an owner enable commanded execution for the organization, submit one GREEN command, and observe a complete run: plan, lease, provider call, diff review, isolated branch, draft PR, real CI, and recorded result.
 8. Update this memory and the scorecard with exact evidence, and only then issue any Phase 1C completion report.
 

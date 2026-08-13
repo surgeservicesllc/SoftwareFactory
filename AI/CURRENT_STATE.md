@@ -56,7 +56,7 @@ Overall status: **Phase 1C is implemented and locally verified on this branch. H
 | GitHub provider installation | Installed; repository-scoped | Installation `153286187`, only `surgeservicesllc/SoftwareFactory` selected. Not a tenant connection. |
 | GitHub App connection | **Not Connected** | The authenticated owner callback, connection record, repository sync, project link, and signed webhook delivery are all still pending. |
 | OpenAI Codex worker | **Not Connected** | Adapter implemented and unit-tested against its contract. No `OPENAI_API_KEY` is configured, so no run can start. |
-| Durable worker tick | **Not Connected** | Endpoint, leasing, and authorization implemented and tested. No `WORKER_TICK_SECRET`/`CRON_SECRET` is configured, so queued runs are never claimed. |
+| Durable worker tick | **Not Connected** | Endpoint, leasing, and authorization implemented and tested. No `WORKER_TICK_SECRET`/`CRON_SECRET` is configured, so queued runs are never claimed. The committed Vercel cron fires **once per day** because the Hobby plan rejects a more frequent schedule; operating the loop needs an external scheduler or a paid plan. |
 | Commanded execution | OFF | Owner-gated per organization; defaults OFF. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2. Listed in the registry with no adapter. |
 | Vercel deployment visibility | **Not Connected** | No `VERCEL_TOKEN`. Deployment metrics report unavailable rather than zero. |
@@ -97,6 +97,7 @@ Defects found and fixed by these gates during Phase 1C:
 - Complete the authenticated owner callback for provider installation `153286187`, persist the connection, and verify repository sync, project link, reads, safe edit/draft PR, audit, error/revocation paths, and disconnect.
 - Configure and verify the GitHub webhook endpoint; the provider General form is still blank/inactive.
 - Configure `OPENAI_API_KEY` and `WORKER_TICK_SECRET`, enable commanded execution for the organization, and observe one complete real run end to end before describing the execution loop as live.
+- Drive `/api/worker/tick` more often than daily. The Vercel Hobby plan caps crons at one firing per day, so the committed schedule is a safety floor only; a real cadence needs an external scheduler or a paid plan.
 - Supabase Preview environment isolation remains unverified.
 
 No documentation or UI may describe GitHub, the Codex worker, the durable tick, or any deployment capability as Connected — or Phase 1C as complete — until these blockers have evidence.
