@@ -80,7 +80,7 @@ export function ActivityConsole() {
     return <BlockedState icon={Activity} title="Sign in to see your activity" description="Your audit trail is visible only to members of your organization." href="/auth/sign-in?next=/activity" label="Sign in" />;
   }
   if (state === "setup") {
-    return <BlockedState icon={Activity} title="Choose an organization" description="Finish setup or pick an active organization to load its audit trail." href="/connections" label="Open connections" />;
+    return <BlockedState icon={Activity} title="Choose an organization" description="Finish setup or pick an active organization to load its audit trail." href="/solutions/connections" label="Open connections" />;
   }
   if (state === "error") {
     return (

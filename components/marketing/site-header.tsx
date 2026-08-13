@@ -95,7 +95,7 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation"
+            aria-label="Open site navigation"
             aria-expanded={mobileOpen}
             className="grid size-10 place-items-center rounded-xl border border-[#2b3547] bg-[#0f1520] text-[#aab5c3] lg:hidden"
           >
@@ -110,7 +110,7 @@ export function SiteHeader() {
             type="button"
             className="absolute inset-0 bg-black/75 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close navigation"
+            aria-label="Close site navigation"
           />
           <div className="absolute inset-x-0 top-0 border-b border-[#1c2433] bg-[#0a0e15] p-4 pb-6">
             <div className="flex items-center justify-between">
@@ -118,7 +118,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                aria-label="Close navigation"
+                aria-label="Close site navigation"
                 className="grid size-10 place-items-center rounded-xl border border-[#2b3547] text-[#aab5c3]"
               >
                 <X className="size-5" aria-hidden="true" />

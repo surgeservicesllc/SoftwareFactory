@@ -15,7 +15,7 @@ const consoleNavigation = [
   "Settings",
 ] as const;
 
-const CONSOLE_ROUTE = "/projects";
+const CONSOLE_ROUTE = "/solutions/projects";
 
 test("loads the control plane without browser errors", async ({
   page,
@@ -57,13 +57,13 @@ test("exposes every console destination through accessible navigation", async ({
 
   if (testInfo.project.name !== "desktop-chromium") {
     const openNavigation = page.getByRole("button", {
-      name: /open navigation/i,
+      name: /open console navigation/i,
     });
     await expect(openNavigation).toBeVisible();
     await openNavigation.click();
   }
 
-  const navigation = page.getByRole("navigation", { name: /primary/i });
+  const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
 
   for (const destination of consoleNavigation) {

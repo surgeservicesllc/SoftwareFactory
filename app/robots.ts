@@ -1,18 +1,13 @@
 import type { MetadataRoute } from "next";
 
+/*
+ * The whole control plane now lives under /solutions, so one prefix covers the
+ * dashboard and every page beneath it. The marketing pages stay crawlable.
+ */
 const CONSOLE_PATHS = [
-  "/activity",
-  "/agents",
+  "/solutions",
   "/api/",
   "/auth/",
-  "/backlog",
-  "/bot-manager",
-  "/connections",
-  "/files",
-  "/projects",
-  "/reports",
-  "/runs",
-  "/settings",
   "/sign-in",
 ];
 

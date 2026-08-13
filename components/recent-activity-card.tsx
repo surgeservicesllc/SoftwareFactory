@@ -67,7 +67,7 @@ export function RecentActivityCard({ authenticated }: { authenticated: boolean }
         ) : null}
       </div>
 
-      <Link href="/activity" className="btn btn-secondary btn-sm mt-4 self-start">
+      <Link href="/solutions/activity" className="btn btn-secondary btn-sm mt-4 self-start">
         Open activity
         <ArrowRight className="size-4" aria-hidden="true" />
       </Link>

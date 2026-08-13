@@ -32,6 +32,7 @@ const mutationRoutes = [
   "app/api/operations/controls/route.ts",
   "app/api/operations/events/route.ts",
   "app/api/operations/reports/route.ts",
+  "app/api/operations/synthetics/route.ts",
 ] as const;
 
 const readRoutes = [
@@ -99,6 +100,27 @@ describe("Phase 1E route boundaries", () => {
     expect(source("lib/operations/repair.ts")).toMatch(
       /PHASE_1E_REPAIR_WORKER_CONNECTED\s*=\s*false/,
     );
+  });
+
+  it("never issues a synthetic write against production", () => {
+    const runner = source("lib/operations/journey.ts");
+    expect(runner).toMatch(/step\.method === "POST"/);
+    expect(runner).toMatch(/outcome: "skipped"/);
+    expect(runner).toMatch(/not executed/);
+    // Every executed step goes through the same validated probe.
+    expect(runner).toMatch(/probeHttpTarget\(/);
+    expect(runner).toMatch(/validateMonitorTarget\(url\)/);
+  });
+
+  it("validates synthetic journey safety in the database, not only in the route", () => {
+    const journeyMigration = source(
+      "supabase/migrations/20260813000200_phase1e_synthetic_journeys.sql",
+    );
+    expect(journeyMigration).toMatch(/synthetic_journeys_steps_are_safe/);
+    expect(journeyMigration).toMatch(/synthetic_journeys_profile_covered/);
+    expect(journeyMigration).toMatch(/delete\|destroy\|purge\|drop\|truncate/);
+    expect(journeyMigration).toMatch(/reversal_note/);
+    expect(journeyMigration).not.toMatch(/grant[\s\S]{0,200}on\s+table[\s\S]{0,200}to\s+service_role/i);
   });
 
   it("keeps the outbound probe restricted to validated public HTTPS targets", () => {
@@ -178,7 +200,7 @@ describe("Phase 1D interlocks survive Phase 1E", () => {
   });
 
   it("tells the operator plainly that execution is Not Connected", () => {
-    const page = source("app/(console)/operations/page.tsx");
+    const page = source("app/(portal)/solutions/operations/page.tsx");
     expect(page).toMatch(/Not Connected/);
     expect(page).toMatch(/cannot deploy, roll back, or run a fix/i);
   });

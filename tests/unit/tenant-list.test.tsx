@@ -47,7 +47,7 @@ describe("live tenant consoles", () => {
     expect(await screen.findByText("Sign in to see your agents")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute(
       "href",
-      "/auth/sign-in?next=%2Fagents",
+      "/auth/sign-in?next=%2Fsolutions%2Fagents",
     );
   });
 

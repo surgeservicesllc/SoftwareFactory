@@ -113,6 +113,21 @@ type AuditEvent = {
   createdAt: string;
 };
 
+type Journey = {
+  id: string;
+  projectName: string;
+  monitorId: string;
+  name: string;
+  profile: string;
+  baseUrl: string;
+  stepCount: number;
+  writeSteps: number;
+  enabled: boolean;
+  connectionLabel: string;
+  lastOutcome: string;
+  lastObservedAt: string | null;
+};
+
 type Overview = {
   role: string;
   summary: Summary | null;
@@ -121,6 +136,7 @@ type Overview = {
   monitors: Monitor[];
   providers: Provider[];
   auditEvents: AuditEvent[];
+  journeys: Journey[];
 };
 
 type State = "loading" | "signed-out" | "setup" | "ready" | "error";
@@ -355,7 +371,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
             <EmptyState
               title="No projects yet"
               description="Connect a repository as a project, then add a production monitor to observe it."
-              actionHref="/projects"
+              actionHref="/solutions/projects"
               actionLabel="Add a project"
             />
           </div>
@@ -617,6 +633,49 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
           </ul>
         </Card>
       </div>
+
+      <Card className="p-5">
+        <SectionTitle
+          title="Synthetic journeys"
+          description="Project-defined production checks. Destructive steps are refused, and a declared write is recorded but never issued against production."
+        />
+        {(overview?.journeys ?? []).length === 0 ? (
+          <div className="mt-4">
+            <EmptyState
+              title="No synthetic journeys defined"
+              description="Add a synthetic monitor and define its Basic, Standard, or Critical journey to check real user paths."
+            />
+          </div>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {(overview?.journeys ?? []).map((journey) => (
+              <li key={journey.id} className="rounded-lg border border-line p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{journey.name}</p>
+                    <p className="text-sm text-muted">
+                      {journey.projectName} · {journey.profile} profile · {journey.stepCount} step
+                      {journey.stepCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge tone={journey.connectionLabel === "Connected" ? "safe" : "danger"}>
+                      {journey.connectionLabel}
+                    </StatusBadge>
+                    <StatusBadge tone={outcomeTone(journey.lastOutcome)}>{journey.lastOutcome}</StatusBadge>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-faint">
+                  Last run {formatTime(journey.lastObservedAt)}
+                  {journey.writeSteps > 0
+                    ? ` · ${journey.writeSteps} declared write step${journey.writeSteps === 1 ? "" : "s"} recorded but not executed`
+                    : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card className="p-5">
         <SectionTitle

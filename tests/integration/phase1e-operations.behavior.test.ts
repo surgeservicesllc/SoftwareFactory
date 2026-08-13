@@ -174,11 +174,11 @@ describe("Phase 1E production operations behavior", () => {
        where n.nspname = 'public' and c.relkind = 'r'
        order by c.relname`,
     );
-    // Every public table must be covered: the ten added by Phase 1E, the three
-    // added by the Phase 2A provider layer, the three bot fabric tables, and
-    // the eleven marketing tables. The filter below is the real guarantee —
-    // this count exists so a new table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(52);
+    // Every public table must be covered: the eleven added by Phase 1E, the
+    // three added by the Phase 2A provider layer, the three bot fabric
+    // tables, and the eleven marketing tables. The filter below is the real
+    // guarantee — this count exists so a new table cannot slip in unexamined.
+    expect(rlsRows).toHaveLength(53);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
@@ -737,6 +737,85 @@ describe("Phase 1E production operations behavior", () => {
       [projectId],
     );
     expect(healthRows[0].evaluate_project_health).not.toBe("paused");
+    await resetRole(db);
+  });
+
+  it("refuses to store a synthetic journey that is destructive or under-covered", async () => {
+    await assumeRole(db, "authenticated", ownerId);
+    const { rows: monitorRows } = await db.query<{ id: string }>(
+      `select id from public.configure_production_monitor(
+         $1::uuid, 'Checkout journey', 'synthetic'::public.production_signal_kind, 'http',
+         'https://storefront.example/', 'standard'::public.synthetic_profile,
+         200::smallint, 2000, 2::smallint, true
+       )`,
+      [projectId],
+    );
+    const monitorId = monitorRows[0].id;
+
+    const configure = (steps: string, profile = "standard") =>
+      db.query(
+        `select id from public.configure_synthetic_journey(
+           $1::uuid, 'Checkout', $2::public.synthetic_profile, 'https://storefront.example/', $3::jsonb
+         )`,
+        [monitorId, profile, steps],
+      );
+
+    const shell = '{"kind":"app_shell","name":"Home","path":"/","method":"GET","expected_status":200}';
+    const read = '{"kind":"critical_read","name":"Orders","path":"/api/orders","method":"GET","expected_status":200}';
+
+    // A destructive-looking path is refused outright.
+    await expect(
+      configure(`[${shell},{"kind":"api","name":"Purge","path":"/api/orders/delete","method":"GET","expected_status":200}]`),
+    ).rejects.toThrow(/destructive steps or an undeclared write/i);
+
+    // A write that does not declare itself is refused.
+    await expect(
+      configure(`[${shell},{"kind":"api","name":"Create","path":"/api/orders","method":"POST","expected_status":201}]`),
+    ).rejects.toThrow(/destructive steps or an undeclared write/i);
+
+    // A declared safe write without a reversal note is refused.
+    await expect(
+      configure(`[${shell},{"kind":"safe_write","name":"Ping","path":"/api/heartbeat","method":"POST","expected_status":202}]`),
+    ).rejects.toThrow(/destructive steps or an undeclared write/i);
+
+    // A profile must actually cover what it promises.
+    await expect(configure(`[${shell}]`)).rejects.toThrow(/does not cover everything its validation profile promises/i);
+
+    const { rows } = await db.query<{ id: string; profile: string }>(
+      `select id, profile::text as profile from public.configure_synthetic_journey(
+         $1::uuid, 'Checkout', 'standard'::public.synthetic_profile, 'https://storefront.example/', $2::jsonb
+       )`,
+      [monitorId, `[${shell},${read}]`],
+    );
+    expect(rows[0].profile).toBe("standard");
+
+    // Even a direct write is refused by the CHECK constraint, not just the RPC.
+    await resetRole(db);
+    await expect(
+      db.query(
+        `update public.synthetic_journeys
+         set steps = '[{"kind":"app_shell","name":"Home","path":"/orders/delete","method":"GET","expected_status":200}]'::jsonb
+         where id = $1::uuid`,
+        [rows[0].id],
+      ),
+    ).rejects.toThrow(/synthetic_journeys_steps_are_safe|synthetic_journeys_profile_covered/i);
+  });
+
+  it("refuses to attach a journey to a monitor that is not synthetic", async () => {
+    await assumeRole(db, "authenticated", ownerId);
+    const { rows: monitorRows } = await db.query<{ id: string }>(
+      `select id from public.production_monitors where project_id = $1::uuid and name = 'Production health'`,
+      [projectId],
+    );
+    await expect(
+      db.query(
+        `select id from public.configure_synthetic_journey(
+           $1::uuid, 'Wrong kind', 'basic'::public.synthetic_profile, 'https://storefront.example/',
+           '[{"kind":"app_shell","name":"Home","path":"/","method":"GET","expected_status":200}]'::jsonb
+         )`,
+        [monitorRows[0].id],
+      ),
+    ).rejects.toThrow(/only be attached to a synthetic monitor/i);
     await resetRole(db);
   });
 

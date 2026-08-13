@@ -53,7 +53,7 @@ describe("GitHub installation state", () => {
         appId: 4573846,
         appSlot: "primary",
         organizationId: "11111111-1111-4111-8111-111111111111",
-        returnTo: "/connections?source=github",
+        returnTo: "/solutions/connections?source=github",
         userId: "22222222-2222-4222-8222-222222222222",
       },
       stateSecret,
@@ -70,7 +70,7 @@ describe("GitHub installation state", () => {
       appId: 4573846,
       appSlot: "primary",
       organizationId: "11111111-1111-4111-8111-111111111111",
-      returnTo: "/connections?source=github",
+      returnTo: "/solutions/connections?source=github",
       userId: "22222222-2222-4222-8222-222222222222",
     });
   });
@@ -81,7 +81,7 @@ describe("GitHub installation state", () => {
         appId: 4573846,
         appSlot: "primary",
         organizationId: "11111111-1111-4111-8111-111111111111",
-        returnTo: "/connections",
+        returnTo: "/solutions/connections",
         userId: "22222222-2222-4222-8222-222222222222",
       },
       stateSecret,
@@ -112,10 +112,10 @@ describe("GitHub installation state", () => {
   });
 
   it("allows only local, explicitly supported return paths", () => {
-    expect(normalizeReturnTo("/projects?github=1")).toBe("/projects?github=1");
+    expect(normalizeReturnTo("/solutions/projects?github=1")).toBe("/solutions/projects?github=1");
     expect(() => normalizeReturnTo("https://evil.example/steal")).toThrow();
     expect(() => normalizeReturnTo("//evil.example/steal")).toThrow();
-    expect(() => normalizeReturnTo("/settings")).toThrow();
+    expect(() => normalizeReturnTo("/solutions/settings")).toThrow();
   });
 
   it("binds the configured App target into the signed state", () => {
@@ -124,7 +124,7 @@ describe("GitHub installation state", () => {
         appId: 5000001,
         appSlot: "candidate",
         organizationId: "11111111-1111-4111-8111-111111111111",
-        returnTo: "/connections",
+        returnTo: "/solutions/connections",
         userId: "22222222-2222-4222-8222-222222222222",
       },
       stateSecret,

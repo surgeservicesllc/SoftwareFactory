@@ -21,7 +21,7 @@ const MARKETING_ROUTES = [
 
 async function openNavigation(page: Page, projectName: string) {
   if (projectName === "desktop-chromium") return;
-  const openNavigationButton = page.getByRole("button", { name: /open navigation/i });
+  const openNavigationButton = page.getByRole("button", { name: /open site navigation/i });
   await expect(openNavigationButton).toBeVisible();
   await openNavigationButton.click();
 }

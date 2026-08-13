@@ -95,10 +95,10 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
-- [x] Pass lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe.
-- [ ] Apply hosted migration `028` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
+- [x] Pass lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe.
+- [ ] Apply hosted migrations `028` and `029` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
-- [ ] Persist per-project synthetic journey definitions; profile validation exists but journeys are not yet stored.
+- [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
 - [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
@@ -133,6 +133,21 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Merge the bot fabric console into Bot Manager alongside main's live request workspace rather than replacing it.
 - [ ] Apply migrations `20260813000100`-`20260813000400` to hosted Supabase. Hosted is current through `027`; these four are unapplied and remain RED pending exact owner approval.
 - [ ] Decide whether the marketing site should be publicly indexed before the domain is pointed at it. The marketing group sets `robots: index:true` while the root layout stays `index:false`.
+
+## Solutions page global navigation
+
+- [x] Give `/solutions` the marketing global navigation so someone arriving from the public site keeps that wayfinding. The page moved from `app/(console)/` to `app/(portal)/`, whose layout renders `SiteHeader` above `AppShell`.
+- [x] Add a `--shell-top` offset to `AppShell`. Its sidebar and header are `fixed`, so without it they would have sat underneath the global navigation. The variable defaults to `0px`, leaving every other console page byte-identical in behaviour.
+- [x] Rename the console navigation landmark from "Primary" to "Console". `/solutions` now carries two navigation landmarks, and two sharing an accessible name leaves screen-reader users unable to tell them apart.
+
+## Console migrated under /solutions
+
+- [x] Move every console page from `app/(console)/` into `app/(portal)/solutions/`, so all twelve destinations sit beneath `/solutions` and inherit the global navigation from the portal layout. `app/(console)/` is removed.
+- [x] Rewrite every in-app link to the new paths, including the `next=` sign-in return parameters. API routes under `/api/**` are unchanged and were deliberately excluded from the rewrite.
+- [x] Update the GitHub install return-path allowlist in `lib/github/state.ts` to `/solutions/connections`, `/solutions/projects`, and `/solutions/files`. Leaving it unchanged would have broken the connect callback, because the allowlist rejects any path not on it.
+- [x] Add permanent redirects from each old console path and its subpaths, so existing links, bookmarks, and in-flight provider callbacks keep working.
+- [x] Reduce `app/robots.ts` to the single `/solutions` prefix, which now covers the dashboard and every page beneath it.
+- [x] Give the two mobile menu buttons distinct accessible names ("Open site navigation" and "Open console navigation"). Both shells render on every `/solutions` page, and two buttons sharing a name left screen-reader users unable to tell them apart.
 
 ## Maintenance
 
