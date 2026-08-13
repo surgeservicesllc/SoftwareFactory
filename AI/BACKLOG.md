@@ -127,7 +127,10 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add `POST /api/auth/resend-confirmation`, enumeration-safe, so a lost or rate-limited confirmation email no longer leaves the account permanently unusable.
 - [x] Offer the resend from the sign-in and sign-up screens, and state plainly when only a workspace owner can clear the failure.
 - [ ] **Owner action:** configure custom SMTP in Supabase, or disable "Confirm email". Until then a newly created account cannot be confirmed and so cannot sign in. Verified against production 2026-08-13: the built-in mail service rate-limited after a single confirmation send.
-- [ ] Re-probe production sign-up and sign-in after that configuration lands, and record the observed codes here.
+- [x] Close the enumeration oracle found by live probing: the resend route returned `429` for a real unconfirmed account and `202` for an invented address. It now short-circuits on `email_provider_disabled` alone, which is address-independent.
+- [x] Add the live custom domain `www.theagoras.com` to `additional_redirect_urls` in `supabase/config.toml`.
+- [ ] **Owner action:** add `https://www.theagoras.com/auth/callback` to the hosted project's redirect allow-list. Editing `config.toml` does not update the hosted project.
+- [ ] Re-probe sign-up and sign-in after that configuration lands, and record the observed codes here.
 - [ ] Delete the diagnostic account `sf-probe-a91c@gmail.com`, created against the hosted project while reproducing this defect.
 
 ## Maintenance

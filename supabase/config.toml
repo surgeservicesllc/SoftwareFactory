@@ -25,6 +25,12 @@ port = 54324
 enabled = true
 site_url = "https://softwarefactory-tan.vercel.app"
 additional_redirect_urls = [
+  # www.theagoras.com serves the application on its custom domain. A sign-up
+  # started there builds its confirmation link against that origin, and an
+  # origin missing from this list is silently replaced by site_url — sending
+  # the person to a different hostname than the one they signed up on.
+  "https://www.theagoras.com/auth/callback",
+  "https://theagoras.com/auth/callback",
   "https://softwarefactory-tan.vercel.app/auth/callback",
   "http://localhost:3000/auth/callback",
   "http://127.0.0.1:3000/auth/callback",

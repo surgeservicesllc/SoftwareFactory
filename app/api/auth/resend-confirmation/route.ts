@@ -61,16 +61,19 @@ export async function POST(request: Request) {
     if (error) {
       const outcome = describeAuthError(error, "resend");
 
-      // A rate limit or an undeliverable mailbox is worth reporting: both tell
-      // the caller their wait is futile, and neither reveals whether the
-      // address is registered. Anything else collapses into the neutral
-      // accepted response below.
-      if (
-        outcome.code === "email_rate_limited" ||
-        outcome.code === "email_delivery_failed" ||
-        outcome.code === "authentication_rate_limited" ||
-        outcome.code === "email_provider_disabled"
-      ) {
+      /*
+       * Only address-independent failures may be reported.
+       *
+       * Reporting a rate limit or a failed delivery here would leak exactly
+       * what the neutral response exists to hide: both can only happen when
+       * Supabase actually attempted a send, which it only does for an address
+       * that has an account awaiting confirmation. An unknown address returns
+       * immediately and consumes no quota, so "429 vs 202" answers the
+       * question "is this person registered?" — verified live before this
+       * branch was narrowed. A disabled email provider is project-level
+       * configuration and is identical for every address, so it stays.
+       */
+      if (outcome.code === "email_provider_disabled") {
         return jsonNoStore(authErrorBody(outcome), { status: outcome.status });
       }
     }
@@ -78,8 +81,10 @@ export async function POST(request: Request) {
     return jsonNoStore(
       {
         accepted: true,
+        // The delivery caveat is stated unconditionally, so it carries no
+        // signal about whether a send was attempted for this address.
         message:
-          "If that address has an account awaiting confirmation, a new confirmation email is on its way.",
+          "If that address has an account awaiting confirmation, a new confirmation email is on its way. If nothing arrives within a few minutes, this workspace's email limit may be exhausted — ask an owner to check its mail configuration.",
       },
       { status: 202 },
     );

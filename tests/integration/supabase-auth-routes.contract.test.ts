@@ -19,6 +19,9 @@ describe("Supabase authentication route contracts", () => {
     expect(config).toMatch(/enable_confirmations\s*=\s*true/);
     expect(config).toContain("https://softwarefactory-tan.vercel.app/auth/callback");
     expect(config).toContain("http://localhost:3000/auth/callback");
+    // The live custom domain must be allow-listed, or a confirmation link
+    // built there is silently rewritten to site_url.
+    expect(config).toContain("https://www.theagoras.com/auth/callback");
     expect(config).not.toMatch(/redirect_urls\s*=\s*\[[\s\S]*?\*/);
   });
 
@@ -70,6 +73,18 @@ describe("Supabase authentication route contracts", () => {
     expect(resend).toMatch(/emailRedirectTo/);
     // The neutral 202 must stay reachable, or this becomes an account oracle.
     expect(resend).toMatch(/accepted:\s*true/);
+
+    /*
+     * Only an address-independent failure may short-circuit that 202.
+     * Returning a rate limit or a delivery failure here leaks registration:
+     * Supabase only attempts a send — and so only consumes quota or fails to
+     * deliver — for an address that actually has an account awaiting
+     * confirmation. An unknown address returns immediately. This was observed
+     * live (429 for a real account, 202 for an invented one) before the
+     * branch was narrowed to email_provider_disabled alone.
+     */
+    const shortCircuits = resend.match(/outcome\.code === "([a-z_]+)"/g) ?? [];
+    expect(shortCircuits).toEqual(['outcome.code === "email_provider_disabled"']);
 
     const form = source("app/auth/auth-form.tsx");
     expect(form).toMatch(/\/api\/auth\/resend-confirmation/);
