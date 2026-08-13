@@ -8,6 +8,19 @@ Projects, users, organizations, agents, provider connections, and provider accou
 
 ## Current phase
 
+**Phase 1C — Full site production build-out and the first AI engineering execution loop.**
+
+Phase 1C completes every primary surface against live tenant records and adds the commanded execution loop:
+owner command → deterministic orchestrator plan → durable leased worker run → provider proposal → server-side
+diff review → isolated branch → draft pull request → real repository CI → human review. It adds no merge,
+deployment, or rollback authority.
+
+Phase 1C is implemented and passes every local gate, but nothing in the loop has been observed live: hosted
+migrations `011`-`016` are unapplied, no provider or worker credential is configured, and no run has executed.
+Commanded execution is owner-gated and defaults OFF.
+
+Phase 1B remains incomplete and is a prerequisite; its boundaries are summarized below.
+
 **Phase 1B — Production GitHub App Integration.**
 
 Phase 1B extends the Phase 1A foundation with:

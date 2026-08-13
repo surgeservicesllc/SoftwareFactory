@@ -6,6 +6,7 @@ SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**.
 
 - [Local setup](LOCAL_SETUP.md) — install, configure, and run the application.
 - [Architecture](ARCHITECTURE.md) — server, database, GitHub, and trust boundaries.
+- [Execution architecture](EXECUTION_ARCHITECTURE.md) — how an owner command becomes a draft pull request, the durable leased worker, where validation actually happens, and the two independent interlocks.
 - [Environment variables](ENVIRONMENT_VARIABLES.md) — public versus server-only configuration.
 - [Supabase setup](SUPABASE_SETUP.md) — hosted/local configuration, Auth redirects, and RLS expectations.
 - [Database migrations](DATABASE_MIGRATIONS.md) — migration inventory, verification, and promotion rules.

@@ -1,95 +1,102 @@
 # Current state
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
-Phase: 1B — Production GitHub App Integration
+Phase: 1C — Full site production build-out and the first AI engineering execution loop
 
-Overall status: **Phase 1B hardening is pushed to `main` and deployed; hosted migrations `011`-`013`, authenticated in-product connection, webhook, and remaining tenant acceptance are pending**
+Overall status: **Phase 1C is implemented and locally verified on this branch. Hosted migrations `011`-`016`, provider/worker credentials, and every live acceptance journey remain pending owner action.**
 
-“Implemented” below means code/schema exists in the current tree. It does not mean the real provider workflow was observed.
+"Implemented" below means code, schema, and tests exist in the current tree. It does not mean a real provider workflow, a real worker run, or a hosted database change was observed.
 
 ## Implemented application boundaries
 
-- Next.js 16.3, React 19.2, TypeScript strict mode, App Router, and Tailwind CSS 4.
-- Supabase email/password sign-up/sign-in, existing-user magic link, sign-out, callback exchange, onboarding, organization creation, membership resolution, and active-organization selection.
-- Tenant-scoped live project API/UI. Owner/admin can create a safe-default project only from a selected repository on an active GitHub connection. Connected status/counts require a live connection, active unsuspended installation, and selected non-archived/non-disabled repository in the exact active organization.
-- GitHub App install start/callback with same-origin protection, signed ten-minute state, HttpOnly nonce cookie, user authorization verification, exact App/installation verification, active-organization equality, and best-effort ephemeral user-token revocation.
-- Server-only App JWT/private-key handling and short-lived installation tokens scoped to one repository ID and exact route permissions.
-- Connection/repository synchronization, status/freshness visibility, explicit disconnect confirmation, history preservation, and connection-loss handling.
-- Tenant-authorized repository branches, commits, pull requests, checks, trees, and UTF-8 file reads.
-- Guarded file change route: validates project/connection/default branch/path/content/SHA/idempotency, rejects likely secrets and a broad protected-resource set (`AI/**`, `policies/**`, Supabase, every `app/api/**` route, GitHub/server/Supabase libraries, Auth/session code, deployment/environment/infrastructure files, and other security-sensitive subject paths), creates a `softwarefactory/*` branch, commits there, and requires an open draft PR.
-- Repository authorization compares normalized GitHub full names literally rather than through SQL wildcard matching. Project creation persists only the synchronized GitHub default branch; a caller-supplied branch is a freshness expectation and cannot override provider state.
-- GitHub webhook route with 2 MiB bound, raw-body HMAC verification, event-specific payload schemas, delivery-ID/payload-hash replay protection, redacted storage, and bounded database reconciliation. Newly granted repository metadata uses the service-role-only RPC introduced by local migration `013`, so that path is not available in hosted production yet.
-- Connections, Projects, Files, and dashboard surfaces consume live tenant records when configured; demo records remain labeled **Demo Data**.
-- Activity now has a live no-store tenant API/UI backed by caller-session RLS. Browser responses omit activity metadata; the separate seeded illustration remains labeled **Demo Data**.
-- The legacy HTTP local-file writer, its component, and its environment switch are removed. Repository changes have only the authenticated GitHub isolated-branch/draft-PR route.
-- Phase 1D observation-only scaffolding is present: a pure GREEN prerequisite evaluator, tenant-scoped GET/owner-only same-origin PATCH controls, a locked static safety surface, and hosted migration `010` that keeps Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF. No evaluator result can execute work.
-- No merge, deploy, rollback, Codex, or Claude executor is present.
+### Carried forward from Phase 1A/1B
+
+- Next.js 16.3, React 19.2, TypeScript strict mode, App Router, Tailwind CSS 4.
+- Supabase email/password auth, magic link, callback, onboarding, membership, and active-organization boundaries.
+- GitHub App install/callback/token/sync/disconnect with same-origin protection, signed state, exact App/installation verification, and short-lived repository-scoped installation tokens.
+- Repository reads: branches, commits, pull requests, check runs, trees, and UTF-8 files.
+- The guarded manual file-change route: protected-path rejection, secret rejection, expected blob SHA, isolated `softwarefactory/*` branch, and a required open draft pull request.
+- Signed, idempotent, redacted webhook ingestion with bounded database reconciliation.
+- Phase 1D observation-only scaffolding with the hosted global kill switch locked ON.
+
+### Added in Phase 1C
+
+- **Provider abstraction.** A provider-neutral worker contract (`createRun`/`getRun`/`cancelRun`/`getResult`), a registry that lists planned providers truthfully, and an OpenAI Codex adapter on the supported server-side Responses API in background mode. Anthropic remains listed as Phase 2 with no adapter.
+- **Deterministic orchestrator.** Classifies intent, derives acceptance criteria, reuses `lib/risk.ts`, decomposes only broad programmes, represents dependencies, and treats the owner's declared risk as a floor while escalating on detected RED signals. Planning requires no provider, so Bot Manager works while Codex is Not Connected.
+- **Durable run engine.** A nine-step state machine advanced by short, leased, idempotent worker ticks. All state is in Postgres; an expired lease is reclaimed on the next tick. Driven by a `vercel.json` cron and authenticated by a server-only bearer secret.
+- **Pre-commit diff review.** Scope, protected paths, untrusted expected SHAs, oversized content, diff-level secret scanning, and recalculated risk. Unexpected escalation stops the run.
+- **Draft-PR-only delivery.** Changes land on an isolated `factory/<run-id>-<slug>` branch and open a draft pull request carrying run ID, command, summary, risk, acceptance criteria, changed files, limitations, and rollback notes.
+- **Real CI as the validation authority.** SoftwareFactory does not run a managed project's test suite. Lint, typecheck, tests, and build are read from the repository's own check runs, and the bounded repair loop consumes genuine failures.
+- **Every primary page is live.** Dashboard, Projects (+ detail with eight tabs), Bot Manager, Files, Agents, Backlog, Runs (+ run detail), Reports, Connections, Activity, and Settings all read tenant records. `lib/demo-data.ts` is deleted; nothing seeds demo content.
+- **Global shell.** Project selector, breadcrumbs, system status, notification centre, profile menu with sign-out, and a Cmd/Ctrl-K command shortcut.
+- **Commanded execution interlock.** `organization_settings.execution_enabled` defaults OFF and is owner-only. It is independent of the Phase 1D autonomy kill switch and never enables autonomous approval, merge, deployment, or rollback.
+- No merge, deploy, or rollback executor exists in any phase of this tree.
 
 ## Data and security state
 
 - Hosted Supabase project `qpuofpmagrmyamahqwxw` (`softwarefactory`) was verified `ACTIVE_HEALTHY`.
-- Hosted migrations `001`, `002`, `003`, `004`, `005`, `007`, `008`, `009`, and `010` were applied successfully; the hosted migration ledger includes `010`.
-- Additive migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` are committed on `main` but **not applied to hosted Supabase**. They respectively close direct authenticated connection/member mutations and align `github_pat_` detection, add actor-attributed terminal change-request evidence, and reconcile newly granted repository metadata. Hosted promotion is pending exact owner approval and post-apply verification.
-- Migration `010` was applied transactionally after preflight returned `unsafe_project_rows=0`. Hosted checks confirmed organization kill-switch default `true`, both new constraints validated, zero organizations with the switch OFF, zero unsafe projects, authenticated execute on the controls RPC, and no anonymous execute grant.
-- The last successful linked public-schema CLI lint was clean through `009` (`[]`). A post-`010` CLI lint attempt was blocked by a Supabase CLI account `403`, so no post-`010` CLI-lint claim is made. Authenticated cross-tenant, broader privileged-RPC/audit, and real application-session checks remain pending.
-- Migration `009_harden_github_project_and_sync` serializes synchronization by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, and forces project links to use the synchronized GitHub default branch.
-- A read-only hosted catalog query returned 22 public tables, 22 with RLS, 22 with FORCE RLS, 43 policies, and 22 row-secret guards. The subsequent linked migration list confirms all eight expected migrations through `009`.
-- Phase 1B adds `github_installations`, `github_repositories`, `github_webhook_deliveries`, and `github_change_requests`, all with RLS and FORCE RLS, plus audited privileged workflows and transactional project linking.
-- Hosted Auth uses exact production/local callbacks, confirmed email sign-up, anonymous sign-in OFF, minimum password length 12, JWT expiry 3600, secure password changes, rate limits, eight-digit OTPs, and TOTP enabled.
-- GitHub/Supabase privileged credentials are stored in Vercel server-side environment settings, not source or database rows.
-- GitHub App installation `153286187` exists on `surgeservicesllc` and is scoped only to `surgeservicesllc/SoftwareFactory`. This provider-side installation is real evidence, but it has not completed the authenticated SoftwareFactory callback or tenant persistence workflow.
-- The App has one remaining private key, identified by public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`. Vercel's protected private-key value was rotated to that key and promoted without placing key material in source or logs.
-- Preview Supabase configuration has not been independently verified.
+- Hosted migrations `001`-`005`, `007`-`010` are applied; the hosted ledger ends at `010`.
+- Local migrations **`011`-`016` are committed but not applied to hosted Supabase.** `011`-`013` close direct authenticated mutations, add actor-attributed change evidence, and reconcile repository grants. `014`-`016` add the Phase 1C execution enums, schema, and workflows. Hosted promotion requires exact owner approval and post-apply verification.
+- All 16 migrations were applied in order to a real PostgreSQL instance (pglite) in tests: 26 public tables, every one with RLS **and** FORCE RLS.
+- New tables `run_events`, `run_workspaces`, `run_results`, and `organization_settings` are read-only for `authenticated`; every write goes through an audited SECURITY DEFINER function.
+- The durable worker boundary (`claim_agent_runs`, `heartbeat_agent_run`, `finish_agent_run`, `record_run_event`, `record_run_workspace`, `record_run_result`, `record_run_pull_request`) is revoked from `public`, `anon`, and `authenticated`. No browser session can drive execution.
+- `run_events` is append-only by trigger and rejects likely secrets in both its message and metadata.
+- Unapproved RED work is never claimed. Dependent work is never claimed before its dependency completes. Organization concurrency is enforced at claim time.
+- The Phase 1D interlocks are intact and verified by test: Autonomous Mode stays constrained OFF and the organization kill switch stays locked ON.
+- GitHub App installation `153286187` exists on `surgeservicesllc`, scoped only to `surgeservicesllc/SoftwareFactory`. It has still not completed the authenticated SoftwareFactory callback.
+- Provider, worker, and deployment credentials are absent, so those capabilities report **Not Connected**.
 
 ## Live/configuration status
 
 | Provider/capability | Status | Evidence/meaning |
 | --- | --- | --- |
-| Supabase hosted project | Schema/observation controls connected; broader behavioral gate pending | Project is healthy and hosted through `010`. Kill-switch/constraint/grant checks pass. Last linked CLI lint was clean through `009`; post-`010` CLI lint is unavailable because the current CLI account returns `403`. Hosted authenticated RLS allow/deny and real app-session verification remain. |
-| GitHub App object/secrets | Configured and rotated | `Surge SoftwareFactory` (`surge-softwarefactory`, App ID `4573846`) exists; its sole remaining key fingerprint is `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`, and the corresponding server-only key is promoted in Vercel. |
-| GitHub provider installation | Installed; repository-scoped | Installation `153286187` is installed on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. This does not establish a SoftwareFactory tenant connection. |
-| GitHub App connection | **Not Connected** | The authenticated SoftwareFactory owner callback, organization connection record, repository synchronization, project/file/draft-PR journey, and signed webhook delivery remain pending. The provider General form is blank/inactive, and App-authenticated hook configuration returns `404` with no hook object. |
-| Vercel UI hosting | Production deployment verified | Deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` is READY at `softwarefactory-fbho4i38o-surgeservices-projects.vercel.app` and current at `https://softwarefactory-tan.vercel.app`; production Playwright passed 12/12. It builds the application tree from implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` through owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c`. This is hosting evidence, not an in-product deploy/rollback adapter or full provider acceptance. |
-| Vercel deployment/rollback adapter | **Not Connected** | Hosting does not create an in-product deploy or rollback executor. |
-| OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
-| Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
-| Auto approve/merge/deploy/rollback | OFF | No autonomous production authority or executor exists. |
-| Phase 1D observation scaffold | Hosted controls; execution blocked | GREEN-only policy observation; hosted global kill switch locked ON; both safety constraints validated; automatic actions OFF; worker **Not Connected**. |
+| Supabase hosted project | Schema through `010`; `011`-`016` pending | Project healthy. All 16 migrations verified against real PostgreSQL locally. Hosted authenticated RLS allow/deny and a real application session remain unverified. |
+| GitHub App object/secrets | Configured and rotated | `Surge SoftwareFactory` (App ID `4573846`); sole key fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` promoted in Vercel. |
+| GitHub provider installation | Installed; repository-scoped | Installation `153286187`, only `surgeservicesllc/SoftwareFactory` selected. Not a tenant connection. |
+| GitHub App connection | **Not Connected** | The authenticated owner callback, connection record, repository sync, project link, and signed webhook delivery are all still pending. |
+| OpenAI Codex worker | **Not Connected** | Adapter implemented and unit-tested against its contract. No `OPENAI_API_KEY` is configured, so no run can start. |
+| Durable worker tick | **Not Connected** | Endpoint, leasing, and authorization implemented and tested. No `WORKER_TICK_SECRET`/`CRON_SECRET` is configured, so queued runs are never claimed. |
+| Commanded execution | OFF | Owner-gated per organization; defaults OFF. |
+| Anthropic/Claude worker | **Not Connected** | Phase 2. Listed in the registry with no adapter. |
+| Vercel deployment visibility | **Not Connected** | No `VERCEL_TOKEN`. Deployment metrics report unavailable rather than zero. |
+| Vercel deployment/rollback adapter | **Not Connected** | Hosting is not an in-product deploy or rollback executor. |
+| Auto approve/merge/deploy/rollback | OFF | No executor exists. Verified by contract test. |
+| Phase 1D autonomy | Locked | Kill switch ON, Autonomous Mode constrained OFF, GREEN ceiling. |
 
 ## Verification evidence and current-tree status
 
-The hardening gates pass locally and the exact application tree is now deployed. Hosted database and authenticated provider acceptance remain separate evidence layers.
-
 | Gate | Evidence | Result |
 | --- | --- | --- |
-| Current local Phase 1B review hardening | Active-tenant routes, truthful live status, Activity API/UI, direct-write removal, migrations `011`-`013`, expanded contracts | Implemented locally; validation below passes |
-| Check phases | `npm run check` | Lint, typecheck, and 24 files/205 tests passed; its build phase hit only a stale OneDrive `.next` cache `EPERM`. |
-| Production build | `npm run build` after recoverable cache relocation | Pass — 34 pages/routes |
-| Full coverage suite | `npm run test:coverage` after final `013` ordering/contracts | Pass — 25 files/208 tests; 50.44% statements, 52.99% branches, 45.07% functions, 51.24% lines |
-| Focused `013` chain | 3 test files | Pass — 44 tests |
-| Local Playwright | `npm run test:e2e` | Pass — 12/12 desktop/tablet/mobile, navigation, overflow, browser-error, and axe checks |
-| Secret/client scan | tracked/source and `.next/static` review | Pass — only the synthetic `github_pat_` fixture matched; no built static server-secret markers |
-| Hosted migration application | Supabase SQL Editor + hosted ledger | Pass through `010`; transactional preflight/application and safety checks recorded |
-| Local migration promotion | `011`, `012`, `013` | Pending exact owner approval; no hosted application/lint/RPC claim |
-| Hosted database lint | linked CLI | Pass through `009` — no schema errors (`[]`); post-`010` attempt blocked by CLI-account `403`, not claimed |
-| Git/main provenance | GitHub `origin/main` | Pass — implementation `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` pushed; owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` is current `main` and preserves the implementation authorship/tree |
-| Stable production Playwright | `PLAYWRIGHT_BASE_URL=https://softwarefactory-tan.vercel.app npm run test:e2e` | Pass — 12/12 against deployment `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY` |
-| Production HTTP probes | `/`, `/activity`, `/connections`, `/api/activity`, `/api/files` | Pass — public pages return 200; unauthenticated `/api/activity` returns 401; removed `/api/files` returns 404 |
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit and integration tests | `npm test` | Pass — 31 files / 300 tests |
+| Migration application | All 16 migrations applied in order to PostgreSQL via pglite | Pass — 26 tables, all with RLS and FORCE RLS |
+| Execution schema behavior | `tests/integration/phase1c-execution-schema.test.ts` | Pass — 17 tests covering leasing, append-only evidence, secret rejection, concurrency, cancellation, retry policy, RED refusal, dependency ordering, and Phase 1D interlocks |
+| Security boundary contract | `tests/integration/phase1c-boundaries.contract.test.ts` | Pass — 13 tests covering service-role confinement, credential isolation from client code, same-origin coverage, tenant scoping, RLS grants, draft-only PRs, and absence of any merge/deploy/rollback executor |
+| Production build | `npm run build` | Pass — 41 routes |
+| Browser, responsive, and accessibility | `npm run test:e2e` | Pass — 15/15 across desktop, tablet, and mobile including axe checks |
 | Live GitHub acceptance | production checklist | Pending; **Not Connected** |
-| Phase 1B/1D Vercel deployment | deployment identity/readiness/public E2E | Pass — `dpl_9i5hybTpGK6ZDufRuKWKT7Ys2gzY`, READY/current for the `e0ca6e7` application tree via marker `7bd9d30`, stable alias 12/12 |
+| Live worker run | production checklist | Pending; **Not Connected** |
+| Hosted migration promotion `011`-`016` | — | Pending exact owner approval |
 
-The local shell used Node 20 and emitted Supabase's future-support warning. The repository, CI, and intended production runtime target Node 22 or newer.
+Defects found and fixed by these gates during Phase 1C:
+
+1. The dashboard counted a project as connected from its connection status alone, which could disagree with the Projects page. It now derives connectivity from identical evidence.
+2. An unlayered `a { color: inherit }` rule outranked every layered component class, stripping the foreground colour from `.primary-action` links so they failed WCAG contrast on their lime background.
+3. The orchestrator applied the owner's declared risk to the plan but not to its tasks, so a YELLOW declaration produced GREEN tasks — and task risk is what gates execution.
+4. The diff secret scanner backtracked catastrophically on long single lines; a 250KB minified line took over 50 seconds, which would stall a worker tick.
+5. `claim_agent_runs` counted an attempt on every claim, so a run spanning several ticks would exhaust its retry budget without failing.
 
 ## Known limitations and release blockers
 
-- Verify hosted authenticated RLS/FORCE RLS, cross-tenant/anonymous denial, privileged-RPC authorization, audit behavior, and a real application session.
-- Obtain exact owner approval to apply hosted migrations `011`-`013`; then verify ledger, lint, grants, RLS, actor-attributed immutable activity, webhook repository-grant reconciliation, and application health.
-- Preserve current provenance: implementation commit `e0ca6e7fe62234817e24273fb8ba3f6a12ffd278` contains the application changes; owner-authored empty marker `7bd9d30e67bf018aba32f28d235d4a2f1232d65c` is current `main` and deployed because Vercel Hobby rejected the private-repository deployment directly from the non-member implementation author. The marker changes no application files.
-- Complete real Supabase sign-in/onboarding.
-- Complete the authenticated owner callback for provider installation `153286187`, persist the organization connection, and verify repository sync, project link, reads, safe edit/draft PR, audit, error/revocation paths, and disconnect.
-- Configure and verify the GitHub webhook endpoint. The provider General form is blank/inactive and App-authenticated hook configuration returns `404`/no hook object; observe a valid signed production delivery before changing its status.
+- Obtain exact owner approval to apply hosted migrations `011`-`016`; then verify ledger, lint, grants, RLS, actor attribution, event immutability, and application health.
+- Verify hosted authenticated RLS allow/deny, cross-tenant and anonymous denial, privileged-RPC authorization, and a real application session.
+- Restore an authorized Supabase CLI account and rerun linked public-schema lint; the last clean linked lint is through `009`.
+- Complete real Supabase sign-in and onboarding in production.
+- Complete the authenticated owner callback for provider installation `153286187`, persist the connection, and verify repository sync, project link, reads, safe edit/draft PR, audit, error/revocation paths, and disconnect.
+- Configure and verify the GitHub webhook endpoint; the provider General form is still blank/inactive.
+- Configure `OPENAI_API_KEY` and `WORKER_TICK_SECRET`, enable commanded execution for the organization, and observe one complete real run end to end before describing the execution loop as live.
 - Supabase Preview environment isolation remains unverified.
-- Restore an authorized Supabase CLI account and rerun linked public-schema lint after `010`; retain the hosted kill-switch/constraint/RPC checks. This does not authorize an executor.
 
-No documentation/UI may change GitHub to Connected or Phase 1B to complete until these blockers have evidence.
+No documentation or UI may describe GitHub, the Codex worker, the durable tick, or any deployment capability as Connected — or Phase 1C as complete — until these blockers have evidence.

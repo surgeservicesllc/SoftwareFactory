@@ -1,10 +1,43 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
-Phase 1B decision: **Not release-ready yet**
+Phase 1C decision: **Not release-ready yet**
 
-Reason: review hardening, local gates, `main` publication, READY production deployment, public HTTP checks, and production Playwright pass. Hosted migrations `011`-`013`, hosted authenticated tenant behavior, the in-product owner callback/connection, webhook configuration/delivery, and remaining GitHub acceptance are pending.
+Reason: the full site build-out and the execution loop are implemented and pass every local gate, but no part of the loop has been observed live. Hosted migrations `011`-`016` are unapplied, no provider or worker credential exists, no worker tick has ever run, and the GitHub connection, webhook, and authenticated tenant behavior remain unverified.
+
+Phase 1B decision: **Not release-ready yet** — its outstanding blockers below are unchanged and are now a prerequisite for Phase 1C acceptance.
+
+## Phase 1C evidence
+
+| Area | Evidence | Status |
+| --- | --- | --- |
+| Scope/implementation | Provider abstraction, Codex adapter, deterministic orchestrator, durable leased run engine, diff review, draft-PR delivery, every primary page live | Implemented locally; no live run observed |
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit and integration tests | `npm test` | Pass — 31 files / 300 tests |
+| Migration application | All 16 migrations applied in order to real PostgreSQL via pglite | Pass — 26 tables, all with RLS and FORCE RLS |
+| Execution schema behavior | `tests/integration/phase1c-execution-schema.test.ts` | Pass — 17 tests: leasing, lease reclaim, append-only evidence, secret rejection, concurrency ceiling, cancellation, retry policy, unapproved RED refusal, dependency ordering, Phase 1D interlocks |
+| Security boundary contract | `tests/integration/phase1c-boundaries.contract.test.ts` | Pass — 13 tests: service-role confinement, no provider credential reachable from client code, same-origin on every cookie-authenticated mutation, tenant scoping, RLS/read-only grants, draft-only PRs, no merge/deploy/rollback executor |
+| Production build | `npm run build` | Pass — 41 routes |
+| E2E/responsive/accessibility | `npm run test:e2e` | Pass — 15/15 across desktop, tablet, mobile including axe |
+| Demo content removal | `lib/demo-data.ts` deleted; no page imports seeded content | Pass |
+| Hosted migrations `011`-`016` | — | **Pending exact owner approval**; no hosted application, lint, or RPC claim |
+| OpenAI Codex worker | Adapter implemented and contract-tested; no `OPENAI_API_KEY` | **Not Connected** |
+| Durable worker tick | Endpoint, leasing, and authorization implemented and tested; no `WORKER_TICK_SECRET`/`CRON_SECRET` | **Not Connected** |
+| Commanded execution | Owner-gated per organization, defaults OFF | OFF |
+| Real worker run | — | **Never executed** |
+| Vercel deployment visibility | No `VERCEL_TOKEN`; metrics report unavailable rather than zero | **Not Connected** |
+
+### Defects found and fixed by these gates
+
+1. Dashboard connectivity was derived from connection status alone and could disagree with the Projects page; it now uses identical evidence.
+2. An unlayered `a { color: inherit }` rule outranked layered component classes, causing a WCAG contrast failure on every `.primary-action` link.
+3. The orchestrator applied the declared risk floor to the plan but not to its tasks, and task risk is what gates execution.
+4. The diff secret scanner backtracked catastrophically on long single lines (250KB minified line took over 50 seconds), which would stall a worker tick.
+5. `claim_agent_runs` counted an attempt on every claim, so a multi-tick run would exhaust its retry budget without failing.
+
+## Phase 1B evidence (unchanged)
 
 | Area | Evidence | Status |
 | --- | --- | --- |
@@ -111,7 +144,7 @@ hosted Supabase:
   required — hosted authenticated RLS/tenant/RPC/audit behavior checks
 
 pending:
-  exact owner approval and hosted application/verification of migrations 011, 012, and 013
+  exact owner approval and hosted application/verification of migrations 011 through 016
   authenticated production Supabase journey
   authenticated SoftwareFactory callback/tenant connection/repository/project/file/draft-PR/webhook/disconnect acceptance
   authorized post-010 CLI lint and broader hosted tenant/RPC/audit verification
@@ -120,6 +153,11 @@ pending:
 ## Security acceptance still required
 
 - prove two-tenant and anonymous denial with user sessions;
+- verify the durable worker boundary is unreachable from an authenticated browser session in hosted Supabase;
+- verify unapproved RED work and dependent work are refused at claim time in hosted Supabase;
+- observe one complete real run: plan, lease, provider call, diff review, isolated branch, draft PR, real CI, recorded result;
+- verify a cancelled run stops before its next external effect and opens no pull request;
+- verify a protected-path and a secret-bearing proposal are both blocked before any commit;
 - verify RLS and FORCE RLS on every exposed hosted table;
 - verify security-definer search paths/grants/actor checks after hosted promotion of `011`-`013`;
 - verify App token scope/expiry and no token leakage in responses/logs;

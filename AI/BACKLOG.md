@@ -1,6 +1,6 @@
 # Backlog
 
-Last triaged: 2026-08-12
+Last triaged: 2026-08-13
 
 Checked items have repository or provider evidence. “Implemented” does not mean the real GitHub workflow passed.
 
@@ -73,3 +73,31 @@ Claude, auto merge, deployment automation, and rollback automation are **Not Con
 - [ ] Run final release verification on Node 22+ (local Node 20 currently emits the Supabase future-support warning).
 - [ ] Resolve the Vitest/Vite future native config-loader warning before it becomes breaking.
 - [ ] Expand authenticated E2E coverage once a safe disposable provider acceptance fixture exists.
+
+## Phase 1C implementation
+
+- [x] Record the full Phase 1C inspection and classify every area in `AI/PHASE_1C_IMPLEMENTATION_PLAN.md`.
+- [x] Add migrations `014`-`016`: execution enums, append-only `run_events`, isolated `run_workspaces`, normalized `run_results`, `organization_settings`, backlog fields, agent enablement/metrics, project portfolio metadata, and the audited worker workflows.
+- [x] Add a provider-neutral worker contract, a registry that lists planned providers truthfully, and an OpenAI Codex adapter on the supported server-side Responses API.
+- [x] Add a deterministic orchestrator that classifies intent and risk, derives acceptance criteria, decomposes only broad programmes, and represents dependencies.
+- [x] Add the durable leased run state machine, the authenticated worker tick endpoint, and the scheduler entry.
+- [x] Add pre-commit diff review with protected-path, expected-SHA, scope, secret, and recalculated-risk checks.
+- [x] Add isolated `factory/*` branch commits and draft pull requests carrying full run evidence.
+- [x] Add real-CI observation and the bounded repair loop.
+- [x] Add cancellation, bounded retry for transient failures, and terminal handling for policy failures.
+- [x] Build every primary page against live tenant records and delete `lib/demo-data.ts`.
+- [x] Add the project detail route with Overview, Repository, Backlog, Runs, Pull requests, Deployments, Activity, and Settings.
+- [x] Finish the global shell: project selector, breadcrumbs, system status, notification centre, profile menu, and command shortcut.
+- [x] Add Phase 1C behavior and boundary test coverage (31 files / 300 tests).
+- [x] Document the execution architecture in `docs/EXECUTION_ARCHITECTURE.md` and record ADR-018 through ADR-021.
+
+## Phase 1C release blockers
+
+- [ ] Obtain exact owner approval and apply hosted migrations `011`-`016`, then verify ledger, lint, grants, RLS, worker-boundary revocations, and run-event immutability.
+- [ ] Verify hosted authenticated RLS allow/deny, cross-tenant and anonymous denial, and privileged-RPC authorization.
+- [ ] Complete the authenticated GitHub owner callback, connection, repository sync, project link, and draft-PR journey.
+- [ ] Configure and verify the GitHub webhook endpoint and observe a signed delivery.
+- [ ] Configure `OPENAI_API_KEY` and `WORKER_TICK_SECRET` as server-only values and confirm the tick reports configured.
+- [ ] Have an owner enable commanded execution and observe one complete real run end to end.
+- [ ] Verify cancellation, protected-path refusal, secret refusal, stale-SHA conflict, and CI repair against live providers.
+- [ ] Restore an authorized Supabase CLI account and rerun linked public-schema lint.

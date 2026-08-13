@@ -12,7 +12,20 @@ Browser (untrusted)
         -> GitHub API / signed webhooks (untrusted provider data)
 ```
 
-Vercel hosts Next.js but is not an in-product deployment adapter. Codex/OpenAI and Claude/Anthropic workers are outside the Phase 1B runtime and **Not Connected**.
+Phase 1C adds a second, machine-authenticated boundary alongside the browser one:
+
+```text
+Scheduler (Vercel Cron or external)
+  -> /api/worker/tick (server-only bearer secret, constant-time comparison)
+    -> service-role client, used only through audited SECURITY DEFINER routines
+      -> leased run state machine in Postgres (for update skip locked)
+        -> provider adapter (untrusted structured proposal)
+        -> server-side diff review (scope, protected paths, secrets, risk)
+        -> GitHub isolated branch + draft pull request
+        -> real repository CI as the validation authority
+```
+
+Vercel hosts Next.js but is not an in-product deployment adapter. Claude/Anthropic workers remain outside this runtime and **Not Connected**; the OpenAI Codex adapter exists but reports **Not Connected** until a server-only credential is configured.
 
 The Phase 1D observation module is an inert policy boundary: it may calculate `WOULD_BE_ELIGIBLE` for freshly evidenced GREEN work, but returns `executionAllowed: false`. The global kill switch is ON, observation-only is fixed, and no executor adapter is connected.
 
@@ -36,6 +49,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
+- `014_phase1c_execution_enums`, `015_phase1c_execution_schema`, and `016_phase1c_execution_workflows` add the execution loop: command/run lifecycle labels, append-only `run_events`, isolated `run_workspaces`, normalized `run_results`, `organization_settings`, backlog fields on `tasks`, agent enablement/metrics, project portfolio metadata, and the audited worker workflows. Every new table has RLS and FORCE RLS with read-only `authenticated` grants; the worker routines are revoked from `public`, `anon`, and `authenticated`. They are not hosted yet.
 - Local migrations `011_harden_direct_mutation_boundaries`, `012_github_change_audit`, and `013_reconcile_github_repository_grants` remove direct authenticated connection/member mutations, align database/server `github_pat_` detection, make terminal GitHub changes actor-attributed and auditable, and add a bounded service-role webhook repository-grant upsert. They are not hosted yet and require exact owner approval plus post-apply verification.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
@@ -75,6 +89,16 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - Deduplicate delivery ID and reject conflicting payload reuse.
 - Reconcile installation/repository/PR/check/status events through bounded database functions. Newly granted repository metadata uses the service-role-only `013` function after hosted promotion.
 - Unknown events/installations are ignored safely, not used to create tenant ownership.
+
+## Execution boundary
+
+- Run state lives only in Postgres; no run depends on an open browser, a live process, or a long HTTP request.
+- A tick leases a bounded batch, advances each run by a bounded number of steps, and releases the lease. An expired lease is reclaimed and recorded rather than stranding the run.
+- Claims refuse unapproved RED work, refuse dependent work whose dependency has not completed, and honor the organization concurrency ceiling.
+- Provider output is untrusted: strict schema parsing, required expected blob SHA for updates, protected-path checks, bounded secret scanning, and recalculated risk.
+- Validation evidence comes from the target repository's own CI. SoftwareFactory does not execute a managed project's test suite, and a repository with no CI is reported as producing no evidence rather than as passing.
+- Transient provider, rate-limit, and timeout failures retry with a backoff. Policy failures — protected resource, detected secret, authorization, out-of-scope diff — are terminal.
+- Commanded execution (`organization_settings.execution_enabled`) is owner-gated, defaults OFF, and is independent of the Phase 1D autonomy kill switch, which stays locked ON.
 
 ## Security invariants
 

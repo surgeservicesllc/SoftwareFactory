@@ -34,16 +34,29 @@ Exit work:
 
 No merge or production deployment autonomy is implied.
 
-## Phase 1C — Codex execution
+## Phase 1C — Full site build-out and Codex execution
 
-Status: **Not Connected; not started.**
+Status: **Implemented and locally verified; Not Connected and not yet observed live.**
 
-- Durable provider-neutral worker, leasing/heartbeat/cancellation/idempotency.
-- Isolated workspaces, budgets/timeouts, sandbox/network restrictions, redacted traces.
-- Bounded GREEN tasks, deterministic validation, and human-reviewed draft PRs.
-- Kill switch, approval inbox, incident evidence, and observed non-production pilot.
+Implemented:
 
-Do not begin without explicit instruction after Phase 1B exits.
+- Provider-neutral worker contract, registry, and an OpenAI Codex adapter on the supported server-side Responses API.
+- Deterministic orchestrator: intent, acceptance criteria, risk classification, bounded decomposition, dependencies, and agent assignment.
+- Durable leased run state machine in Postgres with heartbeat, lease reclaim, cancellation, bounded retry, and organization concurrency.
+- Pre-commit diff review, diff-level secret scanning, isolated `factory/*` branches, and draft-pull-request delivery.
+- Real repository CI as the validation authority, with a bounded repair loop driven by genuine failures.
+- Every primary page built against live tenant records; no seeded demo content remains.
+- Commanded execution as an owner-gated interlock defaulting OFF, independent of the Phase 1D kill switch.
+
+Exit work:
+
+- apply and verify hosted migrations `011`-`016` after exact owner approval;
+- complete the authenticated GitHub connection, project link, draft-PR, and webhook journeys;
+- configure the provider and worker tick credentials;
+- observe one complete real run end to end; and
+- verify cancellation, protected-path refusal, secret refusal, stale-SHA conflict, and CI repair against live providers.
+
+No merge, deployment, or rollback autonomy is implied or implemented.
 
 ## Phase 1D — autonomous-loop controls
 

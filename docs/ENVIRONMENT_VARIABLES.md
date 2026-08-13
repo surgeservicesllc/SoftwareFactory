@@ -61,6 +61,24 @@ These values are for protected local/operator tooling, not application runtime:
 
 Prefer the CLI credential store or a protected operator environment. Do not put real values in `.env.example`, workflow YAML, shell history, fixtures, screenshots, logs, or issue text.
 
+## Phase 1C execution values
+
+All of these are server-only. None may be prefixed with `NEXT_PUBLIC_`, and a contract test asserts that no
+client component or client library references them.
+
+| Variable | Purpose | Absent behavior |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | The Codex worker's server-side credential | The provider reports **Not Connected** and no run starts |
+| `OPENAI_BASE_URL` | Optional API base; must use HTTPS | Defaults to `https://api.openai.com/v1` |
+| `OPENAI_ORGANIZATION` | Optional OpenAI organization header | Omitted |
+| `WORKER_TICK_SECRET` | Bearer credential a scheduler presents to `/api/worker/tick`; at least 32 bytes | The tick refuses every request and queued runs are never claimed |
+| `CRON_SECRET` | Vercel Cron sends this automatically; accepted in place of `WORKER_TICK_SECRET` | As above |
+| `VERCEL_TOKEN` | Read-scope token for deployment visibility | Deployment metrics report unavailable rather than zero |
+
+Setting these does not start any work on its own. An organization owner must also enable commanded execution in
+Settings, which defaults OFF. Doing so grants no autonomous authority: automatic approval, merge, deployment, and
+rollback remain unimplemented.
+
 ## Rotation and validation
 
 - Revoke/rotate immediately if a credential may have entered Git, logs, screenshots, or a client bundle.
