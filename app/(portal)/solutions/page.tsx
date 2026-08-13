@@ -57,7 +57,7 @@ export default async function DashboardPage() {
               </div>
             ))}
           </dl>
-          <Link href="/settings" className="btn btn-secondary btn-sm mt-4 self-start">
+          <Link href="/solutions/settings" className="btn btn-secondary btn-sm mt-4 self-start">
             See all safety settings
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>

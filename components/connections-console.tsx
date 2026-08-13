@@ -192,7 +192,7 @@ export function ConnectionsConsole() {
       const response = await fetch("/api/github/install/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/connections" }),
+        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/solutions/connections" }),
       });
       const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
       if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
@@ -642,7 +642,7 @@ export function ConnectionsConsole() {
       <p className="text-sm text-muted">
         Access tokens are created on the server, expire quickly, and are never sent to your browser or
         stored in the database.{" "}
-        <Link href="/settings" className="font-medium text-accent-text underline underline-offset-4">
+        <Link href="/solutions/settings" className="font-medium text-accent-text underline underline-offset-4">
           See what it may do
         </Link>
       </p>

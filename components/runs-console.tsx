@@ -38,7 +38,7 @@ export function RunsConsole() {
       icon={GitBranch}
       signedOutTitle="Sign in to see your runs"
       signedOutDescription="Run history belongs to your workspace."
-      returnPath="/runs"
+      returnPath="/solutions/runs"
       emptyTitle="Nothing has run yet"
       emptyDescription="Every job an agent performs is recorded here so you can check the work afterwards. No AI worker is connected, so nothing has run."
     >

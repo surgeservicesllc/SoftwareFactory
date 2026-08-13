@@ -39,7 +39,7 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
       icon={Bot}
       signedOutTitle="Sign in to see your requests"
       signedOutDescription="Saved requests belong to your workspace."
-      returnPath="/bot-manager"
+      returnPath="/solutions/bot-manager"
       emptyTitle="No requests yet"
       emptyDescription="Save your first request above and it will appear here with its risk level and status."
     >

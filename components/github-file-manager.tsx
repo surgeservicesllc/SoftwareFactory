@@ -343,8 +343,8 @@ export function GitHubFileManager() {
     );
   }
   if (state === "signed-out") return <BlockedState icon={Folder} title="Sign in to browse your files" description="Repository files are visible only to members of your organization." href="/auth/sign-in?next=/files" label="Sign in" />;
-  if (state === "setup" || (state === "ready" && !projects.length)) return <BlockedState icon={Folder} title="No connected project yet" description="Add a project first, then come back to browse and edit its files." href="/projects" label="Add a project" />;
-  if (state === "error" || !project) return <BlockedState icon={Folder} title="Files are unavailable" description={message || "This repository could not be loaded."} href="/connections" label="Check connections" />;
+  if (state === "setup" || (state === "ready" && !projects.length)) return <BlockedState icon={Folder} title="No connected project yet" description="Add a project first, then come back to browse and edit its files." href="/solutions/projects" label="Add a project" />;
+  if (state === "error" || !project) return <BlockedState icon={Folder} title="Files are unavailable" description={message || "This repository could not be loaded."} href="/solutions/connections" label="Check connections" />;
 
   const parentPath = directoryPath.includes("/") ? directoryPath.slice(0, directoryPath.lastIndexOf("/")) : "";
   const protectedApprovalReady = Boolean(

@@ -36,7 +36,7 @@ export function AgentsConsole() {
       icon={Boxes}
       signedOutTitle="Sign in to see your agents"
       signedOutDescription="Agents belong to your workspace."
-      returnPath="/agents"
+      returnPath="/solutions/agents"
       emptyTitle="No agents yet"
       emptyDescription="Agents appear here once they are defined for your workspace. None can run until an AI provider is connected."
     >

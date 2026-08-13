@@ -35,27 +35,27 @@ const navigationGroups = [
     heading: null,
     items: [
       { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Operations", href: "/operations", icon: HeartPulse },
-      { label: "Projects", href: "/projects", icon: FolderKanban },
-      { label: "Files", href: "/files", icon: FileText },
+      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
+      { label: "Files", href: "/solutions/files", icon: FileText },
     ],
   },
   {
     heading: "Work",
     items: [
-      { label: "Bot Manager", href: "/bot-manager", icon: Bot },
-      { label: "Backlog", href: "/backlog", icon: ClipboardList },
-      { label: "Runs", href: "/runs", icon: GitBranch },
-      { label: "Agents", href: "/agents", icon: Boxes },
+      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
+      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
+      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Agents", href: "/solutions/agents", icon: Boxes },
     ],
   },
   {
     heading: "Evidence & setup",
     items: [
-      { label: "Reports", href: "/reports", icon: ScrollText },
-      { label: "Activity", href: "/activity", icon: Activity },
-      { label: "Connections", href: "/connections", icon: PlugZap },
-      { label: "Settings", href: "/settings", icon: Settings },
+      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+      { label: "Activity", href: "/solutions/activity", icon: Activity },
+      { label: "Connections", href: "/solutions/connections", icon: PlugZap },
+      { label: "Settings", href: "/solutions/settings", icon: Settings },
     ],
   },
 ] as const;
@@ -162,7 +162,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             type="button"
             onClick={() => setMobileOpen(true)}
             className="btn btn-secondary size-10 px-0"
-            aria-label="Open navigation"
+            aria-label="Open console navigation"
             aria-expanded={mobileOpen}
           >
             <Menu className="size-5" aria-hidden="true" />
@@ -185,14 +185,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             type="button"
             className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close navigation"
+            aria-label="Close console navigation"
           />
           <aside className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] border-r border-line bg-surface">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
               className="btn btn-secondary absolute right-3 top-4 size-9 px-0"
-              aria-label="Close navigation"
+              aria-label="Close console navigation"
             >
               <X className="size-4" aria-hidden="true" />
             </button>

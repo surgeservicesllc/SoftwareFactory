@@ -43,7 +43,7 @@ export function BacklogConsole() {
       icon={ClipboardList}
       signedOutTitle="Sign in to see your backlog"
       signedOutDescription="Work items belong to your workspace."
-      returnPath="/backlog"
+      returnPath="/solutions/backlog"
       emptyTitle="Nothing in the backlog"
       emptyDescription="Work items appear here when a request is saved or an agent plans work."
     >

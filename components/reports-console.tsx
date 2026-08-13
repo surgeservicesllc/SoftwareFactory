@@ -33,7 +33,7 @@ export function ReportsConsole() {
       icon={ScrollText}
       signedOutTitle="Sign in to see your reports"
       signedOutDescription="Reports belong to your workspace."
-      returnPath="/reports"
+      returnPath="/solutions/reports"
       emptyTitle="No reports yet"
       emptyDescription="A daily summary of what got done, what is blocked, and what needs your decision will appear here once agents are connected and producing work."
     >
