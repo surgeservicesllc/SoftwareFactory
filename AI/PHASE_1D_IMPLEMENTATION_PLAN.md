@@ -170,6 +170,28 @@ require a credential that does not exist in this environment, so no amount of
 further implementation in this phase could have closed them.
 
 
+### The failed-deploy demonstration
+
+`tests/integration/phase1d-loop-journey.behavior.test.ts` records the chain rather than
+asserting it:
+
+1. **Deploy** — deployment state is read through `lib/deploy/vercel.ts`, which reports
+   `not_connected` with its reason. `latestReadyProduction` correctly resolves nothing, because
+   a failed read must never look like "nothing is deployed".
+2. **Validate** — a `failed` validation is recorded for the new release through Phase 1E's real
+   `record_deployment_validation`.
+3. **Last Known Good holds** — the failed release does not become Last Known Good; the previously
+   validated one still does.
+4. **Incident** — a SEV1 is opened against that deployment, and freezes releases automatically.
+5. **Controls** — the freeze propagates into the Phase 1D envelope; a tenant asking for all nine
+   actions resolves to none.
+6. **Rollback** — Last Known Good resolves from the validated release; execution is refused with
+   `EXECUTOR_NOT_CONNECTED` and nothing is reversed.
+7. **Repair** — bounded repair work is created and left unassigned.
+8. **Retries** — the budget is spent one attempt at a time, then the loop escalates.
+
+Every stage without an executor carries its exact blocker, and the journey asserts those names.
+
 ## 8. Integration register
 
 What this phase's decision layer touches, and in which direction.
