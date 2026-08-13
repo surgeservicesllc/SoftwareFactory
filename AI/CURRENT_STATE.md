@@ -134,7 +134,8 @@ Phase 1E adds a production-operations control plane in source and in migration `
 
 - Local gates on the routing change: lint, typecheck, `vitest run` (83 files / 824 tests), and a clean production build listing all twelve `/solutions` routes. Playwright passes 117/117 across desktop, tablet, and mobile, with axe on each moved page.
 - Verified against live production: `/solutions` and its eleven children each return `200` and serve both landmarks (`aria-label="Primary"` and `aria-label="Console"`) plus the `--shell-top:73px` offset. Every former top-level path returns `308` to its `/solutions` home, preserving query strings and subpaths.
-- `/solutions/projects` serves `noindex, nofollow`; the marketing home serves no robots meta; `robots.txt` disallows `/solutions`.
+- Every live console page serves its own title (`Projects · Control plane · AI Software Factory`, and so on) with the site name appearing once.
+- `/solutions/projects` serves `noindex, nofollow`; the marketing home serves `index, follow`; `robots.txt` disallows `/solutions` and the live sitemap lists the six marketing routes only.
 - `tests/integration/console-routing.contract.test.ts` guards the agreement between the route tree, the redirects, and the crawler directives. Its sitemap/robots assertion was mutation-checked: re-adding `/solutions` to the sitemap fails it.
 
 ## Release blockers
