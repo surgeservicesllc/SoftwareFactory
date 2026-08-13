@@ -1,138 +1,170 @@
-# Marketing site build — working plan
+# SoftwareFactory — shared working status
 
-Last updated: 2026-08-13 (checkpoint 3: schema verified executably; all gates green)
-Branch: `claude/universal-bot-interface-0caeda`
-Owner of this file: whichever agent is currently working. **Update it before your session ends.**
+Last updated: 2026-08-13 (Phase 1E synthetic journeys merged; all gates green on `main`)
+Current `main`: `79084ed` — CI run [`31733955307`](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31733955307)
+Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
-## Goal
-
-Build the marketing site from the approved mockups (Platform, Features, Pricing, Resources,
-About), move the existing console homepage to **Solutions** in the main navigation, and wire
-every page to Supabase. No page may ship with hard-coded content that pretends to be live data.
+Several agents work this repository concurrently. This file is the shared picture: what is
+done, what is genuinely open, and which items only the owner can close. Keep workstream
+sections separate so two agents editing at once conflict on one section rather than the file.
 
 ## Ground rules (from `AGENTS.md` — read it before editing)
 
 - Truthful labels only. **Demo Data** for seeded values, **Not Connected** for absent providers.
-- Row Level Security stays on for every exposed table. Marketing content is world-readable by
-  design; that is an explicit `anon` SELECT policy, never a disabled RLS.
+- Row Level Security stays on for every exposed table, with FORCE RLS. Public-readable content
+  is an explicit `anon` SELECT policy, never a disabled RLS.
 - No credential, key, or secret in browser code, logs, fixtures, or database rows.
-- Marketing tables are content, not control plane. They must not grant any new write path to
-  `anon`, and they must not touch the tenant tables.
 - Run `npm run lint && npm run typecheck && npm test && npm run build` before every commit.
-- Playwright needs `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium` in this sandbox.
+- Playwright in this sandbox: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
+- Merging to `main` deploys production through Vercel. CI runs on `pull_request` and on push to `main`.
 
-## Architecture decision
+## Repository status at a glance
 
-Two Next.js route groups so the two shells never fight:
+| Workstream | State | Blocking item |
+| --- | --- | --- |
+| Phase 1B — GitHub App integration | Live for the owner repository path | Second-tenant and adverse lifecycle matrix |
+| Phase 1D — autonomy controls | Observation-only scaffold, locked OFF | Deliberate; no executor exists |
+| Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
+| Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
+| Bot fabric + marketing site | Merged | Hosted marketing migration |
 
-```
-app/(marketing)/   -> MarketingShell: top nav + footer, public, indexable
-app/(console)/     -> AppShell: sidebar, authenticated control plane
-```
+Gates on current `main`: lint, typecheck, 82 files / 819 tests, clean production build,
+Playwright 117/117 across desktop/tablet/mobile including axe.
 
-Marketing routes: `/` `/platform` `/features` `/solutions` `/pricing` `/resources` `/about`
-Console routes keep their current paths (`/projects`, `/bot-manager`, `/files`, ...).
+---
 
-`/solutions` carries the former console homepage content, per the goal.
+## Phase 1E — production operations
 
-## Data model (migration `022_marketing_content`)
-
-All tables live in `public`, RLS + FORCE RLS on, `anon`/`authenticated` get **SELECT only**,
-writes are owner-gated through audited SECURITY DEFINER functions (same pattern as the bot
-fabric in migration `021`).
-
-| Table | Purpose |
-| --- | --- |
-| `marketing_pages` | slug, title, eyebrow, headline, subheadline, hero copy, SEO fields |
-| `marketing_sections` | ordered content blocks per page (kind + JSON payload) |
-| `marketing_stats` | hero stat rows (value, label, icon, page) |
-| `marketing_features` | feature/capability cards (page, group, icon, title, body) |
-| `marketing_pricing_plans` | name, price, cadence, blurb, cta, highlight flag, sort |
-| `marketing_plan_features` | per-plan feature list + comparison-matrix values |
-| `marketing_resources` | kind, title, summary, media, read time, level, url, featured |
-| `marketing_resource_topics` | topic name, icon, resource count, sort |
-| `marketing_team_members` | name, role, bio, headshot, linkedin, twitter, sort |
-| `marketing_testimonials` | quote, author, title, avatar, page |
-| `marketing_logos` | customer logo wall (name, wordmark, sort) |
-| `newsletter_subscribers` | email, source page, confirmed_at, created_at |
-
-`newsletter_subscribers` is the one table that accepts public input. It takes inserts **only**
-through `subscribe_to_newsletter(email, source)` — a SECURITY DEFINER function that validates
-the address, is idempotent per email, and returns no row data. `anon` gets no SELECT on it.
-
-## Status
+Monitor → Detect → Classify → Protect → Diagnose → Rollback decision → Repair work →
+Validate → Resolve. Full audit, per-section completion, integrations, security findings and
+Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
 
 ### Done
-- [x] Read `AGENTS.md`, `AI/*`, `policies/*`; confirmed the truthful-language contract.
-- [x] Bot fabric shipped on this branch (PR #2) — unrelated to this goal, already green locally.
-- [x] `todo.md` created.
-- [x] Migration `20260813000100_marketing_content` — 11 tables, RLS + FORCE RLS, `anon` SELECT on
-      published rows only, seed matching the mockups, and the `subscribe_to_newsletter` RPC.
-- [x] `lib/marketing/` — `types.ts` (shapes + price/matrix helpers), `content.ts` (seed mirror),
-      `queries.ts` (never throws; falls back and reports `source`).
-- [x] `components/marketing/` — `site-header`, `site-footer`, `primitives`, `icon` registry,
-      `hero-visual` (CSS/SVG, no raster assets), `pricing-plans`, `resource-library`,
-      `newsletter-form`.
-- [x] Route groups: `app/(console)/` + `app/(marketing)/`; console nav "Dashboard" → `/solutions`;
-      each shell owns exactly one skip link.
-- [x] `/platform`, `/features`, `/solutions`, `/pricing`, `/resources`, `/about`, `/` all built.
-- [x] `POST /api/newsletter` → `subscribe_to_newsletter`, same-origin, bounded, uniform response.
-- [x] Per-page `generateMetadata` from content; marketing group `index: true`, console `noindex`.
-- [x] Playwright: 81/81 across desktop/tablet/mobile — render, real horizontal-scroll check,
-      nav, pricing toggle, resource search, and axe per page.
-- [x] Fixed 5 real defects the new axe sweep surfaced: 4 contrast tokens below 4.5:1
-      (`#6d7a8c`, `#4a5768`, `#657283`, `#536070`), an invalid `<dl>` structure in `StatRow`,
-      unclipped hero glows causing mobile overflow, a grid item stretched by the comparison
-      table, and a scroll region with no keyboard access.
 
-- [x] Unit tests: `marketing-types`, `marketing-content`, `marketing-queries` (mocked Supabase,
-      covering fallback, wholesale fallback on a missing page row, per-table degradation, and
-      testimonial scoping). `lib/marketing` sits at 97.61% statement coverage.
-- [x] **Executable RLS matrix** (`tests/integration/marketing-rls-behavior.test.ts`, 21/21):
-      applies the migration to in-process PostgreSQL and exercises it as the real `anon` and
-      `authenticated` roles. Caught a real defect — `marketing_plan_features.label` was `NOT NULL`
-      while matrix-only rows carry no card label — now fixed. **Keep this test passing; it is the
-      guard on the public-read boundary.**
-- [x] Integration contract test incl. **seed parity** — the migration seed and
-      `lib/marketing/content.ts` cannot drift on page slugs, plan prices, highlight, or matrix rows.
-- [x] `sitemap.ts` (marketing routes only) and `robots.ts` (console paths disallowed).
-- [x] Root metadata retitled to the marketing brand; console group carries its own title template.
-- [x] `AI/CURRENT_STATE.md`, `AI/BACKLOG.md`, `AI/HANDOFF.md`, `AI/QUALITY_SCORECARD.md`,
-      `AI/ARCHITECTURE.md`, `AI/DECISIONS.md` (ADR-023/024/025) and `README.md` updated.
+- [x] Migration `028` — ten RLS + FORCE RLS tables, SEV1–SEV4 incident evidence, owner-scoped
+      SECURITY DEFINER workflows, append-only evidence triggers, **zero new `service_role`
+      table grants** so the verified migration-`026` ACL matrix is unchanged.
+- [x] Migration `029` — per-project synthetic journeys whose step safety and profile coverage
+      are CHECK constraints, so bypassing the route cannot bypass them.
+- [x] Provider-neutral monitoring. One connected adapter: a bounded HTTPS probe that refuses
+      loopback/private/CGNAT/link-local/metadata targets, does not follow redirects, and never
+      reads a response body. Every other provider states its reason and unblocking condition.
+- [x] Health `HEALTHY/DEGRADED/CRITICAL/UNKNOWN/PAUSED` with append-only history and a stored
+      reason. No connected monitor resolves to **UNKNOWN**, never HEALTHY.
+- [x] Incidents created automatically, deduplicated by fingerprint into one open incident per
+      project, severity escalating upward only.
+- [x] Automatic release freeze on SEV1/SEV2; owner-only resume, organization-wide stop, and
+      reversal of that stop (which never silently lifts a per-project freeze).
+- [x] Last Known Good resolved only from a deployment whose own validation passed; rollback
+      eligibility fail-closed against `policies/AUTO_ROLLBACK.md`; a failed rollback cannot be
+      recorded without escalating to SEV1 — a CHECK constraint, not application logic.
+- [x] Deterministic Production Investigator returning cause, cited evidence, subsystem,
+      confidence, recommended action and risk. No intermediate reasoning stored or returned.
+- [x] Bounded self-healing: three attempts, escalation on the third, RED and above-ceiling work
+      refused so the GREEN/YELLOW/RED policy is not bypassed.
+- [x] Durable idempotent event queue covering all ten required event types.
+- [x] Gated resolution: restoration, passing same-project validation, root cause, corrective
+      action, and prevention for SEV1/SEV2. A green deployment closes nothing.
+- [x] Operations console, per-project production detail, daily operations report, immutable audit.
+- [x] End-to-end journey and failed-rollback escalation proven against the real migrated schema
+      (`tests/integration/phase1e-incident-journey.behavior.test.ts`).
 
 ### Remaining
-- [ ] **Owner approval to host migration `20260813000100`.** This is the only remaining step
-      between the current build and "100% wired to Supabase". Everything else is done and proven:
-      the query layer reads the real tables, and the schema, policies, grants and subscribe
-      function pass a 21-assertion behavioral matrix against real PostgreSQL as the real roles.
-      What is missing is solely the `supabase db push` against the hosted project, which
-      `AGENTS.md` classifies as an owner-gated protected action — an agent must not perform it.
-      Until it runs, pages render the seeded fallback and say **Demo Data**, which is truthful.
-- [ ] After hosting, re-run the same assertions against the hosted project with a real anon key
-      and record the evidence in `AI/QUALITY_SCORECARD.md`.
+
+- [ ] **Owner-gated: apply hosted migrations `028` and `029`** to `qpuofpmagrmyamahqwxw`.
+      Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` first — the currently
+      selected profile is wrong/unauthorized. Until this runs, every Phase 1E surface reports
+      **Not Connected** or **Unknown**, which is truthful.
+- [ ] **Owner-gated: authorize a production target** to monitor, then record the first real
+      observation → detection → incident → resolution and put the evidence in
+      `AI/QUALITY_SCORECARD.md`. Nothing in Phase 1E has yet run against real production.
+- [ ] Authorize a scheduler identity for continuous monitoring. Checks are owner-triggered
+      today. **Constraint: this must not widen `service_role`** — use a narrow SECURITY DEFINER
+      ingest path, not table grants.
+- [ ] Connect Vercel deployment status, and error-rate/latency telemetry. Both are Not Connected
+      with no provider; error rate in particular cannot be derived from a single probe.
+- [ ] Probe hardening: a public hostname that resolves to a private address at DNS time is not
+      detected. Needs resolve-then-connect-by-IP handling.
+
+### Deliberately not built (do not "fix" these)
+
+- Rollback **execution** — no deployment adapter, `AUTO_ROLLBACK.md` disables it, migration
+  `010` pins `auto_rollback` off. Every rollback records `EXECUTOR_NOT_CONNECTED`.
+- Codex repair **execution** — Phase 1C is Not Connected. Repair work is created, unassigned.
+- Synthetic **write** steps — declared and validated, recorded as `skipped`, never issued.
+- Autonomous deployment or merge. `autonomous_release_allowed` returns false unconditionally.
+
+### Invariants a future change must not break
+
+`service_role` gains no new table privileges · the four append-only evidence tables stay
+append-only · `production_monitors_enabled_requires_connection` (an unconnected monitor cannot
+be enabled) · `rollback_operations_failure_escalates` (a failed rollback cannot be silent) ·
+`incidents_resolution_requires_cause` · `synthetic_journeys_steps_are_safe` ·
+`EXECUTOR_NOT_CONNECTED` stays unconditional in `autonomous_release_allowed`.
+
+---
+
+## Bot fabric + marketing site
+
+Merged into `main`. Route groups: `app/(marketing)/` public and indexable,
+`app/(console)/` authenticated with the sidebar shell. `/solutions` carries the former console
+homepage. Every marketing page is a Server Component reading through
+`lib/marketing/queries.ts`, which never throws — it falls back to seeded content and marks the
+response `source: "seed"` so the UI labels it honestly.
+
+### Remaining
+
+- [ ] **Owner-gated: host the marketing migration.** Until then pages render the seeded
+      fallback and say **Demo Data**. The schema, policies, grants and `subscribe_to_newsletter`
+      already pass a 21-assertion behavioral matrix against real PostgreSQL as the real `anon`
+      and `authenticated` roles — keep `tests/integration/marketing-rls-behavior.test.ts`
+      passing; it is the guard on the public-read boundary.
+- [ ] After hosting, re-run those assertions against the hosted project with a real anon key and
+      record the evidence in `AI/QUALITY_SCORECARD.md`.
 - [ ] Replace placeholder leadership headshots and third-party wordmarks with licensed assets.
 - [ ] Per-page OG images (`opengraph-image.tsx` per route).
-- [ ] Optional: an authenticated editor UI for marketing content (owner/admin only, audited),
-      so copy can be changed without SQL.
+- [ ] Optional: an authenticated owner/admin editor UI for marketing content, audited, so copy
+      can change without SQL.
+
+### Design notes
+
+- Marketing palette: near-black `#080b10` ground, `#0d1118` panels, violet→blue gradient
+  (`#7c5cff` → `#4d8dff`) for accents and headline spans, one accent per card row.
+- The console palette (lime `#c6f135`) is deliberately **not** reused on marketing pages. Keep
+  the two visual systems separate; only shared primitives cross over.
+
+---
+
+## Phase 1B — GitHub App integration
+
+Live for the owner repository path through candidate App `4582606`, installation `153479019`.
+Primary installation `153445938` stays active as the rollback boundary.
+
+### Remaining
+
+- [ ] Observe the rollback window and exercise the evidence-bound reverse handoff before
+      retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
+- [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
+      real user/email is authorized, so this cannot be faked locally.
+- [ ] Remaining adverse cases: stale SHA, approval expiry, revoked/insufficient permission,
+      rate limit, provider ordering, terminal deletion/restore, idempotent recovery.
+- [ ] Verify explicit disconnect/loss state and history preservation.
+- [ ] Configure and verify isolated Preview Supabase values.
+
+---
 
 ## Open questions for the owner
 
-1. **Hosted migrations.** `011`–`021` are still unhosted pending owner approval; `022` will join
-   that queue. Marketing pages therefore render from the seeded fallback until it is applied.
-   Confirm whether `022` may be promoted ahead of the tenant chain, since it touches no tenant data.
-2. **`/features` and `/` have no mockup.** Being built in the same design language as the five
-   supplied screens. Flag if a specific layout is wanted.
-3. **Headshots and logos.** The mockups show real photos and third-party wordmarks. Shipping
-   with neutral placeholders and `marketing_team_members.headshot_url` pointing at them; supply
-   licensed assets to swap in.
-
-## Notes for the next agent
-
-- The mockups are the source of truth for layout, spacing, and colour. Palette: near-black
-  `#080b10` ground, `#0d1118` panels, violet→blue gradient (`#7c5cff` → `#4d8dff`) for accents
-  and headline spans, one accent per card row.
-- The console palette (lime `#c6f135`) is deliberately **not** reused on marketing pages. Keep
-  the two visual systems separate; only shared primitives cross over.
-- Every marketing page is a Server Component. Data fetching goes through `lib/marketing/queries.ts`,
-  which must never throw — it falls back to seeded content and marks the response `source: "seed"`
-  so the UI can label it honestly.
+1. **Hosted migration queue.** Migrations `011`–`029` plus the marketing migration are unhosted.
+   Confirm the order, and whether content-only migrations may be promoted ahead of the tenant
+   chain since they touch no tenant data.
+2. **Production monitoring target.** Which deployed URL should the first real monitor observe,
+   and at what failure threshold? Nothing is monitored until this is answered.
+3. **Scheduler identity.** Continuous monitoring needs one. Confirm the approach before an agent
+   builds it, because the obvious implementation (granting `service_role`) is the wrong one.
+4. **Vercel connection.** A server-only token would connect deployment status, failed-deploy
+   signals, and eventually rollback execution. Currently Not Connected by absence, not design.
+5. **`main` is unprotected** and release commits are unsigned. Enabling branch protection,
+   required checks, or signature requirements is an owner-approved protected action.
+6. **`theagoras.com` Vercel aliases** are unexplained. Verify ownership and routing intent
+   before retaining or removing them.
