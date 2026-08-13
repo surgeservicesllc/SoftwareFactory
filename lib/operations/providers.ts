@@ -26,11 +26,22 @@ export const MONITOR_PROVIDERS: readonly MonitorProvider[] = Object.freeze([
     id: "http",
     label: "Direct HTTPS probe",
     connected: true,
+    /*
+     * The probe observes whatever the monitored application itself reports at
+     * an HTTPS endpoint. That legitimately covers database, job, and
+     * integration health when the project exposes a health route saying so —
+     * the signal is real, it is simply the project's own answer rather than a
+     * direct provider reading. Error rate is deliberately absent: a single
+     * probe cannot measure a rate.
+     */
     supports: Object.freeze([
       "uptime",
       "latency",
       "critical_route",
       "authentication",
+      "database",
+      "job",
+      "integration",
       "synthetic",
     ] as ProductionSignalKind[]),
     unavailableReason: null,
@@ -46,11 +57,12 @@ export const MONITOR_PROVIDERS: readonly MonitorProvider[] = Object.freeze([
   }),
   Object.freeze({
     id: "supabase",
-    label: "Supabase database health",
+    label: "Direct Supabase database reading",
     connected: false,
     supports: Object.freeze(["database"] as ProductionSignalKind[]),
-    unavailableReason: "No database liveness adapter is connected in this phase.",
-    unblockedBy: "A bounded read-only liveness probe approved for the production project.",
+    unavailableReason:
+      "SoftwareFactory holds no credentials for a monitored project's database, so it cannot read one directly. Database health is observable through that project's own health endpoint using the HTTPS probe.",
+    unblockedBy: "An owner-authorized read-only connection to the monitored project's database.",
   }),
   Object.freeze({
     id: "telemetry",
@@ -62,10 +74,11 @@ export const MONITOR_PROVIDERS: readonly MonitorProvider[] = Object.freeze([
   }),
   Object.freeze({
     id: "jobs",
-    label: "Background jobs and integrations",
+    label: "Direct job and integration telemetry",
     connected: false,
     supports: Object.freeze(["job", "integration"] as ProductionSignalKind[]),
-    unavailableReason: "There is no job runner or integration telemetry to read.",
+    unavailableReason:
+      "There is no job runner or integration telemetry to read directly. Failed jobs and integrations are observable through the project's own health endpoint using the HTTPS probe.",
     unblockedBy: "A connected job runner or integration reporting real failures.",
   }),
 ]);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { buildIncidentFingerprint } from "@/lib/operations/fingerprint";
+import { runSyntheticJourney, type JourneyStepResult } from "@/lib/operations/journey";
 import { probeHttpTarget } from "@/lib/operations/probe";
 import {
   OPERATIONS_EXECUTION_ENVELOPE,
@@ -53,6 +54,21 @@ type IncidentRow = {
   occurrences: number;
   deduplicated: boolean;
   freeze_applied: boolean;
+};
+
+type JourneyRow = {
+  id: string;
+  name: string;
+  profile: "basic" | "standard" | "critical";
+  base_url: string;
+  steps: Array<{
+    kind: "app_shell" | "login" | "critical_read" | "safe_write" | "api" | "workflow";
+    name: string;
+    path: string;
+    method: "GET" | "HEAD" | "POST";
+    expected_status?: number;
+    reversal_note?: string;
+  }>;
 };
 
 /**
@@ -109,12 +125,64 @@ export async function POST(
       );
     }
 
-    const probe = await probeHttpTarget({
-      targetUrl: monitor.target_url,
-      expectedStatusCode: monitor.expected_status_code,
-      degradedLatencyMs: monitor.degraded_latency_ms,
-      timeoutMs: monitor.timeout_ms,
-    });
+    // A synthetic monitor runs its stored journey; every other kind is a
+    // single bounded probe of the configured target.
+    let journeySteps: readonly JourneyStepResult[] = [];
+    let probe: { outcome: string; latencyMs: number | null; statusCode: number | null; failureReason: string | null };
+
+    if (monitor.signal_kind === "synthetic") {
+      const { data: journeyData, error: journeyError } = await context.client
+        .from("synthetic_journeys")
+        .select("id,name,profile,base_url,steps")
+        .eq("organization_id", context.activeOrganization.id)
+        .eq("monitor_id", monitor.id)
+        .maybeSingle();
+      if (journeyError) return databaseErrorResponse(journeyError);
+      if (!journeyData) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "journey_not_defined",
+              message: "This synthetic monitor has no journey defined, so there is nothing to run.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      const journey = journeyData as JourneyRow;
+      const result = await runSyntheticJourney({
+        baseUrl: journey.base_url,
+        degradedLatencyMs: monitor.degraded_latency_ms,
+        timeoutMs: monitor.timeout_ms,
+        journey: {
+          profile: journey.profile,
+          steps: journey.steps.map((step) => ({
+            kind: step.kind,
+            name: step.name,
+            path: step.path,
+            method: step.method,
+            expectedStatus: step.expected_status ?? 200,
+            reversalNote: step.reversal_note,
+          })),
+        },
+      });
+
+      journeySteps = result.steps;
+      probe = {
+        outcome: result.outcome,
+        latencyMs: result.latencyMs,
+        statusCode: null,
+        failureReason: result.failureReason,
+      };
+    } else {
+      probe = await probeHttpTarget({
+        targetUrl: monitor.target_url,
+        expectedStatusCode: monitor.expected_status_code,
+        degradedLatencyMs: monitor.degraded_latency_ms,
+        timeoutMs: monitor.timeout_ms,
+      });
+    }
 
     if (probe.outcome === "unknown") {
       // The probe could not run. Recording an "unknown" as if it were a
@@ -140,6 +208,7 @@ export async function POST(
         p_evidence: {
           provider: monitor.provider,
           expected_status_code: monitor.expected_status_code,
+          ...(journeySteps.length ? { journey_steps: journeySteps } : {}),
         },
       })
       .single();
@@ -200,6 +269,7 @@ export async function POST(
         consecutiveFailures: observation.failures_after,
         thresholdBreached: observation.threshold_breached,
         healthState: observation.health_state,
+        journeySteps,
       },
       incident: incident
         ? {
