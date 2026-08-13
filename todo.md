@@ -106,9 +106,9 @@ be enabled) · `rollback_operations_failure_escalates` (a failed rollback cannot
 
 ## Bot fabric + marketing site
 
-Merged into `main`. Route groups: `app/(marketing)/` public and indexable,
-`app/(console)/` authenticated with the sidebar shell. `/solutions` carries the former console
-homepage. Every marketing page is a Server Component reading through
+Merged into `main`. Route groups: `app/(marketing)/` public and indexable, and
+`app/(portal)/` authenticated, which serves the whole control plane under `/solutions` with the
+global navigation above the sidebar shell (ADR-041). Every marketing page is a Server Component reading through
 `lib/marketing/queries.ts`, which never throws — it falls back to seeded content and marks the
 response `source: "seed"` so the UI labels it honestly.
 
