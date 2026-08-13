@@ -120,6 +120,16 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add a `--shell-top` offset to `AppShell`. Its sidebar and header are `fixed`, so without it they would have sat underneath the global navigation. The variable defaults to `0px`, leaving every other console page byte-identical in behaviour.
 - [x] Rename the console navigation landmark from "Primary" to "Console". `/solutions` now carries two navigation landmarks, and two sharing an accessible name leaves screen-reader users unable to tell them apart.
 
+## Account creation and sign-in
+
+- [x] Translate Supabase Auth failures into a specific code, fixed message, and `canResend`/`ownerActionRequired` flags (ADR-041), so a rejected address, a refused password, a rate limit, and an undeliverable email stop reading as one sentence.
+- [x] Return `403 email_not_confirmed` rather than `401 invalid_credentials` when the password was correct but the address is unconfirmed.
+- [x] Add `POST /api/auth/resend-confirmation`, enumeration-safe, so a lost or rate-limited confirmation email no longer leaves the account permanently unusable.
+- [x] Offer the resend from the sign-in and sign-up screens, and state plainly when only a workspace owner can clear the failure.
+- [ ] **Owner action:** configure custom SMTP in Supabase, or disable "Confirm email". Until then a newly created account cannot be confirmed and so cannot sign in. Verified against production 2026-08-13: the built-in mail service rate-limited after a single confirmation send.
+- [ ] Re-probe production sign-up and sign-in after that configuration lands, and record the observed codes here.
+- [ ] Delete the diagnostic account `sf-probe-a91c@gmail.com`, created against the hosted project while reproducing this defect.
+
 ## Maintenance
 
 - [ ] Run final verification on the repository-supported Node version.

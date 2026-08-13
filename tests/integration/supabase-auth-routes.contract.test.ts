@@ -26,6 +26,7 @@ describe("Supabase authentication route contracts", () => {
     "app/api/auth/sign-in/route.ts",
     "app/api/auth/sign-up/route.ts",
     "app/api/auth/magic-link/route.ts",
+    "app/api/auth/resend-confirmation/route.ts",
     "app/api/auth/sign-out/route.ts",
     "app/api/onboarding/route.ts",
     "app/api/organizations/active/route.ts",
@@ -46,6 +47,33 @@ describe("Supabase authentication route contracts", () => {
     expect(magicLink).toMatch(/shouldCreateUser:\s*false/);
     expect(magicLink).toMatch(/emailRedirectTo:\s*callbackUrl\.toString\(\)/);
     expect(magicLink).not.toMatch(/(?:access|refresh|id)_token\s*:/i);
+  });
+
+  it("routes every auth failure through the shared translation", () => {
+    // Guards the regression this replaced: each route hand-rolled its own
+    // status mapping, and all of them flattened distinct provider failures
+    // into one message that told the person nothing they could act on.
+    for (const route of [
+      "app/api/auth/sign-in/route.ts",
+      "app/api/auth/sign-up/route.ts",
+      "app/api/auth/magic-link/route.ts",
+      "app/api/auth/resend-confirmation/route.ts",
+    ]) {
+      expect(source(route)).toMatch(/describeAuthError\(error, "(sign_in|sign_up|magic_link|resend)"\)/);
+    }
+  });
+
+  it("offers a confirmation resend so an undelivered email is recoverable", () => {
+    const resend = source("app/api/auth/resend-confirmation/route.ts");
+    expect(resend).toMatch(/auth\.resend/);
+    expect(resend).toMatch(/type:\s*"signup"/);
+    expect(resend).toMatch(/emailRedirectTo/);
+    // The neutral 202 must stay reachable, or this becomes an account oracle.
+    expect(resend).toMatch(/accepted:\s*true/);
+
+    const form = source("app/auth/auth-form.tsx");
+    expect(form).toMatch(/\/api\/auth\/resend-confirmation/);
+    expect(form).toMatch(/Send a new confirmation email/);
   });
 
   it("uses no service-role credential in application auth boundaries", () => {

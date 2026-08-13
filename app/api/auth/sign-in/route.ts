@@ -6,7 +6,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { authProviderFailureStatus } from "@/lib/supabase/auth";
+import { authErrorBody, describeAuthError } from "@/lib/supabase/auth-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import {
@@ -47,26 +47,12 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user || !data.session) {
-      const status = authProviderFailureStatus(error, 401);
-      return jsonNoStore(
-        {
-          error: {
-            code:
-              status === 429
-                ? "authentication_rate_limited"
-                : status >= 500
-                  ? "authentication_unavailable"
-                  : "invalid_credentials",
-            message:
-              status === 429
-                ? "Too many authentication attempts. Try again later."
-                : status >= 500
-                ? "Authentication is temporarily unavailable."
-                : "The email address or password was not accepted.",
-          },
-        },
-        { status },
-      );
+      // An unconfirmed address is the single most common reason a correct
+      // password is refused. Reporting it as a credential failure sends people
+      // to reset a password that was never wrong, so it keeps its own code and
+      // the browser is told a resend is available.
+      const outcome = describeAuthError(error, "sign_in");
+      return jsonNoStore(authErrorBody(outcome), { status: outcome.status });
     }
 
     return jsonNoStore({

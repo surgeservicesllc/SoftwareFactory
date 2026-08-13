@@ -7,7 +7,7 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
-import { authProviderFailureStatus } from "@/lib/supabase/auth";
+import { authErrorBody, describeAuthError } from "@/lib/supabase/auth-errors";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -75,25 +75,21 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user) {
-      const status = authProviderFailureStatus(error, 400);
-      return jsonNoStore(
-        {
-          error: {
-            code: status === 429 ? "authentication_rate_limited" : "sign_up_failed",
-            message:
-              status === 429
-                ? "Too many authentication attempts. Try again later."
-                : "The account could not be created.",
-          },
-        },
-        { status },
-      );
+      // A rejected address, a refused password, and a workspace that cannot
+      // send mail all used to read as "The account could not be created."
+      // Each now returns its own code so the person is told what to change —
+      // and, when nothing they can type would help, that it is not their fault.
+      const outcome = describeAuthError(error, "sign_up");
+      return jsonNoStore(authErrorBody(outcome), { status: outcome.status });
     }
 
     const confirmationRequired = !data.session;
     return jsonNoStore(
       {
         confirmationRequired,
+        // The address is echoed back only so the browser can offer a resend
+        // without asking the person to retype what they just submitted.
+        email: confirmationRequired ? parsed.data.email : undefined,
         next: confirmationRequired ? "/auth/sign-in?message=check-email" : "/auth/onboarding",
       },
       { status: confirmationRequired ? 202 : 201 },

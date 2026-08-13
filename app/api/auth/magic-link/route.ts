@@ -6,7 +6,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { authProviderFailureStatus } from "@/lib/supabase/auth";
+import { authErrorBody, describeAuthError } from "@/lib/supabase/auth-errors";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import {
   assertSameOriginRequest,
@@ -55,22 +55,11 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      const status = authProviderFailureStatus(error, 400);
-      return jsonNoStore(
-        {
-          error: {
-            code:
-              status === 429
-                ? "authentication_rate_limited"
-                : "magic_link_unavailable",
-            message:
-              status === 429
-                ? "Too many authentication attempts. Try again later."
-                : "A sign-in link could not be sent.",
-          },
-        },
-        { status },
-      );
+      // `magic_link` context deliberately maps an unknown address to the
+      // generic outcome rather than "no such user", so this endpoint cannot be
+      // used to test which addresses are registered.
+      const outcome = describeAuthError(error, "magic_link");
+      return jsonNoStore(authErrorBody(outcome), { status: outcome.status });
     }
 
     // Keep the response account-enumeration safe and never return an OTP or
