@@ -50,7 +50,9 @@ Phase 1E adds a production-operations control plane in source and in migration `
 - Self-healing creates bounded repair work (three attempts, escalation on the third failure) and records assignment as **Not Connected** because Phase 1C has no worker. A RED repair or work above the project risk ceiling is refused, so the GREEN/YELLOW/RED policy is not bypassed.
 - Incident resolution is refused while monitors still fail, without a passing same-project validation, without root cause and corrective action, and — for SEV1/SEV2 — without a prevention reference. A successful deployment alone resolves nothing.
 - `autonomous_release_allowed` returns false unconditionally and enumerates live blockers; `EXECUTOR_NOT_CONNECTED` is unconditional, so no configuration change can make it return true. Phase 1D interlocks are untouched: the kill switch stays locked ON and every project stays at Autonomous Mode OFF with a GREEN ceiling and all automatic actions OFF.
+- Synthetic journeys are stored per project with Basic/Standard/Critical profiles. Step safety is a CHECK constraint, not a convention: a destructive path, an undeclared write, or a safe write with no reversal note cannot be stored at all, and a profile must cover what it promises. Execution stops at the first failing step, and a declared write is recorded as skipped rather than issued — Phase 1E has no authority to mutate a monitored production system.
 - Scheduled monitoring is **Not Connected**: checks are owner-triggered because no scheduler identity is authorized, and authorizing one must not widen `service_role`.
+- Overall Phase 1E completion is roughly **85%**. The remaining ~15% is execution authority — rollback execution, Codex repair execution, and autonomous deployment — each blocked by a named, tested interlock rather than missing by oversight. `AI/PHASE_1E_IMPLEMENTATION_PLAN.md` carries the per-section breakdown, live integrations, security findings, limitations, and Phase 2A readiness.
 
 ## Data and security state
 
@@ -93,7 +95,8 @@ Phase 1E adds a production-operations control plane in source and in migration `
 | OpenAI/Codex worker | **Not Connected** | Phase 1C was not started. |
 | Anthropic/Claude worker | **Not Connected** | Phase 2 was not started. |
 | Auto approve/merge/deploy/rollback | OFF | No autonomous production authority or executor exists. |
-| Production monitoring (HTTPS probe) | Implemented; **no observed target** | The adapter exists and is tested, but migration `028` is unhosted and no owner-authorized production target has been monitored. |
+| Production monitoring (HTTPS probe) | Implemented; **no observed target** | Covers uptime, latency, critical routes, auth, project-reported database/job/integration endpoints, and synthetic journeys. Migrations `028`/`029` are unhosted and no owner-authorized production target has been monitored. |
+| Synthetic journeys | Implemented; **no observed target** | Stored per project with database-enforced step safety. Read steps execute; declared writes are recorded, never issued. |
 | Vercel deployment/error/latency/job/integration telemetry | **Not Connected** | No provider connection exists. Each is listed in the UI with its reason and unblocking condition. |
 | Rollback execution | **Not Connected** | Every rollback decision records `EXECUTOR_NOT_CONNECTED`. Nothing is executed. |
 | Codex repair execution | **Not Connected** | Repair work is created and left unassigned. |
@@ -118,8 +121,8 @@ Phase 1E adds a production-operations control plane in source and in migration `
 
 ## Phase 1E verification evidence
 
-- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (69 files / 635 tests), and a 64-entry production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
-- Playwright passes 51/51 across desktop, tablet, and mobile including axe, with `/operations` added to the audited route set.
+- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (82 files / 819 tests on the merged tree), and a clean production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
+- Playwright passes 117/117 across desktop, tablet, and mobile including axe on the merged tree, with `/operations` in the audited route set.
 - `tests/integration/phase1e-operations.behavior.test.ts` (28 tests) exercises the real migrated schema: threshold detection, deduplication, upward-only severity, automatic freeze, owner-only resume with acknowledgement, Last Known Good resolution, blocked and failed rollbacks, bounded repair attempts, resolution gating, event idempotency and dead-lettering, cross-tenant denial, anonymous denial, append-only enforcement, and sensitive-value rejection.
 - `tests/integration/phase1e-incident-journey.behavior.test.ts` walks the ordered end-to-end journey and separately proves failed-rollback escalation to SEV1 with owner attention, plus refusal to resolve on a successful deployment alone. The Codex-fix and deploy stages are asserted as **blocked with named reasons**, not simulated.
 - `tests/integration/phase1e-operations.contract.test.ts` (16 tests) guards same-origin and role checks on every mutation, the execution envelope on every response, absence of any provider deployment call, no new `service_role` table grants, and the preserved Phase 1D interlocks.

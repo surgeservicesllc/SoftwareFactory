@@ -75,10 +75,10 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add a durable, idempotent operations event queue covering all ten event types with bounded attempts and dead-lettering.
 - [x] Gate incident resolution on restoration, a passing same-project validation, root cause, corrective action, and prevention for SEV1/SEV2.
 - [x] Add the Operations console, per-project production detail, the daily operations report, and the immutable operations audit trail.
-- [x] Pass lint, typecheck, 69 files/635 tests, a 64-entry build, and Playwright 51/51 including axe.
-- [ ] Apply hosted migration `028` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
+- [x] Pass lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe.
+- [ ] Apply hosted migrations `028` and `029` to `qpuofpmagrmyamahqwxw` after reauthenticating the Supabase CLI as `surgeservicesllc@gmail.com`.
 - [ ] Configure an owner-authorized production monitor target and record the first real observation, detection, and resolution.
-- [ ] Persist per-project synthetic journey definitions; profile validation exists but journeys are not yet stored.
+- [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
 - [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.

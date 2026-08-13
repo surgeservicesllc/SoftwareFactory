@@ -134,6 +134,22 @@ const overview = {
       unblockedBy: "An owner-authorized Vercel connection with a server-only token.",
     },
   ],
+  journeys: [
+    {
+      id: "journey-1",
+      projectName: "Storefront",
+      monitorId: "monitor-3",
+      name: "Checkout",
+      profile: "critical",
+      baseUrl: "https://example.com",
+      stepCount: 4,
+      writeSteps: 1,
+      enabled: true,
+      connectionLabel: "Connected",
+      lastOutcome: "pass",
+      lastObservedAt: "2026-08-13T09:58:00.000Z",
+    },
+  ],
   auditEvents: [
     {
       id: "audit-1",
@@ -210,6 +226,19 @@ describe("Operations console", () => {
     expect(screen.getByText("SEV1")).toBeInTheDocument();
     expect(screen.getByText(/3 occurrences/)).toBeInTheDocument();
     expect(screen.getByText("Detected automatically")).toBeInTheDocument();
+  });
+
+  it("says plainly that a declared synthetic write is recorded but not executed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(overview), { status: 200 })),
+    );
+
+    render(<OperationsConsole authenticated />);
+
+    await waitFor(() => expect(screen.getByText("Checkout")).toBeInTheDocument());
+    expect(screen.getByText(/critical profile · 4 steps/)).toBeInTheDocument();
+    expect(screen.getByText(/1 declared write step recorded but not executed/)).toBeInTheDocument();
   });
 
   it("reports an unavailable source instead of inferring a healthy portfolio", async () => {

@@ -68,6 +68,7 @@ const publicTables = [
   "repair_attempts",
   "reports",
   "rollback_operations",
+  "synthetic_journeys",
   "tasks",
   "test_runs",
 ] as const;
