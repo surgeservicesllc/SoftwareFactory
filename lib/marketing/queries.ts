@@ -15,10 +15,11 @@ import type {
   MarketingTestimonial,
   MarketingTopic,
 } from "@/lib/marketing/types";
+import { createSupabaseAnonClient } from "@/lib/supabase/anon";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
- * Published marketing content, read through the caller's Supabase client.
+ * Published marketing content, read through a Supabase client.
  *
  * Marketing rows are world-readable, so this needs no session — the `anon`
  * SELECT policy applies. It never throws: an unconfigured or unreachable
@@ -26,8 +27,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * `source: "seed"` so the interface can label it **Demo Data** rather than
  * present seeded copy as live.
  */
-
-type QueryClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
 const RESOURCE_KINDS: readonly string[] = [
   "guide",
@@ -136,17 +135,35 @@ function mapPlans(planRows: Row[], featureRows: Row[]): MarketingPricingPlan[] {
  * page never renders half-live and half-seeded.
  */
 export async function getMarketingContent(slug: string): Promise<MarketingContent> {
+  return loadMarketingContent(slug, createSupabaseServerClient);
+}
+
+/**
+ * The same content, read without the caller's session.
+ *
+ * Marketing copy is published to `anon`, so a session adds nothing — and
+ * reading cookies would force every caller to render per request. Social card
+ * routes use this so they stay cacheable.
+ */
+export async function getPublicMarketingContent(slug: string): Promise<MarketingContent> {
+  return loadMarketingContent(slug, createSupabaseAnonClient);
+}
+
+async function loadMarketingContent(
+  slug: string,
+  createClient: () => unknown,
+): Promise<MarketingContent> {
   const fallback = seedContentForPage(slug);
 
-  let client: QueryClient;
+  let client: unknown;
   try {
-    client = await createSupabaseServerClient();
+    client = await createClient();
   } catch {
     return fallback;
   }
 
   try {
-    const db = client as unknown as ContentClient;
+    const db = client as ContentClient;
     const [
       pageRows, statRows, featureRows, planRows, planFeatureRows,
       resourceRows, topicRows, teamRows, testimonialRows, logoRows,
