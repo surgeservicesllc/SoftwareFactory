@@ -53,6 +53,13 @@ type GithubProject = {
   id: string;
   name: string;
 };
+type HandoffIntent = {
+  confirmation: string;
+  projectId: string;
+  rationale: string;
+  rollbackPlan: string;
+  targetConnectionId: string;
+};
 
 type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
 
@@ -70,6 +77,7 @@ export function ConnectionsConsole() {
   const [connections, setConnections] = useState<GithubConnection[]>([]);
   const [configuredApps, setConfiguredApps] = useState<ConfiguredGithubApp[]>([]);
   const [projects, setProjects] = useState<GithubProject[]>([]);
+  const [handoffIntent, setHandoffIntent] = useState<HandoffIntent | null>(null);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | null>(null);
 
@@ -196,9 +204,11 @@ export function ConnectionsConsole() {
   }
 
   async function handoffProject(
+    event: React.FormEvent<HTMLFormElement>,
     targetConnection: GithubConnection,
     project: GithubProject,
   ) {
+    event.preventDefault();
     const sourceConnection = connections.find(
       (connection) => connection.id === project.connectionId,
     );
@@ -212,19 +222,20 @@ export function ConnectionsConsole() {
       || !project.githubRepositoryId
     ) return;
 
-    const confirmation = window.prompt(
-      `Move ${project.name} from installation #${sourceConnection.installation.id} to #${targetConnection.installation.id}?\n\nExisting project and change history will be preserved.\n\nType HANDOFF GITHUB PROJECT to confirm.`,
-    );
-    if (confirmation !== "HANDOFF GITHUB PROJECT") return;
-    const rationale = window.prompt(
-      "Why is this RED GitHub App handoff required? Enter 20–500 characters.",
-    )?.trim();
-    if (!rationale || rationale.length < 20 || rationale.length > 500) return;
-    const rollbackPlan = window.prompt(
-      "Enter the 20–500 character rollback/containment plan.",
-      "Reverse the handoff to the prior live installation and verify repository reads.",
-    )?.trim();
-    if (!rollbackPlan || rollbackPlan.length < 20 || rollbackPlan.length > 500) return;
+    if (
+      handoffIntent?.targetConnectionId !== targetConnection.id
+      || handoffIntent.projectId !== project.id
+    ) return;
+    const confirmation = handoffIntent.confirmation.trim();
+    const rationale = handoffIntent.rationale.trim();
+    const rollbackPlan = handoffIntent.rollbackPlan.trim();
+    if (
+      confirmation !== "HANDOFF GITHUB PROJECT"
+      || rationale.length < 20
+      || rationale.length > 500
+      || rollbackPlan.length < 20
+      || rollbackPlan.length > 500
+    ) return;
 
     setPending("handoff");
     setMessage("");
@@ -249,6 +260,7 @@ export function ConnectionsConsole() {
       const body = (await response.json()) as { error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "The GitHub App handoff failed safely.");
       setMessage(`${project.name} now uses installation #${targetConnection.installation.id}. Existing history was preserved.`);
+      setHandoffIntent(null);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The GitHub App handoff failed safely.");
@@ -471,7 +483,16 @@ export function ConnectionsConsole() {
                     <button
                       key={project.id}
                       type="button"
-                      onClick={() => void handoffProject(connection, project)}
+                      onClick={() => {
+                        setMessage("");
+                        setHandoffIntent({
+                          confirmation: "",
+                          projectId: project.id,
+                          rationale: "",
+                          rollbackPlan: `Reverse the handoff to installation #${project.connectionId === connection.id ? "the prior live installation" : connections.find((item) => item.id === project.connectionId)?.installation?.id ?? "the prior live installation"} and verify repository reads.`,
+                          targetConnectionId: connection.id,
+                        });
+                      }}
                       disabled={pending !== null || organization?.role !== "owner"}
                       className="btn btn-primary btn-sm"
                     >
@@ -482,6 +503,65 @@ export function ConnectionsConsole() {
                 </div>
               ) : null}
             </div>
+
+            {eligibleHandoffProjects(connection).map((project) => (
+              handoffIntent?.targetConnectionId === connection.id
+              && handoffIntent.projectId === project.id ? (
+                <form
+                  key={`handoff-${project.id}`}
+                  className="grid gap-4 border-t border-line bg-surface-muted p-5"
+                  onSubmit={(event) => void handoffProject(event, connection, project)}
+                >
+                  <div>
+                    <p className="font-medium text-foreground">Approve RED GitHub App handoff for {project.name}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      The existing project ID and history are preserved. No merge, deploy, or default-branch write is authorized.
+                    </p>
+                  </div>
+                  <label className="grid gap-1 text-sm text-muted">
+                    Type HANDOFF GITHUB PROJECT
+                    <input
+                      className="input"
+                      value={handoffIntent.confirmation}
+                      onChange={(event) => setHandoffIntent({ ...handoffIntent, confirmation: event.target.value })}
+                      autoComplete="off"
+                      required
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-muted">
+                    Rationale (20–500 characters)
+                    <textarea
+                      className="input min-h-24 py-3"
+                      value={handoffIntent.rationale}
+                      onChange={(event) => setHandoffIntent({ ...handoffIntent, rationale: event.target.value })}
+                      minLength={20}
+                      maxLength={500}
+                      required
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-muted">
+                    Rollback and containment plan (20–500 characters)
+                    <textarea
+                      className="input min-h-24 py-3"
+                      value={handoffIntent.rollbackPlan}
+                      onChange={(event) => setHandoffIntent({ ...handoffIntent, rollbackPlan: event.target.value })}
+                      minLength={20}
+                      maxLength={500}
+                      required
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="submit" disabled={pending !== null} className="btn btn-danger btn-sm">
+                      {pending === "handoff" ? <Loader2 className="size-4 animate-spin" /> : null}
+                      Approve and hand off
+                    </button>
+                    <button type="button" onClick={() => setHandoffIntent(null)} disabled={pending !== null} className="btn btn-secondary btn-sm">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : null
+            ))}
 
             {connection.repositories.length ? (
               <div className="border-t border-line p-5">

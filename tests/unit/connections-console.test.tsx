@@ -233,7 +233,7 @@ describe("ConnectionsConsole", () => {
     });
   });
 
-  it("requires exact owner confirmation before handing an existing project to the candidate", async () => {
+  it("requires explicit RED evidence before handing an existing project to the candidate", async () => {
     const oldConnectionId = "22222222-2222-4222-8222-222222222222";
     const candidateConnectionId = "33333333-3333-4333-8333-333333333333";
     const projectId = "44444444-4444-4444-8444-444444444444";
@@ -298,20 +298,27 @@ describe("ConnectionsConsole", () => {
       throw new Error(`Unexpected request: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-    const prompt = vi.spyOn(window, "prompt")
-      .mockReturnValueOnce("HANDOFF GITHUB PROJECT")
-      .mockReturnValueOnce("Replace the GitHub App with its verified candidate.")
-      .mockReturnValueOnce("Reverse to the prior live installation and verify repository reads.");
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
     await user.click(await screen.findByRole("button", { name: "Activate for SoftwareFactory" }));
+    expect(screen.getByText("Approve RED GitHub App handoff for SoftwareFactory")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Type HANDOFF GITHUB PROJECT"), "HANDOFF GITHUB PROJECT");
+    await user.type(
+      screen.getByLabelText("Rationale (20–500 characters)"),
+      "Replace the GitHub App with its verified candidate.",
+    );
+    await user.clear(screen.getByLabelText("Rollback and containment plan (20–500 characters)"));
+    await user.type(
+      screen.getByLabelText("Rollback and containment plan (20–500 characters)"),
+      "Reverse to the prior live installation and verify repository reads.",
+    );
+    await user.click(screen.getByRole("button", { name: "Approve and hand off" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       `/api/github/connections/${candidateConnectionId}/handoff`,
       expect.objectContaining({ method: "POST" }),
     ));
-    expect(prompt).toHaveBeenCalledWith(expect.stringContaining("HANDOFF GITHUB PROJECT"));
     const handoffCall = fetchMock.mock.calls.find(
       ([input, init]) => String(input).endsWith("/handoff") && init?.method === "POST",
     );
