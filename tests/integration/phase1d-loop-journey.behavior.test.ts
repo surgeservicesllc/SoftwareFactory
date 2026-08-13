@@ -5,7 +5,10 @@ import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// The deployment adapter is server-only; this suite runs outside Next.js.
+vi.mock("server-only", () => ({}));
 
 import {
   AUTOMATIC_ACTIONS,
@@ -16,6 +19,7 @@ import {
 import { GREEN_GATES, type GateResult } from "@/lib/autonomy/gates";
 import { MAX_ATTEMPTS, evaluateRetry } from "@/lib/autonomy/retries";
 import { runPipeline } from "@/lib/autonomy/pipeline";
+import { latestReadyProduction, listRecentDeployments } from "@/lib/deploy/vercel";
 
 /**
  * The Phase 1D completion demonstration: one loop, both halves.
@@ -245,6 +249,41 @@ describe("Phase 1D end-to-end loop journey", () => {
       [goodDeploymentId],
     );
 
+    // --- Deploy ---------------------------------------------------------
+    // Live preview and production validation would run here. They cannot:
+    // the read adapter reports why rather than returning empty data that
+    // would read as "nothing is deployed".
+    const deploymentRead = await listRecentDeployments("prj_journey", { target: "production" });
+    expect(deploymentRead.status).toBe("not_connected");
+    expect(latestReadyProduction(deploymentRead)).toBeNull();
+    record(
+      "Deploy",
+      "Deployment state could not be read; the adapter reported why.",
+      "DEPLOY_PROVIDER_NOT_CONNECTED",
+    );
+
+    // --- Failed deploy --------------------------------------------------
+    // The failure is *recorded through the real validation function*, not
+    // asserted. Everything downstream hangs off this row.
+    const { rows: failedValidation } = await db.query<{ id: string; state: string }>(
+      `select id, state::text as state from public.record_deployment_validation(
+         $1::uuid, 'failed'::public.deployment_validation_state,
+         '[{"check":"health","outcome":"fail","detail":"Expected HTTP 200 but received 500."}]'::jsonb,
+         'validator-1d', 'post-deploy-v1', 'Post-deploy validation failed', null
+       )`,
+      [badDeploymentId],
+    );
+    expect(failedValidation[0].state).toBe("failed");
+    record("Validate", "Post-deploy validation failed for the new release.");
+
+    // A failed validation must not become Last Known Good.
+    const { rows: stillGood } = await db.query<{ deployment_id: string }>(
+      `select deployment_id from public.last_known_good_deployment($1::uuid, 'production', null)`,
+      [projectId],
+    );
+    expect(stillGood[0].deployment_id).toBe(goodDeploymentId);
+    expect(stillGood[0].deployment_id).not.toBe(badDeploymentId);
+
     const { rows: incidentRows } = await db.query<{
       incident_id: string;
       incident_sev_level: string;
@@ -453,6 +492,7 @@ describe("Phase 1D end-to-end loop journey", () => {
     // that connects one has to change these names deliberately.
     expect(blocked.map((stage) => [stage.stage, stage.blocker])).toEqual([
       ["Merge", "MERGE_EXECUTOR_NOT_CONNECTED"],
+      ["Deploy", "DEPLOY_PROVIDER_NOT_CONNECTED"],
       ["Rollback", "EXECUTOR_NOT_CONNECTED"],
       ["Repair", "CODEX_WORKER_NOT_CONNECTED"],
       ["Retries", "RETRY_BUDGET_EXHAUSTED"],
@@ -462,7 +502,8 @@ describe("Phase 1D end-to-end loop journey", () => {
     // how far the loop actually got rather than only where it stopped.
     expect(journey.map((stage) => stage.stage)).toEqual(
       expect.arrayContaining([
-        "Envelope", "Controls", "Classify", "Verify", "Review", "Approve", "Emergency STOP",
+        "Envelope", "Controls", "Classify", "Verify", "Review", "Approve",
+        "Validate", "Incident", "Emergency STOP",
       ]),
     );
   });
