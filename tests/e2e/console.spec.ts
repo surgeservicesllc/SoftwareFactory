@@ -63,7 +63,7 @@ test("exposes every console destination through accessible navigation", async ({
     await openNavigation.click();
   }
 
-  const navigation = page.getByRole("navigation", { name: /primary/i });
+  const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
 
   for (const destination of consoleNavigation) {

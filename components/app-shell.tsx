@@ -78,8 +78,11 @@ function Logo() {
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
+  // Named "Console" rather than "Primary": on /solutions the marketing global
+  // navigation is also on the page, and two landmarks sharing an accessible
+  // name give screen-reader users no way to tell them apart.
   return (
-    <nav aria-label="Primary" className="flex-1 space-y-6">
+    <nav aria-label="Console" className="flex-1 space-y-6">
       {navigationGroups.map((group, groupIndex) => (
         <div key={group.heading ?? `group-${groupIndex}`}>
           {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
@@ -149,11 +152,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         Skip to content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-line bg-surface xl:block">
+      <aside className="fixed bottom-0 left-0 top-[var(--shell-top,0px)] z-40 hidden w-64 border-r border-line bg-surface xl:block">
         <Sidebar />
       </aside>
 
-      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:left-64 xl:px-8">
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:left-64 xl:px-8">
         <div className="flex items-center gap-3 xl:hidden">
           <button
             type="button"
