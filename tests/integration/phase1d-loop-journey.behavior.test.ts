@@ -19,6 +19,7 @@ import {
 import { GREEN_GATES, type GateResult } from "@/lib/autonomy/gates";
 import { MAX_ATTEMPTS, evaluateRetry } from "@/lib/autonomy/retries";
 import { runPipeline } from "@/lib/autonomy/pipeline";
+import { planRecovery } from "@/lib/autonomy/recovery";
 import { latestReadyProduction, listRecentDeployments } from "@/lib/deploy/vercel";
 
 /**
@@ -326,6 +327,28 @@ describe("Phase 1D end-to-end loop journey", () => {
     );
     expect(lastKnownGood[0].deployment_id).toBe(goodDeploymentId);
 
+    // --- The decision layer plans the recovery -------------------------
+    // Phase 1E supplies the facts; Phase 1D decides what to do about them.
+    // The steps below follow this plan rather than being hand-ordered.
+    const recovery = planRecovery(
+      {
+        risk: "YELLOW",
+        containsDestructiveMigration: false,
+        lastKnownGoodValidated: lastKnownGood[0].deployment_id === goodDeploymentId,
+        repairAttemptsUsed: 0,
+      },
+      resolveEffectiveControls(requestedEverything, requestedEverything, frozenEnvelope),
+    );
+
+    expect(recovery.automatic).toEqual(["freeze", "incident", "escalate"]);
+    expect(recovery.ownerAttentionRequired).toBe(true);
+    const plannedRollback = recovery.steps.find((step) => step.step === "rollback");
+    expect(plannedRollback?.refusal).toBe("EXECUTOR_NOT_CONNECTED");
+    record(
+      "Recovery plan",
+      "The decision layer planned freeze and incident automatically, and refused rollback and repair.",
+    );
+
     const { rows: rollbackRows } = await db.query<{ state: string; blocked_reason: string }>(
       `select state::text as state, blocked_reason from public.record_rollback_decision(
          $1::uuid, false, 'EXECUTOR_NOT_CONNECTED', '{"lastKnownGood":"validated"}'::jsonb, $2::uuid, $3::uuid
@@ -485,6 +508,34 @@ describe("Phase 1D end-to-end loop journey", () => {
     expect(outcome.attemptsRemaining).toBe(MAX_ATTEMPTS.repair);
   });
 
+
+  it("never plans an automatic rollback for a release that dropped something", () => {
+    // Same failure, except the release carried a destructive migration.
+    const plan = planRecovery(
+      {
+        risk: "YELLOW",
+        containsDestructiveMigration: true,
+        lastKnownGoodValidated: true,
+        repairAttemptsUsed: 0,
+      },
+      resolveEffectiveControls(requestedEverything, requestedEverything, {
+        killSwitchActive: false,
+        emergencyStopActive: false,
+        releaseFrozen: false,
+        executorConnected: true,
+      }),
+    );
+
+    const rollback = plan.steps.find((step) => step.step === "rollback");
+    expect(rollback?.decision).toBe("OWNER_ONLY");
+    expect(rollback?.refusal).toBe("DESTRUCTIVE_MIGRATION_IN_RELEASE");
+    record(
+      "Destructive release",
+      "Rollback was withheld from the loop entirely: reversing a dropped table is a second destructive act.",
+      "DESTRUCTIVE_MIGRATION_IN_RELEASE",
+    );
+  });
+
   it("records a journey that names every blocked stage instead of skipping it", () => {
     const blocked = journey.filter((stage) => stage.blocker);
 
@@ -496,6 +547,7 @@ describe("Phase 1D end-to-end loop journey", () => {
       ["Rollback", "EXECUTOR_NOT_CONNECTED"],
       ["Repair", "CODEX_WORKER_NOT_CONNECTED"],
       ["Retries", "RETRY_BUDGET_EXHAUSTED"],
+      ["Destructive release", "DESTRUCTIVE_MIGRATION_IN_RELEASE"],
     ]);
 
     // And the stages that did complete are recorded too, so the journey shows
@@ -503,7 +555,7 @@ describe("Phase 1D end-to-end loop journey", () => {
     expect(journey.map((stage) => stage.stage)).toEqual(
       expect.arrayContaining([
         "Envelope", "Controls", "Classify", "Verify", "Review", "Approve",
-        "Validate", "Incident", "Emergency STOP",
+        "Validate", "Incident", "Recovery plan", "Emergency STOP",
       ]),
     );
   });

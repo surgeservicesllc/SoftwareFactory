@@ -124,6 +124,8 @@ and an agent must not perform it. That is the single reason this phase does not 
 | No self-approval | **COMPLETE** | same — the author is refused as approver at every scope |
 | Orchestrator stage machine | **COMPLETE** as a decision machine | `lib/autonomy/pipeline.ts` |
 | Merge / Deploy / Rollback execution | **BLOCKED, named** | Every path returns its exact blocker |
+| Recovery decision machine | **COMPLETE** | `lib/autonomy/recovery.ts` — freeze first, rollback fail-closed on four conditions, bounded repair, escalation |
+| Never auto-reverse a destructive migration | **COMPLETE** | A destructive release resolves `OWNER_ONLY` regardless of controls, ceiling or approval |
 | Bounded retries | **COMPLETE** | `lib/autonomy/retries.ts` — per-stage caps, exponential backoff, escalate rather than retry once spent, and never retry a permanent failure |
 | Backlog Autopilot selection | **COMPLETE** | `lib/autonomy/autopilot.ts` — orders eligible P0–P3 work by priority then lower risk, and explains every exclusion |
 | Deployment tracking (read) | **COMPLETE, provider Not Connected** | `lib/deploy/vercel.ts` — real read contract; reports **Not Connected** with a reason while `VERCEL_TOKEN` is unset |
