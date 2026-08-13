@@ -14,6 +14,7 @@ import {
   type AutonomyEnvelope,
 } from "@/lib/autonomy/controls";
 import { GREEN_GATES, type GateResult } from "@/lib/autonomy/gates";
+import { MAX_ATTEMPTS, evaluateRetry } from "@/lib/autonomy/retries";
 import { runPipeline } from "@/lib/autonomy/pipeline";
 
 /**
@@ -74,19 +75,20 @@ describe("Phase 1D end-to-end loop journey", () => {
   async function readEnvelope(): Promise<AutonomyEnvelope> {
     const { rows } = await db.query<{
       kill_switch_active: boolean;
+      emergency_stop_active: boolean;
       release_frozen: boolean;
       executor_connected: boolean;
     }>(
-      `select kill_switch_active, release_frozen, executor_connected
+      `select kill_switch_active, emergency_stop_active, release_frozen, executor_connected
        from public.resolved_autonomy_controls($1::uuid)`,
       [projectId],
     );
 
     return {
       killSwitchActive: rows[0].kill_switch_active,
+      emergencyStopActive: rows[0].emergency_stop_active,
       releaseFrozen: rows[0].release_frozen,
       executorConnected: rows[0].executor_connected,
-      emergencyStopActive: false,
     };
   }
 
@@ -362,6 +364,88 @@ describe("Phase 1D end-to-end loop journey", () => {
     expect(run.reachedStage).toBe("verify");
   });
 
+
+  it("propagates an owner emergency stop from the real RPC into the decision layer", async () => {
+    // Before: the database reports no stop.
+    expect((await readEnvelope()).emergencyStopActive).toBe(false);
+
+    const { rows } = await db.query<{ stop_autonomous_operations: number }>(
+      "select public.stop_autonomous_operations($1::uuid, $2)",
+      [organizationId, "Owner pulling the handle during the completion drill."],
+    );
+    expect(rows[0].stop_autonomous_operations).toBeGreaterThan(0);
+
+    const stopped = await readEnvelope();
+    expect(stopped.emergencyStopActive).toBe(true);
+    record("Emergency STOP", "An owner stopped autonomous operations for the organization.", undefined);
+
+    // A tenant asking for everything still resolves to nothing.
+    const held = resolveEffectiveControls(requestedEverything, requestedEverything, {
+      ...stopped,
+      killSwitchActive: false,
+      executorConnected: true,
+    });
+    expect(held.restrictions).toContain("EMERGENCY_STOP_ACTIVE");
+    expect(Object.values(held.actions).every((enabled) => enabled === false)).toBe(true);
+
+    // And a change that would otherwise be approved is refused.
+    const run = runPipeline({
+      action: "merge",
+      declaredRisk: "GREEN",
+      files: [
+        { path: "components/storefront-banner.tsx" },
+        { path: "tests/unit/storefront-banner.test.tsx" },
+      ],
+      gateResults: passingGreenGates,
+      controls: held,
+      authorId: ownerId,
+      approverId: reviewerId,
+      pullRequestOpen: true,
+    });
+    expect(run.approval.decision).toBe("NOT_APPROVED");
+  });
+
+  it("refuses an emergency stop from someone who is not an owner", async () => {
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [reviewerId]);
+
+    await expect(
+      db.query("select public.stop_autonomous_operations($1::uuid, $2)", [
+        organizationId,
+        "A non-owner should not be able to do this.",
+      ]),
+    ).rejects.toThrow(/only an organization owner/i);
+
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+  });
+
+  it("exhausts a bounded retry budget and escalates instead of trying again", () => {
+    const attempts: string[] = [];
+    let used = 0;
+
+    // Drive a stage to its cap the way the loop would.
+    for (let round = 0; round < MAX_ATTEMPTS.repair + 2; round += 1) {
+      const outcome = evaluateRetry("repair", used);
+      attempts.push(outcome.decision);
+      if (outcome.decision !== "RETRY") break;
+      used += 1;
+    }
+
+    expect(attempts.filter((decision) => decision === "RETRY")).toHaveLength(MAX_ATTEMPTS.repair);
+    expect(attempts.at(-1)).toBe("ESCALATE");
+    record(
+      "Retries",
+      `The budget of ${MAX_ATTEMPTS.repair} attempts was spent and the loop escalated.`,
+      "RETRY_BUDGET_EXHAUSTED",
+    );
+  });
+
+  it("never retries a permanent refusal, however much budget is left", () => {
+    const outcome = evaluateRetry("repair", 0, { permanent: true });
+
+    expect(outcome.decision).toBe("STOP");
+    expect(outcome.attemptsRemaining).toBe(MAX_ATTEMPTS.repair);
+  });
+
   it("records a journey that names every blocked stage instead of skipping it", () => {
     const blocked = journey.filter((stage) => stage.blocker);
 
@@ -371,12 +455,15 @@ describe("Phase 1D end-to-end loop journey", () => {
       ["Merge", "MERGE_EXECUTOR_NOT_CONNECTED"],
       ["Rollback", "EXECUTOR_NOT_CONNECTED"],
       ["Repair", "CODEX_WORKER_NOT_CONNECTED"],
+      ["Retries", "RETRY_BUDGET_EXHAUSTED"],
     ]);
 
     // And the stages that did complete are recorded too, so the journey shows
     // how far the loop actually got rather than only where it stopped.
     expect(journey.map((stage) => stage.stage)).toEqual(
-      expect.arrayContaining(["Envelope", "Controls", "Classify", "Verify", "Review", "Approve"]),
+      expect.arrayContaining([
+        "Envelope", "Controls", "Classify", "Verify", "Review", "Approve", "Emergency STOP",
+      ]),
     );
   });
 });
