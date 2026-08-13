@@ -109,10 +109,7 @@ export async function verifyWorkerProviderAccess(input: {
     );
   }
   if (!response.ok) {
-    throw new WorkerPreflightError(
-      `openai_http_${response.status}`,
-      `OpenAI model access returned HTTP ${response.status}.`,
-    );
+    throw await classifiedHttpError(response, "model access");
   }
   await verifyResponseDescriptor(response, {
     expectedId: input.model,
@@ -140,16 +137,38 @@ export async function verifyWorkerProviderAccess(input: {
     );
   }
   if (!response.ok) {
-    throw new WorkerPreflightError(
-      `openai_http_${response.status}`,
-      `OpenAI execution preflight returned HTTP ${response.status}.`,
-    );
+    throw await classifiedHttpError(response, "execution preflight");
   }
   await verifyResponseDescriptor(response, {
     expectedId: null,
     expectedObject: "response",
     expectedStatus: "completed",
   });
+}
+
+async function classifiedHttpError(response: Response, operation: string) {
+  let classification = "unclassified";
+  try {
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (declaredLength <= MAXIMUM_RESPONSE_BYTES) {
+      const text = await response.text();
+      if (text.length <= MAXIMUM_RESPONSE_BYTES) {
+        const body = JSON.parse(text) as { error?: { code?: unknown; type?: unknown } };
+        const candidate = typeof body.error?.code === "string"
+          ? body.error.code
+          : body.error?.type;
+        if (typeof candidate === "string" && /^[a-z0-9_.-]{1,80}$/i.test(candidate)) {
+          classification = candidate.toLowerCase();
+        }
+      }
+    }
+  } catch {
+    classification = "unclassified";
+  }
+  return new WorkerPreflightError(
+    `openai_http_${response.status}_${classification}`,
+    `OpenAI ${operation} returned HTTP ${response.status} (${classification}).`,
+  );
 }
 
 async function verifyResponseDescriptor(

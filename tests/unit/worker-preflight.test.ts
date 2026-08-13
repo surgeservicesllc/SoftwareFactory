@@ -85,13 +85,15 @@ describe("Phase 1C worker provider preflight", () => {
     const result = verifyWorkerProviderAccess({
       apiKey,
       model,
-      fetcher: vi.fn(async () => new Response(`denied ${apiKey}`, { status: 403 })),
+      fetcher: vi.fn(async () => new Response(JSON.stringify({
+        error: { code: "insufficient_quota", message: `denied ${apiKey}` },
+      }), { status: 429 })),
       runCommand: successfulCommand(),
     });
 
     await expect(result).rejects.toEqual(expect.objectContaining({
-      code: "openai_http_403",
-      message: "OpenAI model access returned HTTP 403.",
+      code: "openai_http_429_insufficient_quota",
+      message: "OpenAI model access returned HTTP 429 (insufficient_quota).",
     } satisfies Partial<WorkerPreflightError>));
     await expect(result).rejects.toSatisfy((error: unknown) => !String(error).includes(apiKey));
   });
