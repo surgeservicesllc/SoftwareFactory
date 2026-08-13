@@ -176,9 +176,10 @@ describe("Phase 1E production operations behavior", () => {
     );
     // Every public table must be covered: the eleven added by Phase 1E, the
     // three added by the Phase 2A provider layer, the three bot fabric
-    // tables, and the eleven marketing tables. The filter below is the real
-    // guarantee — this count exists so a new table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(53);
+    // tables, the eleven marketing tables, and the Phase 1D decision audit.
+    // The filter below is the real guarantee — this count exists so a new
+    // table cannot slip in unexamined.
+    expect(rlsRows).toHaveLength(54);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
