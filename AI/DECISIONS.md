@@ -190,3 +190,10 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Status: Accepted locally; publication and production retry pending
 - Decision: GitHub does not provide `GET /user/installations/{id}`. After exchanging the callback code, request bounded documented `GET /user/installations`, then require an exact match for the callback installation ID and App before minting an installation token or persisting tenant state.
 - Consequence: Installation `153442281` is provider-scoped and App-JWT verified, but GitHub remains **Not Connected** until this local fix is published and the authenticated production callback succeeds. A list result without the exact ID fails closed.
+
+## ADR-028 - Controlled commits use one explicit server-only deployment identity
+
+- Date: 2026-08-13
+- Status: Accepted locally; publication, deployment configuration, and live verification pending
+- Decision: Require one strictly validated server-only name/email pair for controlled GitHub file commits. Validate it before authorization, tenant persistence, token minting, or provider mutation, and send the same identity in both Contents API `author` and `committer`. Do not accept attribution from the browser, persist it in Supabase, write it to logs, or fall back to the authenticated GitHub App bot.
+- Consequence: Missing or malformed attribution returns the safe `github_not_configured` response without a database or GitHub side effect. Production acceptance must configure the exact owner-approved deployment identity and prove both fields on a real draft-PR commit; the boundary still cannot write the default branch, create a non-draft PR, merge, or deploy.

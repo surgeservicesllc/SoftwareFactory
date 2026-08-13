@@ -44,6 +44,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 
 - Supabase URL/publishable key are browser-public; RLS remains mandatory.
 - App private key, GitHub client/state/webhook secrets, Supabase service role, and future provider keys stay in Vercel server-only settings.
+- GitHub commit attribution comes from two dedicated server-only environment values. The route validates them before tenant persistence or provider contact, never accepts them from the browser, never stores/logs them, and supplies the same explicit identity as both Contents API `author` and `committer` with no App-bot fallback.
 - Installation-start state is HMAC signed, expires in ten minutes, and is bound to user, organization, allowlisted return path, and an HttpOnly nonce cookie.
 - Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the local unpublished callback fix uses bounded documented `GET /user/installations` and requires an exact installation-ID match before proceeding.
 - App JWTs are short-lived; installation tokens are further scoped to one repository ID and exact route permissions.
@@ -60,7 +61,7 @@ Write flow:
 4. Reserve `github_change_requests` evidence through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository UUID binding. Protected approval evidence is append-only, recorded atomically, and trigger-bound to that exact pre-provider reservation.
 5. Within the five-minute reservation lease, revalidate approval/intent and mark the persisted provider-execution boundary before minting the write-scoped GitHub installation token. An expired reservation is reclaimable only by the original requester for the exact intent and only while no provider execution/evidence exists.
 6. Create a unique `softwarefactory/*` branch.
-7. Commit using the expected blob SHA.
+7. Commit using the expected blob SHA and the strictly validated server-only deployment identity as both author and committer.
 8. Require an open draft pull request.
 9. Complete or fail the audited request record. If GitHub created the draft PR but database completion was ambiguous, recover that same provider evidence rather than create a second PR.
 

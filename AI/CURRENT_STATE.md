@@ -17,6 +17,7 @@ Overall status: **Hosted Supabase is verified through `026`, and owner Auth/onbo
 - Callback browser failures return safely to Connections with bounded error state; JSON callers retain structured no-store errors. GitHub-returned web URLs are restricted to HTTPS `github.com` origins.
 - Connections and dashboard states do not hard-code a personal account and distinguish the live Supabase control plane from a GitHub integration that is **Not Connected**. A real connection will show its installation ID and repository-selection mode.
 - Ordinary file changes require owner/admin authorization, keep one idempotency key for an unchanged retry intent, and can recover an already-created draft PR after an ambiguous database-completion response. Protected paths fail closed unless an active owner supplies the exact short-lived RED approval phrase, rationale, and rollback plan; generic non-placeholder secret assignments and provider-token patterns remain blocked, and the only provider outcome remains a draft PR.
+- The current local unpublished write boundary requires a strictly validated server-only commit identity before authorization, persistence, token minting, or provider mutation, and sends that same identity as both GitHub author and committer. It has no App-bot fallback and is never browser-, database-, or log-visible. Production configuration and live draft-commit attribution remain unverified.
 - Change reservations expire after five minutes and may be reclaimed only for the exact original intent before the provider boundary is entered. The exact approval snapshot is bound to the reserved change, and the provider boundary is durably revalidated before the write-scoped installation token is minted; entry permanently prevents lease reclamation.
 - Installation and repository webhook transitions are provider-time ordered. Deletion is terminal for an installation ID; repository deletion remains terminal until an explicit newer restore, and restored repositories stay unselected pending access synchronization.
 - Provider-authoritative repository rename/default-branch changes propagate by stable repository UUID only to exact connection-linked projects and create redacted immutable activity evidence.
@@ -71,7 +72,7 @@ Overall status: **Hosted Supabase is verified through `026`, and owner Auth/onbo
 
 ## Verification evidence
 
-- Current local `npm run check` passes lint/typecheck, 54 files/398 Vitest tests, and a 38-route production build.
+- Current local `npm run check` passes lint/typecheck, 54 files/408 Vitest tests, and a 38-route production build.
 - Hosted migration `026` is applied with local and remote history matching; post-apply dry run/lint and the exact ACL matrix pass.
 - Local and exact production Playwright each pass 48/48 across desktop, tablet, and mobile, including axe checks. The production signed-out browser-error race additionally passes 30/30 repeated runs.
 - Current-tree source and rebuilt-static scans found zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present. Code-variable and documented placeholder assignments were reviewed as non-credentials.
@@ -86,4 +87,5 @@ Overall status: **Hosted Supabase is verified through `026`, and owner Auth/onbo
 1. Publish the bounded callback fix, verify its exact deployment, then retry installation `153442281` from the authenticated owner session.
 2. Configure and verify the active GitHub App webhook; GitHub must retain the exact URL and accept a valid signed production delivery.
 3. Complete tenant isolation/RPC acceptance and the GitHub connection/repository/project/read/edit/draft-PR/disconnect journey.
+4. Configure the exact owner-approved server-only commit identity in the deployment and verify both author and committer on the live draft commit.
 5. Keep GitHub **Not Connected**, Phase 1B incomplete, Phase 1C unstarted, and all automatic actions OFF until that evidence exists.

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -23,9 +23,15 @@ function response(body: unknown) {
   return Response.json(body);
 }
 
+beforeEach(() => {
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_NAME", "SoftwareFactory Operator");
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "operator@example.com");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("GitHub provider web URLs", () => {

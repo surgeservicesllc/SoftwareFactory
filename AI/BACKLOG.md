@@ -20,7 +20,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 ## Phase 1B release blockers
 
-- [x] Pass current local lint/typecheck, 54 files/398 tests, and the 38-route production build.
+- [x] Pass current local lint/typecheck, 54 files/408 tests, and the 38-route production build.
 - [x] Pass coverage: statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37%.
 - [x] Pass local and exact production Playwright 48/48 across desktop/tablet/mobile including axe; pass the production focused signed-out browser-error race 30/30.
 - [x] Pass the final source/client artifact scan: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 local artifacts, zero tracked key/container files, and only `.env.example` present.
@@ -32,6 +32,7 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 - [ ] Publish the local callback patch that replaces nonexistent `GET /user/installations/{id}` with bounded documented `GET /user/installations` plus exact-ID lookup, then retry installation `153442281` and verify tenant persistence. Current production does not include the fix.
 - [ ] Link the real repository/project and verify live sync time, branch protection/SHA, commits, pull requests with created/updated timestamps and mergeability, default-branch/per-PR checks, tree, and content reads.
 - [ ] Create one safe isolated branch/commit/draft PR and verify stable idempotent retry, ambiguous completion recovery, stale SHA, likely-secret, unapproved/admin protected denial, exact owner protected approval and expiry/lease behavior, wrong tenant, revoked installation, insufficient permission, and rate-limit behavior. Never merge or deploy.
+- [ ] Publish the strict server-only commit-identity boundary, configure the exact owner-approved name/email in Vercel without browser/database/log exposure, and verify the live draft commit uses that identity for both author and committer rather than an App-bot fallback.
 - [ ] Make GitHub retain and activate the exact webhook endpoint, then observe valid, invalid, duplicate, stale, out-of-order, installation deletion, repository deletion, and explicit restore deliveries. A GitHub App JWT validates App `4573846`, but `/app/hook/config` returns 404 and the UI does not retain activation; the webhook remains **Not Connected**.
 - [ ] Verify explicit disconnect/loss state and history preservation.
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.

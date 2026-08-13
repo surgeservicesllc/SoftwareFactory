@@ -36,8 +36,12 @@ Interactive Auth, organization, project, and repository reads use the caller's s
 | `GITHUB_APP_CALLBACK_URL` | Exact environment callback URL |
 | `GITHUB_APP_WEBHOOK_SECRET` | Raw-body HMAC verification secret, minimum 32 bytes |
 | `GITHUB_APP_STATE_SECRET` | Installation state signing secret, minimum 32 bytes and distinct from webhook secret |
+| `GITHUB_COMMIT_IDENTITY_NAME` | Explicit name used for both author and committer on controlled draft-PR commits |
+| `GITHUB_COMMIT_IDENTITY_EMAIL` | Explicit email used for both author and committer on controlled draft-PR commits |
 
 Configure exactly one private-key representation. The application prefers `GITHUB_APP_PRIVATE_KEY_BASE64` when both exist. Current production deployment `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY from `main` `3434387`, but does not contain the local callback fix. The webhook remains blank/inactive. The App remains **Not Connected** until the corrected callback and full acceptance workflow pass.
+
+Commit identity has no provider/App-bot fallback. Both values must be explicitly configured and pass strict server-side validation before the change route performs tenant persistence, token minting, or a GitHub mutation. The identity is never sent to the browser, stored in Supabase, or written to logs; it is sent only to GitHub in the Contents API's required `author` and `committer` objects. Production must use the owner-approved deployment identity, and a live draft commit must verify both fields before acceptance.
 
 ## Safety/deferred providers
 
@@ -47,7 +51,7 @@ Configure exactly one private-key representation. The application prefers `GITHU
 | `OPENAI_API_KEY` | Future Codex/OpenAI worker | **Not Connected**; Phase 1C |
 | `ANTHROPIC_API_KEY` | Future Claude worker | **Not Connected**; Phase 2 |
 
-The GitHub-backed editor uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR. No HTTP route can write directly to the local repository or protected memory/policy files.
+The GitHub-backed editor uses authenticated repository-scoped App tokens and always creates an isolated branch and draft PR. Its commit author and committer are the same explicitly configured server-only deployment identity. No HTTP route can write directly to the local repository or protected memory/policy files.
 
 ## CLI-only Supabase values
 

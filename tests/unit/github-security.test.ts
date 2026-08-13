@@ -2,7 +2,7 @@
 
 import { createHmac, generateKeyPairSync } from "node:crypto";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -35,8 +35,14 @@ import { containsLikelySecret } from "@/lib/server/sensitive-data";
 const stateSecret = "s".repeat(48);
 const now = Date.UTC(2026, 7, 12, 12, 0, 0);
 
+beforeEach(() => {
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_NAME", "SoftwareFactory Operator");
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "operator@example.com");
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("GitHub installation state", () => {
@@ -232,7 +238,12 @@ describe("GitHub repository write safety", () => {
     });
 
     expect(calls[0].body).toEqual({ ref: "refs/heads/softwarefactory/change", sha: "b".repeat(40) });
-    expect(calls[1].body).toMatchObject({ branch: "softwarefactory/change", sha: "c".repeat(40) });
+    expect(calls[1].body).toMatchObject({
+      author: { email: "operator@example.com", name: "SoftwareFactory Operator" },
+      branch: "softwarefactory/change",
+      committer: { email: "operator@example.com", name: "SoftwareFactory Operator" },
+      sha: "c".repeat(40),
+    });
     expect(calls[2].body).toMatchObject({ base: "main", draft: true, head: "softwarefactory/change" });
     expect(calls.every((call) => call.body.force !== true)).toBe(true);
   });
@@ -266,6 +277,24 @@ describe("GitHub repository write safety", () => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body).toMatchObject({ branch: "softwarefactory/change", sha: "c".repeat(40) });
     expect(body).not.toHaveProperty("force");
+  });
+
+  it("does not contact GitHub when the server-owned commit identity is missing", async () => {
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateGitHubFileOnBranch("token-not-logged", {
+      branch: "softwarefactory/change",
+      content: "# Updated",
+      expectedBlobSha: "c".repeat(40),
+      message: "docs: update backlog",
+      owner: "acme",
+      path: "AI/BACKLOG.md",
+      repository: "factory",
+    })).rejects.toThrow("GITHUB_COMMIT_IDENTITY_EMAIL is not configured.");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("fails closed when GitHub cannot create the required draft PR", async () => {

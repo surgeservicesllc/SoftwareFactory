@@ -9,7 +9,7 @@ Reason: hosted migration `026` and owner onboarding pass. Latest installation `1
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe projections; stable repository UUID; protected approval/token/lease integrity; lifecycle/order/recovery; migrations `011`-`026` | Application schema hosted; live acceptance pending |
-| Current-tree lint/typecheck/Vitest/build | `npm run check` | Pass - lint/typecheck; 54 files/398 tests; 38 routes |
+| Current-tree lint/typecheck/Vitest/build | `npm run check` | Pass - lint/typecheck; 54 files/408 tests; 38 routes |
 | Verified application-release integration suite | `npm run test:integration` | Pass - 21 files/163 tests; focused `026` grant test passes separately |
 | Current-tree coverage | `npm run test:coverage` | Pass - statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37% |
 | Migration `026` | Narrowed exact table grants; function grants unchanged | Pass locally and hosted; local=remote, dry run/lint clean, ACL mismatch count zero |
@@ -25,6 +25,7 @@ Reason: hosted migration `026` and owner onboarding pass. Latest installation `1
 | Safe browser projections | Base-table SELECT revoked for five sensitive domains; bounded caller-member RPCs; allowlisted activity evidence | Hosted; real caller-session verification pending |
 | Stable repository authorization | Project connection/change/webhook attribution follows tenant-scoped repository UUID, not mutable name | Hosted via `021`; live rename/same-name acceptance pending |
 | Protected-resource writes | Unapproved/admin protected requests fail closed; exact active-owner RED approval is immutable, path/digest/SHA/branch-bound, and draft-only; no local HTTP writer | Hosted via `022`; live expiry/role/immutability acceptance pending |
+| Draft-commit attribution | Local write boundary strictly validates one server-only deployment identity before authorization/persistence and supplies it as both Contents API author and committer; no App-bot fallback or browser/database/log path | Local implementation; publication, Vercel configuration, and live commit evidence pending |
 | Idempotency/recovery | Same browser intent retains key; exact-binding reservation; five-minute pre-provider lease; existing draft-PR evidence recovery | Application plus migrations `015`/`017`/`022` hosted; live acceptance pending |
 | Lifecycle safety | Provider-time installation/repository ordering; terminal deletion; explicit newer restore remains unselected | Hosted via migrations `016`/`018`; live acceptance pending |
 | Service-role CHECK boundary | Only sensitive-JSON SECURITY DEFINER wrapper granted for provider-ingress constraints | Hosted via `019`; real provider-ingress insert/rejection acceptance pending |
@@ -76,6 +77,7 @@ Historical baseline evidence remains useful for regression comparison; current h
 - Complete a real authenticated production session and the entire GitHub callback/token/repository/project/read/edit/draft-PR/disconnect journey.
 - Observe valid, invalid, duplicate, stale, out-of-order, deletion, and restore webhook deliveries in production.
 - Verify stale SHA, unapproved/admin protected denial, exact owner approval/expiry/lease, likely secret, wrong tenant, renamed/same-name repository, revoked installation, insufficient permission, rate limit, stable retry, and ambiguous completion recovery.
+- Verify the exact owner-approved deployment identity is configured server-side and appears as both author and committer on the real draft commit.
 - Record authenticated provider acceptance evidence against an exact verified deployment.
 
 ## Release-blocking invariants

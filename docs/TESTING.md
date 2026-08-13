@@ -19,7 +19,7 @@ npm run build
 
 | Gate | Result |
 | --- | --- |
-| Current local check | Pass - lint, typecheck, 54 files/398 Vitest tests, 38-route production build |
+| Current local check | Pass - lint, typecheck, 54 files/408 Vitest tests, 38-route production build |
 | Application release integration suite | Pass - 21 files/163 tests |
 | Migration `026` | Pass locally and hosted - local=remote, dry run/lint clean, exact ACL mismatch count zero |
 | Current local coverage | Pass - statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37% |

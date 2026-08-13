@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { GitHubApiError } from "@/lib/github/client";
+import { getGitHubCommitIdentity } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import {
   createGitHubBranch,
@@ -149,6 +150,11 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // Validate the server-owned commit attribution before tenant persistence,
+    // token minting, or any provider mutation. The Contents API helper reads
+    // the same configuration again when constructing the commit payload.
+    getGitHubCommitIdentity();
 
     prepared = await authorizeGitHubRepositoryRequest(
       request,

@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import {
+  getGitHubAppConfiguration,
+  getGitHubCommitIdentity,
+} from "@/lib/github/config";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -24,5 +27,29 @@ describe("GitHub App configuration", () => {
     expect(() => getGitHubAppConfiguration()).toThrow(
       "GITHUB_APP_STATE_SECRET and GITHUB_APP_WEBHOOK_SECRET must be distinct secrets.",
     );
+  });
+
+  it("returns one explicitly configured identity for GitHub commit attribution", () => {
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_NAME", "  SoftwareFactory Operator  ");
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "  operator@example.com  ");
+
+    expect(getGitHubCommitIdentity()).toEqual({
+      email: "operator@example.com",
+      name: "SoftwareFactory Operator",
+    });
+  });
+
+  it.each([
+    ["missing name", "", "operator@example.com", "GITHUB_COMMIT_IDENTITY_NAME is not configured."],
+    ["control character in name", "Operator\nInjected", "operator@example.com", "GITHUB_COMMIT_IDENTITY_NAME must be a valid Git commit identity name."],
+    ["Git ident delimiter in name", "Operator <bot>", "operator@example.com", "GITHUB_COMMIT_IDENTITY_NAME must be a valid Git commit identity name."],
+    ["missing email", "Operator", "", "GITHUB_COMMIT_IDENTITY_EMAIL is not configured."],
+    ["invalid email", "Operator", "operator@example", "GITHUB_COMMIT_IDENTITY_EMAIL must be a valid Git commit identity email address."],
+    ["email header injection", "Operator", "operator@example.com\r\nother@example.com", "GITHUB_COMMIT_IDENTITY_EMAIL must be a valid Git commit identity email address."],
+  ])("fails closed for a $0", (_label, name, email, message) => {
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_NAME", name);
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", email);
+
+    expect(() => getGitHubCommitIdentity()).toThrow(message);
   });
 });

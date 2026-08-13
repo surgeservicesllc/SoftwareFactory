@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -130,6 +130,8 @@ function preparedContext(role: "owner" | "admin") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_NAME", "SoftwareFactory Operator");
+  vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "operator@example.com");
   harness.prepare.mockResolvedValue(preparedContext("owner"));
   harness.createToken.mockResolvedValue("installation-token");
   harness.completeRpc.mockResolvedValue({ data: true, error: null });
@@ -183,7 +185,34 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("protected GitHub change route", () => {
+  it("fails before authorization, persistence, or provider calls when commit attribution is missing", async () => {
+    vi.stubEnv("GITHUB_COMMIT_IDENTITY_EMAIL", "");
+
+    const response = await POST(
+      createRequest(requestBody()),
+      { params: Promise.resolve({ owner: "example", repo: "application" }) },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "github_not_configured",
+        message: "GitHub App integration is Not Connected because its server configuration is incomplete.",
+      },
+    });
+    expect(harness.prepare).not.toHaveBeenCalled();
+    expect(harness.reservationRpc).not.toHaveBeenCalled();
+    expect(harness.createToken).not.toHaveBeenCalled();
+    expect(harness.createBranch).not.toHaveBeenCalled();
+    expect(harness.updateFile).not.toHaveBeenCalled();
+    expect(harness.createDraftPullRequest).not.toHaveBeenCalled();
+  });
+
   it("returns a bounded approval requirement without reserving or writing", async () => {
     const response = await POST(
       createRequest(requestBody()),

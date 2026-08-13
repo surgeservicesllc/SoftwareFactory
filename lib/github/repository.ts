@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { GitHubApiError, githubApiRequest } from "@/lib/github/client";
+import { getGitHubCommitIdentity } from "@/lib/github/config";
 import { githubWebUrlSchema } from "@/lib/github/schemas";
 
 const repositoryCoordinatePattern = /^[A-Za-z0-9_.-]+$/;
@@ -440,11 +441,14 @@ export async function updateGitHubFileOnBranch(
   if (Buffer.byteLength(input.content, "utf8") > MAX_FILE_BYTES) {
     throw new GitHubApiError(413, "github_file_too_large", "Files larger than 1 MiB are not editable in SoftwareFactory.");
   }
+  const commitIdentity = getGitHubCommitIdentity();
   const raw = await githubApiRequest(
     `${repositoryPath(input.owner, input.repository)}/contents/${encodedPath(input.path)}`,
     {
       body: {
+        author: commitIdentity,
         branch: input.branch,
+        committer: commitIdentity,
         content: Buffer.from(input.content, "utf8").toString("base64"),
         message: input.message,
         sha: input.expectedBlobSha,

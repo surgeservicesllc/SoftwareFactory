@@ -70,9 +70,13 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_APP_CALLBACK_URL` | Exact callback URL listed above |
 | `GITHUB_APP_WEBHOOK_SECRET` | HMAC verification secret; at least 32 bytes |
 | `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
+| `GITHUB_COMMIT_IDENTITY_NAME` | Server-owned name used for both author and committer on every controlled file commit |
+| `GITHUB_COMMIT_IDENTITY_EMAIL` | Server-owned email used for both author and committer on every controlled file commit |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
 The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and the stable alias, sourced from `main` `3434387`. It does not contain the callback fix. The webhook remains blank/inactive and **Not Connected**.
+
+The two commit-identity values are configuration, not request fields. They stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
 
 ## Connection flow
 
@@ -142,7 +146,7 @@ It refuses:
 
 For a protected path, the route first returns an approval-required response. Only an active organization owner may continue, and only by providing the exact `APPROVE RED DRAFT PR FOR <path>` phrase, a 20-500 character rationale, and a 20-500 character rollback plan. Migrations `022`/`025` atomically bind immutable approval evidence to the exact reserved change, requester/approver/executor, organization/project/connection/repository UUID, path, content digest, expected blob SHA, base branch, and a maximum 15-minute expiry before provider execution. Admin-only, expired, mismatched, post-execution, or secret-bearing approval attempts fail closed. Generic secret-key assignments with non-placeholder values are blocked even when the value lacks a provider-specific token prefix.
 
-Successful ordinary or approved protected writes create `softwarefactory/*` branch state, commit to that branch, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. A reservation expires after five minutes and is reclaimable only by its original requester for the exact immutable intent before any provider execution/evidence; the server persists and revalidates entry into the provider boundary before minting the write-scoped installation token or contacting GitHub. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing writes the default branch, merges, or deploys.
+Successful ordinary or approved protected writes create `softwarefactory/*` branch state, commit to that branch with the explicitly configured deployment identity as both author and committer, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. A reservation expires after five minutes and is reclaimable only by its original requester for the exact immutable intent before any provider execution/evidence; the server persists and revalidates entry into the provider boundary before minting the write-scoped installation token or contacting GitHub. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing writes the default branch, merges, or deploys.
 
 ## Webhook guarantees
 
@@ -190,4 +194,5 @@ Do not change GitHub from **Not Connected** until all items are observed against
 - **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
 - **Webhook blank/inactive or App-auth configuration `404`:** no hook object currently exists. Enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible/available through App authentication before sending or observing a delivery.
 - **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
+- **Commit identity unavailable:** configure both server-only commit-identity variables with the exact approved deployment identity, redeploy, and verify both author and committer on a new draft-PR commit without printing the values in logs.
 - **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.

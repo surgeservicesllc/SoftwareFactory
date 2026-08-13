@@ -13,6 +13,7 @@ Finish Phase 1B end to end. Migration `026` is hosted with a zero-mismatch ACL m
 - Revoked/insufficient-permission token failures are persisted best-effort as connection loss without treating rate limits as revocation.
 - Connections/dashboard truthfully distinguish Supabase from GitHub **Not Connected** and remove hard-coded onboarding identity.
 - Ordinary file changes reuse one idempotency key while an intent is unchanged. A protected path requires exact, short-lived, owner-only RED approval evidence before provider execution; likely secrets remain blocked, and the route still creates only an isolated draft PR.
+- The local unpublished write boundary now requires a strictly validated server-only deployment commit identity before authorization or persistence and sends it as both GitHub author and committer. Missing/invalid configuration fails before database/provider effects; the values never enter browser responses, Supabase rows, or logs. Deployment configuration and live attribution verification remain pending.
 - Five-minute reservations are reclaimable only for the original exact intent before any provider execution/evidence. Entering the persisted provider boundary permanently blocks lease reclamation.
 - If GitHub created an isolated branch, commit, and draft PR but database completion was ambiguous, the route can recover the same request from bounded provider evidence.
 - Webhook schemas retain provider timestamps. Installation/repository transitions reject stale/out-of-order state, preserve terminal deletion, and require an explicit newer repository restore that remains unselected pending access sync.
@@ -53,15 +54,16 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 - The GitHub webhook is **Not Connected**: a GitHub App JWT validates App `4573846`, but `/app/hook/config` returns 404 and the UI does not retain activation. No valid signed delivery is verified.
 - Verified application release recorded 2026-08-13: commit `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`; CI run `31694775758` passed both jobs.
 - Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and the stable alias, sourced from `main` `3434387`. It does not contain the callback fix.
-- Current local evidence: `npm run check` passes lint/typecheck, 54 files/398 tests, and a 38-route build.
+- Current local evidence: `npm run check` passes lint/typecheck, 54 files/408 tests, and a 38-route build.
 - Exact Vercel project `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present; secret values were not recorded.
 
 ## Immediate sequence
 
 1. Publish and verify the bounded callback fix, then retry installation `153442281` from the authenticated owner workspace.
-2. Complete two-tenant/anonymous/RPC acceptance and the provider connection/sync/project/read/draft-PR/disconnect journey.
-3. Make GitHub retain the active webhook and complete signed webhook lifecycle acceptance.
-4. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
+2. Configure the exact owner-approved server-only commit identity in Vercel and verify both author and committer on the live draft commit.
+3. Complete two-tenant/anonymous/RPC acceptance and the provider connection/sync/project/read/draft-PR/disconnect journey.
+4. Make GitHub retain the active webhook and complete signed webhook lifecycle acceptance.
+5. Update memory/scorecard with exact evidence; only then report Phase 1B complete.
 
 ## Safe operating notes
 
@@ -77,12 +79,13 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 
 - [x] Hosted migration history is current through `026`; local=remote, dry run/lint are clean, and prior RLS/catalog/browser-grant checks pass.
 - [x] Migration `026` is hosted; exact ACL mismatch count is zero, with four intended `service_role` ingress tables and no table privileges on the other 19.
-- [x] Current local lint/typecheck, 54 files/398 tests, and 38-route build pass.
+- [x] Current local lint/typecheck, 54 files/408 tests, and 38-route build pass.
 - [x] Local and exact production E2E/responsive/accessibility pass 48/48; production focused signed-out race passes 30/30.
 - [x] Source/rebuilt-static secret/client gates pass; production ten-asset privileged-marker scan passes.
 - [x] Application release `edaaf62` is published, CI passes, and matching READY production deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` is verified. Later documentation-only successors retain this runtime evidence unless application code changes.
 - [x] Migrations `011`-`026` are hosted and post-apply dry-run/lint/ACL checks pass.
 - [ ] Real Supabase authenticated/two-tenant/anonymous/RPC behavior passes.
 - [ ] Real GitHub callback/sync/project/read/edit/draft-PR/webhook/audit/disconnect journey passes.
+- [ ] Exact deployment commit identity is configured server-side and a live draft commit proves matching author and committer without App-bot fallback.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [ ] Documentation and scorecard reflect final evidence without claiming Phase 1C.

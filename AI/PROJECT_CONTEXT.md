@@ -23,6 +23,7 @@ Phase 1B extends the Phase 1A foundation with:
 - caller-bound, bounded browser projections that keep sensitive control-plane columns, raw Activity metadata, and stored webhook-delivery evidence server-side;
 - owner/admin-initiated ordinary file changes that create only a controlled branch, commit, and draft pull request; and
 - a separate, short-lived owner-only RED approval path for an exact protected-file draft change, with its immutable snapshot revalidated before a write-scoped token is minted, without default-branch, merge, or deployment authority;
+- an explicit, server-only deployment commit identity used as both GitHub author and committer, with no App-bot fallback;
 - generic secret-assignment rejection even when an opaque value lacks a known provider token prefix; and
 - stable repository-ID project linking serialized against concurrent active duplicates while permitting an intentional relink after archival.
 

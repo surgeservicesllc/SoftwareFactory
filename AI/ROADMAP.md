@@ -21,6 +21,7 @@ Implemented in source:
 - Transactional project linking and provider-authoritative repository/default-branch propagation by immutable repository UUID.
 - Bounded caller-member list RPC projections, raw Activity/webhook direct-read closure, same-origin command creation, allowlisted activity details, restrictive browser CSP, installation-ID/repository-selection visibility, and live Projects metadata/check visibility including stable repository-ID matching, detail-fetched PR mergeability, and per-PR head-SHA checks.
 - Controlled branch + commit + draft-PR file changes with stable same-intent idempotency, exact-binding reservation, terminal audit evidence, provider-evidence completion recovery, and generic secret-assignment detection. Protected-file changes require an exact, short-lived, owner-only RED approval revalidated before write-token minting; merge/default-branch/deploy authority remains absent.
+- Local commit-attribution hardening requires one strictly validated server-only deployment identity, sends it as both author and committer, and has no App-bot fallback; publication, deployment configuration, and live attribution evidence remain pending.
 - Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
 - Hosted forward migrations `011`-`026`, including the verified `service_role` table-grant remediation.
 
@@ -30,7 +31,8 @@ Remaining exit work:
 
 1. Publish the bounded `GET /user/installations` exact-ID callback fix and successfully retry installation `153442281` from the authenticated owner workspace.
 2. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
-3. Make GitHub retain the exact active webhook URL, then complete connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss acceptance.
+3. Configure the exact owner-approved commit identity in server-only deployment settings and verify author plus committer on the safe draft commit.
+4. Make GitHub retain the exact active webhook URL, then complete connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss acceptance.
 
 No merge or production deployment autonomy is implied. GitHub remains **Not Connected** until the live journey passes.
 

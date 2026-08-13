@@ -20,6 +20,11 @@ export type GitHubAppConfiguration = {
   webhookSecret: string;
 };
 
+export type GitHubCommitIdentity = Readonly<{
+  email: string;
+  name: string;
+}>;
+
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -63,6 +68,51 @@ function parseHttpsUrl(name: string, value: string) {
   }
 
   return parsed.toString();
+}
+
+function isValidCommitIdentityEmail(value: string) {
+  if (value.length > 254 || !/^[\x21-\x7e]+$/.test(value)) return false;
+
+  const separator = value.lastIndexOf("@");
+  if (separator <= 0 || separator !== value.indexOf("@")) return false;
+  const localPart = value.slice(0, separator);
+  const domain = value.slice(separator + 1);
+  if (
+    localPart.length > 64
+    || localPart.startsWith(".")
+    || localPart.endsWith(".")
+    || localPart.includes("..")
+    || !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(localPart)
+  ) {
+    return false;
+  }
+
+  const labels = domain.split(".");
+  return labels.length >= 2 && labels.every((label) => (
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label)
+  ));
+}
+
+export function getGitHubCommitIdentity(): GitHubCommitIdentity {
+  const name = requiredEnvironment("GITHUB_COMMIT_IDENTITY_NAME");
+  const email = requiredEnvironment("GITHUB_COMMIT_IDENTITY_EMAIL");
+
+  if (
+    name.length > 100
+    || Buffer.byteLength(name, "utf8") > 128
+    || /[\x00-\x1f\x7f<>]/.test(name)
+  ) {
+    throw new GitHubConfigurationError(
+      "GITHUB_COMMIT_IDENTITY_NAME must be a valid Git commit identity name.",
+    );
+  }
+  if (!isValidCommitIdentityEmail(email)) {
+    throw new GitHubConfigurationError(
+      "GITHUB_COMMIT_IDENTITY_EMAIL must be a valid Git commit identity email address.",
+    );
+  }
+
+  return Object.freeze({ email, name });
 }
 
 export function getGitHubAppConfiguration(): GitHubAppConfiguration {

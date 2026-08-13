@@ -159,6 +159,20 @@ describe("GitHub App server/API contract", () => {
     expect(config).not.toContain("NEXT_PUBLIC_GITHUB");
   });
 
+  it("requires one server-owned commit identity and sends it as author and committer", () => {
+    const config = source("lib/github/config.ts");
+    const repository = source("lib/github/repository.ts");
+    const route = source("app/api/github/repositories/[owner]/[repo]/changes/route.ts");
+
+    expect(config).toContain('requiredEnvironment("GITHUB_COMMIT_IDENTITY_NAME")');
+    expect(config).toContain('requiredEnvironment("GITHUB_COMMIT_IDENTITY_EMAIL")');
+    expect(repository).toContain("const commitIdentity = getGitHubCommitIdentity();");
+    expect(repository).toContain("author: commitIdentity");
+    expect(repository).toContain("committer: commitIdentity");
+    expect(route.indexOf("getGitHubCommitIdentity();"))
+      .toBeLessThan(route.indexOf("authorizeGitHubRepositoryRequest("));
+  });
+
   it("verifies the raw webhook HMAC before parsing and deduplicates delivery ids", () => {
     const webhook = source("app/api/github/webhooks/route.ts");
     const signaturePosition = webhook.indexOf("verifyGitHubWebhookSignature");
