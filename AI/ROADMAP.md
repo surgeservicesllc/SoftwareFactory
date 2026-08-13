@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **Hosted migrations are verified through `026`, and owner Auth/onboarding succeeded. Latest installation `153442281` is repository-scoped and App-JWT verified, but current production callback failed on a nonexistent GitHub endpoint. The bounded local fix is unpublished; GitHub and webhook remain Not Connected.**
+Status: **Hosted migrations are verified through `026`, owner Auth/onboarding succeeds, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection/project/read/draft-write/audit path passes. The webhook remains Not Connected and the live second-tenant/failure matrix remains incomplete.**
 
 Implemented in source:
 
@@ -21,20 +21,19 @@ Implemented in source:
 - Transactional project linking and provider-authoritative repository/default-branch propagation by immutable repository UUID.
 - Bounded caller-member list RPC projections, raw Activity/webhook direct-read closure, same-origin command creation, allowlisted activity details, restrictive browser CSP, installation-ID/repository-selection visibility, and live Projects metadata/check visibility including stable repository-ID matching, detail-fetched PR mergeability, and per-PR head-SHA checks.
 - Controlled branch + commit + draft-PR file changes with stable same-intent idempotency, exact-binding reservation, terminal audit evidence, provider-evidence completion recovery, and generic secret-assignment detection. Protected-file changes require an exact, short-lived, owner-only RED approval revalidated before write-token minting; merge/default-branch/deploy authority remains absent.
-- Local commit-attribution hardening requires one strictly validated server-only deployment identity, sends it as both author and committer, and has no App-bot fallback; publication, deployment configuration, and live attribution evidence remain pending.
+- Commit-attribution hardening requires one strictly validated server-only deployment identity, sends it as both author and committer, and has no App-bot fallback. Production/Preview configuration and ordinary/protected live draft attribution are verified.
 - Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
 - Hosted forward migrations `011`-`026`, including the verified `service_role` table-grant remediation.
 
-Verified application-release evidence recorded 2026-08-13: commit `edaaf625c497380611b80092526926b1457e15a0` (tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`), green CI run `31694775758`, and READY Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` at the stable production alias. Later documentation-only successors do not invalidate this runtime evidence unless application code changes.
+Verified application-release evidence recorded 2026-08-13: commit `0bd048565a9e002848c5553ccbe43ab0e217780e` (tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`), green CI run `31704289754`, and READY Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable production alias. Later documentation-only successors do not invalidate this runtime evidence unless application code changes.
 
 Remaining exit work:
 
-1. Publish the bounded `GET /user/installations` exact-ID callback fix and successfully retry installation `153442281` from the authenticated owner workspace.
-2. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real user sessions.
-3. Configure the exact owner-approved commit identity in server-only deployment settings and verify author plus committer on the safe draft commit.
-4. Make GitHub retain the exact active webhook URL, then complete connection -> repository -> project -> reads -> safe draft PR -> webhook -> disconnect/loss acceptance.
+1. Make GitHub retain the exact active webhook URL and accept a valid signed delivery; invalid signatures already fail closed.
+2. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real caller sessions. Only one actual user/email is currently authorized, so local behavioral tests do not replace this live matrix.
+3. Exercise the remaining live failure/disconnect cases, including stale SHA, role/approval expiry, revoked/insufficient permission, rate limit, provider ordering, terminal deletion/restore, and preserved history.
 
-No merge or production deployment autonomy is implied. GitHub remains **Not Connected** until the live journey passes.
+No merge or production deployment autonomy is implied. The repository connection is live; the webhook, Phase 1C, Phase 2, and every automatic action remain **Not Connected** or OFF as applicable.
 
 ## Phase 1C - Codex execution
 

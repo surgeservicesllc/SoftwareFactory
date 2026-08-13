@@ -32,12 +32,13 @@ npm run build
 | Hosted service-role table grants | Pass - exact matrix mismatch zero; SELECT/INSERT/UPDATE on four GitHub ingress tables, no table privileges on other 19 |
 | Hosted Supabase CLI/link | Authorized as `surgeservicesllc@gmail.com`; linked to exact project `qpuofpmagrmyamahqwxw` |
 | Hosted Supabase lint | Clean against hosted state through `026` |
-| GitHub publication/CI | Pass - application commit `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, author/committer `surgeservicesllc@gmail.com`; CI `31694775758`, both jobs green |
-| Exact production Playwright | Pass - focused race 30/30 and full 48/48 at `https://softwarefactory-tan.vercel.app` on READY deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` for the exact application SHA |
+| GitHub publication/CI | Pass - application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI `31704289754`, both jobs green |
+| Exact production Playwright | Post-rotation `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` passes 48/48; exact-commit CI browser/accessibility job is green |
 | Owner Auth/onboarding | Pass - `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory workspace owner onboarding succeeded |
-| GitHub provider installation | Pass for scope - installation `153442281`, App-JWT verified, `surgeservicesllc/SoftwareFactory` only; production callback failed on nonexistent endpoint |
-| Vercel configuration/runtime | `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` READY at immutable URL and stable alias, source `main` `3434387`; callback fix not deployed |
-| Real in-product GitHub acceptance | Pending; App connection/webhook remain **Not Connected** |
+| GitHub provider installation | Pass - installation `153445938`, connected to `surgeservicesllc`, exactly `surgeservicesllc/SoftwareFactory` selected |
+| Vercel configuration/runtime | `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`; nine JavaScript assets have zero forbidden markers and recent logs have zero errors |
+| Real in-product GitHub acceptance | Pass for the owner connection/project/read/draft-write/secret-rejection/audit path; webhook and live second-tenant matrix remain pending |
+| Live controlled commit identity | Pass - ordinary draft PR `#6` commit `e789303` and protected draft PR `#7` commit `6a808de` use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer |
 
 The repository and intended production/CI runtime require Node 22 or newer. The final local run used Node 22.23.1; older historical test evidence does not replace that run.
 
@@ -88,11 +89,11 @@ The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
 ## Hosted Supabase evidence
 
-Hosted ledger/dry-run/lint checks pass through `026`, local and remote match, and the exact service-role ACL matrix has zero mismatches. Next, test two authenticated tenants plus anonymous denial without service role as the user-under-test.
+Hosted ledger/dry-run/lint checks pass through `026`, local and remote match, and the exact service-role ACL matrix has zero mismatches. The authenticated owner path passes. Only one actual user/email is authorized, so a second live tenant was intentionally not created; local behavioral tests cover tenant denial, but the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
 
 ## Real GitHub acceptance
 
-Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). Provider configuration, mocked requests, and route tests do not prove the real callback/token/repository/webhook workflow.
+Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). The real owner callback/token/repository/project/read/draft-write/audit path passes. Provider configuration, mocked requests, and route tests still do not prove the missing active webhook or live second-tenant behavior.
 
 ## Final evidence
 

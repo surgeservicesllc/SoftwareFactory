@@ -2,7 +2,7 @@
 
 Last triaged: 2026-08-13
 
-Checked items have repository/provider evidence only. They do not make GitHub Connected or Phase 1B complete.
+Checked items have repository/provider evidence only. The owner repository connection is live, but checked items do not make the webhook Connected or Phase 1B complete.
 
 ## Phase 1B implementation
 
@@ -22,28 +22,30 @@ Checked items have repository/provider evidence only. They do not make GitHub Co
 
 - [x] Pass current local lint/typecheck, 54 files/408 tests, and the 38-route production build.
 - [x] Pass coverage: statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37%.
-- [x] Pass local and exact production Playwright 48/48 across desktop/tablet/mobile including axe; pass the production focused signed-out browser-error race 30/30.
+- [x] Retain exact-production Playwright 48/48 across desktop/tablet/mobile including axe and focused signed-out browser-error race 30/30 from the preceding verified release; pass the current exact-commit CI browser/accessibility job.
 - [x] Pass the final source/client artifact scan: zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 local artifacts, zero tracked key/container files, and only `.env.example` present.
-- [x] Publish application tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4` as commit `edaaf625c497380611b80092526926b1457e15a0` with author/committer `surgeservicesllc@gmail.com`; CI run `31694775758` passed both jobs, and matching READY Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ` passed production focused race 30/30, Playwright 48/48, HTTP/security/client/log checks, and the ten-asset privileged-marker scan at the stable alias.
+- [x] Publish application tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0` as commit `0bd048565a9e002848c5553ccbe43ab0e217780e` with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754` passed both jobs, and matching Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at its immutable URL and the stable alias.
 - [x] Apply hosted migrations `011`-`026` to `qpuofpmagrmyamahqwxw`; verify local and remote history match, dry run/lint are clean, and prior RLS/catalog/browser-grant checks remain recorded.
 - [x] Verify the exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
-- [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test.
+- [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test. Only one actual user/email is authorized; a live second tenant was intentionally not created, while local behavioral tests cover the boundary.
 - [x] Confirm and authenticate `surgeservicesllc@gmail.com`; complete SoftwareFactory organization/workspace owner onboarding.
-- [ ] Publish the local callback patch that replaces nonexistent `GET /user/installations/{id}` with bounded documented `GET /user/installations` plus exact-ID lookup, then retry installation `153442281` and verify tenant persistence. Current production does not include the fix.
-- [ ] Link the real repository/project and verify live sync time, branch protection/SHA, commits, pull requests with created/updated timestamps and mergeability, default-branch/per-PR checks, tree, and content reads.
-- [ ] Create one safe isolated branch/commit/draft PR and verify stable idempotent retry, ambiguous completion recovery, stale SHA, likely-secret, unapproved/admin protected denial, exact owner protected approval and expiry/lease behavior, wrong tenant, revoked installation, insufficient permission, and rate-limit behavior. Never merge or deploy.
-- [ ] Publish the strict server-only commit-identity boundary, configure the exact owner-approved name/email in Vercel without browser/database/log exposure, and verify the live draft commit uses that identity for both author and committer rather than an App-bot fallback.
-- [ ] Make GitHub retain and activate the exact webhook endpoint, then observe valid, invalid, duplicate, stale, out-of-order, installation deletion, repository deletion, and explicit restore deliveries. A GitHub App JWT validates App `4573846`, but `/app/hook/config` returns 404 and the UI does not retain activation; the webhook remains **Not Connected**.
+- [x] Publish the bounded documented `GET /user/installations` exact-ID callback fix and verify tenant persistence for installation `153445938`.
+- [x] Link real connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f`; verify live repository sync, branches, commits, pull requests, checks, tree, and `README.md` reads.
+- [x] Create ordinary draft PR `#6` and exact owner-approved protected RED draft PR `#7`; verify both remain draft/unmerged, likely-secret rejection, and immutable approval/provider/audit evidence. Earlier identity-mismatched PRs `#4`/`#5` were closed unmerged and their branches deleted.
+- [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases.
+- [x] Publish the strict server-only commit-identity boundary, configure `GITHUB_COMMIT_IDENTITY_NAME`/`GITHUB_COMMIT_IDENTITY_EMAIL` in Vercel Production and Preview, and verify both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>` on draft commits `e789303` and `6a808de`.
+- [ ] Make GitHub retain and activate the exact webhook endpoint, then observe valid, duplicate, stale, out-of-order, installation deletion, repository deletion, and explicit restore deliveries. A fresh secret is stored only in Sensitive Production/Preview and invalid signatures return `401`/no-store, but documented App-JWT `PATCH /app/hook/config` returns `404` and the owner UI reports success then reloads blank/inactive; the webhook remains **Not Connected**.
 - [ ] Verify explicit disconnect/loss state and history preservation.
 - [ ] Configure/verify isolated Preview Supabase values before authenticated preview testing.
 - [ ] Publish the owner-facing Phase 1B final report only after every acceptance item passes.
 
 ## Release evidence retained
 
-- Verified application release: `edaaf625c497380611b80092526926b1457e15a0`, tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`, CI `31694775758`, Vercel deployment `dpl_FwjzBywZTadQPTRZtB4Esd9QBKTQ`, production focused race 30/30 and Playwright 48/48. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
+- Verified application release: `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, CI `31704289754`, Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`. Both CI jobs are green; post-rotation production Playwright passes 48/48, nine JavaScript assets have zero forbidden markers, and recent logs have zero errors. Later documentation-only successors do not supersede this runtime evidence unless application code changes.
 - Hosted Supabase is current through `026`; local/remote history matches, dry run/lint are clean, and the exact four-table `service_role` ACL matrix has zero mismatches.
-- Latest provider installation `153442281`, App-JWT verified and scoped only to `surgeservicesllc/SoftwareFactory`.
-- Current READY production: `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77`, immutable `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app`, stable alias, source `main` `3434387`; callback fix unpublished.
+- Connected provider installation `153445938`, scoped exactly to `surgeservicesllc/SoftwareFactory`; live connection/project/read/draft-write/audit path passes for the owner.
+- Current READY production: `dpl_AEirYPnCrKemJjiFX7bKGc7626jX`, immutable `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`.
+- Temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no credential/helper artifact remains in the repository checkout.
 - Last independently verified pre-hardening release: `f12814bd94001e5c9fe9637e0350e14816de8d13` on Vercel deployment `dpl_9M66dxkkNiqTTRVbC2SGqzXzkwju`, public Playwright 12/12.
 - Prior local baseline before migrations `014`-`019`: 25 files/208 tests, 34-route build, local Playwright 12/12. Historical only and not proof for the current `020`-`023` tree.
 

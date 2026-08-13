@@ -8,10 +8,10 @@ SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authentic
 | --- | --- | --- |
 | Browser UI | Present safe state and collect intent | Untrusted client |
 | Next.js server | Authenticate, authorize, validate, redact, and coordinate provider operations | Trusted application boundary |
-| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `026`; local=remote, dry run/lint and exact ACL matrix pass. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19; authenticated tenant behavior pending |
-| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Latest installation `153442281` is App-JWT verified and repository-scoped. Production callback failed on nonexistent `GET /user/installations/{id}`; bounded list/exact-ID fix is local and unpublished |
+| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `026`; local=remote, dry run/lint and exact ACL matrix pass. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19; owner session passes and the live second-tenant matrix remains pending |
+| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Installation `153445938` is connected to `surgeservicesllc` and restricted to `surgeservicesllc/SoftwareFactory`; live callback, sync, project, read, draft-write, and audit paths pass for the owner |
 | GitHub webhook route | Verify raw-body HMAC, deduplicate delivery IDs, store redacted payloads, reconcile state | Implemented; live delivery not yet verified |
-| Vercel | Serve Next.js application and server functions | Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and stable alias, source `main` `3434387`; callback fix not deployed. Deploy/rollback adapter **Not Connected** |
+| Vercel | Serve Next.js application and server functions | Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Deploy/rollback adapter **Not Connected** |
 | AI workers | Future task execution | Codex and Claude **Not Connected** |
 
 ## Authenticated request path

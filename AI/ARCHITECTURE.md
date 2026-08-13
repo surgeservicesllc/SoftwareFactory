@@ -46,7 +46,7 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - App private key, GitHub client/state/webhook secrets, Supabase service role, and future provider keys stay in Vercel server-only settings.
 - GitHub commit attribution comes from two dedicated server-only environment values. The route validates them before tenant persistence or provider contact, never accepts them from the browser, never stores/logs them, and supplies the same explicit identity as both Contents API `author` and `committer` with no App-bot fallback.
 - Installation-start state is HMAC signed, expires in ten minutes, and is bound to user, organization, allowlisted return path, and an HttpOnly nonce cookie.
-- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the local unpublished callback fix uses bounded documented `GET /user/installations` and requires an exact installation-ID match before proceeding.
+- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the deployed callback uses bounded documented `GET /user/installations` and requires an exact installation-ID match before proceeding. Installation `153445938` passed this production path.
 - App JWTs are short-lived; installation tokens are further scoped to one repository ID and exact route permissions.
 
 ## Repository read/write boundary
@@ -94,7 +94,7 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 
 ## Deployment topology
 
-- Vercel Production points at the hosted Supabase project and stores server-only GitHub/Supabase secrets.
+- Vercel Production points at the hosted Supabase project and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary and protected draft commits verify the approved identity as both author and committer.
 - Preview GitHub values are configured; Preview Supabase isolation remains unverified.
 - CI performs read-only validation and does not deploy or merge.
 - Phase 1C needs a durable worker/sandbox outside request lifetimes; Phase 2 adds Claude only through supported API connections, never five browser-automated consumer logins.

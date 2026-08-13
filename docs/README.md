@@ -1,6 +1,6 @@
 # Documentation index
 
-SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history is verified through `026`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Latest installation `153442281` is repository-scoped and App-JWT verified, but production callback failed on nonexistent `GET /user/installations/{id}`. The bounded documented list/exact-ID fix is local and unpublished; the webhook remains blank/inactive. GitHub must continue to say **Not Connected**.
+SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history is verified through `026`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Installation `153445938` is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected; the real connection, project, repository reads, draft-only writes, secret rejection, and Activity evidence have been exercised. The provider webhook remains blank/inactive and **Not Connected**, and the live second-tenant matrix remains pending, so Phase 1B is not complete.
 
 ## Developer and operator guides
 

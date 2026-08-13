@@ -27,7 +27,7 @@ Phase 1B extends the Phase 1A foundation with:
 - generic secret-assignment rejection even when an opaque value lacks a known provider token prefix; and
 - stable repository-ID project linking serialized against concurrent active duplicates while permitting an intentional relink after archival.
 
-The code/configuration existing is not the same as a verified connection. GitHub remains **Not Connected** until the real installation and complete production acceptance journey pass.
+The code/configuration existing is not the same as a verified connection. A GitHub repository connection may be called Connected only after the real callback, tenant persistence, repository scope, and live reads pass. The provider webhook is an independent capability and remains **Not Connected** until GitHub retains the active endpoint and a valid signed delivery succeeds.
 
 An inert Phase 1D observation-only scaffold may be developed while Phase 1B acceptance is pending. It does not change the current phase or authorize execution: the global kill switch stays ON, the ceiling is GREEN, automatic approval/merge/deploy/rollback stay OFF, and the worker remains **Not Connected**.
 
@@ -64,4 +64,4 @@ An inert Phase 1D observation-only scaffold may be developed while Phase 1B acce
 
 ## Phase 1B exit criteria
 
-Phase 1B is complete only when current local gates, hosted Supabase migrations/lint/RLS checks, production deployment, and the real GitHub installation → repository sync → project link → file read → controlled branch/commit/draft PR → webhook/audit workflow all pass. `AI/QUALITY_SCORECARD.md` records the evidence.
+Phase 1B is complete only when current local gates, hosted Supabase migrations/lint/RLS checks, production deployment, and the real GitHub installation → repository sync → project link → file read → controlled branch/commit/draft PR → webhook/audit workflow all pass, including the required live tenant/failure matrix. `AI/QUALITY_SCORECARD.md` records the evidence.

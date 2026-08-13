@@ -1,8 +1,8 @@
 # Production GitHub App integration
 
-Status: **Implemented with a repository-scoped provider installation; in-product connection and webhook remain Not Connected pending authenticated callback and end-to-end verification.**
+Status: **The owner repository connection and draft-only file-change path are live; the provider webhook remains Not Connected and Phase 1B acceptance is incomplete.**
 
-The GitHub App exists, its server-only values are configured in Vercel, and latest provider installation `153442281` is App-JWT verified on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected. Owner `surgeservicesllc@gmail.com` is confirmed/authenticated and SoftwareFactory workspace onboarding succeeded. Production callback failed because deployed code called nonexistent `GET /user/installations/{id}`. A local unpublished patch instead calls documented bounded `GET /user/installations` and performs an exact-ID lookup. These facts do not satisfy the product definition of Connected.
+The GitHub App exists, its server-only values are configured in Vercel, and installation `153445938` completed the authenticated production callback for owner `surgeservicesllc@gmail.com`. It is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` drive verified live Connections, Projects, Files, and Activity views. The webhook is a separate boundary and remains **Not Connected**.
 
 ## Registered App
 
@@ -21,11 +21,10 @@ The GitHub App exists, its server-only values are configured in Vercel, and late
 | Expiring user authorization tokens | Enabled |
 | Device flow | Disabled |
 | Redirect on installation update | Enabled |
-| Verified provider installation | Personal `surgeservicesllc` installation `153442281` |
+| Verified provider installation | Personal `surgeservicesllc` installation `153445938` |
 | Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
-| Sole remaining App key fingerprint | `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=` |
 
-The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. However, `/app/hook/config` returns `404` and the provider UI does not retain activation. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
+The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. The webhook secret was freshly rotated in Sensitive Production and Preview scopes and the exact `0bd0485` artifact was redeployed. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. An invalid signature returns `401` with private no-store behavior, but no valid signed delivery exists. Treat the provider webhook as **Not Connected** until the exact URL is retained as an active hook and a signed delivery is accepted.
 
 ## Repository permissions
 
@@ -74,9 +73,9 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_COMMIT_IDENTITY_EMAIL` | Server-owned email used for both author and committer on every controlled file commit |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app` and the stable alias, sourced from `main` `3434387`. It does not contain the callback fix. The webhook remains blank/inactive and **Not Connected**.
+The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. The callback fix and explicit commit-identity boundary are deployed. The webhook remains blank/inactive and **Not Connected**.
 
-The two commit-identity values are configuration, not request fields. They stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
+The two commit-identity values are configuration, not request fields. They are configured in Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`, stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
 
 ## Connection flow
 
@@ -85,7 +84,7 @@ The two commit-identity values are configuration, not request fields. They stay 
 3. The server creates signed state valid for ten minutes and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
 4. The browser follows the returned GitHub installation URL.
 5. GitHub returns `code`, `installation_id`, and signed `state` to the callback.
-6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, lists the user's installations through bounded documented `GET /user/installations`, selects the exact returned installation ID, verifies it belongs to this App, then reads repository state using an App installation token. This corrected flow is local and unpublished.
+6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, lists the user's installations through bounded documented `GET /user/installations`, selects the exact returned installation ID, verifies it belongs to this App, then reads repository state using an App installation token. This corrected flow is deployed and passed for installation `153445938`.
 7. The ephemeral user OAuth token is never persisted or returned and is revoked best-effort after verification.
 8. An audited database workflow serializes by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, stores only installation/account/repository metadata, and updates the provider-neutral connection.
 9. The UI displays Connected only when the connection and installation are both active.
@@ -148,6 +147,8 @@ For a protected path, the route first returns an approval-required response. Onl
 
 Successful ordinary or approved protected writes create `softwarefactory/*` branch state, commit to that branch with the explicitly configured deployment identity as both author and committer, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. A reservation expires after five minutes and is reclaimable only by its original requester for the exact immutable intent before any provider execution/evidence; the server persists and revalidates entry into the provider boundary before minting the write-scoped installation token or contacting GitHub. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing writes the default branch, merges, or deploys.
 
+Live acceptance created ordinary draft PR `#6` (commit `e789303`) and owner-approved protected RED draft PR `#7` (commit `6a808de`). Both are open, draft, and unmerged, and both expose `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer. Earlier acceptance PRs `#4` and `#5` revealed an App-bot attribution mismatch; both were closed unmerged and their isolated branches were deleted before the explicit identity fix was accepted. A fake generic password assignment was rejected before any PR was created.
+
 ## Webhook guarantees
 
 - Verify HMAC-SHA256 over the unparsed body with constant-time comparison.
@@ -164,23 +165,26 @@ Successful ordinary or approved protected writes create `softwarefactory/*` bran
 
 ## Production acceptance checklist
 
-Do not change GitHub from **Not Connected** until all items are observed against the real service:
+Checked items below establish the Connected owner repository path. Do not mark the webhook Connected or Phase 1B complete until every remaining item is observed against the real service:
 
-- [ ] Production release contains the current routes and migrations.
+- [x] Production release contains the current routes and migrations.
 - [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
-- [ ] An authenticated SoftwareFactory owner/admin starts the installation flow.
-- [x] Latest GitHub provider installation `153442281` is App-JWT verified on `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
-- [ ] Callback verifies the installation and returns to Connections.
-- [ ] Connection shows the real account, installation ID, repository-selection mode, repository count, and fresh sync time.
+- [x] An authenticated SoftwareFactory owner starts the installation flow.
+- [x] GitHub provider installation `153445938` is connected to `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
+- [x] Callback verifies the installation and returns to Connections.
+- [x] Connection shows the real account, installation ID, repository-selection mode, repository count, and fresh sync time.
 - [ ] Manual sync handles success and revoked/insufficient-permission failure.
-- [ ] A project links transactionally by stable repository ID to a selected repository and the synchronized default branch; concurrent duplicate active links and stale branch expectations fail closed, while relink after archival succeeds.
-- [ ] Dashboard count derives from the live tenant records.
-- [ ] Projects displays real repository sync freshness, branch protection/SHA, commits with authors/dates, pull requests with authors/created/updated times and detail-fetched mergeability, default-branch checks, and checks for each displayed PR head SHA.
-- [ ] Files reads a real repository file and its SHA.
-- [ ] A safe test edit creates only a controlled branch, commit, and draft PR.
-- [ ] A stale SHA, renamed/same-name repository mismatch, likely secret, unapproved/admin protected request, expired/mismatched owner approval, and invalid/expired/after-provider reservation reclaim all fail closed.
-- [ ] One exact owner-approved protected-file test creates only an isolated branch, commit, and draft PR, with immutable approval/execution evidence and no merge/deploy/default-branch write.
-- [ ] Pull request/webhook updates reconcile and create immutable activity evidence.
+- [x] Project `b1f23696-437e-4d89-b55f-d7a949980e8f` links to the selected repository through the live connection and synchronized `main` branch.
+- [ ] Concurrent duplicate active links and stale branch expectations fail closed, while relink after archival succeeds, in live acceptance; local tests cover these cases.
+- [ ] Dashboard connected-project count is separately rechecked from live tenant records; the live Projects view itself is verified.
+- [x] Projects displays real repository sync freshness, branch protection/SHA, commits with authors/dates, pull requests with authors/created/updated times and detail-fetched mergeability, default-branch checks, and checks for each displayed PR head SHA.
+- [x] Files reads the real repository tree, `README.md`, and its SHA.
+- [x] A safe test edit creates only a controlled branch, commit, and draft PR (`#6`), with the approved author and committer.
+- [ ] A stale SHA, renamed/same-name repository mismatch, unapproved/admin protected request, expired/mismatched owner approval, and invalid/expired/after-provider reservation reclaim all fail closed in live acceptance.
+- [x] Likely-secret content is rejected before provider mutation.
+- [x] One exact owner-approved protected-file test creates only an isolated branch, commit, and draft PR (`#7`), with immutable approval/execution evidence and no merge/deploy/default-branch write.
+- [x] Connection, project, ordinary change, protected approval, provider-boundary, and draft-PR transitions create immutable Activity evidence.
+- [ ] Pull-request webhook updates reconcile through a valid signed delivery.
 - [ ] Delayed installation/repository events are ignored by provider time, deleted installation IDs stay terminal, and a newer explicit repository restore remains unselected until access sync.
 - [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.
 

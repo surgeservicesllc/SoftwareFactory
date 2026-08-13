@@ -8,18 +8,19 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 
 ## Verified release evidence recorded 2026-08-13
 
-- Application commit `edaaf625c497380611b80092526926b1457e15a0` has tree `7379e8bed2712048573d25d3247b0c5db0bfc5c4`; both author and committer are `surgeservicesllc@gmail.com`.
-- GitHub Actions run `31694775758` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
-- Current production deployment `dpl_BbcaKQVC6Nh7YQo4rJH6VwTaqm77` is READY at `https://softwarefactory-nd3orq8r6-surgeservices-projects.vercel.app`, serves the stable alias, and is sourced from `main` `3434387`. It does not contain the local callback fix.
-- Production focused signed-out race passed 30/30, and Playwright passed 48/48 across desktop, tablet, and mobile, including axe checks.
-- Tested pages returned 200 with CSP, HSTS, and X-Frame-Options; protected unauthenticated API requests and an invalid webhook returned 401; all ten deployed assets (nine JavaScript and one CSS) were free of privileged markers; and deployment-log review found zero errors or HTTP 500s.
+- Application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` has tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`; both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>`.
+- GitHub Actions run `31704289754` passed both `Lint, typecheck, test, and build` and `Browser and accessibility tests`.
+- Current production deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app`, serves the stable alias, and is sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation.
+- Post-rotation production Playwright passes 48/48 across desktop, tablet, and mobile, including axe checks. Nine deployed JavaScript assets contain zero forbidden markers, recent deployment logs contain zero errors, and CI run `31704289754` is green for the exact application commit.
 - Production Supabase URL, publishable key, and service-role key are configured in the exact Vercel project.
-- GitHub App server-only variable names are configured for Production and Preview. The protected private key was rotated to the App's sole remaining key (public fingerprint `SHA256:myJc9wk9wLOrLLSykdd3AL5nIDN948lBxP+Ee7GHYBg=`).
-- GitHub provider installation `153442281` is App-JWT verified on `surgeservicesllc`, restricted to only `surgeservicesllc/SoftwareFactory`. Production callback failed because it used nonexistent `GET /user/installations/{id}`; the bounded list/exact-ID correction is local and unpublished. The provider webhook remains blank/inactive and **Not Connected**.
-- Preview Supabase variables are not independently verified.
-- The live authenticated GitHub acceptance journey is still required before Phase 1B can be called complete.
+- GitHub App server-only variable names are configured. `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured for both Production and Preview with the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`; no secret values are recorded.
+- GitHub installation `153445938` completed the production callback and is connected to `surgeservicesllc`, restricted to exactly `surgeservicesllc/SoftwareFactory`. Live Connections, Projects, Files, and Activity reads pass.
+- Ordinary draft PR `#6` and owner-approved protected RED draft PR `#7` are open, draft, and unmerged; both commits have the approved author and committer. Earlier App-bot-attributed PRs `#4` and `#5` were closed unmerged and their isolated branches were deleted.
+- The provider webhook remains blank/inactive and **Not Connected**. The fresh secret is stored only in Sensitive Production/Preview settings. The documented App-JWT `PATCH /app/hook/config` returns `404`, and the normal owner UI reports success but reloads blank/inactive. An invalid signature is rejected with `401`/no-store, but no valid signed delivery is verified.
+- The temporary downloaded App PEM and ignored webhook/helper scripts used for bounded verification were deleted; no credential or helper artifact was persisted in the repository.
+- Preview Supabase variables are not independently verified, and the live second-tenant caller matrix remains pending.
 
-This evidence is bound to the exact application commit/deployment above. Hosted migrations through `026` have separate database evidence, but this runtime evidence does not prove authenticated tenant isolation, the in-product GitHub connection, or webhook acceptance. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
+This evidence is bound to the exact application commit/deployment above. Hosted migrations through `026` have separate database evidence. The live owner GitHub journey is verified, but it does not prove a second tenant or an active webhook. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
 
 ## Project configuration
 

@@ -30,7 +30,7 @@ Do not add wildcard redirect URLs. Local and production callbacks must remain ex
 
 The repository implements email/password sign-up/sign-in, existing-user magic link, sign-out, callback exchange, onboarding, organization creation, membership resolution, and active-organization selection. Magic-link submission uses `shouldCreateUser: false`; a new user must complete sign-up/confirmation first.
 
-`surgeservicesllc@gmail.com` is confirmed and authenticated. SoftwareFactory organization/workspace onboarding and owner membership succeeded. A GitHub connection/project has not yet been persisted because the current production callback failed; tenant/provider end-to-end acceptance remains unverified.
+`surgeservicesllc@gmail.com` is confirmed and authenticated. SoftwareFactory organization/workspace onboarding and owner membership succeeded. GitHub connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` are persisted for the live owner repository path. Only this actual user/email is authorized, so a live second-tenant caller matrix remains unverified; local behavioral tests are supporting evidence only.
 
 ## Local workflow
 
