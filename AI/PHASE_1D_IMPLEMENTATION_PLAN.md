@@ -124,6 +124,11 @@ and an agent must not perform it. That is the single reason this phase does not 
 | No self-approval | **COMPLETE** | same — the author is refused as approver at every scope |
 | Orchestrator stage machine | **COMPLETE** as a decision machine | `lib/autonomy/pipeline.ts` |
 | Merge / Deploy / Rollback execution | **BLOCKED, named** | Every path returns its exact blocker |
+| Recovery decision machine | **COMPLETE** | `lib/autonomy/recovery.ts` — freeze first, rollback fail-closed on four conditions, bounded repair, escalation |
+| Never auto-reverse a destructive migration | **COMPLETE** | A destructive release resolves `OWNER_ONLY` regardless of controls, ceiling or approval |
+| Bounded retries | **COMPLETE** | `lib/autonomy/retries.ts` — per-stage caps, exponential backoff, escalate rather than retry once spent, and never retry a permanent failure |
+| Backlog Autopilot selection | **COMPLETE** | `lib/autonomy/autopilot.ts` — orders eligible P0–P3 work by priority then lower risk, and explains every exclusion |
+| Deployment tracking (read) | **COMPLETE, provider Not Connected** | `lib/deploy/vercel.ts` — real read contract; reports **Not Connected** with a reason while `VERCEL_TOKEN` is unset |
 
 ## 5. Explicitly BLOCKED, with unblocking conditions
 
@@ -131,7 +136,7 @@ and an agent must not perform it. That is the single reason this phase does not 
 | --- | --- | --- |
 | Turning any automatic action ON | Hosted migration `010` CHECK constraint plus the locked organization kill switch | Owner-approved migration that deliberately relaxes the interlock, after sustained non-production evidence |
 | Auto-merge | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases | An owner-approved policy revision |
-| Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset | An owner-authorized Vercel connection with a server-only token |
+| Deploy execution, preview validation | No Vercel API connection; `VERCEL_TOKEN` unset in every environment checked | An owner-authorized Vercel connection with a server-only token. The **read** adapter is built and will report live data the moment a token exists; no write path exists at all. |
 | Rollback execution | No deploy adapter; `policies/AUTO_ROLLBACK.md` disables it | Adapter, the six drills in that policy, and an owner-approved migration |
 | Codex code and repair execution | Phase 1C not started | A Phase 1C worker with leases, sandbox, budgets, and redacted traces |
 | Backlog Autopilot execution | Depends on the two rows above | Both unblocked |
@@ -151,3 +156,99 @@ an executor will see those assertions fail and have to update them deliberately.
 
 This is a control-plane demonstration against a migrated database. It is not evidence that any
 autonomous action ran in production, because none can.
+
+
+## 7. Credential state observed at implementation time
+
+Every provider credential this loop would need is absent from the environment
+this phase was built in: `VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`,
+`SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, `OPENAI_API_KEY`, and
+`ANTHROPIC_API_KEY` are all unset.
+
+That is worth recording plainly: the executor stages are not merely
+policy-blocked, they are **materially impossible** here. Applying the hosted
+migration, reading real deployment state, and running a Codex worker each
+require a credential that does not exist in this environment, so no amount of
+further implementation in this phase could have closed them.
+
+
+### The failed-deploy demonstration
+
+`tests/integration/phase1d-loop-journey.behavior.test.ts` records the chain rather than
+asserting it:
+
+1. **Deploy** — deployment state is read through `lib/deploy/vercel.ts`, which reports
+   `not_connected` with its reason. `latestReadyProduction` correctly resolves nothing, because
+   a failed read must never look like "nothing is deployed".
+2. **Validate** — a `failed` validation is recorded for the new release through Phase 1E's real
+   `record_deployment_validation`.
+3. **Last Known Good holds** — the failed release does not become Last Known Good; the previously
+   validated one still does.
+4. **Incident** — a SEV1 is opened against that deployment, and freezes releases automatically.
+5. **Controls** — the freeze propagates into the Phase 1D envelope; a tenant asking for all nine
+   actions resolves to none.
+6. **Rollback** — Last Known Good resolves from the validated release; execution is refused with
+   `EXECUTOR_NOT_CONNECTED` and nothing is reversed.
+7. **Repair** — bounded repair work is created and left unassigned.
+8. **Retries** — the budget is spent one attempt at a time, then the loop escalates.
+
+Every stage without an executor carries its exact blocker, and the journey asserts those names.
+
+## 8. Integration register
+
+What this phase's decision layer touches, and in which direction.
+
+| Integration | Direction | State | Detail |
+| --- | --- | --- | --- |
+| Phase 1E operations schema | reads | **Connected** | `resolved_autonomy_controls` reads `release_freezes` so an active freeze appears in the decision envelope. The loop journey drives Phase 1E's real incident, freeze, Last Known Good, rollback-decision and repair functions. |
+| Phase 1E repair bounds | mirrored | **Connected** | `MAX_ATTEMPTS.repair` is 3, matching the database-enforced cap, so the rule does not exist in only one half of the loop. |
+| Phase 1A risk policy | reads | **Connected** | `diff-risk.ts` derives factors and defers to `classifyRisk`/`compareRisk`; it introduces no second risk vocabulary. |
+| Supabase (hosted) | writes schema | **Not Connected** | Migration `20260813000500` is unapplied. `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID` and `SUPABASE_DB_PASSWORD` are unset here. |
+| Vercel deployments | reads | **Not Connected** | `lib/deploy/vercel.ts` implements the real read contract and reports the reason. `VERCEL_TOKEN` is unset. No write path exists. |
+| GitHub CI | reads | **Available, not wired** | CI results are readable and the `ci` gate models them, but nothing ingests a run automatically; a gate result is supplied by its caller. |
+| GitHub merge | writes | **Absent by policy** | `AGENTS.md` forbids introducing an auto-merge workflow in this line of phases. The decision path returns `MERGE_EXECUTOR_NOT_CONNECTED`. |
+| Codex / execution worker | writes | **Owned by Phase 1C (PR #9)** | Another agent is building it. This phase deliberately does not duplicate it; see §9 for the seam it should bind to. |
+
+## 9. The seam a Phase 1C worker binds to
+
+Phase 1C is being built separately (PR #9). This phase does **not** implement a worker, and a
+future one should not reimplement these decisions. The contract is:
+
+1. **Ask what you may do.** `resolveEffectiveControls(organization, project, envelope)`, with the
+   envelope read from `public.resolved_autonomy_controls(project_id)` rather than assumed. Then
+   `isActionPermitted(controls, action, risk)`. A worker must never consult a single project row
+   directly — that skips the organization ceiling and the envelope.
+2. **Ask what to work on.** `selectAutopilotWork` returns an ordered queue and an explained
+   exclusion list. Do not re-sort it; the ordering encodes "safer first within a priority".
+3. **Do the work, then be judged on the result.** `runPipeline` reclassifies the finished diff
+   rather than trusting the opening declaration, runs the gates and the agents, and returns the
+   approval decision. A worker supplies gate *results*; it does not decide whether they suffice.
+4. **On failure, ask before retrying.** `evaluateRetry(stage, attemptsUsed)` returns `RETRY`,
+   `ESCALATE` or `STOP`. Escalation is not a failure of the worker; it is the designed end of a
+   bounded budget.
+5. **Never author and approve.** `evaluateApproval` refuses when `approverId === authorId`, at
+   every risk level. A worker that is both is refused, which is the intended behaviour.
+
+The three stages that block by name — `CODEX_WORKER_NOT_CONNECTED`,
+`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED` — are asserted in
+`tests/integration/phase1d-loop-journey.behavior.test.ts`. Connecting an executor is *supposed*
+to fail those assertions. Update them deliberately; do not weaken them to "either blocked or not".
+
+## 10. Phase 1E readiness
+
+Phase 1E is already implemented and merged; the question this phase answers is whether Phase 1E
+can now rely on a decision layer above it. It can:
+
+- **Freeze propagates upward.** A SEV1/SEV2 freeze is visible in the Phase 1D envelope and holds
+  every automatic action off, so Phase 1E's protective action is not something the loop can
+  route around.
+- **Rollback keeps its decision path.** Phase 1D adds no competing rollback authority. Last Known
+  Good still resolves only from a validated deployment, and rollback execution still returns
+  `EXECUTOR_NOT_CONNECTED`.
+- **Repair inherits a bound, not a new one.** The retry cap mirrors the database's, so a repair
+  cannot be retried more times by going through the decision layer than by going through Phase 1E.
+- **Autopilot respects health.** No new work is selected for a project Phase 1E reports as
+  degraded, critical or paused.
+
+Phase 1E's own remaining gap is unchanged by this phase: migrations `028`/`029` are unhosted and
+no monitor has observed a real production target.

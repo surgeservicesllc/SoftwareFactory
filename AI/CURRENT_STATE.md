@@ -2,9 +2,9 @@
 
 Last reviewed: 2026-08-13
 
-Active delivery tracks: Phase 1B GitHub App owner path live; Phase 1E/Phase 2A/bot/marketing schema effects present on hosted Supabase but their migration ledger inconsistent; Phase 1D decision layer published but unhosted/execution-inert; Phase 1C Codex execution in a local branch three commits ahead of `main` and unpublished
+Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C Codex execution local pending merge/publication and live acceptance
 
-Overall status: **Phase 1E production-operations and synthetic-journey source, the Phase 2A provider layer, universal bot-fabric registry, public marketing site, and separated marketing/console route groups are published on `main`; Phase 1C is implemented in the local reconciled tree. A read-only owner-dashboard inspection on 2026-08-13 proves the hosted migration ledger still contains exactly 26 rows through `027`, while the hosted public catalog visibly contains post-`027` operations, provider, synthetic, bot-fabric, and marketing objects. Draft PR #15 separately records a 53-table/61-policy hosted catalog match and the earlier `42710` reapply failure. Therefore the production schema is ahead of its ledger and a normal `db push` is unsafe. Phase 1C migrations remain absent. No production-monitor or synthetic-journey observation, live bot/AI-provider call, or Codex worker run exists. Provider execution defaults OFF, Phase 1C Actions secrets and activation variable are absent, Autonomous Mode is OFF, the global kill switch is ON, and automatic approval, merge, deployment, and rollback remain OFF. Phase 1E monitoring/repair/rollback, Phase 2A provider execution, bot-provider readiness, and Phase 1C Codex execution remain **Not Connected**.**
+Overall status: **The protected hosted-database sequence completed on exact project `qpuofpmagrmyamahqwxw`: catalog-proven history for `028`/`130001`-`130005` was reconciled without DDL replay, forward migrations `130006`-`130014` were applied, the ledger is current, and linked lint is clean. Focused hosted verification preserved bot-function identity/security/search-path/ACL boundaries, found zero `pg_catalog.nullif`, passed register/update/readiness audit behavior `1/1/1`, and confirmed the Phase 1D resolver is hosted with all actions OFF and the global kill switch ON. Seven Actions secrets are configured and the activation variable is absent. The reviewed worker workflow remains local pending merge/publication; no heartbeat, Codex thread, factory branch, or live run exists. No production-monitor journey or live advisory-provider call exists. Phase 1E execution, Phase 2A provider execution, bot-provider execution, Phase 1D execution, and Phase 1C Codex execution remain **Not Connected**.**
 
 The prior Phase 1B owner path remains live: candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, and project `b1f23696-437e-4d89-b55f-d7a949980e8f` are connected to exactly `surgeservicesllc/SoftwareFactory`. Primary installation `153445938` remains available for rollback; its webhook defect remains recorded in GitHub Support ticket `#4660724`. Phase 1B still lacks the live second-tenant, reverse-handoff, disconnect/loss, and remaining adverse matrix.
 
@@ -75,20 +75,20 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 
 ## Database state
 
-- Hosted Supabase project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Its ledger has exactly 26 rows through `027`, while catalog evidence shows the schema effects of `028` and canonical `130001`-`130005` are present. Those six versions are **SCHEMA PRESENT / LEDGER UNRECONCILED**, not migrations to rerun.
+- Hosted Supabase project: `qpuofpmagrmyamahqwxw` (`softwarefactory`). Its canonical ledger is reconciled through `20260813001400`; schema-present `028`/`130001`-`130005` were history-repaired only and were not rerun.
 - Local migration `20260813000600_phase1d_autonomy_controls.sql` adds only the execution-inert Phase 1D decision schema and keeps every automatic action constrained OFF.
 - Local migration `20260813000700_provider_phase1c_compatibility.sql` carries additive/narrowing compatibility over the immutable hosted-source provider layer.
 - Local migration `20260813000800_phase1c_enums.sql` adds `architect`/`performance` roles and Phase 1C activity values; PostgreSQL must commit them before dependent use.
 - Local migration `20260813000900_phase1c_codex_execution.sql` adds durable command/task/run orchestration, workers, evidence, RLS/FORCE RLS, safe projections, service-role lease/result RPCs, cancellation/retry, authoritative planning, and RED blocks.
 - Local migration `20260813001000_logical_agent_roster.sql` adds the provider-neutral eleven-role roster, owner/risk/ACL hardening, coherent recovery/reporting, agent serialization, and bounded projections.
 - Local migration `20260813001100_phase1c_task_dependencies.sql` atomically persists canonical same-project dependencies, derives non-empty criteria when omitted, validates idempotent replay, and enforces cumulative turns/input/output budgets across retries.
-- Migrations `130006`-`130011` are absent from hosted Supabase. Protected promotion must first catalog-prove and repair only the ledger for `028`/`130001`-`130005`, then re-list/dry-run and apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`. The currently selected Supabase CLI profile returns `403` and must be reauthenticated as `surgeservicesllc@gmail.com` before any linked command.
+- Forward migrations `130006`-`130011` are hosted. `130012` repairs invalid bot `NULLIF` qualification without widening signatures/security/search paths/ACLs; `130013` resolves the remaining Phase 1C function-lint findings; `130014` exposes emergency-stop state in the autonomy resolver. All were applied forward-only under the exact owner approvals, with no reset, down-migration, or `130004` replay.
 
 ## Provider and release truth
 
 | Capability | Status | Evidence |
 | --- | --- | --- |
-| Hosted Supabase | Ledger through `027`; catalog ahead | Schema effects `028`/`130001`-`130005` are present but ledger-unreconciled; `130006`-`130011` are absent. |
+| Hosted Supabase | Current through `130014` | Ledger reconciled; linked lint clean; focused catalog, ACL, bot-runtime, Phase 1C runtime, and autonomy-control verification pass. |
 | Primary GitHub App | Connected rollback path; webhook impaired | App `4573846` and installation `153445938` remain active for rollback; Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) remains open. |
 | Candidate GitHub App/project | Connected for the owner repository path | App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, and project `b1f23696-437e-4d89-b55f-d7a949980e8f` passed callback, sync, signed webhook, handoff, reads, and draft-only write acceptance. |
 | Supabase Auth owner | Confirmed and authenticated | `surgeservicesllc@gmail.com` is the only real user/email authorized for live acceptance. |
@@ -100,7 +100,7 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 | Phase 2A provider layer | Published source; **Not Connected** | `130001` schema is present but ledger-unreconciled; credentials/live health are unverified, organization execution defaults OFF, and no live run exists. |
 | Anthropic/Claude advisory provider | **Not Connected** | Adapter/source exists; hosted schema, credential, enabled switch, health, and live-run evidence do not. |
 | OpenAI/Codex worker | **Not Connected** | SDK/worker/workflow exist locally; no protected Actions secrets, heartbeat, or live run evidence exists. |
-| GitHub Actions Phase 1C secrets | **Not Connected** | Required `SOFTWAREFACTORY_*` secret names are not verified configured. |
+| GitHub Actions Phase 1C secrets | Configured; worker **Not Connected** | All seven required `SOFTWAREFACTORY_*` secrets exist; values were not rendered. Activation is absent and the workflow is pending publication. |
 | Auto approve/merge/deploy/rollback | OFF | No autonomous production authority or executor exists. |
 
 ## Identity and secret boundary
@@ -114,8 +114,8 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 
 ## Current verification evidence
 
-- The frozen local candidate passes supported Node `24.19.0` lint/typecheck, 109 files/1,169 tests, production build with 74 page/route entries, coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration suites 8 files/104 tests, production dependency audit 0, and safe disabled-worker smoke.
-- No owner-approved ledger repair, hosted `130006`-`130011` verification, production observation, live provider request, published Phase 1C workflow, Actions secrets/activation, worker heartbeat, Codex thread, factory branch, Phase 1C draft PR, or stable exact-head required-check result exists yet.
+- The exact combined pre-publication tree passes supported Node `24.19.0` lint/typecheck, 115 files/1,251 tests, production build with 74 page/route entries, and Playwright/axe 117/117.
+- Hosted reconciliation through `130014` and seven-secret configuration are complete. No production observation, live provider request, published Phase 1C workflow, activation, worker heartbeat, Codex thread, factory branch, Phase 1C draft PR, or stable exact-head required-check result exists yet.
 
 ## Phase 1D autonomy-control state
 
@@ -127,13 +127,22 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 - Review, QA and Security agents are deterministic analysers, not model calls: Phase 1C is not started, and a rules engine cannot hallucinate an approval. Blocking findings stop progression; advisory findings are recorded and do not.
 - Approval returns `APPROVED_AUTOMATICALLY`, `OWNER_APPROVAL_REQUIRED`, or `NOT_APPROVED`. Owner approval is evaluated after the gates, so nothing can be approved past a failing check, and an unsound change is never escalated to a person. No-self-approval is absolute at every risk level, including for an owner.
 - The orchestrator sequences twelve stages and halts at the first blocked one. `implement`, `merge` and `deploy` are reached, evaluated, and blocked by name.
+- Retries are bounded per stage with exponential backoff. Exhausting the budget escalates rather than retrying again, and a permanent failure never retries at all — re-running a change refused on policy grounds cannot produce a different answer.
+- Backlog Autopilot **selects** work: eligible items are ordered by priority and then by lower risk, work is held behind unmet or unknown dependencies, work above the ceiling is refused, and nothing new is picked up for a project that is degraded, critical or paused. Every exclusion carries its reason. Selection confers no authority to start the work.
+- `resolved_autonomy_controls` reports the owner emergency stop alongside the kill switch and the release freeze. `stop_autonomous_operations` already set `projects.autonomous_operations_stopped`, but the resolver did not read it, so a caller could not tell an owner's deliberate stop from an automatic SEV1 freeze. Nothing was ever permitted that should not have been — STOP also freezes, and the freeze held every action off — but the two need different words and a different action to clear. Forward migration `20260813001400` fixes it after the already-hosted Phase 1C chain and remains unapplied pending its own owner approval.
+- A read-only deployment adapter implements the real provider contract and reports **Not Connected** with a reason while no token is configured. It exposes no create, promote, or rollback path; adding one is a separate owner-approved decision.
+- Every provider credential the loop would need — `VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` — is unset in the environment this phase was built in. The executor stages are materially impossible here, not merely policy-blocked.
 
 ## Phase 1D verification evidence
 
 - `tests/integration/phase1d-autonomy-controls.behavior.test.ts` (35 tests) applies the whole migration chain to real PostgreSQL and attempts, from every direction, to switch something on: each of the nine actions at each of the two scopes, both risk ceilings, both autonomous-mode flags, the global kill switch, and a newly inserted project or organization trying to be born with authority. Every attempt is refused, both constraints are `convalidated`, and `anon` holds no INSERT/UPDATE/DELETE on either table.
 - 91 unit tests cover the five decision modules: control resolution and envelope precedence, diff classification including credential and destructive-SQL detection, gate requirement and blocking semantics, the three agents' findings, the approval tri-state and the no-self-approval rule, and the stage machine.
 - The GREEN end-to-end demonstration runs a well-formed change through classify, verify, review, pull request, risk gate and approval to `APPROVED_AUTOMATICALLY`, and then **still halts** at `MERGE_EXECUTOR_NOT_CONNECTED`. The blocked stages are asserted by name, so a future phase that connects an executor fails these tests deliberately rather than silently gaining authority.
-- This is control-plane evidence against a migrated database. Hosted migration `20260813000500` is **not applied**, and no automatic action has run or can run.
+- A **recovery decision machine** decides what to do about a failure, so the response is a judgement the decision layer makes rather than an order a caller happened to drive Phase 1E's functions in. Freeze is always first and always permitted, because freezing only removes authority. Rollback fails closed on four separate conditions, and one of them outranks every other input: **a release containing a destructive migration is never rolled back automatically**, regardless of controls, ceiling or owner approval — reversing a dropped table or policy is a second destructive act, not an undo, so only an owner may decide it. Repair is bounded by the same retry budget, and anything the loop cannot finish escalates.
+- The failed-deploy chain is **recorded, not asserted**. The journey reads deployment state through the adapter (which reports **Not Connected** with its reason rather than empty data), records a `failed` validation for the new release through `record_deployment_validation`, confirms that a failed validation cannot become Last Known Good, and only then opens the incident against it. Freeze, rollback decision and bounded repair follow from that row.
+- The loop journey additionally drives the **real** `stop_autonomous_operations` RPC as the owner and shows the stop propagating into the decision layer: a tenant asking for all nine actions resolves to none, and a change that would otherwise be approved is refused. A non-owner attempting the same stop is refused by the database.
+- Retry exhaustion is demonstrated end to end: a bounded budget is spent one attempt at a time and the loop escalates rather than trying again, and a permanent refusal never retries even with the whole budget intact.
+- This is control-plane evidence against the hosted migrated database. Migrations through `20260813001400` are applied, but no automatic action has run or can run; all nine actions remain OFF and the global kill switch remains ON.
 
 ## Phase 1E verification evidence
 
@@ -156,11 +165,11 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 ## Release blockers
 
 1. Produce fresh consolidated evidence on the exact reconciled tree, including Phase 1E regressions and the complete migration chain.
-2. Obtain exact owner RED approval for ledger-only reconciliation of catalog-proven `028`/`130001`-`130005`, application of absent `130006`-`130011`, protected Actions secret configuration, disabled publication, and the later bounded Phase 1C activation/run.
-3. Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` (the current profile returns `403`), reconfirm project `qpuofpmagrmyamahqwxw`, repair only proven history rows, re-list/dry-run, then apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011`; verify history, lint, RLS/FORCE RLS, ACLs, functions, interlocks, dependency/budget behavior, and caller-session denial.
+2. Preserve the completed exact owner approvals and evidence for ledger-only reconciliation plus forward-only migrations `130006`-`130014`; use a new forward migration for any containment.
+3. Preserve the verified hosted ledger, clean linked lint, bot/Phase 1C function identity and ACL evidence, `1/1/1` bot runtime audit behavior, and hosted resolver/all-OFF/kill-ON evidence.
 4. Configure an owner-authorized production monitor target and record real Phase 1E observation/detection/resolution evidence before claiming monitoring Connected; rollback, repair, telemetry, and scheduling remain separately blocked.
 5. Apply the execution-inert Phase 1D control-model migration only after its filename/version is unique in the reconciled chain and the protected database promotion is explicitly owner-approved. It relaxes nothing and grants no automatic authority; enabling any action remains a separate RED change requiring its own owner-approved forward migration.
-6. Configure the seven protected Phase 1C Actions secrets without displaying values; keep `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false, verify exact required-check names, publish the reviewed tree, and verify CI/Vercel while worker triggers skip.
+6. Keep the seven configured protected Phase 1C Actions secrets non-rendered and `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false; verify exact required-check names, publish the reviewed tree, and verify CI/Vercel while worker triggers skip.
 7. Under exact owner RED approval, enable the Phase 1C variable for one bounded GREEN command, observe heartbeat through draft PR and stable exact-head checks, then immediately return activation to absent/false unless separately authorized.
 8. Observe the Phase 1B rollback window, reverse handoff, disconnect/loss, live second-tenant/anonymous/RPC, and remaining stale-SHA, approval-expiry, permission, rate-limit, ordering, deletion/restore, idempotency, and recovery cases before retiring primary access; keep Support ticket `#4660724` open.
 9. Keep Phase 1B incomplete, Phase 1C/Phase 2 **Not Connected**, Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF until the corresponding live evidence exists.

@@ -33,9 +33,10 @@ absence of a connected executor. The resolver reports the mode an operator actua
 rather than rewriting it, so the interface can say "mode is on, but everything is held because X"
 instead of silently contradicting the setting.
 
-`public.resolved_autonomy_controls(project_id)` holds the identical rule in the database. It is
-`security invoker`, so it cannot be used to read across a tenant boundary, and it returns every
-action OFF while no executor is connected.
+`public.resolved_autonomy_controls(project_id)` holds the identical rule in the hosted database. It is
+`security invoker`, so it cannot be used to read across a tenant boundary, reports the owner
+emergency-stop state separately from a release freeze, and returns every action OFF while no
+executor is connected.
 
 ## Observation scaffold
 
@@ -58,7 +59,7 @@ RED commands remain durable but blocked. Protected files also require exact curr
 - provider/workflow/branch-protection/secret administration; and
 - Phase 2 multi-provider worker routing.
 
-Migration `010_phase1d_observation_controls` keeps the kill switch ON and execution controls OFF. Unhosted `20260813000600_phase1d_autonomy_controls.sql` adds the five missing actions and organization scope, extends both interlocks, and relaxes nothing. Hosted ledger history extends through `027`; applying this decision-only migration would still not make autonomous execution available.
+Migration `010_phase1d_observation_controls` keeps the kill switch ON and execution controls OFF. Hosted `20260813000600_phase1d_autonomy_controls.sql` adds the five missing actions and organization scope, extends both interlocks, and relaxes nothing. Forward migration `20260813001400_resolve_emergency_stop.sql` preserves the resolver security/ACL boundary while exposing the distinct owner emergency-stop signal. Hosted verification confirms every automatic action remains OFF and the global kill switch remains ON; schema presence does not make autonomous execution available.
 
 ## The decision layer
 
@@ -89,6 +90,6 @@ the property that matters at a gate.
 
 ## What is not built
 
-There is no closed autonomous execution loop. A durable, isolated manual Phase 1C worker candidate exists locally, but Codex/OpenAI execution remains **Not Connected** because its hosted schema, protected configuration, activation, heartbeat, and live run are unverified. It accepts only a new authenticated owner command and can publish only an isolated branch and open draft pull request. There is no autonomous backlog discovery or scheduling, approval executor, merge adapter, deployment adapter, connected post-deploy validator, or rollback executor.
+There is no closed autonomous execution loop. The decision layer now includes deterministic Backlog Autopilot selection, bounded retry decisions, failure recovery ordering, and a read-only deployment adapter that reports **Not Connected** when its provider is unavailable; none of these starts or mutates work. A durable, isolated manual Phase 1C worker candidate exists locally, and its hosted schema plus seven protected secret names are configured, but Codex/OpenAI execution remains **Not Connected** because the workflow is unpublished, activation is absent, and no heartbeat or live run exists. It accepts only a new authenticated owner command and can publish only an isolated branch and open draft pull request. There is no autonomous execution scheduler, approval executor, merge adapter, deployment mutator, connected post-deploy validator, or rollback executor.
 
 Any future autonomous rollout requires Phase 1B acceptance, live Phase 1C worker evidence, sustained non-production observation, explicit allowlists and budgets, independent checks, branch protection, alerting, kill-switch drills, owner approval for the precise authority, and a separate reviewed decision, migration, and implementation that deliberately change the locked interlocks. Phase 1E migration `028` and the provider/bot/marketing/Phase 1C migration chain do not change migration `010` interlocks.

@@ -8,10 +8,10 @@ SoftwareFactory is a server-first Next.js control plane. Main contains a Phase 2
 | --- | --- | --- |
 | Browser UI | Collect bounded intent and show safe tenant projections | Untrusted client |
 | Next.js server | Auth, active tenant, same-origin, risk, plan, repository/base-SHA binding, persistence, opaque dispatch | Implemented locally |
-| Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Published post-`027` schema present; ledger still exactly through `027`; protected history reconciliation and Phase 1C promotion pending |
-| Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, live health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Source on main; migration/credentials/live requests absent; execution OFF; **Not Connected** |
+| Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Hosted ledger reconciled through `130014`; linked lint and focused runtime/catalog verification pass |
+| Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, live health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Schema hosted; credentials/live requests unverified; execution OFF; **Not Connected** |
 | GitHub App adapter | Short-lived repository-ID-scoped tokens, repository dispatch, isolated push, draft PR, checks | Phase 1B owner path connected; Phase 1C live run pending |
-| GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Workflow local; secrets/heartbeat **Not Connected** |
+| GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Seven secrets configured; activation absent; workflow local pending publication; heartbeat **Not Connected** |
 | Codex SDK | Supported server-side engineering thread | Adapter local; real provider call **Not Connected** |
 | Vercel | Serve UI and request-time server routes | Existing production READY; never a Codex worker |
 | Autonomous loop | Future independent execution policy | OFF; kill switch ON |
@@ -56,7 +56,7 @@ Dispatch is not authorization. The worker must still claim an eligible row from 
 
 ## Persistence and browser projections
 
-Hosted schema already contains the effects of `028`/`130001`-`130005`, although their ledger rows are missing. Forward `130006` adds only execution-inert Phase 1D controls. Phase 1C then uses `130007` provider compatibility, `130008` enum additions, `130009` core execution, `130010` roster/recovery/report hardening, and `130011` canonical dependencies/cumulative retry budgets. New tables use RLS and FORCE RLS. Direct browser table privileges are revoked; member-facing reads use bounded functions, while narrowly reviewed trusted functions retain only required grants. Run events, artifacts, and validations reject update/delete.
+Hosted migration history is reconciled through `130014`. `130006` adds only execution-inert Phase 1D controls; Phase 1C uses `130007` provider compatibility, `130008` enum additions, `130009` core execution, `130010` roster/recovery/report hardening, and `130011` canonical dependencies/cumulative retry budgets. Forward repair `130012` removes invalid `pg_catalog.nullif` qualification from three bot functions without changing their identity/security/ACL boundary; `130013` resolves the remaining Phase 1C linked-lint findings; and `130014` makes the database resolver report the owner emergency-stop flag. New tables use RLS and FORCE RLS. Direct browser table privileges are revoked; member-facing reads use bounded functions, while narrowly reviewed trusted functions retain only required grants. Run events, artifacts, and validations reject update/delete.
 
 Browser detail endpoints expose allowlisted agent/task/run/report fields, event timelines, artifact references, validation summaries, dependencies, and heartbeat state. They do not expose service credentials, raw command/model payloads, raw provider errors, or broad base-table columns.
 
@@ -73,6 +73,6 @@ The worker may read one repository, push its own `factory/*` branch, create/reco
 
 ## Current live boundary
 
-Candidate GitHub App installation `153479019` is connected to exactly `surgeservicesllc/SoftwareFactory`, but that is Phase 1B repository evidence. Hosted ledger reconciliation, migrations `130006`-`130011`, production/provider evidence, Actions secrets/variables, published Phase 1C workflow, worker heartbeat, and a Phase 1C draft PR/required-CI result do not exist. A clean one-shot exit could provide temporary availability evidence, not a real bounded-run result. Phase 1E operations, Phase 1D execution, advisory provider execution, bot-provider readiness, and the Codex worker remain **Not Connected**.
+Candidate GitHub App installation `153479019` is connected to exactly `surgeservicesllc/SoftwareFactory`, but that is Phase 1B repository evidence. Hosted ledger reconciliation and forward migrations through `130014` are complete, linked lint is clean, focused bot runtime/audit behavior passed `1/1/1`, and all seven Actions secrets are configured. The activation variable remains absent and the reviewed workflow remains local pending publication; no worker heartbeat, Codex thread, Phase 1C draft PR, or stable required-CI result exists. A clean one-shot exit could provide temporary availability evidence, not a real bounded-run result. Phase 1E execution, Phase 1D execution, advisory provider execution, bot-provider execution, and the Codex worker remain **Not Connected**.
 
 See [`AI/ARCHITECTURE.md`](../AI/ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), and [Autonomous mode](AUTONOMOUS_MODE.md).

@@ -9,7 +9,10 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260813001300_fix_phase1c_function_lint.sql";
+const grantsMigration =
+  "20260812002600_narrow_hosted_service_role_table_grants.sql";
+const latestMigration =
+  "20260813001400_resolve_emergency_stop.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Three successive
@@ -61,8 +64,6 @@ const publicTables = [
   "project_connections",
   "project_health_snapshots",
   "projects",
-  // Phase 2A provider execution tables. Each is created with RLS and FORCE RLS
-  // enabled and tenant-scoped policies in 20260813000100_provider_execution_layer.sql.
   "provider_agent_assignments",
   "provider_model_configurations",
   "provider_routing_decisions",
@@ -146,7 +147,7 @@ async function serviceFunctionPrivileges(db: PGlite) {
 }
 
 describe("hosted service-role table grants", () => {
-  it("narrows hosted default grants across the complete chronological chain", async () => {
+  it("removes hosted-like broad grants while preserving provider RPC access", async () => {
     const db = new PGlite({ extensions: { pgcrypto } });
     try {
       await db.exec(`
@@ -169,8 +170,6 @@ describe("hosted service-role table grants", () => {
         create role anon nologin;
         create role authenticated nologin;
         create role service_role nologin bypassrls;
-        alter default privileges in schema public
-          grant all privileges on tables to service_role;
       `);
 
       const migrationFiles = (await readdir(migrationsDirectory))
@@ -179,10 +178,35 @@ describe("hosted service-role table grants", () => {
       expect(migrationFiles.at(-1)).toBe(latestMigration);
 
       for (const migrationFile of migrationFiles) {
+        if (migrationFile === grantsMigration) continue;
         await db.exec(
           await readFile(resolve(migrationsDirectory, migrationFile), "utf8"),
         );
       }
+
+      await db.exec(`
+        grant all privileges on all tables in schema public to service_role;
+      `);
+
+      const hostedLikePrivileges = await tablePrivileges(db);
+      expect(hostedLikePrivileges.rows.map((row) => row.table_name)).toEqual(
+        publicTables,
+      );
+      expect(hostedLikePrivileges.rows.every((row) => (
+        row.can_select &&
+        row.can_insert &&
+        row.can_update &&
+        row.can_delete &&
+        row.can_truncate &&
+        row.can_references &&
+        row.can_trigger
+      ))).toBe(true);
+
+      const functionsBefore = await serviceFunctionPrivileges(db);
+
+      await db.exec(
+        await readFile(resolve(migrationsDirectory, grantsMigration), "utf8"),
+      );
 
       const narrowedPrivileges = await tablePrivileges(db);
       expect(narrowedPrivileges.rows).toEqual(
@@ -202,7 +226,7 @@ describe("hosted service-role table grants", () => {
       );
 
       const functionsAfter = await serviceFunctionPrivileges(db);
-      expect(functionsAfter.rows.length).toBeGreaterThan(0);
+      expect(functionsAfter.rows).toEqual(functionsBefore.rows);
 
       const requiredFunctionPrivileges = await db.query<{
         complete_change: boolean;

@@ -5,7 +5,10 @@ import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// The deployment adapter is server-only; this suite runs outside Next.js.
+vi.mock("server-only", () => ({}));
 
 import {
   AUTOMATIC_ACTIONS,
@@ -14,7 +17,10 @@ import {
   type AutonomyEnvelope,
 } from "@/lib/autonomy/controls";
 import { GREEN_GATES, type GateResult } from "@/lib/autonomy/gates";
+import { MAX_ATTEMPTS, evaluateRetry } from "@/lib/autonomy/retries";
 import { runPipeline } from "@/lib/autonomy/pipeline";
+import { planRecovery } from "@/lib/autonomy/recovery";
+import { latestReadyProduction, listRecentDeployments } from "@/lib/deploy/vercel";
 
 /**
  * The Phase 1D completion demonstration: one loop, both halves.
@@ -74,19 +80,20 @@ describe("Phase 1D end-to-end loop journey", () => {
   async function readEnvelope(): Promise<AutonomyEnvelope> {
     const { rows } = await db.query<{
       kill_switch_active: boolean;
+      emergency_stop_active: boolean;
       release_frozen: boolean;
       executor_connected: boolean;
     }>(
-      `select kill_switch_active, release_frozen, executor_connected
+      `select kill_switch_active, emergency_stop_active, release_frozen, executor_connected
        from public.resolved_autonomy_controls($1::uuid)`,
       [projectId],
     );
 
     return {
       killSwitchActive: rows[0].kill_switch_active,
+      emergencyStopActive: rows[0].emergency_stop_active,
       releaseFrozen: rows[0].release_frozen,
       executorConnected: rows[0].executor_connected,
-      emergencyStopActive: false,
     };
   }
 
@@ -243,6 +250,41 @@ describe("Phase 1D end-to-end loop journey", () => {
       [goodDeploymentId],
     );
 
+    // --- Deploy ---------------------------------------------------------
+    // Live preview and production validation would run here. They cannot:
+    // the read adapter reports why rather than returning empty data that
+    // would read as "nothing is deployed".
+    const deploymentRead = await listRecentDeployments("prj_journey", { target: "production" });
+    expect(deploymentRead.status).toBe("not_connected");
+    expect(latestReadyProduction(deploymentRead)).toBeNull();
+    record(
+      "Deploy",
+      "Deployment state could not be read; the adapter reported why.",
+      "DEPLOY_PROVIDER_NOT_CONNECTED",
+    );
+
+    // --- Failed deploy --------------------------------------------------
+    // The failure is *recorded through the real validation function*, not
+    // asserted. Everything downstream hangs off this row.
+    const { rows: failedValidation } = await db.query<{ id: string; state: string }>(
+      `select id, state::text as state from public.record_deployment_validation(
+         $1::uuid, 'failed'::public.deployment_validation_state,
+         '[{"check":"health","outcome":"fail","detail":"Expected HTTP 200 but received 500."}]'::jsonb,
+         'validator-1d', 'post-deploy-v1', 'Post-deploy validation failed', null
+       )`,
+      [badDeploymentId],
+    );
+    expect(failedValidation[0].state).toBe("failed");
+    record("Validate", "Post-deploy validation failed for the new release.");
+
+    // A failed validation must not become Last Known Good.
+    const { rows: stillGood } = await db.query<{ deployment_id: string }>(
+      `select deployment_id from public.last_known_good_deployment($1::uuid, 'production', null)`,
+      [projectId],
+    );
+    expect(stillGood[0].deployment_id).toBe(goodDeploymentId);
+    expect(stillGood[0].deployment_id).not.toBe(badDeploymentId);
+
     const { rows: incidentRows } = await db.query<{
       incident_id: string;
       incident_sev_level: string;
@@ -284,6 +326,28 @@ describe("Phase 1D end-to-end loop journey", () => {
       [projectId],
     );
     expect(lastKnownGood[0].deployment_id).toBe(goodDeploymentId);
+
+    // --- The decision layer plans the recovery -------------------------
+    // Phase 1E supplies the facts; Phase 1D decides what to do about them.
+    // The steps below follow this plan rather than being hand-ordered.
+    const recovery = planRecovery(
+      {
+        risk: "YELLOW",
+        containsDestructiveMigration: false,
+        lastKnownGoodValidated: lastKnownGood[0].deployment_id === goodDeploymentId,
+        repairAttemptsUsed: 0,
+      },
+      resolveEffectiveControls(requestedEverything, requestedEverything, frozenEnvelope),
+    );
+
+    expect(recovery.automatic).toEqual(["freeze", "incident", "escalate"]);
+    expect(recovery.ownerAttentionRequired).toBe(true);
+    const plannedRollback = recovery.steps.find((step) => step.step === "rollback");
+    expect(plannedRollback?.refusal).toBe("EXECUTOR_NOT_CONNECTED");
+    record(
+      "Recovery plan",
+      "The decision layer planned freeze and incident automatically, and refused rollback and repair.",
+    );
 
     const { rows: rollbackRows } = await db.query<{ state: string; blocked_reason: string }>(
       `select state::text as state, blocked_reason from public.record_rollback_decision(
@@ -362,6 +426,116 @@ describe("Phase 1D end-to-end loop journey", () => {
     expect(run.reachedStage).toBe("verify");
   });
 
+
+  it("propagates an owner emergency stop from the real RPC into the decision layer", async () => {
+    // Before: the database reports no stop.
+    expect((await readEnvelope()).emergencyStopActive).toBe(false);
+
+    const { rows } = await db.query<{ stop_autonomous_operations: number }>(
+      "select public.stop_autonomous_operations($1::uuid, $2)",
+      [organizationId, "Owner pulling the handle during the completion drill."],
+    );
+    expect(rows[0].stop_autonomous_operations).toBeGreaterThan(0);
+
+    const stopped = await readEnvelope();
+    expect(stopped.emergencyStopActive).toBe(true);
+    record("Emergency STOP", "An owner stopped autonomous operations for the organization.", undefined);
+
+    // A tenant asking for everything still resolves to nothing.
+    const held = resolveEffectiveControls(requestedEverything, requestedEverything, {
+      ...stopped,
+      killSwitchActive: false,
+      executorConnected: true,
+    });
+    expect(held.restrictions).toContain("EMERGENCY_STOP_ACTIVE");
+    expect(Object.values(held.actions).every((enabled) => enabled === false)).toBe(true);
+
+    // And a change that would otherwise be approved is refused.
+    const run = runPipeline({
+      action: "merge",
+      declaredRisk: "GREEN",
+      files: [
+        { path: "components/storefront-banner.tsx" },
+        { path: "tests/unit/storefront-banner.test.tsx" },
+      ],
+      gateResults: passingGreenGates,
+      controls: held,
+      authorId: ownerId,
+      approverId: reviewerId,
+      pullRequestOpen: true,
+    });
+    expect(run.approval.decision).toBe("NOT_APPROVED");
+  });
+
+  it("refuses an emergency stop from someone who is not an owner", async () => {
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [reviewerId]);
+
+    await expect(
+      db.query("select public.stop_autonomous_operations($1::uuid, $2)", [
+        organizationId,
+        "A non-owner should not be able to do this.",
+      ]),
+    ).rejects.toThrow(/only an organization owner/i);
+
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+  });
+
+  it("exhausts a bounded retry budget and escalates instead of trying again", () => {
+    const attempts: string[] = [];
+    let used = 0;
+
+    // Drive a stage to its cap the way the loop would.
+    for (let round = 0; round < MAX_ATTEMPTS.repair + 2; round += 1) {
+      const outcome = evaluateRetry("repair", used);
+      attempts.push(outcome.decision);
+      if (outcome.decision !== "RETRY") break;
+      used += 1;
+    }
+
+    expect(attempts.filter((decision) => decision === "RETRY")).toHaveLength(MAX_ATTEMPTS.repair);
+    expect(attempts.at(-1)).toBe("ESCALATE");
+    record(
+      "Retries",
+      `The budget of ${MAX_ATTEMPTS.repair} attempts was spent and the loop escalated.`,
+      "RETRY_BUDGET_EXHAUSTED",
+    );
+  });
+
+  it("never retries a permanent refusal, however much budget is left", () => {
+    const outcome = evaluateRetry("repair", 0, { permanent: true });
+
+    expect(outcome.decision).toBe("STOP");
+    expect(outcome.attemptsRemaining).toBe(MAX_ATTEMPTS.repair);
+  });
+
+
+  it("never plans an automatic rollback for a release that dropped something", () => {
+    // Same failure, except the release carried a destructive migration.
+    const plan = planRecovery(
+      {
+        risk: "YELLOW",
+        containsDestructiveMigration: true,
+        lastKnownGoodValidated: true,
+        repairAttemptsUsed: 0,
+      },
+      resolveEffectiveControls(requestedEverything, requestedEverything, {
+        killSwitchActive: false,
+        emergencyStopActive: false,
+        releaseFrozen: false,
+        executorConnected: true,
+      }),
+    );
+
+    const rollback = plan.steps.find((step) => step.step === "rollback");
+    expect(rollback?.decision).toBe("OWNER_ONLY");
+    expect(rollback?.refusal).toBe("DESTRUCTIVE_MIGRATION_IN_RELEASE");
+    record(
+      "Destructive release",
+      "Rollback was withheld from the loop entirely: reversing a dropped table is a second destructive act.",
+      "DESTRUCTIVE_MIGRATION_IN_RELEASE",
+    );
+  });
+
   it("records a journey that names every blocked stage instead of skipping it", () => {
     const blocked = journey.filter((stage) => stage.blocker);
 
@@ -369,14 +543,20 @@ describe("Phase 1D end-to-end loop journey", () => {
     // that connects one has to change these names deliberately.
     expect(blocked.map((stage) => [stage.stage, stage.blocker])).toEqual([
       ["Merge", "MERGE_EXECUTOR_NOT_CONNECTED"],
+      ["Deploy", "DEPLOY_PROVIDER_NOT_CONNECTED"],
       ["Rollback", "EXECUTOR_NOT_CONNECTED"],
       ["Repair", "CODEX_WORKER_NOT_CONNECTED"],
+      ["Retries", "RETRY_BUDGET_EXHAUSTED"],
+      ["Destructive release", "DESTRUCTIVE_MIGRATION_IN_RELEASE"],
     ]);
 
     // And the stages that did complete are recorded too, so the journey shows
     // how far the loop actually got rather than only where it stopped.
     expect(journey.map((stage) => stage.stage)).toEqual(
-      expect.arrayContaining(["Envelope", "Controls", "Classify", "Verify", "Review", "Approve"]),
+      expect.arrayContaining([
+        "Envelope", "Controls", "Classify", "Verify", "Review", "Approve",
+        "Validate", "Incident", "Recovery plan", "Emergency STOP",
+      ]),
     );
   });
 });

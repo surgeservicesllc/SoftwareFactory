@@ -24,7 +24,7 @@ GitHub Actions one-shot worker (trusted server process; not a Vercel request)
   -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, and Phase 1D decision layer are published on `main`; Phase 1C exists only in a local branch three commits ahead and unpublished. Hosted Supabase has the schema effects of `028`/`130001`-`130005`, but its migration ledger still has exactly 26 rows through `027`. The historical duplicate `130002` and unrecorded applied versions require protected history reconciliation before absent forward migrations `130006`-`130011` can be promoted. Production targets, provider credentials/live calls, and worker evidence are unverified; all execution switches/actions remain OFF. Phase 1E operations, outbound provider execution, Phase 1D execution, bot-provider readiness, and OpenAI/Codex worker execution remain **Not Connected**.
+The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, and Phase 1D decision layer are published on the default branch; the combined Phase 1C release tree remains local pending merge/publication. Hosted Supabase history is reconciled and forward migrations through `130014` are applied. Linked lint and focused hosted runtime/catalog checks pass, seven Actions secrets are configured, and the activation variable is absent. Production targets, provider live calls, workflow publication, and worker evidence are unverified; all execution switches/actions remain OFF and the global kill switch remains ON. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
 
 ## Phase 2A advisory provider boundary
 
@@ -75,14 +75,9 @@ There is no default-branch commit, approval, merge, release, deployment, rollbac
 
 ## Persistence
 
-- Hosted ledger migrations `001`-`027` remain the verified Phase 1A/1B history. Catalog evidence shows the effects of `028` and canonical `130001`-`130005` are present even though their ledger rows are missing; do not rerun that DDL.
-- Absent `130006` adds the Phase 1D decision schema only and preserves the global kill switch plus all nine actions OFF.
-- Absent `130007` carries additive/narrowing Phase 1C compatibility over the immutable hosted-source provider layer.
-- Absent `130008` adds Phase 1C enum values only; PostgreSQL must commit it before `130009` uses them.
-- Absent `130009` adds Phase 1C orchestration fields/tables, workers, append-only evidence, safe projections, lease/result RPCs, cancellation/retry, deterministic planning, RED blocks, RLS/FORCE RLS, exact grants, indexes, secret checks, and terminal evidence.
-- Absent `130010` initializes/backfills the provider-neutral eleven-role roster; enforces owner-only prompt-plus-criteria risk parity; reconciles provider ACLs; hardens artifact/retry/recovery/cancellation/report coherence; and narrows projections.
-- Absent `130011` persists canonical task dependencies in the submission transaction, derives non-empty criteria when omitted, validates idempotent replay, and enforces cumulative turns/input/output budgets across retry claims.
-- Protected promotion must ledger-repair only catalog-proven `028`/`130001`-`130005`, re-list/dry-run, then apply `130006` -> `130007` -> `130008` -> `130009` -> `130010` -> `130011` under exact owner RED approval.
+- Hosted history is canonical through `130014`. Catalog-proven `028`/`130001`-`130005` were reconciled ledger-only; their DDL was not rerun.
+- Hosted `130006` preserves the global kill switch plus all nine actions OFF. Hosted `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets.
+- Hosted `130012` repairs bot `NULLIF` qualification without changing function identity/security/ACLs; `130013` resolves Phase 1C function lint; `130014` adds the resolver's explicit emergency-stop result. Corrections remain forward-only.
 
 ## Existing GitHub/App boundary
 
@@ -163,4 +158,4 @@ Owner/admin request -> /api/operations/* (same-origin, tenant-scoped, no-store)
 
 ## Pending deployment and activation status
 
-The retained Vercel production deployment is READY but predates the later main integrations and local Phase 1C tree. Hosted schema is ahead of its ledger: `028`/`130001`-`130005` are schema-present/ledger-unreconciled, while `130006`-`130011` are absent. No production target/journey/provider execution or Phase 1C worker run has been observed. The fail-closed sequence keeps all execution OFF, obtains exact approval, repairs only proven history, applies/verifies `130006`-`130011`, configures worker secrets, publishes and passes CI/Vercel while worker jobs stay skipped, then enables only the separately approved bounded Phase 1C capability and returns it to OFF afterward. Phase 1D remains execution-inert throughout.
+The retained Vercel production deployment predates the combined local Phase 1C release tree. Hosted reconciliation/promotion through `130014` and seven-secret configuration are complete. No production target/journey/provider execution or Phase 1C worker run has been observed. The remaining fail-closed sequence keeps activation absent, publishes and passes CI/Vercel while worker jobs skip, then enables only the separately approved bounded Phase 1C capability and returns it to OFF afterward. Phase 1D remains execution-inert throughout.

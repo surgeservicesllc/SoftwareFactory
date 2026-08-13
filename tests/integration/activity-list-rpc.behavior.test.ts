@@ -67,7 +67,9 @@ describe("safe activity list RPC", () => {
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260813001300_fix_phase1c_function_lint.sql");
+    expect(migrationFiles.at(-1)).toBe(
+      "20260813001400_resolve_emergency_stop.sql",
+    );
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }
