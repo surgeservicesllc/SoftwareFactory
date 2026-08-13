@@ -16,11 +16,11 @@ Vercel hosts the Next.js application and server routes. The in-product Vercel de
 - GitHub App server-only variable names are configured. `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured for both Production and Preview with the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`; no secret values are recorded.
 - GitHub installation `153445938` completed the production callback and is connected to `surgeservicesllc`, restricted to exactly `surgeservicesllc/SoftwareFactory`. Live Connections, Projects, Files, and Activity reads pass.
 - Ordinary draft PR `#6` and owner-approved protected RED draft PR `#7` are open, draft, and unmerged; both commits have the approved author and committer. Earlier App-bot-attributed PRs `#4` and `#5` were closed unmerged and their isolated branches were deleted.
-- The provider webhook remains blank/inactive and **Not Connected**. The fresh secret is stored only in Sensitive Production/Preview settings. The documented App-JWT `PATCH /app/hook/config` returns `404`, and the normal owner UI reports success but reloads blank/inactive. An invalid signature is rejected with `401`/no-store, but no valid signed delivery is verified.
+- Primary App `4573846` remains blank/inactive under OPEN GitHub Support ticket `#4660724`. Candidate App `4582606` retains the exact active endpoint, and its distinct required `GITHUB_CANDIDATE_APP_*` names are Sensitive in Production and Preview. Production commit `0bd0485` does not read those candidate values; the App is not installed and no signed processed delivery is verified, so the webhook remains **Not Connected**.
 - The temporary downloaded App PEM and ignored webhook/helper scripts used for bounded verification were deleted; no credential or helper artifact was persisted in the repository.
 - Preview Supabase variables are not independently verified, and the live second-tenant caller matrix remains pending.
 
-This evidence is bound to the exact application commit/deployment above. Hosted migrations through `026` have separate database evidence. The live owner GitHub journey is verified, but it does not prove a second tenant or an active webhook. Later documentation-only successors do not supersede it unless application code changes; a later application release requires a new exact evidence record.
+This evidence is bound to the exact application commit/deployment above. The locally passing dual-App/handoff tree (56 files/436 tests, 38-route build) is not committed or deployed, and migration `027` is not hosted. The live primary owner GitHub journey is verified, but it does not prove a second tenant, candidate installation, signed delivery, or handoff. Later documentation-only successors do not supersede the release evidence; the candidate application release requires a new exact evidence record.
 
 ## Project configuration
 
@@ -40,7 +40,7 @@ See [Environment variables](ENVIRONMENT_VARIABLES.md) and [GitHub App integratio
 - Production uses the exact hosted Supabase project described in [Supabase setup](SUPABASE_SETUP.md).
 - Preview should use separate Supabase data/credentials before authenticated preview testing.
 - Production secrets must not be available to untrusted fork builds.
-- GitHub private key/client/webhook/state secrets remain server-only.
+- Primary and candidate GitHub private-key/client/webhook/state secrets remain server-only, separately keyed, and environment-scoped. Candidate settings must be absent or complete and may not reuse primary credentials.
 - No local-repository write switch or HTTP file-write route is deployed.
 
 ## Manual production promotion

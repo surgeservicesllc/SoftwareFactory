@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 
 const harness = vi.hoisted(() => ({
   configuration: { appId: 1 },
+  configurationForAppId: vi.fn(),
   createToken: vi.fn(),
   lostRpc: vi.fn(),
   requireConnection: vi.fn(),
@@ -24,7 +25,9 @@ vi.mock("@/lib/github/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/github/client")>();
   return { ...original, createGitHubInstallationToken: harness.createToken };
 });
-vi.mock("@/lib/github/config", () => ({ getGitHubAppConfiguration: () => harness.configuration }));
+vi.mock("@/lib/github/config", () => ({
+  getGitHubAppConfigurationForAppId: harness.configurationForAppId,
+}));
 vi.mock("@/lib/github/service-role", () => ({
   createSupabaseGitHubWebhookClient: () => ({ rpc: harness.lostRpc }),
 }));
@@ -37,12 +40,14 @@ const userId = "44444444-4444-4444-8444-444444444444";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  harness.configurationForAppId.mockReturnValue(harness.configuration);
   harness.requireUser.mockResolvedValue({
     activeOrganization: { id: "11111111-1111-4111-8111-111111111111" },
     supabase: {},
     user: { id: userId },
   });
   harness.requireConnection.mockResolvedValue({
+    appId: 1,
     connectionId,
     installationId: 12345,
     organizationId: "11111111-1111-4111-8111-111111111111",
@@ -121,6 +126,7 @@ describe("GitHub repository request loss detection", () => {
       permissions: { contents: "read" },
       repositoryIds: [67890],
     });
+    expect(harness.configurationForAppId).toHaveBeenCalledWith(1);
     expect(harness.lostRpc).not.toHaveBeenCalled();
   });
 });

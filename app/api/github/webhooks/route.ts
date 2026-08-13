@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import { getGitHubAppConfigurationEntries } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
 import {
@@ -242,13 +242,12 @@ function redactedPayload(payload: WebhookPayload) {
 
 export async function POST(request: Request) {
   try {
-    const configuration = getGitHubAppConfiguration();
     const rawBody = await readBoundedWebhookBody(request);
-    if (!verifyGitHubWebhookSignature(
-      rawBody,
-      request.headers.get("x-hub-signature-256"),
-      configuration.webhookSecret,
-    )) {
+    const signature = request.headers.get("x-hub-signature-256");
+    const matchedConfiguration = getGitHubAppConfigurationEntries().find(({ configuration }) =>
+      verifyGitHubWebhookSignature(rawBody, signature, configuration.webhookSecret)
+    );
+    if (!matchedConfiguration) {
       return jsonNoStore(
         { error: { code: "invalid_webhook_signature", message: "GitHub webhook signature is invalid." } },
         { status: 401 },
@@ -288,6 +287,7 @@ export async function POST(request: Request) {
     const serviceClient = createSupabaseGitHubWebhookClient();
     const externalInstallationId = webhookPayload.installation?.id ?? null;
     let installation: {
+      app_id: number;
       connection_id: string;
       id: string;
       organization_id: string;
@@ -296,11 +296,18 @@ export async function POST(request: Request) {
     if (externalInstallationId) {
       const lookup = await serviceClient
         .from("github_installations")
-        .select("id,organization_id,connection_id,status")
+        .select("id,organization_id,connection_id,app_id,status")
         .eq("external_installation_id", externalInstallationId)
         .maybeSingle();
       if (lookup.error) throw lookup.error;
       installation = lookup.data;
+    }
+
+    if (installation && installation.app_id !== matchedConfiguration.configuration.appId) {
+      return jsonNoStore(
+        { error: { code: "webhook_app_mismatch", message: "GitHub webhook App does not match the installation." } },
+        { status: 403 },
+      );
     }
 
     const status = !acceptedEvent
@@ -323,6 +330,8 @@ export async function POST(request: Request) {
         external_repository_id: webhookPayload.repository?.id ?? null,
         installation_id: installation?.id ?? null,
         metadata: {
+          app_id: matchedConfiguration.configuration.appId,
+          app_slot: matchedConfiguration.slot,
           accepted_event: acceptedEvent,
           known_installation: Boolean(installation),
           terminal_installation: installation?.status === "deleted",

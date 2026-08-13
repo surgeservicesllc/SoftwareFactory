@@ -5,8 +5,20 @@ import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const webhookHarness = vi.hoisted(() => ({
+  configurationFailure: null as Error | null,
+  configurations: [
+    {
+      configuration: { appId: 4573846, webhookSecret: "w".repeat(48) },
+      slot: "primary" as const,
+    },
+    {
+      configuration: { appId: 5573846, webhookSecret: "d".repeat(48) },
+      slot: "candidate" as const,
+    },
+  ],
   insert: vi.fn(),
   insertError: null as { code: string } | null,
+  installationAppId: 4573846,
   installationStatus: "active",
   replay: null as { id: string; payload_sha256: string; status: string } | null,
   rpc: vi.fn(),
@@ -15,7 +27,10 @@ const webhookHarness = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/github/config", () => ({
-  getGitHubAppConfiguration: () => ({ webhookSecret: "w".repeat(48) }),
+  getGitHubAppConfigurationEntries: () => {
+    if (webhookHarness.configurationFailure) throw webhookHarness.configurationFailure;
+    return webhookHarness.configurations;
+  },
 }));
 vi.mock("@/lib/github/errors", () => ({
   githubRouteErrorResponse: () => Response.json(
@@ -51,10 +66,14 @@ const payload = JSON.stringify({
   sender: { id: 789, login: "octocat" },
 });
 
-function webhookRequest(body = payload, signatureOverride?: string, eventName = "push") {
-  const signature = signatureOverride ?? `sha256=${createHmac("sha256", "w".repeat(48))
+function signatureFor(body: string, secret: string) {
+  return `sha256=${createHmac("sha256", secret)
     .update(body)
     .digest("hex")}`;
+}
+
+function webhookRequest(body = payload, signatureOverride?: string, eventName = "push") {
+  const signature = signatureOverride ?? signatureFor(body, "w".repeat(48));
   return new Request("https://factory.example/api/github/webhooks", {
     body,
     headers: {
@@ -68,7 +87,9 @@ function webhookRequest(body = payload, signatureOverride?: string, eventName = 
 }
 
 beforeEach(() => {
+  webhookHarness.configurationFailure = null;
   webhookHarness.insertError = null;
+  webhookHarness.installationAppId = 4573846;
   webhookHarness.installationStatus = "active";
   webhookHarness.replay = null;
   webhookHarness.insert.mockReset().mockImplementation(() => ({
@@ -85,10 +106,13 @@ beforeEach(() => {
   webhookHarness.from.mockReset().mockImplementation((table: string) => {
     if (table === "github_installations") {
       return {
-        select: () => ({
+        select: (columns: string) => ({
           eq: () => ({
             maybeSingle: async () => ({
               data: {
+                ...(columns.includes("app_id")
+                  ? { app_id: webhookHarness.installationAppId }
+                  : {}),
                 connection_id: "11111111-1111-4111-8111-111111111111",
                 id: "22222222-2222-4222-8222-222222222222",
                 organization_id: "33333333-3333-4333-8333-333333333333",
@@ -113,7 +137,7 @@ beforeEach(() => {
 });
 
 describe("GitHub webhook route", () => {
-  it("verifies, records, and synchronously processes a valid delivery", async () => {
+  it("accepts a primary-signed delivery only for a primary-owned installation", async () => {
     const response = await POST(webhookRequest());
 
     expect(response.status).toBe(202);
@@ -129,6 +153,65 @@ describe("GitHub webhook route", () => {
     expect(webhookHarness.rpc).toHaveBeenCalledWith("process_github_webhook_delivery", {
       p_delivery_id: "44444444-4444-4444-8444-444444444444",
     });
+    expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        app_id: 4573846,
+        app_slot: "primary",
+      }),
+    }));
+  });
+
+  it("accepts a candidate-signed delivery only for a candidate-owned installation", async () => {
+    webhookHarness.installationAppId = 5573846;
+
+    const response = await POST(webhookRequest(
+      payload,
+      signatureFor(payload, "d".repeat(48)),
+    ));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      accepted: true,
+      processed: true,
+    });
+    expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
+      installation_id: "22222222-2222-4222-8222-222222222222",
+      metadata: expect.objectContaining({
+        app_id: 5573846,
+        app_slot: "candidate",
+        known_installation: true,
+      }),
+    }));
+  });
+
+  it("rejects a valid signature when the matched App does not own the installation", async () => {
+    const response = await POST(webhookRequest(
+      payload,
+      signatureFor(payload, "d".repeat(48)),
+    ));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "webhook_app_mismatch",
+        message: "GitHub webhook App does not match the installation.",
+      },
+    });
+    expect(webhookHarness.insert).not.toHaveBeenCalled();
+    expect(webhookHarness.rpc).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before database access when dual-App configuration is invalid", async () => {
+    webhookHarness.configurationFailure = new Error(
+      "GITHUB_CANDIDATE_APP_SLUG is not configured.",
+    );
+
+    const response = await POST(webhookRequest());
+
+    expect(response.status).toBe(500);
+    expect(webhookHarness.from).not.toHaveBeenCalled();
+    expect(webhookHarness.insert).not.toHaveBeenCalled();
+    expect(webhookHarness.rpc).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid signature before any database access", async () => {
@@ -399,11 +482,13 @@ describe("GitHub webhook route", () => {
     await expect(response.json()).resolves.toMatchObject({ accepted: false, processed: false });
     expect(webhookHarness.rpc).not.toHaveBeenCalled();
     expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: {
+      metadata: expect.objectContaining({
+        app_id: 4573846,
+        app_slot: "primary",
         accepted_event: true,
         known_installation: true,
         terminal_installation: true,
-      },
+      }),
       payload: expect.objectContaining({
         installation_updated_at: "2026-08-12T12:01:00Z",
       }),
@@ -451,7 +536,13 @@ describe("GitHub webhook route", () => {
     expect(webhookHarness.rpc).not.toHaveBeenCalled();
     expect(webhookHarness.insert).toHaveBeenCalledWith(expect.objectContaining({
       external_installation_id: null,
-      metadata: { accepted_event: false, known_installation: false, terminal_installation: false },
+      metadata: expect.objectContaining({
+        app_id: 4573846,
+        app_slot: "primary",
+        accepted_event: false,
+        known_installation: false,
+        terminal_installation: false,
+      }),
       status: "ignored",
     }));
     expect(JSON.stringify(webhookHarness.insert.mock.calls[0]?.[0]))

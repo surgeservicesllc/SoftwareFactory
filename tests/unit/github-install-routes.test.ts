@@ -7,6 +7,16 @@ vi.mock("server-only", () => ({}));
 const harness = vi.hoisted(() => {
   const cookieValues = new Map<string, string>();
   return {
+    candidateConfiguration: {
+      appId: 5000001,
+      appSlug: "software-factory-candidate",
+      callbackUrl: "https://factory.example/api/github/install/callback",
+      clientId: "candidate-client-id",
+      clientSecret: "candidate-client-secret",
+      privateKey: "candidate-private-key",
+      stateSecret: "c".repeat(48),
+      webhookSecret: "x".repeat(48),
+    },
     configuration: {
       appId: 4573846,
       appSlug: "software-factory",
@@ -66,6 +76,13 @@ vi.mock("@/lib/github/config", async (importOriginal) => {
   return {
     ...original,
     getGitHubAppConfiguration: () => harness.configuration,
+    getGitHubAppConfigurationEntries: () => [
+      { configuration: harness.configuration, slot: "primary" as const },
+      { configuration: harness.candidateConfiguration, slot: "candidate" as const },
+    ],
+    getGitHubAppConfigurationForSlot: (slot: "candidate" | "primary") => (
+      slot === "candidate" ? harness.candidateConfiguration : harness.configuration
+    ),
   };
 });
 
@@ -74,7 +91,10 @@ vi.mock("@/lib/github/sync", () => ({
 }));
 
 import { GET as callback } from "@/app/api/github/install/callback/route";
-import { POST as start } from "@/app/api/github/install/start/route";
+import {
+  GET as listConfiguredApps,
+  POST as start,
+} from "@/app/api/github/install/start/route";
 import { GitHubApiError } from "@/lib/github/client";
 import { GITHUB_INSTALL_STATE_COOKIE } from "@/lib/github/state";
 
@@ -101,9 +121,9 @@ const snapshot = {
   targetType: "Organization" as const,
 };
 
-function startRequest(returnTo = "/connections") {
+function startRequest(returnTo = "/connections", appSlot: "candidate" | "primary" = "primary") {
   return new Request("https://factory.example/api/github/install/start", {
-    body: JSON.stringify({ organizationId, returnTo }),
+    body: JSON.stringify({ appSlot, organizationId, returnTo }),
     headers: {
       "content-type": "application/json",
       origin: "https://factory.example",
@@ -112,9 +132,12 @@ function startRequest(returnTo = "/connections") {
   });
 }
 
-async function beginInstallation() {
-  const response = await start(startRequest());
-  const body = await response.json() as { authorizationUrl: string };
+async function beginInstallation(appSlot: "candidate" | "primary" = "primary") {
+  const response = await start(startRequest("/connections", appSlot));
+  const body = await response.json() as {
+    appSlot: "candidate" | "primary";
+    authorizationUrl: string;
+  };
   const state = new URL(body.authorizationUrl).searchParams.get("state");
   if (!state) throw new Error("Expected installation state");
   return { body, response, state };
@@ -158,6 +181,23 @@ beforeEach(() => {
 });
 
 describe("GitHub App install routes", () => {
+  it("lists only non-secret configured App metadata for an organization manager", async () => {
+    const response = await listConfiguredApps();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      apps: [
+        { appId: 4573846, appSlug: "software-factory", slot: "primary" },
+        { appId: 5000001, appSlug: "software-factory-candidate", slot: "candidate" },
+      ],
+    });
+    expect(harness.requireManager).toHaveBeenCalledWith(
+      { tenant: "client" },
+      userId,
+      organizationId,
+    );
+  });
+
   it("starts a session-bound installation and completes the browser callback", async () => {
     const installation = await beginInstallation();
 
@@ -190,6 +230,39 @@ describe("GitHub App install routes", () => {
       "ephemeral-user-token",
     );
     expect(harness.cookieValues.has(GITHUB_INSTALL_STATE_COOKIE)).toBe(false);
+  });
+
+  it("selects only the configured candidate App and keeps that target through callback", async () => {
+    const candidateSnapshot = {
+      ...snapshot,
+      appId: harness.candidateConfiguration.appId,
+      appSlug: harness.candidateConfiguration.appSlug,
+    };
+    harness.verifyInstallation.mockResolvedValueOnce({
+      app_id: harness.candidateConfiguration.appId,
+    });
+    harness.fetchSnapshot.mockResolvedValueOnce(candidateSnapshot);
+    const installation = await beginInstallation("candidate");
+
+    expect(installation.body.appSlot).toBe("candidate");
+    expect(new URL(installation.body.authorizationUrl).pathname)
+      .toBe("/apps/software-factory-candidate/installations/new");
+
+    const response = await callback(callbackRequest(installation.state));
+
+    expect(response.status).toBe(303);
+    expect(harness.exchangeCode).toHaveBeenCalledWith(
+      harness.candidateConfiguration,
+      "one-time-code",
+    );
+    expect(harness.fetchSnapshot).toHaveBeenCalledWith(
+      harness.candidateConfiguration,
+      installationId,
+    );
+    expect(harness.revokeToken).toHaveBeenCalledWith(
+      harness.candidateConfiguration,
+      "ephemeral-user-token",
+    );
   });
 
   it("redirects a browser cancellation to a bounded Connections notice", async () => {

@@ -2,23 +2,25 @@
 
 Last reviewed: 2026-08-13
 
-Phase 1B decision: **Application release verified; phase acceptance incomplete**
+Phase 1B decision: **Candidate cutover passes locally; publication and live acceptance incomplete**
 
-Reason: hosted migration `026`, owner onboarding, installation `153445938`, real connection/project/reads, ordinary/protected draft-only writes, secret rejection, commit attribution, and immutable Activity evidence pass. The provider webhook remains **Not Connected**, and the live second-tenant plus remaining failure/disconnect matrix is incomplete.
+Reason: hosted migration `026`, owner onboarding, primary installation `153445938`, real connection/project/reads, ordinary/protected draft-only writes, secret rejection, commit attribution, and immutable Activity evidence pass on production release `0bd0485`. Candidate App `4582606` now retains the exact active webhook configuration, and the isolated dual-App plus atomic handoff implementation passes the full local check. That tree and migration `027` are not committed/deployed/hosted; the candidate is not installed, no signed processed delivery exists, and no handoff occurred. The webhook capability, live second-tenant matrix, and remaining failure/disconnect acceptance therefore remain incomplete.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe projections; stable repository UUID; protected approval/token/lease integrity; lifecycle/order/recovery; migrations `011`-`026` | Application/schema hosted; owner live path passes; remaining acceptance pending |
-| Current-tree lint/typecheck/Vitest/build | `npm run check` | Pass - lint/typecheck; 54 files/408 tests; 38 routes |
+| Current-tree lint/typecheck/Vitest/build | `npm run check` | Pass - lint/typecheck; 56 files/436 tests; 38 routes; pre-release dual-App/handoff tree |
+| Dual-App replacement boundary | Isolated candidate config; state binds App slot/ID; token routing uses persisted installation App ID; webhook verifies signing App provenance | Pass locally; not committed or deployed |
+| Migration `027` atomic handoff | Owner-only exact confirmation; same account/external repository; both installations live; no pending change; processed signed target delivery; immutable evidence; reversible while both installations remain active | Pass locally; not hosted |
 | Verified application-release integration suite | `npm run test:integration` | Pass - 21 files/163 tests; focused `026` grant test passes separately |
-| Current-tree coverage | `npm run test:coverage` | Pass - statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37% |
-| Migration `026` | Narrowed exact table grants; function grants unchanged | Pass locally and hosted; local=remote, dry run/lint clean, ACL mismatch count zero |
+| Current-tree coverage | `npm run test:coverage` | Pass - statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82% |
+| Migration `026` | Narrowed exact table grants; function grants unchanged | Retained pass locally and hosted; pre-`027` history matched, dry run/lint clean, ACL mismatch count zero |
 | Current-tree production build | `npm run check` | Pass - compiled 38 routes on Node 22.23.1; `/` is dynamic |
 | Signed-out dashboard regression | Focused browser-error race repeated locally and against production | Retained pass - 30/30 production runs; current exact-commit CI is green |
 | E2E/responsive/accessibility | Exact-`0bd0485` production Playwright plus current exact-commit CI browser job | Pass - post-rotation production 48/48 desktop/tablet/mobile including axe; current CI green |
-| Verified application-release secret/client scan | Source plus rebuilt static artifacts | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
+| Verified application-release secret/client scan | Source plus rebuilt static artifacts | Retained pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present; rerun required for candidate publication |
 | Hosted Supabase identity | `qpuofpmagrmyamahqwxw`, last verified `ACTIVE_HEALTHY`; currently selected local CLI profile is wrong/unauthorized for a fresh recheck and was not used for mutations | Prior hosted evidence remains recorded; reauthentication required before a new linked check |
-| Hosted migrations | Current through `026`; local=remote; dry run up to date | Pass |
+| Hosted migrations | Current through `026`; pre-`027` history matched and dry run was up to date; local `027` now awaits promotion | Hosted pass through `026`; `027` pending |
 | Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; linked lint clean | Pass |
 | Hosted RLS/catalog/browser grants | 23/23 RLS+FORCE; 32 policies; zero policyless; 22 secret guards; tested raw authenticated/browser grants false | Pass |
 | Hosted service-role table grants | SELECT/INSERT/UPDATE on four GitHub ingress tables; no table privileges on other 19; exact matrix mismatch zero | Pass |
@@ -31,11 +33,11 @@ Reason: hosted migration `026`, owner onboarding, installation `153445938`, real
 | Service-role CHECK boundary | Only sensitive-JSON SECURITY DEFINER wrapper granted for provider-ingress constraints | Hosted via `019`; real provider-ingress insert/rejection acceptance pending |
 | Browser/request hardening | Command same-origin enforcement; restrictive CSP/security headers; external Markdown images suppressed | Build and public production checks pass; authenticated verification pending |
 | Projects provider detail | Sync freshness, branch protection/SHA, commit and PR timestamps/authors, mergeability, default-branch and per-PR head-SHA checks | Pass against the live selected repository |
-| GitHub App configuration | App ID `4573846`; server-only variable names configured; commit-identity names configured for Production/Preview | Configuration plus live commit evidence |
+| GitHub App configuration | Primary App `4573846`; candidate App `4582606` (`surge-softwarefactory-next`) owner-only with retained exact callback/active webhook; distinct candidate variable names Sensitive in Production/Preview; commit identity remains configured | Primary is the live repository path; candidate is configured but **Not Connected** |
 | Supabase Auth owner | `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory org/workspace owner onboarding succeeded | Pass for onboarding |
 | GitHub provider installation | Installation `153445938`, connected to `surgeservicesllc`, exactly `surgeservicesllc/SoftwareFactory` selected | Pass |
 | GitHub real connection | Connection `d17c63a9-d995-481e-98ce-b737efb32ce5`; project `b1f23696-437e-4d89-b55f-d7a949980e8f`; callback/sync/read/audit journey observed | Connected for the owner repository path |
-| GitHub webhook | Fresh secret in Sensitive Production/Preview; invalid signatures return `401`/no-store; owner UI reports update but reloads blank/inactive; documented App-JWT `PATCH /app/hook/config` returns `404`; GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and is OPEN; no valid signed delivery exists | **Not Connected** |
+| GitHub webhook | Primary App `4573846` still reloads blank/inactive under OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724). Candidate App `4582606` retains the exact active endpoint, but candidate-aware ingress is not deployed, the App is not installed, and no valid signed processed production delivery exists. | **Not Connected** |
 | Local credential cleanup | Temporary downloaded App PEM and ignored provider-verification helper scripts deleted after use; no credential/helper artifact persisted | Pass |
 | Project/repository and file-to-draft-PR flow | Live branches/commits/checks/PRs/tree/README reads; ordinary draft `#6`; protected RED draft `#7`; likely-secret rejection; immutable Activity evidence | Pass for accepted owner scenarios; remaining adverse matrix pending |
 | Acceptance cleanup | Wrong-App-bot attribution on prior draft PRs `#4`/`#5` was detected; both PRs closed unmerged and isolated branches deleted; `main` unchanged | Pass |
@@ -68,7 +70,8 @@ Hosted Supabase baseline:
   prior verified CLI identity: surgeservicesllc@gmail.com
   current selected CLI profile: unauthorized/wrong account for a fresh recheck; no mutations performed
   exact linked project: qpuofpmagrmyamahqwxw
-  current ledger: through 026; local and remote match
+  current hosted ledger: through 026; pre-027 local and remote history matched
+  local pending migration: 027
   linked database lint: clean through 026
   current dry run: up to date; ACL matrix mismatch 0
 ```
@@ -77,7 +80,7 @@ Historical baseline evidence remains useful for regression comparison; current h
 
 ## Security and production acceptance still required
 
-- Wait for GitHub repair under OPEN Support ticket `#4660724`, then make the App retain the active webhook endpoint and observe a valid signed production delivery plus duplicate, stale, out-of-order, deletion, and restore handling. Invalid-signature rejection already passes.
+- Publish/deploy the dual-App tree, host and verify migration `027`, install candidate App `4582606` for exactly the intended repository, and observe an exact signed processed production delivery before owner handoff. Then verify project/history continuity, candidate-backed reads/draft-only writes, reverse observation, disconnect/loss, and lifecycle handling. Keep Support ticket `#4660724` as the primary-App defect record.
 - Verify a second authenticated tenant plus anonymous/RPC denial through real caller sessions. Only one actual user/email is authorized today; local behavioral tests do not replace the live matrix.
 - Verify stale SHA, unapproved/admin protected denial, approval expiry/lease, wrong tenant, renamed/same-name repository, revoked installation, insufficient permission, rate limit, stable retry, ambiguous completion recovery, disconnect/loss, and history preservation. Exact owner approval and likely-secret rejection already pass in the live owner journey.
 

@@ -4,9 +4,14 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
-Finish the remaining Phase 1B acceptance gaps. Migration `026` is hosted with a zero-mismatch ACL matrix, `surgeservicesllc@gmail.com` completed owner Auth/onboarding, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection/project/read/draft-write/audit path passes. GitHub Support ticket `#4660724` is OPEN for the provider webhook defect; the webhook remains **Not Connected**, and the live second-tenant/failure matrix remains incomplete. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
+Finish the verified dual-App replacement cutover and remaining Phase 1B acceptance gaps. Migration `026` is hosted with a zero-mismatch ACL matrix, `surgeservicesllc@gmail.com` completed owner Auth/onboarding, and primary installation `153445938` remains connected to exactly `surgeservicesllc/SoftwareFactory`. Candidate App `4582606` (`surge-softwarefactory-next`) is registered owner-only and retains the exact callback and active webhook URL; distinct candidate settings are Sensitive in Vercel Production and Preview. The local dual-App/handoff tree plus migration `027` passes 56 files/436 tests and a 38-route build, but is not committed, deployed, or hosted. The candidate is not installed, has no signed processed delivery, and no handoff has occurred. Primary Support ticket `#4660724` remains OPEN; the webhook capability and Phase 1B acceptance remain incomplete. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
 
 ## Current repository work
+
+- The uncommitted pre-release tree supports isolated `primary` and `candidate` GitHub App configurations. Candidate configuration is all-or-nothing and must not reuse App identity, OAuth credentials, private key, state secret, or webhook secret.
+- Install state binds slot plus App ID; callback selects and verifies that exact App; repository token minting follows the persisted installation `app_id`; webhook verification accepts configured signing secrets but rejects App-ID/installation provenance mismatches.
+- Connections can start the candidate install and show App identity. The owner-only `HANDOFF GITHUB PROJECT` path requires two distinct active installations, the same provider account and immutable external repository, selected/enabled repositories, no pending change reservation, no conflicting active link, and a processed signed webhook delivery for the first target.
+- Migration `027` performs the rebind atomically, preserves project UUID and existing history, appends immutable evidence, serializes against new reservations, and permits an explicit evidence-bound reverse handoff while both installations remain active.
 
 - Callback browser failures return to Connections with bounded safe messages; JSON consumers retain no-store structured errors.
 - GitHub-returned browser URLs are constrained to HTTPS `github.com` origins; binary/invalid UTF-8 reads fail safely; pull-list tokens request only necessary permissions.
@@ -24,7 +29,7 @@ Finish the remaining Phase 1B acceptance gaps. Migration `026` is hosted with a 
 
 ## Migration boundary
 
-Hosted Supabase is current through `026`, with local and remote history matching:
+Hosted Supabase is current through `026`; its history matched the repository before local migration `027` was added:
 
 - `011`: initial direct mutation closure and `github_pat_` detection.
 - `012`: actor-attributed terminal change audit.
@@ -42,30 +47,33 @@ Hosted Supabase is current through `026`, with local and remote history matching
 - `024`: raw Activity/webhook direct-read closure plus caller-member bounded `list_activity`.
 - `025`: generic secret-assignment detection, protected approval/reservation/token-order integrity, and serialized stable repository relinking.
 - `026`: revoke all `service_role` public-table privileges, then restore only SELECT/INSERT/UPDATE on the four GitHub ingress tables.
+- `027`: local only; owner-only atomic GitHub project handoff with target signed-delivery precondition, history preservation, reservation serialization, immutable evidence, and bounded reverse handoff. It is not applied to hosted Supabase.
 
 Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
 
 ## Evidence
 
-- Supabase project `qpuofpmagrmyamahqwxw` was verified with hosted history current through `026`, local=remote, dry run/lint clean, and prior evidence recording 23/23 RLS+FORCE, 32 policies/zero policyless, 22 secret guards, and false tested raw authenticated/browser grants. The currently selected local Supabase CLI profile is now unauthorized or associated with the wrong account for a fresh recheck and was not used for any mutation; reauthenticate as `surgeservicesllc@gmail.com` and reconfirm the exact project ref before any new linked command.
+- Supabase project `qpuofpmagrmyamahqwxw` was verified with hosted history current through `026`, pre-`027` history matching, dry run/lint clean, and prior evidence recording 23/23 RLS+FORCE, 32 policies/zero policyless, 22 secret guards, and false tested raw authenticated/browser grants. The currently selected local Supabase CLI profile is now unauthorized or associated with the wrong account for a fresh recheck and was not used for any mutation; reauthenticate as `surgeservicesllc@gmail.com` and reconfirm the exact project ref before any new linked command.
 - Exact post-`026` ACL mismatch count is zero. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19.
 - `surgeservicesllc@gmail.com` is confirmed/authenticated; SoftwareFactory organization/workspace onboarding and owner membership succeeded. This is the only actual user/email authorized for live acceptance; no second live tenant was created.
 - Provider installation `153445938` is connected to `surgeservicesllc` and selects exactly `surgeservicesllc/SoftwareFactory`. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` pass callback, sync, branches/commits/checks/PRs/tree/README reads, and immutable Activity verification.
 - The GitHub webhook is **Not Connected**: a GitHub App JWT validates App `4573846`, but documented `PATCH /app/hook/config` returns `404`; the owner UI reports update success but reloads blank/inactive. GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` after the provider/UI defect proof and is OPEN. The fresh secret is stored only in Sensitive Production/Preview, invalid signatures return `401`/no-store, and no valid signed delivery is verified.
+- Candidate App `4582606` (`surge-softwarefactory-next`) is owner-only and retains `https://softwarefactory-tan.vercel.app/api/github/webhooks` as active after reload, with the exact production callback and least-privilege Phase 1B permissions/events. Its distinct candidate environment names are Sensitive in Vercel Production and Preview. It is still **Not Connected** because the dual-App code is not deployed, the App is not installed, and no signed processed delivery exists.
 - Verified application release recorded 2026-08-13: commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754` passed both jobs.
 - Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. Production Playwright passes 48/48, nine JavaScript assets contain zero forbidden markers, and recent logs contain zero errors.
 - `GITHUB_COMMIT_IDENTITY_NAME` and `GITHUB_COMMIT_IDENTITY_EMAIL` are configured server-only in Vercel Production and Preview for the approved public identity. Ordinary draft PR `#6` (commit `e789303`) and owner-approved protected RED draft PR `#7` (commit `6a808de`) are open, draft, unmerged, and use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer.
 - Earlier App-bot-attributed acceptance PRs `#4` and `#5` were closed unmerged and their isolated branches were deleted. A fake generic password assignment was rejected before any PR; the Activity view shows connection, project, ordinary change, protected approval, provider-boundary, and draft-PR events.
 - The temporary downloaded App PEM and ignored provider-verification helper scripts were deleted after use; no credential/helper artifact remains in the repository checkout.
-- Current local evidence: `npm run check` passes lint/typecheck, 54 files/408 tests, and a 38-route build.
+- Current local pre-release evidence: `npm run check` passes lint/typecheck, 56 files/436 tests, and a 38-route build. Production still runs exact application commit `0bd0485`.
 - Exact Vercel project `surgeservices-projects/softwarefactory` is linked and encrypted environment names are present; secret values were not recorded.
 
 ## Immediate sequence
 
-1. Wait for GitHub to repair App `4573846` under OPEN Support ticket `#4660724`, then activate the exact webhook and complete valid signed-delivery/lifecycle acceptance; invalid signatures already fail closed.
-2. Complete the live two-tenant/anonymous/RPC matrix. Only one actual user/email is currently authorized, so local behavioral tests are supporting—not substitute—evidence.
-3. Exercise remaining stale-SHA, idempotency/recovery, protected denial/expiry, wrong-tenant, revoked/permission/rate-limit, lifecycle ordering, disconnect/loss, and history-preservation cases.
-4. Report Phase 1B complete only after those gaps close; otherwise preserve the exact Connected/Not Connected distinctions above.
+1. Review and commit the current tree with the approved identity, push it to `main`, verify CI, and deploy that exact artifact without changing automatic-action controls.
+2. Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com`, reconfirm project `qpuofpmagrmyamahqwxw`, apply migration `027`, and rerun ledger/lint/RLS/grant verification.
+3. Install candidate App `4582606` for exactly `surgeservicesllc/SoftwareFactory`; verify callback, sync, App/repository identity, and reads. Trigger and verify a valid signed **processed** delivery for that exact installation.
+4. Use the owner-only exact confirmation to hand off the existing project, then verify project/history continuity, Activity evidence, repository reads, and draft-only write routing. Keep primary installation `153445938` available through an observation/reverse-handoff check before any retirement decision.
+5. Complete the live two-tenant/anonymous/RPC and remaining failure/disconnect/lifecycle matrix. Report Phase 1B complete only after those gaps close; otherwise preserve the exact Connected/Not Connected distinctions above.
 
 ## Safe operating notes
 
@@ -79,16 +87,18 @@ Post-`026` dry run and lint are clean. The exact hosted ACL matrix has zero mism
 
 ## Completion checklist
 
-- [x] Hosted migration history is current through `026`; local=remote, dry run/lint are clean, and prior RLS/catalog/browser-grant checks pass.
+- [x] Hosted migration history is current through `026`; pre-`027` history matched, dry run/lint were clean, and prior RLS/catalog/browser-grant checks pass.
 - [x] Migration `026` is hosted; exact ACL mismatch count is zero, with four intended `service_role` ingress tables and no table privileges on the other 19.
-- [x] Current local lint/typecheck, 54 files/408 tests, and 38-route build pass.
+- [x] Current pre-release lint/typecheck, 56 files/436 tests, and 38-route build pass.
 - [x] Local and exact production E2E/responsive/accessibility pass 48/48; production focused signed-out race passes 30/30.
-- [x] Source/rebuilt-static secret/client gates pass; production ten-asset privileged-marker scan passes.
+- [x] Published application-release source/rebuilt-static and production privileged-marker gates pass.
+- [ ] Candidate cutover source/tracked-file/rebuilt-client secret scans and coverage rerun pass before publication.
 - [x] Application release `0bd0485` is published, CI `31704289754` passes both jobs, and matching READY production deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is verified. Later documentation-only successors retain this runtime evidence unless application code changes.
 - [x] Migrations `011`-`026` are hosted and post-apply dry-run/lint/ACL checks pass.
 - [ ] Real Supabase two-tenant/anonymous/RPC behavior passes; the sole owner session passes, and local tests cover the unexecuted second-tenant boundary.
 - [x] Real GitHub callback/sync/project/read/edit/ordinary-plus-protected-draft-PR/audit journey passes for the owner connection.
 - [x] Exact deployment commit identity is configured server-side in Production/Preview and live draft commits prove matching author and committer without App-bot fallback.
-- [ ] Real active webhook, valid signed delivery, and disconnect/loss journey pass.
+- [ ] Publish/deploy dual-App code, host migration `027`, install candidate App `4582606`, and verify an exact signed processed delivery.
+- [ ] Owner handoff, project/history continuity, candidate-backed reads/draft-only write, reverse observation, and disconnect/loss journey pass.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [ ] Documentation and scorecard reflect final evidence without claiming Phase 1C.

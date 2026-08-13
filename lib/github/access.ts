@@ -102,7 +102,7 @@ export async function requireGitHubConnection(
 
   const { data: installation, error: installationError } = await supabase
     .from("github_installations")
-    .select("id,external_installation_id,status")
+    .select("id,external_installation_id,app_id,status")
     .eq("organization_id", activeOrganizationId)
     .eq("connection_id", connection.id)
     .maybeSingle();
@@ -155,6 +155,7 @@ export async function requireGitHubConnection(
   }
 
   return {
+    appId: installation.app_id,
     connectionId: connection.id,
     installationId: installation.external_installation_id,
     internalInstallationId: installation.id,

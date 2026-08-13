@@ -32,8 +32,26 @@ type GithubConnection = {
   statusLabel: "Connected" | "Not Connected" | "Error";
   statusReason: string | null;
   account: { login: string; type: string | null } | null;
-  installation: { id: number; repositorySelection: string; suspendedAt: string | null; lastSyncedAt: string | null } | null;
+  installation: {
+    appId?: number;
+    appSlug?: string;
+    id: number;
+    repositorySelection: string;
+    suspendedAt: string | null;
+    lastSyncedAt: string | null;
+  } | null;
   repositories: Repository[];
+};
+type ConfiguredGithubApp = {
+  appId: number;
+  appSlug: string;
+  slot: "candidate" | "primary";
+};
+type GithubProject = {
+  connectionId: string | null;
+  githubRepositoryId: number | null;
+  id: string;
+  name: string;
 };
 
 type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
@@ -50,8 +68,10 @@ export function ConnectionsConsole() {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [connections, setConnections] = useState<GithubConnection[]>([]);
+  const [configuredApps, setConfiguredApps] = useState<ConfiguredGithubApp[]>([]);
+  const [projects, setProjects] = useState<GithubProject[]>([]);
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | null>(null);
+  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | null>(null);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -77,13 +97,29 @@ export function ConnectionsConsole() {
       }
       setOrganization(active);
 
-      const connectionsResponse = await fetch("/api/github/connections", { cache: "no-store" });
+      const [connectionsResponse, appMetadataResponse, projectsResponse] = await Promise.all([
+        fetch("/api/github/connections", { cache: "no-store" }),
+        fetch("/api/github/install/start", { cache: "no-store" }),
+        fetch("/api/projects", { cache: "no-store" }),
+      ]);
       const connectionsBody = (await connectionsResponse.json()) as { connections?: GithubConnection[]; error?: { message?: string } };
       if (!connectionsResponse.ok && connectionsResponse.status !== 503) {
         throw new Error(connectionsBody.error?.message ?? "GitHub connections could not be loaded.");
       }
       setConnections(connectionsBody.connections ?? []);
+      const appMetadataBody = (await appMetadataResponse.json()) as {
+        apps?: ConfiguredGithubApp[];
+        error?: { message?: string };
+      };
+      setConfiguredApps(appMetadataResponse.ok ? appMetadataBody.apps ?? [] : []);
+      const projectsBody = (await projectsResponse.json()) as {
+        projects?: GithubProject[];
+      };
+      setProjects(projectsResponse.ok ? projectsBody.projects ?? [] : []);
       if (connectionsResponse.status === 503) setMessage(connectionsBody.error?.message ?? "The GitHub App server configuration is not complete.");
+      else if (!appMetadataResponse.ok) {
+        setMessage(appMetadataBody.error?.message ?? "Replacement GitHub App configuration is unavailable.");
+      }
       setLoadState("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Connections could not be loaded.");
@@ -140,7 +176,7 @@ export function ConnectionsConsole() {
     }
   }
 
-  async function connectGithub() {
+  async function connectGithub(appSlot: "candidate" | "primary" = "primary") {
     if (!organization) return;
     setPending("connect");
     setMessage("");
@@ -148,13 +184,75 @@ export function ConnectionsConsole() {
       const response = await fetch("/api/github/install/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId: organization.id, returnTo: "/connections" }),
+        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/connections" }),
       });
       const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
       if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
       window.location.assign(body.authorizationUrl);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "GitHub authorization failed.");
+      setPending(null);
+    }
+  }
+
+  async function handoffProject(
+    targetConnection: GithubConnection,
+    project: GithubProject,
+  ) {
+    const sourceConnection = connections.find(
+      (connection) => connection.id === project.connectionId,
+    );
+    const targetRepository = targetConnection.repositories.find(
+      (repository) => repository.id === project.githubRepositoryId,
+    );
+    if (
+      !sourceConnection?.installation
+      || !targetConnection.installation
+      || !targetRepository
+      || !project.githubRepositoryId
+    ) return;
+
+    const confirmation = window.prompt(
+      `Move ${project.name} from installation #${sourceConnection.installation.id} to #${targetConnection.installation.id}?\n\nExisting project and change history will be preserved.\n\nType HANDOFF GITHUB PROJECT to confirm.`,
+    );
+    if (confirmation !== "HANDOFF GITHUB PROJECT") return;
+    const rationale = window.prompt(
+      "Why is this RED GitHub App handoff required? Enter 20–500 characters.",
+    )?.trim();
+    if (!rationale || rationale.length < 20 || rationale.length > 500) return;
+    const rollbackPlan = window.prompt(
+      "Enter the 20–500 character rollback/containment plan.",
+      "Reverse the handoff to the prior live installation and verify repository reads.",
+    )?.trim();
+    if (!rollbackPlan || rollbackPlan.length < 20 || rollbackPlan.length > 500) return;
+
+    setPending("handoff");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/github/connections/${targetConnection.id}/handoff`,
+        {
+          body: JSON.stringify({
+            confirmation,
+            fromConnectionId: sourceConnection.id,
+            fromInstallationId: sourceConnection.installation.id,
+            projectId: project.id,
+            rationale,
+            repositoryId: project.githubRepositoryId,
+            rollbackPlan,
+            toInstallationId: targetConnection.installation.id,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+      );
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The GitHub App handoff failed safely.");
+      setMessage(`${project.name} now uses installation #${targetConnection.installation.id}. Existing history was preserved.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The GitHub App handoff failed safely.");
+    } finally {
       setPending(null);
     }
   }
@@ -202,6 +300,31 @@ export function ConnectionsConsole() {
     } finally {
       setPending(null);
     }
+  }
+
+  const candidateApp = configuredApps.find((app) => app.slot === "candidate") ?? null;
+  const hasCandidateInstallation = Boolean(candidateApp && connections.some(
+    (connection) => connection.installation?.appId === candidateApp.appId
+      && connection.status === "connected",
+  ));
+  function eligibleHandoffProjects(targetConnection: GithubConnection) {
+    if (!candidateApp || targetConnection.status !== "connected" || !targetConnection.installation) return [];
+    const candidateTarget = targetConnection.installation.appId === candidateApp.appId;
+    const primaryTarget = configuredApps.some(
+      (app) => app.slot === "primary" && app.appId === targetConnection.installation?.appId,
+    );
+    if (!candidateTarget && !primaryTarget) return [];
+    const repositoryIds = new Set(targetConnection.repositories.map((repository) => repository.id));
+    return projects.filter((project) => (
+      project.connectionId
+      && project.connectionId !== targetConnection.id
+      && project.githubRepositoryId
+      && repositoryIds.has(project.githubRepositoryId)
+      && (candidateTarget || connections.some(
+        (connection) => connection.id === project.connectionId
+          && connection.installation?.appId === candidateApp.appId,
+      ))
+    ));
   }
 
   if (loadState === "loading") {
@@ -326,7 +449,7 @@ export function ConnectionsConsole() {
                 </p>
                 {connection.installation ? (
                   <p className="mt-1 text-sm text-faint">
-                    Installation #{connection.installation.id} · Repository access: {formatRepositorySelection(connection.installation.repositorySelection)}
+                    {connection.installation.appSlug ? `${connection.installation.appSlug} · ` : ""}Installation #{connection.installation.id} · Repository access: {formatRepositorySelection(connection.installation.repositorySelection)}
                   </p>
                 ) : null}
               </div>
@@ -344,6 +467,18 @@ export function ConnectionsConsole() {
                     {pending === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
                     Disconnect
                   </button>
+                  {eligibleHandoffProjects(connection).map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => void handoffProject(connection, project)}
+                      disabled={pending !== null || organization?.role !== "owner"}
+                      className="btn btn-primary btn-sm"
+                    >
+                      {pending === "handoff" ? <Loader2 className="size-4 animate-spin" /> : null}
+                      Activate for {project.name}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -389,7 +524,7 @@ export function ConnectionsConsole() {
               You will authorize the app on GitHub, then choose exactly which repositories it may read.
               You can change or remove that access at any time.
             </p>
-            <button type="button" onClick={connectGithub} disabled={pending !== null} className="btn btn-primary mt-5">
+            <button type="button" onClick={() => void connectGithub("primary")} disabled={pending !== null} className="btn btn-primary mt-5">
               {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
               Connect GitHub
             </button>
@@ -398,10 +533,18 @@ export function ConnectionsConsole() {
       )}
 
       {connections.length ? (
-        <button type="button" onClick={connectGithub} disabled={pending !== null} className="btn btn-secondary">
-          {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
-          Connect another account
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void connectGithub("primary")} disabled={pending !== null} className="btn btn-secondary">
+            {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+            Connect another account
+          </button>
+          {candidateApp && !hasCandidateInstallation ? (
+            <button type="button" onClick={() => void connectGithub("candidate")} disabled={pending !== null} className="btn btn-primary">
+              {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+              Install replacement GitHub App
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <Card className="p-5">

@@ -11,7 +11,7 @@ Status: **Complete baseline; deployed UI evidence retained.**
 
 ## Phase 1B - Production GitHub App Integration
 
-Status: **Hosted migrations are verified through `026`, owner Auth/onboarding succeeds, and installation `153445938` is connected to exactly `surgeservicesllc/SoftwareFactory`. The live owner connection/project/read/draft-write/audit path passes. The webhook remains Not Connected and the live second-tenant/failure matrix remains incomplete.**
+Status: **Hosted migrations are verified through `026`, owner Auth/onboarding succeeds, and primary installation `153445938` remains connected to exactly `surgeservicesllc/SoftwareFactory`. Candidate App `4582606` retains the exact active webhook configuration, and the dual-App plus atomic handoff tree/migration `027` passes locally. That work is not committed, deployed, hosted, installed, or handed off; no signed processed candidate delivery exists. The webhook remains Not Connected and the live second-tenant/failure matrix remains incomplete.**
 
 Implemented in source:
 
@@ -24,14 +24,17 @@ Implemented in source:
 - Commit-attribution hardening requires one strictly validated server-only deployment identity, sends it as both author and committer, and has no App-bot fallback. Production/Preview configuration and ordinary/protected live draft attribution are verified.
 - Transaction-serialized stable repository linking rejects concurrent active duplicates and permits relink after archival.
 - Hosted forward migrations `011`-`026`, including the verified `service_role` table-grant remediation.
+- Pre-release dual-App configuration/state/token/webhook isolation and owner-only atomic reversible handoff migration `027`; full local check passes 56 files/436 tests and a 38-route build, but production/hosted/provider acceptance is pending.
 
 Verified application-release evidence recorded 2026-08-13: commit `0bd048565a9e002848c5553ccbe43ab0e217780e` (tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`), green CI run `31704289754`, and READY Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable production alias. Later documentation-only successors do not invalidate this runtime evidence unless application code changes.
 
 Remaining exit work:
 
-1. Make GitHub retain the exact active webhook URL and accept a valid signed delivery; invalid signatures already fail closed.
-2. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real caller sessions. Only one actual user/email is currently authorized, so local behavioral tests do not replace this live matrix.
-3. Exercise the remaining live failure/disconnect cases, including stale SHA, role/approval expiry, revoked/insufficient permission, rate limit, provider ordering, terminal deletion/restore, and preserved history.
+1. Commit/deploy the dual-App tree and apply/verify migration `027` against exact hosted project `qpuofpmagrmyamahqwxw`.
+2. Install candidate App `4582606` for exactly `surgeservicesllc/SoftwareFactory`, pass callback/sync/read acceptance, and process a valid signed delivery for that exact installation.
+3. Execute the owner-only atomic handoff; verify project/history continuity, candidate-backed reads/draft-only writes, immutable evidence, and an evidence-bound reverse observation before retiring any primary access.
+4. Verify two-tenant/anonymous/RPC/audit/provider-ingress behavior with real caller sessions. Only one actual user/email is currently authorized, so local behavioral tests do not replace this live matrix.
+5. Exercise the remaining live failure/disconnect cases, including stale SHA, role/approval expiry, revoked/insufficient permission, rate limit, provider ordering, terminal deletion/restore, and preserved history.
 
 No merge or production deployment autonomy is implied. The repository connection is live; the webhook, Phase 1C, Phase 2, and every automatic action remain **Not Connected** or OFF as applicable.
 

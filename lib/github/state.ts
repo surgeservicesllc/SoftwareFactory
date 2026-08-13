@@ -2,11 +2,15 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
+import type { GitHubAppSlot } from "@/lib/github/config";
+
 const STATE_LIFETIME_SECONDS = 10 * 60;
 
 export const GITHUB_INSTALL_STATE_COOKIE = "softwarefactory_github_install_state";
 
 export type GitHubInstallState = {
+  appId: number;
+  appSlot: GitHubAppSlot;
   exp: number;
   iat: number;
   nonce: string;
@@ -49,12 +53,17 @@ export function normalizeReturnTo(value: string | null | undefined) {
 }
 
 export function createGitHubInstallState(
-  input: Pick<GitHubInstallState, "organizationId" | "returnTo" | "userId">,
+  input: Pick<
+    GitHubInstallState,
+    "appId" | "appSlot" | "organizationId" | "returnTo" | "userId"
+  >,
   secret: string,
   now = Date.now(),
 ) {
   const issuedAt = Math.floor(now / 1000);
   const state: GitHubInstallState = {
+    appId: input.appId,
+    appSlot: input.appSlot,
     exp: issuedAt + STATE_LIFETIME_SECONDS,
     iat: issuedAt,
     nonce: randomBytes(32).toString("base64url"),
@@ -68,6 +77,41 @@ export function createGitHubInstallState(
     nonce: state.nonce,
     token: `${payload}.${sign(payload, secret)}`,
   };
+}
+
+/**
+ * Reads only the server-issued routing hint needed to choose which configured
+ * secret verifies the state. Callers must not trust either value until the
+ * complete state has passed `verifyGitHubInstallState`.
+ */
+export function readGitHubInstallStateTarget(token: string): {
+  appId: number;
+  appSlot: GitHubAppSlot;
+} {
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra) {
+    throw new GitHubStateError("GitHub installation state is invalid.");
+  }
+
+  let state: unknown;
+  try {
+    state = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    throw new GitHubStateError("GitHub installation state is invalid.");
+  }
+  if (!state || typeof state !== "object") {
+    throw new GitHubStateError("GitHub installation state is invalid.");
+  }
+
+  const candidate = state as Partial<GitHubInstallState>;
+  if (
+    !Number.isSafeInteger(candidate.appId)
+    || Number(candidate.appId) <= 0
+    || (candidate.appSlot !== "primary" && candidate.appSlot !== "candidate")
+  ) {
+    throw new GitHubStateError("GitHub installation state is invalid.");
+  }
+  return { appId: candidate.appId as number, appSlot: candidate.appSlot };
 }
 
 export function verifyGitHubInstallState(
@@ -95,7 +139,10 @@ export function verifyGitHubInstallState(
   const candidate = state as Partial<GitHubInstallState>;
   const nowSeconds = Math.floor(now / 1000);
   if (
-    typeof candidate.exp !== "number"
+    !Number.isSafeInteger(candidate.appId)
+    || Number(candidate.appId) <= 0
+    || (candidate.appSlot !== "primary" && candidate.appSlot !== "candidate")
+    || typeof candidate.exp !== "number"
     || typeof candidate.iat !== "number"
     || typeof candidate.nonce !== "string"
     || typeof candidate.organizationId !== "string"
@@ -113,6 +160,8 @@ export function verifyGitHubInstallState(
   }
 
   return {
+    appId: candidate.appId as number,
+    appSlot: candidate.appSlot,
     exp: candidate.exp,
     iat: candidate.iat,
     nonce: candidate.nonce,

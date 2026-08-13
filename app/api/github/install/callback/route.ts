@@ -13,9 +13,17 @@ import {
   revokeGitHubUserToken,
   verifyUserCanAccessInstallation,
 } from "@/lib/github/client";
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import {
+  getGitHubAppConfigurationForSlot,
+  type GitHubAppConfiguration,
+} from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
-import { GITHUB_INSTALL_STATE_COOKIE, verifyGitHubInstallState } from "@/lib/github/state";
+import {
+  GITHUB_INSTALL_STATE_COOKIE,
+  GitHubStateError,
+  readGitHubInstallStateTarget,
+  verifyGitHubInstallState,
+} from "@/lib/github/state";
 import { persistGitHubInstallationSnapshot } from "@/lib/github/sync";
 import { jsonNoStore } from "@/lib/server/http";
 
@@ -74,6 +82,7 @@ async function callbackErrorResponse(request: Request, error: unknown) {
 }
 
 export async function GET(request: Request) {
+  let configuration: GitHubAppConfiguration | null = null;
   let userToken: string | null = null;
   try {
     const url = new URL(request.url);
@@ -100,7 +109,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const configuration = getGitHubAppConfiguration();
+    const stateTarget = readGitHubInstallStateTarget(parsed.data.state);
+    configuration = getGitHubAppConfigurationForSlot(stateTarget.appSlot);
+    if (configuration.appId !== stateTarget.appId) {
+      throw new GitHubStateError("GitHub installation state does not match the configured App.");
+    }
     const { activeOrganization, supabase, user } = await requireGitHubUser();
     const state = verifyGitHubInstallState(
       parsed.data.state,
@@ -108,6 +121,9 @@ export async function GET(request: Request) {
       user.id,
       configuration.stateSecret,
     );
+    if (state.appId !== configuration.appId || state.appSlot !== stateTarget.appSlot) {
+      throw new GitHubStateError("GitHub installation state does not match the configured App.");
+    }
     requireMatchingActiveOrganization(activeOrganization.id, state.organizationId);
     await requireOrganizationManager(supabase, user.id, state.organizationId);
 
@@ -155,9 +171,9 @@ export async function GET(request: Request) {
   } catch (error) {
     return callbackErrorResponse(request, error);
   } finally {
-    if (userToken) {
+    if (userToken && configuration) {
       try {
-        await revokeGitHubUserToken(getGitHubAppConfiguration(), userToken);
+        await revokeGitHubUserToken(configuration, userToken);
       } catch {
         // Configuration/provider failures are handled by the primary flow. The
         // short-lived token is never persisted or returned regardless.

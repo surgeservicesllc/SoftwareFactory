@@ -19,18 +19,19 @@ npm run build
 
 | Gate | Result |
 | --- | --- |
-| Current local check | Pass - lint, typecheck, 54 files/408 Vitest tests, 38-route production build |
+| Current local check | Pass - lint, typecheck, 56 files/436 Vitest tests, 38-route production build; candidate cutover tree is not committed or deployed |
 | Application release integration suite | Pass - 21 files/163 tests |
-| Migration `026` | Pass locally and hosted - local=remote, dry run/lint clean, exact ACL mismatch count zero |
-| Current local coverage | Pass - statements 70.36%, branches 71.34%, functions 62.58%, lines 71.37% |
+| Migration `026` | Retained pass locally and hosted - pre-`027` history matched, dry run/lint clean, exact ACL mismatch count zero |
+| Current-tree coverage | Pass - statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82% |
 | Local and exact production E2E/responsive/accessibility | Pass - Playwright 48/48 across desktop/tablet/mobile, including axe checks |
 | Signed-out dashboard race | Pass - focused browser-error test repeated 30/30 against production |
 | Verified application-release secret/client scan | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
+| Candidate cutover coverage and secret/client scan | Pending before publication; the full `npm run check` is green but does not replace these gates |
 | Prior local baseline before migrations `014`-`019` | 25 files/208 tests, 34-route build, and 12/12 local E2E passed; historical evidence only |
-| Hosted Supabase migration application | Pass through `026`; local=remote, dry run up to date |
+| Hosted Supabase migration application | Pass through `026`; pre-`027` history matched and dry run was up to date; local `027` pending |
 | Hosted RLS/catalog/browser grants | Pass - 23/23 RLS+FORCE, 32 policies, zero policyless, 22 secret guards, tested raw authenticated/browser grants false |
 | Hosted service-role table grants | Pass - exact matrix mismatch zero; SELECT/INSERT/UPDATE on four GitHub ingress tables, no table privileges on other 19 |
-| Hosted Supabase CLI/link | Authorized as `surgeservicesllc@gmail.com`; linked to exact project `qpuofpmagrmyamahqwxw` |
+| Hosted Supabase CLI/link | Current selected local profile is wrong/unauthorized and was not used for mutation; reauthenticate as `surgeservicesllc@gmail.com` and reconfirm exact project `qpuofpmagrmyamahqwxw` before applying `027` |
 | Hosted Supabase lint | Clean against hosted state through `026` |
 | GitHub publication/CI | Pass - application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`, tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0`, author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI `31704289754`, both jobs green |
 | Exact production Playwright | Post-rotation `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` passes 48/48; exact-commit CI browser/accessibility job is green |
@@ -39,6 +40,8 @@ npm run build
 | Vercel configuration/runtime | `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`; nine JavaScript assets have zero forbidden markers and recent logs have zero errors |
 | Real in-product GitHub acceptance | Pass for the owner connection/project/read/draft-write/secret-rejection/audit path; webhook and live second-tenant matrix remain pending |
 | Live controlled commit identity | Pass - ordinary draft PR `#6` commit `e789303` and protected draft PR `#7` commit `6a808de` use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer |
+| Candidate provider configuration | Pass for registration only - owner-only App `4582606` retains the exact callback/active webhook and has isolated Sensitive Production/Preview variable names; not installed and **Not Connected** |
+| Dual-App/handoff tests | Pass within current full local check - App-slot/App-ID state, isolated config, persisted-App token routing, dual-signature/provenance webhook handling, owner handoff route, and migration `027` contracts/behavior |
 
 The repository and intended production/CI runtime require Node 22 or newer. The final local run used Node 22.23.1; older historical test evidence does not replace that run.
 
@@ -52,7 +55,9 @@ Phase 1B tests cover or must continue to cover:
 - App JWT/private-key/server-secret validation;
 - installation/repository synchronization, provider-time ordering, terminal deletion, explicit restore, and revoked/permission/rate-limit failures;
 - installation-token repository and permission scoping;
+- primary/candidate configuration isolation, complete-or-absent candidate settings, App-slot/App-ID-bound installation state, persisted-installation-App token routing, and safe absence of a candidate;
 - webhook signature, invalid signature, size bounds, delivery deduplication/conflict, accepted/ignored events, and redaction;
+- dual-App webhook signature selection, persisted installation/App-ID provenance mismatch rejection, and the processed target-installation delivery precondition;
 - repository coordinates, refs, paths, file-size/binary handling, branch/commit/PR/check mapping;
 - literal normalized repository-name matching with no SQL wildcard expansion;
 - serialized first/existing installation synchronization, authoritative post-upsert binding, and synchronized-default-branch project linking;
@@ -67,7 +72,8 @@ Phase 1B tests cover or must continue to cover:
 - signed-webhook repository-grant reconciliation, stable repository-to-project attribution, bounded activity details, exact linked-project metadata propagation, and stale/terminal lifecycle ordering through narrow RPC/trigger boundaries;
 - Projects sync/branch protection/SHA/commit/PR timestamps/authors/mergeability, default-branch checks, and per-PR head-SHA checks;
 - controlled branch + expected SHA + draft-PR-only mutation and idempotency; and
-- schema/RPC/RLS/FORCE RLS/audit contracts for migrations.
+- schema/RPC/RLS/FORCE RLS/audit contracts for migrations; and
+- owner-only atomic handoff across two live same-account/same-repository installations, pending-change/conflict rejection, immutable history/evidence preservation, and evidence-bound reverse handoff.
 
 Contract tests validate static SQL properties, but hosted catalog and cross-tenant user-session checks are still required.
 
@@ -89,11 +95,11 @@ The final E2E run should exercise desktop, tablet, and mobile layouts plus:
 
 ## Hosted Supabase evidence
 
-Hosted ledger/dry-run/lint checks pass through `026`, local and remote match, and the exact service-role ACL matrix has zero mismatches. The authenticated owner path passes. Only one actual user/email is authorized, so a second live tenant was intentionally not created; local behavioral tests cover tenant denial, but the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
+Hosted ledger/dry-run/lint checks pass through `026`, the pre-`027` local and remote history matched, and the exact service-role ACL matrix has zero mismatches. Migration `027` is local only and must receive a fresh hosted ledger/lint/RLS/grant verification after the CLI is reauthenticated to the exact owner/project. The authenticated owner path passes. Only one actual user/email is authorized, so a second live tenant was intentionally not created; local behavioral tests cover tenant denial, but the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
 
 ## Real GitHub acceptance
 
-Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). The real owner callback/token/repository/project/read/draft-write/audit path passes. Provider configuration, mocked requests, and route tests still do not prove the missing active webhook or live second-tenant behavior.
+Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). The primary owner callback/token/repository/project/read/draft-write/audit path passes. Candidate App `4582606` retaining an active provider webhook and local route/database tests do not prove candidate installation, a signed processed production delivery, owner handoff, post-handoff behavior, or live second-tenant behavior.
 
 ## Final evidence
 

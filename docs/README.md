@@ -1,6 +1,6 @@
 # Documentation index
 
-SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history is verified through `026`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Installation `153445938` is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected; the real connection, project, repository reads, draft-only writes, secret rejection, and Activity evidence have been exercised. The provider webhook remains blank/inactive and **Not Connected**, and the live second-tenant matrix remains pending, so Phase 1B is not complete.
+SoftwareFactory is implementing **Phase 1B: Production GitHub App Integration**. Hosted history is verified through `026`, and `surgeservicesllc@gmail.com` completed authenticated owner onboarding. Primary installation `153445938` remains connected to exactly `surgeservicesllc/SoftwareFactory`; its real connection, project, reads, draft-only writes, secret rejection, and Activity evidence pass. Candidate App `4582606` retains the exact active webhook and has isolated Vercel configuration, while the dual-App/handoff tree and local migration `027` pass locally. They are not committed, deployed, hosted, installed, or handed off, and no signed processed candidate delivery exists. The webhook remains **Not Connected**, and the live second-tenant matrix remains pending, so Phase 1B is not complete.
 
 ## Developer and operator guides
 

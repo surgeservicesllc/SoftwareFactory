@@ -7,7 +7,7 @@ Browser (untrusted)
   -> Next.js server boundary
     -> Supabase Auth session + active organization + server validation
       -> Supabase Postgres (RLS/FORCE RLS + immutable activity evidence)
-      -> GitHub App adapter (server-only secrets)
+      -> GitHub App adapter (server-only primary/candidate secrets selected by installation App ID)
         -> short-lived token scoped to one installation/repository/permission set
         -> GitHub API / signed webhooks (untrusted provider data)
 ```
@@ -37,7 +37,8 @@ The Phase 1D observation module is an inert policy boundary: it may calculate `W
 - `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
 - RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
 - `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
-- Hosted migrations `011`-`026` implement the hardening chain described above. Local and remote history match; dry run/lint and prior RLS/catalog/browser-grant checks pass. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub provider-ingress tables and no table privileges on the other 19.
+- Hosted migrations `011`-`026` implement the hardening chain described above. Their pre-`027` history matched; dry run/lint and prior RLS/catalog/browser-grant checks pass. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub provider-ingress tables and no table privileges on the other 19.
+- Local migration `027` adds an owner-only atomic project handoff between two active installations for the same provider account and immutable external repository. It serializes with change reservations, requires a processed signed target-installation delivery before first handoff, preserves project/history identity, emits immutable evidence, and permits an evidence-bound reverse handoff. It is not hosted.
 - Applied migration filenames are immutable; timestamp gaps are not renumbered.
 
 ## Secrets and token lifecycle
@@ -80,6 +81,14 @@ There is also no HTTP local-repository write path; the legacy route, UI, and env
 - Repository rename/default-branch updates reach only projects linked through the same tenant connection and emit redacted immutable evidence through `014`.
 - After `021`/`023` promotion, project attribution and metadata propagation follow the immutable repository UUID rather than mutable names; accepted GitHub activity may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition details.
 - Unknown events/installations are ignored safely, not used to create tenant ownership.
+
+## Dual-App replacement boundary
+
+- Primary App `4573846`/installation `153445938` remains the live project path while candidate App `4582606` is introduced independently. The primary webhook defect remains tracked under Support `#4660724`.
+- Candidate configuration is absent-or-complete and cryptographically isolated. Signed install state binds App slot plus App ID, callback verification uses that exact App, and all repository token minting follows the persisted installation `app_id`.
+- Webhook ingress may verify either configured secret but rejects a signing-App/persisted-installation App-ID mismatch. A retained provider endpoint is not sufficient evidence; the exact target installation must produce a processed signed delivery.
+- The owner handoff uses an exact confirmation and an atomic database RPC. Both installations and repository copies must remain active/selected and refer to the same GitHub account/external repository. Pending changes and conflicting links block the transition; project UUID, change history, and audit history are preserved.
+- The candidate path is pre-release: its code is not deployed, migration `027` is not hosted, the App is not installed, no signed processed delivery exists, and no handoff occurred.
 
 ## Security invariants
 

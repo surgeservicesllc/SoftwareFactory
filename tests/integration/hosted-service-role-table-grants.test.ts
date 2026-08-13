@@ -11,6 +11,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
+const latestMigration =
+  "20260812002700_handoff_github_project_connection.sql";
 
 const publicTables = [
   "activity_events",
@@ -22,6 +24,8 @@ const publicTables = [
   "deployments",
   "github_change_requests",
   "github_installations",
+  "github_project_handoff_approvals",
+  "github_project_handoff_executions",
   "github_protected_change_approvals",
   "github_repositories",
   "github_webhook_deliveries",
@@ -134,7 +138,7 @@ describe("hosted service-role table grants", () => {
       const migrationFiles = (await readdir(migrationsDirectory))
         .filter((file) => /^\d+.*\.sql$/.test(file))
         .sort();
-      expect(migrationFiles.at(-1)).toBe(grantsMigration);
+      expect(migrationFiles.at(-1)).toBe(latestMigration);
 
       for (const migrationFile of migrationFiles) {
         if (migrationFile === grantsMigration) continue;

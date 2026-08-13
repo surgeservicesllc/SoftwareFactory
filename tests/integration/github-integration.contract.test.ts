@@ -154,8 +154,11 @@ describe("GitHub App server/API contract", () => {
     const client = source("lib/github/client.ts");
     expect(config).toMatch(/^import "server-only";/);
     expect(client).toMatch(/^import "server-only";/);
-    expect(config).toContain("GITHUB_APP_PRIVATE_KEY");
-    expect(config).toContain("GITHUB_APP_WEBHOOK_SECRET");
+    expect(config).toContain('"GITHUB_APP" | "GITHUB_CANDIDATE_APP"');
+    expect(config).toContain('`${prefix}_PRIVATE_KEY`');
+    expect(config).toContain('`${prefix}_WEBHOOK_SECRET`');
+    expect(config).toContain("GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64");
+    expect(config).toContain("GITHUB_CANDIDATE_APP_WEBHOOK_SECRET");
     expect(config).not.toContain("NEXT_PUBLIC_GITHUB");
   });
 
@@ -180,6 +183,8 @@ describe("GitHub App server/API contract", () => {
     expect(signaturePosition).toBeGreaterThan(0);
     expect(parsePosition).toBeGreaterThan(signaturePosition);
     expect(webhook).toContain('request.headers.get("x-github-delivery")');
+    expect(webhook).toContain("getGitHubAppConfigurationEntries");
+    expect(webhook).toContain("webhook_app_mismatch");
     expect(webhook).toContain('insertResult.error?.code === "23505"');
     expect(webhook).toMatch(/(?:"repository"|repository):/);
     expect(webhook).toContain('"status"');

@@ -1,30 +1,31 @@
 # Production GitHub App integration
 
-Status: **The owner repository connection and draft-only file-change path are live; the provider webhook remains Not Connected and Phase 1B acceptance is incomplete.**
+Status: **The primary owner repository connection and draft-only file-change path are live. A replacement App now retains the correct provider webhook, but its cutover code is pre-release, it is not installed, and the webhook remains Not Connected. Phase 1B acceptance is incomplete.**
 
-The GitHub App exists, its server-only values are configured in Vercel, and installation `153445938` completed the authenticated production callback for owner `surgeservicesllc@gmail.com`. It is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` drive verified live Connections, Projects, Files, and Activity views. GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) is OPEN for the provider webhook defect. The webhook is a separate boundary and remains **Not Connected**.
+Primary App `4573846` and installation `153445938` completed the authenticated production callback for owner `surgeservicesllc@gmail.com`. The installation is connected to `surgeservicesllc` with exactly `surgeservicesllc/SoftwareFactory` selected. Connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f` drive verified live Connections, Projects, Files, and Activity views. Its webhook still cannot be retained under OPEN GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724).
 
-## Registered App
+Owner-only candidate App `4582606` (`surge-softwarefactory-next`) is registered separately with the exact callback and an active exact webhook that persists after reload. Its distinct candidate environment names are Sensitive in Vercel Production and Preview. The dual-App code and migration `027` pass the full local check, but are uncommitted, undeployed, and unhosted. The candidate is not installed, no signed processed candidate delivery exists, and no project handoff occurred. The webhook is therefore still a separate **Not Connected** capability.
 
-| Field | Production value/evidence |
-| --- | --- |
-| Owner | `surgeservicesllc` |
-| GitHub App name | `Surge SoftwareFactory` |
-| App slug | `surge-softwarefactory` |
-| App ID | `4573846` |
-| Homepage URL | `https://softwarefactory-tan.vercel.app` |
-| Callback URL | `https://softwarefactory-tan.vercel.app/api/github/install/callback` |
-| Setup URL | Leave blank; the authenticated installation callback owns setup completion |
-| Webhook URL | Required value: `https://softwarefactory-tan.vercel.app/api/github/webhooks`; provider General page currently appears blank/inactive; GitHub Support ticket `#4660724` is OPEN |
-| Installation scope | Any account; the installing user chooses repositories in GitHub |
-| User authorization during installation | Enabled |
-| Expiring user authorization tokens | Enabled |
-| Device flow | Disabled |
-| Redirect on installation update | Enabled |
-| Verified provider installation | Personal `surgeservicesllc` installation `153445938` |
-| Selected repository scope | Only `surgeservicesllc/SoftwareFactory` |
+## Registered Apps
 
-The application webhook route and Vercel secret configuration exist, and a GitHub App JWT validates App `4573846`. The webhook secret was freshly rotated in Sensitive Production and Preview scopes and the exact `0bd0485` artifact was redeployed. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. After this provider/UI defect was reproduced, GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and is OPEN. An invalid signature returns `401` with private no-store behavior, but no valid signed delivery exists. Treat the provider webhook as **Not Connected** until GitHub repairs the App state, the exact URL is retained as an active hook, and a signed delivery is accepted.
+| Field | Primary/live repository path | Candidate/pre-release replacement |
+| --- | --- | --- |
+| Owner | `surgeservicesllc` | `surgeservicesllc` |
+| GitHub App name | `Surge SoftwareFactory` | `Surge SoftwareFactory Next` |
+| App slug | `surge-softwarefactory` | `surge-softwarefactory-next` |
+| App ID | `4573846` | `4582606` |
+| Homepage URL | `https://softwarefactory-tan.vercel.app` | `https://softwarefactory-tan.vercel.app` |
+| Callback URL | `https://softwarefactory-tan.vercel.app/api/github/install/callback` | `https://softwarefactory-tan.vercel.app/api/github/install/callback` |
+| Webhook URL | Required URL does not persist; blank/inactive on reload; Support `#4660724` OPEN | Exact `https://softwarefactory-tan.vercel.app/api/github/webhooks` retained and Active after reload |
+| Installation scope | Existing personal installation | Owner-only/private App |
+| User authorization during installation | Enabled | Enabled |
+| Device flow | Disabled | Disabled |
+| Verified provider installation | `153445938` | None; not installed |
+| Selected repository scope | Exactly `surgeservicesllc/SoftwareFactory` | None until installation; must be exactly `surgeservicesllc/SoftwareFactory` for acceptance |
+
+The deployed application webhook route and primary Vercel configuration exist, and a GitHub App JWT validates App `4573846`. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. After this provider/UI defect was reproduced, GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and remains OPEN.
+
+Candidate App `4582606` was created through the supported provider registration flow and independently retains the exact active endpoint. The pre-release route can verify either configured HMAC secret, identify the signing App, and reject a delivery whose signing App ID conflicts with the persisted installation App ID. That code is not in production, and the candidate has no installation or delivery. Treat the provider webhook as **Not Connected** until the exact cutover artifact is deployed, migration `027` is hosted, the candidate callback/sync succeeds, and a valid signed delivery is processed for that exact installation.
 
 ## Repository permissions
 
@@ -39,6 +40,8 @@ The application webhook route and Vercel secret configuration exist, and a GitHu
 | Workflows | No access | The standard Phase 1B route cannot modify workflow files |
 
 Organization permissions: none. Account permissions: none. Administration, secrets, deployments, environments, members, and branch-protection write access are not requested.
+
+The candidate uses the same least-privilege permission and event set. Do not widen it during installation or cutover.
 
 Subscribed/handled events:
 
@@ -73,18 +76,20 @@ All GitHub values are server-only and must use Vercel encrypted/sensitive enviro
 | `GITHUB_COMMIT_IDENTITY_EMAIL` | Server-owned email used for both author and committer on every controlled file commit |
 | `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
 
-The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e` after the webhook-secret rotation. The callback fix and explicit commit-identity boundary are deployed. The webhook remains blank/inactive and **Not Connected** while GitHub Support ticket `#4660724` awaits provider repair.
+The optional replacement slot uses the corresponding `GITHUB_CANDIDATE_APP_ID`, `GITHUB_CANDIDATE_APP_SLUG`, `GITHUB_CANDIDATE_APP_CLIENT_ID`, `GITHUB_CANDIDATE_APP_CLIENT_SECRET`, `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` (or the raw `GITHUB_CANDIDATE_APP_PRIVATE_KEY` alternative), `GITHUB_CANDIDATE_APP_CALLBACK_URL`, `GITHUB_CANDIDATE_APP_WEBHOOK_SECRET`, and `GITHUB_CANDIDATE_APP_STATE_SECRET` names. Candidate configuration must be either absent or complete and must be cryptographically isolated from the primary App. The Base64-key form and all other required candidate names are currently Sensitive in Vercel Production and Preview; the raw key alternative is not configured.
+
+The exact Vercel project `surgeservices-projects/softwarefactory` is linked. Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and the stable alias, sourced from exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. It does not contain candidate-aware code. Primary App `4573846` remains the live repository path; candidate App `4582606` is configuration-only until the reviewed tree is committed, deployed, installed, and verified.
 
 The two commit-identity values are configuration, not request fields. They are configured in Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`, stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
 
 ## Connection flow
 
-1. An authenticated organization owner/admin selects **Connect GitHub**.
-2. `POST /api/github/install/start` verifies same-origin request, active user, and organization manager role.
-3. The server creates signed state valid for ten minutes and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
+1. An authenticated organization owner/admin selects the primary connection action or, once the cutover code is deployed, **Install replacement GitHub App**.
+2. `POST /api/github/install/start` verifies same-origin request, active user, organization manager role, and the explicit `primary` or `candidate` slot.
+3. The server creates signed state valid for ten minutes, binds the chosen App slot and App ID, and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
 4. The browser follows the returned GitHub installation URL.
 5. GitHub returns `code`, `installation_id`, and signed `state` to the callback.
-6. The callback verifies user/session/state/nonce/role, exchanges the one-time code, lists the user's installations through bounded documented `GET /user/installations`, selects the exact returned installation ID, verifies it belongs to this App, then reads repository state using an App installation token. This corrected flow is deployed and passed for installation `153445938`.
+6. The callback reads only the untrusted App routing hint needed to choose a configured verification secret, then verifies the complete user/session/state/nonce/role/App-slot/App-ID binding. It exchanges the one-time code, lists the user's installations through bounded documented `GET /user/installations`, selects the exact returned installation ID, verifies it belongs to that App, then reads repository state using the matching App installation token. The primary path is deployed and passed for installation `153445938`; the candidate path is locally tested but not deployed or exercised.
 7. The ephemeral user OAuth token is never persisted or returned and is revoked best-effort after verification.
 8. An audited database workflow serializes by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, stores only installation/account/repository metadata, and updates the provider-neutral connection.
 9. The UI displays Connected only when the connection and installation are both active.
@@ -96,10 +101,12 @@ Cancellation, organization-approval pending, wrong App, expired/mismatched state
 | Route | Purpose |
 | --- | --- |
 | `POST /api/github/install/start` | Begin owner/admin installation with signed state |
+| `GET /api/github/install/start` | Return caller-authorized non-secret configured App IDs/slugs/slots for the Connections UI |
 | `GET /api/github/install/callback` | Verify installation and synchronize metadata |
 | `GET /api/github/connections` | Tenant-scoped connection/install/repository status |
 | `POST /api/github/connections/:id/sync` | Owner/admin reconciliation with live GitHub state |
 | `POST /api/github/connections/:id/disconnect` | Exact-confirmation disconnect while preserving history |
+| `POST /api/github/connections/:id/handoff` | Owner-only exact-confirmation project rebind to a verified target installation; pre-release until migration `027` is hosted |
 | `GET /api/github/repositories` | Selected repositories for a connection |
 | `GET /api/github/repositories/:owner/:repo/branches` | Branches and protection visibility |
 | `GET /api/github/repositories/:owner/:repo/commits` | Commit history, optionally path-scoped |
@@ -125,7 +132,9 @@ Migration `20260812000700_github_project_linking.sql` adds a transactional funct
 
 Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
 
-Repository migrations `011`-`026` are hosted; local and remote match, dry run/lint are clean, and prior RLS/catalog/browser-grant checks pass. The exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
+Repository migrations `011`-`026` are hosted; their local and remote history matched, dry run/lint were clean, and prior RLS/catalog/browser-grant checks pass. The exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
+
+Local migration `20260812002700_handoff_github_project_connection.sql` is not hosted. It adds an authenticated-owner RPC that atomically moves the existing project/link between two distinct active installations for the same GitHub account and immutable external repository. It requires selected/enabled matching repositories, no pending reserved change, no conflicting active link, and a processed signed delivery for the first target installation. It preserves the project UUID and historical evidence, appends immutable handoff evidence, serializes against new change reservations, and permits an evidence-bound reverse handoff while both installations remain active.
 
 All exposed GitHub integration tables, including the protected-approval table added by `022`, use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
 
@@ -152,6 +161,7 @@ Live acceptance created ordinary draft PR `#6` (commit `e789303`) and owner-appr
 ## Webhook guarantees
 
 - Verify HMAC-SHA256 over the unparsed body with constant-time comparison.
+- In the pre-release dual-App path, match the signature against configured primary/candidate secrets and require the signing App ID to equal the persisted installation App ID.
 - Reject missing/invalid signatures and bodies over 2 MiB.
 - Require syntactically valid GitHub delivery/event headers.
 - Apply an event-specific schema before reconciliation; accepted `installation_repositories` additions require full bounded repository metadata.
@@ -163,13 +173,17 @@ Live acceptance created ordinary draft PR `#6` (commit `e789303`) and owner-appr
 - Hosted migrations `021`, `023`, and `024` use immutable repository identity and bounded `list_activity`; authenticated browser sessions cannot directly read raw Activity or webhook evidence.
 - Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
 
+A provider-side Active indicator is only configuration evidence. Candidate handoff stays blocked until a delivery signed by the candidate secret is stored as `processed` for the exact synchronized candidate installation.
+
 ## Production acceptance checklist
 
 Checked items below establish the Connected owner repository path. Do not mark the webhook Connected or Phase 1B complete until every remaining item is observed against the real service:
 
-- [x] Production release contains the current routes and migrations.
+- [x] Production release `0bd0485` contains the verified primary routes and hosted migrations through `026`.
+- [ ] Commit and deploy the locally passing dual-App routes, then apply and verify migration `027` on hosted project `qpuofpmagrmyamahqwxw`.
 - [x] Provider/UI defect evidence was submitted under `surgeservicesllc` in OPEN GitHub Support ticket `#4660724` on 2026-08-13.
-- [ ] GitHub App webhook endpoint visibly retains the exact URL and is active (currently appears blank/inactive); a signed delivery is accepted.
+- [x] Candidate App `4582606` visibly retains the exact webhook URL and Active setting after reload, with the exact callback and least-privilege permissions/events.
+- [ ] Install candidate App `4582606` for exactly `surgeservicesllc/SoftwareFactory`; complete callback/sync and accept a signed processed delivery for that exact installation.
 - [x] An authenticated SoftwareFactory owner starts the installation flow.
 - [x] GitHub provider installation `153445938` is connected to `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
 - [x] Callback verifies the installation and returns to Connections.
@@ -186,6 +200,8 @@ Checked items below establish the Connected owner repository path. Do not mark t
 - [x] One exact owner-approved protected-file test creates only an isolated branch, commit, and draft PR (`#7`), with immutable approval/execution evidence and no merge/deploy/default-branch write.
 - [x] Connection, project, ordinary change, protected approval, provider-boundary, and draft-PR transitions create immutable Activity evidence.
 - [ ] Pull-request webhook updates reconcile through a valid signed delivery.
+- [ ] The owner executes `HANDOFF GITHUB PROJECT`; the same project/history survives, repository reads and draft-only writes use the candidate App, and immutable handoff evidence is visible.
+- [ ] Verify the evidence-bound reverse handoff during the observation window before any primary installation retirement decision.
 - [ ] Delayed installation/repository events are ignored by provider time, deleted installation IDs stay terminal, and a newer explicit repository restore remains unselected until access sync.
 - [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.
 
@@ -197,7 +213,8 @@ Checked items below establish the Connected owner repository path. Do not mark t
 - **Connection lost:** check installation revocation/suspension, selected repositories, and current permissions; then reconnect or sync.
 - **Permission denied:** compare the exact App settings above. Do not add administration/workflow permissions as a shortcut.
 - **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
-- **Webhook blank/inactive or App-auth configuration `404`:** no hook object currently exists. Track GitHub Support ticket `#4660724`; after GitHub repairs App `4573846`, enter the exact production endpoint, enable Active, save, reload the General page, and confirm it remains visible/available through App authentication before sending or observing a delivery.
+- **Primary webhook blank/inactive or App-auth configuration `404`:** App `4573846` remains affected. Preserve installation `153445938` as the live repository/rollback path and track GitHub Support ticket `#4660724`; do not bypass the supported integration model.
+- **Candidate webhook is Active but handoff is unavailable:** provider configuration alone is insufficient. Confirm the dual-App artifact is deployed, migration `027` is hosted, App `4582606` is installed for the exact repository, callback/sync persisted the matching App ID, and a valid candidate-signed delivery is `processed` for that exact installation.
 - **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
 - **Commit identity unavailable:** configure both server-only commit-identity variables with the exact approved deployment identity, redeploy, and verify both author and committer on a new draft-PR commit without printing the values in logs.
 - **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.

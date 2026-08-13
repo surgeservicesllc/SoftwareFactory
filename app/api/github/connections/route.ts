@@ -20,7 +20,7 @@ export async function GET() {
 
     const { data: installations, error: installationsError } = await supabase
       .from("github_installations")
-      .select("id,connection_id,external_installation_id,account_login,account_type,account_avatar_url,target_type,repository_selection,status,permissions,subscribed_events,suspended_at,installed_at,last_synced_at")
+      .select("id,connection_id,external_installation_id,app_id,app_slug,account_login,account_type,account_avatar_url,target_type,repository_selection,status,permissions,subscribed_events,suspended_at,installed_at,last_synced_at")
       .eq("organization_id", activeOrganization.id)
       .in("connection_id", connectionIds);
     if (installationsError) throw installationsError;
@@ -69,6 +69,8 @@ export async function GET() {
           id: connection.id,
           installation: installation
             ? {
+              appId: installation.app_id,
+              appSlug: installation.app_slug,
               id: installation.external_installation_id,
               installedAt: installation.installed_at,
               lastSyncedAt: installation.last_synced_at,

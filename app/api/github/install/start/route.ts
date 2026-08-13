@@ -6,7 +6,10 @@ import {
   requireMatchingActiveOrganization,
   requireOrganizationManager,
 } from "@/lib/github/access";
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import {
+  getGitHubAppConfigurationEntries,
+  getGitHubAppConfigurationForSlot,
+} from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import {
   createGitHubInstallState,
@@ -19,9 +22,26 @@ import { assertSameOriginRequest } from "@/lib/supabase/request";
 export const runtime = "nodejs";
 
 const requestSchema = z.object({
+  appSlot: z.enum(["primary", "candidate"]).default("primary"),
   organizationId: z.string().uuid(),
   returnTo: z.string().max(512).optional(),
 }).strict();
+
+export async function GET() {
+  try {
+    const { activeOrganization, supabase, user } = await requireGitHubUser();
+    await requireOrganizationManager(supabase, user.id, activeOrganization.id);
+    return jsonNoStore({
+      apps: getGitHubAppConfigurationEntries().map(({ configuration, slot }) => ({
+        appId: configuration.appId,
+        appSlug: configuration.appSlug,
+        slot,
+      })),
+    });
+  } catch (error) {
+    return githubRouteErrorResponse(error);
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +54,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const configuration = getGitHubAppConfiguration();
+    const configuration = getGitHubAppConfigurationForSlot(parsed.data.appSlot);
     const { activeOrganization, supabase, user } = await requireGitHubUser();
     requireMatchingActiveOrganization(
       activeOrganization.id,
@@ -43,6 +63,8 @@ export async function POST(request: Request) {
     await requireOrganizationManager(supabase, user.id, parsed.data.organizationId);
     const state = createGitHubInstallState(
       {
+        appId: configuration.appId,
+        appSlot: parsed.data.appSlot,
         organizationId: parsed.data.organizationId,
         returnTo: normalizeReturnTo(parsed.data.returnTo),
         userId: user.id,
@@ -65,6 +87,7 @@ export async function POST(request: Request) {
     authorizationUrl.searchParams.set("state", state.token);
 
     return jsonNoStore({
+      appSlot: parsed.data.appSlot,
       authorizationUrl: authorizationUrl.toString(),
       expiresAt: state.expiresAt,
     });

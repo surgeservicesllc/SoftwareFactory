@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { requireGitHubConnection, requireGitHubUser, requireOrganizationManager } from "@/lib/github/access";
 import { fetchGitHubInstallationSnapshot, GitHubApiError } from "@/lib/github/client";
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import { persistGitHubInstallationSnapshot } from "@/lib/github/sync";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
@@ -24,7 +24,6 @@ export async function POST(
         { status: 400 },
       );
     }
-    const configuration = getGitHubAppConfiguration();
     const { activeOrganization, supabase, user } = await requireGitHubUser();
     const context = await requireGitHubConnection(
       supabase,
@@ -34,6 +33,7 @@ export async function POST(
       undefined,
       { allowInactive: true },
     );
+    const configuration = getGitHubAppConfigurationForAppId(context.appId);
     await requireOrganizationManager(supabase, user.id, context.organizationId);
     const snapshot = await fetchGitHubInstallationSnapshot(configuration, context.installationId);
     const result = await persistGitHubInstallationSnapshot(

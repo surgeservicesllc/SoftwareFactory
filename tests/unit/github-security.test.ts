@@ -10,6 +10,7 @@ import {
   createGitHubInstallState,
   GitHubStateError,
   normalizeReturnTo,
+  readGitHubInstallStateTarget,
   verifyGitHubInstallState,
 } from "@/lib/github/state";
 import {
@@ -49,6 +50,8 @@ describe("GitHub installation state", () => {
   it("round-trips a signed, session-bound, time-limited state", () => {
     const created = createGitHubInstallState(
       {
+        appId: 4573846,
+        appSlot: "primary",
         organizationId: "11111111-1111-4111-8111-111111111111",
         returnTo: "/connections?source=github",
         userId: "22222222-2222-4222-8222-222222222222",
@@ -64,6 +67,8 @@ describe("GitHub installation state", () => {
       stateSecret,
       now + 60_000,
     )).toMatchObject({
+      appId: 4573846,
+      appSlot: "primary",
       organizationId: "11111111-1111-4111-8111-111111111111",
       returnTo: "/connections?source=github",
       userId: "22222222-2222-4222-8222-222222222222",
@@ -73,6 +78,8 @@ describe("GitHub installation state", () => {
   it("rejects tampering, replay from another session, and expiration", () => {
     const created = createGitHubInstallState(
       {
+        appId: 4573846,
+        appSlot: "primary",
         organizationId: "11111111-1111-4111-8111-111111111111",
         returnTo: "/connections",
         userId: "22222222-2222-4222-8222-222222222222",
@@ -109,6 +116,36 @@ describe("GitHub installation state", () => {
     expect(() => normalizeReturnTo("https://evil.example/steal")).toThrow();
     expect(() => normalizeReturnTo("//evil.example/steal")).toThrow();
     expect(() => normalizeReturnTo("/settings")).toThrow();
+  });
+
+  it("binds the configured App target into the signed state", () => {
+    const created = createGitHubInstallState(
+      {
+        appId: 5000001,
+        appSlot: "candidate",
+        organizationId: "11111111-1111-4111-8111-111111111111",
+        returnTo: "/connections",
+        userId: "22222222-2222-4222-8222-222222222222",
+      },
+      stateSecret,
+      now,
+    );
+
+    expect(readGitHubInstallStateTarget(created.token)).toEqual({
+      appId: 5000001,
+      appSlot: "candidate",
+    });
+    const [payload, signature] = created.token.split(".");
+    const decoded = JSON.parse(Buffer.from(payload!, "base64url").toString("utf8")) as Record<string, unknown>;
+    decoded.appSlot = "primary";
+    const tampered = `${Buffer.from(JSON.stringify(decoded), "utf8").toString("base64url")}.${signature}`;
+    expect(() => verifyGitHubInstallState(
+      tampered,
+      created.nonce,
+      "22222222-2222-4222-8222-222222222222",
+      stateSecret,
+      now,
+    )).toThrow(GitHubStateError);
   });
 });
 

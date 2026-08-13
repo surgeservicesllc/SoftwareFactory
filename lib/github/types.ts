@@ -40,6 +40,7 @@ export type GitHubInstallationToken = {
 };
 
 export type GitHubConnectionContext = {
+  appId: number;
   connectionId: string;
   installationId: number;
   internalInstallationId: string;

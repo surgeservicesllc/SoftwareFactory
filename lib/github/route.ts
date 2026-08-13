@@ -8,7 +8,7 @@ import {
   requireGitHubUser,
 } from "@/lib/github/access";
 import { createGitHubInstallationToken, GitHubApiError } from "@/lib/github/client";
-import { getGitHubAppConfiguration } from "@/lib/github/config";
+import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
 import { validateRepositoryCoordinate } from "@/lib/github/repository";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
 
@@ -91,7 +91,7 @@ export async function createGitHubRepositoryRequestToken(
   if (!context.repository) throw new Error("repository_context_missing");
   try {
     const installationToken = await createGitHubInstallationToken(
-      getGitHubAppConfiguration(),
+      getGitHubAppConfigurationForAppId(context.appId),
       context.installationId,
       {
         permissions,

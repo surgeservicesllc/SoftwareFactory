@@ -110,6 +110,8 @@ function installation(overrides: Row = {}): Row {
     account_avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
     account_login: "example-org",
     account_type: "Organization",
+    app_id: 4573846,
+    app_slug: "software-factory",
     connection_id: "connection-connected",
     external_installation_id: 101,
     id: "installation-connected",
@@ -298,7 +300,12 @@ describe("GitHub connections route", () => {
           type: "Organization",
         },
         id: "connection-connected",
-        installation: expect.objectContaining({ id: 101, suspendedAt: null }),
+        installation: expect.objectContaining({
+          appId: 4573846,
+          appSlug: "software-factory",
+          id: 101,
+          suspendedAt: null,
+        }),
         repositories: [expect.objectContaining({
           fullName: "example-org/application",
           id: 501,

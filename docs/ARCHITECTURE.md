@@ -8,9 +8,9 @@ SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authentic
 | --- | --- | --- |
 | Browser UI | Present safe state and collect intent | Untrusted client |
 | Next.js server | Authenticate, authorize, validate, redact, and coordinate provider operations | Trusted application boundary |
-| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `026`; local=remote, dry run/lint and exact ACL matrix pass. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19; owner session passes and the live second-tenant matrix remains pending |
-| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Installation `153445938` is connected to `surgeservicesllc` and restricted to `surgeservicesllc/SoftwareFactory`; live callback, sync, project, read, draft-write, and audit paths pass for the owner |
-| GitHub webhook route | Verify raw-body HMAC, deduplicate delivery IDs, store redacted payloads, reconcile state | Implemented; live delivery not yet verified |
+| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `026`; exact ACL matrix passes. Local migration `027` adds atomic handoff but is not hosted; owner session passes and the live second-tenant matrix remains pending |
+| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Primary installation `153445938` is live for exactly `surgeservicesllc/SoftwareFactory`; candidate App `4582606` is configured but not deployed/installed/connected |
+| GitHub webhook route | Verify raw-body HMAC, bind signing App provenance, deduplicate delivery IDs, store redacted payloads, reconcile state | Candidate-aware path passes locally; no candidate signed processed production delivery exists |
 | Vercel | Serve Next.js application and server functions | Current production `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at `https://softwarefactory-fa4gc8jfm-surgeservices-projects.vercel.app` and stable alias, source exact `main` application commit `0bd048565a9e002848c5553ccbe43ab0e217780e`. Deploy/rollback adapter **Not Connected** |
 | AI workers | Future task execution | Codex and Claude **Not Connected** |
 
@@ -32,15 +32,15 @@ Installation synchronization is serialized by external installation ID before co
 ```text
 Authenticated owner/admin
   -> POST /api/github/install/start
-  -> signed 10-minute state + HttpOnly nonce cookie
-  -> GitHub App installation and user authorization
+  -> signed 10-minute state bound to App slot + App ID + HttpOnly nonce cookie
+  -> exact GitHub App installation and user authorization
   -> GET /api/github/install/callback
   -> verify state, user access, App identity, installation, repositories
   -> revoke ephemeral user OAuth token
   -> persist installation/repository metadata and activity evidence
 ```
 
-The App private key, client secret, state secret, webhook secret, user OAuth token, and installation token never enter application tables or the browser.
+Primary and candidate App private keys, client/state/webhook secrets, user OAuth tokens, and installation tokens never enter application tables or the browser. Candidate configuration is complete-or-absent and must be cryptographically distinct. Repository token routing follows the persisted installation App ID.
 
 ## Controlled file-change flow
 
@@ -64,7 +64,7 @@ There is no HTTP local-repository writer. The removed legacy `/api/files` route 
 
 ## Webhook path
 
-The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, applies an event-specific schema, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. Unknown events and unknown installations are retained as ignored evidence. Hosted migration `013` upserts bounded newly granted repository metadata, `014` keeps exact connection-linked projects aligned, `016` makes installation deletion terminal and provider-ordered, `018` provider-orders repository metadata while preserving terminal deletion until an explicit newer restore, and `021`/`023` attribute project activity through the immutable repository UUID with bounded actor/resource/state/check details. Migration `024` additionally revokes authenticated direct reads from both raw Activity and webhook-delivery tables. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
+The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, applies an event-specific schema, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. The pre-release route matches either isolated App secret and rejects a signing-App ID that disagrees with the persisted installation App ID. Unknown events and unknown installations are retained as ignored evidence. Hosted migration `013` upserts bounded newly granted repository metadata, `014` keeps exact connection-linked projects aligned, `016` makes installation deletion terminal and provider-ordered, `018` provider-orders repository metadata while preserving terminal deletion until an explicit newer restore, and `021`/`023` attribute project activity through the immutable repository UUID with bounded actor/resource/state/check details. Migration `024` additionally revokes authenticated direct reads from both raw Activity and webhook-delivery tables. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
 
 ## Activity read path
 
@@ -74,7 +74,7 @@ Agents, commands, tasks, runs, and reports use caller-member, tenant-scoped list
 
 ## Data architecture
 
-Migrations `001`-`026` define the hosted control-plane history (with no `006`). Every one of 23 exposed public tables has RLS and FORCE RLS. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19.
+Migrations `001`-`026` define the hosted control-plane history (with no `006`). Every one of 23 exposed public tables has RLS and FORCE RLS. Post-`026` verification reports zero ACL-matrix mismatches: `service_role` has only SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. Local migration `027` atomically rebinds an existing project to a verified second installation for the same account/repository, requires a processed signed target delivery on first handoff, preserves history, serializes change reservations, and records immutable evidence; it is not hosted.
 
 Command mutation routes enforce same-origin requests. Global response headers set a restrictive Content Security Policy, deny framing/objects, restrict connections to SoftwareFactory/Supabase, allow images only from self/data/blob/GitHub avatars, and limit other browser capabilities. Repository Markdown previews suppress external images.
 

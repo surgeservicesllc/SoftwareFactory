@@ -18,8 +18,8 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 
 ## GitHub authentication
 
-- Installation start uses HMAC-signed, ten-minute state plus an HttpOnly nonce cookie tied to user and organization.
-- Callback exchanges the one-time OAuth code, verifies user access and exact App identity, and never persists/returns the user token.
+- Installation start uses HMAC-signed, ten-minute state plus an HttpOnly nonce cookie tied to user, organization, App slot, and App ID.
+- Callback selects the configured App from the untrusted routing hint, verifies the complete state with that App's distinct secret, requires the signed App ID to match configuration, exchanges the one-time OAuth code, verifies user access and exact App identity, and never persists/returns the user token.
 - App JWTs use the server-only private key and a bounded lifetime.
 - Installation tokens are short-lived, repository-ID-scoped, and permission-reduced for each operation.
 - Provider responses are size bounded and schema validated; redirects and API origins are allowlisted.
@@ -28,11 +28,12 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 
 - Read raw bytes before JSON parsing and cap them at 2 MiB.
 - Verify `X-Hub-Signature-256` with the server-only secret using constant-time comparison.
+- In the pre-release dual-App boundary, identify the signing App from its isolated secret and reject a delivery when that App ID differs from the persisted installation App ID.
 - Validate GitHub delivery/event headers and an allowlisted payload shape.
 - Enforce idempotency by delivery ID and payload hash; conflicting replay returns an error.
 - Store only a redacted subset plus hash/status metadata. Authenticated clients cannot directly read webhook-delivery or raw Activity rows; `list_activity` may expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence, never the stored subset or unknown nested fields.
 - Unknown events/installations are ignored safely and cannot mutate another tenant.
-- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`026` are hosted.
+- Newly granted repository metadata is schema-bounded and reconciled only through a service-role RPC after signature, installation, tenant, and event validation. Installation/repository transitions also require provider ordering evidence and preserve terminal deletion. Migrations `011`-`026` are hosted; owner-handoff migration `027` is local only.
 
 ## Repository mutations
 
@@ -48,7 +49,7 @@ The browser is untrusted. Next.js server code authenticates and authorizes. Supa
 
 ## Secrets
 
-Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_`. The App private key, GitHub client/state/webhook secrets, OAuth/installation tokens, Supabase service role, DB credentials, and future provider keys stay in environment-scoped secret storage. Database connection rows hold only non-secret metadata/opaque references.
+Only the Supabase URL and publishable/anonymous client key may use `NEXT_PUBLIC_`. Primary and candidate App private keys, GitHub client/state/webhook secrets, OAuth/installation tokens, Supabase service role, DB credentials, and future provider keys stay in environment-scoped secret storage. Candidate configuration is absent-or-complete and cannot reuse primary cryptographic material. Database connection rows hold only non-secret metadata/opaque references.
 
 ## Audit and privacy
 
@@ -58,7 +59,7 @@ Hosted migrations `011` and `017` remove direct authenticated writes so narrow a
 
 Hosted migration `019` exposes only the SECURITY DEFINER sensitive-JSON wrapper required by provider-ingress CHECK expressions; recursive/text classifiers remain inaccessible. Hosted migration `026` closes the separately discovered default-ACL table-grant drift.
 
-Migrations `020`-`026` are hosted; local/remote history, dry run, lint, catalog, tested raw authenticated/browser grants, and the exact service-role ACL matrix pass. `service_role` has SELECT/INSERT/UPDATE on four GitHub ingress tables and no table privileges on the other 19. Real caller-session, cross-tenant, anonymous, and provider acceptance remains pending.
+Migrations `020`-`026` are hosted; their matched-history, dry-run, lint, catalog, tested raw authenticated/browser grants, and exact service-role ACL evidence pass. Local migration `027` atomically preserves project/history while moving an owner-confirmed project between two active same-account/same-repository installations, blocks pending changes/conflicts, and requires a processed signed target delivery for first handoff; it is not hosted. Real caller-session, cross-tenant, anonymous, candidate-installation, handoff, and provider acceptance remains pending.
 
 ## Supply chain and delivery
 
