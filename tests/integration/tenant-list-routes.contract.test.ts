@@ -49,8 +49,15 @@ describe.each(listRoutes)("$name list route", ({ path, rpc }) => {
 
 describe("list routes withhold sensitive columns", () => {
   it("omits agent run payloads and raw provider errors", () => {
-    const route = read("app/api/runs/route.ts");
-    expect(route).not.toMatch(/\b(input|output|error_message)\b/);
+    // Scoped to the GET handler, matching how the commands route is asserted
+    // below. The POST handler records a provider run and therefore must handle
+    // its input, output, and error text; the guarantee being protected here is
+    // that the *list view* never projects those columns to the browser.
+    const listHandler = read("app/api/runs/route.ts")
+      .split("export async function GET")[1]
+      ?.split("export async function POST")[0] ?? "";
+    expect(listHandler).not.toBe("");
+    expect(listHandler).not.toMatch(/\b(input|output|error_message)\b/);
   });
 
   it("omits report bodies from the list view", () => {

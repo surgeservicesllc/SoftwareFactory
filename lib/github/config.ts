@@ -174,6 +174,11 @@ function readGitHubAppConfiguration(
       `${stateSecretName} and ${webhookSecretName} must be distinct secrets.`,
     );
   }
+  if (stateSecret === webhookSecret) {
+    throw new GitHubConfigurationError(
+      "GITHUB_APP_STATE_SECRET and GITHUB_APP_WEBHOOK_SECRET must be distinct secrets.",
+    );
+  }
 
   return {
     appId,

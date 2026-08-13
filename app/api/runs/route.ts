@@ -1,7 +1,48 @@
+import { z } from "zod";
+
+import { readRepositoryMemoryExcerpts } from "@/lib/providers/memory";
+import { ROUTING_PROVIDER_REQUESTS } from "@/lib/providers/routing";
+import { executeProviderTask } from "@/lib/providers/runtime";
+import { loadProjectRoutingContext } from "@/lib/providers/service";
+import { PROVIDER_TASK_KINDS, type AgentRole, type ProviderId } from "@/lib/providers/types";
+import {
+  ApiRequestError,
+  databaseErrorResponse,
+  jsonNoStore,
+  readBoundedJson,
+  requestErrorResponse,
+} from "@/lib/server/http";
+import { findSensitiveData } from "@/lib/server/sensitive-data";
 import { tenantRpcListResponse } from "@/lib/server/tenant-list";
+import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
+import { assertSameOriginRequest } from "@/lib/supabase/request";
+import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
+const MAX_OUTPUT_TOKENS = 16_000;
+const RUN_TIMEOUT_MS = 180_000;
+
+const runRequestSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    taskId: z.string().uuid(),
+    agentId: z.string().uuid(),
+    taskKind: z.enum(PROVIDER_TASK_KINDS),
+    instructions: z.string().trim().min(1).max(8_000),
+    requestedProvider: z.enum(ROUTING_PROVIDER_REQUESTS).default("AUTO"),
+    riskLevel: z.enum(["GREEN", "YELLOW", "RED"]).default("GREEN"),
+  })
+  .strict();
+
+/** Recent provider runs with their routing evidence and usage. */
+
+/*
+ * GET keeps main's hardened boundary: reads go through the safe-projection
+ * RPC so membership is enforced in the database, not by this route's column
+ * list. POST below is the Phase 2A provider execution path.
+ */
 type RunRow = {
   id: string;
   project_id: string | null;
@@ -40,4 +81,228 @@ export async function GET(request: Request) {
         })),
       }),
   });
+}
+
+export async function POST(request: Request) {
+  try {
+    assertSameOriginRequest(request);
+
+    const parsed = runRequestSchema.safeParse(await readBoundedJson(request));
+    if (!parsed.success) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "invalid_run_request",
+            message: "The run request is invalid.",
+            fields: z.flattenError(parsed.error).fieldErrors,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const sensitive = findSensitiveData({ instructions: parsed.data.instructions });
+    if (sensitive) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "sensitive_data_rejected",
+            message: "Run instructions cannot contain credentials or likely secret values.",
+            path: sensitive.path,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const { client, activeOrganization } = await requireActiveOrganization();
+
+    const context = await loadProjectRoutingContext(
+      client,
+      activeOrganization.id,
+      parsed.data.projectId,
+    );
+    if (!context) {
+      return jsonNoStore(
+        { error: { code: "project_not_found", message: "The project is not available." } },
+        { status: 404 },
+      );
+    }
+
+    if (!context.executionEnabled) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "provider_execution_disabled",
+            message:
+              "Outbound AI provider execution is switched off for this organization. An owner must enable it in Settings.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const agent = await loadAgent(client, activeOrganization.id, parsed.data.agentId);
+    if (!agent) {
+      return jsonNoStore(
+        { error: { code: "agent_not_found", message: "The agent is not available." } },
+        { status: 404 },
+      );
+    }
+
+    const routingRequest = {
+      taskKind: parsed.data.taskKind,
+      riskLevel: parsed.data.riskLevel,
+      requestedProvider: parsed.data.requestedProvider,
+      policy: context.policy,
+      agentAssignment: {
+        agentId: agent.id,
+        agentRole: agent.role,
+        provider: agent.provider,
+        model: agent.model,
+      },
+      availability: context.availability,
+    } as const;
+
+    const execution = await executeProviderTask({
+      runId: crypto.randomUUID(),
+      routing: routingRequest,
+      agentId: agent.id,
+      instructions: parsed.data.instructions,
+      context: {
+        projectName: context.projectName,
+        repositoryFullName: context.repositoryFullName,
+        defaultBranch: context.defaultBranch,
+        riskLevel: parsed.data.riskLevel,
+        priorArtifacts: [],
+        memoryExcerpts: await readRepositoryMemoryExcerpts(),
+      },
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      timeoutMs: RUN_TIMEOUT_MS,
+    });
+
+    const attempt = execution.finalAttempt ?? execution.attempts.at(-1) ?? null;
+    const decision = attempt?.decision ?? execution.primaryDecision;
+
+    const { data, error } = await client
+      .rpc("record_provider_run", {
+        p_organization_id: activeOrganization.id,
+        p_project_id: parsed.data.projectId,
+        p_task_id: parsed.data.taskId,
+        p_agent_id: agent.id,
+        p_task_kind: parsed.data.taskKind,
+        p_risk_level: parsed.data.riskLevel.toLowerCase(),
+        p_requested_provider: parsed.data.requestedProvider,
+        p_policy_version: decision.policyVersion,
+        p_decision: decision.decision,
+        p_source: decision.source,
+        p_selected_provider: decision.provider,
+        p_selected_model: decision.model,
+        p_reasons: decision.reasons,
+        p_candidates: decision.candidates,
+        p_fallback_from_provider: execution.fallbackFromProvider,
+        p_run_status: databaseRunStatus(execution.outcome),
+        p_provider_run_reference: attempt?.result.providerRunId ?? null,
+        p_input: { task_kind: parsed.data.taskKind, requested_provider: parsed.data.requestedProvider },
+        p_output: attempt?.result.output ?? null,
+        p_usage: attempt?.result.usage
+          ? {
+              input_tokens: attempt.result.usage.inputTokens,
+              output_tokens: attempt.result.usage.outputTokens,
+              cached_input_tokens: attempt.result.usage.cachedInputTokens,
+              estimated_cost_micros: attempt.result.usage.estimatedCostMicros,
+            }
+          : null,
+        p_latency_ms: attempt?.result.latencyMs ?? null,
+        p_error_message: attempt?.result.error?.message ?? null,
+        p_events: attempt?.result.events.map((event) => ({
+          type: event.type,
+          message: event.message,
+        })) ?? [],
+      })
+      .single();
+
+    if (error) return databaseErrorResponse(error);
+
+    const recorded = data as { routing_decision_id: string; agent_run_id: string | null };
+
+    return jsonNoStore(
+      {
+        outcome: execution.outcome,
+        runId: recorded.agent_run_id,
+        routingDecisionId: recorded.routing_decision_id,
+        routing: {
+          decision: decision.decision,
+          provider: decision.provider,
+          model: decision.model,
+          source: decision.source,
+          policyVersion: decision.policyVersion,
+          requiresOwnerApproval: decision.requiresOwnerApproval,
+          reasons: decision.reasons,
+        },
+        fallback: execution.fallbackFromProvider
+          ? { fromProvider: execution.fallbackFromProvider, reason: execution.fallbackReason }
+          : null,
+        attempts: execution.attempts.map((entry) => ({
+          attempt: entry.attempt,
+          provider: entry.provider,
+          model: entry.model,
+          status: entry.result.status,
+          latencyMs: entry.result.latencyMs,
+          error: entry.result.error,
+        })),
+        result: attempt?.result.output ?? null,
+        usage: attempt?.result.usage ?? null,
+      },
+      { status: execution.outcome === "SUCCEEDED" ? 200 : 202 },
+    );
+  } catch (error) {
+    if (error instanceof ApiRequestError) return requestErrorResponse(error);
+    const boundary = supabaseBoundaryErrorResponse(error);
+    if (boundary) return boundary;
+
+    return jsonNoStore(
+      { error: { code: "internal_error", message: "The provider run failed safely." } },
+      { status: 500 },
+    );
+  }
+}
+
+type AgentRecord = {
+  readonly id: string;
+  readonly role: AgentRole;
+  readonly provider: ProviderId | null;
+  readonly model: string | null;
+};
+
+async function loadAgent(
+  client: Awaited<ReturnType<typeof requireActiveOrganization>>["client"],
+  organizationId: string,
+  agentId: string,
+): Promise<AgentRecord | null> {
+  const { data, error } = await client
+    .from("agents")
+    .select("id,role,provider,model")
+    .eq("organization_id", organizationId)
+    .eq("id", agentId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const row = data as { id: string; role: string; provider: string | null; model: string | null };
+  return {
+    id: row.id,
+    role: row.role as AgentRole,
+    provider: row.provider === "anthropic" || row.provider === "openai" ? row.provider : null,
+    model: row.model,
+  };
+}
+
+/** Map the runtime outcome onto the `public.run_status` enum. */
+function databaseRunStatus(
+  outcome: Awaited<ReturnType<typeof executeProviderTask>>["outcome"],
+): "succeeded" | "failed" | "cancelled" {
+  if (outcome === "SUCCEEDED") return "succeeded";
+  if (outcome === "CANCELLED") return "cancelled";
+  return "failed";
 }

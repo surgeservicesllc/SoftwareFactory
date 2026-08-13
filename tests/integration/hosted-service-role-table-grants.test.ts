@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260812002700_handoff_github_project_connection.sql";
+  "20260813000100_provider_execution_layer.sql";
 
 const publicTables = [
   "activity_events",
@@ -36,6 +36,11 @@ const publicTables = [
   "profiles",
   "project_connections",
   "projects",
+  // Phase 2A provider execution tables. Each is created with RLS and FORCE RLS
+  // enabled and tenant-scoped policies in 20260813000100_provider_execution_layer.sql.
+  "provider_model_configurations",
+  "provider_routing_decisions",
+  "provider_run_events",
   "pull_requests",
   "reports",
   "tasks",

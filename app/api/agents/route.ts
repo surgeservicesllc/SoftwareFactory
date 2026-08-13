@@ -1,7 +1,16 @@
+import { listAgents } from "@/lib/providers/service";
+import { databaseErrorResponse, jsonNoStore } from "@/lib/server/http";
+import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
+import { assertSameOriginRequest } from "@/lib/supabase/request";
+import { requireActiveOrganization } from "@/lib/supabase/tenant";
 import { tenantRpcListResponse } from "@/lib/server/tenant-list";
 
 export const runtime = "nodejs";
 
+/*
+ * GET keeps main's hardened safe-projection RPC boundary; POST is the
+ * Phase 2A provider-assignment path.
+ */
 type AgentRow = {
   id: string;
   name: string;
@@ -38,4 +47,26 @@ export async function GET(request: Request) {
       })),
     }),
   });
+}
+
+export async function POST(request: Request) {
+  try {
+    assertSameOriginRequest(request);
+    const { client, activeOrganization } = await requireActiveOrganization();
+
+    const { error } = await client.rpc("ensure_default_agents", {
+      p_organization_id: activeOrganization.id,
+    });
+    if (error) return databaseErrorResponse(error);
+
+    return jsonNoStore({ agents: await listAgents(client, activeOrganization.id) }, { status: 200 });
+  } catch (error) {
+    const boundary = supabaseBoundaryErrorResponse(error);
+    if (boundary) return boundary;
+
+    return jsonNoStore(
+      { error: { code: "internal_error", message: "Agent setup failed safely." } },
+      { status: 500 },
+    );
+  }
 }
