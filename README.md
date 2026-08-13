@@ -97,3 +97,6 @@ Repository memory lives under [`AI/`](AI/), and enforceable constraints live und
 ## Security
 
 Never commit credentials or paste them into issues, screenshots, fixtures, logs, or database rows. Review [`SECURITY.md`](SECURITY.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`policies/PROTECTED_RESOURCES.md`](policies/PROTECTED_RESOURCES.md). Revoke/rotate a possibly disclosed credential at its provider; deleting it from Git is insufficient.
+
+
+<!-- Temporary candidate App write-path verification; draft only. -->
