@@ -158,7 +158,7 @@ export default async function PlatformPage() {
                 Explore Features
               </a>
               <a
-                href="/sign-in"
+                href="/auth/sign-up"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
               >
                 Get Started for Free

@@ -206,8 +206,8 @@ export function ProjectsConsole() {
     );
   }
   if (state === "signed-out") return <BlockedState icon={FolderTree} title="Sign in to see your projects" description="Projects belong to your organization." href="/auth/sign-in?next=/projects" label="Sign in" />;
-  if (state === "setup") return <BlockedState icon={FolderTree} title="Finish setting up" description="Create or choose a workspace before linking a repository." href="/connections" label="Open connections" />;
-  if (state === "error") return <BlockedState icon={FolderTree} title="Projects are unavailable" description={message || "Your projects could not be loaded."} href="/connections" label="Check connections" />;
+  if (state === "setup") return <BlockedState icon={FolderTree} title="Finish setting up" description="Create or choose a workspace before linking a repository." href="/solutions/connections" label="Open connections" />;
+  if (state === "error") return <BlockedState icon={FolderTree} title="Projects are unavailable" description={message || "Your projects could not be loaded."} href="/solutions/connections" label="Check connections" />;
 
   return (
     <div className="space-y-4">
@@ -224,7 +224,7 @@ export function ProjectsConsole() {
           icon={GitFork}
           title="Connect GitHub first"
           description="A repository becomes a project only after you have authorized GitHub."
-          href="/connections"
+          href="/solutions/connections"
           label="Connect GitHub"
         />
       ) : unconnectedRepositories.length || !projects.length ? (
@@ -445,12 +445,12 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
           </div>
           <div className="flex flex-wrap gap-2 sm:shrink-0">
             {isConnected ? (
-              <Link href={`/files?project=${project.id}`} className="btn btn-primary btn-sm">
+              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-primary btn-sm">
                 <FolderTree className="size-4" aria-hidden="true" />
                 Browse files
               </Link>
             ) : (
-              <Link href="/connections" className="btn btn-primary btn-sm">Reconnect</Link>
+              <Link href="/solutions/connections" className="btn btn-primary btn-sm">Reconnect</Link>
             )}
             {repository?.htmlUrl ? (
               <a href={repository.htmlUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">

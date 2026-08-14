@@ -7,7 +7,6 @@ import {
   type ProviderObservedMetrics,
 } from "@/lib/providers/registry";
 import type { ProjectRoutingPolicy, ProviderAvailability } from "@/lib/providers/routing";
-import { formatEstimatedCost } from "@/lib/providers/usage";
 import {
   PROVIDER_CONNECTION_STATE_LABELS,
   PROVIDER_IDS,
@@ -18,6 +17,7 @@ import {
   type ProviderId,
 } from "@/lib/providers/types";
 import type { RiskLevel } from "@/lib/risk";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -68,6 +68,27 @@ interface ModelConfigurationRow {
   output_cost_per_million_micros: string | number | null;
 }
 
+const BROWSER_SAFE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function assertBrowserSafeConfigurationRow(row: ModelConfigurationRow) {
+  const capabilities = Array.isArray(row.capabilities) ? row.capabilities : [];
+  const safe = isProviderId(row.provider)
+    && BROWSER_SAFE_MODEL_ID.test(row.model)
+    && row.display_name.trim().length >= 1
+    && row.display_name.length <= 160
+    && !containsLikelySecret(row.model)
+    && !containsLikelySecret(row.display_name)
+    && capabilities.every((entry) =>
+      typeof entry === "string"
+      && entry.trim().length >= 1
+      && entry.length <= 64
+      && !containsLikelySecret(entry),
+    );
+  if (!safe) {
+    throw new Error("Provider model metadata failed the browser-safe projection.");
+  }
+}
+
 function toNumber(value: string | number | null): number | null {
   if (value === null) return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -99,9 +120,9 @@ export async function listModelConfigurations(
 
   return Object.freeze(
     ((data ?? []) as ModelConfigurationRow[])
-      .filter((row) => isProviderId(row.provider))
-      .map((row) =>
-        Object.freeze({
+      .map((row) => {
+        assertBrowserSafeConfigurationRow(row);
+        return Object.freeze({
           id: row.id,
           provider: row.provider as ProviderId,
           model: row.model,
@@ -111,8 +132,8 @@ export async function listModelConfigurations(
           isDefault: row.is_default,
           inputCostPerMillionMicros: toNumber(row.input_cost_per_million_micros),
           outputCostPerMillionMicros: toNumber(row.output_cost_per_million_micros),
-        }),
-      ),
+        });
+      }),
   );
 }
 
@@ -168,13 +189,11 @@ export async function loadObservedMetrics(
   organizationId: string,
   sampleSize = 50,
 ): Promise<Partial<Record<ProviderId, ProviderObservedMetrics>>> {
-  const { data, error } = await client
-    .from("agent_runs")
-    .select("provider,status,latency_ms")
-    .eq("organization_id", organizationId)
-    .not("provider", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(sampleSize);
+  const limit = Math.min(Math.max(Math.trunc(sampleSize), 1), 50);
+  const { data, error } = await client.rpc("list_provider_run_metrics", {
+    p_limit: limit,
+    p_organization_id: organizationId,
+  });
 
   if (error) throw error;
 
@@ -231,6 +250,7 @@ export async function loadProjectRoutingContext(
   client: ServerClient,
   organizationId: string,
   projectId: string,
+  options: { readonly probeProviders?: boolean } = {},
 ): Promise<ProjectRoutingContext | null> {
   const [projectResult, organizationResult, configurations, metrics] = await Promise.all([
     client
@@ -254,6 +274,11 @@ export async function loadProjectRoutingContext(
   const project = projectResult.data as ProjectRow | null;
   if (!project) return null;
 
+  const executionEnabled = Boolean(
+    (organizationResult.data as { ai_provider_execution_enabled?: boolean } | null)
+      ?.ai_provider_execution_enabled,
+  );
+
   const enabledModelsByProvider: Partial<Record<ProviderId, readonly string[]>> = {};
   for (const provider of PROVIDER_IDS) {
     enabledModelsByProvider[provider] = Object.freeze(
@@ -263,9 +288,27 @@ export async function loadProjectRoutingContext(
     );
   }
 
+  // The owner switch is the consent boundary for outbound provider traffic,
+  // including health probes. Callers must also opt in explicitly: routing
+  // previews use the conservative local snapshot and never contact providers.
+  const probeProviders = executionEnabled && options.probeProviders === true;
   const availability = await buildProviderAvailability({
     enabledModelsByProvider,
     metricsByProvider: metrics,
+    ...(probeProviders
+      ? {}
+      : {
+          health: PROVIDER_IDS.map((provider) => Object.freeze({
+            provider,
+            state: executionEnabled ? "not_configured" as const : "disabled" as const,
+            checkedAt: new Date().toISOString(),
+            detail: executionEnabled
+              ? "Provider health was not probed for this no-contact routing preview."
+              : "Outbound provider execution is disabled for this organization.",
+            latencyMs: null,
+            defaultModel: resolveProviderConfiguration(provider).defaultModel,
+          })),
+        }),
   });
 
   const maximumRisk = (project.maximum_autonomous_risk ?? "green").toUpperCase() as RiskLevel;
@@ -286,186 +329,6 @@ export async function loadProjectRoutingContext(
       maximumRisk,
     }),
     availability,
-    executionEnabled: Boolean(
-      (organizationResult.data as { ai_provider_execution_enabled?: boolean } | null)
-        ?.ai_provider_execution_enabled,
-    ),
+    executionEnabled,
   });
-}
-
-export interface AgentView {
-  readonly id: string;
-  readonly name: string;
-  readonly role: string;
-  readonly description: string | null;
-  readonly status: string;
-  readonly provider: ProviderId | null;
-  readonly providerLabel: string | null;
-  readonly model: string | null;
-  readonly lastRunAt: string | null;
-}
-
-export async function listAgents(
-  client: ServerClient,
-  organizationId: string,
-): Promise<readonly AgentView[]> {
-  const { data, error } = await client
-    .from("agents")
-    .select("id,name,role,description,status,provider,model,last_run_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: true })
-    .limit(100);
-
-  if (error) throw error;
-
-  return Object.freeze(
-    ((data ?? []) as Array<{
-      id: string;
-      name: string;
-      role: string;
-      description: string | null;
-      status: string;
-      provider: string | null;
-      model: string | null;
-      last_run_at: string | null;
-    }>).map((row) =>
-      Object.freeze({
-        id: row.id,
-        name: row.name,
-        role: row.role,
-        description: row.description,
-        status: row.status,
-        provider: isProviderId(row.provider) ? row.provider : null,
-        providerLabel: isProviderId(row.provider) ? PROVIDER_LABELS[row.provider] : null,
-        model: row.model,
-        lastRunAt: row.last_run_at,
-      }),
-    ),
-  );
-}
-
-export interface ProviderRunView {
-  readonly id: string;
-  readonly projectId: string;
-  readonly taskKind: string | null;
-  readonly status: string;
-  readonly provider: ProviderId | null;
-  readonly providerLabel: string | null;
-  readonly model: string | null;
-  readonly latencyMs: number | null;
-  readonly fallbackFromProvider: ProviderId | null;
-  readonly estimatedCostLabel: string;
-  readonly inputTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly errorMessage: string | null;
-  readonly summary: string | null;
-  readonly createdAt: string;
-  readonly routing: {
-    readonly decision: string;
-    readonly source: string | null;
-    readonly requestedProvider: string;
-    readonly policyVersion: string;
-    readonly reasons: readonly { code: string; detail: string }[];
-  } | null;
-}
-
-interface RunRow {
-  id: string;
-  project_id: string;
-  task_kind: string | null;
-  status: string;
-  provider: string | null;
-  model: string | null;
-  latency_ms: number | null;
-  fallback_from_provider: string | null;
-  usage: unknown;
-  output: unknown;
-  error_message: string | null;
-  created_at: string;
-  provider_routing_decisions: {
-    decision: string;
-    source: string | null;
-    requested_provider: string;
-    policy_version: string;
-    reasons: unknown;
-  } | null;
-}
-
-function readNumber(source: unknown, key: string): number | null {
-  if (typeof source !== "object" || source === null) return null;
-  const value = (source as Record<string, unknown>)[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readReasons(value: unknown): readonly { code: string; detail: string }[] {
-  if (!Array.isArray(value)) return Object.freeze([]);
-  return Object.freeze(
-    value
-      .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
-      .slice(0, 20)
-      .map((entry) =>
-        Object.freeze({
-          code: typeof entry.code === "string" ? entry.code : "UNKNOWN",
-          detail: typeof entry.detail === "string" ? entry.detail.slice(0, 400) : "",
-        }),
-      ),
-  );
-}
-
-export async function listProviderRuns(
-  client: ServerClient,
-  organizationId: string,
-  limit = 25,
-): Promise<readonly ProviderRunView[]> {
-  const { data, error } = await client
-    .from("agent_runs")
-    .select(
-      "id,project_id,task_kind,status,provider,model,latency_ms,fallback_from_provider,usage,output,error_message,created_at,provider_routing_decisions(decision,source,requested_provider,policy_version,reasons)",
-    )
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(limit, 1), 100));
-
-  if (error) throw error;
-
-  return Object.freeze(
-    ((data ?? []) as unknown as RunRow[]).map((row) => {
-      const routingRow = Array.isArray(row.provider_routing_decisions)
-        ? row.provider_routing_decisions[0]
-        : row.provider_routing_decisions;
-      const summary =
-        typeof row.output === "object" && row.output !== null
-          ? (row.output as Record<string, unknown>).summary
-          : null;
-
-      return Object.freeze({
-        id: row.id,
-        projectId: row.project_id,
-        taskKind: row.task_kind,
-        status: row.status,
-        provider: isProviderId(row.provider) ? row.provider : null,
-        providerLabel: isProviderId(row.provider) ? PROVIDER_LABELS[row.provider] : null,
-        model: row.model,
-        latencyMs: row.latency_ms,
-        fallbackFromProvider: isProviderId(row.fallback_from_provider)
-          ? row.fallback_from_provider
-          : null,
-        estimatedCostLabel: formatEstimatedCost(readNumber(row.usage, "estimated_cost_micros")),
-        inputTokens: readNumber(row.usage, "input_tokens"),
-        outputTokens: readNumber(row.usage, "output_tokens"),
-        errorMessage: row.error_message,
-        summary: typeof summary === "string" ? summary.slice(0, 2000) : null,
-        createdAt: row.created_at,
-        routing: routingRow
-          ? Object.freeze({
-              decision: routingRow.decision,
-              source: routingRow.source,
-              requestedProvider: routingRow.requested_provider,
-              policyVersion: routingRow.policy_version,
-              reasons: readReasons(routingRow.reasons),
-            })
-          : null,
-      });
-    }),
-  );
 }

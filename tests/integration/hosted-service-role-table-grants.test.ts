@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260813000500_serialize_concurrent_operations_writes.sql";
+  "20260813001600_autonomy_decision_audit.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Three successive
@@ -22,6 +22,7 @@ const publicTables = [
   "agent_runs",
   "agents",
   "approvals",
+  "autonomy_decisions",
   "bot_assignments",
   "bot_roles",
   "bots",
@@ -53,6 +54,10 @@ const publicTables = [
   "operations_events",
   "organization_members",
   "organizations",
+  "phase1c_run_artifacts",
+  "phase1c_run_events",
+  "phase1c_run_validations",
+  "phase1c_workers",
   "policies",
   "production_diagnoses",
   "production_monitors",
@@ -60,6 +65,7 @@ const publicTables = [
   "project_connections",
   "project_health_snapshots",
   "projects",
+  "provider_agent_assignments",
   "provider_model_configurations",
   "provider_routing_decisions",
   "provider_run_events",
@@ -69,6 +75,7 @@ const publicTables = [
   "reports",
   "rollback_operations",
   "synthetic_journeys",
+  "task_dependencies",
   "tasks",
   "test_runs",
 ] as const;

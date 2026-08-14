@@ -1,219 +1,167 @@
 # Production GitHub App integration
 
-Status: **Candidate App `4582606` is the live owner repository/webhook path after a verified history-preserving handoff. Primary installation `153445938` remains active rollback. Phase 1B acceptance is incomplete only for remaining tenant/adverse/reverse/disconnect checks.**
+## Current provider status
 
-Primary App `4573846` and installation `153445938` remain active as rollback; its webhook still cannot be retained under OPEN Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724).
+Candidate App `4582606` (`surge-softwarefactory-next`) is the live Phase 1B owner repository/webhook path. It is installed as `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, for exactly `surgeservicesllc/SoftwareFactory`. Project `b1f23696-437e-4d89-b55f-d7a949980e8f`, signed webhook processing, repository/file reads, and prior draft-only write acceptance pass.
 
-Owner-only candidate App `4582606` is installed as `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, for exactly `surgeservicesllc/SoftwareFactory`. Hosted migration `027`, post-sync signed delivery, owner handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f`, reads, and clean draft-only PR `#8` acceptance pass.
+Primary App `4573846` and installation `153445938` remain the rollback path. Its webhook defect remains tracked under GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724).
+
+The connected GitHub repository is a prerequisite for Phase 1C, not proof of a connected Codex worker. Hosted ledger reconciliation and the forward chain through `130014` are complete, the reviewed worker is published, the prior verified production baseline before this update passed CI/Vercel, and six non-OpenAI worker secrets remain configured. The current routing/UI update and local `130015` still need their own gates/publication/approval/hosted evidence. The exposed OpenAI key and activation variable are absent. A real claim/heartbeat/provider thread failed safely before repository mutation; no-claim diagnostic `31748582858` then identified `credit_balance_exhausted`. The failed run's base is now stale, so acceptance requires funded-provider proof and a new current-base command. OpenAI/Codex remains **Not Connected**.
 
 ## Registered Apps
 
-| Field | Primary/live repository path | Candidate/pre-release replacement |
+| Field | Primary rollback | Candidate live owner path |
 | --- | --- | --- |
 | Owner | `surgeservicesllc` | `surgeservicesllc` |
-| GitHub App name | `Surge SoftwareFactory` | `Surge SoftwareFactory Next` |
-| App slug | `surge-softwarefactory` | `surge-softwarefactory-next` |
+| App | `Surge SoftwareFactory` | `Surge SoftwareFactory Next` |
+| Slug | `surge-softwarefactory` | `surge-softwarefactory-next` |
 | App ID | `4573846` | `4582606` |
-| Homepage URL | `https://softwarefactory-tan.vercel.app` | `https://softwarefactory-tan.vercel.app` |
-| Callback URL | `https://softwarefactory-tan.vercel.app/api/github/install/callback` | `https://softwarefactory-tan.vercel.app/api/github/install/callback` |
-| Webhook URL | Required URL does not persist; blank/inactive on reload; Support `#4660724` OPEN | Exact `https://softwarefactory-tan.vercel.app/api/github/webhooks` retained and Active after reload |
-| Installation scope | Existing personal installation | Owner-only/private App |
-| User authorization during installation | Enabled | Enabled |
-| Device flow | Disabled | Disabled |
-| Verified provider installation | `153445938` (rollback) | `153479019` (live) |
-| Selected repository scope | Exactly `surgeservicesllc/SoftwareFactory` | Exactly `surgeservicesllc/SoftwareFactory` |
+| Callback | `https://softwarefactory-tan.vercel.app/api/github/install/callback` | Same exact callback |
+| Webhook | Defective/blank after reload; Support `#4660724` | `https://softwarefactory-tan.vercel.app/api/github/webhooks`, signed delivery verified |
+| Installation | `153445938` | `153479019` |
+| Repository scope | Exactly `surgeservicesllc/SoftwareFactory` | Exactly `surgeservicesllc/SoftwareFactory` |
 
-The deployed application webhook route and primary Vercel configuration exist, and a GitHub App JWT validates App `4573846`. The documented App-JWT `PATCH /app/hook/config` still returns `404`; the normal owner UI reports that the exact URL/secret/Active update succeeded, but a reload is blank/inactive again. After this provider/UI defect was reproduced, GitHub Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724), subject **GitHub App 4573846 cannot retain its single webhook**, was submitted 2026-08-13 under `surgeservicesllc` and remains OPEN.
+Primary and candidate identity, OAuth, private key, state secret, and webhook secret remain cryptographically isolated. Installation state binds slot/App ID; token minting follows persisted installation App ID; webhook verification rejects signing-App/persisted-App mismatch.
 
-Candidate App `4582606` retains the exact active endpoint. The deployed route verifies either isolated secret and rejects App-ID/installation mismatches. Candidate installation `153479019` has post-sync processed signed delivery plus push/check Activity evidence; the primary webhook remains independently impaired.
+## App permissions
 
-## Repository permissions
+The Apps retain the Phase 1B permission set:
 
-| Permission | Access | Used for |
+| Permission | Access | Phase 1C use |
 | --- | --- | --- |
-| Metadata | Read | Required repository/installation identity |
-| Contents | Read and write | Tree/file reads and controlled branch commit |
-| Pull requests | Read and write | PR visibility and draft PR creation |
-| Checks | Read | Check-run visibility |
-| Commit statuses | Read | Status events/readiness evidence |
-| Actions | Read | Workflow-run visibility |
-| Workflows | No access | The standard Phase 1B route cannot modify workflow files |
+| Metadata | Read | Repository/installation identity |
+| Contents | Read/write | Opaque repository dispatch authorization, fetch, isolated factory branch push |
+| Pull requests | Read/write | Create/recover only an open draft PR |
+| Checks | Read | Exact-head CI observation |
+| Commit statuses | Read | Provider status evidence |
+| Actions | Read | Existing visibility; worker check observation uses checks API |
+| Workflows | None | Worker cannot modify workflow files or workflow permissions |
 
-Organization permissions: none. Account permissions: none. Administration, secrets, deployments, environments, members, and branch-protection write access are not requested.
+Organization/account administration, secrets, deployments, environments, members, and branch-protection write permissions remain absent. Do not widen them for Phase 1C.
 
-The candidate uses the same least-privilege permission and event set. Do not widen it during installation or cutover.
+## Phase 1B routes retained
 
-Subscribed/handled events:
+The installation, callback, sync, disconnect, handoff, repository read, file-change, and signed webhook routes remain as previously verified. Every route checks the authenticated active tenant and exact installation/repository before minting a short-lived token. Phase 1B file changes create only a `softwarefactory/*` branch and draft PR.
 
-- `check_run`
-- `check_suite`
-- `installation`
-- `installation_repositories`
-- `pull_request`
-- `push`
-- `repository`
-- `status`
-- `workflow_run`
+## Phase 1C command dispatch
 
-The route ignores unsupported events safely and records only redacted delivery evidence. Event selection in GitHub must match the permissions above; lifecycle events supplied by GitHub are still validated by the handler.
+After `submit_command` commits one durable GREEN/YELLOW run, the Next.js server mints a short-lived installation token scoped to the exact repository ID with `contents: write` and `metadata: read`, then sends:
 
-## Required Vercel variables
+```text
+POST /repos/{owner}/{repo}/dispatches
+event_type: softwarefactory_phase1c_command
+client_payload: { command_id: <opaque UUID> }
+```
 
-All GitHub values are server-only and must use Vercel encrypted/sensitive environment storage. Never add `NEXT_PUBLIC_` aliases.
+The payload contains no prompt, repository name, branch, user, token, provider key, or execution configuration. Dispatch is only a wake-up signal. The worker must claim the command from Supabase and revalidate all durable identity/risk/lease data. Dispatch failure is recorded as delayed; a scheduled worker wake can recover it.
 
-| Variable | Purpose |
-| --- | --- |
-| `GITHUB_APP_ID` | Numeric App identity |
-| `GITHUB_APP_SLUG` | App installation URL slug |
-| `GITHUB_APP_CLIENT_ID` | OAuth client identity |
-| `GITHUB_APP_CLIENT_SECRET` | Exchange the callback code; secret |
-| `GITHUB_APP_PRIVATE_KEY_BASE64` | Preferred Vercel representation of the PEM private key; secret |
-| `GITHUB_APP_PRIVATE_KEY` | Alternative raw/escaped PEM; configure one private-key form, not both |
-| `GITHUB_APP_CALLBACK_URL` | Exact callback URL listed above |
-| `GITHUB_APP_WEBHOOK_SECRET` | HMAC verification secret; at least 32 bytes |
-| `GITHUB_APP_STATE_SECRET` | Installation-state signing secret; at least 32 bytes and distinct from the webhook secret |
-| `GITHUB_COMMIT_IDENTITY_NAME` | Server-owned name used for both author and committer on every controlled file commit |
-| `GITHUB_COMMIT_IDENTITY_EMAIL` | Server-owned email used for both author and committer on every controlled file commit |
-| `SUPABASE_SERVICE_ROLE_KEY` | Narrow server-only webhook and audited privileged-RPC client |
+## Worker workflow activation
 
-The optional replacement slot uses the corresponding `GITHUB_CANDIDATE_APP_ID`, `GITHUB_CANDIDATE_APP_SLUG`, `GITHUB_CANDIDATE_APP_CLIENT_ID`, `GITHUB_CANDIDATE_APP_CLIENT_SECRET`, `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` (or the raw `GITHUB_CANDIDATE_APP_PRIVATE_KEY` alternative), `GITHUB_CANDIDATE_APP_CALLBACK_URL`, `GITHUB_CANDIDATE_APP_WEBHOOK_SECRET`, and `GITHUB_CANDIDATE_APP_STATE_SECRET` names. Candidate configuration must be either absent or complete and must be cryptographically isolated from the primary App. The Base64-key form and all other required candidate names are currently Sensitive in Vercel Production and Preview; the raw key alternative is not configured.
+`.github/workflows/codex-worker.yml` is triggered only by the opaque repository dispatch or a five-minute recovery schedule. Branch-selectable manual workflow dispatch is intentionally absent from this secret-bearing workflow. The job has a final fail-closed gate:
 
-The exact Vercel project is linked. Production `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and stable alias from main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`.
+```text
+vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true'
+```
 
-The two commit-identity values are configuration, not request fields. They are configured in Vercel Production and Preview for the owner-approved public identity `surgeservicesllc <surgeservicesllc@gmail.com>`, stay in server-only environment storage, are never returned to the browser, persisted in Supabase, or logged, and have no authenticated-App fallback. Before authorization or persistence, the change route requires a bounded name and syntactically valid email. The Contents API request then supplies that same identity in both `author` and `committer`; missing or invalid configuration returns the safe `github_not_configured` response before any database or provider side effect.
+If repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is missing or not exactly `true`, every trigger skips the worker job. It is currently absent/OFF. Keep it absent/false through migration work, secret setup, publication, ordinary CI, and matching Vercel verification. Setting it to `true` is a protected RED activation that requires exact owner approval for the bounded acceptance window; restore it to absent/false afterward unless continued operation is separately approved.
 
-## Connection flow
+The workflow token has only contents read. Checkout and Node setup actions are pinned to exact commit SHAs, checkout uses `persist-credentials: false`, locked dependencies install with scripts ignored, and the exact Docker digest is preloaded before secrets are injected. A successful invocation claims at most one durable run.
 
-1. An authenticated organization owner/admin selects the primary connection action or, once the cutover code is deployed, **Install replacement GitHub App**.
-2. `POST /api/github/install/start` verifies same-origin request, active user, organization manager role, and the explicit `primary` or `candidate` slot.
-3. The server creates signed state valid for ten minutes, binds the chosen App slot and App ID, and sets a Secure/HttpOnly/SameSite=Lax nonce cookie.
-4. The browser follows the returned GitHub installation URL.
-5. GitHub returns `code`, `installation_id`, and signed `state` to the callback.
-6. The callback reads only the untrusted App routing hint needed to choose a configured secret, then verifies the complete binding. Primary `153445938` and candidate `153479019` passed this deployed flow.
-7. The ephemeral user OAuth token is never persisted or returned and is revoked best-effort after verification.
-8. An audited database workflow serializes by external installation ID before first-or-existing connection creation, re-resolves the authoritative installation binding after upsert, stores only installation/account/repository metadata, and updates the provider-neutral connection.
-9. The UI displays Connected only when the connection and installation are both active.
+## GitHub Actions protected secrets
 
-Cancellation, organization-approval pending, wrong App, expired/mismatched state, revoked installation, insufficient permission, rate limit, provider outage, and malformed responses fail closed with safe error codes.
+GitHub does not allow Actions secret names beginning with `GITHUB_`. Configure exactly these repository secret names only after owner approval:
 
-## Server routes
+- `SOFTWAREFACTORY_SUPABASE_URL`
+- `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`
+- `SOFTWAREFACTORY_OPENAI_API_KEY`
+- `SOFTWAREFACTORY_GITHUB_APP_ID`
+- `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`
+- `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`
+- `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`
 
-| Route | Purpose |
-| --- | --- |
-| `POST /api/github/install/start` | Begin owner/admin installation with signed state |
-| `GET /api/github/install/start` | Return caller-authorized non-secret configured App IDs/slugs/slots for the Connections UI |
-| `GET /api/github/install/callback` | Verify installation and synchronize metadata |
-| `GET /api/github/connections` | Tenant-scoped connection/install/repository status |
-| `POST /api/github/connections/:id/sync` | Owner/admin reconciliation with live GitHub state |
-| `POST /api/github/connections/:id/disconnect` | Exact-confirmation disconnect while preserving history |
-| `POST /api/github/connections/:id/handoff` | Owner-only immutable RED approval/execution and atomic rebind; hosted/live |
-| `GET /api/github/repositories` | Selected repositories for a connection |
-| `GET /api/github/repositories/:owner/:repo/branches` | Branches and protection visibility |
-| `GET /api/github/repositories/:owner/:repo/commits` | Commit history, optionally path-scoped |
-| `GET /api/github/repositories/:owner/:repo/pulls` | Pull request visibility |
-| `GET /api/github/repositories/:owner/:repo/checks` | Check runs for a ref |
-| `GET /api/github/repositories/:owner/:repo/tree` | Directory listing at a ref |
-| `GET /api/github/repositories/:owner/:repo/contents` | UTF-8 file read with SHA; 1 MiB maximum |
-| `POST /api/github/repositories/:owner/:repo/changes` | Guarded branch + commit + draft PR transaction |
-| `POST /api/github/webhooks` | Signed, bounded, idempotent webhook ingestion |
+The worker step maps the last four to runtime `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_CANDIDATE_APP_ID`, and `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`. Values must never appear in source, workflow logs, issues, screenshots, artifacts, model prompts/output, or Supabase rows.
 
-Every repository request checks the authenticated tenant connection and selected repository before minting a short-lived token scoped to the repository ID and exact read/write permissions required by that route.
+The six Supabase/GitHub App secret names are verified configured without reading their values. `SOFTWAREFACTORY_OPENAI_API_KEY` was removed after its value was exposed and must remain absent until a fresh funded replacement is created through the protected path. Configuration alone is not connectivity; the worker remains **Not Connected**.
 
-## Database records
+## Required CI check contract
 
-Migration `20260812000400_github_integration.sql` adds:
+The workflow passes this exact public runtime policy:
 
-- `github_installations` — non-secret installation/account/permission/status metadata;
-- `github_repositories` — selected repository/default-branch/visibility/sync metadata;
-- `github_webhook_deliveries` — delivery ID, payload hash, redacted payload subset, processing state;
-- `github_change_requests` — idempotency reservation and branch/commit/draft-PR evidence.
+```text
+SOFTWAREFACTORY_REQUIRED_CHECKS=Lint, typecheck, test, and build|Browser and accessibility tests
+```
 
-Migration `20260812000700_github_project_linking.sql` adds a transactional function that creates a safe-default project only from an active, selected, non-archived repository belonging to the caller's organization and primary GitHub connection.
+The pipe-delimited value must parse to 1-20 unique names, each at most 300 characters. Both names exactly match the job display names in `.github/workflows/ci.yml`; a CI job rename requires a reviewed update to this contract and its tests.
 
-Migration `20260812000800_fix_github_sync_ambiguity.sql` additively repairs qualified-column/conflict-target ambiguity. Migration `20260812000900_harden_github_project_and_sync.sql` serializes synchronization by external installation ID, treats the post-upsert installation row as the authoritative tenant/connection binding, and persists only the synchronized GitHub default branch when linking a project. A caller-supplied branch is only a freshness expectation; stale provider state fails closed.
+For the exact draft-PR head SHA, the publisher requires the full returned check set rather than accepting a truncated page. Every observed check must be completed with an acceptable conclusion (`success`, `neutral`, or `skipped`), every required name must be present with exact `success`, and at least one required success must exist. It observes the identical passing fingerprint twice, then refetches and revalidates the exact PR number, base, head branch, and head SHA. Missing, renamed, incomplete, unstable, non-success, truncated, or changed-PR evidence fails or times out; it never passes inconclusively.
 
-Repository migrations `011`-`027` are hosted. The verified pre-`027` local/remote history matched, dry run/lint were clean, and RLS/catalog/browser-grant checks pass. The exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
+## Installation-token scopes inside the worker
 
-Hosted migration `20260812002700_handoff_github_project_connection.sql` adds immutable owner approval/execution and atomically moves the project between active same-account/repository installations after fresh signed-delivery proof. Live audit confirms preserved project/link identity, four completed change requests, five prior activity rows, enabled append-only triggers, and retained primary rollback rows.
+For a claimed run, the worker signs a short App JWT for the App ID stored in the durable repository binding and requests an installation token restricted to the single external repository ID with:
 
-All exposed GitHub integration tables, including the protected-approval table added by `022`, use RLS and FORCE RLS. Browser-facing clients never receive service-role credentials, App private keys, webhook/state/client secrets, OAuth tokens, or installation tokens.
+- `metadata: read`
+- `contents: write`
+- `pull_requests: write`
+- `checks: read`
+- `statuses: read`
+- `actions: read`
 
-## Controlled file edits
+It cannot request workflows, administration, secrets, environments, deployments, or branch protection. The token is never stored in Supabase, passed to Codex, or printed. Git commands receive it only through a per-command extra header whose value is redacted.
 
-The ordinary editor requires an owner/admin, an active project-to-connection mapping bound to the immutable tenant-scoped repository UUID, the verified synchronized repository default branch, the expected blob SHA, a bounded idempotency key, and content that passes sensitive-data checks. Repository full names remain normalized display/freshness metadata; they are not the authorization key.
+## Exact repository and branch boundary
 
-It refuses:
+The database claim includes App ID, installation ID, external repository ID, owner/name, default branch, and exact base SHA derived from the active project connection. The worker:
 
-- direct default-branch writes;
-- non-draft or merge operations;
-- archived/disabled/unselected repositories;
-- stale SHA overwrites;
-- files larger than 1 MiB or binary/non-UTF-8 files;
-- unapproved protected resources, including repository control/memory, Supabase, every application API, server-side GitHub/Supabase code, Auth/session boundaries, deployment/environment/infrastructure controls, and security-sensitive subject paths;
-- likely credentials in content, title, or commit message.
+1. constructs only `https://github.com/{owner}/{name}.git` from validated coordinates;
+2. calls `ls-remote` for the expected default branch and compares the exact SHA;
+3. fetches the exact commit and fails if it differs;
+4. creates/resumes only `factory/<run-uuid>-<slug>`;
+5. verifies remote URL, branch marker, remote branch SHA, and ancestry during recovery; and
+6. configures author and committer as `surgeservicesllc <surgeservicesllc@gmail.com>`.
 
-For a protected path, the route first returns an approval-required response. Only an active organization owner may continue, and only by providing the exact `APPROVE RED DRAFT PR FOR <path>` phrase, a 20-500 character rationale, and a 20-500 character rollback plan. Migrations `022`/`025` atomically bind immutable approval evidence to the exact reserved change, requester/approver/executor, organization/project/connection/repository UUID, path, content digest, expected blob SHA, base branch, and a maximum 15-minute expiry before provider execution. Admin-only, expired, mismatched, post-execution, or secret-bearing approval attempts fail closed. Generic secret-key assignments with non-placeholder values are blocked even when the value lacks a provider-specific token prefix.
+A moved default branch produces a stale-base failure and requires a newly planned command. The worker never rebases onto a different SHA silently.
 
-Successful ordinary or approved protected writes create `softwarefactory/*` branch state, commit to that branch with the explicitly configured deployment identity as both author and committer, open a draft pull request, and persist redacted audit evidence. Browser retries reuse the same idempotency key while the save intent is unchanged. A reservation expires after five minutes and is reclaimable only by its original requester for the exact immutable intent before any provider execution/evidence; the server persists and revalidates entry into the provider boundary before minting the write-scoped installation token or contacting GitHub. If GitHub created the draft PR but database completion was ambiguous, the server can complete that same reserved request from bounded provider evidence rather than creating another PR. Nothing writes the default branch, merges, or deploys.
+## Draft pull request and CI boundary
 
-Live acceptance created ordinary draft PR `#6` (commit `e789303`) and owner-approved protected RED draft PR `#7` (commit `6a808de`). Both are open, draft, and unmerged, and both expose `surgeservicesllc <surgeservicesllc@gmail.com>` as author and committer. Earlier acceptance PRs `#4` and `#5` revealed an App-bot attribution mismatch; both were closed unmerged and their isolated branches were deleted before the explicit identity fix was accepted. A fake generic password assignment was rejected before any PR was created.
+After deterministic validation and policy scan pass, the worker records one coherent branch/commit pair, commits, pushes its isolated branch, and requests a PR with:
 
-## Webhook guarantees
+- base equal to the synchronized default branch;
+- head equal to the exact factory branch;
+- `draft: true`;
+- `maintainer_can_modify: false`; and
+- a body that identifies the run, logical agent/provider/model, risk, and the no-merge/no-deploy boundary.
 
-- Verify HMAC-SHA256 over the unparsed body with constant-time comparison.
-- Match the signature against configured primary/candidate secrets and require the signing App ID to equal the persisted installation App ID.
-- Reject missing/invalid signatures and bodies over 2 MiB.
-- Require syntactically valid GitHub delivery/event headers.
-- Apply an event-specific schema before reconciliation; accepted `installation_repositories` additions require full bounded repository metadata.
-- Deduplicate by delivery ID; reject reuse of an ID with different payload bytes.
-- Store a SHA-256 hash plus an allowlisted/redacted payload subset, not the raw payload.
-- Mark revoked/suspended installation or repository-selection changes in control-plane state through audited database functions.
-- Hosted migration `013` supports service-role-only reconciliation of newly granted repository metadata after signature and tenant validation.
-- Hosted migrations `014`, `016`, and `018` propagate exact linked metadata, order transitions by provider time, preserve terminal deletion, and audit stale/terminal outcomes.
-- Hosted migrations `021`, `023`, and `024` use immutable repository identity and bounded `list_activity`; authenticated browser sessions cannot directly read raw Activity or webhook evidence.
-- Return quickly; Phase 1B performs bounded reconciliation only and never starts an AI worker.
+If PR creation has an ambiguous response, the worker searches for an existing open draft with the exact owner/branch/base/head SHA and recovers it instead of creating another. The database artifact and `pull_requests` projection must agree on organization/project/repository/run/base/head/URL/number. Exact replay is accepted; partial/conflicting branch, commit, or PR evidence is rejected. Before resuming, the workspace/publisher revalidates the remote branch SHA and exact PR identity. A non-draft, closed, wrong-head, or wrong-base result is rejected.
 
-A provider-side Active indicator alone is only configuration evidence. Any first handoff to a candidate stays blocked until a delivery signed by that candidate secret is stored as `processed` for the exact synchronized installation; the live handoff to installation `153479019` passed this gate.
+The worker polls the complete check set for the exact commit SHA using the required-check contract above. Missing/incomplete/unstable checks until the deadline are timed out, never passed. One bounded repair may update the existing draft PR, after which the exact new head and PR identity are observed again.
 
-## Production acceptance checklist
+## Phase 1C acceptance checklist
 
-Checked items below establish the candidate Connected owner path. Do not mark Phase 1B complete until every remaining item is observed:
-
-- [x] Production release `799d2cea` contains deployed dual-App routes and hosted migration `027`.
-- [x] Provider/UI defect evidence was submitted under `surgeservicesllc` in OPEN GitHub Support ticket `#4660724` on 2026-08-13.
-- [x] Candidate App `4582606` visibly retains the exact webhook URL and Active setting after reload, with the exact callback and least-privilege permissions/events.
-- [x] Install candidate App `4582606` as `153479019`; complete callback/sync and accept exact signed processed deliveries.
-- [x] An authenticated SoftwareFactory owner starts the installation flow.
-- [x] GitHub provider installation `153445938` is connected to `surgeservicesllc` with only `surgeservicesllc/SoftwareFactory` selected.
-- [x] Callback verifies the installation and returns to Connections.
-- [x] Connection shows the real account, installation ID, repository-selection mode, repository count, and fresh sync time.
-- [ ] Manual sync handles success and revoked/insufficient-permission failure.
-- [x] Project `b1f23696-437e-4d89-b55f-d7a949980e8f` links to the selected repository through the live connection and synchronized `main` branch.
-- [ ] Concurrent duplicate active links and stale branch expectations fail closed, while relink after archival succeeds, in live acceptance; local tests cover these cases.
-- [ ] Dashboard connected-project count is separately rechecked from live tenant records; the live Projects view itself is verified.
-- [x] Projects displays real repository sync freshness, branch protection/SHA, commits with authors/dates, pull requests with authors/created/updated times and detail-fetched mergeability, default-branch checks, and checks for each displayed PR head SHA.
-- [x] Files reads the real repository tree, `README.md`, and its SHA.
-- [x] A safe test edit creates only a controlled branch, commit, and draft PR (`#6`), with the approved author and committer.
-- [ ] A stale SHA, renamed/same-name repository mismatch, unapproved/admin protected request, expired/mismatched owner approval, and invalid/expired/after-provider reservation reclaim all fail closed in live acceptance.
-- [x] Likely-secret content is rejected before provider mutation.
-- [x] One exact owner-approved protected-file test creates only an isolated branch, commit, and draft PR (`#7`), with immutable approval/execution evidence and no merge/deploy/default-branch write.
-- [x] Connection, project, ordinary change, protected approval, provider-boundary, and draft-PR transitions create immutable Activity evidence.
-- [x] Push/check webhook updates reconcile through candidate-signed deliveries.
-- [x] Owner handoff preserves project/history; candidate reads and draft-only PR `#8` pass and cleanup is complete.
-- [ ] Verify the evidence-bound reverse handoff during the observation window before any primary installation retirement decision.
-- [ ] Delayed installation/repository events are ignored by provider time, deleted installation IDs stay terminal, and a newer explicit repository restore remains unselected until access sync.
-- [ ] Disconnect requires exact confirmation, removes active linkage, and preserves history.
+- [x] Local command/orchestration, SDK worker, workspace, validation, policy scan, publisher, workflow, schema, APIs, UI, and tests are implemented.
+- [x] Local Phase 1C migrations are split into `130007` provider compatibility, `130008` enums, `130009` execution, `130010` logical roster/recovery/report hardening, and `130011` dependencies/cumulative budgets.
+- [x] Prior verified baseline gates are retained in `AI/QUALITY_SCORECARD.md`; they are not current-update evidence.
+- [ ] Run the complete final gate set for the current routing/UI update with fresh counts before publication.
+- [x] Obtain exact owner RED approvals for the hosted ledger repair, forward migrations through `130014`, protected secret configuration, workflow publication/activation, and one bounded live GREEN attempt.
+- [x] Ledger-repair only catalog-proven schema-present `028`/`130001`-`130005`, then apply and verify the forward-only chain `130006` -> `130014` on exact project `qpuofpmagrmyamahqwxw` without replaying `130004` or down-migrating.
+- [x] Configure six non-OpenAI `SOFTWAREFACTORY_*` secrets without exposing values. The exposed OpenAI key was removed; a fresh funded replacement remains pending.
+- [x] Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` exactly matches both CI job names.
+- [x] Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, passing CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`, all while activation was absent/OFF. The current routing/UI update needs its own publication evidence.
+- [x] Exercise the exact activation gate for the approved first attempt and return it to absent/OFF after job admission.
+- [x] Submit the first real GREEN owner command and observe a fresh claim, heartbeat, lease, and provider thread. It failed safely before repository mutation.
+- [ ] After provider funding and a passing no-claim diagnostic, submit a new narrow GREEN owner command bound to current `main` and record command/task/run/agent/lease/thread IDs. Do not retry the stale failed run.
+- [ ] Verify exact base SHA, coherent factory branch/commit/PR projection, commit identity, open draft PR, validation, changed paths, usage, structured report/activity, stable exact required checks, and final PR base/head.
+- [ ] Verify no default-branch write, PR approval/merge, deployment, rollback, workflow/provider administration, RED execution, or secret disclosure.
+- [ ] Exercise dispatch failure/scheduled recovery, stale SHA, cancellation, lease expiry, provider failure/rate limit, validation/CI failure/timeout, retry, protected path, secret, binary/symlink, and oversized change denial.
+- [ ] Return activation to absent/false after acceptance unless continued operation is separately approved; disable immediately if containment is required and preserve durable evidence.
 
 ## Troubleshooting
 
-- **`github_not_configured`:** one or more server-only variables are absent/invalid. Do not log values.
-- **State invalid/expired:** restart the installation from SoftwareFactory; do not reuse the callback URL.
-- **Awaiting organization approval:** an organization owner must approve the App in GitHub; SoftwareFactory remains **Not Connected**.
-- **Connection lost:** check installation revocation/suspension, selected repositories, and current permissions; then reconnect or sync.
-- **Permission denied:** compare the exact App settings above. Do not add administration/workflow permissions as a shortcut.
-- **Rate limited/provider unavailable:** preserve existing metadata, show the safe error, and retry only after the provider allows it.
-- **Primary webhook blank/inactive or App-auth configuration `404`:** App `4573846` remains affected. Preserve installation `153445938` as the live repository/rollback path and track GitHub Support ticket `#4660724`; do not bypass the supported integration model.
-- **Candidate webhook is Active but handoff is unavailable:** provider configuration alone is insufficient. Confirm the dual-App artifact is deployed, migration `027` is hosted, App `4582606` is installed for the exact repository, callback/sync persisted the matching App ID, and a valid candidate-signed delivery is `processed` for that exact installation.
-- **Webhook rejected:** confirm the retained endpoint, active setting, event, delivery ID, body size, and that GitHub/Vercel hold the same webhook secret without printing it.
-- **Commit identity unavailable:** configure both server-only commit-identity variables with the exact approved deployment identity, redeploy, and verify both author and committer on a new draft-PR commit without printing the values in logs.
-- **Stale SHA conflict:** reload the file from GitHub and reapply the intended edit; never force overwrite.
+- **Workflow job skipped:** confirm the protected Actions variable is exactly `true`. Missing/false is the intended safe default.
+- **Worker Not Connected:** require reconciled history, hosted `130006`-`130014`, valid protected configuration, published workflow, an enabled approved window, and a successful end-to-end run. A workflow file, failed provider attempt, transient heartbeat, or completed idle one-shot registration is insufficient.
+- **Dispatch delayed:** the command remains durable; inspect bounded dispatch evidence and let the scheduled wake claim it after provider recovery.
+- **GitHub not configured:** verify the claimed App ID has its matching protected App ID/private-key pair without printing values.
+- **Stale base SHA:** submit a new command so planning captures the current branch SHA; never force/rebase silently.
+- **PR invalid:** require open + draft + exact head/base; close/contain ambiguous unsafe artifacts manually.
+- **CI timeout:** verify exact required names still match CI, check enumeration is complete, and PR base/head stayed exact; keep the run failed/inconclusive and the PR draft; do not merge.
+- **Secret/protected-path rejection:** remove secret material or obtain exact approved paths where eligible; never weaken the scanner. RED remains non-executable.
+- **Primary webhook defect:** preserve installation `153445938` and Support ticket `#4660724`; candidate success does not relabel the primary webhook.

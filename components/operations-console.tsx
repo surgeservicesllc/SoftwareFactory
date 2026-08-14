@@ -371,7 +371,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
             <EmptyState
               title="No projects yet"
               description="Connect a repository as a project, then add a production monitor to observe it."
-              actionHref="/projects"
+              actionHref="/solutions/projects"
               actionLabel="Add a project"
             />
           </div>

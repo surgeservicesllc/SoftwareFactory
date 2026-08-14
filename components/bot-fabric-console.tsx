@@ -176,7 +176,7 @@ export function BotFabricConsole() {
       <FabricNotice
         title="Sign in to manage your bots"
         description="The bot fabric is scoped to your authenticated SoftwareFactory organization."
-        href="/sign-in?next=/bot-manager"
+        href="/auth/sign-in?next=%2Fsolutions%2Fbot-manager"
         label="Sign in"
       />
     );
@@ -186,7 +186,7 @@ export function BotFabricConsole() {
       <FabricNotice
         title="Complete organization setup"
         description="Create or select an organization before registering bots."
-        href="/connections"
+        href="/solutions/connections"
         label="Open connections"
       />
     );
@@ -196,7 +196,7 @@ export function BotFabricConsole() {
       <FabricNotice
         title="The bot fabric is unavailable"
         description={message || "The service could not be reached."}
-        href="/connections"
+        href="/solutions/connections"
         label="Review connections"
       />
     );
@@ -334,7 +334,7 @@ function FleetBoard({
         icon={ArrowRight}
         title="Connect a project first"
         description="Bots are posted to projects. Link a repository-backed project, then assign your fleet."
-        actionHref="/projects"
+        actionHref="/solutions/projects"
         actionLabel="Open projects"
       />
     );

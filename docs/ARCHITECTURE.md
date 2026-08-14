@@ -1,85 +1,78 @@
 # Architecture overview
 
-SoftwareFactory is a server-first Next.js control plane. Phase 1B adds authenticated, tenant-scoped GitHub App integration without adding autonomous merge, deployment, rollback, Codex, or Claude execution.
+SoftwareFactory is a server-first Next.js control plane. Main contains a Phase 2A advisory Anthropic/OpenAI provider layer and the published Phase 1C manually requested, durable Codex-to-draft-PR path. Neither adds merge, deployment, rollback, RED execution, or Autonomous Mode.
 
 ## Components
 
-| Component | Responsibility | Trust level/status |
+| Component | Responsibility | Current status |
 | --- | --- | --- |
-| Browser UI | Present safe state and collect intent | Untrusted client |
-| Next.js server | Authenticate, authorize, validate, redact, and coordinate provider operations | Trusted application boundary |
-| Supabase Auth/Postgres | Identity, organizations, projects, GitHub metadata, RLS, and audit evidence | Hosted through `027`; live owner handoff passes; live second-tenant matrix remains pending |
-| GitHub App adapter | Sign App JWTs, mint repository-scoped installation tokens, normalize provider responses | Candidate installation `153479019` is live for exactly `surgeservicesllc/SoftwareFactory`; primary `153445938` remains active rollback |
-| GitHub webhook route | Verify raw-body HMAC, bind signing App provenance, deduplicate delivery IDs, store redacted payloads, reconcile state | Candidate-signed post-sync, push, and check deliveries process; primary webhook remains impaired |
-| Vercel | Serve Next.js application and server functions | Production `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` is READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and stable alias, source main commit `799d2cea189b6860a03987ae75c25765f9ac4aca`. Deploy/rollback adapter **Not Connected** |
-| AI workers | Future task execution | Codex and Claude **Not Connected** |
+| Browser UI | Collect bounded intent and show safe tenant projections | Untrusted client |
+| Next.js server | Auth, active tenant, same-origin, risk, plan, repository/base-SHA binding, persistence, opaque dispatch | Published and deployed |
+| Supabase Auth/Postgres | Identity, RLS, commands/tasks/runs, operations/synthetic journeys, provider routing/advisory evidence, bot registry, marketing content, neutral logical-agent roster, leases, coherent artifacts, validations, reports, activity | Hosted ledger reconciled through `130014`; linked lint and focused runtime/catalog verification pass |
+| Phase 2A provider adapters | Official Anthropic/OpenAI SDKs, consent-gated health/model discovery, deterministic routing, bounded fallback, schema-validated advisory artifacts | Schema hosted; credentials/live requests unverified. Execution OFF returns local Disabled status and suppresses outbound probes; **Not Connected** |
+| GitHub App adapter | Short-lived repository-ID-scoped tokens, repository dispatch, isolated push, draft PR, checks | Phase 1B owner path connected; Phase 1C live run pending |
+| GitHub Actions worker | One durable claim, heartbeat/cancel, Codex, validation, draft publication, CI observation | Published; six non-OpenAI secrets remain; OpenAI secret and activation absent; provider credits exhausted; **Not Connected** |
+| Codex SDK | Supported server-side engineering thread | Published; first provider thread failed pre-mutation; successful run **Not Connected** |
+| Vercel | Serve UI and request-time server routes | Prior verified production baseline before this update: `0c662a24393f682073e6002c5aff9339292226d8` READY; never a Codex worker |
+| Autonomous loop | Future independent execution policy | OFF; kill switch ON |
 
-## Authenticated request path
+## Command path
 
-1. Supabase Auth resolves the server-side user session.
-2. The server resolves the active organization and verifies membership/role.
-3. Every interactive GitHub route requires its requested organization, connection, installation, and repository to match that active organization.
-4. RLS independently restricts tenant rows.
-5. A GitHub request verifies the selected connection and repository remain live for that tenant; removed, archived, disabled, suspended, lost, and disconnected resources are **Not Connected**.
-6. The server mints a short-lived installation token scoped to that single repository and the exact requested permissions.
-7. GitHub output is size-bounded, schema-validated, normalized, and returned without token material.
-8. Mutations reserve an idempotent database record through a caller-authenticated exact project/connection/repository-UUID RPC and append actor-attributed terminal audit evidence. The same browser intent retains its key across ambiguous retries.
+1. The caller has an authenticated Supabase session and active organization.
+2. `POST /api/commands` enforces same origin and owner authority, validates type/prompt/criteria/risk/idempotency, and rejects likely secrets.
+3. The server resolves a live connected project to exact connection, App/installation, immutable repository ID, full name, default branch, and current 40-character base SHA.
+4. The server computes the highest risk, maps the logical role, and fixes provider `openai`, model `gpt-5.3-codex`, budgets, and the draft-PR workflow.
+5. `submit_command` persists the command/task/run. Phase 1C migrations `130007`-`130011` independently require organization ownership, raise risk from prompt plus acceptance criteria, enforce input/key/secret/dependency bounds, reject provider/model/role/budget/workflow mismatch, and preserve total budgets across retries.
+6. RED remains awaiting approval/blocked and cannot be claimed. GREEN/YELLOW may queue.
+7. After commit, the server sends repository dispatch event `softwarefactory_phase1c_command` with only an opaque command UUID. Failed dispatch is recorded as delayed; the five-minute scheduled worker can recover durable work.
 
-Installation synchronization is serialized by external installation ID before connection creation and re-reads the post-upsert installation row as the authoritative tenant/connection binding. Project links persist the immutable tenant-scoped GitHub repository UUID plus the synchronized default branch; repository names are mutable display metadata, and any caller-supplied branch is an optimistic freshness expectation. Project creation also takes a tenant/repository transaction lock, refreshes provider state after the lock, rejects a second non-archived project for that UUID, and allows an intentional relink only after all prior projects for it are archived.
+Dispatch is not authorization. The worker must still claim an eligible row from Supabase with its service-role credential and lease token.
 
-## GitHub installation flow
+## Worker path
 
-```text
-Authenticated owner/admin
-  -> POST /api/github/install/start
-  -> signed 10-minute state bound to App slot + App ID + HttpOnly nonce cookie
-  -> exact GitHub App installation and user authorization
-  -> GET /api/github/install/callback
-  -> verify state, user access, App identity, installation, repositories
-  -> revoke ephemeral user OAuth token
-  -> persist installation/repository metadata and activity evidence
-```
+1. Register the worker and publish a heartbeat-derived status.
+2. Claim one GREEN/YELLOW queued run and receive the exact repository snapshot plus fixed budget. The database serializes execution so one neutral logical agent cannot hold two active leases.
+3. Mint a short-lived installation token scoped to one repository ID.
+4. Verify the remote default branch still equals the planned base SHA. Fail stale rather than rebase silently.
+5. Create or safely resume `factory/<run-id>-<slug>` under a dedicated work root.
+6. Bootstrap locked dependencies in the pinned Docker image using `npm ci --ignore-scripts`.
+7. Start the supported Codex SDK thread with isolated `CODEX_HOME`, workspace-write sandbox, approval `never`, workspace network disabled, and web search disabled.
+8. Heartbeat the lease and honor cancellation/time/token/turn limits throughout.
+9. Run deterministic `git diff --check`, lint, typecheck, tests, and build inside the pinned network-none validation container.
+10. If required, allow one bounded Codex repair, then revalidate.
+11. Scan every changed path/content for containment, protected resources, forbidden files, symlinks, binaries, secrets, count, and size.
+12. Commit as `surgeservicesllc <surgeservicesllc@gmail.com>`, push only the factory branch, and create or recover an open draft PR. Recovery accepts only coherent exact branch/commit evidence and an optional exactly matching draft PR; partial or conflicting evidence fails closed.
+13. Observe the complete check set for the exact head SHA. `SOFTWAREFACTORY_REQUIRED_CHECKS` must name the two exact CI jobs, every required conclusion must be `success`, all observed checks must be terminal/acceptable, and the identical passing fingerprint must appear twice before a final PR base/head recheck.
+14. Persist bounded terminal result, timeline, validation, artifacts, changed paths, usage, and a structured success/failure/cancellation report. Cancellation wins at the terminal safe boundary.
 
-Primary and candidate App private keys, client/state/webhook secrets, user OAuth tokens, and installation tokens never enter application tables or the browser. Candidate configuration is complete-or-absent and must be cryptographically distinct. Repository token routing follows the persisted installation App ID.
+## Execution sandbox
 
-## Controlled file-change flow
+- The work root cannot be filesystem root, user home, current repository root, or an unsafe reused directory.
+- Each run has a marker binding run ID, repository ID, base SHA, and generated branch.
+- Child processes get a narrow environment. Git credentials are injected into only the required Git command and included in output redaction.
+- The exact validation image is `node:22.22.0-bookworm@sha256:20a424ecd1d2064a44e12fe287bf3dae443aab31dc5e0c0cb6c74bef9c78911c`.
+- Validation containers drop capabilities, use no-new-privileges, a read-only root, limited PID/CPU/memory, and network none. The dependency bootstrap alone uses bridge networking and ignores install scripts.
+- Process output and durations are bounded and redacted before persistence.
 
-```text
-Open selected repository file at verified ref/SHA
-  -> reject likely secrets
-  -> for a protected path, require exact active-owner RED phrase + rationale + rollback plan
-  -> verify project + connection + default branch
-  -> reserve exact intent and immutable protected approval evidence if required
-  -> revalidate the exact approval and enter the durable provider boundary
-  -> mint the repository-scoped write token only after that boundary
-  -> create softwarefactory/* branch from current default-branch SHA
-  -> update file using expected blob SHA
-  -> create draft pull request
-  -> persist commit/PR evidence
-```
+## Persistence and browser projections
 
-The route cannot write directly to the default branch, create a non-draft PR, merge, or deploy. A stale file SHA fails closed rather than silently overwriting changes. Protected approval expires within 15 minutes. Its immutable snapshot must match the exact reserved change, requester/approver/executor, path, digest, expected SHA, and branch before it can be attached or used. The change reservation expires after five minutes and may be reclaimed only by the original requester for the exact intent before any provider execution/evidence; entering the persisted provider boundary permanently blocks reclaim. Generic secret-key assignments with real values are rejected even when the value does not match a provider-specific token prefix; deliberate placeholders remain allowed.
+Hosted migration history is reconciled through `130014`. `130006` adds only execution-inert Phase 1D controls; Phase 1C uses `130007` provider compatibility, `130008` enum additions, `130009` core execution, `130010` roster/recovery/report hardening, and `130011` canonical dependencies/cumulative retry budgets. Forward repair `130012` removes invalid `pg_catalog.nullif` qualification from three bot functions without changing their identity/security/ACL boundary; `130013` resolves the remaining Phase 1C linked-lint findings; and `130014` makes the database resolver report the owner emergency-stop flag. Local/unhosted `130015` restores the assignment/run model checks from 120 to the original 128-character provider catalogue/API contract while retaining their other semantics; adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text; adds a capped/allowlisted run-detail routing object; revokes authenticated raw routing-decision/event SELECT; and retains tenant-scoped model-configuration SELECT. The application accepts absent/null routing for rolling compatibility and fails closed on dirty pre-migration catalogue scalars. New tables use RLS and FORCE RLS. Sensitive browser reads use their deliberately selected RLS or bounded-function boundary, while narrowly reviewed trusted functions retain only required grants. Run events, artifacts, and validations reject update/delete.
 
-There is no HTTP local-repository writer. The removed legacy `/api/files` route and local-write environment switch cannot be used as an alternate path around GitHub's isolated-branch/draft-PR boundary.
+Browser detail endpoints expose allowlisted agent/task/run/report fields, event timelines, artifact references, validation summaries, dependencies, and heartbeat state. They do not expose service credentials, raw command/model payloads, raw provider errors, or broad base-table columns.
 
-## Webhook path
+## Publication authority
 
-The webhook route reads at most 2 MiB, verifies `X-Hub-Signature-256` over raw bytes, applies an event-specific schema, hashes the full payload, stores only a redacted subset, and deduplicates on the delivery ID. It matches either isolated App secret and rejects a signing-App ID that disagrees with the persisted installation App ID. Candidate installation `153479019` has processed signed production deliveries. Unknown events and installations are ignored safely. The accepted Phase 1B events are documented in [GitHub App integration](GITHUB_APP_INTEGRATION.md).
+The worker may read one repository, push its own `factory/*` branch, create/recover a draft PR, and read check state. It cannot:
 
-## Activity read path
+- write the default branch;
+- create a ready-for-review/non-draft PR;
+- approve or merge;
+- modify workflows, branch protection, environments, secrets, or repository administration;
+- deploy or rollback; or
+- execute RED work.
 
-`GET /api/activity` requires the active organization and calls the tenant-member `list_activity` RPC through the caller's session. The RPC caps results at 100, trims display fields, and rebuilds evidence only from bounded allowlisted scalar values. Authenticated users have no direct SELECT on `activity_events` or `github_webhook_deliveries`; raw metadata, redacted webhook subsets, nested provider payloads, and unknown fields are deliberately excluded from the browser response. The Activity page labels its separate seeded illustration **Demo Data**.
+## Current live boundary
 
-Agents, commands, tasks, runs, and reports use caller-member, tenant-scoped list RPCs with a maximum of 100 rows and explicit safe columns. Agent capabilities are returned only when their serialized JSON is at most 8 KiB. Authenticated clients have no direct SELECT on those base tables, so input/result payloads, idempotency/provider references, report bodies, and raw run errors do not leak through a broad table grant.
+Candidate GitHub App installation `153479019` is connected to exactly `surgeservicesllc/SoftwareFactory`, but that is Phase 1B repository evidence. Hosted ledger reconciliation and forward migrations through `130014` are complete, linked lint is clean, focused bot runtime/audit behavior passed `1/1/1`, and the reviewed worker workflow is published. The frozen routing/UI candidate passes its complete local final-candidate gate set; publication, fresh CI/Vercel evidence, exact RED approval for local `130015`, and hosted verification remain pending. Six non-OpenAI worker secrets remain; the exposed OpenAI secret and activation variable are absent. A real claim recorded a heartbeat and provider thread, then failed safely before repository mutation; diagnostic `31748582858` subsequently identified `credit_balance_exhausted`. The failed run's planned base differs from the prior verified production baseline, so retry must fail closed and acceptance must use a new current-base command. No Phase 1C draft PR or stable exact-head required-CI result exists. Phase 1E execution, Phase 1D execution, advisory provider execution, bot-provider execution, and the Codex worker remain **Not Connected**.
 
-## Data architecture
-
-Migrations `001`-`027` define the hosted control-plane history (with no `006`). The verified pre-`027` baseline has 23/23 RLS+FORCE tables and zero service-role ACL mismatches. Hosted `027` adds two RLS/FORCE-RLS evidence tables and atomically rebinds a project to a verified same-account/repository installation after a fresh signed delivery. Its live handoff preserved project/history and retained the primary rollback path.
-
-Command mutation routes enforce same-origin requests. Global response headers set a restrictive Content Security Policy, deny framing/objects, restrict connections to SoftwareFactory/Supabase, allow images only from self/data/blob/GitHub avatars, and limit other browser capabilities. Repository Markdown previews suppress external images.
-
-## Deployment boundary
-
-Vercel serves the UI and server routes. It does not provide a SoftwareFactory deployment executor. The repository CI validates only and has no merge/deploy permission. Durable AI work cannot rely on a Vercel request lifetime and is deferred to Phase 1C.
-
-See `AI/ARCHITECTURE.md`, `AI/DECISIONS.md`, [Security model](SECURITY_MODEL.md), and the files under `policies/` for deeper contracts.
+See [`AI/ARCHITECTURE.md`](../AI/ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), and [Autonomous mode](AUTONOMOUS_MODE.md).

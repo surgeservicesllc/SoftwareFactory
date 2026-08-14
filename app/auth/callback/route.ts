@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { takeAuthReturnPath } from "@/lib/supabase/auth-return";
 import { normalizeReturnPath } from "@/lib/supabase/request";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,10 +16,11 @@ function redirectNoStore(url: URL) {
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = normalizeReturnPath(
-    requestUrl.searchParams.get("next"),
-    "/auth/onboarding",
-  );
+  // A query parameter still wins when one survives, but the emailed link
+  // cannot carry one, so the remembered path is the real source here.
+  const next = requestUrl.searchParams.get("next")
+    ? normalizeReturnPath(requestUrl.searchParams.get("next"), "/auth/onboarding")
+    : await takeAuthReturnPath("/auth/onboarding");
 
   if (!code) {
     const signInUrl = new URL("/auth/sign-in", requestUrl.origin);

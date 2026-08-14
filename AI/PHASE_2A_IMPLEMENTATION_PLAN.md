@@ -2,6 +2,8 @@
 
 Last reviewed: 2026-08-13
 
+Historical-snapshot notice: sections 1-4 describe the pre-Phase-2A audit and original implementation sequence at commit `249c3a2`; their hosted-state and test-count statements are not current instructions. The maintained state is: provider migration `130001` and forward compatibility `130007` are hosted in the reconciled chain through `130014`; provider execution remains OFF/**Not Connected**; the exposed OpenAI key was removed and no successful live advisory run exists; local `130015` restores the assignment/run model checks from 120 to 128, adds four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded routing detail, revokes authenticated raw routing-decision/event reads, and retains tenant-scoped model-catalogue reads, but is unhosted pending fresh exact RED approval. Runtime/API scalar-secret rejection is also local. The frozen current-update candidate passes its local final gates; publication CI/deployment remain pending. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`.
+
 Objective: make SoftwareFactory provider-agnostic so a logical agent can be executed by
 Anthropic/Claude or OpenAI/Codex based on task kind, capability, availability, policy,
 risk, prior results, latency and cost, with structured routing evidence and controlled
@@ -130,7 +132,7 @@ logical agent that produced the implementation, and (when the workflow step dema
 whose producing provider is the same. Artifacts are exchanged as typed records persisted by
 SoftwareFactory, not as shared chat history.
 
-### 2.5 Persistence (migration `020`)
+### 2.5 Persistence (`20260813000100_provider_execution_layer.sql`)
 
 - `provider_model_configurations` - per-organization model catalog, capabilities, enabled
   flag, default flag, declared cost.
@@ -153,7 +155,7 @@ has not happened they show an empty state, not invented data.
 
 1. Plan document (this file).
 2. Core provider library + unit tests.
-3. Migration `020` + RLS behavioral tests.
+3. Provider-layer migration `20260813000100_provider_execution_layer.sql` + RLS behavioral tests.
 4. API routes + route tests.
 5. UI surfaces + component tests.
 6. `/AI` and `/docs` updates, full gate run, commit, push, draft PR.
@@ -180,12 +182,12 @@ the section 4 definition of done:
 
 | Done criterion | Result |
 | --- | --- |
-| Provider interface with two real adapters, no unproven live claims | Met. Both adapters use the official SDKs; both report **Not Configured** because no credential exists here. |
+| Provider interface with two real adapters, no unproven live claims | Met in source. Both adapters use official SDKs; outbound execution remains OFF/**Not Connected**, and no successful advisory credential/run is verified. OFF also suppresses outbound status/model probes; live discovery is owner/admin-only after deliberate enablement. |
 | Structured, explainable, override-respecting routing that never silently degrades | Met. `OVERRIDE_TARGET_UNAVAILABLE` is covered by test. |
 | Policy-bounded, recorded fallback | Met. Credential, authorization, cancellation, and content-policy failures are ineligible by declaration. |
 | Independent review cannot be self-satisfied | Met and enforced in `workflow.ts`. |
-| RLS, FORCE RLS, RPC-only writes, audit evidence on new tables | Met in migration `020`; **not hosted**. |
-| lint, typecheck, tests, production build | Met: 45 files / 365 tests, 41-route build. |
+| RLS, FORCE RLS, tenant-scoped reads, owner/admin RPC-only writes, audit evidence on new tables | Hosted through `130014`: the three original provider tables retain RLS-scoped member SELECT and no direct writes; provider assignments use a bounded member function and no direct authenticated SELECT. Local/unhosted `130015` will add four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, revoke raw routing-decision/event SELECT, and retain model-configuration SELECT so bounded routing evidence cannot be bypassed. |
+| lint, typecheck, tests, production build | Historical implementation result: 45 files / 365 tests, 41-route build. Frozen current candidate: local Node `24.19.0` lint/typecheck, 118 files/1,311 tests, coverage 76.70/71.47/74.04/78.11, and 74/74-route build pass; CI/production evidence pending. |
 | `/AI` documents state exactly what is and is not live | Met. |
 
 ### Completion by section
@@ -200,17 +202,17 @@ the section 4 definition of done:
 | 6 Intelligent routing | Complete |
 | 7 Multi-agent work | Complete |
 | 8 Fallback | Complete |
-| 9 UI | Complete for Connections, Agents, Runs, Settings, Bot Manager. Dashboard and Reports still show their existing **Demo Data** sections and are listed in the backlog. |
-| 10 Security and RLS | Complete locally; hosted verification pending |
+| 9 UI | Published baseline exists; the locally gated current update adds assignment controls and bounded "Why this provider?" evidence. Publication and hosted `130015` proof are pending. |
+| 10 Security and RLS | Hosted and focused verification passes through `130014`; unrelated-authenticated and mutation-shaped live denial remain pending. |
 | 11 Testing | Complete against the contract; provider wire formats need a credential |
-| 12 Completion demonstration | **Blocked** - the three end-to-end flows need a live credential and hosted migration `020` |
+| 12 Completion demonstration | **Blocked** - the three end-to-end flows need a deliberately enabled organization, a verified supported credential, and successful live provider evidence. Hosted `130001` alone does not satisfy this. |
 
 ### What an owner must do to finish section 12
 
-1. Approve and apply migrations `011`-`020` to the hosted Supabase project.
-2. Set `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY` plus `OPENAI_DEFAULT_MODEL`,
-   as server-only values.
-3. Enable outbound execution in Settings.
+1. Finish the current routing/UI update's full gate set and publish it with fresh CI/deployment evidence while provider execution remains OFF.
+2. Under fresh exact RED approval, apply only the complete `130015` forward migration to `qpuofpmagrmyamahqwxw`; verify its two 120-to-128 constraint restorations, all four no-secret constraints, 128-character assignment/run/project behavior, valid and negative credential-shaped catalogue/assignment/routing scalar behavior, two raw-SELECT revokes plus retained model-catalogue SELECT, run-detail function identity/security/ACL, bounded routing behavior, raw-table/tenant denial, lint, and health.
+3. Configure an owner-approved supported provider credential as a server-only value. Never restore or reuse the exposed OpenAI key; no credential or successful run is currently verified.
+4. Deliberately enable outbound execution in Settings under the applicable approval/cost boundary. Treat that switch as consent for both provider execution and outbound health/model probes; keep live discovery owner/admin-only. Then record live health, routing, run, usage, fallback, independent-review, and audit evidence.
 
 Until then the three demonstration flows cannot be run, and this document does
 not claim them.

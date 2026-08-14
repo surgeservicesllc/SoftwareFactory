@@ -8,10 +8,8 @@ import {
 } from "@/lib/server/http";
 import { authProviderFailureStatus } from "@/lib/supabase/auth";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
-import {
-  assertSameOriginRequest,
-  normalizeReturnPath,
-} from "@/lib/supabase/request";
+import { rememberAuthReturnPath } from "@/lib/supabase/auth-return";
+import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -41,9 +39,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const next = normalizeReturnPath(parsed.data.returnTo, "/auth/onboarding");
+    // The destination goes in a cookie, not the callback URL: Supabase matches
+    // emailRedirectTo against a bare /auth/callback and silently falls back to
+    // Site URL when a query string makes it miss.
+    await rememberAuthReturnPath(parsed.data.returnTo ?? "/auth/onboarding");
     const callbackUrl = new URL("/auth/callback", request.url);
-    callbackUrl.searchParams.set("next", next);
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signInWithOtp({

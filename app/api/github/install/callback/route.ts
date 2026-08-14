@@ -74,7 +74,7 @@ async function callbackErrorResponse(request: Request, error: unknown) {
     // The redirect always falls back to a fixed, client-safe failure notice.
   }
 
-  const redirect = new URL("/connections", request.url);
+  const redirect = new URL("/solutions/connections", request.url);
   redirect.searchParams.set("github", "error");
   redirect.searchParams.set("githubError", code);
   redirect.searchParams.set("githubMessage", message);

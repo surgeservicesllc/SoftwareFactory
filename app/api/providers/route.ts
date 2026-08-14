@@ -1,5 +1,7 @@
 import { jsonNoStore } from "@/lib/server/http";
+import { resolveProviderConfiguration } from "@/lib/providers/config";
 import { loadProviderStatus } from "@/lib/providers/service";
+import { PROVIDER_IDS, type ProviderHealth } from "@/lib/providers/types";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -16,14 +18,11 @@ export async function GET() {
   try {
     const { client, activeOrganization } = await requireActiveOrganization();
 
-    const [providers, organization] = await Promise.all([
-      loadProviderStatus(client, activeOrganization.id),
-      client
-        .from("organizations")
-        .select("ai_provider_execution_enabled")
-        .eq("id", activeOrganization.id)
-        .maybeSingle(),
-    ]);
+    const organization = await client
+      .from("organizations")
+      .select("ai_provider_execution_enabled")
+      .eq("id", activeOrganization.id)
+      .maybeSingle();
 
     if (organization.error) {
       return jsonNoStore(
@@ -32,16 +31,29 @@ export async function GET() {
       );
     }
 
+    const executionEnabled = Boolean(
+      (organization.data as { ai_provider_execution_enabled?: boolean } | null)
+        ?.ai_provider_execution_enabled,
+    );
+    const noProbeHealth: readonly ProviderHealth[] | undefined = executionEnabled
+      ? undefined
+      : PROVIDER_IDS.map((provider) => Object.freeze({
+          provider,
+          state: "disabled" as const,
+          checkedAt: new Date().toISOString(),
+          detail: "Outbound provider execution is disabled for this organization; no provider probe ran.",
+          latencyMs: null,
+          defaultModel: resolveProviderConfiguration(provider).defaultModel,
+        }));
+    const providers = await loadProviderStatus(client, activeOrganization.id, noProbeHealth);
+
     return jsonNoStore({
       organization: {
         id: activeOrganization.id,
         name: activeOrganization.name,
         role: activeOrganization.role,
       },
-      executionEnabled: Boolean(
-        (organization.data as { ai_provider_execution_enabled?: boolean } | null)
-          ?.ai_provider_execution_enabled,
-      ),
+      executionEnabled,
       providers,
     });
   } catch (error) {

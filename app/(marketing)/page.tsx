@@ -47,7 +47,7 @@ export default async function HomePage() {
               <p className="mt-6 max-w-xl text-[15px] leading-7 text-[#8593a5]">{page.subheadline}</p>
             ) : null}
             <div className="mt-8 flex flex-wrap gap-3">
-              <PrimaryCta href="/sign-in">
+              <PrimaryCta href="/auth/sign-up">
                 Get Started Free
                 <ArrowRight className="size-4" aria-hidden="true" />
               </PrimaryCta>
@@ -193,7 +193,7 @@ export default async function HomePage() {
         <CtaBand
           title="Start building with AI at the core."
           description="Create a workspace in minutes. Bring your own bots, assign them roles, and keep every action auditable."
-          primaryHref="/sign-in"
+          primaryHref="/auth/sign-up"
           primaryLabel="Get Started Free"
           secondaryHref="/solutions"
           secondaryLabel="See it in operation"

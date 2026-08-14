@@ -23,7 +23,7 @@ sections separate so two agents editing at once conflict on one section rather t
 | Workstream | State | Blocking item |
 | --- | --- | --- |
 | Phase 1B — GitHub App integration | Live for the owner repository path | Second-tenant and adverse lifecycle matrix |
-| Phase 1D — autonomy controls | Observation-only scaffold, locked OFF | Deliberate; no executor exists |
+| Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Hosted migration `20260813000500`; executors owned elsewhere |
 | Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
@@ -32,6 +32,46 @@ Gates on current `main`: lint, typecheck, 82 files / 819 tests, clean production
 Playwright 117/117 across desktop/tablet/mobile including axe.
 
 ---
+
+## Phase 1D — autonomy controls
+
+Merged to `main` as `62b5c5a` and `a00574e`. The **decision layer** of the loop: it decides what
+is allowed, whether a change earned it, and who may say yes. It executes nothing.
+
+`lib/autonomy/` — `controls` (nine actions, two scopes, most-restrictive-wins), `diff-risk`
+(classifies the real diff, not a self-declaration), `gates` (GREEN set + enhanced set),
+`agents` (deterministic Review/QA/Security), `approval` (tri-state, no self-approval),
+`pipeline` (twelve stages), `autopilot` (selects, does not start), `retries` (bounded).
+`lib/deploy/vercel.ts` — read-only deployment tracking, **Not Connected** without a token.
+
+### If you are building the executor, read this first
+
+`AI/PHASE_1D_IMPLEMENTATION_PLAN.md` §9 is the seam. In short: read the envelope from
+`public.resolved_autonomy_controls(project_id)` rather than a project row, take the autopilot
+queue in the order given, supply gate *results* rather than deciding whether they suffice, ask
+`evaluateRetry` before retrying, and expect to be refused if you author and approve the same
+change.
+
+`CODEX_WORKER_NOT_CONNECTED`, `MERGE_EXECUTOR_NOT_CONNECTED` and
+`DEPLOY_EXECUTOR_NOT_CONNECTED` are asserted by name in
+`tests/integration/phase1d-loop-journey.behavior.test.ts`. Connecting an executor is **supposed**
+to fail those assertions — update them deliberately rather than weakening them.
+
+### Rules that must survive any change here
+
+1. Approval is evaluated **after** the gates. Nothing may be approved past a failing check.
+2. No self-approval, at any risk level, including for an owner.
+3. A missing gate result is a blocker, never a pass.
+4. Migration `20260813000500` relaxes nothing. Enabling any automatic action is a RED action
+   needing a separate owner-approved migration — never a side effect of other work.
+
+### Open, and owned by the owner
+
+- Hosted migration `20260813000500` is unapplied. Every Supabase credential is unset in the
+  agent environments checked, so an agent cannot apply it.
+- `VERCEL_TOKEN` is unset, so deployment tracking reports **Not Connected**. The read adapter is
+  built and will show live data the moment a token exists.
+- Auto-merge stays absent while `AGENTS.md` forbids introducing the workflow.
 
 ## Phase 1E — production operations
 
@@ -112,9 +152,9 @@ be enabled) · `rollback_operations_failure_escalates` (a failed rollback cannot
 
 ## Bot fabric + marketing site
 
-Merged into `main`. Route groups: `app/(marketing)/` public and indexable,
-`app/(console)/` authenticated with the sidebar shell. `/solutions` carries the former console
-homepage. Every marketing page is a Server Component reading through
+Merged into `main`. Route groups: `app/(marketing)/` public and indexable, and
+`app/(portal)/` authenticated, which serves the whole control plane under `/solutions` with the
+global navigation above the sidebar shell (ADR-041). Every marketing page is a Server Component reading through
 `lib/marketing/queries.ts`, which never throws — it falls back to seeded content and marks the
 response `source: "seed"` so the UI labels it honestly.
 

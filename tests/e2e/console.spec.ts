@@ -15,7 +15,7 @@ const consoleNavigation = [
   "Settings",
 ] as const;
 
-const CONSOLE_ROUTE = "/projects";
+const CONSOLE_ROUTE = "/solutions/projects";
 
 test("loads the control plane without browser errors", async ({
   page,
@@ -47,6 +47,18 @@ test("loads the control plane without browser errors", async ({
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
   await expect(page.getByRole("link", { name: /softwarefactory dashboard/i }).first()).toBeVisible();
+  // Every surface now reads live tenant records, so there is no seeded
+  // content left to label. The truthfulness contract is stronger this way:
+  // rather than labelling fake rows, the console shows none at all.
+  await expect(page.getByText(/Demo Data/i)).toHaveCount(0);
+  // A signed-out or locally unconfigured visitor cannot truthfully determine
+  // tenant-scoped provider state. The console must expose that exact boundary
+  // rather than claim live project or worker state.
+  await expect(
+    page.getByRole("heading", {
+      name: /Sign in (?:required|to see your projects)|Projects are unavailable/i,
+    }).first(),
+  ).toBeVisible();
   expect(browserErrors, browserErrors.join("\n")).toEqual([]);
 });
 
@@ -57,13 +69,13 @@ test("exposes every console destination through accessible navigation", async ({
 
   if (testInfo.project.name !== "desktop-chromium") {
     const openNavigation = page.getByRole("button", {
-      name: /open navigation/i,
+      name: /open console navigation/i,
     });
     await expect(openNavigation).toBeVisible();
     await openNavigation.click();
   }
 
-  const navigation = page.getByRole("navigation", { name: /primary/i });
+  const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
 
   for (const destination of consoleNavigation) {

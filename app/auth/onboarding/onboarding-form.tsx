@@ -39,7 +39,7 @@ export function OnboardingForm() {
         return;
       }
 
-      router.push("/projects");
+      router.push("/solutions/projects");
       router.refresh();
     } catch {
       setError("Setup is temporarily unavailable. Try again shortly.");

@@ -11,7 +11,7 @@ type AuthFormProps = {
   returnTo?: string;
 };
 
-type ErrorBody = { error?: { message?: string } };
+type ErrorBody = { error?: { message?: string; needsConfirmation?: boolean } };
 
 export function AuthForm({
   checkEmail = false,
@@ -27,7 +27,42 @@ export function AuthForm({
     checkEmail ? "Check your email to confirm your account, then sign in." : "",
   );
   const [pending, setPending] = useState(false);
+  // Shown when the account exists but its email was never confirmed, which is
+  // otherwise a dead end: sign-up will not remake it and sign-in will not admit
+  // it.
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+
+  async function resendConfirmation() {
+    const email = emailRef.current?.value.trim() ?? "";
+    if (!email) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setPending(true);
+
+    try {
+      const response = await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const result = (await response.json()) as ErrorBody & { message?: string };
+      if (!response.ok) {
+        setError(result.error?.message ?? "The confirmation email could not be sent.");
+        return;
+      }
+      setNeedsConfirmation(false);
+      setMessage(result.message ?? "If that address needs confirming, a new link has been sent.");
+    } catch {
+      setError("The confirmation email could not be sent.");
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function sendMagicLink() {
     const email = emailRef.current?.value.trim() ?? "";
@@ -67,6 +102,7 @@ export function AuthForm({
     event.preventDefault();
     setError("");
     setMessage("");
+    setNeedsConfirmation(false);
     setPending(true);
 
     const form = new FormData(event.currentTarget);
@@ -89,11 +125,16 @@ export function AuthForm({
 
       if (!response.ok) {
         setError(result.error?.message ?? "That did not work. Check your details and try again.");
+        setNeedsConfirmation(Boolean(result.error?.needsConfirmation));
         return;
       }
 
       if (result.confirmationRequired) {
-        setMessage("Check your email to confirm your account before signing in.");
+        setMessage(
+          "Account created. Check your email for a confirmation link, then sign in. "
+          + "If it does not arrive, use the resend button below.",
+        );
+        setNeedsConfirmation(true);
         return;
       }
 
@@ -179,13 +220,26 @@ export function AuthForm({
               type="password"
             />
             {signingUp ? (
-              <span className="field-hint">At least 12 characters.</span>
+              <span className="field-hint">
+                At least 12 characters, including a letter and a number.
+              </span>
             ) : null}
           </div>
 
           <button className="btn btn-primary w-full" disabled={pending} type="submit">
             {pending ? "Just a moment…" : signingUp ? "Create account" : "Sign in"}
           </button>
+
+          {needsConfirmation ? (
+            <button
+              className="btn btn-secondary w-full"
+              disabled={pending}
+              onClick={resendConfirmation}
+              type="button"
+            >
+              Resend the confirmation email
+            </button>
+          ) : null}
 
           {!signingUp ? (
             <button

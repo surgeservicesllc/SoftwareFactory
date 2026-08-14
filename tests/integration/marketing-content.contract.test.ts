@@ -110,7 +110,7 @@ describe("marketing content migration", () => {
 
 describe("seed parity between the migration and the fallback", () => {
   it("seeds the same page slugs the fallback declares", () => {
-    const seeded = [...sql.matchAll(/^\s*\('([a-z-]+)',\s*'[^']*',\n/gm)].map((match) => match[1]);
+    const seeded = [...sql.matchAll(/^\s*\('([a-z-]+)',\s*'[^']*',\r?\n/gm)].map((match) => match[1]);
     const pageSection = sql.slice(
       sql.indexOf("insert into public.marketing_pages"),
       sql.indexOf("insert into public.marketing_stats"),
