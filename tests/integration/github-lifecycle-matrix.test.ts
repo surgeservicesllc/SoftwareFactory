@@ -38,6 +38,7 @@ const migrationFiles = [
   "20260812002500_harden_sensitive_assignments_and_protected_approval_integrity.sql",
   "20260812002600_narrow_hosted_service_role_table_grants.sql",
   "20260812002700_handoff_github_project_connection.sql",
+  "20260812002800_harden_github_connection_loss.sql",
 ] as const;
 
 const ownerAId = "00000000-0000-4000-8000-000000000301";
@@ -814,6 +815,140 @@ describe("Phase 1B GitHub access-loss, disconnect, and reconnect matrix", () => 
     expect(afterReconnect.allowed).toBe(true);
   });
 
+  it("records a server-discovered revocation and clears the stale suspension reason", async () => {
+    // Suspension first, so the discovery has a stale marker to correct. This is
+    // the real sequence: GitHub suspends, then the next token request is
+    // refused outright.
+    await deliver({
+      action: "suspend",
+      connectionId: connectionPrimaryId,
+      event: "installation",
+      externalInstallationId: externalInstallationPrimary,
+      installationId: installationPrimaryId,
+      organizationId: organizationAId,
+      payload: { installation_updated_at: "2026-08-11T00:00:00Z" },
+    });
+    expect((await readInstallation(installationPrimaryId)).suspended_at).not.toBeNull();
+
+    await asService();
+    const marked = await db.query<{ mark_github_connection_lost: boolean }>(
+      "select public.mark_github_connection_lost($1::uuid, $2::uuid, $3::text)",
+      [ownerAId, connectionPrimaryId, "installation_revoked"],
+    );
+    await db.exec("reset role");
+    expect(marked.rows[0]!.mark_github_connection_lost).toBe(true);
+
+    const revoked = await readInstallation(installationPrimaryId);
+    expect(revoked.status).toBe("error");
+    // A retained suspension marker would make every surface report the wrong
+    // reason for a loss that was actually a revocation.
+    expect(revoked.suspended_at).toBeNull();
+    expect(revoked.deleted_at).toBeNull();
+    expect((await readRepository(repositoryPrimaryId)).selected).toBe(false);
+
+    const lostConnection = await readConnection(connectionPrimaryId);
+    expect(lostConnection.status).toBe("error");
+    expect(lostConnection.error_message).toBe("GitHub Connection Lost");
+
+    const afterRevocation = await attemptReservation({
+      actorUserId: ownerAId,
+      connectionId: connectionPrimaryId,
+      key: "matrix-revoked",
+      organizationId: organizationAId,
+      projectId: projectPrimaryId,
+      repositoryId: repositoryPrimaryId,
+    });
+    expect(afterRevocation.allowed).toBe(false);
+    expect(afterRevocation.code).toBe("23514");
+
+    // The discarded suspension survives as evidence rather than as a
+    // misleading column value.
+    await asObserver();
+    const evidence = await db.query<{
+      installation_state_retained: boolean;
+      previous_installation_status: string;
+      previous_suspended_at: string | null;
+      reason: string;
+    }>(
+      `select
+         metadata ->> 'reason' as reason,
+         metadata ->> 'previous_installation_status' as previous_installation_status,
+         metadata ->> 'previous_suspended_at' as previous_suspended_at,
+         (metadata ->> 'installation_state_retained')::boolean as installation_state_retained
+       from public.activity_events
+       where organization_id = $1 and description = 'GitHub connection lost'
+       order by occurred_at desc, created_at desc
+       limit 1`,
+      [organizationAId],
+    );
+    expect(evidence.rows[0]).toMatchObject({
+      installation_state_retained: false,
+      previous_installation_status: "suspended",
+      reason: "installation_revoked",
+    });
+    expect(evidence.rows[0]!.previous_suspended_at).not.toBeNull();
+
+    // An ordinary member cannot fabricate a connection loss.
+    await asService();
+    await expect(
+      db.query("select public.mark_github_connection_lost($1::uuid, $2::uuid, $3::text)", [
+        memberAId,
+        connectionPrimaryId,
+        "insufficient_permission",
+      ]),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      db.query("select public.mark_github_connection_lost($1::uuid, $2::uuid, $3::text)", [
+        ownerAId,
+        connectionPrimaryId,
+        "rate_limited",
+      ]),
+    ).rejects.toMatchObject({ code: "22023" });
+
+    // Reconnecting after a revocation restores service through the normal path.
+    await db.query(
+      `select * from public.sync_github_installation(
+         $1::uuid, $2::uuid, $3::bigint, $4::bigint, 'matrix-app', 820001, 'tenant-a',
+         'Organization', null, 'Organization', 'selected', '{}'::jsonb,
+         array[]::text[], now(), null, $5::jsonb, $6::uuid
+       )`,
+      [
+        ownerAId,
+        organizationAId,
+        externalInstallationPrimary,
+        appId,
+        JSON.stringify([
+          {
+            archived: false,
+            default_branch: "main",
+            disabled: false,
+            full_name: "tenant-a/primary",
+            github_updated_at: "2026-08-11T12:00:00Z",
+            html_url: "https://github.com/tenant-a/primary",
+            id: externalRepositoryPrimary,
+            name: "primary",
+            owner_login: "tenant-a",
+            private: true,
+            visibility: "private",
+          },
+        ]),
+        connectionPrimaryId,
+      ],
+    );
+    await db.exec("reset role");
+
+    expect((await readInstallation(installationPrimaryId)).status).toBe("active");
+    const recovered = await attemptReservation({
+      actorUserId: ownerAId,
+      connectionId: connectionPrimaryId,
+      key: "matrix-revocation-recovered",
+      organizationId: organizationAId,
+      projectId: projectPrimaryId,
+      repositoryId: repositoryPrimaryId,
+    });
+    expect(recovered.allowed).toBe(true);
+  });
+
   it("treats provider deletion as terminal for the installation id", async () => {
     await deliver({
       action: "deleted",
@@ -874,9 +1009,39 @@ describe("Phase 1B GitHub access-loss, disconnect, and reconnect matrix", () => 
         [ownerAId, organizationAId, externalInstallationPrimary, appId, connectionPrimaryId],
       ),
     ).rejects.toMatchObject({ code: "55000" });
+
+    // A discovery that arrives after the id is already terminal must record the
+    // loss rather than abort. `deleted` already refuses every operation, so the
+    // installation row is deliberately left untouched.
+    const lateDiscovery = await db.query<{ mark_github_connection_lost: boolean }>(
+      "select public.mark_github_connection_lost($1::uuid, $2::uuid, $3::text)",
+      [ownerAId, connectionPrimaryId, "insufficient_permission"],
+    );
+    expect(lateDiscovery.rows[0]!.mark_github_connection_lost).toBe(true);
     await db.exec("reset role");
 
-    expect((await readInstallation(installationPrimaryId)).status).toBe("deleted");
+    const stillTerminal = await readInstallation(installationPrimaryId);
+    expect(stillTerminal.status).toBe("deleted");
+    expect(stillTerminal.deleted_at).not.toBeNull();
+
+    await asObserver();
+    const lateEvidence = await db.query<{
+      installation_state_retained: boolean;
+      reason: string;
+    }>(
+      `select
+         metadata ->> 'reason' as reason,
+         (metadata ->> 'installation_state_retained')::boolean as installation_state_retained
+       from public.activity_events
+       where organization_id = $1 and description = 'GitHub connection lost'
+       order by occurred_at desc, created_at desc
+       limit 1`,
+      [organizationAId],
+    );
+    expect(lateEvidence.rows[0]).toMatchObject({
+      installation_state_retained: true,
+      reason: "insufficient_permission",
+    });
   });
 
   it("keeps every tenant-A loss event out of tenant B", async () => {

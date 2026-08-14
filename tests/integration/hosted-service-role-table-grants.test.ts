@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260812002700_handoff_github_project_connection.sql";
+  "20260812002800_harden_github_connection_loss.sql";
 
 const publicTables = [
   "activity_events",
