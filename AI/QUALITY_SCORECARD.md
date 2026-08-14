@@ -54,7 +54,7 @@ Each of these encodes something that was already true and was verifiable only by
 | Guard | What it prevents | Status |
 | --- | --- | --- |
 | `tests/integration/migration-version-uniqueness.test.ts` | Two migrations sharing a version prefix. Supabase's ledger keys on the prefix, so a duplicate is two applies competing for one primary key — `db push` fails partway and leaves the hosted schema half-applied | **Caught a live defect.** `20260814000300` was held by both `agentos_isolation_model` and `declare_model_characteristics`; the latter moved to `20260814000250`. Neither was hosted, so the fix carried no ledger consequence |
-| `tests/integration/schema-security-invariants.test.ts` | A new table shipping without RLS, or `service_role` quietly gaining a table privilege | Pass - RLS and FORCE RLS on every public table across the whole chain; `service_role` limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write anywhere |
+| `tests/integration/schema-security-invariants.test.ts` | A new table shipping without RLS, `service_role` quietly gaining a table privilege, a SECURITY DEFINER function without a pinned `search_path`, or a new function reachable anonymously | Pass - RLS and FORCE RLS on every public table across the whole chain; `service_role` table privileges limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write anywhere. **All 172 SECURITY DEFINER functions pin a `search_path`**; `anon` may execute exactly one of them (`subscribe_to_newsletter`) and `service_role` exactly twenty, each pinned by name |
 | `tests/integration/required-checks-wiring.test.ts` | A renamed CI job leaving a live Phase 1C run waiting for a check that never reports — a hang rather than an error, after real work has been pushed | Pass - `SOFTWAREFACTORY_REQUIRED_CHECKS` matches `ci.yml` job names in both directions |
 | `tests/integration/supabase-rpc-contract.test.ts` (pre-existing) | An `.rpc()` argument-name typo that type-checks and only fails against a real database | Pass - every call site in `app`, `lib`, `scripts` resolves against the migrated schema |
 
@@ -72,7 +72,9 @@ Recorded because an audit with no record is an audit that gets repeated. A first
 
 ### Deployment position
 
-Measured 2026-08-14 22:29 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**. The served build's sitemap `lastmod` is `2026-08-14T21:38:25Z`, so production lags `main`. Vercel returned `api-deployments-free-per-day` at 21:54, 22:02, and 22:17 UTC, and a preview succeeded at 22:16 — the free-tier cap throttles rather than blocking outright for a day, contrary to its own message. No `VERCEL_TOKEN` exists in any agent environment, so the deployment list cannot be read and the lag's precise cause is not established. An owner redeploy of `main` from the Vercel dashboard is the remedy.
+Measured 2026-08-14 23:04 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**, and the served build's sitemap `lastmod` is `2026-08-14T23:03:49Z` — the deploy from `baf8ce0`. **Production is current with `main`.**
+
+It lagged for roughly ninety minutes because Vercel's free-tier hundred-per-day cap, exhausted by this session's pull-request volume, rejected deployments at 21:54, 22:02, 22:17, and 22:33 while allowing previews at 22:16 and 22:48. The cap throttles rather than blocking for a day, contrary to its own message, and a rejected deployment is not retried — the lag cleared when a later merge gave Vercel a fresh commit to build.
 
 ### Secret boundary
 
