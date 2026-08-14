@@ -40,6 +40,29 @@ unconfirmed accounts cannot sign in -- but they can be removed from
 Authentication → Users. Deleting them needs the dashboard; the repository holds
 no service-role key.
 
+## The defect that actually broke sign-up
+
+Found by walking the chain against a real Supabase, and not visible from
+production because catching it needs a mailbox.
+
+Supabase matches `emailRedirectTo` against the redirect allowlist and, on a
+miss, **silently falls back to Site URL**. The allowlist entry is a bare
+`/auth/callback`; every auth route appended `?next=/auth/onboarding`; so every
+match missed and the emailed link resolved to
+
+```
+https://www.theagoras.com/?code=<uuid>
+```
+
+the marketing home page, carrying a code it ignores. Clicking "confirm my
+email" confirmed the address and left the visitor signed out on the home page.
+
+Fixed by keeping query strings off the callback URL. Sign-up and resend never
+needed one; magic link carries its destination in a short-lived host-only
+cookie instead. `tests/e2e/auth-lifecycle.spec.ts` walks the whole chain
+against a local stack -- with the old code it reproduces the URL above, with
+the fix it passes. **This needed no dashboard change.**
+
 ## Owner action required
 
 Both are Supabase dashboard changes. Neither can be made from the application:
