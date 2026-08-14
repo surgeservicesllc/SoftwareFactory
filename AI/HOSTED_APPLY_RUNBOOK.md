@@ -77,6 +77,36 @@ separately, so the cause is visible rather than looking like a scoring bug.
   who realises they declared the wrong tier should be able to say "I no longer claim this" rather
   than substitute another guess.
 
+## Added 2026-08-14 — AgentOS and Phase 1D visibility
+
+Eight further migrations are unhosted. All eight apply cleanly in order against real PostgreSQL
+(PGlite) on top of everything before them, verified by the suites named beside each.
+
+| Migration | What it adds | Verified by |
+|---|---|---|
+| `20260814000300_agentos_isolation_model` | 9 tables: environments, MCP connections, skills, default-deny agent grants | `agentos-isolation.behavior` |
+| `20260814000400_agentos_inbox` | Inbox messages, one open question per run, answer/resume routines | `agentos-inbox.behavior` |
+| `20260814000500_agentos_templates_and_chains` | Templates, chain steps, the two completion paths | `agentos-chains.behavior` |
+| `20260814000600_agentos_compound_engineer_template` | Seeds the built-in nine-step workflow (idempotent, per organization) | `agentos-chains.behavior` |
+| `20260814000700_agentos_goals` | Goals, definition of done, append-only progress, the three rails | `agentos-goals.behavior` |
+| `20260814000800_agentos_triggers_and_automations` | Triggers, deliveries, cron automations | `agentos-triggers.behavior` |
+| `20260814000900_agentos_safe_list_reads` | Five browser projections for the AgentOS console | `agentos-routes.contract` |
+| `20260814001000_phase1d_decision_visibility` | Makes `autonomy_decisions` readable + per-project autonomy status | `phase1d-decision-visibility.behavior` |
+
+What they do **not** do, which is what makes them safe to apply:
+
+- No execution authority. Every AgentOS surface reports `*_RUNNER_NOT_CONNECTED`, and the goal
+  spawn decision returns `maySpawn: false` unconditionally.
+- No new `service_role` table privileges, so the verified `026` ACL matrix is unchanged. The one
+  function `service_role` may call is `agentos_record_trigger_delivery`, and it creates only a
+  backlog task.
+- No Phase 1D control is relaxed. `20260814001000` is read-only: two projections and their grants.
+  A test asserts that reading the trail cannot change what the loop may do.
+- Every table carries RLS and FORCE RLS with browser access limited to SELECT.
+
+Order matters only in that `000600` needs `000500`, `000900` needs the tables before it, and
+`001000` needs `20260813001600`. Applying them in filename order satisfies all three.
+
 ## Not covered here
 
 - **A funded provider key and a registered Phase 1C worker.** Neither exists in any verified
