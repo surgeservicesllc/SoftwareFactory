@@ -148,3 +148,72 @@ describe("reclassifyAgainstDeclared", () => {
     expect(result.deescalated).toBe(false);
   });
 });
+
+describe("a change that widens autonomous authority is RED", () => {
+  // RISK_CLASSIFICATION.md lists "enabling or widening autonomous approval,
+  // merge, deploy, or rollback authority" as RED. Without these rules a
+  // migration flipping auto_merge would score as an ordinary schema change,
+  // which is exactly how a loop grants itself power through a change it
+  // classified as routine.
+  it.each([
+    "  auto_merge = true,",
+    "update public.projects set auto_deploy = true;",
+    "set autonomous_mode = true where id = '1';",
+    "update public.organizations set autonomy_kill_switch_active = false;",
+    "alter table public.projects drop constraint projects_phase1d_green_observation_only;",
+    "set maximum_autonomous_risk = 'red';",
+    "update public.projects set autonomous_operations_stopped = false;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("privileged-access");
+  });
+
+  it("treats the control model itself as privileged", () => {
+    expect(assessDiffRisk([file("lib/autonomy/controls.ts")]).level).toBe("RED");
+  });
+
+  it("leaves a migration that keeps everything off at the ordinary level", () => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [
+        "add column auto_plan boolean not null default false,",
+      ]),
+    ]);
+
+    expect(assessment.level).toBe("YELLOW");
+    expect(assessment.factors).not.toContain("privileged-access");
+  });
+});
+
+describe("destroying audit evidence is RED", () => {
+  it.each([
+    "drop table public.activity_events;",
+    "truncate table public.autonomy_decisions;",
+    "delete from public.operations_audit_events;",
+    "drop trigger autonomy_decisions_append_only on public.autonomy_decisions;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("destructive-production-data");
+  });
+});
+
+describe("the remaining RED classes the policy names", () => {
+  it.each([
+    ["config/encryption/keys.ts", "authentication-or-security-controls"],
+    ["infra/tls/renewal.ts", "dns-or-domain-ownership"],
+    ["ops/backups/schedule.ts", "destructive-production-data"],
+    ["ops/retention/policy.ts", "destructive-production-data"],
+  ])("classifies %s as RED", (path, factor) => {
+    const assessment = assessDiffRisk([file(path)]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain(factor);
+  });
+});

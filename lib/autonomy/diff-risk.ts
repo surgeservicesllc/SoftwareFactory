@@ -52,6 +52,36 @@ const SECRET_MARKERS = [
 ];
 
 /**
+ * Content that widens autonomous authority.
+ *
+ * `policies/RISK_CLASSIFICATION.md` lists "enabling or widening autonomous
+ * approval, merge, deploy, or rollback authority" as RED. Without this the
+ * classifier would score a migration that flips `auto_merge` to true as an
+ * ordinary schema change — YELLOW — which is precisely the case the whole
+ * control model exists to prevent. A loop must never be able to grant itself
+ * more power through a change it classified as routine.
+ */
+const AUTHORITY_WIDENING = [
+  /\bauto_(plan|code|test|repair|review|approve|merge|deploy|rollback)\s*(=|:)\s*true\b/i,
+  /\bautonomous_mode\s*(=|:)\s*true\b/i,
+  /\bautonomy_kill_switch_active\s*(=|:)\s*false\b/i,
+  /\bmaximum_autonomous_risk\s*(=|:)\s*'?(yellow|red)'?/i,
+  /\bdrop\s+constraint[^;]*green_observation_only/i,
+  /\bautonomous_operations_stopped\s*(=|:)\s*false\b/i,
+];
+
+/**
+ * Content that destroys audit evidence. Deleting the record of what happened
+ * is listed separately from destroying production data because it is worse:
+ * it removes the ability to find out what was destroyed.
+ */
+const AUDIT_EVIDENCE_DESTRUCTION = [
+  /\b(drop|truncate)\s+table\s+[a-z_.]*\b(audit|activity_events|autonomy_decisions|operations_audit)/i,
+  /\bdelete\s+from\s+[a-z_.]*\b(audit|activity_events|autonomy_decisions|operations_audit)/i,
+  /\bdrop\s+trigger[^;]*append_only/i,
+];
+
+/**
  * Destructive schema verbs. `drop table`, `truncate`, and a non-additive column
  * drop cannot be walked back by re-running a migration, so they are RED even
  * though an ordinary migration is only YELLOW.
@@ -82,9 +112,29 @@ const RULES: readonly Rule[] = [
     matches: (file) => (file.addedLines ?? []).some((line) => DESTRUCTIVE_SQL.some((m) => m.test(line))),
   },
   {
+    factor: "privileged-access",
+    reason: "Enables or widens autonomous approval, merge, deploy, or rollback authority.",
+    matches: (file) =>
+      (file.addedLines ?? []).some((line) => AUTHORITY_WIDENING.some((m) => m.test(line))) ||
+      /(^|\/)lib\/autonomy\/controls\.ts$/.test(file.path),
+  },
+  {
+    factor: "destructive-production-data",
+    reason: "Destroys or unprotects audit evidence.",
+    matches: (file) =>
+      (file.addedLines ?? []).some((line) => AUDIT_EVIDENCE_DESTRUCTION.some((m) => m.test(line))),
+  },
+  {
     factor: "authentication-or-security-controls",
-    reason: "Changes authentication, authorization, or row-level security.",
-    matches: path(/(^|\/)(auth|middleware|proxy)\b|row_level_security|(^|\/)lib\/supabase\//i),
+    reason: "Changes authentication, authorization, encryption, audit policy, or row-level security.",
+    matches: path(
+      /(^|\/)(auth|middleware|proxy)\b|row_level_security|(^|\/)lib\/supabase\/|(^|\/)(encryption|crypto|audit-policy)\b/i,
+    ),
+  },
+  {
+    factor: "destructive-production-data",
+    reason: "Changes backup, retention, or recovery controls.",
+    matches: path(/(^|\/)(backups?|retention|recovery)\//i),
   },
   {
     factor: "authentication-or-security-controls",
@@ -93,8 +143,8 @@ const RULES: readonly Rule[] = [
   },
   {
     factor: "dns-or-domain-ownership",
-    reason: "Changes domain, DNS, or hosting routing configuration.",
-    matches: path(/(^|\/)(vercel|netlify)\.json$|(^|\/)(dns|domains?)\//i),
+    reason: "Changes domain, DNS, TLS, or hosting routing configuration.",
+    matches: path(/(^|\/)(vercel|netlify)\.json$|(^|\/)(dns|domains?|tls|certs?|certificates)\//i),
   },
   {
     factor: "privileged-access",
