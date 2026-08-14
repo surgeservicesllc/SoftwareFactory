@@ -1,210 +1,152 @@
-# SoftwareFactory — shared working status
+# Open work
 
-Last updated: 2026-08-13 (Phase 1E synthetic journeys merged; all gates green on `main`)
-Current `main`: `79084ed` — CI run [`31733955307`](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31733955307)
-Owner of this file: **whichever agent is currently working. Update it before your session ends.**
+Last updated: 2026-08-14.
 
-Several agents work this repository concurrently. This file is the shared picture: what is
-done, what is genuinely open, and which items only the owner can close. Keep workstream
-sections separate so two agents editing at once conflict on one section rather than the file.
-
-## Ground rules (from `AGENTS.md` — read it before editing)
-
-- Truthful labels only. **Demo Data** for seeded values, **Not Connected** for absent providers.
-- Row Level Security stays on for every exposed table, with FORCE RLS. Public-readable content
-  is an explicit `anon` SELECT policy, never a disabled RLS.
-- No credential, key, or secret in browser code, logs, fixtures, or database rows.
-- Run `npm run lint && npm run typecheck && npm test && npm run build` before every commit.
-- Playwright in this sandbox: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
-- Merging to `main` deploys production through Vercel. CI runs on `pull_request` and on push to `main`.
-
-## Repository status at a glance
-
-| Workstream | State | Blocking item |
-| --- | --- | --- |
-| Phase 1B — GitHub App integration | Live for the owner repository path | Second-tenant and adverse lifecycle matrix |
-| Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Hosted migration `20260813000500`; executors owned elsewhere |
-| Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
-| Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
-| Bot fabric + marketing site | Merged | Hosted marketing migration |
-
-Gates on current `main`: lint, typecheck, 82 files / 819 tests, clean production build,
-Playwright 117/117 across desktop/tablet/mobile including axe.
+Everything currently open, ordered by whether it needs you or needs me.
+Detail lives in `AI/BACKLOG.md` and `AI/PHASE_2B_IMPLEMENTATION_PLAN.md`; this
+is the single page that says what is actually outstanding.
 
 ---
 
-## Phase 1D — autonomy controls
+## Needs the owner — nothing proceeds without these
 
-Merged to `main` as `62b5c5a` and `a00574e`. The **decision layer** of the loop: it decides what
-is allowed, whether a change earned it, and who may say yes. It executes nothing.
+### Blocking people from using the product
 
-`lib/autonomy/` — `controls` (nine actions, two scopes, most-restrictive-wins), `diff-risk`
-(classifies the real diff, not a self-declaration), `gates` (GREEN set + enhanced set),
-`agents` (deterministic Review/QA/Security), `approval` (tri-state, no self-approval),
-`pipeline` (twelve stages), `autopilot` (selects, does not start), `retries` (bounded).
-`lib/deploy/vercel.ts` — read-only deployment tracking, **Not Connected** without a token.
+- [ ] **Confirm `Daniel.Hughen@gmail.com` by hand.** Supabase → Authentication →
+      Users → row menu → Confirm email. No confirmation email will arrive until
+      SMTP exists, and the super-administrator role requires a confirmed
+      address, so this also switches on admin access.
+- [ ] **Configure custom SMTP** (Supabase → Authentication → Emails). Required,
+      not optional: `enable_confirmations` is on and the built-in mail service
+      allows a couple of messages per hour and is not meant to reach end users.
+      Until this lands, nobody new can create a usable account.
+      `scripts/configure-auth-email.sh` and `supabase/config.toml` already carry
+      the `SUPABASE_AUTH_SMTP_*` contract.
+- [ ] **Delete the diagnostic account `sf-probe-a91c@gmail.com`.** Created while
+      reproducing the sign-up defect using an invented address that does not
+      exist; its confirmation email hard-bounced and Supabase warned that
+      sending privileges are at risk.
 
-### If you are building the executor, read this first
+### Security
 
-`AI/PHASE_1D_IMPLEMENTATION_PLAN.md` §9 is the seam. In short: read the envelope from
-`public.resolved_autonomy_controls(project_id)` rather than a project row, take the autopilot
-queue in the order given, supply gate *results* rather than deciding whether they suffice, ask
-`evaluateRetry` before retrying, and expect to be refused if you author and approve the same
-change.
+- [ ] **Rotate the `sb_secret_` Supabase key** exposed in a screenshot, and
+      update the Vercel environment variable.
+- [ ] **Rotate the `sbp_` Supabase personal access token** pasted into the
+      conversation.
 
-`CODEX_WORKER_NOT_CONNECTED`, `MERGE_EXECUTOR_NOT_CONNECTED` and
-`DEPLOY_EXECUTOR_NOT_CONNECTED` are asserted by name in
-`tests/integration/phase1d-loop-journey.behavior.test.ts`. Connecting an executor is **supposed**
-to fail those assertions — update them deliberately rather than weakening them.
+### Infrastructure
 
-### Rules that must survive any change here
+- [ ] **Repair the migration ledger.** It records 26 versions; the 32 migration
+      files carry 31 distinct versions, so five applied versions are unrecorded
+      and `supabase db push` would try to re-apply them and fail. Idempotent
+      repair SQL is prepared. **This blocks Phase 2B Stage 2 from being pushed
+      with normal tooling.**
+- [ ] **Decide on the duplicate migration version `20260813000200`.** Two files
+      share it (`bot_fabric_activity_types`, `phase1e_synthetic_journeys`) and
+      the ledger cannot represent both. Renaming is the obvious fix but
+      `AI/ARCHITECTURE.md` records applied filenames as immutable, so it is an
+      owner call.
+- [ ] **Investigate why automatic CI stopped firing.** No `pull_request`-
+      triggered run since 2026-08-13 19:32Z; every run since has been manually
+      dispatched. Pull requests are currently ungated by default.
 
-1. Approval is evaluated **after** the gates. Nothing may be approved past a failing check.
-2. No self-approval, at any risk level, including for an owner.
-3. A missing gate result is a blocker, never a pass.
-4. Migration `20260813000500` relaxes nothing. Enabling any automatic action is a RED action
-   needing a separate owner-approved migration — never a side effect of other work.
+### AI providers — blocks every live Phase 2B demonstration
 
-### Open, and owned by the owner
+- [ ] Set server-only `ANTHROPIC_API_KEY`.
+- [ ] Set server-only `OPENAI_API_KEY` and `OPENAI_DEFAULT_MODEL`. The current
+      OpenAI project reported `credit_balance_exhausted`, so it also needs
+      funding.
+- [ ] Enable the outbound provider execution switch in Settings.
+- [ ] Both providers are needed, not one: cross-provider verification degrades
+      or fails closed with a single provider.
 
-- Hosted migration `20260813000500` is unapplied. Every Supabase credential is unset in the
-  agent environments checked, so an agent cannot apply it.
-- `VERCEL_TOKEN` is unset, so deployment tracking reports **Not Connected**. The read adapter is
-  built and will show live data the moment a token exists.
-- Auto-merge stays absent while `AGENTS.md` forbids introducing the workflow.
+### Optional configuration
 
-## Phase 1E — production operations
-
-Monitor → Detect → Classify → Protect → Diagnose → Rollback decision → Repair work →
-Validate → Resolve. Full audit, per-section completion, integrations, security findings and
-Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
-
-### Done
-
-- [x] Migration `028` — ten RLS + FORCE RLS tables, SEV1–SEV4 incident evidence, owner-scoped
-      SECURITY DEFINER workflows, append-only evidence triggers, **zero new `service_role`
-      table grants** so the verified migration-`026` ACL matrix is unchanged.
-- [x] Migration `029` — per-project synthetic journeys whose step safety and profile coverage
-      are CHECK constraints, so bypassing the route cannot bypass them.
-- [x] Provider-neutral monitoring. One connected adapter: a bounded HTTPS probe that refuses
-      loopback/private/CGNAT/link-local/metadata targets, does not follow redirects, and never
-      reads a response body. Every other provider states its reason and unblocking condition.
-- [x] Health `HEALTHY/DEGRADED/CRITICAL/UNKNOWN/PAUSED` with append-only history and a stored
-      reason. No connected monitor resolves to **UNKNOWN**, never HEALTHY.
-- [x] Incidents created automatically, deduplicated by fingerprint into one open incident per
-      project, severity escalating upward only.
-- [x] Automatic release freeze on SEV1/SEV2; owner-only resume, organization-wide stop, and
-      reversal of that stop (which never silently lifts a per-project freeze).
-- [x] Last Known Good resolved only from a deployment whose own validation passed; rollback
-      eligibility fail-closed against `policies/AUTO_ROLLBACK.md`; a failed rollback cannot be
-      recorded without escalating to SEV1 — a CHECK constraint, not application logic.
-- [x] Deterministic Production Investigator returning cause, cited evidence, subsystem,
-      confidence, recommended action and risk. No intermediate reasoning stored or returned.
-- [x] Bounded self-healing: three attempts, escalation on the third, RED and above-ceiling work
-      refused so the GREEN/YELLOW/RED policy is not bypassed.
-- [x] Durable idempotent event queue covering all ten required event types.
-- [x] Gated resolution: restoration, passing same-project validation, root cause, corrective
-      action, and prevention for SEV1/SEV2. A green deployment closes nothing.
-- [x] Operations console, per-project production detail, daily operations report, immutable audit.
-- [x] End-to-end journey and failed-rollback escalation proven against the real migrated schema
-      (`tests/integration/phase1e-incident-journey.behavior.test.ts`).
-
-### Remaining
-
-- [ ] **Owner-gated: apply hosted migrations `028` and `029`** to `qpuofpmagrmyamahqwxw`.
-      Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` first — the currently
-      selected profile is wrong/unauthorized. Until this runs, every Phase 1E surface reports
-      **Not Connected** or **Unknown**, which is truthful.
-- [ ] **Owner-gated: authorize a production target** to monitor, then record the first real
-      observation → detection → incident → resolution and put the evidence in
-      `AI/QUALITY_SCORECARD.md`. Nothing in Phase 1E has yet run against real production.
-- [ ] Authorize a scheduler identity for continuous monitoring. Checks are owner-triggered
-      today. **Constraint: this must not widen `service_role`** — use a narrow SECURITY DEFINER
-      ingest path, not table grants.
-- [ ] Connect Vercel deployment status, and error-rate/latency telemetry. Both are Not Connected
-      with no provider; error rate in particular cannot be derived from a single probe.
-- [ ] Probe hardening: a public hostname that resolves to a private address at DNS time is not
-      detected. Needs resolve-then-connect-by-IP handling.
-
-### Deliberately not built (do not "fix" these)
-
-- Rollback **execution** — no deployment adapter, `AUTO_ROLLBACK.md` disables it, migration
-  `010` pins `auto_rollback` off. Every rollback records `EXECUTOR_NOT_CONNECTED`.
-- Codex repair **execution** — Phase 1C is Not Connected. Repair work is created, unassigned.
-- Synthetic **write** steps — declared and validated, recorded as `skipped`, never issued.
-- Autonomous deployment or merge. `autonomous_release_allowed` returns false unconditionally.
-
-### Invariants a future change must not break
-
-`service_role` gains no new table privileges · the four append-only evidence tables stay
-append-only · `production_monitors_enabled_requires_connection` (an unconnected monitor cannot
-be enabled) · `rollback_operations_failure_escalates` (a failed rollback cannot be silent) ·
-`incidents_resolution_requires_cause` · `synthetic_journeys_steps_are_safe` ·
-`EXECUTOR_NOT_CONNECTED` stays unconditional in `autonomous_release_allowed`.
+- [ ] Set `SUPER_ADMIN_EMAILS` in Vercel Production and Preview if the
+      super-administrator role should not use the repository default list.
 
 ---
 
-## Bot fabric + marketing site
+## Phase 2B — Graph Engineering
 
-Merged into `main`. Route groups: `app/(marketing)/` public and indexable, and
-`app/(portal)/` authenticated, which serves the whole control plane under `/solutions` with the
-global navigation above the sidebar shell (ADR-041). Every marketing page is a Server Component reading through
-`lib/marketing/queries.ts`, which never throws — it falls back to seeded content and marks the
-response `source: "seed"` so the UI labels it honestly.
+### Stage 1 — engine core — **DONE**
 
-### Remaining
+Delivered in `lib/graph/`, 61 tests. Topology selection, fake-edge removal,
+typed contracts, DAG scheduler, deterministic reducers, fan-in guards,
+verification quorum, budgets, frozen policies, discovery stop conditions.
+Documented in `AI/GRAPH_ENGINEERING.md`.
 
-- [ ] **Owner-gated: host the marketing migration.** Until then pages render the seeded
-      fallback and say **Demo Data**. The schema, policies, grants and `subscribe_to_newsletter`
-      already pass a 21-assertion behavioral matrix against real PostgreSQL as the real `anon`
-      and `authenticated` roles — keep `tests/integration/marketing-rls-behavior.test.ts`
-      passing; it is the guard on the public-read boundary.
-- [ ] After hosting, re-run those assertions against the hosted project with a real anon key and
-      record the evidence in `AI/QUALITY_SCORECARD.md`.
-- [ ] Replace placeholder leadership headshots and third-party wordmarks with licensed assets.
-- [ ] Per-page OG images (`opengraph-image.tsx` per route).
-- [ ] Optional: an authenticated owner/admin editor UI for marketing content, audited, so copy
-      can change without SQL.
+### Stage 2 — durability — **IN PROGRESS**
 
-### Design notes
+- [x] Thirteen tables in `20260814000100_graph_engineering.sql`: `graphs`,
+      `graph_runs`, `graph_nodes`, `graph_edges`, `node_runs`, `node_contracts`,
+      `graph_handoffs`, `graph_artifacts`, `graph_verifications`, `work_locks`,
+      `graph_templates`, `graph_budgets`, `graph_events`.
+- [x] RLS + FORCE RLS on all thirteen, member-only select, zero browser write
+      grants, foreign keys, indexes, check constraints.
+- [x] Work locks with heartbeat, expiry, and abandoned-lock recovery, enforced
+      by a partial unique index rather than by the scheduler remembering.
+- [ ] **Not applied to hosted.** Blocked on the migration ledger repair.
+- [ ] Graph compiler: plan → durable definition the scheduler consumes.
+- [ ] Handoff persistence validated against the receiving node's input contract.
+- [ ] RLS behavioural tests: owner access, unrelated-user denial, anonymous
+      denial, project isolation, cross-project node denial.
 
-- Marketing palette: near-black `#080b10` ground, `#0d1118` panels, violet→blue gradient
-  (`#7c5cff` → `#4d8dff`) for accents and headline spans, one accent per card row.
-- The console palette (lime `#c6f135`) is deliberately **not** reused on marketing pages. Keep
-  the two visual systems separate; only shared primitives cross over.
+### Stage 3 — execution
+
+- [ ] Node runner over the Phase 2A provider layer, per-node routing and tiering.
+- [ ] Fan-out onto isolated workspaces (`lib/worker/workspace.ts` already
+      supports concurrent isolation; nothing fans out to it yet).
+- [ ] Integration nodes: wait, check completeness, detect conflicts, reconcile.
+- [ ] Anchors modelled as structured evidence attached to graph decisions.
+      Real anchors already exist — container validation, CI results, deployment
+      state, synthetic journeys — but are not attached to nodes.
+- [ ] Hidden-dependency detection wired to work locks.
+
+### Stage 4 — surfaces
+
+- [ ] Graph templates (Production Readiness, Security Audit, RLS Audit, Bug
+      Sweep, Test Coverage, Refactor Sweep, Dependency Audit, Performance Audit,
+      Mobile Audit, Code Review, Feature Build, Incident Investigation,
+      SEO/AEO Audit), clone/save/version.
+- [ ] Workflows UI: visual nodes and edges, node detail, status, budget,
+      concurrency, locks, verification, artifacts, anchors, timeline.
+- [ ] Bot Manager proposes an execution summary before running.
+- [ ] Graph observability: critical path, parallelism, latency, retries,
+      verifier rejection, reduction ratio, completion, missing inputs.
+- [ ] Conservative graph optimizer recommendations.
+
+### Stage 5 — demonstrations (all blocked on provider credentials)
+
+- [ ] A. Simple task takes the single-agent path with no graph overhead.
+- [ ] B. Wide audit: 20+ independent nodes, fan-out, verification, reduction.
+- [ ] C. Code feature: plan → parallel Codex → integration → fresh review → gates.
+- [ ] D. Silent failure: one node fails, the graph refuses to claim completion.
+- [ ] E. Hidden conflict: two nodes contend, the lock prevents unsafe parallelism.
+- [ ] F. Discovery terminates on the no-new-findings condition.
+- [ ] G. Budget degrades and stops gracefully at the limit.
 
 ---
 
-## Phase 1B — GitHub App integration
+## Carried over from earlier phases
 
-Live for the owner repository path through candidate App `4582606`, installation `153479019`.
-Primary installation `153445938` stays active as the rollback boundary.
-
-### Remaining
-
-- [ ] Observe the rollback window and exercise the evidence-bound reverse handoff before
-      retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
-- [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
-      real user/email is authorized, so this cannot be faked locally.
-- [ ] Remaining adverse cases: stale SHA, approval expiry, revoked/insufficient permission,
-      rate limit, provider ordering, terminal deletion/restore, idempotent recovery.
-- [ ] Verify explicit disconnect/loss state and history preservation.
-- [ ] Configure and verify isolated Preview Supabase values.
+- [ ] Phase 1B: live second-tenant, reverse handoff, disconnect/loss, and the
+      remaining adverse lifecycle matrix.
+- [ ] Phase 1C: no successful live result, factory branch, or draft PR yet —
+      blocked on provider credit.
+- [ ] Phase 1E: no owner-authorized production target, so production
+      observation remains unproven.
+- [ ] Expand authenticated E2E once a safe disposable live fixture exists.
+- [ ] Run final verification on the repository-supported Node version.
 
 ---
 
-## Open questions for the owner
+## Standing constraints
 
-1. **Hosted migration queue.** Migrations `011`–`029` plus the marketing migration are unhosted.
-   Confirm the order, and whether content-only migrations may be promoted ahead of the tenant
-   chain since they touch no tenant data.
-2. **Production monitoring target.** Which deployed URL should the first real monitor observe,
-   and at what failure threshold? Nothing is monitored until this is answered.
-3. **Scheduler identity.** Continuous monitoring needs one. Confirm the approach before an agent
-   builds it, because the obvious implementation (granting `service_role`) is the wrong one.
-4. **Vercel connection.** A server-only token would connect deployment status, failed-deploy
-   signals, and eventually rollback execution. Currently Not Connected by absence, not design.
-5. **`main` is unprotected** and release commits are unsigned. Enabling branch protection,
-   required checks, or signature requirements is an owner-approved protected action.
-6. **`theagoras.com` Vercel aliases** are unexplained. Verify ownership and routing intent
-   before retaining or removing them.
+Not tasks — these stay true regardless of what else lands.
+
+- Autonomous Mode OFF, global kill switch ON, auto approve/merge/deploy/rollback OFF.
+- The only repository write path is an isolated branch, commit, and **draft** PR.
+- RED actions require explicit owner approval.
+- RLS and FORCE RLS stay on for every exposed table.
+- No credential in browser code, prompts, logs, fixtures, database rows, or source control.
