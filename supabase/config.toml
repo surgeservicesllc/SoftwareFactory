@@ -73,13 +73,24 @@ otp_length = 8
 # control. That is a security decision for the owner, not a default to drift
 # into.
 [auth.email.smtp]
-enabled = false
-host = "env(SMTP_HOST)"
-port = 587
-user = "env(SMTP_USER)"
-pass = "env(SMTP_PASS)"
-admin_email = "env(SMTP_ADMIN_EMAIL)"
-sender_name = "SoftwareFactory"
+# Custom SMTP is required, not optional. `enable_confirmations` is true, and
+# Supabase's built-in mail service allows only a few messages per hour and is
+# not intended to reach end users — so without this, sign-up succeeds and the
+# account can then never be confirmed or signed in to.
+#
+# Every value is read from the environment. No credential belongs in this file:
+# it is source-controlled, and `pass` is a live secret. `supabase config push`
+# fails if any of these are unset, which is deliberate — a partially configured
+# mailer would be pushed as a broken one.
+enabled = true
+host = "env(SUPABASE_AUTH_SMTP_HOST)"
+port = "env(SUPABASE_AUTH_SMTP_PORT)"
+user = "env(SUPABASE_AUTH_SMTP_USER)"
+pass = "env(SUPABASE_AUTH_SMTP_PASS)"
+# The From address. Its domain must be verified with the provider, or mail is
+# accepted and then silently dropped.
+sender_name = "env(SUPABASE_AUTH_SMTP_SENDER_NAME)"
+admin_email = "env(SUPABASE_AUTH_SMTP_ADMIN_EMAIL)"
 
 [auth.mfa.totp]
 enroll_enabled = true

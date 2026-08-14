@@ -168,6 +168,15 @@ Implemented, hosted in the reconciled chain, and locally verified against the mi
 - [x] Assert page titles in `tests/e2e/pages.spec.ts`. Metadata resolves through nested layouts, so a wrong title is invisible in the source of the page that shows it; both title regressions were found by reading served HTML. Mutation-checked against the doubled title.
 - [x] Verify against live production: twelve `/solutions` pages serve both navigation landmarks and the shell offset, every former path returns `308` preserving query strings and subpaths, and `/solutions/projects` serves `noindex, nofollow` while the marketing home stays indexable.
 
+## Signed-in site state and roles
+
+- [x] Resolve a server-verified viewer in every route-group layout so the signed-in navigation is correct in the first render (ADR-056).
+- [x] Show console destinations, the signed-in identity, and sign-out once there is a session; leave the signed-out site unchanged, including the public Solutions entry.
+- [x] Add the super-administrator role, configured by server-only `SUPER_ADMIN_EMAILS`, gated on a confirmed email address, with an Admin entry and a server-checked `/solutions/admin` page.
+- [ ] **Owner action:** set `SUPER_ADMIN_EMAILS` in Vercel Production and Preview if the role should not use the repository default list.
+- [ ] **Owner action:** confirm `Daniel.Hughen@gmail.com` manually in Supabase (Authentication -> Users -> Confirm email). No confirmation email arrives while the project has no custom SMTP, and the super-administrator role requires a confirmed address.
+- [ ] Verify the signed-in navigation against the deployed site once an account can be confirmed.
+
 ## Maintenance
 
 - [ ] Run final verification on the repository-supported Node version.

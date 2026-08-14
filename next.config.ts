@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       "activity",
+      "admin",
       "agents",
       "backlog",
       "bot-manager",

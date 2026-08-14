@@ -1,20 +1,36 @@
 "use client";
 
-import { Menu, Settings2, X } from "lucide-react";
+import { Menu, Settings2, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
+import { globalNavigation, PUBLIC_NAV } from "@/lib/navigation";
 
-export const MARKETING_NAV = [
-  { label: "Platform", href: "/platform" },
-  { label: "Features", href: "/features" },
-  { label: "Solutions", href: "/solutions" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Resources", href: "/resources" },
-  { label: "About", href: "/about" },
-] as const;
+/**
+ * The signed-out navigation, kept as a named export for callers and tests that
+ * want the public shape specifically. The header itself derives its entries
+ * from the viewer via `globalNavigation`.
+ */
+export const MARKETING_NAV = PUBLIC_NAV;
+
+/**
+ * What the header knows about the person looking at it.
+ *
+ * This is resolved on the server and passed down. The header never fetches it,
+ * so the first paint is already correct and the navigation does not flicker
+ * from signed-out to signed-in after hydration.
+ */
+export type HeaderViewer = {
+  readonly signedIn: boolean;
+  readonly email?: string | null;
+  readonly displayName?: string | null;
+  readonly isSuperAdmin?: boolean;
+};
+
+const SIGNED_OUT_VIEWER: HeaderViewer = { signedIn: false };
 
 function Wordmark() {
   return (
@@ -35,8 +51,13 @@ function Wordmark() {
   );
 }
 
-export function SiteHeader() {
+export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderViewer }) {
   const pathname = usePathname();
+  const navItems = globalNavigation({
+    signedIn: viewer.signedIn,
+    isSuperAdmin: viewer.isSuperAdmin,
+  });
+  const accountLabel = viewer.displayName ?? viewer.email ?? "Account";
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -56,7 +77,7 @@ export function SiteHeader() {
         <Wordmark />
 
         <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">
-          {MARKETING_NAV.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -80,6 +101,30 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {viewer.signedIn ? (
+            <>
+              {viewer.isSuperAdmin ? (
+                <span className="hidden items-center gap-1.5 rounded-lg border border-[#4c3a86] bg-[#1a1436] px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#c4b5fd] md:inline-flex">
+                  <ShieldCheck className="size-3" aria-hidden="true" />
+                  Super admin
+                </span>
+              ) : null}
+              <span
+                className="hidden max-w-[180px] truncate text-sm text-[#9aa6b8] lg:inline"
+                title={viewer.email ?? undefined}
+              >
+                {accountLabel}
+              </span>
+              <Link
+                href="/solutions"
+                className="hidden min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:inline-flex"
+              >
+                Open Console
+              </Link>
+              <SignOutButton className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex" />
+            </>
+          ) : (
+            <>
           <Link
             href="/auth/sign-in?next=/solutions"
             className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
@@ -98,6 +143,8 @@ export function SiteHeader() {
           >
             Get Started Free
           </Link>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -131,7 +178,7 @@ export function SiteHeader() {
               </button>
             </div>
             <nav aria-label="Mobile" className="mt-5 grid gap-1">
-              {MARKETING_NAV.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -147,6 +194,23 @@ export function SiteHeader() {
                   {item.label}
                 </Link>
               ))}
+              {viewer.signedIn ? (
+                <>
+                  <p className="mt-2 truncate px-3 text-xs text-[#6f7c90]">
+                    Signed in as {accountLabel}
+                    {viewer.isSuperAdmin ? " · Super admin" : ""}
+                  </p>
+                  <Link
+                    href="/solutions"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-3 py-3 text-center text-sm font-semibold text-white"
+                  >
+                    Open Console
+                  </Link>
+                  <SignOutButton className="w-full rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]" />
+                </>
+              ) : (
+                <>
               <Link
                 href="/auth/sign-up"
                 onClick={() => setMobileOpen(false)}
@@ -161,6 +225,8 @@ export function SiteHeader() {
               >
                 Sign In
               </Link>
+                </>
+              )}
             </nav>
           </div>
         </div>
