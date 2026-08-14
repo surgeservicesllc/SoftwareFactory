@@ -31,7 +31,15 @@ import type { ResourceAssignment } from "@/lib/resources/manager";
  * a failing provider look healthy forever.
  */
 
-interface SupabaseLike {
+/**
+ * The narrow slice of the Supabase client this module uses.
+ *
+ * Exported so a caller can widen its real client to exactly this. Structurally
+ * checking the full generated client against it makes the inferred union deep
+ * enough that TypeScript gives up (TS2589), and the honest fix is to say which
+ * two methods are needed rather than to drag the whole surface through.
+ */
+export interface SupabaseLike {
   rpc(
     name: string,
     params: Record<string, unknown>,
