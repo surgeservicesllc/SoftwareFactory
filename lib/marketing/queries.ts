@@ -118,7 +118,7 @@ function mapPlans(planRows: Row[], featureRows: Row[]): MarketingPricingPlan[] {
       priceNote: nullableText(row.price_note),
       blurb: text(row.blurb),
       ctaLabel: text(row.cta_label),
-      ctaHref: text(row.cta_href) || "/sign-in",
+      ctaHref: text(row.cta_href) || "/auth/sign-up",
       accent: text(row.accent) || "violet",
       highlighted: row.highlighted === true,
       highlightLabel: nullableText(row.highlight_label),

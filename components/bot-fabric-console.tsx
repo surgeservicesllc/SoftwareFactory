@@ -176,7 +176,7 @@ export function BotFabricConsole() {
       <FabricNotice
         title="Sign in to manage your bots"
         description="The bot fabric is scoped to your authenticated SoftwareFactory organization."
-        href="/sign-in?next=/bot-manager"
+        href="/auth/sign-in?next=%2Fsolutions%2Fbot-manager"
         label="Sign in"
       />
     );

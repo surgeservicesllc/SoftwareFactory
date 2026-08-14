@@ -263,7 +263,15 @@ const workerFunctions = [
   "complete_phase1c_run(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)",
 ] as const;
 
-describe("Phase 1C migration contract", () => {
+/*
+ * Every test here applies the whole migration chain to a fresh PGlite
+ * instance, which takes seconds on its own and longer when the rest of the
+ * suite is running in parallel. Most of these inherited the 5s default and so
+ * failed intermittently in a full run -- a different test each time -- while
+ * passing in isolation. The work is genuinely slow, so the budget is raised
+ * rather than the assertions weakened.
+ */
+describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
   it("applies the full chain with split enum and execution migrations", async () => {
     const db = await database();
     try {

@@ -36,6 +36,28 @@ describe("authentication entry points", () => {
     expect(header).toContain('href="/auth/sign-in?next=/solutions"');
   });
 
+  it("routes every account-creation call to action to sign-up", () => {
+    // Fixing the header alone was not enough: the homepage hero, the closing
+    // band, the platform page and all three pricing plans each carried their
+    // own "Get Started Free" pointing at /sign-in.
+    const surfaces = [
+      "app/(marketing)/page.tsx",
+      "app/(marketing)/platform/page.tsx",
+      "components/marketing/site-header.tsx",
+      "components/marketing/site-footer.tsx",
+      "lib/marketing/content.ts",
+      "lib/marketing/queries.ts",
+    ];
+
+    for (const surface of surfaces) {
+      const body = source(surface);
+      // /sign-in only redirects to /auth/sign-in, so a call to action aimed
+      // there sends a visitor without an account to the wrong page.
+      expect(body, `${surface} still links to the legacy /sign-in redirect`)
+        .not.toMatch(/["'`]\/sign-in(\?|["'`])/);
+    }
+  });
+
   it("lands a signed-in caller in the console rather than the marketing home page", () => {
     expect(source("app/api/auth/sign-in/route.ts"))
       .toContain('normalizeReturnPath(parsed.data.returnTo, "/solutions")');
