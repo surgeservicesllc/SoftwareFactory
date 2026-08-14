@@ -1,7 +1,7 @@
 # SoftwareFactory — shared working status
 
 Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–5, open in PR #27)
-Current `main`: `6340c4f` — AgentOS inbox
+Current `main`: `5c28f57` — AgentOS goals
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -55,7 +55,7 @@ concurrently.
    simulate it. `lib/graph/provider-bridge.ts` is written and unit-tested against
    stubs and is the seam a live `executeNode` plugs into; `lib/graph/anchor-store.ts`
    is the seam for recording what that run observed.
-3. **Migration `20260814000700` is unhosted**, like every other migration added
+3. **Migration `20260814002200` is unhosted**, like every other migration added
    since the ledger repair. Applying it is an owner-gated action.
 
 **Two traps that have already cost time:**
@@ -65,6 +65,12 @@ concurrently.
   version prefix and its message carries the fix. If it fails for you, the rule
   is: **an applied filename cannot move, an unhosted one can** — check
   `AI/DECISIONS.md` for hosted status and renumber the unhosted one.
+  This branch's unhosted migrations now sit at `20260814002000`+ deliberately.
+  AgentOS was advancing one slot per merge (`000300` → `000700`) and taking
+  whichever version this branch had just moved to, so stepping one ahead each
+  time simply collided again. Leaving a gap is what stopped it. **If you add a
+  migration to a long-running branch, leave room rather than taking the next
+  slot** — the next slot is exactly what the other workstream will take.
 - **Automatic CI is intermittent.** A missing run and a not-yet-started run look
   identical. Confirm an Actions run exists *for the head SHA* before believing a
   PR is gated, and dispatch `ci.yml` manually if none does.
@@ -315,7 +321,7 @@ frozen policies, discovery stop conditions.
       unit-tested against stub responses; its first real call needs a provider key.
 - [ ] Fan-out onto isolated workspaces. `lib/worker/workspace.ts` already supports concurrent
       isolation; nothing fans out to it until nodes execute.
-- [x] **Anchor persistence** (`20260814000700_graph_anchors.sql`, `lib/graph/anchor-store.ts`).
+- [x] **Anchor persistence** (`20260814002200_graph_anchors.sql`, `lib/graph/anchor-store.ts`).
       Four RLS + FORCE RLS tables, no browser write grants, two SECURITY DEFINER functions.
       The load-bearing decision: **the database decides whether a claim is anchored.**
       `record_claim_anchoring` is handed anchor IDs, not a verdict — it looks each one up, checks
