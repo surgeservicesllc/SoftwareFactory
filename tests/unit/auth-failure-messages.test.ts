@@ -87,3 +87,20 @@ describe("auth failure messages", () => {
       .toMatchObject(fallback);
   });
 });
+
+describe("marketing call-to-action routing", () => {
+  it("maps a stale /sign-in content row forward to sign-up", async () => {
+    const { normalizeCtaHref } = await import("@/lib/marketing/queries");
+
+    // The hosted pricing plans still carry these, and they cannot be edited
+    // from the application, so "Start Free Trial" would otherwise open the
+    // sign-in page for someone who has no account.
+    expect(normalizeCtaHref("/sign-in")).toBe("/auth/sign-up");
+    expect(normalizeCtaHref("/sign-in?next=/solutions")).toBe("/auth/sign-up");
+    expect(normalizeCtaHref("  ")).toBe("/auth/sign-up");
+
+    // Anything else is left exactly as the content author wrote it.
+    expect(normalizeCtaHref("/about")).toBe("/about");
+    expect(normalizeCtaHref("/auth/sign-up")).toBe("/auth/sign-up");
+  });
+});

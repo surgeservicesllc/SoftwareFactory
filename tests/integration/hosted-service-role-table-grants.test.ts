@@ -12,14 +12,33 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260813001600_autonomy_decision_audit.sql";
+  "20260814000900_agentos_safe_list_reads.sql";
 
 const publicTables = [
-  // Sorted alphabetically to match the catalogue query. Three successive
-  // merges drifted this list out of order; keep it sorted when adding tables,
-  // and only after confirming the new table enables RLS and FORCE RLS.
+  // Sorted alphabetically to match the catalogue query. Keep it sorted when
+  // adding tables, and only after confirming RLS and FORCE RLS are enabled.
   "activity_events",
   "agent_runs",
+  "agentos_agent_collaborators",
+  "agentos_agent_filesystem_grants",
+  "agentos_agent_grants",
+  "agentos_agent_mcp_grants",
+  "agentos_agent_repo_grants",
+  "agentos_agent_skill_grants",
+  "agentos_automations",
+  "agentos_environments",
+  "agentos_goal_dod_items",
+  "agentos_goal_progress",
+  "agentos_goals",
+  "agentos_inbox_messages",
+  "agentos_mcp_connections",
+  "agentos_skills",
+  "agentos_task_chain_steps",
+  "agentos_task_chains",
+  "agentos_task_template_steps",
+  "agentos_task_templates",
+  "agentos_trigger_deliveries",
+  "agentos_triggers",
   "agents",
   "approvals",
   "autonomy_decisions",
@@ -73,6 +92,9 @@ const publicTables = [
   "release_freezes",
   "repair_attempts",
   "reports",
+  "resource_assignments",
+  "resource_breaker_events",
+  "resource_breakers",
   "rollback_operations",
   "synthetic_journeys",
   "task_dependencies",

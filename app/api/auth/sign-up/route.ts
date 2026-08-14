@@ -61,7 +61,12 @@ export async function POST(request: Request) {
 
     const supabase = await createSupabaseServerClient();
     const callbackUrl = new URL("/auth/callback", request.url);
-    callbackUrl.searchParams.set("next", "/auth/onboarding");
+    // Deliberately no `next` parameter. Supabase matches emailRedirectTo
+    // against its allowlist and silently falls back to Site URL on a miss, and
+    // a bare `/auth/callback` entry does not match one carrying a query
+    // string. That fallback is what sent confirmation links to the site root
+    // instead of the callback, so the link confirmed the address and then
+    // signed nobody in. The callback already defaults to /auth/onboarding.
 
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,

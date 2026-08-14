@@ -51,10 +51,12 @@ describe("authentication entry points", () => {
 
     for (const surface of surfaces) {
       const body = source(surface);
+      // Match links and call-to-action values, not every mention of the path:
+      // normalizeCtaHref has to name the legacy value in order to map it away.
       // /sign-in only redirects to /auth/sign-in, so a call to action aimed
       // there sends a visitor without an account to the wrong page.
       expect(body, `${surface} still links to the legacy /sign-in redirect`)
-        .not.toMatch(/["'`]\/sign-in(\?|["'`])/);
+        .not.toMatch(/(?:href|primaryHref|secondaryHref|ctaHref)\s*[:=]\s*["'`{]*\s*["'`]\/sign-in/);
     }
   });
 
@@ -79,6 +81,27 @@ describe("authentication entry points", () => {
     const form = source("app/auth/auth-form.tsx");
     expect(form).toContain("/api/auth/resend-confirmation");
     expect(form).toContain("Resend the confirmation email");
+  });
+
+  it("never appends a query string to an emailed callback URL", () => {
+    // Supabase matches emailRedirectTo against a bare /auth/callback entry and
+    // silently falls back to Site URL on a miss. A query string here made the
+    // confirmation link resolve to the site root carrying a ?code= the
+    // marketing page ignores: the address was confirmed and nobody was signed
+    // in. Verified end to end in tests/e2e/auth-lifecycle.spec.ts.
+    for (const route of [
+      "app/api/auth/sign-up/route.ts",
+      "app/api/auth/resend-confirmation/route.ts",
+      "app/api/auth/magic-link/route.ts",
+    ]) {
+      expect(source(route), `${route} puts a query string on the callback URL`)
+        .not.toMatch(/callbackUrl\.searchParams\.set/);
+    }
+
+    // Widening the allowlist with a wildcard would fix the match and open a
+    // redirect hole, so the destination travels in a cookie instead.
+    expect(source("app/api/auth/magic-link/route.ts")).toContain("rememberAuthReturnPath");
+    expect(source("app/auth/callback/route.ts")).toContain("takeAuthReturnPath");
   });
 
   it("states the password rule the server actually enforces", () => {

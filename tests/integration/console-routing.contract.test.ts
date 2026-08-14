@@ -18,9 +18,18 @@ import sitemap from "@/app/sitemap";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const consoleRoot = resolve(repositoryRoot, "app/(portal)/solutions");
+const marketingRoot = resolve(repositoryRoot, "app/(marketing)");
 
 function consoleRoutes(): string[] {
   return readdirSync(consoleRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/** Public marketing pages. Their bare paths are not the console's to claim. */
+function marketingRoutes(): string[] {
+  return readdirSync(marketingRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
@@ -38,7 +47,33 @@ describe("console routing", () => {
     const config = readFileSync(resolve(repositoryRoot, "next.config.ts"), "utf8");
 
     for (const route of consoleRoutes()) {
+      if (marketingRoutes().includes(route)) continue;
       expect(config, `${route} must keep a redirect from its old path`).toContain(`"${route}"`);
+    }
+  });
+
+  it("never redirects a bare path that a marketing page still serves", () => {
+    // `/resources` is a public marketing page *and* a console page name. A
+    // redirect list built by walking the console tree would quietly send that
+    // public URL to the console with a permanent 308, which browsers and
+    // search engines cache. The collision is asserted rather than remembered.
+    const config = readFileSync(resolve(repositoryRoot, "next.config.ts"), "utf8");
+
+    for (const route of marketingRoutes()) {
+      expect(
+        config,
+        `/${route} is a marketing page; redirecting it to /solutions/${route} would take it offline`,
+      ).not.toContain(`"${route}"`);
+    }
+  });
+
+  it("still reaches a console page whose bare path belongs to marketing", () => {
+    // The console page must exist under /solutions even though nothing
+    // redirects to it, or the collision above would silently mean no console
+    // page at all.
+    for (const route of marketingRoutes()) {
+      if (!consoleRoutes().includes(route)) continue;
+      expect(existsSync(resolve(consoleRoot, route, "page.tsx"))).toBe(true);
     }
   });
 
