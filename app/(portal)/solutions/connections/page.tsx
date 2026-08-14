@@ -1,3 +1,4 @@
+import { AuthReadinessNotice } from "@/components/auth-readiness-notice";
 import { ConnectionsConsole } from "@/components/connections-console";
 import { PageHeader } from "@/components/ui";
 
@@ -12,6 +13,7 @@ export default function ConnectionsPage() {
         title="Connections"
         description="Give SoftwareFactory read access to the repositories you choose. You stay in control of which ones."
       />
+      <AuthReadinessNotice />
       <ConnectionsConsole />
     </>
   );
