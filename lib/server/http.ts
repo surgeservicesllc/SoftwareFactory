@@ -91,20 +91,29 @@ type DatabaseError = {
   message?: string;
 };
 
-export function databaseErrorResponse(error: DatabaseError) {
-  const statusByCode: Record<string, number> = {
-    "22023": 400,
-    "23502": 400,
-    "23514": 400,
-    "42501": 403,
-    "40001": 409,
-    "55000": 409,
-    P0002: 404,
-  };
-  const status = error.code ? (statusByCode[error.code] ?? 500) : 500;
+/**
+ * SQLSTATE codes whose raised message is authored by a repository migration and
+ * is therefore safe to return verbatim. Every other database fault stays
+ * opaque, so an unexpected failure can never leak schema or provider detail.
+ */
+const STATUS_BY_DATABASE_ERROR_CODE: Record<string, number> = {
+  "22023": 400,
+  "23502": 400,
+  "23514": 400,
+  "42501": 403,
+  "40001": 409,
+  "55000": 409,
+  P0002: 404,
+};
 
-  const clientSafeCodes = new Set(Object.keys(statusByCode));
-  const message = error.code && clientSafeCodes.has(error.code)
+export function isClientSafeDatabaseErrorCode(code: string) {
+  return Object.hasOwn(STATUS_BY_DATABASE_ERROR_CODE, code);
+}
+
+export function databaseErrorResponse(error: DatabaseError) {
+  const status = error.code ? (STATUS_BY_DATABASE_ERROR_CODE[error.code] ?? 500) : 500;
+
+  const message = error.code && isClientSafeDatabaseErrorCode(error.code)
     ? (error.message ?? "The request could not be completed.")
     : "The control-plane database request failed.";
 

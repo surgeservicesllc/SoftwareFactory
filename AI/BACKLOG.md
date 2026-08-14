@@ -1,6 +1,8 @@
 # Backlog
 
-Last triaged: 2026-08-13
+Last triaged: 2026-08-14
+
+Phase 1B item-by-item scoring lives in `AI/PHASE_1B_COMPLETION.md`.
 
 Checked items have repository/provider evidence only. The owner repository connection is live, but checked items do not make the webhook Connected or Phase 1B complete.
 
@@ -19,6 +21,8 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Keep Autonomous Mode OFF, global kill switch ON, auto approve/merge/deploy/rollback OFF, and Codex/Claude **Not Connected**.
 - [x] Register owner-only candidate App `4582606` (`surge-softwarefactory-next`) with the exact callback, a retained active exact webhook URL, least-privilege Phase 1B permissions/events, and distinct Sensitive Production/Preview candidate variable names. This is provider/configuration evidence, not an installation or connection.
 - [x] Deploy the isolated dual-App configuration/state/token/webhook boundaries and host owner-only atomic reversible project handoff migration `027`, including fresh processed target-installation delivery provenance, immutable exact RED approval/execution evidence, and cross-App serialization.
+- [x] Report GitHub lifecycle refusals truthfully. Recognized SQLSTATE codes raised by the GitHub RPCs now map to their real status and message through one shared client-safe table in `lib/server/http.ts`; a stale disconnect, a terminally deleted installation resync, and a cross-organization installation binding no longer collapse into a generic `500`. Unrecognized database faults stay opaque.
+- [x] Prove the complete access-loss, disconnect, and reconnect matrix behaviorally against the real `001`-`027` migrations, including two independent installations inside one tenant and a second tenant, in `tests/integration/github-lifecycle-matrix.test.ts`.
 
 ## Phase 1B release blockers
 
@@ -31,12 +35,14 @@ Checked items have repository/provider evidence only. The owner repository conne
 - [x] Publish application tree `82f62ff725133c98ea4792c1bfe5dd03d7f222c0` as commit `0bd048565a9e002848c5553ccbe43ab0e217780e` with author/committer `surgeservicesllc <surgeservicesllc@gmail.com>`; CI run `31704289754` passed both jobs, and matching Vercel deployment `dpl_AEirYPnCrKemJjiFX7bKGc7626jX` is READY at its immutable URL and the stable alias.
 - [x] Apply hosted migrations `011`-`026` to `qpuofpmagrmyamahqwxw`; verify pre-`027` history matched, dry run/lint were clean, and prior RLS/catalog/browser-grant checks remain recorded.
 - [x] Verify the exact post-`026` ACL matrix has zero mismatches: `service_role` has only SELECT/INSERT/UPDATE on the four GitHub ingress tables and no table privileges on the other 19.
-- [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test. Only one actual user/email is authorized; a live second tenant was intentionally not created, while local behavioral tests cover the boundary.
+- [ ] Verify two authenticated tenants plus anonymous denial and privileged-RPC behavior using caller sessions, not service role as the user-under-test. Only one actual user/email is authorized; a live second tenant was intentionally not created. Behavioral coverage is now complete — `tests/integration/github-lifecycle-matrix.test.ts` exercises owner allowed, unrelated user denied, and anonymous denied against the real migrations, and refuses rebinding a provider installation id to a second organization — so only the live confirmation remains.
+- [ ] Install the App on a second, independent GitHub account or organization. Owner action; exact page, field, and verification steps are in `AI/PHASE_1B_COMPLETION.md`.
+- [ ] Run one deliberate live adverse-event pass — repository remove/re-add, suspend, unsuspend, uninstall — on that throwaway installation only, never on primary `153445938` or candidate `153479019`. Owner action.
 - [x] Confirm and authenticate `surgeservicesllc@gmail.com`; complete SoftwareFactory organization/workspace owner onboarding.
 - [x] Publish the bounded documented `GET /user/installations` exact-ID callback fix and verify tenant persistence for installation `153445938`.
 - [x] Link real connection `d17c63a9-d995-481e-98ce-b737efb32ce5` and project `b1f23696-437e-4d89-b55f-d7a949980e8f`; verify live repository sync, branches, commits, pull requests, checks, tree, and `README.md` reads.
 - [x] Create ordinary draft PR `#6` and exact owner-approved protected RED draft PR `#7`; verify both remain draft/unmerged, likely-secret rejection, and immutable approval/provider/audit evidence. Earlier identity-mismatched PRs `#4`/`#5` were closed unmerged and their branches deleted.
-- [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases.
+- [ ] Complete live stale-SHA, idempotent retry, ambiguous completion recovery, unapproved/admin/expired protected denial, wrong-tenant, revoked-installation, insufficient-permission, rate-limit, and lifecycle failure acceptance. Local tests do not replace the missing provider cases; the lifecycle half of this list is now fully covered behaviorally, which narrows it to live confirmation rather than unproven behavior.
 - [x] Publish the strict server-only commit-identity boundary, configure `GITHUB_COMMIT_IDENTITY_NAME`/`GITHUB_COMMIT_IDENTITY_EMAIL` in Vercel Production and Preview, and verify both author and committer are `surgeservicesllc <surgeservicesllc@gmail.com>` on draft commits `e789303` and `6a808de`.
 - [x] Commit, push, and deploy the dual-App/handoff tree; apply hosted migration `027` to project `qpuofpmagrmyamahqwxw`; and prove its live owner approval/execution/rebind path.
 - [x] Install candidate App `4582606` as installation `153479019` for exactly `surgeservicesllc/SoftwareFactory`; verify callback, synchronized App/repository identity, repository/file reads, and a post-sync signed **processed** webhook delivery through connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`.

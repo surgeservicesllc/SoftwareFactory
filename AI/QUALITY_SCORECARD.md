@@ -1,8 +1,10 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-14
 
-Phase 1B decision: **Candidate cutover is live and verified; remaining tenant/adverse/rollback observations keep Phase 1B incomplete**
+Phase 1B decision: **Candidate cutover is live and verified; the adverse matrix is now proven behaviorally, and two live owner actions keep Phase 1B incomplete at 90%**
+
+Item-by-item Phase 1B scoring with evidence class is maintained in `AI/PHASE_1B_COMPLETION.md`.
 
 Reason: hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, a post-sync processed signed delivery, atomic project handoff, preserved history, candidate-backed reads, and clean draft-only PR `#8` acceptance pass. Primary installation `153445938` remains active as rollback while its webhook defect stays isolated under Support `#4660724`. The live second-tenant, reverse-handoff, disconnect/loss, and remaining adverse matrix are incomplete; Phase 1C/2 remain Not Connected and automatic actions remain OFF.
 
@@ -10,6 +12,9 @@ Reason: hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9
 | --- | --- | --- |
 | Scope/implementation | Auth/onboarding; signed-out fetch suppression; active-tenant GitHub boundaries; safe projections; stable repository UUID; protected approval/token/lease integrity; lifecycle/order/recovery; dual-App handoff; migrations `011`-`027` | Application/schema hosted; candidate owner path passes; remaining acceptance pending |
 | Cutover-tree lint/typecheck/Vitest/build | `npm run check` plus main CI | Pass - lint/typecheck; 56 files/436 tests; 38 routes; CI `31716263910` green |
+| Current-tree lint/typecheck/Vitest/build (2026-08-14) | `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` | Pass - lint/typecheck clean; 58 files/455 tests; production build exit 0 |
+| GitHub access-loss/disconnect/reconnect matrix | `tests/integration/github-lifecycle-matrix.test.ts` against the real `001`-`027` migrations | Pass - 10 cases: two-installation isolation, cross-organization rebinding refused, owner/unrelated/anonymous read boundary, repository remove/re-add, archive/delete with stale-event resurrection blocked, suspend/stale-unsuspend/unsuspend, owner disconnect preserving history, reconnect without duplicates, terminal deletion. Live confirmation still pending. |
+| Truthful lifecycle error reporting | `tests/unit/github-lifecycle-errors.test.ts` | Pass - stale disconnect `409`, terminal-deleted resync `409`, cross-organization binding `403`, missing connection `404`, rejected change target `400`; unknown SQLSTATE and arbitrary thrown objects stay an opaque `500` |
 | Dual-App replacement boundary | Isolated candidate config; state binds App slot/ID; token routing uses persisted installation App ID; webhook verifies signing App provenance | Deployed and live for candidate installation `153479019` |
 | Migration `027` atomic handoff | Immutable exact-tuple owner RED approval/execution; same account/external repository; both installations live; post-sync processed signed target delivery; cross-App/pending-change serialization; preserved history; bounded reverse | Hosted and live handoff passed |
 | Hosted handoff database audit | Candidate sync `2026-08-13T15:26:56Z`; earliest qualifying delivery `2026-08-13T15:27:38Z` with exact App ID; immutable RED same-owner approval/execution succeeded; three request/approved/completed events; append-only triggers enabled; old installation/repository retained | Pass - project/link rebound to candidate while four completed change requests and five prior activity rows remain |

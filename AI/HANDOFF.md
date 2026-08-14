@@ -1,10 +1,10 @@
 # Handoff
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Mission and boundary
 
-Finish the remaining Phase 1B adverse/tenant/rollback observations without disturbing the verified candidate cutover. Hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, post-sync signed webhook processing, and the owner-approved atomic handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f` are live. Candidate-backed file read and draft-only PR `#8` write acceptance passed and was cleaned up without merging. Primary installation `153445938` remains active as rollback, and Support ticket `#4660724` remains OPEN for its separate webhook defect. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
+Finish the remaining Phase 1B adverse/tenant/rollback observations without disturbing the verified candidate cutover. As of 2026-08-14 the adverse matrix is proven behaviorally against the real `001`-`027` migrations, so the outstanding work is two owner actions — a second independent GitHub account/organization installation, and one deliberate live adverse-event pass on that throwaway installation — scored and specified in `AI/PHASE_1B_COMPLETION.md`. Do not run either against primary installation `153445938` or candidate installation `153479019`. Hosted migration `027`, main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, post-sync signed webhook processing, and the owner-approved atomic handoff of project `b1f23696-437e-4d89-b55f-d7a949980e8f` are live. Candidate-backed file read and draft-only PR `#8` write acceptance passed and was cleaned up without merging. Primary installation `153445938` remains active as rollback, and Support ticket `#4660724` remains OPEN for its separate webhook defect. Do not begin Phase 1C or Phase 2, and keep Autonomous Mode OFF, the global kill switch ON, and all automatic actions OFF.
 
 ## Current repository work
 
@@ -26,6 +26,8 @@ Finish the remaining Phase 1B adverse/tenant/rollback observations without distu
 - Browser tenant lists come from caller-bound bounded RPC projections; authenticated raw Activity/webhook reads are revoked behind `list_activity`; commands enforce same-origin; global CSP/security headers restrict browser resource loads.
 - Generic non-placeholder secret assignments are blocked. Protected approval snapshots are bound to exact reservations and revalidated before the write-scoped GitHub token is minted.
 - A server-verified signed-out hint lets the dashboard skip protected browser fetches; exact production passes the focused browser-error race 30/30 and full Playwright 48/48.
+- GitHub lifecycle refusals are reported truthfully. `githubRouteErrorResponse` recognizes PostgREST error objects and maps the client-safe SQLSTATE set through the single shared table in `lib/server/http.ts`; unknown codes still return an opaque `500`. A stale disconnect now returns `409`, a resync of a terminally deleted installation returns `409`, and a cross-organization installation binding returns `403`.
+- `tests/integration/github-lifecycle-matrix.test.ts` is the access-loss proof. It applies the full migration history to PGlite, runs two independent installations in one tenant plus a third in a second tenant, and drives repository removal/re-add, archive/unarchive, repository deletion, installation suspend/stale-unsuspend/unsuspend, terminal installation deletion, owner disconnect, and reconnect/resync — asserting after each that `reserve_github_change_request` refuses or permits correctly, that history and audit survive, and that the tenant's other installation is unaffected.
 
 ## Migration boundary
 

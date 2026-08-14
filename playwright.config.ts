@@ -4,6 +4,14 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
   !process.env.PLAYWRIGHT_WEB_SERVER_COMMAND;
 
+// Opt-in escape hatch for environments that provide a Chromium build other than
+// the revision this Playwright version pins. Unset in CI, so the verified
+// browser remains the release gate; setting it only redirects the executable.
+const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?.trim();
+const chromiumLaunch = chromiumExecutable
+  ? { launchOptions: { executablePath: chromiumExecutable } }
+  : {};
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -32,6 +40,7 @@ export default defineConfig({
       name: "desktop-chromium",
       use: {
         ...devices["Desktop Chrome"],
+        ...chromiumLaunch,
         viewport: { width: 1440, height: 900 },
       },
     },
@@ -39,6 +48,7 @@ export default defineConfig({
       name: "tablet-chromium",
       use: {
         ...devices["Desktop Chrome"],
+        ...chromiumLaunch,
         viewport: { width: 834, height: 1112 },
       },
     },
@@ -46,6 +56,7 @@ export default defineConfig({
       name: "mobile-chromium",
       use: {
         ...devices["Pixel 5"],
+        ...chromiumLaunch,
       },
     },
   ],
