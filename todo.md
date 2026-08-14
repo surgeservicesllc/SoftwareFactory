@@ -1,6 +1,6 @@
 # Open work
 
-Last updated: 2026-08-14.
+Last updated: 2026-08-14 (Stage 3 in progress).
 
 Everything currently open, ordered by whether it needs you or needs me.
 Detail lives in `AI/BACKLOG.md` and `AI/PHASE_2B_IMPLEMENTATION_PLAN.md`; this
@@ -46,9 +46,12 @@ is the single page that says what is actually outstanding.
       the ledger cannot represent both. Renaming is the obvious fix but
       `AI/ARCHITECTURE.md` records applied filenames as immutable, so it is an
       owner call.
-- [ ] **Investigate why automatic CI stopped firing.** No `pull_request`-
-      triggered run since 2026-08-13 19:32Z; every run since has been manually
-      dispatched. Pull requests are currently ungated by default.
+- [ ] **Confirm automatic CI is healthy again.** It stopped firing on
+      `pull_request` between 2026-08-13 19:32Z and 2026-08-14 12:05Z — roughly
+      sixteen hours during which every run was manually dispatched and pull
+      requests were ungated by default. A run appeared automatically one minute
+      after the 12:05Z push, so it looks self-healed, but the cause is unknown
+      and it may recur. Worth a glance at repository Actions settings.
 
 ### AI providers — blocks every live Phase 2B demonstration
 
