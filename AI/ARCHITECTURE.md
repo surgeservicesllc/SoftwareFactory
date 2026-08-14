@@ -5,68 +5,96 @@
 ```text
 Browser (untrusted)
   -> Next.js server boundary
-    -> Supabase Auth session + active organization + server validation
-      -> Supabase Postgres (RLS/FORCE RLS + immutable activity evidence)
-      -> GitHub App adapter (server-only primary/candidate secrets selected by installation App ID)
-        -> short-lived token scoped to one installation/repository/permission set
-        -> GitHub API / signed webhooks (untrusted provider data)
+    -> Phase 2A: provider health/model discovery, routing preview, or owner-enabled advisory run
+      -> official Anthropic/OpenAI adapter -> schema-validated advisory artifact
+      -> no repository, approval, merge, deployment, or rollback authority
+    -> Supabase Auth session + active organization + same-origin validation
+    -> deterministic risk, plan, repository-ID and base-SHA binding
+    -> Supabase command/task/run transaction (RLS + audit)
+    -> repository_dispatch with opaque command UUID only
+
+GitHub Actions one-shot worker (trusted server process; not a Vercel request)
+  -> service-role lease/heartbeat/cancel RPCs
+  -> repository-ID-scoped GitHub App token
+  -> isolated factory/* Git workspace at exact base SHA
+  -> @openai/codex-sdk with bounded workspace-write execution
+  -> pinned-container deterministic validation + policy/secret scan
+  -> commit + push isolated branch + open/recover draft PR
+  -> exact-head GitHub CI observation
+  -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-Vercel hosts Next.js but is not an in-product deployment adapter. Codex/OpenAI and Claude/Anthropic workers are outside the Phase 1B runtime and **Not Connected**.
+The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, Phase 1D decision layer, and Phase 1C worker/recovery path are published on the default branch. Hosted Supabase history is reconciled and forward migrations through `130014` are applied. Linked lint and focused hosted runtime/catalog checks pass. Six non-OpenAI worker secrets remain configured, the exposed OpenAI secret is absent, and the activation variable is absent. A real worker claim/heartbeat/provider-thread transition was recorded before provider startup failed without repository mutation; the later no-claim diagnostic classified `credit_balance_exhausted`. All execution switches/actions remain OFF and the global kill switch remains ON. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
 
-The Phase 1D observation module is an inert policy boundary: it may calculate `WOULD_BE_ELIGIBLE` for freshly evidenced GREEN work, but returns `executionAllowed: false`. The global kill switch is ON, observation-only is fixed, and no executor adapter is connected.
+## Phase 2A advisory provider boundary
 
-## Presentation and application services
+- `GET /api/providers` uses a live server-side health probe only when the organization execution switch is ON. While it is OFF, the route returns a local **Disabled** snapshot and makes no outbound provider call. Missing credentials during an enabled probe report **Not Configured**; they never fall back to a fabricated connection.
+- Configured model-catalogue reads remain tenant-local. Live provider model discovery is owner/admin-only and requires the organization execution switch ON; otherwise it returns a disabled error without an outbound call. Model configuration, agent assignment, routing preview, and the execution switch use authenticated tenant/manager boundaries. Enabling provider execution requires explicit owner confirmation and does not enable Phase 1C or Autonomous Mode.
+- Routing is deterministic and records its candidates/reasons. Owner override, agent assignment, project default, and automatic score remain subordinate to capability and connection eligibility. Fallback is one bounded attempt and never follows authorization, cancellation, or content-policy failures.
+- A Phase 2A run sends bounded context to an official provider SDK and persists a schema-validated advisory artifact, usage, routing decision, and redacted events. It cannot access a Git workspace or perform any repository/delivery mutation.
 
-- Server Components are preferred for data-bearing views; client boundaries are narrow interactive forms/editors.
-- Auth/onboarding resolves the user and active tenant before live control-plane views.
-- Connections shows real Supabase/GitHub metadata only after exact active-organization reads; otherwise it says **Not Connected**.
-- Projects derives repository/default-branch authorization and UI matching from the immutable tenant-scoped GitHub repository UUID on the project connection. It renders live sync freshness, branch protection/SHA, commit and PR dates/authors, detail-fetched mergeability, default-branch checks, and per-PR checks against each displayed head SHA; retained rows alone do not count as connected.
-- Files reads the real repository tree/content at explicit refs only for projects whose live connection evidence remains valid. Ordinary owner/admin intent enters the controlled draft-PR flow; an exact protected-file intent additionally requires an active owner, path-bound RED confirmation, rationale, rollback plan, and unexpired recorded approval.
-- Activity reads immutable tenant events through the caller-member, 100-row `list_activity` RPC and returns an allowlisted bounded projection of actor/source/resource/action/status/conclusion/transition evidence. Authenticated direct SELECT on raw Activity and webhook-delivery rows is revoked.
-- Agents, commands, tasks, runs, and reports use caller-bound list RPCs that cap results at 100 and omit sensitive base-table columns. Agent capabilities are returned only when their serialized JSON is at most 8 KiB. Authenticated sessions do not receive direct SELECT on those base tables.
-- Live dashboard metrics derive from tenant rows; seeded sections retain **Demo Data** labels.
+## Control-plane request boundary
+
+- Server Components remain the default. Client Components collect bounded intent and render safe projections.
+- `POST /api/commands` authenticates the caller, enforces same origin and active organization, accepts only a connected project, and rejects likely secrets before persistence.
+- The server resolves the immutable GitHub repository UUID, App/installation IDs, full name, default branch, and current branch SHA from the live project connection. Prompt text cannot select or override a repository.
+- Command type and prompt produce a deterministic risk floor. The most severe of requested risk, type floor, and protected prompt signals wins.
+- A fixed plan selects provider `openai`, model `gpt-5.3-codex`, logical role, 45-minute duration, four turns, 200,000 input tokens, 50,000 output tokens, one repair, and 15-minute CI observation.
+- Migrations `130007`-`130011` independently enforce the same provider/model/role/budget/workflow and raise risk from prompt plus acceptance criteria. Direct PostgREST callers cannot lower or widen the execution configuration; `130010` requires an authenticated organization owner and exact top-level parameters, while `130011` adds canonical same-project dependencies and cumulative retry budgets.
+- Only manual GREEN/YELLOW work creates a claimable run. RED remains blocked even if legacy approval state changes.
+- Dispatch uses a short-lived repository-ID-scoped installation token and sends `softwarefactory_phase1c_command` with only `command_id`. Dispatch is a wake-up hint, never authorization; the schedule is a durable recovery path.
+
+## Worker and lease boundary
+
+- `scripts/worker.mts` registers a worker and either polls or claims once. The reviewed GitHub Actions workflow runs one claim per invocation and also wakes every five minutes, but the job is skipped unless repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` equals literal `true`.
+- `phase1c_workers` supplies heartbeat-derived connection truth. A one-shot worker started by approved default-branch repository dispatch or schedule records `idle` on clean exit; its fresh heartbeat is briefly Available/Connected, then becomes stale/**Not Connected** after the bounded threshold. Explicitly disabled, stale, or absent workers are **Not Connected**, a no-work observation is not end-to-end execution evidence, and branch-selectable manual workflow dispatch is absent.
+- Service-role-only RPCs register/heartbeat/finish workers; claim and heartbeat runs; append events; record validation/artifacts; and complete, fail, or cancel a run. Direct table grants remain revoked.
+- Claims use a UUID lease token, worker ID, bounded expiry, attempt counter, retryability, and cancellation checks. Stale leases are reclaimable only through the database contract.
+- Member-facing list/detail/status RPCs expose bounded safe fields. Worker records, raw command input, raw model/provider failures, and service credentials are not broad browser-readable rows.
+- Run events, artifacts, and validations are append-only. Activity events record material state transitions. Migration `130010` creates one provider-neutral standard roster per organization, serializes concurrent work by logical agent, and keeps provider/model only on execution runs. Migration `130011` persists dependencies atomically and prevents retry leases from resetting total turn/token budgets.
+
+## Execution isolation
+
+- The worker builds a dedicated run directory outside the repository/home/filesystem root and stores a non-secret identity marker binding run, repository ID, base SHA, and branch.
+- Git verifies the exact remote default-branch SHA before checkout. A moved base fails as `stale_base_sha`; no silent rebase or default-branch write occurs.
+- The branch format is `factory/<run-uuid>-<bounded-slug>`. Recovery verifies remote, branch, ancestry, and marker identity before reuse.
+- Provider credentials are excluded from general child-process environments. Git tokens are injected only into the individual Git command environment and redacted from bounded output.
+- Codex uses an isolated `CODEX_HOME`, `sandboxMode: workspace-write`, `approvalPolicy: never`, network disabled, web search disabled, high reasoning effort, structured result schema, and bounded turns/tokens.
+- Dependency bootstrap uses the exact pinned `node:22.22.0-bookworm` digest with `npm ci --ignore-scripts --no-audit --no-fund`. Deterministic validation uses that digest with network none, read-only root, dropped capabilities, no-new-privileges, PID/CPU/memory constraints, and bounded output.
+- Required local validation is `git diff --check` plus every repository-defined lint, typecheck, test, and build script. Missing scripts are reported as skipped; failures enter at most one bounded repair cycle.
+- Provider CI has an independent required-check allowlist. `SOFTWAREFACTORY_REQUIRED_CHECKS` must name 1-20 unique pipe-delimited checks; the reviewed workflow fixes the exact names `Lint, typecheck, test, and build` and `Browser and accessibility tests`. The publisher rejects truncated check sets, requires every observed check terminal and acceptable, requires every named check to be exact `success`, observes the same passing fingerprint twice, then revalidates the draft PR number/base/head.
+- The policy scan blocks escaped/forbidden paths, symlinks, binary files, likely secrets, files over 2 MiB, more than 200 changed files, and more than 10 MiB total. Protected paths require a current exact approval naming every path; RED work is categorically blocked earlier.
+
+## GitHub publication boundary
+
+The worker mints repository-ID-scoped App tokens, commits as `surgeservicesllc <surgeservicesllc@gmail.com>`, pushes only the isolated `factory/*` branch, and creates or recovers only an open draft pull request. It records the branch, commits, PR, validation, changed paths, checks, and bounded Codex usage. Artifact replay must match immutable evidence, and migrations `130009`/`130010` persist the draft PR only when repository/project/run/base/head/URL/number are coherent.
+
+An eligible retry may start cleanly from no provider evidence or a branch-only pre-push intent, or resume only from one exact branch/commit and optional matching draft PR. Partial/conflicting evidence is non-retryable. On coherent recovery the worker revalidates the remote branch head and, when present, the live draft PR before observing CI; it preserves the provider thread/usage only when the durable branch/commit evidence matches.
+
+There is no default-branch commit, approval, merge, release, deployment, rollback, workflow modification, administration action, or secret-setting action in the worker.
 
 ## Persistence
 
-- Migrations `001`-`003` define the core control plane and audit/approval workflows.
-- `004` defines GitHub installation, repository, webhook-delivery, and change-request state plus privileged reconciliation functions.
-- `005` defines authenticated organization onboarding.
-- `007` transactionally links an active selected repository to a safe-default project.
-- `008_fix_github_sync_ambiguity` additively qualifies the repository installation column and named conflict constraint; it is applied remotely, local/remote history matches, and linked public-schema lint is clean.
-- `009_harden_github_project_and_sync` serializes external-installation synchronization before connection creation, re-resolves the authoritative tenant/connection binding after upsert, and makes the synchronized repository default branch the only persisted project-branch authority. It is applied remotely; local/remote history matches through `009` and linked lint is clean.
-- RLS and FORCE RLS apply to every exposed table. User-facing requests use caller JWT/RLS; narrow service-role operations still validate actor/organization/resource through audited functions.
-- `010_phase1d_observation_controls` is applied to hosted Supabase. It adds a database-locked organization kill switch, constrains projects to Autonomous Mode OFF and GREEN with all automatic action flags OFF, and hardens the owner-only controls RPC/audit language. Hosted checks confirm the default/constraints/data/grants remain fail closed; there is still no executor.
-- Hosted migrations `011`-`027` implement the hardening chain described above. The verified pre-`027` dry-run/lint, RLS/catalog/browser-grant, and zero-mismatch service-role ACL baseline remains recorded. Hosted `027` adds immutable RED handoff approvals/executions, external-repository serialization, exact target-delivery provenance/freshness checks, and the owner-only atomic reversible project rebind; its live candidate handoff path passed.
-- Applied migration filenames are immutable; timestamp gaps are not renumbered.
+- Hosted history is canonical through `130014`. Catalog-proven `028`/`130001`-`130005` were reconciled ledger-only; their DDL was not rerun.
+- Hosted `130006` preserves the global kill switch plus all nine actions OFF. Hosted `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets.
+- Hosted `130012` repairs bot `NULLIF` qualification without changing function identity/security/ACLs; `130013` resolves Phase 1C function lint; `130014` adds the resolver's explicit emergency-stop result. Corrections remain forward-only.
+- Local `130015` restores the original 128-character provider catalogue/API model bound by changing `provider_agent_assignments_model_check` and `agent_runs_model_check` from 120 to 128 while retaining the assignment regex and other constraint semantics. It adds four named no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text so credential-shaped scalars cannot enter browser-readable rows. It also replaces `get_agent_run_detail(uuid, uuid)` with a rolling-compatible bounded `routing` object: Phase 2A evidence is allowlisted/capped, Phase 1C command runs receive fixed-policy reasons without fabricated scores, and absent durable evidence returns null. To prevent bypass of that projection, it revokes authenticated raw SELECT on `provider_routing_decisions` and `provider_run_events`, retains tenant-scoped SELECT on `provider_model_configurations`, and leaves assignment reads behind their bounded function. The application accepts a missing field against hosted `130014`; `130015` remains unhosted pending its own exact RED approval and exact six-constraint-definition/128-character/no-secret regressions plus identity/signature/table-and-function-ACL/RLS/direct-denial/runtime/lint/health verification.
 
-## Secrets and token lifecycle
+## Existing GitHub/App boundary
 
-- Supabase URL/publishable key are browser-public; RLS remains mandatory.
-- App private key, GitHub client/state/webhook secrets, Supabase service role, and future provider keys stay in Vercel server-only settings.
-- GitHub commit attribution comes from two dedicated server-only environment values. The route validates them before tenant persistence or provider contact, never accepts them from the browser, never stores/logs them, and supplies the same explicit identity as both Contents API `author` and `committer` with no App-bot fallback.
-- Installation-start state is HMAC signed, expires in ten minutes, and is bound to user, organization, allowlisted return path, and an HttpOnly nonce cookie.
-- Ephemeral GitHub user OAuth tokens verify installation access, are not persisted/returned, and are revoked best-effort. GitHub has no `GET /user/installations/{id}` route: the deployed callback uses bounded documented `GET /user/installations` and requires an exact installation-ID/App match before proceeding. Primary installation `153445938` and candidate installation `153479019` passed this production path.
-- App JWTs are short-lived; installation tokens are further scoped to one repository ID and exact route permissions.
+The Phase 1B candidate App path remains independently live for installation `153479019` and exactly `surgeservicesllc/SoftwareFactory`. App secrets remain isolated, tokens are short-lived and repository scoped, callbacks are signed, and webhook ingress is HMAC verified/idempotent/redacted. Primary installation `153445938` remains rollback. This connected repository boundary does not make the Phase 1C OpenAI worker Connected.
 
-## Repository read/write boundary
+## Autonomous-mode boundary
 
-Read routes normalize and schema-validate branches, commits, PRs, check runs, directory entries, and UTF-8 files. Repository coordinates, refs, paths, response sizes, binary content, and installation state are bounded.
+Manual Phase 1C execution is not Autonomous Mode. Migration `010` still locks the global kill switch ON and Autonomous Mode, auto approve, auto merge, auto deploy, and auto rollback OFF. The worker refuses RED and cannot merge or deploy. Phase 1D authority can change only through a separate owner-approved policy, migration, implementation, and rollout.
 
-Write flow:
+## Secret topology
 
-1. Same-origin, authenticated owner/admin request. A protected path requires the active organization owner specifically.
-2. Verify active connection, selected non-archived repository, project mapping, and synchronized default branch. Repository full names are normalized and compared literally, without SQL wildcard semantics.
-3. Reject likely secrets. For a protected resource class, require the exact `APPROVE RED DRAFT PR FOR <path>` phrase plus bounded rationale and rollback plan; bind approval to the path, content digest, expected blob SHA, branch, requester/approver/executor, and a maximum 15-minute decision window.
-4. Reserve `github_change_requests` evidence through a caller-authenticated RPC that revalidates the exact live tenant/project/connection/repository UUID binding. Protected approval evidence is append-only, recorded atomically, and trigger-bound to that exact pre-provider reservation.
-5. Within the five-minute reservation lease, revalidate approval/intent and mark the persisted provider-execution boundary before minting the write-scoped GitHub installation token. An expired reservation is reclaimable only by the original requester for the exact intent and only while no provider execution/evidence exists.
-6. Create a unique `softwarefactory/*` branch.
-7. Commit using the expected blob SHA and the strictly validated server-only deployment identity as both author and committer.
-8. Require an open draft pull request.
-9. Complete or fail the audited request record. If GitHub created the draft PR but database completion was ambiguous, recover that same provider evidence rather than create a second PR.
-
-There is no merge or deployment step.
-There is also no HTTP local-repository write path; the legacy route, UI, and environment switch are removed.
+- Vercel stores browser-public Supabase URL/publishable key and server-only application/GitHub secrets.
+- The GitHub Actions worker requires seven protected repository secrets with the `SOFTWAREFACTORY_` prefix for a live run. Six non-OpenAI secrets remain configured; the compromised OpenAI credential is absent pending a funded replacement. GitHub does not allow Actions secret names beginning `GITHUB_`; the workflow maps the App values to runtime `GITHUB_*` variables only for the worker step.
+- The non-secret `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` repository Actions variable is a final fail-closed gate. Missing/false skips all worker jobs; enabling it is a protected RED action.
+- `SOFTWAREFACTORY_REQUIRED_CHECKS` is a mandatory non-secret policy input, not an enable switch. Missing/invalid input prevents worker startup, while missing or mismatched check evidence prevents CI success.
+- No OpenAI key, service-role credential, App private key, installation token, or database password may enter source, Supabase rows, model prompts/output, browser responses, logs, fixtures, reports, or artifacts.
 
 ## Webhook boundary
 
@@ -124,7 +152,11 @@ Owner/admin request -> /api/operations/* (same-origin, tenant-scoped, no-store)
 
 ## Deployment topology
 
-- Vercel Production deployment `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` serves the stable alias from main release `799d2cea189b6860a03987ae75c25765f9ac4aca`, points at the hosted Supabase project, and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary, protected, and candidate-backed draft commits verify the approved identity as both author and committer.
+- The prior verified production baseline before this update was commit `0c662a24393f682073e6002c5aff9339292226d8`, with audited READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`. It points at the hosted Supabase project and stores server-only GitHub/Supabase secrets. The explicit GitHub commit-identity names are configured for Production and Preview; live ordinary, protected, and candidate-backed draft commits verify the approved identity as both author and committer.
 - Preview GitHub values are configured; Preview Supabase isolation remains unverified.
 - CI performs read-only validation and does not deploy or merge.
-- Phase 1C needs a durable worker/sandbox outside request lifetimes; Phase 2 adds Claude only through supported API connections, never five browser-automated consumer logins.
+- Phase 1C needs a durable worker/sandbox outside request lifetimes. Phase 2A uses supported server-side Anthropic/OpenAI API connections, never browser-automated consumer logins.
+
+## Current deployment and activation status
+
+The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Hosted reconciliation/promotion through `130014` is complete; local `130015` is unapplied. The frozen current-update candidate passes its local final gate set, but its publication commit, CI, matching Vercel deployment, and hosted migration proof remain pending. One bounded worker run proved claim/heartbeat/provider-thread persistence and failed before repository mutation; no-claim diagnostic `31748582858` then classified `credit_balance_exhausted`. The activation variable and OpenAI secret are absent, while six non-OpenAI secrets remain. The remaining live-worker sequence requires a funded replacement, successful no-claim diagnostic, and new current-base GREEN command before bounded activation. Phase 1D remains execution-inert throughout.

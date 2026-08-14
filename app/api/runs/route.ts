@@ -4,7 +4,12 @@ import { readRepositoryMemoryExcerpts } from "@/lib/providers/memory";
 import { ROUTING_PROVIDER_REQUESTS } from "@/lib/providers/routing";
 import { executeProviderTask } from "@/lib/providers/runtime";
 import { loadProjectRoutingContext } from "@/lib/providers/service";
-import { PROVIDER_TASK_KINDS, type AgentRole, type ProviderId } from "@/lib/providers/types";
+import {
+  PROVIDER_TASK_KINDS,
+  isAgentRole,
+  type AgentRole,
+  type ProviderId,
+} from "@/lib/providers/types";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -54,6 +59,11 @@ type RunRow = {
   created_at: string;
   task_title: string | null;
   agent_name: string | null;
+  project_name?: string | null;
+  risk_level?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  branch_name?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -71,6 +81,13 @@ export async function GET(request: Request) {
           createdAt: row.created_at,
           durationMs: row.started_at && row.completed_at
             ? Math.max(0, Date.parse(row.completed_at) - Date.parse(row.started_at))
+            : null,
+          risk: row.risk_level ?? null,
+          provider: row.provider ?? null,
+          model: row.model ?? null,
+          branch: row.branch_name ?? null,
+          project: row.project_id
+            ? { id: row.project_id, name: row.project_name ?? "Project" }
             : null,
           task: row.task_id
             ? { id: row.task_id, title: row.task_title ?? "Task" }
@@ -117,10 +134,68 @@ export async function POST(request: Request) {
 
     const { client, activeOrganization } = await requireActiveOrganization();
 
+    // External execution has cost and data-egress impact. Reject callers that
+    // cannot manage this tenant before probing providers or sending content.
+    if (activeOrganization.role !== "owner" && activeOrganization.role !== "admin") {
+      return jsonNoStore(
+        {
+          error: {
+            code: "provider_run_forbidden",
+            message: "Organization owner or administrator access is required.",
+          },
+        },
+        { status: 403 },
+      );
+    }
+
+    // Phase 2A has no durable, exact RED approval attached to this advisory
+    // run request. A risk ceiling or provider switch cannot substitute for
+    // that evidence, so RED never reaches an outbound provider here.
+    if (parsed.data.riskLevel === "RED") {
+      return jsonNoStore(
+        {
+          error: {
+            code: "red_provider_run_blocked",
+            message: "RED provider runs require a separately reviewed approval workflow.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const task = await loadTask(client, activeOrganization.id, parsed.data.projectId, parsed.data.taskId);
+    if (!task) {
+      return jsonNoStore(
+        { error: { code: "task_not_found", message: "The task is not available for this project." } },
+        { status: 404 },
+      );
+    }
+
+    if (task.riskLevel !== parsed.data.riskLevel.toLowerCase()) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "risk_mismatch",
+            message: "The requested risk level does not match the persisted task.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const agent = await loadAgent(client, activeOrganization.id, parsed.data.agentId);
+    if (!agent) {
+      return jsonNoStore(
+        { error: { code: "agent_not_found", message: "The agent is not available." } },
+        { status: 404 },
+      );
+    }
+
     const context = await loadProjectRoutingContext(
       client,
       activeOrganization.id,
       parsed.data.projectId,
+      { probeProviders: true },
     );
     if (!context) {
       return jsonNoStore(
@@ -139,14 +214,6 @@ export async function POST(request: Request) {
           },
         },
         { status: 409 },
-      );
-    }
-
-    const agent = await loadAgent(client, activeOrganization.id, parsed.data.agentId);
-    if (!agent) {
-      return jsonNoStore(
-        { error: { code: "agent_not_found", message: "The agent is not available." } },
-        { status: 404 },
       );
     }
 
@@ -280,22 +347,64 @@ async function loadAgent(
   organizationId: string,
   agentId: string,
 ): Promise<AgentRecord | null> {
-  const { data, error } = await client
-    .from("agents")
-    .select("id,role,provider,model")
-    .eq("organization_id", organizationId)
-    .eq("id", agentId)
-    .maybeSingle();
+  const { data, error } = await client.rpc("get_provider_agent_assignment", {
+    p_agent_id: agentId,
+    p_organization_id: organizationId,
+  });
 
-  if (error || !data) return null;
+  if (error) throw error;
 
-  const row = data as { id: string; role: string; provider: string | null; model: string | null };
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result || typeof result !== "object") return null;
+
+  const row = result as { id: string; role: string; provider: string | null; model: string | null };
+  if (!isAgentRole(row.role)) return null;
+
   return {
     id: row.id,
-    role: row.role as AgentRole,
+    role: row.role,
     provider: row.provider === "anthropic" || row.provider === "openai" ? row.provider : null,
     model: row.model,
   };
+}
+
+type TaskRecord = {
+  readonly riskLevel: "green" | "yellow" | "red";
+};
+
+async function loadTask(
+  client: Awaited<ReturnType<typeof requireActiveOrganization>>["client"],
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+): Promise<TaskRecord | null> {
+  // `get_task_detail` is the caller-bound projection used by the task detail
+  // route. It proves the task belongs to both the active tenant and project
+  // without restoring direct SELECT on the sensitive tasks base table.
+  const { data, error } = await client.rpc("get_task_detail", {
+    p_organization_id: organizationId,
+    p_task_id: taskId,
+  });
+  if (error) throw error;
+
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result || typeof result !== "object") return null;
+  const projected = "detail" in result ? result.detail : result;
+  if (!projected || typeof projected !== "object") return null;
+
+  const row = projected as Record<string, unknown>;
+  const project = row.project;
+  const risk = row.risk;
+  if (
+    !project ||
+    typeof project !== "object" ||
+    (project as Record<string, unknown>).id !== projectId ||
+    (risk !== "green" && risk !== "yellow" && risk !== "red")
+  ) {
+    return null;
+  }
+
+  return { riskLevel: risk };
 }
 
 /** Map the runtime outcome onto the `public.run_status` enum. */

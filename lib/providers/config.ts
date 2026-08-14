@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PROVIDER_IDS, type ProviderId } from "@/lib/providers/types";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 
 /**
  * Server-only provider configuration.
@@ -120,7 +121,7 @@ function parseBaseUrl(provider: ProviderId, name: string): string | null {
 function parseModelId(provider: ProviderId, name: string): string | null {
   const raw = readTrimmed(name);
   if (!raw) return null;
-  if (!MODEL_ID_PATTERN.test(raw)) {
+  if (!MODEL_ID_PATTERN.test(raw) || containsLikelySecret(raw)) {
     throw new ProviderConfigurationError(provider, `${name} is not a valid model identifier.`);
   }
   return raw;

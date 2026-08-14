@@ -121,7 +121,7 @@ const snapshot = {
   targetType: "Organization" as const,
 };
 
-function startRequest(returnTo = "/connections", appSlot: "candidate" | "primary" = "primary") {
+function startRequest(returnTo = "/solutions/connections", appSlot: "candidate" | "primary" = "primary") {
   return new Request("https://factory.example/api/github/install/start", {
     body: JSON.stringify({ appSlot, organizationId, returnTo }),
     headers: {
@@ -133,7 +133,7 @@ function startRequest(returnTo = "/connections", appSlot: "candidate" | "primary
 }
 
 async function beginInstallation(appSlot: "candidate" | "primary" = "primary") {
-  const response = await start(startRequest("/connections", appSlot));
+  const response = await start(startRequest("/solutions/connections", appSlot));
   const body = await response.json() as {
     appSlot: "candidate" | "primary";
     authorizationUrl: string;
@@ -215,7 +215,7 @@ describe("GitHub App install routes", () => {
 
     expect(response.status).toBe(303);
     expect(location.origin).toBe("https://factory.example");
-    expect(location.pathname).toBe("/connections");
+    expect(location.pathname).toBe("/solutions/connections");
     expect(location.searchParams.get("github")).toBe("connected");
     expect(location.searchParams.get("connectionId")).toBe(connectionId);
     expect(location.searchParams.get("repositories")).toBe("1");
@@ -274,7 +274,7 @@ describe("GitHub App install routes", () => {
     const location = new URL(response.headers.get("location") ?? "");
 
     expect(response.status).toBe(303);
-    expect(location.pathname).toBe("/connections");
+    expect(location.pathname).toBe("/solutions/connections");
     expect(location.searchParams.get("github")).toBe("error");
     expect(location.searchParams.get("githubError")).toBe("github_installation_cancelled");
     expect(location.searchParams.get("githubMessage"))
@@ -308,7 +308,7 @@ describe("GitHub App install routes", () => {
     const location = new URL(response.headers.get("location") ?? "");
 
     expect(response.status).toBe(303);
-    expect(location.pathname).toBe("/connections");
+    expect(location.pathname).toBe("/solutions/connections");
     expect(location.searchParams.get("githubError")).toBe("github_state_invalid");
     expect(location.searchParams.get("githubMessage")).toMatch(/invalid/i);
     expect(harness.exchangeCode).not.toHaveBeenCalled();
@@ -327,7 +327,7 @@ describe("GitHub App install routes", () => {
     const location = new URL(response.headers.get("location") ?? "");
 
     expect(response.status).toBe(303);
-    expect(location.pathname).toBe("/connections");
+    expect(location.pathname).toBe("/solutions/connections");
     expect(location.searchParams.get("githubError")).toBe("github_installation_revoked");
     expect(location.searchParams.get("githubMessage"))
       .toBe("The GitHub App installation is no longer available.");

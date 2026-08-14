@@ -40,8 +40,8 @@ describe("Supabase auth request safety", () => {
   });
 
   it("normalizes internal redirects and rejects open redirects", () => {
-    expect(normalizeReturnPath("/projects?tab=active#top")).toBe(
-      "/projects?tab=active#top",
+    expect(normalizeReturnPath("/solutions/projects?tab=active#top")).toBe(
+      "/solutions/projects?tab=active#top",
     );
     expect(normalizeReturnPath("https://attacker.example", "/safe")).toBe(
       "/safe",

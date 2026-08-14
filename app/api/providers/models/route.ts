@@ -11,6 +11,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -33,7 +34,32 @@ const upsertModelSchema = z
     inputCostPerMillionMicros: z.number().int().min(0).max(1_000_000_000_000).nullable().default(null),
     outputCostPerMillionMicros: z.number().int().min(0).max(1_000_000_000_000).nullable().default(null),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (containsLikelySecret(value.model)) {
+      context.addIssue({ code: "custom", path: ["model"], message: "Invalid model identifier." });
+    }
+    if (containsLikelySecret(value.displayName)) {
+      context.addIssue({ code: "custom", path: ["displayName"], message: "Invalid display name." });
+    }
+  });
+
+const discoveredModelSchema = z.object({
+  id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  displayName: z.string().trim().min(1).max(160),
+  maxInputTokens: z.number().int().min(0).max(2_147_483_647).nullable(),
+  maxOutputTokens: z.number().int().min(0).max(2_147_483_647).nullable(),
+}).strict();
+
+function browserSafeDiscoveredModels(value: unknown) {
+  const parsed = z.array(discoveredModelSchema).max(100).safeParse(value);
+  if (!parsed.success || parsed.data.some((model) =>
+    containsLikelySecret(model.id) || containsLikelySecret(model.displayName)
+  )) {
+    throw new ProviderError("invalid_response", "The provider returned an unusable model catalogue.");
+  }
+  return parsed.data;
+}
 
 /**
  * Model discovery.
@@ -60,8 +86,31 @@ export async function GET(request: Request) {
       );
     }
 
+    if (activeOrganization.role !== "owner" && activeOrganization.role !== "admin") {
+      return jsonNoStore(
+        { error: { code: "provider_discovery_forbidden", message: "Owner or administrator access is required." } },
+        { status: 403 },
+      );
+    }
+
+    const { data: organization, error: organizationError } = await client
+      .from("organizations")
+      .select("ai_provider_execution_enabled")
+      .eq("id", activeOrganization.id)
+      .maybeSingle();
+    if (organizationError) return databaseErrorResponse(organizationError);
+    if (!(organization as { ai_provider_execution_enabled?: boolean } | null)
+      ?.ai_provider_execution_enabled) {
+      return jsonNoStore(
+        { error: { code: "provider_execution_disabled", message: "Outbound provider execution is disabled." } },
+        { status: 409 },
+      );
+    }
+
     try {
-      const models = await getProviderAdapter(requestedProvider).listModels();
+      const models = browserSafeDiscoveredModels(
+        await getProviderAdapter(requestedProvider).listModels(),
+      );
       return jsonNoStore({ provider: requestedProvider, models });
     } catch (error) {
       const providerError =

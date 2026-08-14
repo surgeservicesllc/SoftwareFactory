@@ -83,9 +83,12 @@ describe("BotFabricConsole", () => {
     render(<BotFabricConsole />);
 
     expect(await screen.findByText(/sign in to manage your bots/i)).toBeInTheDocument();
+    // Both halves of the old value were stale: /sign-in is a legacy redirect,
+    // and /bot-manager moved under /solutions with the rest of the console, so
+    // signing in returned the visitor to a path that no longer exists.
     expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute(
       "href",
-      "/sign-in?next=/bot-manager",
+      "/auth/sign-in?next=%2Fsolutions%2Fbot-manager",
     );
   });
 

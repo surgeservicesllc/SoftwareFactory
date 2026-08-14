@@ -27,6 +27,29 @@ A future pull request may be considered for auto-merge only when every condition
 
 Eligibility is recalculated after every push, rebase, review change, check rerun, policy update, or repository-setting change.
 
+### Which of these are implemented
+
+Phase 1D implements the *evaluation* of this list in `lib/autonomy/`. It executes no merge — the
+decision always ends at `MERGE_EXECUTOR_NOT_CONNECTED` — but the conditions themselves are real,
+tested code rather than a future intention:
+
+| Condition | Where |
+| --- | --- |
+| GREEN classification under `RISK_CLASSIFICATION.md` | `diff-risk.ts`, derived from the diff rather than declared |
+| Every required, current-head check passes | `merge-readiness.ts`; a check that has not reported blocks as `REQUIRED_CHECK_MISSING` |
+| Lint, typecheck, tests, build, security, preview validation | `gates.ts`, as the GREEN and enhanced gate sets |
+| The head SHA reviewed is exactly the head SHA merged | `merge-readiness.ts` — `APPROVAL_STALE` and `GATES_STALE` |
+| Conflict-free | `merge-readiness.ts` — `MERGE_CONFLICT`; unknown mergeability blocks rather than assuming clean |
+| Approvals remain valid and are not dismissed | `merge-readiness.ts` — `REVIEW_DISMISSED` |
+| No protected resource, secret, auth boundary, destructive migration, billing, DNS, or workflow permission touched | `diff-risk.ts` RED factors, enforced by the security agent in `agents.ts` |
+| No security finding, incident, freeze, kill switch, or owner-attention flag | `agents.ts` for findings; `controls.ts` envelope for freeze and kill switch; `merge-readiness.ts` for `OPEN_INCIDENT` and `OWNER_ATTENTION_REQUIRED` |
+| Recalculated after every push | The staleness model above; nothing is carried forward across a head change |
+| Audit record with risk rationale, evidence, policy version, actor, project, and commit SHA | `autonomy_decisions`, append-only. **Repository and branch are not yet stored** |
+
+Still unimplemented from the list above: repository/branch allowlisting, size and scope limits,
+generated/binary content detection, unresolved-review-thread detection, and repository and branch
+in the audit record. No merge executor exists, so none of these gaps can currently be reached.
+
 ## Always excluded in Phase 1
 
 - RED actions;

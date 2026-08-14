@@ -1,28 +1,33 @@
 # Security guide
 
-SoftwareFactory treats the browser, repository content, GitHub responses/webhooks, Supabase rows, and future model output as untrusted. Next.js server code is the application authorization boundary; Supabase RLS is an independent tenant boundary.
+SoftwareFactory treats the browser, repository content, Supabase rows, GitHub responses/webhooks, workflow events, model/provider output, and process output as untrusted. Next.js server code authorizes user intent; Supabase RLS independently enforces tenants; the worker must separately claim and revalidate its lease and repository snapshot.
 
 ## Non-negotiable rules
 
-- App private keys, client/state/webhook secrets, OAuth/installation tokens, service-role keys, passwords, and database credentials never enter browser code, props, logs, source maps, database rows, fixtures, reports, screenshots, or source control.
-- Every sensitive request authenticates the user and verifies active organization membership, connection, selected repository, and operation-specific role on the server.
-- RLS and FORCE RLS remain enabled on every exposed table; test allowed access plus cross-tenant and anonymous denial.
-- GitHub installation tokens are short-lived and scoped to the one repository ID and exact permissions required by the route.
-- Webhooks are bounded, raw-body HMAC verified, delivery-ID deduplicated, schema validated, and stored only as hashes/redacted subsets.
-- During replacement, primary and candidate credentials remain distinct; installation state and token routing bind the exact App ID, webhook signatures must match the persisted installation App, and first handoff requires a processed signed target-installation delivery.
-- Ordinary file mutations require an expected blob SHA, verified default branch, stable project/connection/repository-UUID mapping, idempotency key, owner/admin role, and draft PR outcome.
-- Protected paths require an active owner, exact path-bound RED phrase, rationale, rollback plan, immutable approval evidence matching the exact reserved change, and an unexpired reservation/decision. The durable provider boundary is recorded and revalidated before any write-scoped token is minted. Admin-only, unapproved, expired, post-execution, or mismatched requests fail closed.
-- Likely secretsâ€”including non-placeholder values assigned to generic secret-bearing keysâ€”direct default-branch writes, non-draft PRs, merges, deployments, archived/disabled repositories, and lease reclamation after provider execution/evidence always fail closed.
-- Browser list reads use bounded safe-projection RPCs instead of broad authenticated base-table SELECT. Authenticated direct reads of raw Activity and webhook-delivery tables are revoked; `list_activity` returns only bounded allowlisted evidence. Command mutation is same-origin, and global CSP/security headers constrain resource loading.
-- Important provider/database state transitions create append-only, redacted activity evidence.
-- RED actions require exact, current owner approval; Phase 1B never auto-merges or auto-deploys.
+- Credentials never enter browser code, source control, prompts, model output, Supabase rows, reports, fixtures, screenshots, or logs.
+- Every command binds the authenticated active organization to one connected project and immutable GitHub repository ID/base SHA.
+- Command submission is owner-only. Browser input cannot lower prompt/acceptance-criteria risk or choose provider, model, logical role, budget, workflow, repository, or branch.
+- RED commands never execute in Phase 1C, including when approval evidence exists.
+- RLS and FORCE RLS remain enabled for every exposed table; service role never proves caller isolation.
+- Worker claims require exact worker ID, lease UUID, expiry, attempt, cancellation checks, and per-logical-agent serialization.
+- Repository/App tokens are short-lived and scoped to one repository ID and minimum permissions.
+- Workspaces are dedicated, identity-marked, path-contained, and rejected on remote/branch/base-SHA mismatch.
+- Codex runs workspace-write with approval `never`, workspace network disabled, web search disabled, bounded turns/tokens/time, and an isolated home.
+- Validation uses the exact pinned Docker image, ignores dependency install scripts, and runs deterministic checks with network none and resource/security constraints.
+- Changed files fail closed on escape/forbidden paths, symlinks, binaries, likely secrets, missing protected-path approval, excessive count, or excessive size.
+- Publication creates or recovers only an open draft PR from a `factory/*` branch. Default-branch write, approval, merge, deployment, rollback, workflow/provider administration, and secret-setting are absent.
+- Events, artifacts, and validations are append-only; branch/commit/draft-PR recovery must be complete and coherent, and persisted output is bounded and redacted.
+- Completion, queued cancellation, and exhausted stale leases create bounded structured reports; cancellation wins at the completion safe boundary and report PR links are reconstructed from authoritative database rows.
+- Autonomous Mode and every automatic action remain OFF; the global kill switch remains ON.
 
-## Privileged service-role boundary
+## Protected release boundary
 
-The service-role client is restricted to server-only GitHub webhook/synchronization and audited privileged RPC operations. Those RPCs still validate actor/tenant/resource identifiers and restrict grants. Interactive reads and project/Auth operations use the caller's session and RLS. Never move service-role access into a Client Component or use it to bypass a policy failure.
+Ledger repair for catalog-proven `028`/`130001`-`130005`, forward application through `130014`, provider/worker credentials, publication of the secret-bearing workflow, and activation of any outbound provider/workflow are RED protected changes. The completed production changes used exact owner approvals naming target, scope, risk, expiry, validation, and containment. Local `130015` is a new protected schema change: two 120-to-128 model-constraint restorations, four no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text, a caller-visible run-detail projection, two authenticated raw-table SELECT revokes, and deliberate retention of tenant-scoped model-catalogue SELECT. No earlier approval covers it. Any new credential, activation, command, schema, or provider change requires current authority appropriate to that exact action; urgency, old approval, or approval of another target is not enough.
 
-## Current verification limits
+The required Actions secret names use `SOFTWAREFACTORY_*`; GitHub forbids Actions secret names beginning `GITHUB_`. The workflow maps App secrets to runtime `GITHUB_*` names only in the worker step and must never echo values. `SOFTWAREFACTORY_REQUIRED_CHECKS` must exactly name `Lint, typecheck, test, and build|Browser and accessibility tests`; missing, renamed, incomplete, unstable, or non-success required checks fail closed. The separate repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is a fail-closed activation gate: missing/false skips every job, and literal `true` requires exact owner RED approval only after hosted migrations, secrets, publication, ordinary CI, and the matching Vercel deployment are verified.
 
-Hosted Supabase is current through migration `027`. The verified pre-`027` RLS/service-role baseline remains intact, and `027` adds two RLS/FORCE-RLS immutable evidence tables with narrow grants. Candidate App `4582606`, installation `153479019`, and connection `85591f43-dd4e-46d2-8a1b-0f036b32639f` passed exact repository scope, post-sync signed webhook provenance, owner RED handoff, preserved project/history, reads, and draft-only PR `#8`. Primary installation `153445938` remains active rollback while its webhook defect stays isolated. A live second tenant and remaining adverse/reverse/disconnect matrix are still pending.
+## Current limits
 
-See [Security model](SECURITY_MODEL.md), [Environment variables](ENVIRONMENT_VARIABLES.md), [GitHub App integration](GITHUB_APP_INTEGRATION.md), and `policies/PROTECTED_RESOURCES.md`. Report vulnerabilities through the private process in the repository-root `SECURITY.md`.
+Hosted Supabase is reconciled and current through `130014`; linked lint and focused catalog/runtime/ACL verification pass. Local `130015` remains unhosted pending fresh exact RED approval and exact widened/no-secret constraint, valid-and-negative scalar, function, runtime, RLS, lint, and health proof. The rolling application rejects credential-shaped provider scalars and fails closed on dirty pre-migration catalogue rows. The Phase 1C worker is published, six non-OpenAI Actions secrets remain, the exposed OpenAI secret is absent, and activation is absent/OFF. A first real claim recorded a heartbeat/provider thread and then failed before repository mutation; no-claim diagnostic `31748582858` classified `credit_balance_exhausted`. Its failed run is stale against the prior verified production baseline and must not be retried. No successful Codex run, factory branch, or Phase 1C draft PR exists. Phase 1D remains kill-ON/all-actions-OFF and **Not Connected**; neither advisory provider execution nor the Codex worker is live.
+
+See [Security model](SECURITY_MODEL.md), [Environment variables](ENVIRONMENT_VARIABLES.md), [Database migrations](DATABASE_MIGRATIONS.md), [GitHub App integration](GITHUB_APP_INTEGRATION.md), and [`policies/PROTECTED_RESOURCES.md`](../policies/PROTECTED_RESOURCES.md). Report vulnerabilities through the private process in repository-root [`SECURITY.md`](../SECURITY.md).

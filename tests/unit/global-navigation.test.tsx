@@ -39,12 +39,12 @@ describe("globalNavigation", () => {
 
     for (const item of SIGNED_IN_NAV) expect(hrefs).toContain(item.href);
     for (const item of PUBLIC_NAV) expect(hrefs).toContain(item.href);
-    expect(hrefs).not.toContain("/admin");
+    expect(hrefs).not.toContain("/solutions/admin");
   });
 
   it("adds Admin only for a super administrator", () => {
     const hrefs = globalNavigation({ signedIn: true, isSuperAdmin: true }).map((i) => i.href);
-    expect(hrefs).toContain("/admin");
+    expect(hrefs).toContain("/solutions/admin");
 
     // The role is meaningless without a session.
     expect(globalNavigation({ signedIn: false, isSuperAdmin: true })).toEqual(PUBLIC_NAV);

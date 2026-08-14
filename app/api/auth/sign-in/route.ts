@@ -6,7 +6,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { authErrorBody, describeAuthError } from "@/lib/supabase/auth-errors";
+import { describeAuthFailure } from "@/lib/supabase/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import {
@@ -47,17 +47,29 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user || !data.session) {
-      // An unconfirmed address is the single most common reason a correct
-      // password is refused. Reporting it as a credential failure sends people
-      // to reset a password that was never wrong, so it keeps its own code and
-      // the browser is told a resend is available.
-      const outcome = describeAuthError(error, "sign_in");
-      return jsonNoStore(authErrorBody(outcome), { status: outcome.status });
+      const failure = describeAuthFailure(error, {
+        status: 401,
+        code: "invalid_credentials",
+        message: "The email address or password was not accepted.",
+      });
+      return jsonNoStore(
+        {
+          error: {
+            code: failure.code,
+            message: failure.message,
+            // Lets the form offer a resend link instead of leaving someone
+            // stuck being told a correct password was wrong.
+            ...(failure.needsConfirmation ? { needsConfirmation: true } : {}),
+          },
+        },
+        { status: failure.status },
+      );
     }
 
     return jsonNoStore({
       authenticated: true,
-      next: normalizeReturnPath(parsed.data.returnTo, "/"),
+      // The console, not the public home page, is where a signed-in caller belongs.
+      next: normalizeReturnPath(parsed.data.returnTo, "/solutions"),
     });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);

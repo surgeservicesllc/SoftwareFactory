@@ -11,13 +11,7 @@ type AuthFormProps = {
   returnTo?: string;
 };
 
-type ErrorBody = {
-  error?: {
-    message?: string;
-    canResend?: boolean;
-    ownerActionRequired?: boolean;
-  };
-};
+type ErrorBody = { error?: { message?: string; needsConfirmation?: boolean } };
 
 export function AuthForm({
   checkEmail = false,
@@ -33,24 +27,18 @@ export function AuthForm({
     checkEmail ? "Check your email to confirm your account, then sign in." : "",
   );
   const [pending, setPending] = useState(false);
-  /**
-   * The address to offer a confirmation resend for. Set whenever the server
-   * reports a failure that another email would fix — an unconfirmed account on
-   * sign-in, or a sign-up that is waiting on a link the person never received.
-   */
-  const [resendEmail, setResendEmail] = useState<string | null>(null);
-  /** True when no input the person can change will help; an owner must act. */
-  const [ownerBlocked, setOwnerBlocked] = useState(false);
+  // Shown when the account exists but its email was never confirmed, which is
+  // otherwise a dead end: sign-up will not remake it and sign-in will not admit
+  // it.
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
-  function applyError(body: ErrorBody, email: string, fallback: string) {
-    setError(body.error?.message ?? fallback);
-    setResendEmail(body.error?.canResend ? email : null);
-    setOwnerBlocked(Boolean(body.error?.ownerActionRequired));
-  }
-
   async function resendConfirmation() {
-    if (!resendEmail) return;
+    const email = emailRef.current?.value.trim() ?? "";
+    if (!email) {
+      setError("Enter your email address first.");
+      return;
+    }
 
     setError("");
     setMessage("");
@@ -60,20 +48,15 @@ export function AuthForm({
       const response = await fetch("/api/auth/resend-confirmation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: resendEmail }),
+        body: JSON.stringify({ email }),
       });
       const result = (await response.json()) as ErrorBody & { message?: string };
-
       if (!response.ok) {
-        applyError(result, resendEmail, "The confirmation email could not be sent.");
+        setError(result.error?.message ?? "The confirmation email could not be sent.");
         return;
       }
-
-      setResendEmail(null);
-      setMessage(
-        result.message ??
-          "If that address has an account awaiting confirmation, a new confirmation email is on its way.",
-      );
+      setNeedsConfirmation(false);
+      setMessage(result.message ?? "If that address needs confirming, a new link has been sent.");
     } catch {
       setError("The confirmation email could not be sent.");
     } finally {
@@ -90,8 +73,6 @@ export function AuthForm({
 
     setError("");
     setMessage("");
-    setResendEmail(null);
-    setOwnerBlocked(false);
     setPending(true);
 
     try {
@@ -102,7 +83,7 @@ export function AuthForm({
       });
       const result = (await response.json()) as ErrorBody & { message?: string };
       if (!response.ok) {
-        applyError(result, email, "A sign-in link could not be sent.");
+        setError(result.error?.message ?? "A sign-in link could not be sent.");
         return;
       }
 
@@ -121,8 +102,7 @@ export function AuthForm({
     event.preventDefault();
     setError("");
     setMessage("");
-    setResendEmail(null);
-    setOwnerBlocked(false);
+    setNeedsConfirmation(false);
     setPending(true);
 
     const form = new FormData(event.currentTarget);
@@ -140,23 +120,21 @@ export function AuthForm({
       });
       const result = (await response.json()) as ErrorBody & {
         confirmationRequired?: boolean;
-        email?: string;
         next?: string;
       };
 
       if (!response.ok) {
-        applyError(result, email, "That did not work. Check your details and try again.");
+        setError(result.error?.message ?? "That did not work. Check your details and try again.");
+        setNeedsConfirmation(Boolean(result.error?.needsConfirmation));
         return;
       }
 
       if (result.confirmationRequired) {
-        // The account exists but cannot sign in yet. Keep the resend offer on
-        // screen, because an undelivered confirmation email is the one failure
-        // that otherwise leaves the account permanently unusable.
-        setResendEmail(result.email ?? email);
         setMessage(
-          "Your account was created. Confirm your email address using the link we sent, then sign in.",
+          "Account created. Check your email for a confirmation link, then sign in. "
+          + "If it does not arrive, use the resend button below.",
         );
+        setNeedsConfirmation(true);
         return;
       }
 
@@ -198,24 +176,6 @@ export function AuthForm({
           >
             {message}
           </p>
-        ) : null}
-
-        {ownerBlocked ? (
-          <p className="mt-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning)]">
-            Nothing you enter here will change this. A workspace owner needs to
-            fix the account settings before sign-up or sign-in can succeed.
-          </p>
-        ) : null}
-
-        {resendEmail ? (
-          <button
-            className="btn btn-secondary mt-3 w-full"
-            disabled={pending}
-            onClick={() => void resendConfirmation()}
-            type="button"
-          >
-            Send a new confirmation email
-          </button>
         ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={submit}>
@@ -260,13 +220,26 @@ export function AuthForm({
               type="password"
             />
             {signingUp ? (
-              <span className="field-hint">At least 12 characters.</span>
+              <span className="field-hint">
+                At least 12 characters, including a letter and a number.
+              </span>
             ) : null}
           </div>
 
           <button className="btn btn-primary w-full" disabled={pending} type="submit">
             {pending ? "Just a moment…" : signingUp ? "Create account" : "Sign in"}
           </button>
+
+          {needsConfirmation ? (
+            <button
+              className="btn btn-secondary w-full"
+              disabled={pending}
+              onClick={resendConfirmation}
+              type="button"
+            >
+              Resend the confirmation email
+            </button>
+          ) : null}
 
           {!signingUp ? (
             <button

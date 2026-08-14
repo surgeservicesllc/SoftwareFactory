@@ -37,7 +37,7 @@ function safeEqual(left: string, right: string) {
 }
 
 export function normalizeReturnTo(value: string | null | undefined) {
-  if (!value) return "/connections";
+  if (!value) return "/solutions/connections";
   if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
     throw new GitHubStateError("The return path is invalid.");
   }
@@ -46,7 +46,7 @@ export function normalizeReturnTo(value: string | null | undefined) {
   if (parsed.origin !== "https://softwarefactory.invalid") {
     throw new GitHubStateError("The return path must stay inside SoftwareFactory.");
   }
-  if (!["/connections", "/projects", "/files"].includes(parsed.pathname)) {
+  if (!["/solutions/connections", "/solutions/projects", "/solutions/files"].includes(parsed.pathname)) {
     throw new GitHubStateError("The return path is not allowed for GitHub setup.");
   }
   return `${parsed.pathname}${parsed.search}`;

@@ -23,7 +23,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationFiles = [
   "20260812000100_control_plane_schema.sql",
   "20260812000200_row_level_security.sql",
-  "20260813000400_marketing_content.sql",
+  "20260813000500_marketing_content.sql",
 ] as const;
 
 const CONTENT_TABLES = [

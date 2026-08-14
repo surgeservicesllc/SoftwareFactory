@@ -23,12 +23,13 @@ port = 54324
 
 [auth]
 enabled = true
-site_url = "https://softwarefactory-tan.vercel.app"
+# The production domain must come first: Supabase builds confirmation and
+# recovery links from site_url, and it silently falls back to site_url whenever
+# an emailRedirectTo is not on the allowlist below. With only the Vercel
+# preview host listed, every confirmation link sent to a theagoras.com visitor
+# pointed at a different origin, where the session cookie cannot apply.
+site_url = "https://www.theagoras.com"
 additional_redirect_urls = [
-  # www.theagoras.com serves the application on its custom domain. A sign-up
-  # started there builds its confirmation link against that origin, and an
-  # origin missing from this list is silently replaced by site_url — sending
-  # the person to a different hostname than the one they signed up on.
   "https://www.theagoras.com/auth/callback",
   "https://theagoras.com/auth/callback",
   "https://softwarefactory-tan.vercel.app/auth/callback",
@@ -48,18 +49,34 @@ secure_password_change = true
 max_frequency = "1m"
 otp_length = 8
 
-# Custom SMTP. Confirmations are required (`enable_confirmations` above), and
-# Supabase's built-in mail service cannot satisfy that: it is capped at a few
-# messages per hour and is not intended to reach end users. Without a real
-# provider here, sign-up succeeds and the account can then never be confirmed
-# or signed in to.
+# Confirmation email delivery.
 #
-# Every value is read from the environment. No credential belongs in this file
-# — it is source-controlled, and `pass` is a live secret.
+# `enable_confirmations = true` above means no account is usable until its
+# confirmation email arrives, so delivery is part of the sign-up path, not a
+# nice-to-have. Supabase's built-in sender is capped at roughly two messages an
+# hour for the whole project: one sign-up consumes the window and the next
+# visitor gets `over_email_send_rate_limit`. That is the observed production
+# failure, and no application change can work around it.
 #
-# `supabase config push` fails if any of these are unset, which is deliberate:
-# a partially configured mailer would be pushed as a broken one.
+# To turn this on: set the four secrets in the environment, flip `enabled` to
+# true, and run `supabase config push` against the hosted project. Keeping the
+# shape here means the setting is reviewed in the repository rather than
+# hand-edited in a dashboard where nothing records what changed.
+#
+# The alternative -- setting `enable_confirmations = false` -- removes the
+# dependency on email entirely but lets anyone register an address they do not
+# control. That is a security decision for the owner, not a default to drift
+# into.
 [auth.email.smtp]
+# Custom SMTP is required, not optional. `enable_confirmations` is true, and
+# Supabase's built-in mail service allows only a few messages per hour and is
+# not intended to reach end users — so without this, sign-up succeeds and the
+# account can then never be confirmed or signed in to.
+#
+# Every value is read from the environment. No credential belongs in this file:
+# it is source-controlled, and `pass` is a live secret. `supabase config push`
+# fails if any of these are unset, which is deliberate — a partially configured
+# mailer would be pushed as a broken one.
 enabled = true
 host = "env(SUPABASE_AUTH_SMTP_HOST)"
 port = "env(SUPABASE_AUTH_SMTP_PORT)"

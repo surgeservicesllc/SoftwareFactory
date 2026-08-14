@@ -4,13 +4,13 @@ import Link from "next/link";
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
 import { RecentActivityCard } from "@/components/recent-activity-card";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+import { WorkerStatusBadge } from "@/components/worker-status";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-/** The three facts about safety that people actually need, stated plainly. */
+/** The static safety facts; worker connectivity is rendered from heartbeat evidence below. */
 const safetyFacts = [
-  { label: "Highest risk allowed", value: "GREEN", tone: "safe" as const },
+  { label: "Autonomous risk ceiling", value: "GREEN", tone: "safe" as const },
   { label: "Runs work on its own", value: "No", tone: "safe" as const },
-  { label: "AI worker", value: "Not Connected", tone: "neutral" as const },
 ];
 
 async function hasAuthenticatedUser() {
@@ -56,8 +56,12 @@ export default async function DashboardPage() {
                 </dd>
               </div>
             ))}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5">
+              <dt className="text-sm text-muted">AI worker</dt>
+              <dd><WorkerStatusBadge enabled={authenticated} /></dd>
+            </div>
           </dl>
-          <Link href="/settings" className="btn btn-secondary btn-sm mt-4 self-start">
+          <Link href="/solutions/settings" className="btn btn-secondary btn-sm mt-4 self-start">
             See all safety settings
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>

@@ -41,13 +41,13 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Dashboard", href: "/solutions" },
-  { label: "Projects", href: "/projects" },
-  { label: "Runs", href: "/runs" },
-  { label: "Activity", href: "/activity" },
+  { label: "Projects", href: "/solutions/projects" },
+  { label: "Runs", href: "/solutions/runs" },
+  { label: "Activity", href: "/solutions/activity" },
 ];
 
 /** Added only for a confirmed super administrator. */
-export const SUPER_ADMIN_NAV: readonly NavItem[] = [{ label: "Admin", href: "/admin" }];
+export const SUPER_ADMIN_NAV: readonly NavItem[] = [{ label: "Admin", href: "/solutions/admin" }];
 
 /**
  * The global navigation for a viewer.

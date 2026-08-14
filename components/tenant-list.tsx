@@ -111,7 +111,7 @@ export function TenantListShell<Item>({
         icon={icon}
         title="Choose a workspace"
         description="Finish setup or pick an active workspace to load this data."
-        href="/connections"
+        href="/solutions/connections"
         label="Open connections"
       />
     );

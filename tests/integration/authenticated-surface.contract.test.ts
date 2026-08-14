@@ -14,7 +14,6 @@ function source(relativePath: string) {
 describe("Signed-in surface contracts", () => {
   it.each([
     "app/(marketing)/layout.tsx",
-    "app/(console)/layout.tsx",
     "app/(portal)/layout.tsx",
   ])("resolves the viewer on the server in %s", (layout) => {
     const contents = source(layout);
@@ -43,7 +42,7 @@ describe("Signed-in surface contracts", () => {
 
   it("re-checks the role inside the admin page, not only in the navigation", () => {
     // Hiding the link is presentation. Typing the URL must still be refused.
-    const admin = source("app/(console)/admin/page.tsx");
+    const admin = source("app/(portal)/solutions/admin/page.tsx");
     expect(admin).toMatch(/readViewer\(\)/);
     expect(admin).toMatch(/!viewer\.signedIn \|\| !viewer\.isSuperAdmin/);
   });

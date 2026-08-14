@@ -54,6 +54,7 @@ export const RISK_FACTORS = Object.freeze({
   "non-destructive-schema-change": "YELLOW",
   "reversible-production-configuration": "YELLOW",
   "cross-component-change": "YELLOW",
+  "safety-relevant-memory": "YELLOW",
   "money-or-billing": "RED",
   "destructive-production-data": "RED",
   "secrets-or-credentials": "RED",

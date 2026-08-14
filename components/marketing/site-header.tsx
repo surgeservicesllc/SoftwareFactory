@@ -53,13 +53,12 @@ function Wordmark() {
 
 export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderViewer }) {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
   const navItems = globalNavigation({
     signedIn: viewer.signedIn,
     isSuperAdmin: viewer.isSuperAdmin,
   });
   const accountLabel = viewer.displayName ?? viewer.email ?? "Account";
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -126,24 +125,30 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
             </>
           ) : (
             <>
-              <Link
-                href="/sign-in"
-                className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/sign-in?next=/solutions"
-                className="inline-flex min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-              >
-                Get Started Free
-              </Link>
+          <Link
+            href="/auth/sign-in?next=/solutions"
+            className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
+          >
+            Sign In
+          </Link>
+          {/*
+            Sign-up, not sign-in. This pointed at /sign-in, so the primary
+            call to action on every marketing page landed a brand-new visitor
+            on a page headed "Sign in / Welcome back", with account creation
+            hidden behind a small link at the bottom.
+          */}
+          <Link
+            href="/auth/sign-up"
+            className="inline-flex min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Get Started Free
+          </Link>
             </>
           )}
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation"
+            aria-label="Open site navigation"
             aria-expanded={mobileOpen}
             className="grid size-10 place-items-center rounded-xl border border-[#2b3547] bg-[#0f1520] text-[#aab5c3] lg:hidden"
           >
@@ -158,7 +163,7 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
             type="button"
             className="absolute inset-0 bg-black/75 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close navigation"
+            aria-label="Close site navigation"
           />
           <div className="absolute inset-x-0 top-0 border-b border-[#1c2433] bg-[#0a0e15] p-4 pb-6">
             <div className="flex items-center justify-between">
@@ -166,7 +171,7 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                aria-label="Close navigation"
+                aria-label="Close site navigation"
                 className="grid size-10 place-items-center rounded-xl border border-[#2b3547] text-[#aab5c3]"
               >
                 <X className="size-5" aria-hidden="true" />
@@ -205,13 +210,22 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
                   <SignOutButton className="w-full rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]" />
                 </>
               ) : (
-                <Link
-                  href="/sign-in"
-                  onClick={() => setMobileOpen(false)}
-                  className="mt-2 rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
-                >
-                  Sign In
-                </Link>
+                <>
+              <Link
+                href="/auth/sign-up"
+                onClick={() => setMobileOpen(false)}
+                className="mt-2 rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-3 py-3 text-center text-sm font-semibold text-white"
+              >
+                Get Started Free
+              </Link>
+              <Link
+                href="/auth/sign-in?next=/solutions"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
+              >
+                Sign In
+              </Link>
+                </>
               )}
             </nav>
           </div>

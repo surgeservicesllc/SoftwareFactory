@@ -24,7 +24,7 @@ import {
   findDeclaredModelPrice,
   formatEstimatedCost,
 } from "@/lib/providers/usage";
-import type { ProviderRunRequest } from "@/lib/providers/types";
+import { AGENT_ROLES, isAgentRole, type ProviderRunRequest } from "@/lib/providers/types";
 
 const validResult = {
   summary: "The change is scoped and reversible.",
@@ -133,6 +133,25 @@ describe("parseProviderResult", () => {
 });
 
 describe("prompt construction", () => {
+  it("accepts every provider-neutral canonical agent role", () => {
+    expect(AGENT_ROLES).toEqual([
+      "orchestrator",
+      "product",
+      "architect",
+      "frontend",
+      "backend",
+      "database",
+      "qa",
+      "security",
+      "performance",
+      "release",
+      "ceo_reporter",
+      "custom",
+    ]);
+    expect(isAgentRole("architect")).toBe(true);
+    expect(isAgentRole("performance")).toBe(true);
+  });
+
   it("states the advisory boundary and the agent role", () => {
     const system = buildSystemPrompt(runRequest());
 

@@ -1,106 +1,111 @@
 # Testing
 
-Phase 1B needs local code evidence, hosted database evidence, and real-provider acceptance evidence. None substitutes for the others.
+Phase 1C requires four independent evidence layers: local code/behavior, migration/catalog/RLS, protected runner configuration, and a real end-to-end provider run. None substitutes for another.
 
 ## Commands
 
 ```bash
 npm run lint
 npm run typecheck
-npm test
 npm run test:unit
 npm run test:integration
+npm test
 npm run test:coverage
-npm run test:e2e
 npm run build
+npm run test:e2e
+npm audit --omit=dev
+npm run worker:once
 ```
 
-## Last verified application release and current hosted status (2026-08-13)
+The last command must exit safely without executing when the worker is disabled or configuration is incomplete.
 
-| Gate | Result |
+## Prior verified Phase 1C baseline
+
+| Gate | Prior verified result |
 | --- | --- |
-| Cutover check | Pass - lint, typecheck, 56 files/436 Vitest tests, 38-route build; deployed main CI is green |
-| Application release integration suite | Pass - 21 files/163 tests |
-| Migration `026` | Retained pass locally and hosted - pre-`027` history matched, dry run/lint clean, exact ACL mismatch count zero |
-| Current-tree coverage | Pass - statements 74.76%, branches 75.59%, functions 68.02%, lines 75.82% |
-| Local and exact production E2E/responsive/accessibility | Pass - Playwright 48/48 across desktop/tablet/mobile, including axe checks |
-| Signed-out dashboard race | Pass - focused browser-error test repeated 30/30 against production |
-| Verified application-release secret/client scan | Pass - zero high-confidence non-fixture credential candidates, zero privileged/static marker matches across 27 artifacts, zero tracked key/container files, and only `.env.example` present |
-| Candidate cutover coverage and secret/client scan | Pending before publication; the full `npm run check` is green but does not replace these gates |
-| Prior local baseline before migrations `014`-`019` | 25 files/208 tests, 34-route build, and 12/12 local E2E passed; historical evidence only |
-| Hosted Supabase migration application | Pass through `027`; live approval/execution/rebind path verified |
-| Hosted RLS/catalog/browser grants | Pass - 23/23 RLS+FORCE, 32 policies, zero policyless, 22 secret guards, tested raw authenticated/browser grants false |
-| Hosted service-role table grants | Pass - exact matrix mismatch zero; SELECT/INSERT/UPDATE on four GitHub ingress tables, no table privileges on other 19 |
-| Hosted Supabase CLI/link | Earlier wrong/unauthorized profile was not used for mutation; reconfirm `surgeservicesllc@gmail.com` and project `qpuofpmagrmyamahqwxw` before future linked commands |
-| Hosted Supabase lint | Verified baseline clean through `026`; hosted `027` live behavior passes |
-| GitHub publication/CI | Pass - commit `799d2cea189b6860a03987ae75c25765f9ac4aca`, tree `a7731dc5626f1d014a446e94e989a1ac3f4f72a1`; CI `31716263910`, both jobs green |
-| Exact production Playwright | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` passes 48/48; 13/13 routes, invalid webhook, logs, and 20-asset checks pass |
-| Owner Auth/onboarding | Pass - `surgeservicesllc@gmail.com` confirmed/authenticated; SoftwareFactory workspace owner onboarding succeeded |
-| GitHub provider installations | Candidate `153479019` live; primary `153445938` active rollback; exact repository selected |
-| Vercel configuration/runtime | `dpl_853oYWK122qrTHhqtqDhsEYJkKaQ` READY at `https://softwarefactory-7kfx3u1ey-surgeservices-projects.vercel.app` and stable alias, source exact main commit `799d2cea189b6860a03987ae75c25765f9ac4aca` |
-| Real in-product GitHub acceptance | Candidate callback/sync/webhook/handoff/read/draft-write/audit pass; live second-tenant/reverse/adverse matrix pending |
-| Live controlled commit identity | Pass - ordinary draft PR `#6` commit `e789303` and protected draft PR `#7` commit `6a808de` use `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer |
-| Candidate provider acceptance | Pass - App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, signed webhook, handoff, and clean PR `#8` |
-| Dual-App/handoff tests | Pass within current full local check - App-slot/App-ID state, isolated config, persisted-App token routing, dual-signature/provenance webhook handling, owner handoff route, and migration `027` contracts/behavior |
+| Runtime | Supported bundled Node `24.19.0` |
+| `npm run check` | Pass on Node `24.19.0`: lint/typecheck, 117 test files/1,282 tests, production build with 74 page/route entries |
+| Coverage | Pass: 75.06% statements, 69.97% branches, 72.60% functions, 76.66% lines |
+| Focused migration suites | Pass: 8 files/104 tests |
+| Playwright responsive/accessibility | Pass: 117/117 across desktop/tablet/mobile against the production build |
+| Production dependency audit | Pass: `npm audit --omit=dev` reports 0 vulnerabilities |
+| Changed-tree secret scan | Pass: 96 files, 0 high-confidence secret candidates |
+| Production static scan | Pass: `.next/static` 27 files, 0 privileged markers |
+| Disabled worker smoke | Pass: exits safely without executing |
+| Diff/independent audit | Pass: `git diff --check` clean except line-ending notices; final independent P0/P1 audit PASS |
 
-The repository and intended production/CI runtime require Node 22 or newer. The final local run used Node 22.23.1; older historical test evidence does not replace that run.
+These are historical baseline results. Separately, the frozen current-update candidate passes local Node `24.19.0` lint/typecheck, 118 Vitest files/1,311 tests, coverage 76.70% statements / 71.47% branches / 74.04% functions / 78.11% lines, a 74/74-route production build, Playwright/axe 117/117, `npm audit --omit=dev` with 0 vulnerabilities, and clean diff-check. That is local final-candidate evidence only: publication commit, CI, matching Vercel deployment, and hosted `130015` verification remain pending. Hosted reconciliation through `130014`, workflow publication, and one transient live claim/heartbeat/provider thread are independently verified. None of this proves funded provider execution, a successful Codex turn, a Phase 1C factory branch/draft PR, or exact-head required-CI completion.
 
-## Unit and integration coverage
+## Phase 1C unit/integration coverage
 
-Phase 1B tests cover or must continue to cover:
+The suites cover:
 
-- Supabase environment/Auth/session/onboarding and active-organization resolution;
-- same-origin and authenticated/tenant authorization boundaries;
-- installation-state signature, expiry, nonce, user, organization, and return-path validation;
-- App JWT/private-key/server-secret validation;
-- installation/repository synchronization, provider-time ordering, terminal deletion, explicit restore, and revoked/permission/rate-limit failures;
-- installation-token repository and permission scoping;
-- primary/candidate configuration isolation, complete-or-absent candidate settings, App-slot/App-ID-bound installation state, persisted-installation-App token routing, and safe absence of a candidate;
-- webhook signature, invalid signature, size bounds, delivery deduplication/conflict, accepted/ignored events, and redaction;
-- dual-App webhook signature selection, persisted installation/App-ID provenance mismatch rejection, and the processed target-installation delivery precondition;
-- repository coordinates, refs, paths, file-size/binary handling, branch/commit/PR/check mapping;
-- literal normalized repository-name matching with no SQL wildcard expansion;
-- serialized first/existing installation synchronization, authoritative post-upsert binding, and synchronized-default-branch project linking;
-- expanded protected-resource path and likely-secret rejection, including opaque non-placeholder values assigned to generic secret-bearing keys while deliberate placeholders remain allowed;
-- exact active-organization enforcement across interactive GitHub routes and truthful connection status derived from live installation/repository evidence;
-- authenticated direct raw Activity/webhook-delivery denial plus caller-member `list_activity` reads that cap results and expose only bounded allowlisted actor/source/resource/action/status/conclusion/transition evidence;
-- authenticated base-table SELECT revocation plus caller-member/tenant/limit/column/size behavior for agent, command, task, run, and report list RPCs;
-- command same-origin/CSRF enforcement and global CSP/security header contracts;
-- removal of the legacy HTTP local-file writer and direct authenticated connection/member/project/link/change-request mutation paths;
-- authenticated exact stable-repository-UUID change reservation and serialized active-project linking/relink-after-archive, stable same-intent idempotency, provider-evidence completion recovery, actor attribution, and immutable terminal events;
-- active-owner-only protected RED approval with exact reservation/path/content/SHA/branch/requester/approver/executor binding, exact phrase/rationale/rollback validation, 15-minute expiry, five-minute pre-provider lease, provider-boundary-before-write-token ordering, exact reclaim, and permanent reclaim denial after provider execution/evidence;
-- signed-webhook repository-grant reconciliation, stable repository-to-project attribution, bounded activity details, exact linked-project metadata propagation, and stale/terminal lifecycle ordering through narrow RPC/trigger boundaries;
-- Projects sync/branch protection/SHA/commit/PR timestamps/authors/mergeability, default-branch checks, and per-PR head-SHA checks;
-- controlled branch + expected SHA + draft-PR-only mutation and idempotency; and
-- schema/RPC/RLS/FORCE RLS/audit contracts for migrations; and
-- owner-only atomic handoff across two live same-account/same-repository installations, pending-change/conflict rejection, immutable history/evidence preservation, and evidence-bound reverse handoff.
+- command type/criteria/idempotency, same-origin, owner-only submission, secret/key/size rejection, project binding, deterministic prompt-plus-criteria risk escalation, exact base SHA, fixed plan, opaque dispatch, delayed evidence, and RED blocking;
+- catalog/history reconciliation for schema-present `028`/`130001`-`130005`, followed by hosted forward `130006` through `130014`; provider compatibility, Phase 1D interlocks, tables/constraints/indexes, RLS/FORCE RLS, dependencies, cumulative retry budgets, policies/grants, safe detail/status, lease/result functions, append-only evidence, RED claim exclusion, and terminal report/activity behavior;
+- local `130015` restoration of the two model checks from 120 to 128 characters, exact preserved constraint semantics, all four new immutable-function no-secret constraints, 128-character assignment/run/project-default behavior, valid and negative credential-shaped catalogue/assignment/routing scalar cases through catalogue/RPC/direct paths, provider runtime/API scalar rejection, dirty pre-migration catalogue fail-closed reads, preserved run-detail signature/security/search path/ACL, capped/allowlisted Phase 1C/Phase 2A routing evidence, absent/null rolling compatibility, authenticated raw routing-decision/event denial, and retained tenant-scoped model-catalogue reads;
+- provider-neutral eleven-role roster for existing/future organizations, preservation of user-created agents, general-to-Orchestrator mapping, provider/model run metadata, and per-agent claim serialization;
+- worker configuration, safe work root, controlled environment, disabled behavior, lease lifecycle, heartbeat/cancellation/retry, redaction, and bounded process output;
+- Codex SDK thread options, turns/tokens, structured summary, event projection, and terminal errors;
+- exact repository/base-SHA workspace preparation, safe branch generation, coherent branch/commit/draft-PR recovery and conflict rejection, Git authentication redaction, owner author/committer, and stale/mismatch failures;
+- pinned Docker arguments, install-script suppression, network-none validation, resource/security caps, and deterministic gates;
+- path containment, protected paths, forbidden files, symlinks, binary files, likely secrets, changed-file/size limits, and exact approval paths;
+- draft PR creation/recovery, authoritative pull-request projection, repository-ID-scoped token permissions, exact required-check presence/success, complete stable check fingerprint, final PR base/head recheck, CI failure/timeout, and bounded repair;
+- workflow trigger, schedule, permission, secret-name mapping, no checkout credentials, and no secrets in pre-worker steps;
+- member-safe agent/task/run/report details, timelines/artifacts/validations/dependencies, worker status, cancellation/retry, loading/empty/error/authorization states, and responsive consoles; and
+- retained Phase 1B Auth/GitHub callback/webhook/project/file/draft-PR/RLS boundaries.
 
-Contract tests validate static SQL properties, but hosted catalog and cross-tenant user-session checks are still required.
+Static SQL/workflow contract tests are necessary but do not prove hosted catalog or runner/provider behavior.
 
-## End-to-end coverage
+## Hosted Supabase acceptance record and remaining cases
 
-The final E2E run should exercise desktop, tablet, and mobile layouts plus:
+Hosted verification completed after exact owner approval: catalog-prove and ledger-repair only schema-present `028`/`130001`-`130005`, then apply forward-only migrations `130006` through `130014` to exact project `qpuofpmagrmyamahqwxw` and verify:
 
-- unauthenticated redirects and safe **Not Connected** states;
-- sign-up/sign-in/callback/onboarding/organization selection;
-- Connections installation initiation and cancellation/error states;
-- real connected state only in a controlled provider acceptance environment;
-- project creation from a selected repository;
-- live sync time, branch protection/SHA, commit/PR author/timestamp/mergeability views, default-branch checks, and per-PR head-SHA checks;
-- file tree/read/edit/preview/unsaved-change protection;
-- stale SHA, renamed/same-name repository mismatch, unapproved/admin/expired protected request, reservation expiry/reclaim, and provider failure;
-- exact owner-approved protected-file draft PR with immutable approval/execution evidence;
-- successful controlled branch/commit/draft PR with no merge/deploy; and
-- accessibility, keyboard, browser-error, and viewport-overflow checks.
+- linked migration history and lint;
+- all public tables RLS/FORCE RLS and intended policies;
+- exact table/function ACLs and no unintended service-role table grants;
+- function search paths, constraints, indexes, triggers, secret checks, and append-only guards;
+- direct browser denials plus bounded member detail/status;
+- owner-only submission; owner/admin cancel/retry; and service-worker lease/result paths;
+- direct command SQL prompt/criteria risk and fixed configuration normalization, payload/secret limits, and RED exclusion;
+- provider-neutral roster, one active lease per logical agent, coherent artifact/PR replay and rejection, stale-lease/cancellation terminalization, structured report content, and bounded reconstructed PR links; and
+- real owner and anonymous read behavior using caller sessions.
 
-## Hosted Supabase evidence
+Hosted migration history is reconciled and current through `130014`; linked lint and focused catalog/runtime/ACL checks pass. The temporary release token used for that protected work was revoked and its temporary file deleted. Any future schema correction remains forward-only and requires its own exact approval.
 
-Hosted history is current through `027`; the pre-`027` history/lint/ACL baseline and live `027` path pass. Only one actual user/email is authorized, so the live two-tenant plus anonymous caller matrix remains an explicit acceptance gap.
+Authenticated production owner reads pass across Bot Manager, Runs/detail, Backlog/detail, all-eleven-role Agents/detail, Reports/detail, and Connections. Signed-out UI exposes no tenant records, and twelve hosted target/read RPCs deny anonymous callers with `401`/`42501`. An unrelated authenticated tenant does not exist in hosted membership, so its live isolation case and mutation-shaped/direct-table denial probes remain pending; local integration tests are not represented as live proof.
 
-## Real GitHub acceptance
+Migration `130015` remains local. A fresh exact RED approval must precede applying only that migration, followed by exact definitions for both widened and all four new no-secret constraints; 128-character assignment/run/project regression; valid and negative credential-shaped catalogue/assignment/routing scalar checks through reviewed paths; the two raw-SELECT revokes and retained model-catalogue SELECT; run-detail identity/security/ACL; bounded routing; raw-table/tenant denial; linked lint; and health verification. Until then hosted run detail may omit `routing`, and the rolling-compatible application must render that as missing historical evidence rather than infer a reason; credential-shaped pre-migration catalogue rows fail closed.
 
-Use the checklist in [GitHub App integration](GITHUB_APP_INTEGRATION.md). Candidate installation, signed delivery, owner handoff, post-handoff read/draft-write behavior, and cleanup pass. They do not prove the pending second-tenant, reverse-handoff, disconnect/loss, or remaining adverse matrix.
+## Protected GitHub Actions acceptance still required
 
-## Final evidence
+Verify the presence, never values, of the six retained non-OpenAI `SOFTWAREFACTORY_*` secrets documented in [Environment variables](ENVIRONMENT_VARIABLES.md). Keep `SOFTWAREFACTORY_OPENAI_API_KEY` absent until a fresh funded replacement is configured through the protected path. Confirm untrusted PR workflows cannot receive secrets, checkout does not persist credentials, the normal workflow token is read-only, and worker secrets enter only their reviewed steps.
 
-Before claiming completion, record exact commands, tree/commit, date, result, hosted project/migration state, production deployment ID, and provider acceptance outcomes in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`. A skipped, stale, flaky, or narrower test is not passing evidence for omitted scope.
+Verify `SOFTWAREFACTORY_REQUIRED_CHECKS` is exactly `Lint, typecheck, test, and build|Browser and accessibility tests` and still exactly matches the two CI job display names. Test missing/renamed/incomplete/non-success/unstable checks, truncated check enumeration, changed PR base/head, and the required identical passing fingerprint twice; every unsafe state must fail or time out.
+
+Then verify the approved default-branch repository dispatch (or scheduled durable recovery) registers/heartbeats one worker, claims at most one run and one run per logical agent, uses the pinned validation digest, honors cancellation/timeout, redacts failures, and leaves no credential/workspace artifact. The secret-bearing workflow intentionally has no branch-selectable manual dispatch.
+
+Before that run, verify repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is missing/false and both repository-dispatch and schedule triggers safely skip. Set it to literal `true` only under the exact protected activation approval after migrations, secrets, publication, CI, and deployment pass. Submit the real GREEN owner command through the authenticated UI/API and observe a fresh active heartbeat during its repository-dispatch run; do not add or use a manual workflow trigger. Restore activation to absent/false after the acceptance window unless continued operation is separately approved.
+
+## Real end-to-end acceptance still required
+
+Use one narrowly scoped manual GREEN owner command. Record:
+
+1. owner/organization/project/command/task/run/agent IDs;
+2. repository, installation/App/repository IDs, default branch, and exact base SHA;
+3. dispatch outcome, worker ID, lease/attempt, heartbeat, and Codex thread ID;
+4. timeline, validation rounds, changed paths, usage, and policy scan;
+5. isolated `factory/*` branch, exact commit, author/committer, open draft PR, and exact head SHA;
+6. the complete stable check set, both exact required names/conclusions, two identical passing fingerprints, and final draft PR base/head recheck;
+7. coherent artifact/pull-request projection plus bounded structured report/activity and terminal state; and
+8. proof the default branch, PR approval/merge, production deployment, rollback, workflow/provider settings, secrets, and RED authority were untouched.
+
+Exercise adverse cases separately: dispatch failure with schedule recovery, stale base SHA, cancellation, lease expiry, provider rate limit/unavailable, validation failure, CI failure/timeout, retry bounds, existing-draft recovery, protected path denial, secret denial, and oversized/binary/symlink changes.
+
+## Evidence discipline
+
+- A skipped, stale, flaky, narrower, or mocked test is not proof for omitted scope.
+- A queued command or workflow event is not a worker claim.
+- A fresh active heartbeat proves an executing worker. A clean idle one-shot heartbeat is briefly Available/Connected but is not end-to-end execution proof; stale, disabled, or missing heartbeat state is Not Connected.
+- A Vercel READY build is not a Codex run.
+- A draft PR is not a merge/deployment.
+- Record exact commit/tree, runtime versions, commands/counts, hosted migration state, workflow run, deployment, and provider artifact IDs in `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md`.

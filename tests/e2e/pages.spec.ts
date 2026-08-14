@@ -13,17 +13,17 @@ import { expect, test } from "@playwright/test";
 const routes = [
   // The console home moved to /solutions when / became the marketing landing.
   { path: "/solutions", heading: "Dashboard" },
-  { path: "/operations", heading: "Operations" },
-  { path: "/projects", heading: "Projects" },
-  { path: "/files", heading: "Files" },
-  { path: "/bot-manager", heading: "Bot Manager" },
-  { path: "/connections", heading: "Connections" },
-  { path: "/activity", heading: "Activity" },
-  { path: "/settings", heading: "Safety" },
-  { path: "/agents", heading: "Agents" },
-  { path: "/backlog", heading: "Backlog" },
-  { path: "/runs", heading: "Runs" },
-  { path: "/reports", heading: "Reports" },
+  { path: "/solutions/operations", heading: "Operations" },
+  { path: "/solutions/projects", heading: "Projects" },
+  { path: "/solutions/files", heading: "Files" },
+  { path: "/solutions/bot-manager", heading: "Bot Manager" },
+  { path: "/solutions/connections", heading: "Connections" },
+  { path: "/solutions/activity", heading: "Activity" },
+  { path: "/solutions/settings", heading: "Safety" },
+  { path: "/solutions/agents", heading: "Agents" },
+  { path: "/solutions/backlog", heading: "Backlog" },
+  { path: "/solutions/runs", heading: "Runs" },
+  { path: "/solutions/reports", heading: "Reports" },
   { path: "/auth/sign-in", heading: "Sign in" },
   { path: "/auth/sign-up", heading: "Create your account" },
 ] as const;
@@ -34,6 +34,18 @@ for (const { path, heading } of routes) {
     expect(response?.ok(), `${path} returned ${response?.status()}`).toBe(true);
 
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+
+    // Metadata resolves through nested layouts, so a title can silently pick up
+    // the wrong ancestor: the console once rendered the marketing home page's
+    // title on every page, then rendered the site name twice.
+    const title = await page.title();
+    expect(title, `${path} has no distinguishing title`).not.toBe(
+      "AI Software Factory — Build, Deploy and Scale with AI",
+    );
+    expect(
+      title.split("AI Software Factory").length - 1,
+      `${path} repeats the site name: ${title}`,
+    ).toBeLessThanOrEqual(1);
 
     // Client consoles settle into a signed-out or unconfigured state; wait for
     // the loading spinner to clear so axe sees the real content.

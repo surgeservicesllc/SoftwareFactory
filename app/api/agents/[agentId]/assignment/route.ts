@@ -67,9 +67,25 @@ export async function POST(
       );
     }
 
-    // Bind the request to the caller's active tenant. The function re-checks
-    // the agent's organization and the caller's role in the database.
-    const { client } = await requireActiveOrganization();
+    // Prove the agent belongs to the caller's exact active tenant through the
+    // existing bounded member projection before entering the mutation RPC.
+    // The mutation independently re-checks owner/admin authority in SQL.
+    const { client, activeOrganization } = await requireActiveOrganization();
+
+    const { data: projectedAssignment, error: projectionError } = await client.rpc(
+      "get_provider_agent_assignment",
+      {
+        p_agent_id: agentId,
+        p_organization_id: activeOrganization.id,
+      },
+    );
+    if (projectionError) return databaseErrorResponse(projectionError);
+    if (!Array.isArray(projectedAssignment) || projectedAssignment.length !== 1) {
+      return jsonNoStore(
+        { error: { code: "agent_not_found", message: "The agent is not available in this workspace." } },
+        { status: 404 },
+      );
+    }
 
     const { data, error } = await client
       .rpc("set_agent_provider_assignment", {

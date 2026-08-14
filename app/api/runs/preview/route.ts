@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import { routeProvider, ROUTING_PROVIDER_REQUESTS } from "@/lib/providers/routing";
 import { loadProjectRoutingContext } from "@/lib/providers/service";
-import { PROVIDER_TASK_KINDS, type AgentRole, type ProviderId } from "@/lib/providers/types";
+import {
+  PROVIDER_TASK_KINDS,
+  isAgentRole,
+  type AgentRole,
+  type ProviderId,
+} from "@/lib/providers/types";
 import {
   ApiRequestError,
   jsonNoStore,
@@ -69,21 +74,37 @@ export async function POST(request: Request) {
     } | null = null;
 
     if (parsed.data.agentId) {
-      const { data } = await client
-        .from("agents")
-        .select("id,role,provider,model")
-        .eq("organization_id", activeOrganization.id)
-        .eq("id", parsed.data.agentId)
-        .maybeSingle();
+      const { data, error } = await client.rpc("get_provider_agent_assignment", {
+        p_agent_id: parsed.data.agentId,
+        p_organization_id: activeOrganization.id,
+      });
+      if (error) throw error;
 
-      if (data) {
-        const row = data as { id: string; role: string; provider: string | null; model: string | null };
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result) {
+        const row = result as {
+          id: string;
+          role: string;
+          provider: string | null;
+          model: string | null;
+        };
+        if (!isAgentRole(row.role)) {
+          return jsonNoStore(
+            { error: { code: "agent_not_found", message: "The agent is not available." } },
+            { status: 404 },
+          );
+        }
         agentAssignment = {
           agentId: row.id,
-          agentRole: row.role as AgentRole,
+          agentRole: row.role,
           provider: row.provider === "anthropic" || row.provider === "openai" ? row.provider : null,
           model: row.model,
         };
+      } else {
+        return jsonNoStore(
+          { error: { code: "agent_not_found", message: "The agent is not available." } },
+          { status: 404 },
+        );
       }
     }
 
