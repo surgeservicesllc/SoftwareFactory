@@ -175,6 +175,14 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 - `/solutions/projects` serves `noindex, nofollow`; the marketing home serves `index, follow`; `robots.txt` disallows `/solutions` and the live sitemap lists the six marketing routes only.
 - `tests/integration/console-routing.contract.test.ts` guards the agreement between the route tree, the redirects, and the crawler directives. Its sitemap/robots assertion was mutation-checked: re-adding `/solutions` to the sitemap fails it.
 
+## Authentication state
+
+- Account creation is **blocked in production by a Supabase project setting**, not by application code. The live project reports `mailer_autoconfirm: false` (every signup needs a confirmation email) while using Supabase's built-in email sender, whose quota is exhausted: `POST /auth/v1/signup` returns `over_email_send_rate_limit` against the raw API. Until custom SMTP is configured or email confirmation is turned off, no one can complete signup.
+- Four application defects that also blocked it are fixed and live: every "Get Started Free" / "Start Free Trial" call to action pointed at `/sign-in` rather than sign-up (the header, the homepage hero and closing band, the platform page, and all three pricing plans); successful sign-in returned the visitor to the public home page instead of `/solutions`; `supabase/config.toml` allowlisted only the Vercel preview host, so confirmation links resolved to an origin where the session cookie cannot apply; and every failure collapsed into "The account could not be created."
+- `describeAuthFailure` now distinguishes rate-limited email, invalid address, weak password, disabled signups, unconfirmed account, and provider outage, and never confirms during sign-up that an address is registered. `/api/auth/resend-confirmation` plus a resend button recover an account whose confirmation email never arrived, which was previously a permanent dead end.
+- Hosted pricing rows still carry `/sign-in` as their call to action and cannot be edited from the application, so `normalizeCtaHref` maps the legacy path forward on read.
+- Owner actions and verification commands are in `docs/AUTH_RUNBOOK.md`.
+
 ## Release blockers
 
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.

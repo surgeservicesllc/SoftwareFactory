@@ -51,10 +51,12 @@ describe("authentication entry points", () => {
 
     for (const surface of surfaces) {
       const body = source(surface);
+      // Match links and call-to-action values, not every mention of the path:
+      // normalizeCtaHref has to name the legacy value in order to map it away.
       // /sign-in only redirects to /auth/sign-in, so a call to action aimed
       // there sends a visitor without an account to the wrong page.
       expect(body, `${surface} still links to the legacy /sign-in redirect`)
-        .not.toMatch(/["'`]\/sign-in(\?|["'`])/);
+        .not.toMatch(/(?:href|primaryHref|secondaryHref|ctaHref)\s*[:=]\s*["'`{]*\s*["'`]\/sign-in/);
     }
   });
 
