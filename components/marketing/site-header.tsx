@@ -81,13 +81,19 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
-            href="/sign-in"
+            href="/auth/sign-in?next=/solutions"
             className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
           >
             Sign In
           </Link>
+          {/*
+            Sign-up, not sign-in. This pointed at /sign-in, so the primary
+            call to action on every marketing page landed a brand-new visitor
+            on a page headed "Sign in / Welcome back", with account creation
+            hidden behind a small link at the bottom.
+          */}
           <Link
-            href="/sign-in?next=/solutions"
+            href="/auth/sign-up"
             className="inline-flex min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             Get Started Free
@@ -142,9 +148,16 @@ export function SiteHeader() {
                 </Link>
               ))}
               <Link
-                href="/sign-in"
+                href="/auth/sign-up"
                 onClick={() => setMobileOpen(false)}
-                className="mt-2 rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
+                className="mt-2 rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-3 py-3 text-center text-sm font-semibold text-white"
+              >
+                Get Started Free
+              </Link>
+              <Link
+                href="/auth/sign-in?next=/solutions"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
               >
                 Sign In
               </Link>

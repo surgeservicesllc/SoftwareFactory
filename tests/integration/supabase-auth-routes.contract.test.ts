@@ -20,6 +20,14 @@ describe("Supabase authentication route contracts", () => {
     expect(config).toContain("https://softwarefactory-tan.vercel.app/auth/callback");
     expect(config).toContain("http://localhost:3000/auth/callback");
     expect(config).not.toMatch(/redirect_urls\s*=\s*\[[\s\S]*?\*/);
+
+    // Supabase builds confirmation links from site_url and falls back to it
+    // whenever an emailRedirectTo is not allowlisted. Pointing either at a
+    // preview host sends production visitors to an origin where their session
+    // cookie cannot apply, which is how sign-up broke in production.
+    expect(config).toMatch(/site_url\s*=\s*"https:\/\/www\.theagoras\.com"/);
+    expect(config).toContain("https://www.theagoras.com/auth/callback");
+    expect(config).toContain("https://theagoras.com/auth/callback");
   });
 
   it.each([

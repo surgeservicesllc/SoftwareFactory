@@ -6,7 +6,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { authProviderFailureStatus } from "@/lib/supabase/auth";
+import { describeAuthFailure } from "@/lib/supabase/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import {
@@ -47,31 +47,29 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user || !data.session) {
-      const status = authProviderFailureStatus(error, 401);
+      const failure = describeAuthFailure(error, {
+        status: 401,
+        code: "invalid_credentials",
+        message: "The email address or password was not accepted.",
+      });
       return jsonNoStore(
         {
           error: {
-            code:
-              status === 429
-                ? "authentication_rate_limited"
-                : status >= 500
-                  ? "authentication_unavailable"
-                  : "invalid_credentials",
-            message:
-              status === 429
-                ? "Too many authentication attempts. Try again later."
-                : status >= 500
-                ? "Authentication is temporarily unavailable."
-                : "The email address or password was not accepted.",
+            code: failure.code,
+            message: failure.message,
+            // Lets the form offer a resend link instead of leaving someone
+            // stuck being told a correct password was wrong.
+            ...(failure.needsConfirmation ? { needsConfirmation: true } : {}),
           },
         },
-        { status },
+        { status: failure.status },
       );
     }
 
     return jsonNoStore({
       authenticated: true,
-      next: normalizeReturnPath(parsed.data.returnTo, "/"),
+      // The console, not the public home page, is where a signed-in caller belongs.
+      next: normalizeReturnPath(parsed.data.returnTo, "/solutions"),
     });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);

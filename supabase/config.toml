@@ -23,8 +23,15 @@ port = 54324
 
 [auth]
 enabled = true
-site_url = "https://softwarefactory-tan.vercel.app"
+# The production domain must come first: Supabase builds confirmation and
+# recovery links from site_url, and it silently falls back to site_url whenever
+# an emailRedirectTo is not on the allowlist below. With only the Vercel
+# preview host listed, every confirmation link sent to a theagoras.com visitor
+# pointed at a different origin, where the session cookie cannot apply.
+site_url = "https://www.theagoras.com"
 additional_redirect_urls = [
+  "https://www.theagoras.com/auth/callback",
+  "https://theagoras.com/auth/callback",
   "https://softwarefactory-tan.vercel.app/auth/callback",
   "http://localhost:3000/auth/callback",
   "http://127.0.0.1:3000/auth/callback",

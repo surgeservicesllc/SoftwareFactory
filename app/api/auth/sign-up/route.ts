@@ -7,7 +7,7 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
-import { authProviderFailureStatus } from "@/lib/supabase/auth";
+import { describeAuthFailure } from "@/lib/supabase/auth";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -75,18 +75,14 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user) {
-      const status = authProviderFailureStatus(error, 400);
+      const failure = describeAuthFailure(error, {
+        status: 400,
+        code: "sign_up_failed",
+        message: "The account could not be created.",
+      });
       return jsonNoStore(
-        {
-          error: {
-            code: status === 429 ? "authentication_rate_limited" : "sign_up_failed",
-            message:
-              status === 429
-                ? "Too many authentication attempts. Try again later."
-                : "The account could not be created.",
-          },
-        },
-        { status },
+        { error: { code: failure.code, message: failure.message } },
+        { status: failure.status },
       );
     }
 
