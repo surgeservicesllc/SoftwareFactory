@@ -10,6 +10,7 @@ import {
   Cpu,
   FileText,
   FolderKanban,
+  Gauge,
   Fingerprint,
   GitBranch,
   HeartPulse,
@@ -74,6 +75,7 @@ const navigationGroups = [
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
+      { label: "Autonomy", href: "/solutions/autonomy", icon: Gauge },
     ],
   },
   {

@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import type { CodexAuthResolution } from "@/lib/worker/auth";
+
 const execFileAsync = promisify(execFile);
 const EXPECTED_CODEX_VERSION = "codex-cli 0.147.0";
 const MAXIMUM_RESPONSE_BYTES = 65_536;
@@ -46,18 +48,15 @@ async function defaultRunCommand(
 }
 
 export async function verifyWorkerProviderAccess(input: {
-  apiKey: string;
+  auth: CodexAuthResolution;
   model: string;
   executeProbe?: boolean;
   environment?: Readonly<Record<string, string | undefined>>;
   fetcher?: typeof fetch;
   runCommand?: RunCommand;
 }) {
-  if (!input.apiKey.trim()) {
-    throw new WorkerPreflightError("missing_api_key", "The OpenAI worker API key is missing.");
-  }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(input.model)) {
-    throw new WorkerPreflightError("invalid_model", "The configured OpenAI model name is invalid.");
+    throw new WorkerPreflightError("invalid_model", "The configured Codex model name is invalid.");
   }
 
   const runCommand = input.runCommand ?? defaultRunCommand;
@@ -92,12 +91,19 @@ export async function verifyWorkerProviderAccess(input: {
     );
   }
 
+  // The whole point of subscription mode is that no request reaches the billed
+  // API surface — not on a turn, and not on a preflight either. Verifying the
+  // pinned CLI is the last check this mode performs. Credential *usability* is
+  // proven by the run itself; a preflight that called the API to prove a
+  // zero-token configuration would defeat what it was checking.
+  if (input.auth.mode === "subscription") return;
+
   let response: Response;
   try {
     response = await (input.fetcher ?? fetch)(
       `https://api.openai.com/v1/models/${encodeURIComponent(input.model)}`,
       {
-        headers: { Authorization: `Bearer ${input.apiKey}` },
+        headers: { Authorization: `Bearer ${input.auth.apiKey ?? ""}` },
         redirect: "error",
         signal: AbortSignal.timeout(15_000),
       },
@@ -123,7 +129,7 @@ export async function verifyWorkerProviderAccess(input: {
     response = await (input.fetcher ?? fetch)("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${input.apiKey}`,
+        Authorization: `Bearer ${input.auth.apiKey ?? ""}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ input: "Return exactly READY.", max_output_tokens: 128, model: input.model, store: false }),

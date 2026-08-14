@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { resolveCodexAuth, type CodexAuthResolution } from "@/lib/worker/auth";
+
 const positiveInteger = (fallback: number, minimum: number, maximum: number) => z.coerce
   .number()
   .int()
@@ -23,7 +25,10 @@ const workerEnvironmentSchema = z.object({
   SOFTWAREFACTORY_WORKER_HEARTBEAT_MS: positiveInteger(10_000, 1_000, 60_000),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().startsWith("https://"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
-  OPENAI_API_KEY: z.string().min(20),
+  // Deliberately absent: OPENAI_API_KEY. Codex authentication is resolved by
+  // `resolveCodexAuth`, which defaults to the owner's ChatGPT subscription and
+  // treats per-token API billing as an explicit opt-in. Requiring a paid key
+  // here is what made a funded API balance a precondition for every run.
   GITHUB_COMMIT_IDENTITY_NAME: z.string().trim().min(1).max(100),
   GITHUB_COMMIT_IDENTITY_EMAIL: z.string().email().max(254),
 }).passthrough();
@@ -39,7 +44,7 @@ export type WorkerConfiguration = Readonly<{
   requiredChecks: readonly string[];
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
-  openAiApiKey: string;
+  codexAuth: CodexAuthResolution;
   commitIdentity: { name: string; email: string };
 }>;
 
@@ -112,7 +117,8 @@ export function readWorkerConfiguration(
     requiredChecks: Object.freeze(requiredChecks),
     supabaseUrl: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
     supabaseServiceRoleKey: parsed.data.SUPABASE_SERVICE_ROLE_KEY,
-    openAiApiKey: parsed.data.OPENAI_API_KEY,
+    // Throws a named CodexAuthError rather than resolving to a billed default.
+    codexAuth: resolveCodexAuth(environment),
     commitIdentity: Object.freeze({
       name: parsed.data.GITHUB_COMMIT_IDENTITY_NAME,
       email: parsed.data.GITHUB_COMMIT_IDENTITY_EMAIL,

@@ -73,7 +73,7 @@ GitHub does not allow Actions secret names beginning with `GITHUB_`. Configure e
 
 - `SOFTWAREFACTORY_SUPABASE_URL`
 - `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`
-- `SOFTWAREFACTORY_OPENAI_API_KEY`
+- `SOFTWAREFACTORY_CODEX_AUTH_JSON`
 - `SOFTWAREFACTORY_GITHUB_APP_ID`
 - `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`
 - `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`
@@ -81,7 +81,7 @@ GitHub does not allow Actions secret names beginning with `GITHUB_`. Configure e
 
 The worker step maps the last four to runtime `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_CANDIDATE_APP_ID`, and `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`. Values must never appear in source, workflow logs, issues, screenshots, artifacts, model prompts/output, or Supabase rows.
 
-The six Supabase/GitHub App secret names are verified configured without reading their values. `SOFTWAREFACTORY_OPENAI_API_KEY` was removed after its value was exposed and must remain absent until a fresh funded replacement is created through the protected path. Configuration alone is not connectivity; the worker remains **Not Connected**.
+The six Supabase/GitHub App secret names are verified configured without reading their values. `SOFTWAREFACTORY_OPENAI_API_KEY` was removed after its value was exposed and is now permanently absent rather than pending replacement: Phase 1C authenticates Codex with the owner's ChatGPT subscription and has no paid-API path to restore it to. `SOFTWAREFACTORY_CODEX_AUTH_JSON` replaces it. Configuration alone is not connectivity; the worker remains **Not Connected** until a live run proves it.
 
 ## Required CI check contract
 

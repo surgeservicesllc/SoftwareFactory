@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
       "admin",
       "agentos",
       "agents",
+      "autonomy",
       "backlog",
       "bot-manager",
       "connections",

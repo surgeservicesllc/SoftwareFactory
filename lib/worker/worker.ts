@@ -44,7 +44,7 @@ export type WorkerDependencies = Readonly<{
   workspace: Pick<GitWorkspaceManager,
     "prepare" | "currentHead" | "changedFiles" | "commit" | "assertImmutableCommit"
     | "assertRemoteBaseSha" | "push">;
-  codex: Pick<CodexSdkAdapter, "createSession" | "initialPrompt">;
+  codex: Pick<CodexSdkAdapter, "createSession" | "initialPrompt" | "prepare">;
   validator: Pick<DeterministicValidator, "bootstrap" | "run">;
   publisher: Pick<GitHubDraftPublisher, "createOrRecoverDraft" | "verifyExistingDraft" | "waitForChecks">;
 }>;
@@ -343,6 +343,11 @@ export class SoftwareFactoryWorker {
       if (bootstrap.status === "failed") {
         throw new Error(`Dependency bootstrap failed: ${bootstrap.output}`);
       }
+
+      // Seeds the per-run CODEX_HOME with subscription credentials. Must happen
+      // before the first turn, and after the workspace exists — the credential
+      // lives inside the run directory so it is removed with it.
+      await this.dependencies.codex.prepare(workspace);
 
       const session = this.dependencies.codex.createSession(job, workspace);
       activeCodexSession = session;
