@@ -87,10 +87,18 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
 - [x] Work locks with heartbeat, expiry, and abandoned-lock recovery, enforced
       by a partial unique index rather than by the scheduler remembering.
 - [ ] **Not applied to hosted.** Blocked on the migration ledger repair.
-- [ ] Graph compiler: plan → durable definition the scheduler consumes.
-- [ ] Handoff persistence validated against the receiving node's input contract.
-- [ ] RLS behavioural tests: owner access, unrelated-user denial, anonymous
-      denial, project isolation, cross-project node denial.
+- [x] Graph compiler (`lib/graph/compiler.ts`): plan → durable definition,
+      rejecting cycles, dangling dependencies, duplicate keys, entry-less
+      graphs, and unresolved write conflicts before anything is spent.
+- [x] Handoff preparation validated against the receiving node's input
+      contract (`lib/graph/handoffs.ts`); invalid handoffs are stored as
+      evidence rather than dropped, and verifier context is built separately so
+      worker reasoning cannot leak into it.
+- [x] RLS behavioural tests: member read, cross-tenant denial, outright
+      anonymous denial, absent write grants, constraint enforcement, full lock
+      lifecycle.
+- [ ] Persist compiled graphs and handoffs through SECURITY DEFINER RPCs — the
+      tables and the pure layer exist; the write path between them does not.
 
 ### Stage 3 — execution
 
