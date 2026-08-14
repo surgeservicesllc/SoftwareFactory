@@ -46,6 +46,41 @@ What this does **not** prove: that the hosted ledger rows match what the catalog
 hosted-only objects behave identically. The ledger on that project was reconciled by hand once
 already, so re-list before applying rather than trusting the documented position.
 
+## Rehearsal on real PostgreSQL 16, 2026-08-14 23:2x UTC
+
+The exact owner scenario was rehearsed end to end on a real PostgreSQL 16.13 cluster with a real ledger, after the version-collision fix. PGlite cannot do this: it has no `supabase_migrations.schema_migrations`, so it cannot show a ledger failure at all — which is precisely the failure mode that matters here.
+
+| Step | Result |
+| --- | --- |
+| Baseline built to exactly `20260813001400` | **41 ledger rows**, matching the documented hosted position |
+| The 15 unhosted migrations applied in filename order, each recorded | **All 15 applied**, ledger ends at 56 |
+| Whole chain from empty, as a separate check | **All 56 applied**, 56 ledger rows |
+
+Post-apply verification against that cluster:
+
+| Check | Result |
+| --- | --- |
+| Public tables | 83 |
+| Tables without RLS + FORCE RLS | **none** |
+| `service_role` table privileges | exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries` |
+| `anon` write grants | **none** |
+| SECURITY DEFINER functions | 172, **none** without a pinned `search_path` |
+| SECURITY DEFINER executable by `anon` | exactly `subscribe_to_newsletter` |
+| `autonomous_release_allowed` present | yes |
+
+### The collision, demonstrated rather than asserted
+
+Replaying the pre-fix state against a real ledger produces exactly the predicted failure:
+
+```
+ERROR:  duplicate key value violates unique constraint "schema_migrations_pkey"
+DETAIL:  Key (version)=(20260814000300) already exists.
+```
+
+The first migration records its version. The second **still applies its DDL** and then fails to record — schema changed, ledger not updated, push aborted partway. That is the half-applied state this fix prevents. With the shipped versions (`20260814000250` and `20260814000300`), both are accepted.
+
+What this rehearsal does **not** prove: that the hosted ledger's actual contents match the documented position. Re-list before applying, as the step below says. It also cannot prove hosted-only behavior — Supabase's own roles, extensions, and defaults differ from a bare cluster.
+
 ## Order of operations
 
 1. `supabase link` the exact project `qpuofpmagrmyamahqwxw`, then `supabase migration list` and
