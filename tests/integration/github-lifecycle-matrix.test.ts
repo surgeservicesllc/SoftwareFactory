@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
@@ -9,37 +9,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-// The complete applied migration history. Access loss, disconnection, and
-// reconnection are only meaningful against the schema the hosted project runs.
-const migrationFiles = [
-  "20260812000100_control_plane_schema.sql",
-  "20260812000200_row_level_security.sql",
-  "20260812000300_control_plane_workflows.sql",
-  "20260812000400_github_integration.sql",
-  "20260812000500_authenticated_onboarding.sql",
-  "20260812000700_github_project_linking.sql",
-  "20260812000800_fix_github_sync_ambiguity.sql",
-  "20260812000900_harden_github_project_and_sync.sql",
-  "20260812001000_phase1d_observation_controls.sql",
-  "20260812001100_harden_direct_mutation_boundaries.sql",
-  "20260812001200_github_change_audit.sql",
-  "20260812001300_reconcile_github_repository_grants.sql",
-  "20260812001400_sync_linked_project_repository_metadata.sql",
-  "20260812001500_recover_draft_pr_completion.sql",
-  "20260812001600_guard_github_installation_terminal_state.sql",
-  "20260812001700_close_authenticated_control_plane_writes.sql",
-  "20260812001800_order_github_repository_events.sql",
-  "20260812001900_allow_service_role_sensitive_json_checks.sql",
-  "20260812002000_safe_tenant_list_reads.sql",
-  "20260812002100_bind_projects_to_github_repository_ids.sql",
-  "20260812002200_owner_approved_protected_draft_changes.sql",
-  "20260812002300_github_activity_details.sql",
-  "20260812002400_safe_activity_list_reads.sql",
-  "20260812002500_harden_sensitive_assignments_and_protected_approval_integrity.sql",
-  "20260812002600_narrow_hosted_service_role_table_grants.sql",
-  "20260812002700_handoff_github_project_connection.sql",
-  "20260812002800_harden_github_connection_loss.sql",
-] as const;
+const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
+
+// The complete applied migration history, read from disk. Access loss,
+// disconnection, and reconnection are only meaningful against the schema the
+// hosted project actually runs, so a stale hand-maintained list is worse than
+// no list. The pin below fails deliberately when a new migration lands, so its
+// author reviews this matrix.
+const newestMigration = "20260814001100_harden_github_connection_loss.sql";
 
 const ownerAId = "00000000-0000-4000-8000-000000000301";
 const memberAId = "00000000-0000-4000-8000-000000000302";
@@ -255,6 +232,10 @@ describe("Phase 1B GitHub access-loss, disconnect, and reconnect matrix", () => 
       create role service_role nologin bypassrls;
     `);
 
+    const migrationFiles = (await readdir(migrationsDirectory))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    expect(migrationFiles.at(-1)).toBe(newestMigration);
     for (const migrationFile of migrationFiles) {
       await db.exec(await source(`supabase/migrations/${migrationFile}`));
     }

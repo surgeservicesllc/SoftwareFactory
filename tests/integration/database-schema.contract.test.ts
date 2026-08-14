@@ -30,6 +30,9 @@ const requiredTables = [
   "github_webhook_deliveries",
   "github_change_requests",
   "github_protected_change_approvals",
+  "bots",
+  "bot_roles",
+  "bot_assignments",
 ] as const;
 
 function escapeRegExp(value: string): string {

@@ -8,6 +8,22 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
+import {
+  acceptanceCriterionSchema,
+  assessCommandRisk,
+  commandTypeSchema,
+  dependencyTaskIdSchema,
+  normalizeDependencyTaskIds,
+  resolveAcceptanceCriteria,
+} from "@/lib/orchestration/command";
+import { dispatchPhase1CWorker } from "@/lib/orchestration/dispatch";
+import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import {
+  createGitHubInstallationToken,
+  GitHubApiError,
+} from "@/lib/github/client";
+import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
+import { getGitHubBranchReference } from "@/lib/github/repository";
 import { tenantRpcListResponse } from "@/lib/server/tenant-list";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
@@ -19,8 +35,11 @@ export const runtime = "nodejs";
 const commandRequestSchema = z.object({
   projectId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(4000),
+  commandType: commandTypeSchema.default("other"),
+  acceptanceCriteria: z.array(acceptanceCriterionSchema).max(12).default([]),
+  dependencyTaskIds: z.array(dependencyTaskIdSchema).max(20).default([]),
   risk: z.enum(["green", "yellow", "red"]).default("green"),
-  parameters: z.record(z.string(), z.unknown()).default({}),
+  parameters: z.object({}).strict().default({}),
   idempotencyKey: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/).optional(),
 }).strict();
 
@@ -31,6 +50,18 @@ type SubmissionResult = {
   task_state: "backlog" | "awaiting_approval" | "queued" | "in_progress" | "blocked" | "completed" | "failed" | "cancelled";
   requires_owner_approval: boolean;
   was_created: boolean;
+};
+
+type CommandTarget = {
+  app_id: number;
+  base_branch: string;
+  connection_id: string;
+  external_installation_id: number;
+  external_repository_id: number;
+  internal_installation_id: string;
+  project_id: string;
+  repository_full_name: string;
+  repository_id: string;
 };
 
 export async function POST(request: Request) {
@@ -52,7 +83,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const acceptanceCriteria = resolveAcceptanceCriteria(
+      parsed.data.commandType,
+      parsed.data.acceptanceCriteria,
+    );
+    const dependencyTaskIds = normalizeDependencyTaskIds(parsed.data.dependencyTaskIds);
     const sensitiveFinding = findSensitiveData({
+      acceptanceCriteria,
       prompt: parsed.data.prompt,
       parameters: parsed.data.parameters,
     });
@@ -70,30 +107,128 @@ export async function POST(request: Request) {
     }
 
     const { activeOrganization, client: supabase } = await requireActiveOrganization();
-    const { data: activeProject, error: projectError } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("id", parsed.data.projectId)
-      .eq("organization_id", activeOrganization.id)
-      .maybeSingle();
-    if (projectError) return databaseErrorResponse(projectError);
-    if (!activeProject) {
+    if (activeOrganization.role !== "owner") {
       return jsonNoStore(
         {
           error: {
-            code: "project_not_in_active_organization",
-            message: "The project does not belong to the active organization.",
+            code: "owner_required",
+            message: "Only the organization owner can start a Codex engineering command.",
+          },
+        },
+        { status: 403 },
+      );
+    }
+    const { data: targetData, error: targetError } = await supabase
+      .rpc("resolve_phase1c_command_target", {
+        p_organization_id: activeOrganization.id,
+        p_project_id: parsed.data.projectId,
+      })
+      .single();
+    if (targetError) {
+      if (["P0002", "42501", "55000"].includes(targetError.code ?? "")) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "project_not_executable",
+              message: "Choose an active project with a live selected GitHub repository.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+      return databaseErrorResponse(targetError);
+    }
+    if (!targetData) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "project_not_executable",
+            message: "Choose an active project with a live selected GitHub repository.",
           },
         },
         { status: 409 },
       );
     }
 
+    const target = targetData as CommandTarget;
+    const requestedRisk = parsed.data.risk.toUpperCase() as "GREEN" | "YELLOW" | "RED";
+    const riskAssessment = assessCommandRisk({
+      acceptanceCriteria,
+      commandType: parsed.data.commandType,
+      prompt: parsed.data.prompt,
+      requestedRisk,
+    });
+    const executionPlan = createPhase1CExecutionPlan(parsed.data.commandType);
+    const [repositoryOwner, repositoryName] = target.repository_full_name.split("/");
+    if (!repositoryOwner || !repositoryName || target.repository_full_name.split("/").length !== 2) {
+      return jsonNoStore(
+        { error: { code: "project_not_executable", message: "The project repository binding is invalid." } },
+        { status: 409 },
+      );
+    }
+    let baseSha: string;
+    try {
+      const token = await createGitHubInstallationToken(
+        getGitHubAppConfigurationForAppId(target.app_id),
+        target.external_installation_id,
+        {
+          permissions: { contents: "read", metadata: "read" },
+          repositoryIds: [target.external_repository_id],
+        },
+      );
+      const reference = await getGitHubBranchReference(
+        token.token,
+        repositoryOwner,
+        repositoryName,
+        target.base_branch,
+      );
+      baseSha = reference.object.sha.toLowerCase();
+    } catch (error) {
+      if (error instanceof GitHubApiError) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "project_not_executable",
+              message: "The connected repository base branch could not be verified safely.",
+            },
+          },
+          { status: error.status === 429 ? 429 : 409 },
+        );
+      }
+      throw error;
+    }
+    const orchestrationParameters = {
+      acceptanceCriteria,
+      agentRole: executionPlan.agentRole,
+      budget: executionPlan.budget,
+      commandType: parsed.data.commandType,
+      dependencyTaskIds,
+      executionMode: "manual",
+      model: executionPlan.model,
+      plan: executionPlan.plan,
+      provider: executionPlan.provider,
+      repositoryBinding: {
+        appId: target.app_id,
+        baseBranch: target.base_branch,
+        baseSha,
+        connectionId: target.connection_id,
+        externalInstallationId: target.external_installation_id,
+        externalRepositoryId: target.external_repository_id,
+        installationId: target.internal_installation_id,
+        repositoryId: target.repository_id,
+      },
+      riskAssessment: {
+        factors: riskAssessment.factors,
+        reasons: riskAssessment.reasons,
+        requestedRisk: riskAssessment.requestedRisk.toLowerCase(),
+      },
+    };
+
     const { data, error } = await supabase.rpc("submit_command", {
       p_project_id: parsed.data.projectId,
       p_prompt: parsed.data.prompt,
-      p_requested_risk: parsed.data.risk,
-      p_parameters: parsed.data.parameters,
+      p_requested_risk: riskAssessment.effectiveRisk.toLowerCase(),
+      p_parameters: orchestrationParameters,
       p_idempotency_key: parsed.data.idempotencyKey ?? null,
     }).single();
 
@@ -102,6 +237,37 @@ export async function POST(request: Request) {
     }
 
     const result = data as SubmissionResult;
+    let workerDispatch: "not_applicable" | "requested" | "delayed" = "not_applicable";
+    if (!result.requires_owner_approval && result.task_state === "queued") {
+      try {
+        await dispatchPhase1CWorker(
+          {
+            appId: target.app_id,
+            externalInstallationId: target.external_installation_id,
+            externalRepositoryId: target.external_repository_id,
+            repositoryFullName: target.repository_full_name,
+          },
+          result.command_id,
+        );
+        workerDispatch = "requested";
+      } catch {
+        // The command/task transaction is durable. A same-key retry can wake
+        // the worker again without creating duplicate work.
+        workerDispatch = "delayed";
+      }
+      const { error: dispatchEvidenceError } = await supabase.rpc(
+        "record_phase1c_dispatch_outcome",
+        {
+          p_command_id: result.command_id,
+          p_organization_id: activeOrganization.id,
+          p_outcome: workerDispatch,
+          p_reason_code: workerDispatch === "delayed" ? "provider_dispatch_failed" : null,
+        },
+      );
+      if (dispatchEvidenceError) {
+        return databaseErrorResponse(dispatchEvidenceError);
+      }
+    }
     return jsonNoStore(
       {
         command: {
@@ -115,8 +281,21 @@ export async function POST(request: Request) {
         execution: {
           started: false,
           message: result.requires_owner_approval
-            ? "Persisted only. RED execution is blocked until an organization owner approves it."
-            : "Persisted and queued only. No AI worker is connected in Phase 1A.",
+            ? "Persisted only. RED Codex execution remains blocked in Phase 1C; owner approval does not widen the worker ceiling."
+            : workerDispatch === "requested"
+              ? "The command is queued and the durable Phase 1C worker was notified."
+              : "The command is queued durably. Worker notification is delayed; retrying is safe.",
+          workerDispatch,
+        },
+        orchestration: {
+          acceptanceCriteria,
+          baseBranch: target.base_branch,
+          baseSha,
+          commandType: parsed.data.commandType,
+          dependencyTaskIds,
+          effectiveRisk: riskAssessment.effectiveRisk.toLowerCase(),
+          model: executionPlan.model,
+          repository: target.repository_full_name,
         },
         requiresOwnerApproval: result.requires_owner_approval,
         idempotentReplay: !result.was_created,

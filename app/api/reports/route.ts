@@ -14,6 +14,8 @@ type ReportRow = {
   published_at: string | null;
   created_at: string;
   project_name: string | null;
+  generated_by_agent_id?: string | null;
+  generated_by_agent_name?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -35,6 +37,9 @@ export async function GET(request: Request) {
           createdAt: row.created_at,
           project: row.project_id
             ? { id: row.project_id, name: row.project_name ?? "Project" }
+            : null,
+          generatedBy: row.generated_by_agent_id
+            ? { id: row.generated_by_agent_id, name: row.generated_by_agent_name ?? "Agent" }
             : null,
         })),
       }),

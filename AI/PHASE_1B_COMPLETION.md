@@ -4,7 +4,7 @@ Scope: the 20-item Phase 1B GitHub control-plane goal. This file scores each
 item against the code, migrations, and test output actually present in this
 repository, plus the live evidence recorded in `AI/CURRENT_STATE.md`.
 
-Last scored: 2026-08-14, loop 1, at branch `claude/softwarefactory-repo-connect-cwbdib`.
+Last scored: 2026-08-14, at branch `claude/softwarefactory-repo-connect-cwbdib`, rebased on `main` after it advanced 144 commits.
 
 ## Evidence classes
 
@@ -23,7 +23,7 @@ and the class is stated explicitly so nothing reads as more proven than it is.
 | --- | --- |
 | `npm run lint` | PASS |
 | `npx tsc --noEmit` | PASS |
-| `npx vitest run` | PASS — 455 tests across 58 files |
+| `npx vitest run` | PASS — 1712 tests across 152 files on the merged tree |
 | `npm run build` | PASS |
 
 ## Scorecard
@@ -77,16 +77,21 @@ The client-safe SQLSTATE table now lives in one place, `lib/server/http.ts`, and
 is shared with the control-plane routes that already used it. Unrecognized codes
 still return an opaque 500, so schema and provider detail cannot leak.
 
-## Observed and accepted, not changed
+## Second defect fixed: server-discovered connection loss
 
-`mark_github_connection_lost` sets `github_installations.status = 'error'`. If
-the installation is already terminally `deleted`, that update trips the terminal
-trigger and the call raises. Both callers already swallow that failure and keep
-the provider error as the primary result. No state is lost: a deleted
-installation is already `deleted` with its connection in `error` and
-`GitHub Connection Lost`, which is the stronger of the two states. Recorded here
-rather than changed, because changing it would alter a verified live path for no
-behavioural gain.
+Extending the matrix to the revocation path exposed two more defects in
+`mark_github_connection_lost`, which had not been redefined since migration
+`004` and whose behavior was never covered. Migration
+`20260814001100_harden_github_connection_loss.sql` fixes both.
+
+| Defect | Effect | Fix |
+| --- | --- | --- |
+| Moving an installation to `error` left `suspended_at` set | Surfaces kept reporting "The GitHub App installation is suspended." after the real evidence was a revocation or permission loss | Clear the stale marker; preserve the discarded state as activity metadata |
+| A terminally deleted installation tripped the terminal trigger | The call aborted, both callers swallow it, so a real discovery was recorded nowhere | Leave the terminal row untouched and still record the loss |
+| A connection with no installation row | Activity event written against a null entity id | Attribute the event to the connection instead |
+
+Both were confirmed by running the new cases against the pre-fix function: the
+suspension marker survived, and the terminal call raised.
 
 ## OWNER ACTION REQUIRED
 

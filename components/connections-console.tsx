@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, NotConnectedBadge, StatusBadge } from "@/components/ui";
+import { WorkerStatusBadge } from "@/components/worker-status";
 
 type Organization = { id: string; name: string; slug: string; role: string };
 type Repository = {
@@ -64,7 +65,6 @@ type HandoffIntent = {
 type LoadState = "loading" | "signed-out" | "onboarding" | "selection" | "ready" | "error";
 
 const otherProviders = [
-  { name: "OpenAI model adapter", connected: false },
   { name: "Anthropic model adapter", connected: false },
   { name: "Vercel deployment adapter", connected: false },
   { name: "Supabase control plane", connected: true },
@@ -192,7 +192,7 @@ export function ConnectionsConsole() {
       const response = await fetch("/api/github/install/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/connections" }),
+        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/solutions/connections" }),
       });
       const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
       if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
@@ -630,6 +630,10 @@ export function ConnectionsConsole() {
       <Card className="p-5">
         <p className="label">Other providers</p>
         <ul className="mt-3 flex flex-wrap gap-2">
+          <li className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
+            <span className="text-sm font-medium text-foreground">OpenAI Codex worker</span>
+            <WorkerStatusBadge />
+          </li>
           {otherProviders.map(({ name, connected }) => (
             <li key={name} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
               <span className="text-sm font-medium text-foreground">{name}</span>
@@ -642,7 +646,7 @@ export function ConnectionsConsole() {
       <p className="text-sm text-muted">
         Access tokens are created on the server, expire quickly, and are never sent to your browser or
         stored in the database.{" "}
-        <Link href="/settings" className="font-medium text-accent-text underline underline-offset-4">
+        <Link href="/solutions/settings" className="font-medium text-accent-text underline underline-offset-4">
           See what it may do
         </Link>
       </p>

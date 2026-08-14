@@ -6,6 +6,31 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  /*
+   * The control plane moved under /solutions. These keep existing links,
+   * bookmarks and any in-flight provider callbacks working.
+   */
+  async redirects() {
+    return [
+      "activity",
+      "admin",
+      "agentos",
+      "agents",
+      "autonomy",
+      "backlog",
+      "bot-manager",
+      "connections",
+      "files",
+      "operations",
+      "projects",
+      "reports",
+      "runs",
+      "settings",
+    ].flatMap((route) => [
+      { source: `/${route}`, destination: `/solutions/${route}`, permanent: true },
+      { source: `/${route}/:path*`, destination: `/solutions/${route}/:path*`, permanent: true },
+    ]);
+  },
   async headers() {
     return [
       {

@@ -64,6 +64,38 @@ Missing, stale, or mismatched deployment evidence produces `inconclusive`, never
 
 A failed validation does not automatically authorize rollback. Evaluate `AUTO_ROLLBACK.md` from fresh state. Database, auth/security, secret, DNS, and other protected-resource changes require owner-led containment or recovery in Phase 1.
 
+## Phase 1E implementation status
+
+Phase 1E records validation evidence and consumes it; it does not deploy. It changes no requirement above.
+
+- `deployment_validations` stores project, deployment, outcome, checks, baseline reference, validator version, policy version, correlation id, and timestamps. Outcomes are `passed`, `failed`, `inconclusive`, or `cancelled`, exactly as this policy defines them.
+- A passing validation is required — and is not sufficient — to resolve an incident: production must also no longer be failing its own monitors, and root cause plus corrective action must be recorded. A successful deployment alone closes nothing.
+- A failed validation does not authorize rollback. Eligibility is re-evaluated from fresh state under `AUTO_ROLLBACK.md`, and the result is always blocked while no executor exists.
+- Validation is currently recorded by an owner or administrator rather than produced by an automated validator, because no deployment integration exists to trigger one.
+
+## Which of these are implemented
+
+Phase 1E stores validation evidence. Phase 1D decides what that evidence proves, in `lib/autonomy/post-deploy.ts`. The two are separate on purpose: storage accepts what an owner recorded, and the decision layer asks whether that record is evidence about the deployment in front of it.
+
+| Requirement | Where | Status |
+| --- | --- | --- |
+| Missing, stale, or mismatched evidence is `inconclusive`, never `passed` | `evaluatePostDeployValidation` | Implemented; `passed` is reachable only by exhausting every way of not reaching it |
+| Evidence requirements (identity, timing, correlation, validator and policy version, baseline, checks) | `ValidationEvidence`, `evidenceIsComplete` | Implemented; a record missing any required field is `inconclusive` |
+| Identity and readiness — evidence matches project, environment, provider, deployment, and commit | Attribution check, evaluated before any check result | Implemented; a mismatched record can neither pass nor fail this deployment |
+| Provider reports a terminal ready state | `DeploymentIdentity.ready` | Implemented |
+| Every validation stage reports | `REQUIRED_STAGES` | Implemented; a stage with no required check is `inconclusive` |
+| Observation window completed | `observationWindowComplete` | Implemented as a required fact; its risk-proportional *duration* is not implemented |
+| Failed → incident, and rollback eligibility re-evaluated from fresh state | `openIncident`, `rollbackEligibilityMustBeReevaluated` | Implemented; this module never authorizes a rollback |
+| Inconclusive → freeze automation and request owner attention | `freezeAutomation`, `ownerAttentionRequired` | Implemented as a decision; no executor applies the freeze |
+| Cancelled → record who and why | `cancelledBy`, `cancelledReason` | Implemented |
+
+Not implemented, and not claimed to be:
+
+- No validator produces this evidence. Nothing runs health checks, smoke journeys, or accessibility checks against a deployment; the evidence is recorded by an owner or administrator. The Phase 1D pipeline's `validate` stage evaluates whatever exists and blocks when nothing does.
+- Thresholds and baseline comparison are carried as references, not computed. Nothing measures error rate, latency, or availability against a baseline.
+- The observation window's duration is not enforced; only its declared completion is read.
+- The `validate` stage is unreachable in this tree, because `merge` blocks first. Its behavior is covered by tests against `lib/autonomy/post-deploy.ts` directly, and a test asserts the unreachability so that connecting an executor forces the path to be reviewed.
+
 ## Phase 1A user-interface rule
 
 Deployment and validation examples must say **Demo Data**. Provider-dependent actions must say **Not Connected**. No Phase 1A report may count a production deployment or rollback unless an independently verified live integration created the evidence above.

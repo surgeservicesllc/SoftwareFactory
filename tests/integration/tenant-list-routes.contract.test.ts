@@ -49,8 +49,15 @@ describe.each(listRoutes)("$name list route", ({ path, rpc }) => {
 
 describe("list routes withhold sensitive columns", () => {
   it("omits agent run payloads and raw provider errors", () => {
-    const route = read("app/api/runs/route.ts");
-    expect(route).not.toMatch(/\b(input|output|error_message)\b/);
+    // Scoped to the GET handler, matching how the commands route is asserted
+    // below. The POST handler records a provider run and therefore must handle
+    // its input, output, and error text; the guarantee being protected here is
+    // that the *list view* never projects those columns to the browser.
+    const listHandler = read("app/api/runs/route.ts")
+      .split("export async function GET")[1]
+      ?.split("export async function POST")[0] ?? "";
+    expect(listHandler).not.toBe("");
+    expect(listHandler).not.toMatch(/\b(input|output|error_message)\b/);
   });
 
   it("omits report bodies from the list view", () => {
@@ -60,6 +67,34 @@ describe("list routes withhold sensitive columns", () => {
   it("omits caller-supplied command parameters", () => {
     const getHandler = read("app/api/commands/route.ts").split("export async function GET")[1] ?? "";
     expect(getHandler).not.toMatch(/\bparameters\b/);
+  });
+});
+
+describe("provider routes preserve hardened tenant reads", () => {
+  const service = read("lib/providers/service.ts");
+  const preview = read("app/api/runs/preview/route.ts");
+  const runs = read("app/api/runs/route.ts");
+
+  it("never restores direct agents or agent_runs reads", () => {
+    for (const source of [service, preview, runs]) {
+      expect(source).not.toMatch(/\.from\(["'](?:agents|agent_runs)["']\)/);
+    }
+    expect(service).toContain('rpc("list_provider_run_metrics"');
+    expect(preview).toContain('rpc("get_provider_agent_assignment"');
+    expect(runs).toContain('rpc("get_provider_agent_assignment"');
+  });
+
+  it("keeps preview no-contact and opts into provider probes only after run validation", () => {
+    expect(preview).not.toContain("probeProviders: true");
+    expect(runs).toContain("{ probeProviders: true }");
+    expect(service).toMatch(/executionEnabled\s*&&\s*options\.probeProviders\s*===\s*true/);
+
+    const taskCheck = runs.indexOf("const task = await loadTask");
+    const agentCheck = runs.indexOf("const agent = await loadAgent");
+    const contextLoad = runs.indexOf("const context = await loadProjectRoutingContext");
+    expect(taskCheck).toBeGreaterThan(-1);
+    expect(agentCheck).toBeGreaterThan(taskCheck);
+    expect(contextLoad).toBeGreaterThan(agentCheck);
   });
 });
 

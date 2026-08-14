@@ -1,0 +1,83 @@
+name: Phase 1C Codex worker
+
+on:
+  repository_dispatch:
+    types:
+      - softwarefactory_phase1c_command
+      - softwarefactory_phase1c_preflight
+  schedule:
+    - cron: "*/5 * * * *"
+permissions:
+  contents: read
+
+concurrency:
+  group: phase1c-worker-${{ github.event.client_payload.command_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    name: Claim one durable SoftwareFactory run
+    if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+      SOFTWAREFACTORY_WORKER_ENABLED: "true"
+      SOFTWAREFACTORY_WORKER_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
+      SOFTWAREFACTORY_CODEX_MODEL: gpt-5.3-codex
+      SOFTWAREFACTORY_REQUIRED_CHECKS: Lint, typecheck, test, and build|Browser and accessibility tests
+      SOFTWAREFACTORY_WORKER_RUNTIME: docker
+      GITHUB_COMMIT_IDENTITY_NAME: surgeservicesllc
+      GITHUB_COMMIT_IDENTITY_EMAIL: surgeservicesllc@gmail.com
+    steps:
+      - name: Check out the reviewed worker release
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        # actions/setup-node v4 (reviewed immutable commit)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked worker runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # No OPENAI_API_KEY is supplied to any step. Codex authenticates with the
+      # owner's ChatGPT subscription, so no step here can consume per-token API
+      # credit. Supplying the key without also setting
+      # SOFTWAREFACTORY_CODEX_AUTH_MODE=api_key is a configuration error the
+      # worker refuses, rather than a silent return to billing.
+      - name: Verify the pinned Codex CLI and resolved authentication mode
+        env:
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
+        run: npm run worker:preflight
+
+      - name: Report the resolved authentication without claiming a run
+        if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'softwarefactory_phase1c_preflight' }}
+        env:
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
+        run: npm run worker:preflight -- --execute
+
+      - name: Preload the pinned validation sandbox
+        if: ${{ github.event.action != 'softwarefactory_phase1c_preflight' }}
+        run: |
+          docker pull node:22.22.0-bookworm@sha256:20a424ecd1d2064a44e12fe287bf3dae443aab31dc5e0c0cb6c74bef9c78911c
+          docker image inspect --format='{{.RepoDigests}}' node:22.22.0-bookworm@sha256:20a424ecd1d2064a44e12fe287bf3dae443aab31dc5e0c0cb6c74bef9c78911c
+
+      - name: Claim and execute one durable run
+        if: ${{ github.event.action != 'softwarefactory_phase1c_preflight' }}
+        env:
+          SOFTWAREFACTORY_WORK_ROOT: ${{ runner.temp }}/softwarefactory-worker
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
+          GITHUB_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64 }}
+          GITHUB_CANDIDATE_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID }}
+          GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64 }}
+        run: npm run worker:once
