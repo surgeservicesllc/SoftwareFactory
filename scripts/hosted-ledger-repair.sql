@@ -23,7 +23,7 @@
 --    record is what tooling believes.
 --
 -- Four of the migrations marked "not applied" in the dashboard are in fact
--- applied: 20260814000220, 20260814000310, 20260814000400 and 20260814000700.
+-- applied: 20260814000220, 20260814000250, 20260814000400 and 20260814000700.
 -- Their objects are present. Do not re-run them.
 
 -- ---------------------------------------------------------------------------
@@ -55,8 +55,8 @@ insert into supabase_migrations.schema_migrations (version) values
   ('20260813001700'),  -- link_promoted_repair_task                (applied)
   ('20260814000210'),  -- phase2c_resource_persistence             (step 1)
   ('20260814000220'),  -- declare_model_strength_and_context       (applied)
+  ('20260814000250'),  -- declare_model_characteristics            (applied)
   ('20260814000300'),  -- agentos_isolation_model                  (applied)
-  ('20260814000310'),  -- declare_model_characteristics            (applied)
   ('20260814000400'),  -- agentos_inbox                            (applied)
   ('20260814000500'),  -- agentos_templates_and_chains             (applied)
   ('20260814000600'),  -- agentos_compound_engineer_template       (applied)

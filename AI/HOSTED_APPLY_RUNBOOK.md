@@ -3,8 +3,12 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 
 This exists because the owner actions were previously described loosely — including by me, as
-"three unhosted migrations", which undercounted. There are **six**, and one of them has a
-materially different approval requirement from the others.
+"three unhosted migrations", which undercounted.
+
+**The current total is 15**, listed across the two tables below: seven in "What is actually
+unhosted" (row 6 bundles two migrations) and eight in "Added 2026-08-14". One of the 15 has a
+materially different approval requirement from the others. The repository total is 56 migration
+files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 
 > ## Measured against hosted, 2026-08-14 21:00Z — this section supersedes the table below
 >
@@ -63,7 +67,7 @@ Everything after that point is unhosted:
 | 3 | `20260813001600_autonomy_decision_audit.sql` | Append-only `autonomy_decisions` | Ordinary forward migration |
 | 4 | `20260813001700_link_promoted_repair_task.sql` | `link_repair_promotion`, owner-only | Ordinary forward migration |
 | 5 | `20260814000100_phase2c_resource_persistence.sql` | `resource_breakers`, `resource_breaker_events`, `resource_assignments` | Ordinary forward migration |
-| 6 | `20260814000300_declare_model_characteristics.sql` + `20260814000200_declare_model_strength_and_context.sql` | Owner-declared model strength/context, and the function that sets them | Ordinary forward migration |
+| 6 | `20260814000200_declare_model_strength_and_context.sql` + `20260814000250_declare_model_characteristics.sql` | Owner-declared model strength/context, and the function that sets them | Ordinary forward migration |
 
 Migration 1 is not mine and I have not verified its frozen identity — only that it applies. Treat
 its approval requirement as still standing.
@@ -75,7 +79,7 @@ ordering or concurrency problems):
 
 | Check | Result |
 | --- | --- |
-| All 48 migrations apply in order from empty | **Pass** |
+| The whole chain applies in order from empty | **Pass** (48 files at the time of that run; 56 now — the later eight are covered in "Added 2026-08-14") |
 | A baseline built to exactly `20260813001400`, then the six applied in order | **Pass, each individually reported** |
 | RLS + FORCE RLS on every public table after apply | **Pass — 0 missing of 63** |
 | `service_role` table privileges after apply | **Pass — exactly the four GitHub ingress tables** |
@@ -130,6 +134,8 @@ Eight further migrations are unhosted. All eight apply cleanly in order against 
 | Migration | What it adds | Verified by |
 |---|---|---|
 | `20260814000300_agentos_isolation_model` | 9 tables: environments, MCP connections, skills, default-deny agent grants | `agentos-isolation.behavior` |
+
+Note: `declare_model_characteristics` was renumbered from `20260814000300` to `20260814000250` on 2026-08-14. It had collided with `agentos_isolation_model`, which two agents had independently timestamped the same. See "Version collisions" below.
 | `20260814000400_agentos_inbox` | Inbox messages, one open question per run, answer/resume routines | `agentos-inbox.behavior` |
 | `20260814000500_agentos_templates_and_chains` | Templates, chain steps, the two completion paths | `agentos-chains.behavior` |
 | `20260814000600_agentos_compound_engineer_template` | Seeds the built-in nine-step workflow (idempotent, per organization) | `agentos-chains.behavior` |
@@ -151,6 +157,29 @@ What they do **not** do, which is what makes them safe to apply:
 
 Order matters only in that `000600` needs `000500`, `000900` needs the tables before it, and
 `001000` needs `20260813001600`. Applying them in filename order satisfies all three.
+
+## Version collisions
+
+Two migrations must never share a version prefix. Supabase's ledger keys on the numeric prefix,
+not the filename, so two files at `20260814000300_*` are two applies competing for one primary key
+in `supabase_migrations.schema_migrations`. The first records the version, the second collides, and
+`db push` fails partway with the schema half-applied against hosted.
+
+That state existed in this repository on 2026-08-14 and is fixed: `declare_model_characteristics`
+moved to `20260814000250`, which keeps it after the `20260814000200` migration whose columns it
+depends on and leaves the AgentOS chain `000300`→`001000` intact. Neither file was hosted, so the
+renumber carries no ledger consequence — this was safe to fix precisely because it was caught
+before the apply.
+
+Nothing else in the suite catches this class of defect. Both files applied cleanly in isolation,
+both applied cleanly in filename order under PGlite (which has no ledger), and every behavioral
+test passed, because the failure lives in the ledger rather than the schema. It surfaces for the
+first time during the one operation that is hardest to reverse.
+
+`tests/integration/migration-version-uniqueness.test.ts` now asserts uniqueness, that every
+filename parses, and that filename order matches version order. It has happened twice, both times
+from separate agents picking the same timestamp in parallel, so it is checked rather than
+remembered.
 
 ## Not covered here
 
