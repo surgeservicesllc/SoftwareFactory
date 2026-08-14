@@ -211,8 +211,11 @@ Measured directly rather than inferred from a merge succeeding.
 - `https://www.theagoras.com` and `https://www.theagoras.com/solutions` both return **200**. Production is live and externally observable.
 - The served build's sitemap reports `lastmod` `2026-08-14T21:38:25Z`, which corresponds to the deploy triggered by `8fd28cf`.
 - **Production is behind `main`.** `f793268` and `145a31d` merged after that build and are not deployed.
-- The cause is not a failing build. Vercel began returning `api-deployments-free-per-day` at roughly 21:54 UTC — the free tier's 100-deployments-per-day cap, reached by this session's pull-request volume. Preview and production deployments draw on the same cap, so production cannot catch up until the cap resets (~24 hours) or the plan is upgraded.
-- This is an external quota, not a repository defect. No code change clears it, and it is recorded here so a later reader does not diagnose the lag as a broken pipeline.
+- Vercel returned `api-deployments-free-per-day` — the free tier's 100-deployments-per-day cap, reached by this session's pull-request volume — on deployments at roughly 21:54 and 22:02 UTC. Its message said to retry in 24 hours.
+- That message overstated it. A preview deployment succeeded at 22:16 UTC, so the cap throttles rather than blocking outright for a day. **Production had still not advanced past the 21:38 build as of 22:16**, despite `main` moving at 21:43 and 22:13.
+- What is therefore established: production lags `main`, and rate-limit rejections were observed in that window. What is **not** established is the precise cause of the lag. A rejected production deployment does not appear to be retried automatically, but this environment holds no `VERCEL_TOKEN`, so the deployment list cannot be read and the distinction between "rejected and not retried" and "queued behind the cap" cannot be settled from here.
+- Build identity is inferred from the served sitemap's `lastmod`, which changes only on rebuild. That is a reasonable proxy, not a deployment ID.
+- The remedy, if production is still behind after the cap resets, is an owner-triggered redeploy of `main` from the Vercel dashboard. No code change affects any of this.
 
 ## Migration ledger integrity
 
