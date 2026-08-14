@@ -57,7 +57,7 @@ describe("Phase 2C resource persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260814000200_declare_model_strength_and_context.sql");
+    expect(migrationFiles.at(-1)).toBe("20260814000300_agentos_isolation_model.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
