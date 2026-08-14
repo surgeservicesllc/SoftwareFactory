@@ -20,7 +20,7 @@ The deployed Phase 1C application uses Vercel to:
 - record dispatch success/delay and show truthful status; and
 - read bounded heartbeat/result projections from Supabase.
 
-For Phase 1C, Vercel does not use the worker's `OPENAI_API_KEY`, execute `scripts/worker.mts`, store a workspace, run Docker, push a branch, create a PR directly, or wait through Codex/CI execution. Those actions belong to the protected GitHub Actions worker.
+For Phase 1C, Vercel does not hold any Codex credential, execute `scripts/worker.mts`, store a workspace, run Docker, push a branch, create a PR directly, or wait through Codex/CI execution. Those actions belong to the protected GitHub Actions worker. Phase 1C no longer has a paid-API credential at all: the worker authenticates Codex with the owner's ChatGPT subscription through `SOFTWAREFACTORY_CODEX_AUTH_JSON`, which lives only in GitHub Actions.
 
 ## Phase 2A application responsibilities
 
@@ -62,7 +62,7 @@ After deploying:
 ## Restrictions
 
 - Do not place GitHub Actions worker secrets in Vercel unless the application separately requires the same value for its existing Phase 1B server routes.
-- Do not add `OPENAI_API_KEY` to Vercel for Phase 1C; add it only for an explicitly configured Phase 2A advisory provider and keep the worker credential separately scoped in GitHub Actions.
+- Do not add any AI provider key to Vercel for Phase 1C. Phase 1C has no paid-API path, and its subscription credential belongs only in GitHub Actions.
 - Do not add merge, deploy, rollback, or worker execution to Vercel request handlers.
 - Do not call the Vercel deployment/rollback adapter Connected because the UI is hosted.
 - A READY deployment, configured name, queued command, or completed idle one-shot invocation is not a live Codex worker; require a fresh active heartbeat during a real end-to-end run.

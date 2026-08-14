@@ -147,6 +147,32 @@ owner's plan or OpenAI's terms disallow headless subscription use, that is a gen
 limitation, and the honest outcome is to report Phase 1C as blocked on it rather than to restore
 API billing.
 
+## 5a. A conflict outside this phase, flagged rather than resolved
+
+The cost rule was given for Phase 1C, and Phase 1C now satisfies it. But the rule as stated —
+"SoftwareFactory must operate without purchasing, funding or consuming OpenAI/Anthropic API
+tokens or prepaid AI credits" — is broader than one phase, and **Phase 2A conflicts with it**.
+
+`lib/providers/openai-adapter.ts` and `lib/providers/anthropic-adapter.ts` make per-token API
+calls, and `docs/VERCEL_SETUP.md` documents holding `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`
+in Vercel for that path. Those calls are advisory-only, produce no repository mutation, and are
+gated behind an owner-controlled organization switch that defaults OFF — so nothing is being
+spent today, and no live provider call has ever succeeded.
+
+This was left in place deliberately rather than removed:
+
+- The instruction scoped the work to Phase 1C and said not to begin other phases. Deleting
+  another phase's provider layer is not the change that was asked for.
+- The switch already defaults OFF, so the conflict is latent rather than active.
+- Phase 2A's purpose is advisory analysis, which is a different question from zero-token
+  *execution*. Whether it should also become zero-token is an architecture decision with real
+  consequences, and it is the owner's to make.
+
+**Owner decision needed:** either Phase 2A is exempt from the cost rule as an
+explicitly-enabled advisory path, or it should be removed or re-based on the same
+subscription-authenticated capability. Until that is answered, the honest statement is that
+Phase 1C is zero-token and Phase 2A is a paid path that is currently switched off.
+
 ## 6. Not started, and deliberately
 
 No Phase 1D or later execution authority is granted by any of this. The worker remains
