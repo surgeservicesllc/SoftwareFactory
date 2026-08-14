@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
     return [
       "activity",
       "admin",
+      "agentos",
       "agents",
       "backlog",
       "bot-manager",

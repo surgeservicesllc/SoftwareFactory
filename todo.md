@@ -1,7 +1,7 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 2B graph engineering open in PR #27; AgentOS, Phase 2C routing and probe hardening merged)
-Current `main`: `5364b66` — RPC call sites verified against the migrated schema
+Last updated: 2026-08-14 (Phase 2B graph engineering open in PR #27; AgentOS wired to Supabase, roadmap audit merged)
+Current `main`: `2dc60e1` — roadmap audited against main
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -17,6 +17,57 @@ sections separate so two agents editing at once conflict on one section rather t
 - Run `npm run lint && npm run typecheck && npm test && npm run build` before every commit.
 - Playwright in this sandbox: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
 - Merging to `main` deploys production through Vercel. CI runs on `pull_request` and on push to `main`.
+
+## Roadmap audit — 2026-08-14
+
+Audited against `main`, with evidence, because the phase table and the repository
+had drifted apart.
+
+**Naming discrepancy, flagged rather than silently reconciled.** The roadmap labels
+2B "Multi-agent teams" and 2C "Multi-project portfolio". The repository's own plans
+use 2B = **Graph Engine** (`AI/PHASE_2B_IMPLEMENTATION_PLAN.md`) and 2C =
+**Intelligent Agent & Resource Manager** (`AI/PHASE_2C_IMPLEMENTATION_PLAN.md`).
+The "Phase 2C" that is built and merged is the Resource Manager — it is **not** the
+roadmap's multi-project portfolio. Someone should decide which numbering is
+canonical; until then both readings are in circulation and they disagree.
+
+| Phase | Roadmap result | Actual state |
+| --- | --- | --- |
+| 1A Control plane | SoftwareFactory website | **Done.** Marketing site plus console under `/solutions`, merged. |
+| 1B GitHub | Real repos/files/PRs | **Partial.** Owner path live; draft-PR-only writes work. Second tenant, reverse handoff, disconnect/loss and the adverse matrix are unproven. |
+| 1C Codex + complete site | Bot Manager can command real engineering work | **Not achieved.** Worker is published; no successful live run has ever occurred. Provider credits exhausted, key removed as compromised, no factory branch or draft PR produced. |
+| 1D Autonomous loop | GREEN work builds → tests → merges → deploys automatically | **Decision layer done; executor deliberately absent.** Kill switch is locked ON by CHECK constraint, all nine actions OFF, `MERGE_EXECUTOR_NOT_CONNECTED` / `DEPLOY_EXECUTOR_NOT_CONNECTED` asserted by test. `AGENTS.md` forbids introducing auto-merge in this line of phases, so the stated result is blocked by **policy**, not only by missing work. |
+| 1E Production operations | Monitor → detect → fix → rollback | **~87% in-tree.** Monitor, detect, classify, protect, diagnose and repair-queueing are built and merged. "Fix" needs Codex execution; "rollback" has no executor by design. Migrations unhosted. |
+| 2A Claude | Add Claude as another AI provider | **Built, Not Connected.** Adapter and schema exist; `ai_provider_execution_enabled` defaults OFF and no successful live call has been made. |
+| 2B Multi-agent teams | Claude + Codex specialists work together | **0% implemented**, per the phase's own plan. No teams, orchestration, handoff persistence, parallel execution, or team UI exist. |
+| 2C Multi-project portfolio | Factory manages all your repositories | **Not built as described.** The schema is multi-project and `operations_portfolio_summary` aggregates across projects, but exactly one repository is connected and there is no portfolio management surface. (The merged "Phase 2C" is the Resource Manager — a different thing.) |
+| 3 Self-improving Factory | Factory audits and improves itself | **0%.** No plan document exists. |
+
+### Not done, and therefore open
+
+- [ ] **1B:** live second-tenant matrix, reverse/evidence-bound handoff, explicit
+      disconnect and connection-loss states, and the remaining adverse cases
+      (stale SHA, approval expiry, revoked permission). Needs a second real tenant.
+- [ ] **1C:** one successful live Codex run producing a factory branch and draft PR.
+      Blocked on a funded provider key and a registered worker. The previously
+      pasted key is compromised and must not be used.
+- [ ] **1D:** the merge and deploy executors. **Do not build these without an
+      explicit owner decision** — `AGENTS.md` forbids introducing an auto-merge or
+      production deployment workflow in this line of phases, and the tests that
+      assert the blockers are supposed to fail when an executor is connected.
+- [ ] **1E:** rollback execution (no deployment adapter; `AUTO_ROLLBACK.md`
+      disables it), Codex-backed repair execution, continuous scheduled monitoring,
+      and a first real observed production incident.
+- [ ] **2A:** a successful live provider call, which needs a credential and the
+      owner switch turned on.
+- [ ] **2B (roadmap: multi-agent teams):** everything. Teams, orchestration, handoff
+      persistence, parallel execution and team UI are all absent.
+- [ ] **2C (roadmap: multi-project portfolio):** connecting more than one
+      repository, and a portfolio surface that manages them. Distinct from the
+      merged Resource Manager work.
+- [ ] **3 (self-improving Factory):** no plan, no implementation. Should not begin
+      before 1D's executor question is settled, because a Factory that improves
+      itself is exactly the case the guardrails exist for.
 
 ## Repository status at a glance
 
