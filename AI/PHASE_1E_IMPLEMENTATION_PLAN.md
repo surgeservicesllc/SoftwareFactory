@@ -137,7 +137,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### Evidence
 
 - `npm run lint`, `npm run typecheck`: pass.
-- `vitest run`: 137 files / 1556 tests pass on the merged tree, including 30 Phase 1E behavioral tests, a 3-test end-to-end journey, 19 boundary contracts, 6 repair-promotion behaviors, 5 real-PostgreSQL concurrency tests, and 64 policy/probe/console/journey unit tests.
+- `vitest run`: 140 files / 1589 tests pass on the merged tree, including 30 Phase 1E behavioral tests, a 3-test end-to-end journey, 19 boundary contracts, 6 repair-promotion behaviors, 5 real-PostgreSQL concurrency tests, and 64 policy/probe/console/journey unit tests.
 - `npm run build`: compiles cleanly, including 12 operations APIs and the Operations page.
 - Playwright: 117/117 across desktop, tablet, and mobile including axe on the merged tree.
 - The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.

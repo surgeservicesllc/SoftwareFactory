@@ -180,7 +180,7 @@ describe("Phase 1E production operations behavior", () => {
     // tables, the Phase 1D decision audit, and the three Phase 2C resource
     // tables. The filter below is the real guarantee — this count exists so a
     // new table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(63);
+    expect(rlsRows).toHaveLength(73);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

@@ -50,7 +50,7 @@ describe("Phase 2C model declaration", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260814000300_declare_model_characteristics.sql");
+    expect(migrationFiles.at(-1)).toBe("20260814000400_agentos_inbox.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
