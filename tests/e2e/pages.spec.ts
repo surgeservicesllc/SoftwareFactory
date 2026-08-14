@@ -25,6 +25,7 @@ const routes = [
   { path: "/solutions/backlog", heading: "Backlog" },
   { path: "/solutions/runs", heading: "Runs" },
   { path: "/solutions/reports", heading: "Reports" },
+  { path: "/solutions/agentos", heading: "AgentOS" },
   { path: "/auth/sign-in", heading: "Sign in" },
   { path: "/auth/sign-up", heading: "Create your account" },
 ] as const;

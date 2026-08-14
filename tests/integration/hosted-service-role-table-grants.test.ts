@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260814000800_agentos_triggers_and_automations.sql";
+  "20260814000900_agentos_safe_list_reads.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
