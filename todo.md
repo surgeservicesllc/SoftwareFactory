@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–4, open in PR #27)
+Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–5, open in PR #27)
 Current `main`: `438a370` — Phase 2C Resource Manager UI
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
@@ -26,7 +26,7 @@ sections separate so two agents editing at once conflict on one section rather t
 | Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Hosted migration `20260813000500`; executors owned elsewhere |
 | Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
-| Phase 2B — graph engineering | **Open in PR #27**; stages 1–4 built, hosted schema applied | Provider credentials for every live demonstration |
+| Phase 2B — graph engineering | **Open in PR #27**; stages 1–5, 6 of 7 demonstrations passing | Provider credentials for the live model calls only |
 | Phase 2C — resource manager | Merged; scoring core, persistence and UI | Hosted migration `20260814000300`; wiring into the Phase 1C DAG |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 | Sign-up and sign-in | Merged (PR #15) | Custom SMTP; the owner account is unconfirmed |
@@ -34,6 +34,42 @@ sections separate so two agents editing at once conflict on one section rather t
 Gates on PR #27 (`c83c3d9`): lint, typecheck, 135 files / 1602 tests, clean production build,
 Playwright green. CI run
 [`31822563019`](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31822563019).
+
+---
+
+## If you are picking this up cold
+
+PR **#27** (draft, branch `claude/github-connection-confirm-qe3tqm`) carries all
+of Phase 2B. `main` moved four commits during it and was merged in at `2a223b1`;
+re-check mergeability before doing anything, because two workstreams are landing
+concurrently.
+
+**Start here, in this order:**
+
+1. **Read `AI/PHASE_2B_DEMONSTRATIONS.md`.** It states exactly what is proven
+   without a credential and what is not. Do not re-litigate that boundary; it is
+   the honest one and it was got wrong once already (stage 5 was recorded as
+   fully credential-blocked when six of seven demonstrations needed no
+   credential at all).
+2. **The next buildable thing is anchor persistence** — writing anchors against
+   `node_runs` and `graph_verifications`. The evidence model exists in
+   `lib/graph/anchors.ts`; the persistence does not. Stage 3 lists it.
+3. **Everything else outstanding in Phase 2B needs a provider key.** Do not
+   simulate it. `lib/graph/provider-bridge.ts` is written and unit-tested against
+   stubs and is the seam a live `executeNode` plugs into.
+
+**Two traps that have already cost time:**
+
+- **Migration versions collide across workstreams.** It has happened twice
+  (`20260813000500`, then `20260814000100`). Before adding a migration, list
+  `supabase/migrations/` and pick a version after everything applied. An applied
+  filename cannot move; an unhosted one can.
+- **Automatic CI is intermittent.** A missing run and a not-yet-started run look
+  identical. Confirm an Actions run exists *for the head SHA* before believing a
+  PR is gated, and dispatch `ci.yml` manually if none does.
+
+Verify by exit code, not by reading output — an `&&`-chained gate command masked
+a real typecheck failure earlier in this work.
 
 ---
 
@@ -296,15 +332,40 @@ frozen policies, discovery stop conditions.
       of judgement work. Its most valuable recommendation is the one an orchestration engine is
       least inclined to make: this did not need to be a graph.
 
-### Stage 5 — demonstrations — all blocked on provider credentials
+### Stage 5 — demonstrations — six of seven done
 
-- [ ] A. A simple task takes the single-agent path with no graph overhead.
-- [ ] B. Wide audit: 20+ independent nodes, fan-out, verification, reduction.
-- [ ] C. Code feature: plan → parallel Codex → integration → fresh review → gates.
-- [ ] D. Silent failure: one node fails and the graph refuses to claim completion.
-- [ ] E. Hidden conflict: two nodes contend and the lock prevents unsafe parallelism.
-- [ ] F. Discovery terminates on the no-new-findings condition.
-- [ ] G. Budget degrades and stops gracefully at the limit.
+Evidence: `tests/integration/graph-demonstrations.test.ts` (19 passing, 1
+skipped). Written up in `AI/PHASE_2B_DEMONSTRATIONS.md`.
+
+**These were previously recorded as "all blocked on provider credentials". That
+was wrong**, and the correction is worth keeping: the runner takes an injected
+`executeNode`, so every decision the *engine* makes — topology, edge removal,
+scheduling, retry, contract enforcement, fan-in, budget, discovery, locks — is
+provable with a scripted executor. Only the claim that a *real model* satisfies
+these contracts needs a credential.
+
+- [x] A. A simple task takes the single-agent path. Two dependent steps, one
+      node, and a five-node chain all refuse to become a scheduled graph.
+- [x] B. Wide audit: 20 independent nodes compile to `DIAMOND` at width 20 and
+      the runner dispatches all 20 in one batch — asserted by recording the
+      widest in-flight count rather than trusting the plan. Reduction collapses
+      20 duplicates to 1.
+- [ ] C. Code feature: **shape proven, live run skipped.** Three parallel
+      branches converge on integration and the reviewer runs only after an
+      anchor observed the tests. The live half needs a provider credential and a
+      registered Codex worker; it is `skipIf`-skipped so it starts *running*
+      when credentials land rather than starting to fail.
+- [x] D. Silent failure: a failed node blocks its dependants and nothing else,
+      prose where structure was required is rejected at the boundary, and a node
+      that never ran counts as missing rather than as failed or succeeded.
+- [x] E. Hidden conflict: two writers of one file refuse to compile; declaring
+      the conflict resolved puts them in separate lock waves; a read-after-write
+      edge nobody proposed is discovered from declared resources.
+- [x] F. Discovery stops on two quiet rounds, stops at the round ceiling, and
+      cannot be sustained by unverified candidates.
+- [x] G. Budget reduces concurrency, then stops gracefully keeping finished work;
+      a failed call is charged (3 × 500 = 1500 tokens); no cost is invented when
+      pricing is undeclared.
 
 ---
 

@@ -38,6 +38,32 @@ Manual Phase 1C execution may handle only authenticated owner-submitted GREEN/YE
 
 ## Current repository work
 
+**Phase 2B (graph engineering) is open in draft PR #27**, branch
+`claude/github-connection-confirm-qe3tqm`. Stages 1–5 are built: the pure engine
+core (`lib/graph/`), thirteen durable tables plus a SECURITY DEFINER write
+boundary (both **applied to hosted**), the runner and provider bridge, the
+templates/Workflows/observability/optimizer surfaces, and six of the seven
+demonstrations. Read `todo.md` first — it opens with a pickup section — then
+`AI/GRAPH_ENGINEERING.md` and `AI/PHASE_2B_DEMONSTRATIONS.md`.
+
+Three facts a successor needs and will not infer:
+
+- **The credential boundary is narrower than it looks.** `runGraph` takes an
+  injected `executeNode`, so every decision the engine makes is testable without
+  a provider. Only the claim that a real model satisfies these contracts needs
+  `ANTHROPIC_API_KEY` and a funded `OPENAI_API_KEY`. Stage 5 was once recorded
+  as fully credential-blocked; that was wrong, and six demonstrations now pass.
+- **Migration versions collide across concurrent workstreams.** Twice so far:
+  `20260813000500`, then `20260814000100` when Phase 2C's
+  `phase2c_resource_persistence` and Phase 2B's `graph_engineering` both claimed
+  it. The ledger stores one row per version, so the loser can never be applied.
+  `graph_engineering` was already hosted and could not move, so the unhosted
+  Phase 2C file was renamed to `20260814000300`. Check `supabase/migrations/`
+  before choosing a version.
+- **Automatic CI is intermittent.** A missing run and a not-yet-started run are
+  indistinguishable. Confirm an Actions run exists for the exact head SHA before
+  treating a PR as gated.
+
 Phase 2A is a separate advisory path. It can route a bounded task to an official Anthropic/OpenAI adapter and store a structured analysis artifact only after hosted schema, server credential, provider health, and explicit organization enablement exist. It cannot access a Git workspace or authorize a repository, approval, merge, deployment, rollback, or Phase 1C/1D switch.
 
 ## Repository identity

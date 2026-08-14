@@ -156,14 +156,14 @@ export function recommend(input: OptimizerInput): readonly Recommendation[] {
     });
   }
 
-  if (structural && metrics.reductionRatio !== null && metrics.reductionRatio > 0.9) {
+  if (structural && metrics.retentionRatio !== null && metrics.retentionRatio > 0.9) {
     recommendations.push({
       kind: "TIGHTEN_REDUCTION",
       detail:
         "Reduction discarded almost nothing, so the reduce step is currently paying for itself only in ordering. Either the inspectors overlap less than assumed, or the dedupe key is too specific.",
       tradeoff:
         "A broader dedupe key risks collapsing genuinely distinct findings into one.",
-      evidence: [`Reduction retained ${Math.round(metrics.reductionRatio * 100)}% of items.`],
+      evidence: [`Reduction retained ${Math.round(metrics.retentionRatio * 100)}% of items.`],
       confidence: "LOW",
     });
   }

@@ -133,7 +133,7 @@ describe("efficiency metrics", () => {
     expect(metrics.verifierRejectionRate).toBeNull();
     expect(metrics.retryRate).toBeNull();
     expect(metrics.achievedParallelism).toBeNull();
-    expect(metrics.reductionRatio).toBeNull();
+    expect(metrics.retentionRatio).toBeNull();
   });
 });
 

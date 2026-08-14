@@ -65,8 +65,16 @@ export type GraphMetrics = {
   /** Share of verified nodes a verifier rejected. Null if nothing was verified. */
   readonly verifierRejectionRate: number | null;
   readonly verifiedNodeCount: number;
-  /** Items retained ÷ items produced. Null if no node reported a collection. */
-  readonly reductionRatio: number | null;
+  /**
+   * Items retained ÷ items produced. Null if no node reported a collection.
+   *
+   * Named for what it measures rather than for the step it measures, because
+   * `reducers.ts` already has a `reductionRatio` meaning `1 - retained/produced`
+   * — the inverse. Two fields with one name and opposite senses is a misreading
+   * waiting to happen, so this one is a retention ratio and says so: high means
+   * reduction removed little.
+   */
+  readonly retentionRatio: number | null;
   readonly completedCount: number;
   readonly failedCount: number;
   readonly neverReportedCount: number;
@@ -190,7 +198,7 @@ export function computeGraphMetrics(observation: GraphObservation): GraphMetrics
     verifierRejectionRate:
       verified.length > 0 ? Number((rejected.length / verified.length).toFixed(2)) : null,
     verifiedNodeCount: verified.length,
-    reductionRatio: produced > 0 ? Number((retained / produced).toFixed(2)) : null,
+    retentionRatio: produced > 0 ? Number((retained / produced).toFixed(2)) : null,
     completedCount: completed.length,
     failedCount: failed.length,
     neverReportedCount: neverReported.length,
@@ -258,9 +266,9 @@ export function describeMetrics(metrics: GraphMetrics): readonly string[] {
     lines.push(`${metrics.retryCount} retry attempt(s) across the run.`);
   }
 
-  if (metrics.reductionRatio !== null) {
+  if (metrics.retentionRatio !== null) {
     lines.push(
-      `Reduction kept ${Math.round(metrics.reductionRatio * 100)}% of produced items.`,
+      `Reduction kept ${Math.round(metrics.retentionRatio * 100)}% of produced items.`,
     );
   }
 
