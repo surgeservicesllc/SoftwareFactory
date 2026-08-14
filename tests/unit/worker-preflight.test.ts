@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { CodexAuthResolution } from "@/lib/worker/auth";
 import { verifyWorkerProviderAccess, WorkerPreflightError } from "@/lib/worker/preflight";
 
 const apiKey = "dedicated-test-api-key-that-must-never-appear";
 const model = "gpt-5.3-codex";
+
+/** The opt-in billed mode, which is the only mode that reaches the API. */
+const billed: CodexAuthResolution = Object.freeze({
+  mode: "api_key",
+  authJson: null,
+  apiKey,
+  zeroToken: false,
+});
 
 function successfulCommand() {
   return vi.fn(async (
@@ -25,7 +34,7 @@ describe("Phase 1C worker provider preflight", () => {
     ));
 
     await verifyWorkerProviderAccess({
-      apiKey,
+      auth: billed,
       model,
       environment: {
         PATH: "/safe/bin",
@@ -61,7 +70,7 @@ describe("Phase 1C worker provider preflight", () => {
       }), { status: 200 }));
 
     await verifyWorkerProviderAccess({
-      apiKey,
+      auth: billed,
       executeProbe: true,
       fetcher,
       model,
@@ -83,7 +92,7 @@ describe("Phase 1C worker provider preflight", () => {
 
   it("fails closed with a fixed, secret-free error when model access is denied", async () => {
     const result = verifyWorkerProviderAccess({
-      apiKey,
+      auth: billed,
       model,
       fetcher: vi.fn(async () => new Response(JSON.stringify({
         error: { code: "insufficient_quota", message: `denied ${apiKey}` },
@@ -98,16 +107,49 @@ describe("Phase 1C worker provider preflight", () => {
     await expect(result).rejects.toSatisfy((error: unknown) => !String(error).includes(apiKey));
   });
 
+  it("makes no request to the billed API surface in subscription mode", async () => {
+    // A preflight that called the API to prove a zero-token configuration
+    // would defeat what it was checking, so the fetcher must stay untouched.
+    const fetcher = vi.fn();
+    const runCommand = successfulCommand();
+
+    await verifyWorkerProviderAccess({
+      auth: {
+        mode: "subscription",
+        authJson: '{"tokens":{"access_token":"fabricated"}}',
+        apiKey: null,
+        zeroToken: true,
+      },
+      model,
+      executeProbe: true,
+      fetcher,
+      runCommand,
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    // The pinned CLI is still verified; that check is local and free.
+    expect(runCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("still rejects a mismatched CLI in subscription mode", async () => {
+    await expect(verifyWorkerProviderAccess({
+      auth: { mode: "subscription", authJson: "{}", apiKey: null, zeroToken: true },
+      model,
+      fetcher: vi.fn(),
+      runCommand: vi.fn(async () => ({ stdout: "codex-cli 0.148.0\n" })),
+    })).rejects.toMatchObject({ code: "codex_cli_version_mismatch" });
+  });
+
   it("rejects a CLI or model descriptor that differs from the reviewed release", async () => {
     await expect(verifyWorkerProviderAccess({
-      apiKey,
+      auth: billed,
       model,
       fetcher: vi.fn(),
       runCommand: vi.fn(async () => ({ stdout: "codex-cli 0.148.0\n" })),
     })).rejects.toMatchObject({ code: "codex_cli_version_mismatch" });
 
     await expect(verifyWorkerProviderAccess({
-      apiKey,
+      auth: billed,
       model,
       fetcher: vi.fn(async () => new Response(
         JSON.stringify({ id: "different-model", object: "model" }),
