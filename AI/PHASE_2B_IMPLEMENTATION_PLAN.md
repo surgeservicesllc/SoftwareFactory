@@ -1,129 +1,161 @@
-# Phase 2B — Multi-Agent Teams: implementation plan
+# Phase 2B — Graph Engineering: audit and implementation plan
 
-Audit date: 2026-08-13. Branch `claude/github-connection-confirm-qe3tqm`.
+Audit date: 2026-08-14, against `main` at `5ad3142`.
 
-Phase 2B turns individual AI workers into coordinated teams:
+Phase 2B turns multi-AI execution into a Graph Engineering engine:
 
 ```
-Goal → Orchestrator → Team Plan → Specialist Agents → Handoffs
-     → Independent Review → QA/Security → existing 1D/1E release gates
+Goal → Graph Planner → Dependency Analysis → DAG → Parallel Nodes → Reduce
+     → Independent Verification → Synthesis → QA/Security → existing 1D/1E gates
 ```
 
-This document is the audit required before any Phase 2B code is written. It
-records what already exists, what is partial, and what is missing, so the work
-extends the Phase 2A provider layer rather than rebuilding it.
+The objective is **not** to use many agents. It is to execute the smallest,
+fastest, safest, cheapest workflow that does the job — which for most work is a
+single agent and no graph at all.
 
 ## Status legend
 
 | Mark | Meaning |
 | --- | --- |
-| **COMPLETE** | Exists, tested, and does what Phase 2B needs without change. |
-| **PARTIAL** | Exists but does not yet meet the Phase 2B requirement. |
+| **COMPLETE** | Exists, tested, meets the Phase 2B requirement unchanged. |
+| **PARTIAL** | Exists but does not yet meet the requirement. |
 | **MISSING** | No implementation. |
 | **BROKEN** | Exists and does not work as documented. |
 | **BLOCKED** | Cannot be built or proven until a named dependency clears. |
 
 ---
 
-## 1. Audit of the existing foundation
+## 1. What already exists (the foundation, not the gap)
 
-### Provider layer (Phase 2A)
+Phase 2B is better supported than a blank-sheet reading suggests. These are
+real and tested on `main`:
 
-| Item | Status | Evidence |
+| Capability | Status | Where |
 | --- | --- | --- |
-| Adapter contract (`createRun`/`getRun`/`cancelRun`/events/result/models/health) | **COMPLETE** | `lib/providers/contract.ts`, `base-adapter.ts`, real Anthropic and OpenAI adapters. |
-| Routing precedence and structured reasons | **COMPLETE** | `lib/providers/routing.ts` — `OWNER_OVERRIDE → AGENT_ASSIGNMENT → PROJECT_DEFAULT → AUTO_SCORE`, plus the two absolute rules (capability declared, provider connected). |
-| Error taxonomy with declared fallback eligibility | **COMPLETE** | `lib/providers/errors.ts`. Credential and content-policy failures are not fallback-eligible. |
-| Single-task execution with fallback | **COMPLETE** | `lib/providers/runtime.ts`, `app/api/runs/route.ts`. |
-| Run persistence (provider, model, usage, latency, routing decision) | **COMPLETE** | `agent_runs` extended by `20260813000100`; `record_provider_run` RPC. |
-| Owner execution switch, default OFF | **COMPLETE** | `organizations.ai_provider_execution_enabled`, `set_provider_execution_enabled`. |
-| Live provider execution | **BLOCKED** | No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in any verified environment; both providers report **Not Configured** and the switch is OFF. |
+| Provider adapter contract, routing precedence, structured reasons | **COMPLETE** | `lib/providers/` (Phase 2A) |
+| Error taxonomy with declared fallback eligibility | **COMPLETE** | `lib/providers/errors.ts` |
+| Reviewer independence — an implementer cannot review its own work | **PARTIAL** | `lib/providers/workflow.ts` |
+| **Isolated per-run Git workspaces** | **COMPLETE** | `lib/worker/workspace.ts` — keyed by `runId`, so concurrent workers already get separate trees |
+| **Real validation in a pinned container** (lint/typecheck/test/build) | **COMPLETE** | `lib/worker/validation.ts` — this is a genuine non-AI anchor today |
+| Path containment, forbidden paths, secret and protected-resource scanning | **COMPLETE** | `lib/worker/policy-scan.ts` |
+| Phase 1D decision layer: controls, gates, approval, retries, recovery | **COMPLETE** | `lib/autonomy/` |
+| Risk classification from the actual diff | **COMPLETE** | `lib/autonomy/diff-risk.ts` |
+| Deployment tracking, post-deploy validation, rollback interlocks | **COMPLETE** | `lib/autonomy/post-deploy.ts`, `lib/deploy/vercel.ts` |
+| Incidents, production diagnoses, repair attempts, synthetic journeys | **COMPLETE** | Phase 1E schema |
+| RLS + FORCE RLS on every public table, SECURITY DEFINER write boundary | **COMPLETE** | established pattern, 53/53 verified |
+| Single command → risk → dispatch → worker | **COMPLETE** | `lib/orchestration/` |
 
-### Workflow and review
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Reviewer independence rule | **COMPLETE** | `evaluateReviewIndependence` / `assertIndependentReview` in `lib/providers/workflow.ts`. An implementation agent cannot review its own work; `requiresDistinctProvider` adds cross-provider separation where declared. |
-| Handoff context assembly | **PARTIAL** | `buildHandoffContext` composes prior artifacts in memory for one request. Artifacts are not persisted, so a handoff cannot be inspected after the fact or resumed. |
-| Multi-step workflow | **PARTIAL** | `DEFAULT_DELIVERY_WORKFLOW` is a single hard-coded four-step chain (plan → implement → review → qa). It is linear, fixed, and not selected per goal. |
-| Reviewer verdicts (`PASS`/`WARN`/`REQUEST_CHANGES`/`BLOCK`) | **MISSING** | Review steps return an advisory artifact with no verdict, so nothing can gate on the outcome. |
-| Bounded repair loops | **MISSING** | No mechanism returns requested changes to the responsible agent. |
-
-### Agents and roles
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Agent is distinct from provider, model, connection, project | **COMPLETE** | ADR-021; `agents` table carries `role`, optional `provider`/`model` preference. |
-| Role enum | **PARTIAL** | `public.agent_role` has `orchestrator, product, frontend, backend, database, qa, security, release, ceo_reporter, custom`. Phase 2B additionally requires **architect**, **performance**, and **production_investigator**. `custom` exists, so future roles are supported. |
-| Per-agent and per-project provider assignment | **COMPLETE** | `set_agent_provider_assignment`. |
-| Agent availability / current work / performance data | **PARTIAL** | `agent_status` enum exists; there is no aggregate of tasks, success rate, duration, or retries per agent. |
-
-### Task model
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Tasks with owner command, project, agent, priority, risk, status, input, result | **COMPLETE** | `public.tasks`. |
-| Parent goal | **MISSING** | No `parent_task_id` or goal reference. |
-| Dependencies | **MISSING** | No dependency edges, so no task graph and no automatic blocking. |
-| Acceptance criteria | **MISSING** | Not represented; `description` is free text. |
-| Run / PR links | **PARTIAL** | `agent_runs` references a task; `pull_requests` exists but is not linked to a task. |
-
-### Teams, concurrency, and metrics
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Teams | **MISSING** | No `teams` table and no team concept anywhere in `lib/` or the schema's 53 tables. |
-| Orchestrator that composes a team from a goal | **MISSING** | `orchestrator` exists only as a role value. There is no planning loop. |
-| Parallel execution / isolated workspaces | **MISSING** | Execution is one task per HTTP request. |
-| Work locks (project / path / subsystem) | **MISSING** | Change reservations exist for repository file changes (`017`), which is a related but narrower control. |
-| Metrics | **PARTIAL** | `provider_routing_decisions`, `provider_run_events`, and `agent_runs` capture per-run truth including usage and latency. No aggregation, no bottleneck analysis. |
-| Team UI (task graph, handoffs, blockers, progress) | **MISSING** | Agents/Runs/Bot Manager show individual records only. |
-
-### Security and isolation
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| RLS + FORCE RLS on every public table | **COMPLETE** | 53/53 verified on hosted, 61 policies, 2026-08-13. |
-| Server-only secrets | **COMPLETE** | Provider keys read server-side; `secret-boundaries.contract.test.ts` guards it. |
-| Least-privilege context per agent | **MISSING** | No per-agent scoping of what context or credential a task may receive. |
-| Cross-user / cross-project isolation tests | **PARTIAL** | RLS behavioral tests exist for GitHub, marketing, and provider tables; none cover team or handoff tables, which do not exist yet. |
-
-### Release gates (Phase 1D/1E)
-
-| Item | Status | Evidence |
-| --- | --- | --- |
-| Risk classification, approvals, protected paths, kill switch | **COMPLETE** | Phase 1D interlocks; Autonomous Mode OFF. |
-| Production operations, synthetic journeys, rollback interlocks | **COMPLETE** for schema; **BLOCKED** for observation — no owner-authorized production target. |
-| Draft-PR-only write boundary | **COMPLETE** | Verified live in PR `#8`. |
+**The gap is the graph layer itself**, not the machinery it would drive.
 
 ---
 
-## 2. What Phase 2B must add
+## 2. Requirement audit
 
-Ordered so each step is useful on its own and nothing depends on live provider
-credentials until the final demonstration.
+### Planning and topology (spec §2, §17, §18, §26)
 
-1. **Schema.** `teams`, `team_members`, `task_dependencies`, `agent_handoffs`, `review_verdicts`, `work_locks`; extend `agent_role` with `architect`, `performance`, `production_investigator`; add `parent_task_id` and `acceptance_criteria` to `tasks`. RLS + FORCE RLS, ownership checks, foreign keys, indexes, and audit events on every one.
-2. **Handoff persistence.** Promote `WorkflowArtifact` from an in-memory value to a durable, tenant-scoped row carrying task, context, decisions, files, output, assumptions, evidence, blockers, and next required action.
-3. **Task graph.** Dependency edges with cycle rejection at write time, automatic `blocked` status while unmet, and readiness computed in the database rather than by a caller.
-4. **Team composition.** A pure function from goal + risk to the smallest sufficient team, mirroring how `routing.ts` is pure and testable without a provider.
-5. **Reviewer verdicts and bounded repair.** Verdict enum, a repair counter with a hard ceiling, and a rule that a repair loop can never widen risk or bypass an interlock.
-6. **Orchestrator.** A loop that reads ready tasks, routes each through the existing 2A engine, records handoffs, and stops on failure rather than retrying without bound.
-7. **Work locks.** Advisory locks keyed by project and path prefix so parallel specialists cannot touch the same subsystem or produce overlapping migrations.
-8. **Metrics.** Aggregate views over real `agent_runs` and routing decisions only. No fabricated figures.
-9. **UI.** Team list and Team Detail showing goal, specialists, task graph, dependencies, progress, handoffs, blockers, PRs, and validation.
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 2 | Topology selection (SINGLE_AGENT/LOOP/SEQUENTIAL/DAG/DIAMOND/DISCOVERY_GRAPH) | **MISSING** | `lib/orchestration/plan.ts` produces one linear Phase 1C plan. |
+| 2 | Fake-edge test on proposed dependencies | **MISSING** | No dependency analysis of any kind. |
+| 17 | Model economics per node | **PARTIAL** | 2A routing exists and records reasons; nothing selects per-node tiers. |
+| 18 | Logical specialists | **PARTIAL** | Roles exist including architect/performance/production_investigator (added on main). No team assembly. |
+| 26 | Graph compiler — orchestration as data, not conversation | **MISSING** | |
+
+### Contracts and data (spec §3, §4, §19)
+
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 3 | Machine-readable node contracts with typed I/O | **MISSING** | |
+| 3 | Reject invalid output, retry per policy | **MISSING** | |
+| 4 | graphs/graph_runs/graph_nodes/graph_edges/node_runs/node_contracts/handoffs/artifacts/verifications/work_locks/graph_templates/graph_budgets/graph_events | **MISSING** | None of the thirteen tables exist. |
+| 19 | Structured handoffs validated against the receiving contract | **MISSING** | `buildHandoffContext` is in-memory, per-request, unvalidated. |
+
+### Execution (spec §5, §6, §9, §10, §11, §20, §27)
+
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 5 | Durable DAG scheduler, nine node states | **MISSING** | |
+| 6 | Diamond pattern as a native topology | **MISSING** | |
+| 9 | Fan-out with isolated workspaces | **PARTIAL** | Workspace isolation is **COMPLETE**; nothing fans out to use it. |
+| 10 | Hidden dependency detection (files, migrations, APIs, rate limits, deployments) | **MISSING** | |
+| 11 | Recoverable work locks with heartbeat/expiry | **MISSING** | Change reservations (`017`) are a narrower relative. |
+| 20 | Integration nodes | **MISSING** | |
+| 27 | Retry/fallback/reassign/pause/cancel/recover per node | **PARTIAL** | `lib/autonomy/retries.ts` bounds retries for pipeline stages, not nodes. |
+
+### Verification and truth (spec §7, §8, §14, §21, §22)
+
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 7 | Fresh verifier with no shared worker context | **PARTIAL** | Independence is enforced by *agent identity*; context isolation is not modelled. |
+| 7 | Structured PASS/WARN/REJECT/BLOCK with evidence | **MISSING** | Reviews return prose artifacts. |
+| 8 | Verification quorum strategies | **MISSING** | |
+| 14 | Silent-failure guard on every fan-in | **MISSING** | |
+| 21 | Non-AI anchors | **PARTIAL** | Real anchors exist (container validation, CI observation, deployment state, synthetic journeys); they are not modelled as evidence attached to graph decisions. |
+| 22 | Frozen policies the planner cannot optimise away | **PARTIAL** | The policies exist and are enforced; nothing declares them immune to a planner. |
+
+### Economy and scale (spec §12, §13, §15, §16, §28, §29)
+
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 12 | Deterministic reducers | **MISSING** | |
+| 13 | Layered fan-in, never silently truncate | **MISSING** | |
+| 15 | Discovery graphs with stop conditions | **MISSING** | |
+| 16 | Graph budgets | **PARTIAL** | Phase 1C has per-run turn/token budgets; no graph-level budget. |
+| 28 | Graph observability (critical path, parallelism, reduction ratio…) | **MISSING** | Per-run usage/latency is captured and real. |
+| 29 | Conservative graph optimizer | **MISSING** | |
+
+### Surfaces and integration (spec §23, §24, §25, §30, §31, §32, §33)
+
+| # | Requirement | Status | Note |
+| --- | --- | --- | --- |
+| 23 | Reusable graph templates | **MISSING** | |
+| 24 | Workflow builder UI | **MISSING** | |
+| 25 | Bot Manager proposes an execution summary | **MISSING** | Bot Manager exists; it does not plan. |
+| 30 | Feed the **existing** 1D/1E release system, not a second pipeline | **COMPLETE as a target** | The pipeline to feed is real and tested. |
+| 31 | Self-healing graphs from incidents | **PARTIAL** | Incident/diagnosis/repair/rollback schema exists; no graph generation. |
+| 32 | RLS on all graph data | **MISSING** | No tables yet; the pattern to follow is established. |
+| 33 | Tests across the whole list | **MISSING** | |
 
 ---
 
-## 3. Constraints carried forward
+## 3. Build order
 
-These are not negotiable within Phase 2B and each is already enforced:
+Sequenced so each step is independently useful, and so nothing depends on
+provider credentials until the live demonstrations.
 
-- Autonomous Mode stays OFF and the global kill switch stays ON. Phase 2B coordinates advisory work; it does not acquire authority to merge, deploy, or run anything.
-- The only repository write path remains an isolated branch, commit, and **draft** pull request, with protected paths requiring the exact owner RED approval phrase.
-- An implementation agent can never satisfy an independent-review requirement for its own work, and fallback can never be used to escape a credential or content-policy failure.
-- Agents exchange durable typed artifacts through SoftwareFactory. They never share a provider chat history.
-- No provider secret reaches the browser, a database row, a prompt, or a log.
+**Stage 1 — the engine core (pure, no I/O, fully testable today)**
+1. Topology selection with an explicit bias toward `SINGLE_AGENT`.
+2. Dependency analysis and the fake-edge test, with a recorded reason per surviving edge.
+3. Typed node contracts and output validation.
+4. The DAG scheduler as a pure state machine over the nine node states.
+5. Deterministic reducers (dedupe/sort/group/count/filter/normalise/validate/aggregate).
+6. Fan-in completeness guard and `PARTIAL_INPUT`.
+7. Layered fan-in thresholds.
+8. Graph budgets and degradation policy.
+9. Verification quorum, including "security BLOCK always blocks".
+10. Frozen policies, declared and enforced against planner mutation.
+11. Discovery-round stop conditions.
+
+**Stage 2 — durability**
+12. The thirteen tables, with RLS, FORCE RLS, foreign keys, indexes, audit events.
+13. Work locks with heartbeat, expiry, and abandoned-lock recovery.
+14. Graph compiler: plan → durable definition consumed by the scheduler.
+15. Handoff persistence validated against the receiving contract.
+
+**Stage 3 — execution**
+16. Node runner over the 2A provider layer, per-node routing and model tiering.
+17. Fan-out onto isolated workspaces (the workspace manager already supports this).
+18. Integration nodes.
+19. Anchors as structured evidence.
+20. Hidden-dependency detection wired to locks.
+
+**Stage 4 — surfaces**
+21. Graph templates.
+22. Workflows UI and graph visualisation.
+23. Bot Manager execution summary.
+24. Graph observability and the conservative optimizer.
+
+**Stage 5 — demonstrations (§34 A–G)**
 
 ---
 
@@ -131,24 +163,26 @@ These are not negotiable within Phase 2B and each is already enforced:
 
 | # | Blocker | Effect | Owner action |
 | --- | --- | --- | --- |
-| 1 | No provider credential in any verified environment | Every live multi-agent demonstration is unprovable. Team composition, the task graph, locks, and verdicts can all be built and tested with stubs, but section 14's end-to-end run cannot be executed. | Set server-only `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, then enable the execution switch in Settings. |
-| 2 | Cross-provider review needs **both** providers configured | `requiresDistinctProvider` steps degrade to same-provider review or fail closed. | Configure both, not one. |
-| 3 | Account creation cannot complete | No second account can be created to test cross-user isolation of team and handoff rows. | Configure Supabase SMTP, or disable "Confirm email" — see release blocker 5 in `AI/CURRENT_STATE.md`. |
-| 4 | Migration ledger records 26 of 31 versions | `supabase db push` would try to re-apply applied migrations and fail, so Phase 2B migrations cannot be pushed with the normal tooling until repaired. | Run the prepared ledger repair. |
-| 5 | No owner-authorized production target | Production Investigator work cannot be demonstrated against a real system. | Authorize a target, or accept that this role stays unproven. |
+| 1 | No provider credential in any verified environment | Demonstrations B, C, F and the live parts of A cannot run. Every engine-core behaviour above is testable without one. | Set server-only `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`; enable the execution switch. |
+| 2 | Cross-provider verification needs **both** providers | Fresh-verifier lenses that require a different provider degrade or fail closed. | Configure both. |
+| 3 | OpenAI project credit exhausted (`credit_balance_exhausted`, recorded on main) | Codex implementation nodes cannot execute. | Fund the project, supply a fresh key. |
+| 4 | Migration ledger records 26 of 31 versions | `supabase db push` would re-apply applied migrations and fail, so Stage 2 cannot be pushed with normal tooling. | Run the prepared ledger repair. |
+| 5 | Account creation cannot complete (no SMTP) | No second account, so cross-user isolation of graph tables cannot be proven live. | Configure custom SMTP. |
+| 6 | Automatic CI is not firing on pull requests | Graph work would merge without independent gating. Every run since 19:32Z on 2026-08-13 has been manually dispatched. | Investigate repository Actions settings. |
 
-Blocker 4 is the one that gates *starting* Phase 2B schema work through normal
-tooling, and it is the cheapest to clear.
+Blocker 4 gates Stage 2. Blockers 1–3 gate Stage 5. Stage 1 is unblocked.
 
 ---
 
 ## 5. Honest completion statement
 
-Phase 2B is **0% implemented** as of this audit. What exists is the foundation
-it builds on: the Phase 2A provider layer is complete and tested, the
-reviewer-independence rule is real and enforced, and the Phase 1D/1E release
-gates it must feed into are in place.
+At audit time Phase 2B is **0% implemented**. No graph, node, edge, lock,
+contract, verification, budget, or template exists in code or schema.
 
-No part of this document should be read as a claim that teams, orchestration,
-task graphs, handoff persistence, parallel execution, or team UI exist today.
-They do not.
+What exists is the substrate: isolated workspaces, real container validation,
+provider routing, the Phase 1D decision layer, and the Phase 1E production
+surfaces. Phase 2B connects those into a graph engine; it does not replace
+them, and §30 is explicit that it must not create a second release pipeline.
+
+Progress against this plan is recorded in `AI/CURRENT_STATE.md`. Nothing in
+this document should be read as a claim that the engine exists today.
