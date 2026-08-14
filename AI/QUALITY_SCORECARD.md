@@ -28,8 +28,34 @@ Reason: hosted migration `130006` completes the nine-action control model at org
 | Rollback | **Decision 100% (Phase 1E); execution 0%** | **Blocked** — no adapter; `AUTO_ROLLBACK.md` disables it |
 | Healing / repair | **Creation 100% (Phase 1E); execution 0%** | **Blocked** — the manual Phase 1C candidate is **Not Connected** and grants no autonomous authority |
 | Auto merge | **0%** | **Blocked** — `AGENTS.md` forbids introducing the workflow in this line of phases |
-| Backlog Autopilot | **0%** | **Blocked** — depends on the two rows above |
+| Backlog Autopilot | **Selection 100%; execution 0%** | Orders eligible P0–P3 work by priority then lower risk, holds behind unmet and unknown dependencies, refuses above the ceiling, and skips a degraded/critical/paused project. Starting the selected work is **blocked** on the two rows above |
+| Bounded retries | **100%** | Per-stage caps with backoff; the budget escalates rather than retrying again, and a permanent refusal never retries |
+| Recovery ordering on failure | **100%** as a decision machine | Freeze first (it only removes authority), then incident, rollback, repair, escalate |
+| Never auto-reverse a destructive migration | **100%** | A destructive release resolves owner-only, outranking controls, ceiling and approval alike |
+| Merge revalidation against the current head | **100%** | A push after approval invalidates it; a push after verification invalidates the gates; a required check with no report blocks rather than being read as satisfied |
+| Decision auditability | **100%** | `autonomy_decisions` is append-only with RLS and FORCE RLS, no browser write, named blocker codes only. Self-approval and unexplained refusals are rejected by the table itself |
 | Enabling any automatic action | **0% by design** | RED under `RISK_CLASSIFICATION.md`; needs an owner-approved migration |
+
+**Overall: the decision half of the loop is complete; the executor half is blocked on three
+things an agent cannot supply.** Everything that decides, restricts, records or refuses is built,
+hosted and demonstrated. Everything that would mutate a protected resource is reached, evaluated
+and blocked by a named blocker that the tests assert — so connecting an executor fails those
+assertions deliberately rather than silently granting authority.
+
+The three remaining blockers are a funded OpenAI project and rotated key (Phase 1C), a
+`VERCEL_TOKEN` (deploy and preview), and an owner decision on the `AGENTS.md` auto-merge
+prohibition. None is a code gap.
+
+### Secret boundary
+
+Scanned on 2026-08-14 across every tracked file and the full git history for OpenAI keys, GitHub
+PATs, Slack tokens and private-key blocks. Twelve historical matches exist and **all twelve are
+deliberate fake fixtures in test files** — `provider-config`, `autonomy-diff-risk`,
+`github-rls-behavior`, `worker-foundation`, `provider-contract`, `bot-schemas`,
+`bot-credentials`, and `provider-execution-rls`, each of which needs a credential-shaped string to
+prove its detector fires. No real credential appears in any tracked file or in history, and no
+`.env` file is tracked. The OpenAI key the roadmap records as exposed was exposed in chat, not
+committed; the repository is consistent with that account.
 
 ## Phase 1E and retained Phase 1B evidence
 
