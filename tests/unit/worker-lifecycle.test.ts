@@ -147,7 +147,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha,
         push,
       },
-      codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(passingValidation),
@@ -216,7 +216,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         )),
         push,
       },
-      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(passingValidation),
@@ -266,7 +266,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha,
         push,
       },
-      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(passingValidation),
@@ -323,7 +323,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha: vi.fn(),
         push: vi.fn(),
       },
-      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(failedValidation),
@@ -351,7 +351,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       store,
       tokenProvider: { createToken: vi.fn() },
       workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
-      codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
+      codex: { createSession: vi.fn(), initialPrompt: vi.fn(), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
     });
@@ -374,7 +374,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       store,
       tokenProvider: { createToken: vi.fn() },
       workspace: { prepare: vi.fn(), currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
-      codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
+      codex: { createSession: vi.fn(), initialPrompt: vi.fn(), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
     });
@@ -404,7 +404,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha: vi.fn().mockResolvedValue(undefined),
         push: vi.fn().mockRejectedValue(new WorkspaceError("git_push_failed", "Push outcome is unknown.")),
       },
-      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(passingValidation),
@@ -436,7 +436,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       store,
       tokenProvider: { createToken: vi.fn() },
       workspace: { prepare, currentHead: vi.fn(), changedFiles: vi.fn(), commit: vi.fn(), assertImmutableCommit: vi.fn(), assertRemoteBaseSha: vi.fn(), push: vi.fn() },
-      codex: { createSession: vi.fn(), initialPrompt: vi.fn() },
+      codex: { createSession: vi.fn(), initialPrompt: vi.fn(), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
     });
@@ -484,7 +484,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha,
         push,
       },
-      codex: { createSession, initialPrompt: vi.fn() },
+      codex: { createSession, initialPrompt: vi.fn(), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: {
         createOrRecoverDraft,
@@ -551,7 +551,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha: vi.fn().mockResolvedValue(undefined),
         push: vi.fn().mockResolvedValue(undefined),
       },
-      codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work") },
+      codex: { createSession: vi.fn().mockReturnValue(session), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
       validator: {
         bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
         run: vi.fn().mockResolvedValue(passingValidation),

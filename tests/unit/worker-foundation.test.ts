@@ -5,6 +5,7 @@ import path from "node:path";
 import type { ThreadEvent, ThreadOptions } from "@openai/codex-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CodexAuthResolution } from "@/lib/worker/auth";
 import {
   CodexBudgetError,
   codexClientOptions,
@@ -22,6 +23,18 @@ import { hasLikelySecret, redactText } from "@/lib/worker/redact";
 import { workerJobSchema, type WorkerJob } from "@/lib/worker/types";
 import { dockerContainerArguments, PINNED_VALIDATION_IMAGE } from "@/lib/worker/validation";
 import { branchForJob, type PreparedWorkspace } from "@/lib/worker/workspace";
+
+/**
+ * The opt-in billed mode. These cases predate zero-token execution and assert
+ * the API-key path's redaction and budget behavior, which still has to work
+ * when an owner deliberately selects it.
+ */
+const billedAuth = (apiKey: string): CodexAuthResolution => Object.freeze({
+  mode: "api_key",
+  authJson: null,
+  apiKey,
+  zeroToken: false,
+});
 
 const temporaryPaths: string[] = [];
 
@@ -227,7 +240,7 @@ describe("Codex SDK adapter", () => {
       hooksDirectory: path.join(runDirectory, "empty-hooks"),
       runDirectory,
     };
-    const options = codexClientOptions("dedicated-sdk-api-key", workspace, {
+    const options = codexClientOptions(billedAuth("dedicated-sdk-api-key"), workspace, {
       PATH: "/safe/bin",
       TEMP: "/safe/tmp",
       HOME: "/unsafe/host-home",
@@ -332,7 +345,7 @@ describe("Codex SDK adapter", () => {
       },
       resumeThread: vi.fn(),
     };
-    const adapter = new CodexSdkAdapter("test-api-key-not-used", () => client);
+    const adapter = new CodexSdkAdapter(billedAuth("test-api-key-not-used"), () => client);
     const workspace: PreparedWorkspace = {
       branch: branchForJob(job()),
       directory: process.cwd(),
@@ -398,7 +411,7 @@ describe("Codex SDK adapter", () => {
         maximumOutputTokens: 50,
       },
     });
-    const adapter = new CodexSdkAdapter("test-api-key-not-used", () => client);
+    const adapter = new CodexSdkAdapter(billedAuth("test-api-key-not-used"), () => client);
     const runDirectory = path.join(process.cwd(), "isolated-retry-run");
     const workspace: PreparedWorkspace = {
       branch: branchForJob(retryJob),
@@ -441,7 +454,7 @@ describe("Codex SDK adapter", () => {
       },
       resumeThread: vi.fn(),
     };
-    const adapter = new CodexSdkAdapter("test-api-key-not-used", () => client);
+    const adapter = new CodexSdkAdapter(billedAuth("test-api-key-not-used"), () => client);
     const runDirectory = path.join(process.cwd(), "isolated-provider-failure-run");
     const workspace: PreparedWorkspace = {
       branch: branchForJob(job()),
@@ -480,7 +493,7 @@ describe("Codex SDK adapter", () => {
       },
       resumeThread: vi.fn(),
     };
-    const adapter = new CodexSdkAdapter(unusualApiKey, () => client);
+    const adapter = new CodexSdkAdapter(billedAuth(unusualApiKey), () => client);
     const runDirectory = path.join(process.cwd(), "isolated-provider-redaction-run");
     const workspace: PreparedWorkspace = {
       branch: branchForJob(job()),
