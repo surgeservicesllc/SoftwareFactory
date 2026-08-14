@@ -5,9 +5,10 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 15**, listed across the two tables below: seven in "What is actually
-unhosted" (row 6 bundles two migrations) and eight in "Added 2026-08-14". One of the 15 has a
-materially different approval requirement from the others. The repository total is 56 migration
+**The current total is 16**, listed across the tables below: seven in "What is actually
+unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", and one in "Added later
+the same day". One of the 15 has a
+materially different approval requirement from the others. The repository total is 57 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 
 ## What is actually unhosted
@@ -53,8 +54,8 @@ The exact owner scenario was rehearsed end to end on a real PostgreSQL 16.13 clu
 | Step | Result |
 | --- | --- |
 | Baseline built to exactly `20260813001400` | **41 ledger rows**, matching the documented hosted position |
-| The 15 unhosted migrations applied in filename order, each recorded | **All 15 applied**, ledger ends at 56 |
-| Whole chain from empty, as a separate check | **All 56 applied**, 56 ledger rows |
+| The unhosted migrations applied in filename order, each recorded | **All applied**, ledger ends at 57 |
+| Whole chain from empty, as a separate check | **All 57 applied**, 57 ledger rows |
 
 Post-apply verification against that cluster:
 
@@ -67,6 +68,16 @@ Post-apply verification against that cluster:
 | SECURITY DEFINER functions | 172, **none** without a pinned `search_path` |
 | SECURITY DEFINER executable by `anon` | exactly `subscribe_to_newsletter` |
 | `autonomous_release_allowed` present | yes |
+
+### Added later the same day
+
+| Migration | What it adds | Verified by |
+|---|---|---|
+| `20260814001100_guard_resource_assignment_candidates` | A `jsonb_has_sensitive_keys` check on `resource_assignments.candidates` | Applied on the real cluster above; the guard was exercised directly against realistic payloads |
+
+`resource_assignments` already refused credential-shaped text in `agent_id`, `provider`, and `model`, and every other structured-evidence jsonb column in the schema is guarded. `candidates` — which holds those same three identifiers per candidate, plus named rejections and notes — was not. That is an inconsistency rather than a discovered leak: the column is written by the routing layer from server-computed scoring, not from user or model input. It is closed anyway because the column is browser-readable through the table's member SELECT policy, and "notes" is the kind of field a later change quietly widens.
+
+Exercised on the real cluster: benign candidate evidence and an empty array pass; an `api_key` in the payload and a nested `access_token` are both rejected.
 
 ### The collision, demonstrated rather than asserted
 
