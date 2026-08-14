@@ -36,11 +36,12 @@ is the single page that says what is actually outstanding.
 
 ### Infrastructure
 
-- [ ] **Repair the migration ledger.** It records 26 versions; the 32 migration
-      files carry 31 distinct versions, so five applied versions are unrecorded
-      and `supabase db push` would try to re-apply them and fail. Idempotent
-      repair SQL is prepared. **This blocks Phase 2B Stage 2 from being pushed
-      with normal tooling.**
+- [x] **Migration ledger repaired.** Resolved 2026-08-14. The ledger had already
+      been extended to 41 rows before I looked; three applied migrations
+      (`20260813001500`, `20260813001600`, `20260814000100`) were still
+      unrecorded, and `20260814000200` had not been applied at all. Both are now
+      fixed: the ledger holds 45 rows through `20260814000200`, and no
+      repository migration is unrecorded.
 - [ ] **Decide on the duplicate migration version `20260813000200`.** Two files
       share it (`bot_fabric_activity_types`, `phase1e_synthetic_journeys`) and
       the ledger cannot represent both. Renaming is the obvious fix but
@@ -79,7 +80,7 @@ typed contracts, DAG scheduler, deterministic reducers, fan-in guards,
 verification quorum, budgets, frozen policies, discovery stop conditions.
 Documented in `AI/GRAPH_ENGINEERING.md`.
 
-### Stage 2 — durability — **DONE** (not applied to hosted)
+### Stage 2 — durability — **DONE** (applied to hosted)
 
 - [x] Thirteen tables in `20260814000100_graph_engineering.sql`: `graphs`,
       `graph_runs`, `graph_nodes`, `graph_edges`, `node_runs`, `node_contracts`,
@@ -89,7 +90,9 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
       grants, foreign keys, indexes, check constraints.
 - [x] Work locks with heartbeat, expiry, and abandoned-lock recovery, enforced
       by a partial unique index rather than by the scheduler remembering.
-- [ ] **Not applied to hosted.** Blocked on the migration ledger repair.
+- [x] **Applied to hosted and verified 2026-08-14**: 73 public tables, all 73
+      with RLS and FORCE RLS, all 13 graph tables present, 7 write-boundary
+      functions present, and zero EXECUTE grants to `anon` on any of them.
 - [x] Graph compiler (`lib/graph/compiler.ts`): plan → durable definition,
       rejecting cycles, dangling dependencies, duplicate keys, entry-less
       graphs, and unresolved write conflicts before anything is spent.
