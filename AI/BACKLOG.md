@@ -131,7 +131,10 @@ Implemented and locally verified against the migrated schema. Nothing here is li
 - [x] Add the live custom domain `www.theagoras.com` to `additional_redirect_urls` in `supabase/config.toml`.
 - [ ] **Owner action:** add `https://www.theagoras.com/auth/callback` to the hosted project's redirect allow-list. Editing `config.toml` does not update the hosted project.
 - [ ] Re-probe sign-up and sign-in after that configuration lands, and record the observed codes here.
-- [ ] Delete the diagnostic account `sf-probe-a91c@gmail.com`, created against the hosted project while reproducing this defect.
+- [ ] **Urgent.** Delete the diagnostic account `sf-probe-a91c@gmail.com`. It was created against the hosted project on 2026-08-13 while reproducing the sign-up defect, using an invented address that does not exist. Supabase sent a confirmation email to it, which hard-bounced. On 2026-08-13 21:19 Supabase warned that email sending privileges for `qpuofpmagrmyamahqwxw` are at risk from a high bounce rate; because the project sends only a couple of messages per hour, one hard bounce is a large share of the total.
+- [ ] **Owner action, now required rather than optional:** configure custom SMTP. Disabling "Confirm email" would stop the bounces only by stopping the sending, and would not repair sender reputation — and it weakens the super-administrator model, which depends on confirmed addresses (ADR-042).
+- [ ] Never probe sign-up with an invented address again. Use an address on a domain the owner controls, or stop at a domain Supabase rejects outright (`example.com` is refused before any send).
+- [ ] Consider bounce-aware handling once custom SMTP is in place, so repeated delivery failures to one address stop retrying. Supabase rejects obviously fake domains but not an invented mailbox at a real domain, so nothing currently prevents a sign-up from costing sender reputation.
 
 ## Signed-in site state and roles
 
