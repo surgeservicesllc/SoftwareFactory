@@ -1,7 +1,7 @@
 # Phase 1E repair work cannot reach Phase 1C execution
 
 Found: 2026-08-13, by attempting the wiring rather than assuming it.
-Status: **real gap, not yet closed.** The fix is identified and scoped below.
+Status: **contract satisfied and proven; route wiring remains.** See "Progress" at the end.
 
 ## What the chain claims
 
@@ -76,3 +76,35 @@ Closing this gap makes the chain continuous **in code**. It does not make it exe
 a registered worker and `OPENAI_API_KEY`, neither of which exists in any verified environment. A
 promoted run would sit `queued`, which is the truthful state and visibly different from today's
 state, where it could never run at all.
+
+
+## Progress — the contract is now satisfied and proven
+
+`lib/operations/promotion.ts` assembles a Phase 1C command from a Phase 1E diagnosis, built from
+`createPhase1CExecutionPlan` rather than hand-written, so the exact-key contract has one source of
+truth and cannot drift.
+
+`tests/integration/phase1e-repair-promotion.behavior.test.ts` asserts it against the **real**
+`submit_command` in the migrated schema, not against a copy of the rule:
+
+| Assertion | Result |
+| --- | --- |
+| Assembled keys equal Phase 1C's allowlist exactly | Pass |
+| `submit_command` accepts it and creates a command **and** a task | Pass — the thing a repair attempt never had |
+| One command per repair attempt however often promotion is retried | Pass, via `repair:<id>` idempotency |
+| A security-shaped repair is forced to RED and `awaiting_approval` | Pass — no privileged lane |
+
+That last row is the important one. Repair work enters the ordinary gates: the database risk floor
+reads the diagnosis text, sees an authentication-shaped repair, and forces owner approval exactly as
+if a person had typed the request.
+
+### What remains
+
+A route that calls this and links the result back. It needs the same live `baseSha` resolution the
+commands route performs — mint an installation token, read the base branch reference — because a
+stale or invented SHA would send a worker at the wrong tree. That is mechanical, but it is a real
+GitHub round trip and belongs behind the same failure handling the commands route already has.
+
+Execution still needs a registered Phase 1C worker and `OPENAI_API_KEY`. With the route in place and
+neither present, a promoted run would sit `queued` — truthful, and visibly different from a task that
+could never be claimed at all.

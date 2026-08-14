@@ -192,13 +192,13 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 - [ ] Persist routing decisions, capability profiles, and breaker state (migration + RLS), and
       surface them in a Resource Manager UI showing why each worker was selected.
 - [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
-- [ ] **Close the Phase 1E → Phase 1C gap.** Phase 1E repair tasks are *unclaimable*, not
-      merely unassigned: `create_repair_attempt` writes a bare `backlog` task with no command
-      or run, while `claim_phase1c_run` requires an `agent_runs` row joined to a command. Fix
-      is scoped in `AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md` — promotion in TypeScript reusing
-      `createPhase1CExecutionPlan`, submitted through `submit_command` so the risk floor and
-      approval gates apply. Deliberately not done in SQL: Phase 1C's parameter contract is an
-      exact-key allowlist and duplicating it would drift.
+- [x] **Phase 1E → Phase 1C contract satisfied.** `lib/operations/promotion.ts` assembles a valid
+      Phase 1C command from a diagnosis, proven against the *real* `submit_command`: keys match the
+      allowlist exactly, a command and task are created, promotion is idempotent per repair attempt,
+      and a security-shaped repair is forced to RED and `awaiting_approval` — no privileged lane.
+- [ ] **Remaining:** the route that calls it and links the task back onto `repair_attempts`. Needs
+      live `baseSha` resolution (installation token + branch reference), as the commands route does.
+      See `AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md`.
 - [ ] **Blocked on credentials:** queues, dynamic concurrency, and the budget ladder need a worker
       pool that executes. Specified in the plan, deliberately not simulated.
 - [ ] **Blocked on credentials:** objective §16's "historical-performance routing improvement"
