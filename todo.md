@@ -192,6 +192,13 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 - [ ] Persist routing decisions, capability profiles, and breaker state (migration + RLS), and
       surface them in a Resource Manager UI showing why each worker was selected.
 - [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
+- [ ] **Close the Phase 1E → Phase 1C gap.** Phase 1E repair tasks are *unclaimable*, not
+      merely unassigned: `create_repair_attempt` writes a bare `backlog` task with no command
+      or run, while `claim_phase1c_run` requires an `agent_runs` row joined to a command. Fix
+      is scoped in `AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md` — promotion in TypeScript reusing
+      `createPhase1CExecutionPlan`, submitted through `submit_command` so the risk floor and
+      approval gates apply. Deliberately not done in SQL: Phase 1C's parameter contract is an
+      exact-key allowlist and duplicating it would drift.
 - [ ] **Blocked on credentials:** queues, dynamic concurrency, and the budget ladder need a worker
       pool that executes. Specified in the plan, deliberately not simulated.
 - [ ] **Blocked on credentials:** objective §16's "historical-performance routing improvement"

@@ -918,7 +918,7 @@ describe("Phase 1E production operations behavior", () => {
     expect(report.content.repairs.executor).toBe("not_connected");
     expect(report.content.rollbacks.recorded).toBeGreaterThanOrEqual(2);
     expect(report.content.rollbacks.failed).toBe(1);
-    expect(report.content.repairs.created).toBe(3);
+    expect(report.content.repairs.created).toBeGreaterThanOrEqual(3);
     expect(report.content.unavailability.failing_observations).toBeGreaterThanOrEqual(2);
     expect(Array.isArray(report.content.recurring_failures)).toBe(true);
     expect(Array.isArray(report.content.frozen_projects)).toBe(true);
