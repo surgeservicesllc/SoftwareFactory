@@ -71,7 +71,7 @@ Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
 
 ### Remaining
 
-- [ ] **Owner-gated: apply hosted migrations `028` and `029`** to `qpuofpmagrmyamahqwxw`.
+- [ ] **Owner-gated: apply hosted migrations `028`, `029` and `030`** to `qpuofpmagrmyamahqwxw`.
       Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` first — the currently
       selected profile is wrong/unauthorized. Until this runs, every Phase 1E surface reports
       **Not Connected** or **Unknown**, which is truthful.
@@ -85,6 +85,12 @@ Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
       with no provider; error rate in particular cannot be derived from a single probe.
 - [ ] Probe hardening: a public hostname that resolves to a private address at DNS time is not
       detected. Needs resolve-then-connect-by-IP handling.
+- [x] Two concurrent-write races found and fixed by testing against a **real PostgreSQL**
+      server rather than PGlite (migration `030`): simultaneous first signals dropped one
+      occurrence on the incident fingerprint index, and concurrent rollback decisions
+      collided on the attempt index. Both failed closed but surfaced raw `23505` errors.
+      `tests/integration/phase1e-operations.concurrency.test.ts` guards both; it starts a real
+      cluster and skips cleanly where no server binary exists.
 
 ### Deliberately not built (do not "fix" these)
 
