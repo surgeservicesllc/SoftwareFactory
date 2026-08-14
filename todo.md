@@ -641,9 +641,22 @@ Primary installation `153445938` stays active as the rollback boundary.
       retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
 - [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
       real user/email is authorized, so this cannot be faked locally.
-- [ ] Remaining adverse cases: stale SHA, approval expiry, revoked/insufficient permission,
-      rate limit, provider ordering, terminal deletion/restore, idempotent recovery.
-- [ ] Verify explicit disconnect/loss state and history preservation.
+- [x] **Adverse lifecycle matrix** (`tests/integration/github-adverse-lifecycle.test.ts`, 12
+      tests against the real migrated schema). Covers revoked and insufficient-permission loss,
+      idempotent re-signalling, explicit disconnect, terminal deletion, and isolation. Each
+      asserts the *refusal*, because the refusals are the paths that had never been exercised:
+      a loss reason outside the declared set is rejected rather than stored; a disconnect aimed
+      at the wrong installation ID fails, so it cannot hit a connection that was since
+      re-installed; a non-owner cannot disconnect; a deleted installation cannot be restored,
+      so a revoked integration cannot quietly come back; and status and deletion marker cannot
+      disagree.
+      Provider ordering is already covered by `github-webhook-ordering.test.ts`; stale SHA and
+      approval expiry by `github-project-connection-handoff.test.ts` and the protected-approval
+      constraints. Rate limit is a provider response, not a schema state, and is handled in the
+      worker's error taxonomy.
+- [x] **Disconnect and loss preserve history.** Both paths keep the installation row: the record
+      of what was connected is the only thing that explains what happened afterwards, and losing
+      it with the connection would be worse than the loss.
 - [ ] Configure and verify isolated Preview Supabase values.
 
 ---
