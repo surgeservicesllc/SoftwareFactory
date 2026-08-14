@@ -115,9 +115,17 @@ Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
       Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` first — the currently
       selected profile is wrong/unauthorized. Until this runs, every Phase 1E surface reports
       **Not Connected** or **Unknown**, which is truthful.
-- [ ] **Owner-gated: authorize a production target** to monitor, then record the first real
-      observation → detection → incident → resolution and put the evidence in
-      `AI/QUALITY_SCORECARD.md`. Nothing in Phase 1E has yet run against real production.
+- [x] First **real production observation** recorded — the shipped probe observed
+      `https://www.theagoras.com` at 4/4 routes, 200, 190-933 ms. See
+      `AI/PRODUCTION_OBSERVATION_EVIDENCE.md`. It surfaced two operational findings below.
+- [ ] **Owner decision: Vercel Deployment Protection.** Both `*.vercel.app` hosts return `302`
+      to Vercel SSO for every route, so no external monitor can observe the URLs recorded as
+      production. Monitoring must target the custom domain, or protection must change.
+- [ ] **Owner decision: the `theagoras.com` aliases.** The open "remove or retain" review item now
+      has evidence: with protection on, `www.theagoras.com` is the *only* public path to the
+      application. Removing it takes the public site — including the marketing pages — offline.
+- [ ] **Owner-gated: store** what the probe observes. Needs hosted `028`/`029`/`030` plus a monitor
+      row; until then the adapter can be exercised but the pipeline behind it cannot run.
 - [ ] Authorize a scheduler identity for continuous monitoring. Checks are owner-triggered
       today. **Constraint: this must not widen `service_role`** — use a narrow SECURITY DEFINER
       ingest path, not table grants.

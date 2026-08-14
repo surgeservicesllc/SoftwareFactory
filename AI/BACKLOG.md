@@ -189,4 +189,5 @@ Implemented, hosted in the reconciled chain, and locally verified against the mi
 These are recorded for deliberate owner review and are not evidence that Phase 1B provider acceptance passed:
 
 - [ ] Decide whether to enable protection/required checks and require verified signatures on `main`; the branch is currently unprotected and the published release commit is unsigned. Any settings change is a protected owner-approved action.
-- [ ] Review unexpected `theagoras.com` Vercel aliases, verify ownership and routing intent, and remove or retain them only through an explicitly approved protected routing change.
+- [ ] Decide the `theagoras.com` aliases with the routing question now answered by evidence: both `*.vercel.app` hosts are behind Vercel SSO Deployment Protection, so `www.theagoras.com` is the **only** public path to the application. Removing the aliases would take the public site offline. See `AI/PRODUCTION_OBSERVATION_EVIDENCE.md`.
+- [ ] Decide whether production keeps Vercel Deployment Protection. While it is on, no external monitor — this one or any third party — can observe the deployment URLs recorded as production.
