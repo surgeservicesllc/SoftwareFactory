@@ -92,7 +92,7 @@ canonical; until then both readings are in circulation and they disagree.
 | Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 
-Gates on current `main`: lint, typecheck, 148 files / 1665 tests, clean production build,
+Gates on current `main`: lint, typecheck, 149 files / 1674 tests, clean production build,
 Playwright across desktop/tablet/mobile including axe.
 
 **Owner actions are collected in `AI/HOSTED_APPLY_RUNBOOK.md`** — the exact unhosted migration
@@ -369,9 +369,22 @@ Primary installation `153445938` stays active as the rollback boundary.
       retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
 - [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
       real user/email is authorized, so this cannot be faked locally.
-- [ ] Remaining adverse cases: stale SHA, approval expiry, revoked/insufficient permission,
-      rate limit, provider ordering, terminal deletion/restore, idempotent recovery.
-- [ ] Verify explicit disconnect/loss state and history preservation.
+- [x] **Adverse lifecycle now covered against the real migrated schema**
+      (`tests/integration/github-adverse-lifecycle.behavior.test.ts`, 9 tests). These had
+      **zero** coverage and are the states the integration enters once something has already
+      gone wrong — where a control that silently does nothing costs most and is noticed least.
+      Approval expiry (an expired row still reads `approved`; only the expiry distinguishes it),
+      owner-only decision, connection loss with history preserved, repeated loss converging on
+      one end state, disconnect refused against a mismatched installation id, rows retained
+      through disconnect, cross-tenant refusal of every privileged function, anonymous denial,
+      and member read-without-mutate.
+      Three assumptions the schema corrected: approvals cannot be created already-approved;
+      loss reasons are an allowlist; and `decide_approval` refuses a non-owner **outright**
+      rather than recording a decision that later fails validation — the stronger guarantee,
+      because no approved-looking row ever exists to be misread.
+- [ ] Still open: stale-SHA rejection, rate-limit handling that must not falsely revoke a
+      connection, and webhook provider ordering. Each needs a mocked GitHub response rather
+      than schema alone.
 - [ ] Configure and verify isolated Preview Supabase values.
 
 ---
