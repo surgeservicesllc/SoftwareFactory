@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260813001700_link_promoted_repair_task.sql";
+  "20260814000100_phase2c_resource_persistence.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Three successive
@@ -73,6 +73,9 @@ const publicTables = [
   "release_freezes",
   "repair_attempts",
   "reports",
+  "resource_assignments",
+  "resource_breaker_events",
+  "resource_breakers",
   "rollback_operations",
   "synthetic_journeys",
   "task_dependencies",
