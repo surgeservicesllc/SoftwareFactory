@@ -70,6 +70,21 @@ Five routes are unauthenticated by design and were confirmed to be the intended 
 
 Recorded because an audit with no record is an audit that gets repeated. A first pass using a naive grep reported 32 unguarded routes; every one was a false positive from the shared-helper indirection. The finding is that the boundary is centralized, not that it is missing.
 
+### Client bundle secret scan, 2026-08-14
+
+The production build output was scanned for credential-shaped strings and for the names of server-only secrets. **Nothing leaks.**
+
+| Check | Result |
+| --- | --- |
+| Credential-shaped strings in the 35 client JS chunks | **none** |
+| Credential-shaped strings anywhere in `.next` (excluding cache) | **none** — the apparent hits were `sk-async-storage-instance` inside Next.js's own `after-task-async-storage-instance.js` |
+| `SUPABASE_SERVICE_ROLE_KEY`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_CODEX_AUTH_JSON`, `GITHUB_WEBHOOK_SECRET` in client JS | **absent** |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in client JS | **present as names, not values** |
+
+The last row is the one worth explaining. `lib/bots/catalog.ts` carries `defaultCredentialRef: "OPENAI_API_KEY"` so the console can tell an owner which environment variable a provider's credential lives under. The name of a variable is not the variable's contents, and this is the pattern `AGENTS.md` prescribes: "A connection record is metadata plus a reference to server-side secret material; it is not a credential store."
+
+`NEXT_PUBLIC_*` is limited to `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — all intentionally public, with row level security rather than obscurity as the protection.
+
 ### Deployment position
 
 Measured 2026-08-14 23:04 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**, and the served build's sitemap `lastmod` is `2026-08-14T23:03:49Z` — the deploy from `baf8ce0`. **Production is current with `main`.**
