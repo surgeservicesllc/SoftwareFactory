@@ -137,7 +137,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### Evidence
 
 - `npm run lint`, `npm run typecheck`: pass.
-- `vitest run`: 135 files / 1543 tests pass on the merged tree, including 30 Phase 1E behavioral tests, a 3-test end-to-end journey, 19 boundary contracts, 6 repair-promotion behaviors, 5 real-PostgreSQL concurrency tests, and 64 policy/probe/console/journey unit tests.
+- `vitest run`: 137 files / 1556 tests pass on the merged tree, including 30 Phase 1E behavioral tests, a 3-test end-to-end journey, 19 boundary contracts, 6 repair-promotion behaviors, 5 real-PostgreSQL concurrency tests, and 64 policy/probe/console/journey unit tests.
 - `npm run build`: compiles cleanly, including 12 operations APIs and the Operations page.
 - Playwright: 117/117 across desktop, tablet, and mobile including axe on the merged tree.
 - The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.
@@ -188,7 +188,7 @@ One caveat on that number: the promotion path raises §5 in code but not in the 
 
 1. **`service_role` scope held.** Provider ingestion runs through SECURITY DEFINER workflows rather than table grants, so `service_role` still holds table privileges on exactly the four GitHub ingress tables. Verified by test, not by inspection.
 2. **Probe SSRF surface bounded.** Monitor targets are restricted to public HTTPS origins on the standard port with no credentials, refusing loopback, private, carrier-grade-NAT, link-local, and cloud-metadata addresses. Redirects are not followed and no response body is read.
-3. **Residual limitation, recorded not hidden.** A public hostname that resolves to a private address at DNS time is not detected; catching it needs resolve-then-connect-by-IP handling.
+3. **DNS-rebinding gap now closed.** Previously recorded here as a residual limitation: a public hostname resolving to a private address was not detected. It is now refused at *connect* time through undici's `connect.lookup` (`lib/operations/guarded-lookup.ts`), so the address checked is the address the socket reaches. Resolving separately and checking the result would have left the window open, because the second resolution is free to disagree with the first. Any blocked answer fails the whole lookup even when a public address is offered alongside it. `lib/operations/address.ts` covers both families including IPv4-mapped forms — the hex spelling `::ffff:7f00:1` was a live bypass in the first implementation and is now a regression test.
 4. **Safety in the schema, not only the route.** Monitor enablement, rollback escalation, incident resolution, and synthetic step safety are CHECK constraints, so bypassing the application cannot bypass them.
 5. **No secret path widened.** No new credential, environment variable, or browser-reachable privilege was introduced.
 
@@ -199,6 +199,7 @@ One caveat on that number: the promotion path raises §5 in code but not in the 
 - Promotion queues repair work; it does not execute it. Without a registered Phase 1C worker and a provider credential the run stays `queued`, and the route says so in its own response rather than leaving a reader to infer it.
 - Monitoring is owner-triggered rather than continuous; a scheduler identity must be authorized without widening `service_role`.
 - Synthetic write steps are declared and validated but never issued.
+- The probe's address guard covers what a hostname resolves to at connect time. It does not attempt to police a redirect chain, because redirects are not followed at all.
 - Health depends on what the monitored project's own endpoints report; SoftwareFactory does not read a monitored project's database or job runner directly.
 
 ### Phase 2A readiness

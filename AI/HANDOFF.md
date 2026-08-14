@@ -169,7 +169,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [x] Documentation and scorecard distinguish hosted `130014`, local/unhosted `130015`, the prior verified production baseline, proven owner/anonymous reads, and remaining unrelated-authenticated/mutation/provider acceptance without claiming Phase 1C Connected.
-- [x] Phase 1E control plane passes lint, typecheck, 135 files/1543 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
+- [x] Phase 1E control plane passes lint, typecheck, 137 files/1556 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [x] Migration `028` is hosted in the reconciled ledger. No real production target has been observed, so every Phase 1E monitoring surface remains **Not Connected** or **Unknown**.
 - [x] The control plane is served under `/solutions` and verified live: twelve pages serve both navigation landmarks, every former path returns `308`, and the console stays `noindex` and out of the sitemap. See ADR-041.
 
