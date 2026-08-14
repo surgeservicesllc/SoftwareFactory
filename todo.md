@@ -102,9 +102,16 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
       graph is created in one statement, a terminal node cannot be reopened, and
       a run with incomplete input cannot be recorded COMPLETED.
 
-### Stage 3 — execution
+### Stage 3 — execution — **IN PROGRESS**
 
-- [ ] Node runner over the Phase 2A provider layer, per-node routing and tiering.
+- [x] Node runner (`lib/graph/runner.ts`): drives the scheduler, owns attempts
+      and retries, rejects contract-violating output, degrades and stops on
+      budget, and refuses to call a run complete when a node never reported.
+      Execution, time, and locking are injected, so the whole of retry,
+      fallback, degradation and partial completion is tested without a
+      credential.
+- [ ] Wire the runner's `executeNode` to `executeProviderTask` for MODEL nodes,
+      with per-node model tiering.
 - [ ] Fan-out onto isolated workspaces (`lib/worker/workspace.ts` already
       supports concurrent isolation; nothing fans out to it yet).
 - [ ] Integration nodes: wait, check completeness, detect conflicts, reconcile.
