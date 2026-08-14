@@ -50,7 +50,13 @@ describe("Phase 2C model declaration", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260814000400_agentos_inbox.sql");
+    // Assert the migration this suite depends on is in the chain, rather than
+    // that it happens to sort last. The last-file pin used by the older suites
+    // is a deliberate tripwire so a new migration cannot be added without
+    // someone reading them — but it says nothing about *this* test, and with
+    // two agents landing migrations on the same day it broke three times in an
+    // hour while never once catching a real problem here.
+    expect(migrationFiles).toContain("20260814000300_declare_model_characteristics.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
