@@ -81,7 +81,11 @@ This is the same rule Phase 1E applied to monitoring: absence of evidence is **U
 
 ### 2.10 UI (objective §13)
 
-**MISSING.** No Resource Manager view.
+**MISSING at audit; now built.** `/solutions/resources` reads `GET /api/resources/overview` and shows
+breakers with fault explanation and cooldown, breaker transitions, and per-decision candidate
+evidence including eligibility and named rejection codes. The design problem was that almost every
+panel is legitimately empty, so each states *which kind* of empty it is — "nothing has failed here"
+is not "proven healthy", and an unevidenced prediction reads "No recorded history" rather than 0%.
 
 ### 2.11 Budget enforcement (objective §14)
 
@@ -89,7 +93,7 @@ This is the same rule Phase 1E applied to monitoring: absence of evidence is **U
 
 ### 2.12 Security and RLS (objective §15)
 
-**COMPLETE and must stay so.** 60/60 public tables carry RLS + FORCE RLS; `service_role` holds table privileges on exactly the four GitHub ingress tables. Any Phase 2C table must join under the same rules and grant `service_role` nothing new.
+**COMPLETE and must stay so.** 63/63 public tables carry RLS + FORCE RLS; `service_role` holds table privileges on exactly the four GitHub ingress tables. Any Phase 2C table must join under the same rules and grant `service_role` nothing new.
 
 ---
 
@@ -116,7 +120,7 @@ Blocker 1 is the one that makes §10–11 unprovable on real data. It does not p
 6. Objective selection: QUALITY / SPEED / COST / BALANCED, with frozen security and risk requirements excluded from every trade-off.
 7. Routing feedback: predicted vs actual, regret, minimum sample thresholds before preferences move.
 8. Durable memory for the above. *(Done: migration `20260814000100` plus `lib/resources/store.ts`.)*
-9. Resource Manager UI showing availability, decisions, breakers, and **why this worker was selected** — reading **No data yet** wherever no run has happened.
+9. Resource Manager UI showing availability, decisions, breakers, and **why this worker was selected** — reading **No data yet** wherever no run has happened. *(Done: `/solutions/resources`.)*
 
 Sections 7, 8, and 14 of the objective (queues, dynamic concurrency, budget ladder) depend on a worker pool that executes; they are specified here and deferred behind blocker 1 rather than simulated.
 

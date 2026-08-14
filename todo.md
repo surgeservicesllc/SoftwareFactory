@@ -206,8 +206,15 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 - [ ] Capability profiles are still code constants, not per-organization rows. Declaring them in
       the database needs a decision about whether they extend `provider_model_configurations` or
       sit beside it; not worth guessing.
-- [ ] Resource Manager UI showing availability, decisions, breakers, and why each worker was
-      selected — reading **No data yet** wherever no run has happened.
+- [x] **Resource Manager UI** at `/solutions/resources`, reading `GET /api/resources/overview`.
+      Shows breakers with fault explanation and cooldown, transitions, and per-decision candidate
+      evidence with eligibility and named rejection codes. Almost every panel is legitimately
+      empty, so each says *which kind* of empty it is: "nothing has failed here" is not "proven
+      healthy", and an unevidenced prediction shows "No recorded history" rather than 0%. The
+      Execution card shows `—` while loading rather than defaulting to "Not Connected", because
+      that is a state read from the server, not a fallback.
+- [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it, and record each
+      decision with `recordAssignment`.
 - [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
 - [x] **Phase 1E → Phase 1C gap closed in code.** `lib/operations/promotion.ts` assembles a valid
       Phase 1C command from a diagnosis, proven against the *real* `submit_command`: keys match the
