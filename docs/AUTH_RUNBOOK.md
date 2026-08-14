@@ -20,9 +20,25 @@ POST /auth/v1/signup
 ```
 
 Every signup needs a confirmation email, the project uses Supabase's built-in
-email service, and that service's quota is exhausted. Until one of the two
-changes below is made, **no one can complete account creation**, regardless of
-what the application does.
+email service, and that service's quota is tiny.
+
+The quota does recover. A probe against the raw API during an open window
+succeeded and returned `confirmation_sent_at`, so the code path itself is
+sound. The very next request — seconds later, through the application — came
+back `429 email_send_rate_limited`. **One signup consumes the window.** That is
+the shape of the failure: not permanently broken, but unusable, and whoever
+tries second gets an error through no fault of their own.
+
+This is why step 1 below is required rather than advisory. Until it is done,
+account creation works about once an hour for the whole project.
+
+### Test accounts created while diagnosing
+
+Two unconfirmed users were created against `sf-probe-*@gmail.com` and
+`sf-e2e-*@gmail.com` addresses while proving the path works. They are inert --
+unconfirmed accounts cannot sign in -- but they can be removed from
+Authentication → Users. Deleting them needs the dashboard; the repository holds
+no service-role key.
 
 ## Owner action required
 
