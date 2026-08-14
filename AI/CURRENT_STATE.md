@@ -204,6 +204,30 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - Hosted pricing rows still carry `/sign-in` as their call to action and cannot be edited from the application, so `normalizeCtaHref` maps the legacy path forward on read.
 - Owner actions and verification commands are in `docs/AUTH_RUNBOOK.md`.
 
+## Production deployment position, verified 2026-08-14 22:13 UTC
+
+Measured directly rather than inferred from a merge succeeding.
+
+- `https://www.theagoras.com` and `https://www.theagoras.com/solutions` both return **200**. Production is live and externally observable.
+- The served build's sitemap reports `lastmod` `2026-08-14T21:38:25Z`, which corresponds to the deploy triggered by `8fd28cf`.
+- **Production is behind `main`.** `f793268` and `145a31d` merged after that build and are not deployed.
+- The cause is not a failing build. Vercel began returning `api-deployments-free-per-day` at roughly 21:54 UTC — the free tier's 100-deployments-per-day cap, reached by this session's pull-request volume. Preview and production deployments draw on the same cap, so production cannot catch up until the cap resets (~24 hours) or the plan is upgraded.
+- This is an external quota, not a repository defect. No code change clears it, and it is recorded here so a later reader does not diagnose the lag as a broken pipeline.
+
+## Migration ledger integrity
+
+- Two migrations shared the version prefix `20260814000300` (`agentos_isolation_model` and `declare_model_characteristics`). Supabase's ledger keys on the numeric prefix, so `supabase db push` would have hit a primary-key collision in `supabase_migrations.schema_migrations` and left the hosted schema **half-applied**. Neither file was hosted, so the fix carried no ledger consequence: `declare_model_characteristics` was renumbered to `20260814000250`, after the `20260814000200` migration whose columns it depends on and before the AgentOS chain.
+- `tests/integration/migration-version-uniqueness.test.ts` now prevents recurrence. This had happened twice, both times from separate agents choosing the same timestamp in parallel.
+- **15 migrations remain unhosted.** The hosted ledger ends at `20260813001400`. `AI/HOSTED_APPLY_RUNBOOK.md` lists all 15 with their approval requirements and corrected counts; applying them is owner-gated and requires Supabase credentials that do not exist in any agent environment.
+
+## Schema and wiring guarantees now enforced continuously
+
+Each of these was true and unguarded — provable only by a manual run, which does not survive the next migration.
+
+- `tests/integration/supabase-rpc-contract.test.ts` — every `.rpc()` call site in `app`, `lib`, and `scripts` resolves against the fully migrated schema with matching argument names.
+- `tests/integration/schema-security-invariants.test.ts` — RLS and FORCE RLS on every public table across the whole chain; `service_role` table privileges limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write privilege anywhere. `newsletter_subscribers` is an allowlisted policyless table, locked shut on purpose behind the SECURITY DEFINER `subscribe_to_newsletter`.
+- `tests/integration/required-checks-wiring.test.ts` — the worker's `SOFTWAREFACTORY_REQUIRED_CHECKS` matches the `name:` of every job in `ci.yml`, in both directions. A renamed CI job would otherwise leave a live run waiting for a check that never reports.
+
 ## Release blockers
 
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.
