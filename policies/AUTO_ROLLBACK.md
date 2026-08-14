@@ -36,6 +36,26 @@ Automatic rollback may be considered only for a narrowly allowlisted deployment 
 - an owner freeze, kill switch, or incident commander blocks automation; or
 - rollback would exceed approved scope, time window, or retry limit.
 
+### Which of these are implemented
+
+`lib/autonomy/recovery.ts` evaluates this policy and executes nothing; every path ends at
+`EXECUTOR_NOT_CONNECTED` or hands the decision to an owner. The prohibitions are enforced as
+follows:
+
+| Prohibition | Where |
+| --- | --- |
+| The preceding release included irreversible data, auth, security, secret, DNS, or infrastructure changes | `IRREVERSIBLE_RELEASE_FACTORS`, reused from the diff classifier so the definition cannot drift. Outranks controls, ceiling and owner approval alike |
+| Root cause or current deployment identity is ambiguous | `DEPLOYMENT_IDENTITY_AMBIGUOUS` |
+| Telemetry is stale, unavailable, noisy, or in a monitoring outage | `TELEMETRY_UNRELIABLE` |
+| Multiple deployments are in flight | `CONCURRENT_DEPLOYMENTS` |
+| An owner freeze or kill switch blocks automation | The `controls.ts` envelope, which forces every action off |
+| Rollback would exceed the retry limit | `retries.ts`, bounded and escalating |
+| The previous artifact is known healthy | `NO_VALIDATED_LAST_KNOWN_GOOD` — Last Known Good resolves only from a deployment whose own validation passed |
+
+Not implemented: independent multi-signal health thresholds, the idempotent provider operation and
+concurrency lock, and observing the rollback action itself. Each needs a deployment adapter, which
+is **Not Connected**.
+
 ## Trigger and response model
 
 1. Post-deploy validation observes a sustained, attributable failure outside the warm-up window.

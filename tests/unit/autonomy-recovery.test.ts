@@ -38,7 +38,7 @@ const asShipped = resolveEffectiveControls(allOn, allOn, {
 function failure(overrides: Partial<FailedRelease> = {}): FailedRelease {
   return {
     risk: "GREEN",
-    containsDestructiveMigration: false,
+    releaseRiskFactors: [],
     lastKnownGoodValidated: true,
     repairAttemptsUsed: 0,
     ...overrides,
@@ -69,20 +69,20 @@ describe("ordering", () => {
   });
 });
 
-describe("never auto-reverse a destructive migration", () => {
+describe("never auto-reverse an irreversible release", () => {
   it("refuses rollback to the owner when the release dropped something", () => {
-    const plan = planRecovery(failure({ containsDestructiveMigration: true }), permissive);
+    const plan = planRecovery(failure({ releaseRiskFactors: ["destructive-production-data"] }), permissive);
     const rollback = stepOf(plan, "rollback");
 
     expect(rollback?.decision).toBe("OWNER_ONLY");
-    expect(rollback?.refusal).toBe("DESTRUCTIVE_MIGRATION_IN_RELEASE");
+    expect(rollback?.refusal).toBe("IRREVERSIBLE_CHANGE_IN_RELEASE");
     expect(rollback?.detail).toMatch(/not an undo/i);
   });
 
   it("holds even when everything else would have allowed it", () => {
     // Enabled, within ceiling, validated last known good, executor connected.
     const plan = planRecovery(
-      failure({ containsDestructiveMigration: true, risk: "GREEN" }),
+      failure({ releaseRiskFactors: ["destructive-production-data"], risk: "GREEN" }),
       permissive,
     );
 
@@ -94,11 +94,73 @@ describe("never auto-reverse a destructive migration", () => {
     // No validated last known good *and* destructive: the destructive fact is
     // the one an owner needs to see.
     const plan = planRecovery(
-      failure({ containsDestructiveMigration: true, lastKnownGoodValidated: false }),
+      failure({ releaseRiskFactors: ["destructive-production-data"], lastKnownGoodValidated: false }),
       permissive,
     );
 
-    expect(stepOf(plan, "rollback")?.refusal).toBe("DESTRUCTIVE_MIGRATION_IN_RELEASE");
+    expect(stepOf(plan, "rollback")?.refusal).toBe("IRREVERSIBLE_CHANGE_IN_RELEASE");
+  });
+
+  it.each([
+    "secrets-or-credentials",
+    "authentication-or-security-controls",
+    "dns-or-domain-ownership",
+    "privileged-access",
+    "irreversible-production-change",
+  ] as const)("refuses rollback when the release touched %s", (factor) => {
+    // AUTO_ROLLBACK.md prohibits automation when "the preceding release
+    // included irreversible data, auth, security, secret, DNS, or
+    // infrastructure changes" — not only destructive migrations.
+    const plan = planRecovery(failure({ releaseRiskFactors: [factor] }), permissive);
+
+    expect(stepOf(plan, "rollback")?.decision).toBe("OWNER_ONLY");
+    expect(stepOf(plan, "rollback")?.refusal).toBe("IRREVERSIBLE_CHANGE_IN_RELEASE");
+  });
+
+  it("names every irreversible class it found, not just the first", () => {
+    const plan = planRecovery(
+      failure({ releaseRiskFactors: ["secrets-or-credentials", "dns-or-domain-ownership"] }),
+      permissive,
+    );
+
+    expect(stepOf(plan, "rollback")?.detail).toMatch(/secrets or credentials/);
+    expect(stepOf(plan, "rollback")?.detail).toMatch(/dns or domain ownership/);
+  });
+
+  it("ignores a reversible factor", () => {
+    // A schema addition or a dependency bump is not irreversible.
+    const plan = planRecovery(
+      failure({ releaseRiskFactors: ["non-destructive-schema-change", "dependency-change"] }),
+      permissive,
+    );
+
+    expect(stepOf(plan, "rollback")?.decision).toBe("DO");
+  });
+});
+
+describe("the policy's ambiguous-state prohibitions", () => {
+  it.each([
+    ["deploymentIdentityAmbiguous", "DEPLOYMENT_IDENTITY_AMBIGUOUS"],
+    ["telemetryUnreliable", "TELEMETRY_UNRELIABLE"],
+    ["concurrentDeployments", "CONCURRENT_DEPLOYMENTS"],
+  ] as const)("hands the decision to an owner when %s", (field, refusal) => {
+    const plan = planRecovery(failure({ [field]: true }), permissive);
+
+    expect(stepOf(plan, "rollback")?.decision).toBe("OWNER_ONLY");
+    expect(stepOf(plan, "rollback")?.refusal).toBe(refusal);
+  });
+
+  it("still rolls back when none of them applies", () => {
+    const plan = planRecovery(
+      failure({
+        deploymentIdentityAmbiguous: false,
+        telemetryUnreliable: false,
+        concurrentDeployments: false,
+      }),
+      permissive,
+    );
+
+    expect(stepOf(plan, "rollback")?.decision).toBe("DO");
   });
 });
 
