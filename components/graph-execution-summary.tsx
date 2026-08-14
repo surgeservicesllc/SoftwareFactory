@@ -56,6 +56,10 @@ export function GraphExecutionSummary({ templateKey }: { templateKey: string }) 
                 {preview.modelNodeCount} of {preview.nodes.length}
               </dd>
             </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted">Isolated checkouts</dt>
+              <dd className="tabular text-foreground">{preview.isolatedWorkspaces}</dd>
+            </div>
           </dl>
 
           <p className="mt-4 text-sm text-muted">{preview.costNote}</p>

@@ -342,9 +342,14 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
 
           <Card>
             <SectionTitle
-              title="Lock waves"
+              title="Lock waves and isolation"
               description="Nodes whose writes do not overlap can hold their locks at the same time. More than one wave means contention is resolved by scheduling rather than by collision and retry."
             />
+            <p className="mt-3 text-sm text-muted">
+              {preview.isolatedWorkspaces === 0
+                ? "No node writes to the repository, so none needs its own checkout."
+                : `${preview.isolatedWorkspaces} node(s) write, so each gets an isolated checkout. Two agents editing one checkout lose each other's work in a way that still builds and still passes.`}
+            </p>
             <div className="mt-4 space-y-2">
               {preview.lockWaves.map((wave, index) => (
                 <div key={index} className="flex flex-wrap items-center gap-2">

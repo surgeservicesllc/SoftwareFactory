@@ -1,5 +1,6 @@
 import { compileGraph, describeCompiledGraph, type CompiledGraph } from "@/lib/graph/compiler";
 import { assessBudget, type GraphBudget } from "@/lib/graph/budgets";
+import { isolatedWorkspaceCount } from "@/lib/graph/fan-out";
 import { planLockWaves } from "@/lib/graph/locks";
 import { templateNodeContracts, type GraphTemplate } from "@/lib/graph/templates";
 
@@ -56,6 +57,8 @@ export type GraphPreview = {
   readonly removedEdges: readonly RemovedPreviewEdge[];
   readonly layers: readonly (readonly string[])[];
   readonly lockWaves: readonly (readonly string[])[];
+  /** Isolated checkouts this graph would need at full width. */
+  readonly isolatedWorkspaces: number;
   readonly maxParallelism: number;
   readonly sequentialDepth: number;
   readonly modelNodeCount: number;
@@ -178,6 +181,7 @@ export function previewGraph(
     })),
     layers,
     lockWaves: planLockWaves(graph.nodes),
+    isolatedWorkspaces: isolatedWorkspaceCount(graph.nodes),
     maxParallelism: graph.maxParallelism,
     sequentialDepth: graph.sequentialDepth,
     modelNodeCount: modelNodes.length,

@@ -117,8 +117,20 @@ a real typecheck failure earlier in this work.
       Every run on PR #27 has been manually dispatched. Until the cause is found, treat a green
       PR as green only when an Actions run actually exists for its head commit — the absence of
       a run looks identical to a run that has not started yet.
-- [x] **Migration ledger repaired** (2026-08-14). The ledger now holds 45 rows through
-      `20260814000200`, and no repository migration is unrecorded.
+- [ ] **Apply the ten unhosted migrations.** Verified against hosted on 2026-08-14: the ledger
+      holds **45 rows** with a high-water mark of `20260814000200`, while the repository has
+      **55** migrations. Nothing in the ledger is missing from the repository. The ten unapplied
+      are `20260813001550`, `20260813001700`, the five AgentOS migrations
+      (`20260814000300`–`000700`), `20260814002000_phase2c_resource_persistence`,
+      `20260814002100_declare_model_strength_and_context`, and
+      `20260814002200_graph_anchors`. Note the first two sort **below** the high-water mark, so
+      they were skipped rather than deferred.
+      **An agent cannot apply these**: writing to hosted Supabase is refused by the Claude Code
+      auto-mode classifier, which is the correct guard for a RED action against production. This
+      needs the owner, or an explicit permission rule.
+- [x] **Migration ledger repaired** (2026-08-14). The earlier repair holds: no repository
+      migration below the high-water mark is unrecorded except the two named above, and no
+      ledger row lacks a repository file.
 - [x] **Second and third duplicate migration versions resolved** (2026-08-14). Each `main` merge
       into PR #27 produced one. First `20260814000100`: `graph_engineering` (this branch, hosted)
       against `phase2c_resource_persistence` (main, unhosted) — the latter renamed to
@@ -319,8 +331,13 @@ frozen policies, discovery stop conditions.
       planning so contention is resolved by scheduling rather than by collision and retry.
 - [ ] **Blocked on credentials:** assemble the bridge into a live `executeNode`. Written and
       unit-tested against stub responses; its first real call needs a provider key.
-- [ ] Fan-out onto isolated workspaces. `lib/worker/workspace.ts` already supports concurrent
-      isolation; nothing fans out to it until nodes execute.
+- [x] **Fan-out onto isolated workspaces** (`lib/graph/fan-out.ts`). A node that writes always
+      gets its own checkout, even alone — a writer in a shared checkout is a landmine for
+      whatever runs next. Read-only nodes share one, since cloning per reader buys no safety.
+      Allocation is bounded and a writer that does not fit is **deferred rather than run
+      unisolated**: a bounded delay always beats the silent corruption of one agent's work
+      vanishing from a branch that still builds and still passes. Acquisition is injected, so
+      the coordination is proven without a token; the git clone behind it is not.
 - [x] **Anchor persistence** (`20260814002200_graph_anchors.sql`, `lib/graph/anchor-store.ts`).
       Four RLS + FORCE RLS tables, no browser write grants, two SECURITY DEFINER functions.
       The load-bearing decision: **the database decides whether a claim is anchored.**
