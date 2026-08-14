@@ -1,7 +1,8 @@
 # Phase 1E repair work cannot reach Phase 1C execution
 
 Found: 2026-08-13, by attempting the wiring rather than assuming it.
-Status: **contract satisfied and proven; route wiring remains.** See "Progress" at the end.
+Status: **closed in code.** The chain is continuous; it does not yet execute, for the reasons in
+"What this does and does not unblock". See "Progress" at the end.
 
 ## What the chain claims
 
@@ -98,13 +99,38 @@ That last row is the important one. Repair work enters the ordinary gates: the d
 reads the diagnosis text, sees an authentication-shaped repair, and forces owner approval exactly as
 if a person had typed the request.
 
+### The route, and the link behind it
+
+`POST /api/operations/incidents/[incidentId]/promote` is owner-only, because promotion starts a Codex
+engineering command and therefore carries the same requirement as submitting one directly. It
+resolves the repository through `resolve_phase1c_command_target`, mints a scoped installation token,
+and reads the base branch with `getGitHubBranchReference` — a live read, because a stale or invented
+SHA would send a worker at the wrong tree. A GitHub failure there returns `project_not_executable`
+rather than falling back to a guess.
+
+`link_repair_promotion` (migration `20260813001700`) does only the part that must be privileged and
+transactional: `authenticated` holds no UPDATE on `repair_attempts`. It re-checks every precondition
+the route checked. The route's checks produce a useful error message; these are the ones that
+actually hold, because a route can be bypassed and a SECURITY DEFINER function cannot.
+
+The "already promoted" guard keys on `state = 'assigned'`, which only promotion sets. Not `task_id`
+— `create_repair_attempt` already points that at the bare backlog task. Not `assignment_status`
+either — promotion sets that to `pending`. Both of the wrong guards were written first and caught by
+the double-promotion test.
+
+| Assertion | Result |
+| --- | --- |
+| Promotion links the task and moves the attempt to `assigned` / `pending` | Pass |
+| A second promotion of the same attempt is refused | Pass |
+| An attempt with no diagnosis is refused | Pass |
+| A **release freeze** does not block promotion | Pass — a frozen project still needs repair |
+| The **emergency stop** does block promotion | Pass |
+| The route is owner-only and goes through `submit_command` | Pass, asserted against the route source |
+
 ### What remains
 
-A route that calls this and links the result back. It needs the same live `baseSha` resolution the
-commands route performs — mint an installation token, read the base branch reference — because a
-stale or invented SHA would send a worker at the wrong tree. That is mechanical, but it is a real
-GitHub round trip and belongs behind the same failure handling the commands route already has.
-
-Execution still needs a registered Phase 1C worker and `OPENAI_API_KEY`. With the route in place and
-neither present, a promoted run would sit `queued` — truthful, and visibly different from a task that
-could never be claimed at all.
+Execution. Phase 1C needs a registered worker and `OPENAI_API_KEY`, neither of which exists in any
+verified environment here, and migration `20260813001700` is not applied to the hosted database. A
+promoted run therefore sits `queued`, which the route says in its own response rather than leaving a
+reader to infer. That is truthful, and visibly different from a task that could never be claimed at
+all — which is the whole of what this change bought.

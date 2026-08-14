@@ -144,7 +144,9 @@ Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
 
 - Rollback **execution** — no deployment adapter, `AUTO_ROLLBACK.md` disables it, migration
   `010` pins `auto_rollback` off. Every rollback records `EXECUTOR_NOT_CONNECTED`.
-- Codex repair **execution** — Phase 1C is Not Connected. Repair work is created, unassigned.
+- Codex repair **execution** — Phase 1C is Not Connected. Repair work can now be *promoted* into
+  the ordinary command queue, where it sits `queued`; nothing claims it without a registered
+  worker and a provider credential.
 - Synthetic **write** steps — declared and validated, recorded as `skipped`, never issued.
 - Autonomous deployment or merge. `autonomous_release_allowed` returns false unconditionally.
 
@@ -192,13 +194,15 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 - [ ] Persist routing decisions, capability profiles, and breaker state (migration + RLS), and
       surface them in a Resource Manager UI showing why each worker was selected.
 - [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
-- [x] **Phase 1E → Phase 1C contract satisfied.** `lib/operations/promotion.ts` assembles a valid
+- [x] **Phase 1E → Phase 1C gap closed in code.** `lib/operations/promotion.ts` assembles a valid
       Phase 1C command from a diagnosis, proven against the *real* `submit_command`: keys match the
       allowlist exactly, a command and task are created, promotion is idempotent per repair attempt,
       and a security-shaped repair is forced to RED and `awaiting_approval` — no privileged lane.
-- [ ] **Remaining:** the route that calls it and links the task back onto `repair_attempts`. Needs
-      live `baseSha` resolution (installation token + branch reference), as the commands route does.
-      See `AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md`.
+      `POST /api/operations/incidents/[incidentId]/promote` (owner-only) submits it with a **live**
+      `baseSha` from an installation-token branch read, and `link_repair_promotion` (migration
+      `20260813001700`) records the link under re-validated preconditions, because a route can be
+      bypassed and a SECURITY DEFINER function cannot. A release freeze does not block promotion;
+      the emergency stop does. See `AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md`.
 - [ ] **Blocked on credentials:** queues, dynamic concurrency, and the budget ladder need a worker
       pool that executes. Specified in the plan, deliberately not simulated.
 - [ ] **Blocked on credentials:** objective §16's "historical-performance routing improvement"
