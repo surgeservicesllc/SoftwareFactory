@@ -123,18 +123,22 @@ real and tested on `main`:
 Sequenced so each step is independently useful, and so nothing depends on
 provider credentials until the live demonstrations.
 
-**Stage 1 — the engine core (pure, no I/O, fully testable today)**
-1. Topology selection with an explicit bias toward `SINGLE_AGENT`.
-2. Dependency analysis and the fake-edge test, with a recorded reason per surviving edge.
-3. Typed node contracts and output validation.
-4. The DAG scheduler as a pure state machine over the nine node states.
-5. Deterministic reducers (dedupe/sort/group/count/filter/normalise/validate/aggregate).
-6. Fan-in completeness guard and `PARTIAL_INPUT`.
-7. Layered fan-in thresholds.
-8. Graph budgets and degradation policy.
-9. Verification quorum, including "security BLOCK always blocks".
-10. Frozen policies, declared and enforced against planner mutation.
-11. Discovery-round stop conditions.
+**Stage 1 — the engine core (pure, no I/O, fully testable today) — IMPLEMENTED**
+
+Delivered in `lib/graph/`, 61 tests across `tests/unit/graph-planning.test.ts`
+and `tests/unit/graph-execution.test.ts`. See `AI/GRAPH_ENGINEERING.md`.
+
+1. ~~Topology selection with an explicit bias toward `SINGLE_AGENT`.~~ **DONE** — `topology.ts`.
+2. ~~Dependency analysis and the fake-edge test.~~ **DONE** — `dependencies.ts`; every surviving edge records why.
+3. ~~Typed node contracts and output validation.~~ **DONE** — `contracts.ts`; prose is rejected where structure is required.
+4. ~~The DAG scheduler as a pure state machine.~~ **DONE** — `scheduler.ts`; pure, so a restart replays to the same decision.
+5. ~~Deterministic reducers.~~ **DONE** — `reducers.ts`.
+6. ~~Fan-in completeness guard and `PARTIAL_INPUT`.~~ **DONE** — `fan-in.ts`.
+7. ~~Layered fan-in thresholds.~~ **DONE** — `fan-in.ts`; batches rather than truncates.
+8. ~~Graph budgets and degradation policy.~~ **DONE** — `budgets.ts`; cost is real or absent.
+9. ~~Verification quorum.~~ **DONE** — `verification.ts`; a security BLOCK is absolute.
+10. ~~Frozen policies.~~ **DONE** — `frozen.ts`; catches a plan under-declaring its own risk.
+11. ~~Discovery-round stop conditions.~~ **DONE** — `discovery.ts`; only verified items count as progress.
 
 **Stage 2 — durability**
 12. The thirteen tables, with RLS, FORCE RLS, foreign keys, indexes, audit events.
@@ -176,10 +180,18 @@ Blocker 4 gates Stage 2. Blockers 1–3 gate Stage 5. Stage 1 is unblocked.
 
 ## 5. Honest completion statement
 
-At audit time Phase 2B is **0% implemented**. No graph, node, edge, lock,
+At audit time Phase 2B was 0% implemented. **Stage 1 of five is now complete**,
+which is roughly **20%** of Phase 2B by stage count and rather less by effort,
+since stages 2–4 carry the schema, the execution loop, and the UI. No graph, node, edge, lock,
 contract, verification, budget, or template exists in code or schema.
 
-What exists is the substrate: isolated workspaces, real container validation,
+What now exists beyond the substrate is the reasoning core: topology selection,
+fake-edge removal, typed contracts, the scheduler state machine, deterministic
+reducers, fan-in guards, quorum, budgets, frozen policies, and discovery stop
+conditions — all pure and tested. Nothing is persisted and nothing executes
+against a provider yet.
+
+The substrate it builds on: isolated workspaces, real container validation,
 provider routing, the Phase 1D decision layer, and the Phase 1E production
 surfaces. Phase 2B connects those into a graph engine; it does not replace
 them, and §30 is explicit that it must not create a second release pipeline.
