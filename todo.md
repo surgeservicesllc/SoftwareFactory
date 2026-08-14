@@ -1,7 +1,7 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–5, open in PR #27)
-Current `main`: `5c28f57` — AgentOS goals
+Last updated: 2026-08-14 (Phase 2B graph engineering open in PR #27; AgentOS, Phase 2C routing and probe hardening merged)
+Current `main`: `5364b66` — RPC call sites verified against the migrated schema
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -23,11 +23,11 @@ sections separate so two agents editing at once conflict on one section rather t
 | Workstream | State | Blocking item |
 | --- | --- | --- |
 | Phase 1B — GitHub App integration | Live for the owner repository path | Second-tenant and adverse lifecycle matrix |
-| Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Hosted migration `20260813000500`; executors owned elsewhere |
-| Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
+| Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Executors owned elsewhere |
+| Phase 1E — production operations | **Merged; ~87% of objective in this tree** | Six unhosted migrations; no observed production target |
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
 | Phase 2B — graph engineering | **Open in PR #27**; stages 1–5, 6 of 7 demonstrations passing | Provider credentials for the live model calls only |
-| Phase 2C — resource manager | Merged; scoring core, persistence and UI | Hosted migration `20260814000300`; wiring into the Phase 1C DAG |
+| Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 | Sign-up and sign-in | Merged (PR #15) | Custom SMTP; the owner account is unconfirmed |
 
@@ -152,6 +152,11 @@ a real typecheck failure earlier in this work.
       timestamps independently with nothing to stop them agreeing. Worth a convention (per-phase
       version ranges, or a pre-commit check that fails on a duplicate version prefix) rather than
       catching it by hand each time.
+Gates on current `main`: lint, typecheck, 143 files / 1621 tests, clean production build,
+Playwright across desktop/tablet/mobile including axe.
+
+**Owner actions are collected in `AI/HOSTED_APPLY_RUNBOOK.md`** — the exact unhosted migration
+list, the order, and the real-PostgreSQL verification already done, so applying them is not blind.
 
 ---
 
@@ -233,28 +238,41 @@ Phase 2A readiness live in `AI/PHASE_1E_IMPLEMENTATION_PLAN.md`.
 
 ### Remaining
 
-- [ ] **Owner-gated: apply hosted migrations `028`, `029` and `030`** to `qpuofpmagrmyamahqwxw`.
+- [ ] **Owner-gated: apply the six unhosted migrations** to `qpuofpmagrmyamahqwxw`. The hosted
+      ledger ends at `20260813001400`; everything after it is unhosted, and `20260813001500` needs
+      its own fresh RED approval against a frozen SHA. Exact list, order and the real-PostgreSQL
+      verification behind it: `AI/HOSTED_APPLY_RUNBOOK.md`. (Earlier entries here named `028`/`029`/
+      `030`, which were stale — `028` has been hosted since the ledger reconciliation.)
       Reauthenticate the Supabase CLI as `surgeservicesllc@gmail.com` first — the currently
       selected profile is wrong/unauthorized. Until this runs, every Phase 1E surface reports
       **Not Connected** or **Unknown**, which is truthful.
 - [x] First **real production observation** recorded — the shipped probe observed
       `https://www.theagoras.com` at 4/4 routes, 200, 190-933 ms. See
       `AI/PRODUCTION_OBSERVATION_EVIDENCE.md`. It surfaced two operational findings below.
-- [ ] **Owner decision: Vercel Deployment Protection.** Both `*.vercel.app` hosts return `302`
-      to Vercel SSO for every route, so no external monitor can observe the URLs recorded as
-      production. Monitoring must target the custom domain, or protection must change.
+- [ ] **Owner decision: Vercel Deployment Protection.** Both `*.vercel.app` hosts return `302` to
+      `vercel.com/sso-api`, re-verified 2026-08-14. **Corrected framing:** this does *not* block
+      monitoring. `https://www.theagoras.com` answers `200` and is a valid monitor target, so
+      Protection can stay on — which is the better posture. What it genuinely blocks is observing a
+      *specific deployment* by its `*.vercel.app` URL, which matters for per-deploy validation
+      rather than uptime.
 - [ ] **Owner decision: the `theagoras.com` aliases.** The open "remove or retain" review item now
       has evidence: with protection on, `www.theagoras.com` is the *only* public path to the
       application. Removing it takes the public site — including the marketing pages — offline.
-- [ ] **Owner-gated: store** what the probe observes. Needs hosted `028`/`029`/`030` plus a monitor
+- [ ] **Owner-gated: store** what the probe observes. Needs the unhosted chain applied plus a monitor
       row; until then the adapter can be exercised but the pipeline behind it cannot run.
 - [ ] Authorize a scheduler identity for continuous monitoring. Checks are owner-triggered
       today. **Constraint: this must not widen `service_role`** — use a narrow SECURITY DEFINER
       ingest path, not table grants.
 - [ ] Connect Vercel deployment status, and error-rate/latency telemetry. Both are Not Connected
       with no provider; error rate in particular cannot be derived from a single probe.
-- [ ] Probe hardening: a public hostname that resolves to a private address at DNS time is not
-      detected. Needs resolve-then-connect-by-IP handling.
+- [x] **Probe SSRF hardening closed.** A public hostname resolving to a private address is now
+      refused at *connect* time via undici's `connect.lookup` (`lib/operations/guarded-lookup.ts`),
+      not by resolving separately and checking the result — a separate resolve leaves the rebinding
+      window open, because the second resolution is free to disagree with the first. Any blocked
+      answer fails the whole lookup even when a public address was offered alongside it; filtering
+      to the public one would be luck, not a control. `lib/operations/address.ts` covers both
+      families including the IPv4-mapped forms — the hex spelling `::ffff:7f00:1` was a live bypass
+      in the first implementation and is now a test.
 - [x] Two concurrent-write races found and fixed by testing against a **real PostgreSQL**
       server rather than PGlite (migration `030`): simultaneous first signals dropped one
       occurrence on the incident fingerprint index, and concurrent rollback decisions
@@ -485,7 +503,6 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 - [ ] Call it from the Phase 1C task DAG so tasks route automatically rather than on request. Left
       undone deliberately: the claim path is hosted and live, and nothing executes anyway, so
       changing it now buys no behavior and risks conflicting with concurrent agents.
-- [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
 - [x] **Phase 1E → Phase 1C gap closed in code.** `lib/operations/promotion.ts` assembles a valid
       Phase 1C command from a diagnosis, proven against the *real* `submit_command`: keys match the
       allowlist exactly, a command and task are created, promotion is idempotent per repair attempt,
