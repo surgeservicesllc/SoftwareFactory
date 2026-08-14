@@ -1,7 +1,7 @@
 # SoftwareFactory — shared working status
 
 Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–5, open in PR #27)
-Current `main`: `438a370` — Phase 2C Resource Manager UI
+Current `main`: `406d754` — Phase 2C routing against real rows
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -60,10 +60,13 @@ concurrently.
 
 **Two traps that have already cost time:**
 
-- **Migration versions collide across workstreams.** It has happened twice
-  (`20260813000500`, then `20260814000100`). Before adding a migration, list
-  `supabase/migrations/` and pick a version after everything applied. An applied
-  filename cannot move; an unhosted one can.
+- **Migration versions collide across workstreams — three times now**
+  (`20260813000500`, `20260814000100`, `20260814000200`), once per `main` merge.
+  This is not bad luck; it is two workstreams picking timestamps independently,
+  and it will keep happening. Before adding a migration, list
+  `supabase/migrations/` and pick a version after everything applied. The rule
+  that resolves it: **an applied filename cannot move, an unhosted one can.**
+  Check `AI/DECISIONS.md` for whether a migration is hosted before renaming it.
 - **Automatic CI is intermittent.** A missing run and a not-yet-started run look
   identical. Confirm an Actions run exists *for the head SHA* before believing a
   PR is gated, and dispatch `ci.yml` manually if none does.
@@ -112,13 +115,18 @@ a real typecheck failure earlier in this work.
       a run looks identical to a run that has not started yet.
 - [x] **Migration ledger repaired** (2026-08-14). The ledger now holds 45 rows through
       `20260814000200`, and no repository migration is unrecorded.
-- [x] **Second duplicate migration version resolved** (2026-08-14). Merging `main` into PR #27
-      put two files on version `20260814000100`: `graph_engineering` (this branch) and
-      `phase2c_resource_persistence` (main). `graph_engineering` is already applied to hosted
-      and recorded in the ledger, so its filename cannot move; `phase2c_resource_persistence`
-      is unhosted, so it was renamed to `20260814000300` — the same resolution the earlier
-      `20260813000500` collision took. Left unresolved, the ledger would have treated the
-      Phase 2C migration as already applied and it could never have been hosted.
+- [x] **Second and third duplicate migration versions resolved** (2026-08-14). Each `main` merge
+      into PR #27 produced one. First `20260814000100`: `graph_engineering` (this branch, hosted)
+      against `phase2c_resource_persistence` (main, unhosted) — the latter renamed to
+      `20260814000300`. Then `20260814000200`: `graph_write_boundary` (this branch, hosted)
+      against `declare_model_strength_and_context` (main, unhosted) — the latter renamed to
+      `20260814000400`. Both follow the rule the earlier `20260813000500` collision set: the
+      applied filename cannot move, the unhosted one can. Left unresolved, the ledger would
+      treat the losing migration as already applied and it could never be hosted.
+- [ ] **The collisions will recur.** Three in two days, one per merge. Two workstreams pick
+      timestamps independently with nothing to stop them agreeing. Worth a convention (per-phase
+      version ranges, or a pre-commit check that fails on a duplicate version prefix) rather than
+      catching it by hand each time.
 
 ---
 
@@ -413,9 +421,15 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
       `lib/resources/store.ts` reads before a decision and writes after one, failing soft on a
       read (an unreadable breaker must not block work it never saw fail) and hard on a write (a
       lost fault observation looks like health).
-- [ ] Capability profiles are still code constants, not per-organization rows. Declaring them in
-      the database needs a decision about whether they extend `provider_model_configurations` or
-      sit beside it; not worth guessing.
+- [x] **Candidates come from real tenant rows**, not code constants
+      (`lib/resources/candidates.ts`): `agents` → agent profiles, `provider_model_configurations`
+      → model profiles. Migration `20260814000200` adds owner-declared `strength_tier` and
+      `context_limit_tokens` to the Phase 2A catalogue — additively, touching nothing
+      `20260813001500` redefines. Both are **nullable, and null means undeclared, never a
+      default**: undeclared strength resolves to the weakest tier so it cannot pass the
+      strong-model gate, and undeclared context resolves to zero so nothing can be shown to fit.
+      Only the six unambiguous Phase 2A capability names are mapped — `reporting` is deliberately
+      not mapped to `synthesis`, because `synthesis` gates work onto strong models.
 - [x] **Resource Manager UI** at `/solutions/resources`, reading `GET /api/resources/overview`.
       Shows breakers with fault explanation and cooldown, transitions, and per-decision candidate
       evidence with eligibility and named rejection codes. Almost every panel is legitimately
@@ -423,8 +437,16 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
       healthy", and an unevidenced prediction shows "No recorded history" rather than 0%. The
       Execution card shows `—` while loading rather than defaulting to "Not Connected", because
       that is a state read from the server, not a fallback.
-- [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it, and record each
-      decision with `recordAssignment`.
+- [x] **`POST /api/resources/route`** routes one unit of work against the organization's real
+      agents, models and stored breaker state, and records the decision with `recordAssignment`.
+      It selects; it starts nothing — no claim, no token, no provider call, asserted by
+      `tests/integration/phase2c-routing.contract.test.ts`. An unconfigured organization returns
+      `NO_CANDIDATES_CONFIGURED` rather than a routing failure, because "no eligible worker" and
+      "nobody declared any models" have different fixes. A decision that cannot be stored is still
+      returned, marked unrecorded, so a persistence problem does not masquerade as a routing one.
+- [ ] Call it from the Phase 1C task DAG so tasks route automatically rather than on request. Left
+      undone deliberately: the claim path is hosted and live, and nothing executes anyway, so
+      changing it now buys no behavior and risks conflicting with concurrent agents.
 - [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
 - [x] **Phase 1E → Phase 1C gap closed in code.** `lib/operations/promotion.ts` assembles a valid
       Phase 1C command from a diagnosis, proven against the *real* `submit_command`: keys match the
