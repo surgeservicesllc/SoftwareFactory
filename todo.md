@@ -51,12 +51,12 @@ concurrently.
    the honest one and it was got wrong once already (stage 5 was recorded as
    fully credential-blocked when six of seven demonstrations needed no
    credential at all).
-2. **The next buildable thing is anchor persistence** — writing anchors against
-   `node_runs` and `graph_verifications`. The evidence model exists in
-   `lib/graph/anchors.ts`; the persistence does not. Stage 3 lists it.
-3. **Everything else outstanding in Phase 2B needs a provider key.** Do not
+2. **Everything still outstanding in Phase 2B needs a provider key.** Do not
    simulate it. `lib/graph/provider-bridge.ts` is written and unit-tested against
-   stubs and is the seam a live `executeNode` plugs into.
+   stubs and is the seam a live `executeNode` plugs into; `lib/graph/anchor-store.ts`
+   is the seam for recording what that run observed.
+3. **Migration `20260814000700` is unhosted**, like every other migration added
+   since the ledger repair. Applying it is an owner-gated action.
 
 **Two traps that have already cost time:**
 
@@ -315,8 +315,16 @@ frozen policies, discovery stop conditions.
       unit-tested against stub responses; its first real call needs a provider key.
 - [ ] Fan-out onto isolated workspaces. `lib/worker/workspace.ts` already supports concurrent
       isolation; nothing fans out to it until nodes execute.
-- [ ] Persist anchors against node runs and verifications. The evidence model exists; the
-      persistence for it does not, and it is only meaningful once real runs produce anchors.
+- [x] **Anchor persistence** (`20260814000700_graph_anchors.sql`, `lib/graph/anchor-store.ts`).
+      Four RLS + FORCE RLS tables, no browser write grants, two SECURITY DEFINER functions.
+      The load-bearing decision: **the database decides whether a claim is anchored.**
+      `record_claim_anchoring` is handed anchor IDs, not a verdict — it looks each one up, checks
+      the kind is acceptable for the claim and that the observation passed, and computes
+      `anchored` itself. A caller can offer evidence and be told; it cannot assert support.
+      Contradicting anchors are stored but not linked to the claim, because they are the reason
+      it failed. Evidence borrowed from another run is ignored, a future-dated observation is
+      refused, and a claim cannot be re-decided on the same node run — otherwise a refusal could
+      be retried until something stuck.
 
 ### Stage 4 — surfaces — done
 
