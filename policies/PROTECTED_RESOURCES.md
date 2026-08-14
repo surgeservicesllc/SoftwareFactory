@@ -61,6 +61,32 @@ The following are protected by subject matter even if repository path names chan
 
 Documentation-only clarification may be GREEN/YELLOW, but any semantic reduction in protection is RED.
 
+## Which of these are enforced in code
+
+`lib/autonomy/diff-risk.ts` classifies a real diff, so the protected paths below are the part of this policy a machine can check. Everything else in this document is a rule for the humans and agents working the repository, not something the classifier can see.
+
+| Protected path | Classified | Where |
+| --- | --- | --- |
+| `supabase/migrations/**` | YELLOW; RED on a destructive statement, an authority-widening statement, or audit-evidence destruction | `DESTRUCTIVE_SQL`, `AUTHORITY_WIDENING`, `AUDIT_EVIDENCE_DESTRUCTION` |
+| `.github/workflows/**` | RED | `privileged-access` |
+| Authentication, authorization, RLS, encryption, secret resolution | RED | `authentication-or-security-controls` |
+| `.env*` | RED | `secrets-or-credentials`, by path and by content shape |
+| `policies/**`, `AGENTS.md`, `CLAUDE.md` | RED | `authentication-or-security-controls` |
+| Safety-relevant AI memory (`AI/DECISIONS.md`) | YELLOW | `safety-relevant-memory` |
+| DNS, domains, TLS, certificates, hosting routing | RED | `dns-or-domain-ownership` |
+| Billing, payments, subscriptions | RED | `money-or-billing` |
+| Backups, retention, recovery | RED | `destructive-production-data` |
+| The autonomy control model (`lib/autonomy/controls.ts`) | RED | `privileged-access` |
+| Unrecognised paths | YELLOW | `classifyRisk` defaults an empty factor set to YELLOW |
+
+"Automated systems cannot weaken, remove, or approve changes to their own guardrails" is enforced in three places: the authority-widening content rules classify any enabling of autonomous authority as RED; `lib/autonomy/approval.ts` refuses self-approval absolutely, so an author can never approve their own change; and `AI/DECISIONS.md` is raised above documentation-only so a guardrail decision cannot be deleted inside an otherwise-GREEN diff.
+
+Not enforced in code, and not claimed to be:
+
+- Semantic reduction in protection is not detected. The classifier reads paths and added lines; it cannot tell a policy clarification from a policy weakening. Where that distinction matters it over-classifies — every path under `policies/` is RED, including a clarification this policy would allow at YELLOW.
+- The access-and-evidence record below is a schema and a contract, not an enforced workflow. Nothing blocks a protected-resource action on the absence of that record, because no executor performs protected-resource actions.
+- Provider scopes, branch protection settings, and CODEOWNERS are read from GitHub where CI surfaces them; nothing in this repository asserts they are correctly configured.
+
 ## Access and evidence
 
 For each approved protected-resource action, record:

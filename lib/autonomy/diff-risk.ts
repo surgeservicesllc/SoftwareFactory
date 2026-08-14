@@ -142,6 +142,24 @@ const RULES: readonly Rule[] = [
     matches: path(/^(policies|AGENTS\.md|CLAUDE\.md)/),
   },
   {
+    factor: "safety-relevant-memory",
+    reason: "Changes recorded architecture or policy decisions.",
+    // `policies/PROTECTED_RESOURCES.md` lists "safety-relevant AI memory" among
+    // the paths requiring elevated review, and prohibits an automated system
+    // from weakening its own guardrails. The decision log is where those
+    // guardrails are recorded, so editing it is not documentation-only — an
+    // otherwise-GREEN diff could delete the ADR that requires owner approval.
+    //
+    // YELLOW rather than RED is the policy's own wording: documentation-only
+    // clarification "may be GREEN/YELLOW", and only a semantic reduction in
+    // protection is RED. Enhanced gates and a security-agent review apply; an
+    // owner signature does not. The status memory — current state, handoff,
+    // roadmap, backlog, scorecard — stays documentation-only, because every
+    // material change is required to update it and pinning it above GREEN
+    // would mean no change could ever complete.
+    matches: path(/^AI\/DECISIONS\.md$/),
+  },
+  {
     factor: "dns-or-domain-ownership",
     reason: "Changes domain, DNS, TLS, or hosting routing configuration.",
     matches: path(/(^|\/)(vercel|netlify)\.json$|(^|\/)(dns|domains?|tls|certs?|certificates)\//i),

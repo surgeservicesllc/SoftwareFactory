@@ -204,6 +204,40 @@ describe("destroying audit evidence is RED", () => {
   });
 });
 
+describe("safety-relevant AI memory is not documentation-only", () => {
+  // PROTECTED_RESOURCES.md lists it among the paths requiring elevated review
+  // and prohibits an automated system from weakening its own guardrails. An
+  // otherwise-GREEN diff must not be able to delete the ADR that requires
+  // owner approval.
+  it("raises the decision log above GREEN", () => {
+    const assessment = assessDiffRisk([file("AI/DECISIONS.md")]);
+
+    expect(assessment.level).toBe("YELLOW");
+    expect(assessment.factors).toContain("safety-relevant-memory");
+  });
+
+  it("does not let an accompanying docs change pull it back down", () => {
+    expect(assessDiffRisk([file("AI/DECISIONS.md"), file("README.md")]).level).toBe("YELLOW");
+  });
+
+  it("leaves the status memory at GREEN, because every change has to update it", () => {
+    for (const path of [
+      "AI/CURRENT_STATE.md",
+      "AI/HANDOFF.md",
+      "AI/ROADMAP.md",
+      "AI/BACKLOG.md",
+      "AI/QUALITY_SCORECARD.md",
+    ]) {
+      expect(assessDiffRisk([file(path)]).level).toBe("GREEN");
+    }
+  });
+
+  it("stays below the policy documents, which are RED", () => {
+    expect(assessDiffRisk([file("policies/RISK_CLASSIFICATION.md")]).level).toBe("RED");
+    expect(assessDiffRisk([file("AGENTS.md")]).level).toBe("RED");
+  });
+});
+
 describe("the remaining RED classes the policy names", () => {
   it.each([
     ["config/encryption/keys.ts", "authentication-or-security-controls"],

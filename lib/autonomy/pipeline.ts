@@ -4,6 +4,10 @@ import type { AutomaticAction, EffectiveAutonomyControls } from "@/lib/autonomy/
 import { reclassifyAgainstDeclared, type DiffFile, type DiffRiskAssessment } from "@/lib/autonomy/diff-risk";
 import { evaluateGates, type GateEvaluation, type GateResult } from "@/lib/autonomy/gates";
 import { evaluateMergeReadiness, type MergeReadinessRequest } from "@/lib/autonomy/merge-readiness";
+import {
+  evaluatePostDeployValidation,
+  type PostDeployValidationRequest,
+} from "@/lib/autonomy/post-deploy";
 import type { RiskLevel } from "@/lib/risk";
 
 /**
@@ -60,6 +64,23 @@ export const UNEXECUTABLE_STAGES: Readonly<Record<string, string>> = Object.free
   deploy: "DEPLOY_EXECUTOR_NOT_CONNECTED",
 });
 
+/**
+ * The deployment a run refers to when it reached `validate` without one.
+ *
+ * It exists so the absent case goes through the same evaluation as the present
+ * case rather than around it. Every field is empty and `ready` is false, so it
+ * can only ever produce `inconclusive`.
+ */
+const UNVALIDATED_DEPLOYMENT = Object.freeze({
+  projectId: "",
+  environment: "production" as const,
+  provider: "",
+  deploymentId: "",
+  commitSha: "",
+  url: "",
+  ready: false,
+});
+
 export type StageStatus = "pending" | "satisfied" | "blocked";
 
 export interface StageOutcome {
@@ -96,6 +117,12 @@ export interface PipelineInput {
    * the change was gated. Omitted when the run is not attempting a merge.
    */
   readonly mergeReadiness?: Omit<MergeReadinessRequest, "approved" | "executorConnected">;
+  /**
+   * Post-deploy validation evidence, read after a deploy rather than when the
+   * change was gated. Omitting it does not mean "fine" — the stage treats an
+   * absent record as `inconclusive`, which is what the policy requires.
+   */
+  readonly postDeployValidation?: PostDeployValidationRequest;
 }
 
 export interface PipelineRun {
@@ -271,8 +298,23 @@ function evaluateStage(stage: PipelineStage, context: StageContext): StageOutcom
         "No deployment adapter is connected.",
       );
 
-    case "validate":
-      return satisfied(stage, "Post-deploy validation is available once a deploy occurs.");
+    case "validate": {
+      // `POST_DEPLOY_VALIDATION.md`: missing, stale, or mismatched evidence is
+      // `inconclusive`, never `passed`. A stage that reports satisfied because
+      // nothing validated the deploy would invert that, so the absent case is
+      // evaluated through the same function as the present one.
+      const validation = evaluatePostDeployValidation(
+        input.postDeployValidation ?? { deployment: UNVALIDATED_DEPLOYMENT, evidence: null },
+      );
+
+      return validation.outcome === "passed"
+        ? satisfied(stage, "Post-deploy validation passed against matching, fresh evidence.")
+        : blocked(
+            stage,
+            `VALIDATION_${validation.outcome.toUpperCase()}`,
+            validation.reasons.join(" "),
+          );
+    }
 
     case "report":
       return satisfied(stage, "Run recorded.");
