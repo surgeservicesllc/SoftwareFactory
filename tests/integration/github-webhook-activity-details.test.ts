@@ -46,7 +46,7 @@ async function applyFullMigrationChain(db: PGlite) {
     .filter((file) => /^\d+.*\.sql$/.test(file))
     .sort();
   expect(migrationFiles.at(-1)).toBe(
-    "20260814000700_agentos_goals.sql",
+    "20260814000800_agentos_triggers_and_automations.sql",
   );
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
