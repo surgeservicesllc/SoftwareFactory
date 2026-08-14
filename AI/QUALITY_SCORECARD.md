@@ -47,6 +47,23 @@ The three remaining blockers are a funded OpenAI project and rotated key (Phase 
 `VERCEL_TOKEN` (deploy and preview), and an owner decision on the `AGENTS.md` auto-merge
 prohibition. None is a code gap.
 
+### Schema and wiring guards added 2026-08-14
+
+Each of these encodes something that was already true and was verifiable only by a manual run, which does not survive the next migration. They are listed here because the scorecard previously credited manual verification as if it were standing coverage.
+
+| Guard | What it prevents | Status |
+| --- | --- | --- |
+| `tests/integration/migration-version-uniqueness.test.ts` | Two migrations sharing a version prefix. Supabase's ledger keys on the prefix, so a duplicate is two applies competing for one primary key — `db push` fails partway and leaves the hosted schema half-applied | **Caught a live defect.** `20260814000300` was held by both `agentos_isolation_model` and `declare_model_characteristics`; the latter moved to `20260814000250`. Neither was hosted, so the fix carried no ledger consequence |
+| `tests/integration/schema-security-invariants.test.ts` | A new table shipping without RLS, or `service_role` quietly gaining a table privilege | Pass - RLS and FORCE RLS on every public table across the whole chain; `service_role` limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write anywhere |
+| `tests/integration/required-checks-wiring.test.ts` | A renamed CI job leaving a live Phase 1C run waiting for a check that never reports — a hang rather than an error, after real work has been pushed | Pass - `SOFTWAREFACTORY_REQUIRED_CHECKS` matches `ci.yml` job names in both directions |
+| `tests/integration/supabase-rpc-contract.test.ts` (pre-existing) | An `.rpc()` argument-name typo that type-checks and only fails against a real database | Pass - every call site in `app`, `lib`, `scripts` resolves against the migrated schema |
+
+Two findings while writing these turned out to be the code being right and the assertion being wrong: `newsletter_subscribers` is deliberately policyless behind the SECURITY DEFINER `subscribe_to_newsletter`, and the four `service_role` tables are not the names assumed. Both corrections went into the tests.
+
+### Deployment position
+
+Measured 2026-08-14 22:29 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**. The served build's sitemap `lastmod` is `2026-08-14T21:38:25Z`, so production lags `main`. Vercel returned `api-deployments-free-per-day` at 21:54, 22:02, and 22:17 UTC, and a preview succeeded at 22:16 — the free-tier cap throttles rather than blocking outright for a day, contrary to its own message. No `VERCEL_TOKEN` exists in any agent environment, so the deployment list cannot be read and the lag's precise cause is not established. An owner redeploy of `main` from the Vercel dashboard is the remedy.
+
 ### Secret boundary
 
 Scanned on 2026-08-14 across every tracked file and the full git history for OpenAI keys, GitHub
@@ -62,7 +79,7 @@ committed; the repository is consistent with that account.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Phase 1D gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 - lint/typecheck clean; 120 files/1407 tests; production build clean |
+| Merged-tree gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 22:00 UTC - lint/typecheck clean; **153 files/1704 tests**; production build clean. CI green on both required jobs for the commit merged as `145a31d` |
 | Phase 1D E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe | Pass - 117/117 |
 | Phase 1D control interlocks | `tests/integration/phase1d-autonomy-controls.behavior.test.ts` against the migrated schema | Pass - 35 tests: each of nine actions refused at each of two scopes, both ceilings, both mode flags, the kill switch, and a new project or organization trying to be born with authority; both constraints `convalidated`; `anon` holds no write |
 | Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 277 tests across 12 files: controls, diff risk, gates, agents, approval, retries, autopilot, decision records, merge revalidation, recovery, post-deploy validation, and the stage machine |
