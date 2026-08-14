@@ -95,3 +95,24 @@ await probeHttpTarget({
 
 Storing what it observes needs hosted migrations `028`/`029`/`030` and an owner-authorized monitor
 row. Until then the adapter can be exercised but the pipeline behind it cannot run.
+
+## Re-probe, 2026-08-14
+
+Re-run because a stale claim about a live host is worse than no claim.
+
+| Host | Status | Note |
+| --- | --- | --- |
+| `https://www.theagoras.com` | **200** | Externally observable |
+| `https://theagoras.com` | 308 → `https://www.theagoras.com/` | Apex redirects to www |
+| `https://softwarefactory-surgeservices-projects.vercel.app` | **302** → `vercel.com/sso-api` | Deployment Protection, unobservable |
+
+The finding worth correcting: **monitoring does not require disabling Deployment Protection.** The
+earlier framing implied it did. Protection covers the `*.vercel.app` hosts; the custom domain
+`www.theagoras.com` answers `200` and is a valid monitor target. An owner who wants Phase 1E to
+observe production can point a monitor at the custom domain and leave Protection on — which is the
+better security posture, not a workaround.
+
+What Deployment Protection still blocks is observing a *specific deployment* by its
+`*.vercel.app` URL, which matters for per-deploy validation rather than for uptime monitoring. That
+is a narrower gap than "no external monitor can observe production", which is how it was previously
+recorded.
