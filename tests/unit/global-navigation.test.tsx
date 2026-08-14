@@ -18,6 +18,21 @@ describe("globalNavigation", () => {
     expect(globalNavigation({ signedIn: false })).toEqual(PUBLIC_NAV);
   });
 
+  it("keeps Solutions reachable when signed out", () => {
+    // Regression: an earlier revision moved Solutions into the signed-in set,
+    // which left a signed-out visitor no navigation route to the console at
+    // all. The browser suite caught it; this keeps it caught cheaply.
+    expect(PUBLIC_NAV.map((item) => item.href)).toContain("/solutions");
+    expect(globalNavigation({ signedIn: false }).map((i) => i.label)).toContain("Solutions");
+  });
+
+  it("renders one link per destination when signed in", () => {
+    // Dashboard and Solutions are the same route; two links to it is a bug.
+    const hrefs = globalNavigation({ signedIn: true, isSuperAdmin: true }).map((i) => i.href);
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+    expect(hrefs.filter((href) => href === "/solutions")).toHaveLength(1);
+  });
+
   it("adds the console destinations once signed in", () => {
     const items = globalNavigation({ signedIn: true });
     const hrefs = items.map((item) => item.href);

@@ -16,16 +16,29 @@ export type NavItem = {
   readonly href: string;
 };
 
-/** Public pages, always present. */
+/**
+ * Public pages, always present.
+ *
+ * `Solutions` is the console entry point the public site hands off to, so it
+ * belongs here rather than only in the signed-in set — dropping it would leave
+ * a signed-out visitor no way to reach the dashboard from the navigation.
+ */
 export const PUBLIC_NAV: readonly NavItem[] = [
   { label: "Platform", href: "/platform" },
   { label: "Features", href: "/features" },
+  { label: "Solutions", href: "/solutions" },
   { label: "Pricing", href: "/pricing" },
   { label: "Resources", href: "/resources" },
   { label: "About", href: "/about" },
 ];
 
-/** Added once there is a verified session. */
+/**
+ * Added once there is a verified session.
+ *
+ * `Dashboard` points at the same route as the public `Solutions` entry. Signed
+ * in it is the more useful name, so `globalNavigation` keeps this one and drops
+ * the public duplicate rather than rendering two links to one destination.
+ */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Dashboard", href: "/solutions" },
   { label: "Projects", href: "/projects" },
@@ -48,9 +61,11 @@ export function globalNavigation(options: {
 }): readonly NavItem[] {
   if (!options.signedIn) return PUBLIC_NAV;
 
-  return [
+  const consoleEntries = [
     ...SIGNED_IN_NAV,
     ...(options.isSuperAdmin ? SUPER_ADMIN_NAV : []),
-    ...PUBLIC_NAV,
   ];
+  const claimed = new Set(consoleEntries.map((entry) => entry.href));
+
+  return [...consoleEntries, ...PUBLIC_NAV.filter((entry) => !claimed.has(entry.href))];
 }
