@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260814000600_agentos_compound_engineer_template.sql";
+  "20260814000700_agentos_goals.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -26,6 +26,9 @@ const publicTables = [
   "agentos_agent_repo_grants",
   "agentos_agent_skill_grants",
   "agentos_environments",
+  "agentos_goal_dod_items",
+  "agentos_goal_progress",
+  "agentos_goals",
   "agentos_inbox_messages",
   "agentos_mcp_connections",
   "agentos_skills",
