@@ -1,7 +1,7 @@
 # SoftwareFactory — shared working status
 
 Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–5, open in PR #27)
-Current `main`: `406d754` — Phase 2C routing against real rows
+Current `main`: `6340c4f` — AgentOS inbox
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -60,13 +60,11 @@ concurrently.
 
 **Two traps that have already cost time:**
 
-- **Migration versions collide across workstreams — three times now**
-  (`20260813000500`, `20260814000100`, `20260814000200`), once per `main` merge.
-  This is not bad luck; it is two workstreams picking timestamps independently,
-  and it will keep happening. Before adding a migration, list
-  `supabase/migrations/` and pick a version after everything applied. The rule
-  that resolves it: **an applied filename cannot move, an unhosted one can.**
-  Check `AI/DECISIONS.md` for whether a migration is hosted before renaming it.
+- **Migration versions collide across workstreams — now caught by a test.**
+  `tests/integration/migration-versions.contract.test.ts` fails on any duplicate
+  version prefix and its message carries the fix. If it fails for you, the rule
+  is: **an applied filename cannot move, an unhosted one can** — check
+  `AI/DECISIONS.md` for hosted status and renumber the unhosted one.
 - **Automatic CI is intermittent.** A missing run and a not-yet-started run look
   identical. Confirm an Actions run exists *for the head SHA* before believing a
   PR is gated, and dispatch `ci.yml` manually if none does.
@@ -123,7 +121,16 @@ a real typecheck failure earlier in this work.
       `20260814000400`. Both follow the rule the earlier `20260813000500` collision set: the
       applied filename cannot move, the unhosted one can. Left unresolved, the ledger would
       treat the losing migration as already applied and it could never be hosted.
-- [ ] **The collisions will recur.** Three in two days, one per merge. Two workstreams pick
+- [x] **Fourth and fifth collisions resolved, and the class is now closed by a test** (2026-08-14).
+      Merging `main` at `6340c4f` brought AgentOS migrations claiming `20260814000300` and
+      `20260814000400`, the two versions this branch had used for its earlier renames. Since the
+      AgentOS files are on the trunk and both sides were unhosted, this branch's two moved on to
+      `20260814000500` and `20260814000600`.
+      `tests/integration/migration-versions.contract.test.ts` now fails on any duplicate version
+      prefix, on a malformed filename, and on a version that sorts out of order. It was verified
+      against a deliberately introduced duplicate rather than assumed to work. Five collisions in
+      two days were each caught by hand; catching it by hand is what fails the time nobody looks.
+- [ ] ~~**The collisions will recur.**~~ Superseded by the guard test above. Two workstreams pick
       timestamps independently with nothing to stop them agreeing. Worth a convention (per-phase
       version ranges, or a pre-commit check that fails on a duplicate version prefix) rather than
       catching it by hand each time.
@@ -514,6 +521,86 @@ Primary installation `153445938` stays active as the rollback boundary.
 - [ ] Configure and verify isolated Preview Supabase values.
 
 ---
+
+## AgentOS — least-privilege agent operating system
+
+Source: the AgentOS blueprint gist (reconstructed from a Danny Postma talk). Full spec kept at
+`docs/AGENTOS_SPEC.md`. **The spec is a single-operator product; this repository is a
+multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
+
+- Every new table is tenant-scoped with RLS **and** FORCE RLS. The spec's single-operator model
+  is not a licence to drop tenancy.
+- The spec's local runner ("`--dangerously-skip-permissions`", "Grok in yolo mode") is a
+  **routing target, not an authority grant**. Execution stays behind the existing interlocks;
+  connecting a runner does not enable an automatic action.
+- Goals that "run 5–6 hours and open a PR" are built as decision + queue machinery. The
+  execution half stays gated exactly like Phase 1C/1D, and surfaces say **Not Connected** until
+  an owner connects one.
+- Reconstructed prompts carry the spec's required header comment and are labelled as such.
+
+### What already exists and maps directly
+
+| Spec entity | Here |
+|---|---|
+| Project, Agent, Task, Session, Activity | `projects`, `agents`, `tasks`, `agent_runs`, `activity_events` |
+| Approval gate | `approvals` + the RED owner-approval path, which is stricter than the spec |
+| Secret (reference, never a value) | bot fabric credential **references** (`bots.credential_env_var`) |
+| Runner routing | Phase 2A provider routing (`lib/providers/routing.ts`) |
+| Ephemeral session lifecycle | Phase 1C worker: clone → work → draft PR → destroy |
+| Least-privilege default-deny | RLS + FORCE RLS + service-role confinement |
+
+### The gap — build in this order
+
+**A. Isolation model (spec §5, its own "first-class" requirement).** Nothing else is safe to
+attach until grants exist.
+
+- [ ] `environments` — `networking: open | limited`, `allowed_hosts[]`. The second wall: a
+      `limited` environment blocks every host not listed, independent of which MCPs are attached.
+- [ ] `mcp_connections` — transport config plus a `credential_secret_ref`, never a token.
+- [ ] `skills` — `prompt` | `file`, attached per agent (plan-mode is a skill).
+- [ ] `agent_grants` — the default-deny join: MCP ids, repo access with `git-read`/`git-write`,
+      filesystem grants with **separate** `can_read`/`can_write`/`can_delete`, collaboration
+      list, environment, inbox access.
+- [ ] Enforcement is server-side, not honour-system: a verb an agent lacks is refused by the
+      API, and a path outside a granted prefix is refused before any storage call.
+
+**B. Filesystem MCP (spec §7).** Blob store behind an MCP with per-folder ACLs. Agents never get
+a raw bucket SDK or a mount. `fs.list/read/write/delete/mkdir`, each authorized separately.
+
+**C. Inbox (spec §12).** `inbox_messages` with `text` | `multiple-choice`, and the resume
+semantics: answering an open message continues the waiting session with the answer in context.
+This is the only human channel — no second chat product.
+
+**D. Templates, gates, chains (spec §9–10).** `task_templates` + instantiation into a blocked
+chain, and the built-in `compound-engineer-workflow` (9 steps, spec approval and human PR review
+gated). Step N+1 stays `todo` until step N is `done`, and an agent token can never set `done` on
+a gated step.
+
+**E. Goals / gauntlet loop (spec §11).** `goals` with a human-approved definition of done, an
+append-only progress log, and the three rails: spend cap, max duration, stuck-at-19. A goal
+without an approved DoD does not start; a goal without a spend cap requires explicit confirmation.
+
+**F. Triggers + automations (spec §14–15).** Signed inbound webhooks that spawn a scoped job, and
+named cron automations. Payloads are sanitized before they reach a prompt.
+
+**G. CLI + YAML (spec §17).** `agentos.yml` per project, `push`/`pull` round-trip.
+
+**H. PWA, live session viewer, activity feed (spec §13, §12).** Installable, push on
+"needs help" and "done"; tool calls streamed live and replayable afterwards.
+
+### Acceptance tests the spec requires (§22)
+
+Ship these as real tests, not aspirations: session destroy leaves no reusable workspace;
+write/delete/path-escape all refused without the matching grant; an agent cannot invoke an MCP
+the project has but it was not granted; a `limited` environment cannot reach an unlisted host;
+an agent token gets 403 on a gated `done`; a 9-card chain respects order and interpolates
+variables; inbox reply resumes a session; each goal rail sets its own `stopped-*` state; a bad
+webhook secret is 401; YAML push/pull is identity.
+
+### Deliberately not built
+
+Multi-user teams and billing (not described), Slack/email channels (inbox is the channel),
+persistent containers, raw cloud credentials for agents, and the spec's own out-of-scope list.
 
 ## Open questions for the owner
 
