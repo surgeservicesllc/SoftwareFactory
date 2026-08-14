@@ -26,6 +26,8 @@ export type MergeBlocker =
   | "REVIEW_DISMISSED"
   | "BRANCH_PROTECTION_UNSATISFIED"
   | "PULL_REQUEST_NOT_OPEN"
+  | "OPEN_INCIDENT"
+  | "OWNER_ATTENTION_REQUIRED"
   | "MERGE_EXECUTOR_NOT_CONNECTED";
 
 /** GitHub's mergeable_state vocabulary, narrowed to what the decision needs. */
@@ -51,6 +53,13 @@ export interface MergeReadinessRequest {
   readonly checks: readonly CheckState[];
   /** True when a previously-given review was dismissed. */
   readonly reviewDismissed?: boolean;
+  /**
+   * `AUTO_MERGE_POLICY.md` requires that no unresolved incident or
+   * owner-attention flag exists. Merging into a live incident is how a bad
+   * situation acquires a second cause.
+   */
+  readonly openIncident?: boolean;
+  readonly ownerAttentionRequired?: boolean;
   /** Only true once a merge executor exists. Nothing sets this today. */
   readonly executorConnected?: boolean;
 }
@@ -75,6 +84,8 @@ const REASONS: Readonly<Record<MergeBlocker, string>> = Object.freeze({
   REVIEW_DISMISSED: "A required review was dismissed.",
   BRANCH_PROTECTION_UNSATISFIED: "Branch protection is not satisfied.",
   PULL_REQUEST_NOT_OPEN: "The pull request is not open.",
+  OPEN_INCIDENT: "An unresolved incident is open for this project.",
+  OWNER_ATTENTION_REQUIRED: "The project is flagged as needing owner attention.",
   MERGE_EXECUTOR_NOT_CONNECTED: "No merge executor is connected.",
 });
 
@@ -105,6 +116,8 @@ export function evaluateMergeReadiness(request: MergeReadinessRequest): MergeRea
     requiredChecks,
     checks,
     reviewDismissed = false,
+    openIncident = false,
+    ownerAttentionRequired = false,
     executorConnected = false,
   } = request;
 
@@ -119,6 +132,8 @@ export function evaluateMergeReadiness(request: MergeReadinessRequest): MergeRea
   if (gatedHeadSha !== currentHeadSha) blockers.push("GATES_STALE");
 
   if (reviewDismissed) blockers.push("REVIEW_DISMISSED");
+  if (openIncident) blockers.push("OPEN_INCIDENT");
+  if (ownerAttentionRequired) blockers.push("OWNER_ATTENTION_REQUIRED");
 
   switch (mergeability) {
     case "dirty":

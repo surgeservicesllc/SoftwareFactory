@@ -160,6 +160,20 @@ describe("other preconditions", () => {
     );
   });
 
+  it("refuses while an incident is open", () => {
+    // Merging into a live incident is how a bad situation acquires a second
+    // cause; AUTO_MERGE_POLICY.md requires no unresolved incident.
+    expect(evaluateMergeReadiness(request({ openIncident: true })).blockers).toContain(
+      "OPEN_INCIDENT",
+    );
+  });
+
+  it("refuses while the project is flagged for owner attention", () => {
+    expect(
+      evaluateMergeReadiness(request({ ownerAttentionRequired: true })).blockers,
+    ).toContain("OWNER_ATTENTION_REQUIRED");
+  });
+
   it("refuses a pull request that is not open", () => {
     expect(evaluateMergeReadiness(request({ pullRequestOpen: false })).blockers).toContain(
       "PULL_REQUEST_NOT_OPEN",

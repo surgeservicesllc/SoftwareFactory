@@ -3,7 +3,7 @@ import {
   type EffectiveAutonomyControls,
 } from "@/lib/autonomy/controls";
 import { evaluateRetry, MAX_ATTEMPTS } from "@/lib/autonomy/retries";
-import type { RiskLevel } from "@/lib/risk";
+import type { RiskFactor, RiskLevel } from "@/lib/risk";
 
 /**
  * The recovery decision machine: what the loop should do about a failure.
@@ -44,9 +44,29 @@ export type RecoveryRefusal =
   | "ACTION_NOT_ENABLED"
   | "ABOVE_RISK_CEILING"
   | "NO_VALIDATED_LAST_KNOWN_GOOD"
-  | "DESTRUCTIVE_MIGRATION_IN_RELEASE"
+  | "IRREVERSIBLE_CHANGE_IN_RELEASE"
+  | "DEPLOYMENT_IDENTITY_AMBIGUOUS"
+  | "TELEMETRY_UNRELIABLE"
+  | "CONCURRENT_DEPLOYMENTS"
   | "EXECUTOR_NOT_CONNECTED"
   | "RETRY_BUDGET_EXHAUSTED";
+
+/**
+ * Change classes whose presence in the failed release prohibits an automatic
+ * rollback, from `policies/AUTO_ROLLBACK.md`: "the preceding release included
+ * irreversible data, auth, security, secret, DNS, or infrastructure changes".
+ *
+ * These are reused from the diff classifier rather than restated, so the
+ * definition of "irreversible" cannot drift between the two.
+ */
+export const IRREVERSIBLE_RELEASE_FACTORS: readonly RiskFactor[] = Object.freeze([
+  "destructive-production-data",
+  "secrets-or-credentials",
+  "authentication-or-security-controls",
+  "dns-or-domain-ownership",
+  "privileged-access",
+  "irreversible-production-change",
+]);
 
 export interface RecoveryStepPlan {
   readonly step: RecoveryStep;
@@ -59,15 +79,21 @@ export interface FailedRelease {
   /** Risk of the change that shipped, used against the ceiling. */
   readonly risk: RiskLevel;
   /**
-   * True when the failed release contained a destructive schema change —
-   * a dropped table or column, a truncate, an unbounded delete, an RLS or
-   * policy removal.
+   * Risk factors the failed release actually carried, from the diff
+   * classifier. Any factor in `IRREVERSIBLE_RELEASE_FACTORS` prohibits an
+   * automatic rollback.
    */
-  readonly containsDestructiveMigration: boolean;
+  readonly releaseRiskFactors?: readonly RiskFactor[];
   /** A previous release whose own validation passed, if one exists. */
   readonly lastKnownGoodValidated: boolean;
   /** Repair attempts already made for this failure. */
   readonly repairAttemptsUsed: number;
+  /** True when the current deployment identity or root cause is ambiguous. */
+  readonly deploymentIdentityAmbiguous?: boolean;
+  /** True when telemetry is stale, unavailable, noisy, or in a known outage. */
+  readonly telemetryUnreliable?: boolean;
+  /** True when more than one deployment is in flight. */
+  readonly concurrentDeployments?: boolean;
 }
 
 export interface RecoveryPlan {
@@ -85,14 +111,19 @@ export interface RecoveryPlan {
  * subtracts authority, so it is always safe and always the first thing to do —
  * it stops the loop making the situation worse while the rest is decided.
  *
- * Rollback is where the judgement is, and it fails closed on four separate
- * conditions. The one worth stating outright: a release containing a
- * destructive migration is **never** rolled back automatically. Re-running a
- * migration forward is usually safe; reversing one that dropped a table or a
- * policy is not, because the data or the protection is already gone and a
- * "rollback" would be a second destructive act rather than an undo. That
- * refusal holds regardless of controls, ceiling, or owner approval — it is a
- * property of the change, not of the configuration.
+ * Rollback is where the judgement is, and it fails closed on every condition
+ * `policies/AUTO_ROLLBACK.md` names. The one worth stating outright: a release
+ * that changed data destructively, or touched auth, secrets, DNS, privileged
+ * access, or anything else irreversible, is **never** rolled back
+ * automatically. Re-running a migration forward is usually safe; reversing one
+ * that dropped a table or a policy is not, because the data or the protection
+ * is already gone and the "rollback" would be a second irreversible act rather
+ * than an undo. That refusal holds regardless of controls, ceiling, or owner
+ * approval — it is a property of the change, not of the configuration.
+ *
+ * The policy also prohibits automation on ambiguous or unreliable state, so an
+ * unclear deployment identity, unreliable telemetry, or concurrent deployments
+ * each hand the decision to an owner.
  */
 export function planRecovery(
   failure: FailedRelease,
@@ -143,15 +174,48 @@ function planRollback(
   failure: FailedRelease,
   controls: EffectiveAutonomyControls,
 ): RecoveryStepPlan {
-  // This one outranks everything else, including an enabled control and an
-  // owner's ceiling. Reversing a destructive migration is not an undo.
-  if (failure.containsDestructiveMigration) {
+  // This outranks everything else, including an enabled control and an owner's
+  // ceiling. Reversing an irreversible change is not an undo — the data, the
+  // credential, or the security control is already gone.
+  const irreversible = (failure.releaseRiskFactors ?? []).filter((factor) =>
+    IRREVERSIBLE_RELEASE_FACTORS.includes(factor),
+  );
+  if (irreversible.length > 0) {
     return {
       step: "rollback",
       decision: "OWNER_ONLY",
-      refusal: "DESTRUCTIVE_MIGRATION_IN_RELEASE",
-      detail:
-        "The release contained a destructive migration. Reversing it would be a second destructive act, not an undo, so only an owner may decide it.",
+      refusal: "IRREVERSIBLE_CHANGE_IN_RELEASE",
+      detail: `The release changed ${irreversible
+        .map((factor) => factor.replaceAll("-", " "))
+        .join(", ")}. Reversing that is a second irreversible act, not an undo, so only an owner may decide it.`,
+    };
+  }
+
+  // policies/AUTO_ROLLBACK.md prohibits automation on ambiguous or unreliable
+  // state. Rolling back the wrong deployment, or on a signal that is merely
+  // noisy, expands the incident instead of ending it.
+  if (failure.deploymentIdentityAmbiguous) {
+    return {
+      step: "rollback",
+      decision: "OWNER_ONLY",
+      refusal: "DEPLOYMENT_IDENTITY_AMBIGUOUS",
+      detail: "The current deployment identity or root cause is ambiguous.",
+    };
+  }
+  if (failure.telemetryUnreliable) {
+    return {
+      step: "rollback",
+      decision: "OWNER_ONLY",
+      refusal: "TELEMETRY_UNRELIABLE",
+      detail: "Telemetry is stale, unavailable, noisy, or inside a known monitoring outage.",
+    };
+  }
+  if (failure.concurrentDeployments) {
+    return {
+      step: "rollback",
+      decision: "OWNER_ONLY",
+      refusal: "CONCURRENT_DEPLOYMENTS",
+      detail: "More than one deployment is in flight.",
     };
   }
 

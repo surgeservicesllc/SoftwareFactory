@@ -333,7 +333,7 @@ describe("Phase 1D end-to-end loop journey", () => {
     const recovery = planRecovery(
       {
         risk: "YELLOW",
-        containsDestructiveMigration: false,
+        releaseRiskFactors: [],
         lastKnownGoodValidated: lastKnownGood[0].deployment_id === goodDeploymentId,
         repairAttemptsUsed: 0,
       },
@@ -514,7 +514,7 @@ describe("Phase 1D end-to-end loop journey", () => {
     const plan = planRecovery(
       {
         risk: "YELLOW",
-        containsDestructiveMigration: true,
+        releaseRiskFactors: ["destructive-production-data"],
         lastKnownGoodValidated: true,
         repairAttemptsUsed: 0,
       },
@@ -528,11 +528,11 @@ describe("Phase 1D end-to-end loop journey", () => {
 
     const rollback = plan.steps.find((step) => step.step === "rollback");
     expect(rollback?.decision).toBe("OWNER_ONLY");
-    expect(rollback?.refusal).toBe("DESTRUCTIVE_MIGRATION_IN_RELEASE");
+    expect(rollback?.refusal).toBe("IRREVERSIBLE_CHANGE_IN_RELEASE");
     record(
       "Destructive release",
       "Rollback was withheld from the loop entirely: reversing a dropped table is a second destructive act.",
-      "DESTRUCTIVE_MIGRATION_IN_RELEASE",
+      "IRREVERSIBLE_CHANGE_IN_RELEASE",
     );
   });
 
@@ -547,7 +547,7 @@ describe("Phase 1D end-to-end loop journey", () => {
       ["Rollback", "EXECUTOR_NOT_CONNECTED"],
       ["Repair", "CODEX_WORKER_NOT_CONNECTED"],
       ["Retries", "RETRY_BUDGET_EXHAUSTED"],
-      ["Destructive release", "DESTRUCTIVE_MIGRATION_IN_RELEASE"],
+      ["Destructive release", "IRREVERSIBLE_CHANGE_IN_RELEASE"],
     ]);
 
     // And the stages that did complete are recorded too, so the journey shows
