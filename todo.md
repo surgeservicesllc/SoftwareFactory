@@ -1,12 +1,94 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 1E→1C repair promotion, Phase 2C persistence/UI/routing, probe SSRF hardening)
-Current `main`: `5364b66` — Supabase RPC contract verification merged
+Last updated: 2026-08-14, end of session. **Start at the HANDOFF section below.**
+Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
+declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
+Phase 2B graph foundation (PR #40) · Phase 1B adverse lifecycle (PR #40).
+Current `main`: `2dc60e1` at handoff; PR #40 open on top of it.
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
+
+## HANDOFF — read this first (2026-08-14, end of session)
+
+**Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq` · **PR #40 open**, CI running at handoff.
+If #40 is green, merge it. If it failed, the cause is almost certainly the
+latest-migration pin (see "The pin" below), not the code.
+
+**Active goal when this session ended:** *"fully build out 1B GitHub, 100% production
+ready and 100% connected to Supabase."* Half of that is reachable; half is not, and
+the next agent should not burn time rediscovering which.
+
+### The one thing that cannot be done from an agent container
+
+`supabase db push --dry-run` → `LegacyProjectNotLinkedError`. There is no
+`SUPABASE_ACCESS_TOKEN`, no `supabase/.temp` link, and **no Docker daemon**, so
+`supabase start` cannot run a local stack either. Both verified this session, twice.
+
+**Eleven migrations are unhosted** — everything after `20260813001400`. The exact
+list, order, and a real-PostgreSQL-16 verification of the whole chain applied from
+the hosted position are in **`AI/HOSTED_APPLY_RUNBOOK.md`**. Do not re-derive it.
+One of them (`20260813001500`) needs its own fresh RED approval against a frozen SHA.
+
+Until an owner applies those, "connected to Supabase" is false no matter what else
+is built, and every new surface is correctly empty rather than broken.
+
+### Where 1B actually stands
+
+Done and merged, or in #40:
+- Owner repository path live; draft-PR-only writes work.
+- **Adverse lifecycle** — `tests/integration/github-adverse-lifecycle.behavior.test.ts`,
+  9 tests. Approval expiry, owner-only decision, connection loss with history kept,
+  repeated loss converging, disconnect refused on mismatched installation id, rows
+  retained through disconnect, cross-tenant refusal, anonymous denial, member
+  read-without-mutate.
+
+**Next tranche, in priority order.** Each needs a mocked GitHub response rather than
+schema alone, so they belong in a route/unit test, not a PGlite behavior test:
+
+1. **Stale SHA.** A change whose `expected_blob_sha` no longer matches must be refused,
+   not overwritten. `reclaim_expired_github_change_reservation` and
+   `reserve_github_change_request` are the functions; the worker already rejects
+   `stale_base_sha`, so mirror that vocabulary rather than inventing a new code.
+2. **Rate limit must not falsely revoke.** `mark_github_connection_lost` accepts only
+   `installation_revoked`, `insufficient_permission`, `provider_authorization_failed`.
+   A 429 is none of those, and treating it as loss would disconnect a healthy
+   integration during a traffic spike. `lib/github/errors.ts` is where the
+   distinction lives; assert a 429 does **not** reach the loss path.
+3. **Webhook provider ordering.** `github-webhook-ordering.test.ts` exists — extend it
+   for out-of-order delivery of installation lifecycle events, where an older event
+   arriving late must not resurrect a terminal state.
+
+### Things that will bite you
+
+**The pin.** Nine-plus test files assert the *last* migration filename as a tripwire so
+a new migration cannot be added without someone reading the suites that replay the
+chain. It is doing its job, but with several agents landing migrations the same day it
+conflicts constantly. Resolve it to whichever filename genuinely sorts last —
+check with `ls supabase/migrations/*.sql | sort | tail -3`, do not assume your own.
+Newer suites (`phase2b-task-graph`, `phase2c-model-declaration`) deliberately assert
+`toContain(<their own migration>)` instead, because which file sorts last says nothing
+about what those tests depend on.
+
+**Two tripwire counts** move whenever a table is added: the RLS count in
+`phase1e-operations.behavior.test.ts` and the `publicTables` list in
+`hosted-service-role-table-grants.test.ts` (keep it alphabetical).
+
+**CI will not run on an unmergeable head.** If checks never appear on a PR, the PR is
+`dirty` — merge `origin/main` into the branch first. That cost a confusing half hour
+this session.
+
+### Do not do these without an explicit owner decision
+
+- **Build the 1D merge or deploy executor.** `AGENTS.md` forbids introducing auto-merge
+  or a production deployment workflow in this line of phases. The tests asserting
+  `MERGE_EXECUTOR_NOT_CONNECTED` / `DEPLOY_EXECUTOR_NOT_CONNECTED` are *designed* to
+  fail when an executor appears — that failure is the signal to stop and ask, not to
+  update the assertion.
+- **Use a provider key pasted into chat.** One was pasted this session; it is
+  compromised by having been pasted and must be rotated, never installed.
 
 ## Ground rules (from `AGENTS.md` — read it before editing)
 
