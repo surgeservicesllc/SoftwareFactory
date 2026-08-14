@@ -60,6 +60,16 @@ Each of these encodes something that was already true and was verifiable only by
 
 Two findings while writing these turned out to be the code being right and the assertion being wrong: `newsletter_subscribers` is deliberately policyless behind the SECURITY DEFINER `subscribe_to_newsletter`, and the four `service_role` tables are not the names assumed. Both corrections went into the tests.
 
+### Authorization boundary audit, 2026-08-14
+
+Every `app/api/**/route.ts` was checked for an authentication guard. **74 of 74 are guarded.**
+
+Most do not call an auth helper directly — they delegate to a shared boundary that authenticates the caller, resolves the exact active organization, and reads through the caller's own JWT so the RPC enforces membership rather than the route re-implementing it: `tenantRpcListResponse` / `tenantRpcDetailResponse` (`lib/server/tenant-list.ts`), `operationsContext` (`lib/operations/route.ts`), and `prepareGitHubRepositoryRequest` (`lib/github/route.ts`). Concentrating the check is why the count is 74 rather than 74-minus-the-ones-someone-forgot.
+
+Five routes are unauthenticated by design and were confirmed to be the intended set: `auth/sign-in`, `auth/sign-up`, `auth/magic-link`, `auth/resend-confirmation`, and `newsletter`. The newsletter route writes through the SECURITY DEFINER `subscribe_to_newsletter` into a table that holds RLS with no policy, so an anonymous caller can insert a subscription and read nothing.
+
+Recorded because an audit with no record is an audit that gets repeated. A first pass using a naive grep reported 32 unguarded routes; every one was a false positive from the shared-helper indirection. The finding is that the boundary is centralized, not that it is missing.
+
 ### Deployment position
 
 Measured 2026-08-14 22:29 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**. The served build's sitemap `lastmod` is `2026-08-14T21:38:25Z`, so production lags `main`. Vercel returned `api-deployments-free-per-day` at 21:54, 22:02, and 22:17 UTC, and a preview succeeded at 22:16 — the free-tier cap throttles rather than blocking outright for a day, contrary to its own message. No `VERCEL_TOKEN` exists in any agent environment, so the deployment list cannot be read and the lag's precise cause is not established. An owner redeploy of `main` from the Vercel dashboard is the remedy.
