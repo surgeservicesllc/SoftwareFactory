@@ -125,10 +125,17 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
       against stub responses; its first real call needs a credential.
 - [ ] Fan-out onto isolated workspaces (`lib/worker/workspace.ts` already
       supports concurrent isolation; nothing fans out to it yet).
-- [ ] Integration nodes: wait, check completeness, detect conflicts, reconcile.
-- [ ] Anchors modelled as structured evidence attached to graph decisions.
-      Real anchors already exist — container validation, CI results, deployment
-      state, synthetic journeys — but are not attached to nodes.
+- [x] Integration nodes (`lib/graph/integration.ts`): wait for declared
+      branches, refuse to integrate when two wrote the same resource, refuse
+      partial integration unless the plan opted in, and carry the
+      incompleteness caveat even when it did.
+- [x] Anchors (`lib/graph/anchors.ts`): claims that get acted on must be backed
+      by an observation rather than an assertion. Contradicting evidence
+      refutes rather than supports, wrong-kind and state-only evidence do not
+      count, stale evidence is discarded, and only an explicit CI `success`
+      reads as a pass. Converters exist for container validation and CI checks.
+- [ ] Attach anchors to node runs and verifications in the database — the
+      evidence model exists, the persistence for it does not.
 - [ ] Hidden-dependency detection wired to work locks.
 
 ### Stage 4 — surfaces
