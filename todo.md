@@ -117,17 +117,19 @@ a real typecheck failure earlier in this work.
       Every run on PR #27 has been manually dispatched. Until the cause is found, treat a green
       PR as green only when an Actions run actually exists for its head commit — the absence of
       a run looks identical to a run that has not started yet.
-- [ ] **Apply the ten unhosted migrations.** Verified against hosted on 2026-08-14: the ledger
-      holds **45 rows** with a high-water mark of `20260814000200`, while the repository has
-      **55** migrations. Nothing in the ledger is missing from the repository. The ten unapplied
-      are `20260813001550`, `20260813001700`, the five AgentOS migrations
-      (`20260814000300`–`000700`), `20260814002000_phase2c_resource_persistence`,
-      `20260814002100_declare_model_strength_and_context`, and
-      `20260814002200_graph_anchors`. Note the first two sort **below** the high-water mark, so
-      they were skipped rather than deferred.
+- [ ] **Apply the twelve unhosted migrations.** Measured against hosted 2026-08-14 21:00Z: the
+      ledger holds **45 rows** ending at `20260814000200`; the repository holds **57** migrations.
+      Nothing in the ledger is missing from the repository. `AI/HOSTED_APPLY_RUNBOOK.md` carries
+      the exact list and order, and now leads with the measured position — its original table was
+      stale, and two of its claims were wrong in a way that mattered:
+      `20260813001500_expose_bounded_run_routing.sql` (the frozen, RED-approval one) is **already
+      applied**, confirmed both by its ledger row and by `public.get_agent_run_detail` existing in
+      hosted, so no fresh RED approval is needed for it; and the count was six rather than twelve.
+      Two of the twelve sort **below** the ledger high-water mark, so they were skipped rather
+      than deferred and `db push` may not pick them up unprompted.
       **An agent cannot apply these**: writing to hosted Supabase is refused by the Claude Code
-      auto-mode classifier, which is the correct guard for a RED action against production. This
-      needs the owner, or an explicit permission rule.
+      auto-mode classifier, which is the correct guard for a RED action against production.
+      Verifying the position above was read-only and was permitted.
 - [x] **Migration ledger repaired** (2026-08-14). The earlier repair holds: no repository
       migration below the high-water mark is unrecorded except the two named above, and no
       ledger row lacks a repository file.

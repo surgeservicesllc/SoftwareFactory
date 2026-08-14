@@ -6,7 +6,52 @@ This exists because the owner actions were previously described loosely — incl
 "three unhosted migrations", which undercounted. There are **six**, and one of them has a
 materially different approval requirement from the others.
 
-## What is actually unhosted
+> ## Measured against hosted, 2026-08-14 21:00Z — this section supersedes the table below
+>
+> This runbook told its reader to re-list rather than trust its documented position. That was
+> right, and doing so found the position had moved. Read this first.
+>
+> **The ledger holds 45 rows and ends at `20260814000200`, not `20260813001400`.** The repository
+> holds 57 migrations, so **twelve** are unapplied, not six. Nothing in the ledger is missing from
+> the repository.
+>
+> **Migration 1 below is already applied.** `20260813001500_expose_bounded_run_routing.sql` is in
+> the ledger *and* its `public.get_agent_run_detail(uuid, uuid)` exists in hosted, so this is a
+> real apply rather than an orphaned ledger row. Its frozen identity still matches — 13,121 bytes,
+> SHA-256 `3e1bea8f5dab912d…`. **Do not seek fresh RED approval for it; it is done.**
+> `20260813001600_autonomy_decision_audit.sql` is likewise applied.
+>
+> The twelve genuinely unapplied, in apply order:
+>
+> | # | Migration |
+> | --- | --- |
+> | 1 | `20260813001550_serialize_concurrent_operations_writes.sql` |
+> | 2 | `20260813001700_link_promoted_repair_task.sql` |
+> | 3 | `20260814000210_phase2c_resource_persistence.sql` |
+> | 4 | `20260814000220_declare_model_strength_and_context.sql` |
+> | 5 | `20260814000300_agentos_isolation_model.sql` |
+> | 6 | `20260814000310_declare_model_characteristics.sql` |
+> | 7 | `20260814000400_agentos_inbox.sql` |
+> | 8 | `20260814000500_agentos_templates_and_chains.sql` |
+> | 9 | `20260814000600_agentos_compound_engineer_template.sql` |
+> | 10 | `20260814000700_agentos_goals.sql` |
+> | 11 | `20260814000800_agentos_triggers_and_automations.sql` |
+> | 12 | `20260814002200_graph_anchors.sql` |
+>
+> Two of these — `20260813001550` and `20260813001700` — sort **below** the ledger's high-water
+> mark. They were skipped rather than deferred, so `supabase db push` may not pick them up on its
+> own; check that it does before assuming it did.
+>
+> Items 3, 4 and 6 were renumbered while resolving version collisions between concurrent
+> workstreams. Item 6 additionally resolves a duplicate that existed on `main`, where
+> `agentos_isolation_model` and `declare_model_characteristics` both claimed `20260814000300` and
+> one of them could therefore never have been applied.
+>
+> **An agent cannot apply any of this.** Writing to hosted Supabase is refused by the Claude Code
+> auto-mode classifier, which is the correct guard for a RED action against production. Verifying
+> the position above was read-only and was allowed.
+
+## What was believed unhosted when this runbook was written
 
 The hosted ledger is current through `130014` = `20260813001400_resolve_emergency_stop.sql`.
 Everything after that point is unhosted:
