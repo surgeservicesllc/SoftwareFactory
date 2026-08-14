@@ -258,6 +258,73 @@ describe("Phase 1B adverse lifecycle", () => {
     });
   });
 
+  describe("cross-tenant privileged RPC matrix", () => {
+    /**
+     * The live two-tenant matrix needs a second authorized GitHub account and
+     * cannot be faked. What *can* be proven here is the property that matrix
+     * exists to check: that being an owner somewhere is not authority
+     * everywhere. Each privileged RPC is called by a real owner of the *other*
+     * organization, which is the shape a confused-deputy bug actually takes —
+     * not an anonymous caller, but a legitimate one reaching sideways.
+     */
+    it("refuses an owner of another organization on every connection-scoped RPC", async () => {
+      const attempts: { name: string; sql: string; params: unknown[] }[] = [
+        {
+          name: "mark_github_connection_lost",
+          sql: "select public.mark_github_connection_lost($1::uuid, $2::uuid, $3::text)",
+          params: [outsiderId, connectionId, "installation_revoked"],
+        },
+        {
+          name: "disconnect_github_connection",
+          sql: "select public.disconnect_github_connection($1::uuid, $2::uuid, $3::bigint)",
+          params: [outsiderId, connectionId, EXTERNAL_INSTALLATION],
+        },
+      ];
+
+      for (const attempt of attempts) {
+        await expect(db.query(attempt.sql, attempt.params), attempt.name).rejects.toThrow();
+      }
+    });
+
+    it("refuses a sync aimed at an organization the actor does not belong to", async () => {
+      // The organization is a parameter, so passing someone else's is the
+      // obvious attack and has to fail on membership rather than on shape.
+      await expect(
+        db.query(
+          `select public.sync_github_installation(
+             $1::uuid, $2::uuid, $3::bigint, $4::bigint, $5::text, $6::bigint, $7::text,
+             $8::text, $9::text, $10::text, $11::text, $12::jsonb, $13::text[], $14::timestamptz
+           )`,
+          [
+            outsiderId,
+            organizationId,
+            EXTERNAL_INSTALLATION,
+            4582606,
+            "softwarefactory",
+            316305532,
+            "surgeservicesllc",
+            "User",
+            null,
+            "User",
+            "selected",
+            "{}",
+            "{}",
+            new Date().toISOString(),
+          ],
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("leaves the other organization's records untouched after every refusal", async () => {
+      // The refusals above must not have partially applied.
+      const { rows } = await db.query<{ count: string }>(
+        "select count(*)::text as count from public.github_installations where organization_id = $1",
+        [otherOrganizationId],
+      );
+      expect(rows[0].count).toBe("0");
+    });
+  });
+
   describe("isolation", () => {
     it("denies anonymous callers every GitHub table", async () => {
       await assumeRole(db, "anon");
