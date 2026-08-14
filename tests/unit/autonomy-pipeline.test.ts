@@ -100,6 +100,19 @@ describe("the blocked executors are named, not skipped", () => {
   });
 });
 
+describe("the validate stage", () => {
+  it("is not reached in this tree, because merge blocks first", () => {
+    // Stated as a test rather than a comment: `validate` fails closed on absent
+    // evidence, and that branch is unreachable until merge and deploy have
+    // executors. A future phase that connects them makes this assertion fail,
+    // which is the point — it forces the validate path to be looked at.
+    const run = runPipeline(input());
+
+    expect(run.reachedStage).toBe("merge");
+    expect(outcome(run, "validate")).toBeUndefined();
+  });
+});
+
 describe("classification is done against the real diff", () => {
   it("blocks a change that escalated past its declaration", () => {
     const run = runPipeline(

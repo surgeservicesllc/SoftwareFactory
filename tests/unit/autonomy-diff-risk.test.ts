@@ -148,3 +148,106 @@ describe("reclassifyAgainstDeclared", () => {
     expect(result.deescalated).toBe(false);
   });
 });
+
+describe("a change that widens autonomous authority is RED", () => {
+  // RISK_CLASSIFICATION.md lists "enabling or widening autonomous approval,
+  // merge, deploy, or rollback authority" as RED. Without these rules a
+  // migration flipping auto_merge would score as an ordinary schema change,
+  // which is exactly how a loop grants itself power through a change it
+  // classified as routine.
+  it.each([
+    "  auto_merge = true,",
+    "update public.projects set auto_deploy = true;",
+    "set autonomous_mode = true where id = '1';",
+    "update public.organizations set autonomy_kill_switch_active = false;",
+    "alter table public.projects drop constraint projects_phase1d_green_observation_only;",
+    "set maximum_autonomous_risk = 'red';",
+    "update public.projects set autonomous_operations_stopped = false;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("privileged-access");
+  });
+
+  it("treats the control model itself as privileged", () => {
+    expect(assessDiffRisk([file("lib/autonomy/controls.ts")]).level).toBe("RED");
+  });
+
+  it("leaves a migration that keeps everything off at the ordinary level", () => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [
+        "add column auto_plan boolean not null default false,",
+      ]),
+    ]);
+
+    expect(assessment.level).toBe("YELLOW");
+    expect(assessment.factors).not.toContain("privileged-access");
+  });
+});
+
+describe("destroying audit evidence is RED", () => {
+  it.each([
+    "drop table public.activity_events;",
+    "truncate table public.autonomy_decisions;",
+    "delete from public.operations_audit_events;",
+    "drop trigger autonomy_decisions_append_only on public.autonomy_decisions;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("destructive-production-data");
+  });
+});
+
+describe("safety-relevant AI memory is not documentation-only", () => {
+  // PROTECTED_RESOURCES.md lists it among the paths requiring elevated review
+  // and prohibits an automated system from weakening its own guardrails. An
+  // otherwise-GREEN diff must not be able to delete the ADR that requires
+  // owner approval.
+  it("raises the decision log above GREEN", () => {
+    const assessment = assessDiffRisk([file("AI/DECISIONS.md")]);
+
+    expect(assessment.level).toBe("YELLOW");
+    expect(assessment.factors).toContain("safety-relevant-memory");
+  });
+
+  it("does not let an accompanying docs change pull it back down", () => {
+    expect(assessDiffRisk([file("AI/DECISIONS.md"), file("README.md")]).level).toBe("YELLOW");
+  });
+
+  it("leaves the status memory at GREEN, because every change has to update it", () => {
+    for (const path of [
+      "AI/CURRENT_STATE.md",
+      "AI/HANDOFF.md",
+      "AI/ROADMAP.md",
+      "AI/BACKLOG.md",
+      "AI/QUALITY_SCORECARD.md",
+    ]) {
+      expect(assessDiffRisk([file(path)]).level).toBe("GREEN");
+    }
+  });
+
+  it("stays below the policy documents, which are RED", () => {
+    expect(assessDiffRisk([file("policies/RISK_CLASSIFICATION.md")]).level).toBe("RED");
+    expect(assessDiffRisk([file("AGENTS.md")]).level).toBe("RED");
+  });
+});
+
+describe("the remaining RED classes the policy names", () => {
+  it.each([
+    ["config/encryption/keys.ts", "authentication-or-security-controls"],
+    ["infra/tls/renewal.ts", "dns-or-domain-ownership"],
+    ["ops/backups/schedule.ts", "destructive-production-data"],
+    ["ops/retention/policy.ts", "destructive-production-data"],
+  ])("classifies %s as RED", (path, factor) => {
+    const assessment = assessDiffRisk([file(path)]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain(factor);
+  });
+});

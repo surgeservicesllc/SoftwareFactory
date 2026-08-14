@@ -24,7 +24,7 @@ Reason: hosted migration `130006` completes the nine-action control model at org
 | Review / QA / Security agents | **100%** as deterministic analysers | Model-backed review needs Phase 1C/2A binding, which this phase does not claim |
 | Approval (tri-state, no self-approval) | **100%** | Evaluated after the gates; unsound work is never escalated to a person |
 | Orchestrator stage machine | **100%** as a decision machine | Twelve stages, halts at the first block |
-| Deploy / preview / validate | **Validate 100% (Phase 1E); deploy and preview 0%** | **Blocked** — no Vercel API connection |
+| Deploy / preview / validate | **Validate: storage 100% (Phase 1E), decision 100% (Phase 1D); deploy and preview 0%** | **Blocked** — no Vercel API connection, and no validator produces the evidence. `lib/autonomy/post-deploy.ts` decides what a validation record proves: attribution before check results, and missing/stale/mismatched evidence is `inconclusive`, never `passed`. The pipeline's `validate` stage previously reported satisfied unconditionally; it now routes the absent case through the same evaluation |
 | Rollback | **Decision 100% (Phase 1E); execution 0%** | **Blocked** — no adapter; `AUTO_ROLLBACK.md` disables it |
 | Healing / repair | **Creation 100% (Phase 1E); execution 0%** | **Blocked** — the manual Phase 1C candidate is **Not Connected** and grants no autonomous authority |
 | Auto merge | **0%** | **Blocked** — `AGENTS.md` forbids introducing the workflow in this line of phases |
@@ -34,7 +34,8 @@ Reason: hosted migration `130006` completes the nine-action control model at org
 | Never auto-reverse a destructive migration | **100%** | A destructive release resolves owner-only, outranking controls, ceiling and approval alike |
 | Merge revalidation against the current head | **100%** | A push after approval invalidates it; a push after verification invalidates the gates; a required check with no report blocks rather than being read as satisfied |
 | Decision auditability | **100%** | `autonomy_decisions` is append-only with RLS and FORCE RLS, no browser write, named blocker codes only. Self-approval and unexplained refusals are rejected by the table itself |
-| Enabling any automatic action | **0% by design** | RED under `RISK_CLASSIFICATION.md`; needs an owner-approved migration |
+| Enabling any automatic action | **0% by design** | RED under `RISK_CLASSIFICATION.md`; needs an owner-approved migration. The classifier now enforces this rather than relying on it: any diff enabling an action, clearing the kill switch or emergency stop, raising the ceiling, or dropping the GREEN-observation constraint classifies RED on content, wherever it appears |
+| Guardrails a loop could weaken about itself | **100%** as classification | Authority-widening and audit-evidence destruction are RED on content; `lib/autonomy/controls.ts` is RED by path; `AI/DECISIONS.md` is raised to YELLOW so a guardrail decision cannot be deleted inside an otherwise-GREEN diff |
 
 **Overall: the decision half of the loop is complete; the executor half is blocked on three
 things an agent cannot supply.** Everything that decides, restricts, records or refuses is built,
@@ -61,10 +62,11 @@ committed; the repository is consistent with that account.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Phase 1D gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass - lint/typecheck; 90 files/986 tests; 97 build entries |
+| Phase 1D gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 - lint/typecheck clean; 120 files/1407 tests; production build clean |
 | Phase 1D E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe | Pass - 117/117 |
 | Phase 1D control interlocks | `tests/integration/phase1d-autonomy-controls.behavior.test.ts` against the migrated schema | Pass - 35 tests: each of nine actions refused at each of two scopes, both ceilings, both mode flags, the kill switch, and a new project or organization trying to be born with authority; both constraints `convalidated`; `anon` holds no write |
-| Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 91 tests across controls, diff risk, gates, agents, approval, and the stage machine |
+| Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 277 tests across 12 files: controls, diff risk, gates, agents, approval, retries, autopilot, decision records, merge revalidation, recovery, post-deploy validation, and the stage machine |
+| Phase 1D post-deploy validation | `tests/unit/autonomy-post-deploy.test.ts` | Pass - 38 tests. `passed` requires matching, complete, finished, fresh evidence with every required stage reporting and the observation window closed; mismatched evidence is `inconclusive` even when it records a failure, because a failure that cannot be attributed to this deployment is not this deployment's failure |
 | Phase 1D end-to-end loop | `tests/integration/phase1d-loop-journey.behavior.test.ts` | Pass - a GREEN change reaches `APPROVED_AUTOMATICALLY` and then halts at `MERGE_EXECUTOR_NOT_CONNECTED`; a failed release drives incident, automatic freeze, Last Known Good, blocked rollback and bounded repair through Phase 1E's real functions, and the freeze is shown propagating back into the decision layer |
 | Phase 1D self-approval boundary | Same journey plus `tests/unit/autonomy-approval.test.ts` | Pass - the author is refused as approver at every risk level, including RED and including an owner |
 | Phase 1D hosted state | Ledger reconciled/current through `130014`; resolver checked live | Pass - decision-only migration `20260813000600` is hosted; all nine actions remain OFF and the global kill switch remains ON |
