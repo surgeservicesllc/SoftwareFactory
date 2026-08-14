@@ -75,6 +75,15 @@ type Assignment = {
   decidedAt: string;
 };
 
+type ModelDeclaration = {
+  provider: string;
+  model: string;
+  enabled: boolean;
+  strengthTier: string | null;
+  contextLimitTokens: number | null;
+  fullyDeclared: boolean;
+};
+
 type Overview = {
   policyVersion: string;
   capabilities: string[];
@@ -124,6 +133,7 @@ export function ResourceManagerConsole({ authenticated }: { authenticated: boole
   const canLoad = supabaseConfigured && authenticated;
   const [state, setState] = useState<State>(() => (canLoad ? "loading" : "signed-out"));
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [models, setModels] = useState<ModelDeclaration[] | null>(null);
 
   const load = useCallback(async () => {
     if (!canLoad) {
@@ -144,6 +154,22 @@ export function ResourceManagerConsole({ authenticated }: { authenticated: boole
       const body = (await response.json()) as Overview & { error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Resource manager state could not be loaded.");
       setOverview(body);
+
+      // Declarations load separately and are allowed to fail without taking the
+      // page down: not knowing which models are declared is worse than the rest
+      // of the console being unavailable, but it is not the same failure.
+      try {
+        const modelResponse = await fetch("/api/resources/models", { cache: "no-store" });
+        if (modelResponse.ok) {
+          const modelBody = (await modelResponse.json()) as { models?: ModelDeclaration[] };
+          setModels(modelBody.models ?? []);
+        } else {
+          setModels(null);
+        }
+      } catch {
+        setModels(null);
+      }
+
       setState("ready");
     } catch {
       setState("error");
@@ -410,6 +436,68 @@ export function ResourceManagerConsole({ authenticated }: { authenticated: boole
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <SectionTitle
+          title="Model declarations"
+          description="Routing refuses a model until an owner declares its strength and context limit. Undeclared is not assumed capable."
+        />
+        <div className="mt-4">
+          {models === null ? (
+            <EmptyState
+              icon={Cpu}
+              title="Model declarations could not be read"
+              description="The rest of this page loaded. Nothing is inferred about which models are declared."
+            />
+          ) : models.length === 0 ? (
+            <EmptyState
+              icon={Cpu}
+              title="No models configured"
+              description="This organization has no model catalogue yet, so there is nothing to route work onto."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[38rem] text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-faint">
+                  <tr>
+                    <th scope="col" className="py-2 pr-4 font-medium">Model</th>
+                    <th scope="col" className="py-2 pr-4 font-medium">Strength</th>
+                    <th scope="col" className="py-2 pr-4 font-medium">Context limit</th>
+                    <th scope="col" className="py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {models.map((entry) => (
+                    <tr key={`${entry.provider}/${entry.model}`}>
+                      <th scope="row" className="py-3 pr-4 font-medium text-foreground">
+                        {entry.provider}/{entry.model}
+                      </th>
+                      {/* Undeclared shows as "Undeclared", never as a guessed
+                          default — that distinction is the whole reason routing
+                          refuses these. */}
+                      <td className="py-3 pr-4 text-muted">{entry.strengthTier ?? "Undeclared"}</td>
+                      <td className="tabular py-3 pr-4 text-muted">
+                        {entry.contextLimitTokens === null
+                          ? "Undeclared"
+                          : entry.contextLimitTokens.toLocaleString()}
+                      </td>
+                      <td className="py-3">
+                        <StatusBadge tone={entry.fullyDeclared && entry.enabled ? "safe" : "warning"}>
+                          {!entry.enabled
+                            ? "Disabled"
+                            : entry.fullyDeclared
+                              ? "Routable"
+                              : "Refused until declared"}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </Card>
