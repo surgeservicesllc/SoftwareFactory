@@ -95,6 +95,22 @@ A `202` with `confirmationRequired: true` means the email was accepted for
 delivery. A `201` means confirmation is off and the account is usable
 immediately. A `429` with `email_send_rate_limited` means step 1 is not done.
 
+## Verified live
+
+Confirmed against production, not inferred:
+
+| Behaviour | Evidence |
+| --- | --- |
+| Sign-in reaches Supabase and rejects a bad password | `POST /api/auth/sign-in` with a wrong password on a real confirmed account returns `401 invalid_credentials` |
+| An unconfirmed account gets a recovery path | The same endpoint on a genuinely unconfirmed account returns `403 email_not_confirmed` with `needsConfirmation: true`. Before this work it returned "The email address or password was not accepted" -- a false statement that left the account permanently unreachable |
+| Resend is reachable and enumeration-safe | `POST /api/auth/resend-confirmation` returns `202` with the same body for an address with no account |
+| The sign-up code path works | A raw-API probe during an open email window created a user and returned `confirmation_sent_at` |
+| Sign-up is rate limited, not broken | The next request seconds later returned `429 over_email_send_rate_limit`; the app surfaces it as `email_send_rate_limited` with an actionable message |
+| Every account-creation entry point leads to sign-up | Six marketing pages serve `/auth/sign-up` and zero legacy `/sign-in` links |
+
+The one thing not verifiable from here is the emailed confirmation link itself,
+which needs a mailbox. Everything either side of it is proven.
+
 ## The flow, end to end
 
 1. `/auth/sign-up` posts to `/api/auth/sign-up`, which calls `signUp` with
