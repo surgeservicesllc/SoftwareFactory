@@ -76,7 +76,7 @@ typed contracts, DAG scheduler, deterministic reducers, fan-in guards,
 verification quorum, budgets, frozen policies, discovery stop conditions.
 Documented in `AI/GRAPH_ENGINEERING.md`.
 
-### Stage 2 — durability — **IN PROGRESS**
+### Stage 2 — durability — **DONE** (not applied to hosted)
 
 - [x] Thirteen tables in `20260814000100_graph_engineering.sql`: `graphs`,
       `graph_runs`, `graph_nodes`, `graph_edges`, `node_runs`, `node_contracts`,
@@ -97,8 +97,10 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
 - [x] RLS behavioural tests: member read, cross-tenant denial, outright
       anonymous denial, absent write grants, constraint enforcement, full lock
       lifecycle.
-- [ ] Persist compiled graphs and handoffs through SECURITY DEFINER RPCs — the
-      tables and the pure layer exist; the write path between them does not.
+- [x] Write boundary (`20260814000200_graph_write_boundary.sql`): seven
+      SECURITY DEFINER functions are the only way anything is written. A whole
+      graph is created in one statement, a terminal node cannot be reopened, and
+      a run with incomplete input cannot be recorded COMPLETED.
 
 ### Stage 3 — execution
 
