@@ -29,6 +29,11 @@ enabled = true
 # preview host listed, every confirmation link sent to a theagoras.com visitor
 # pointed at a different origin, where the session cookie cannot apply.
 site_url = "https://www.theagoras.com"
+# Bare callbacks only, no wildcards: a wildcard here is an open-redirect risk
+# and `supabase-auth-routes.contract.test.ts` rejects one. Supabase matches
+# emailRedirectTo against these exactly and silently falls back to site_url on
+# a miss, so no auth route may append a query string to its callback URL. The
+# return path travels in a short-lived cookie instead.
 additional_redirect_urls = [
   "https://www.theagoras.com/auth/callback",
   "https://theagoras.com/auth/callback",
