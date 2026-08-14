@@ -29,7 +29,7 @@ sections separate so two agents editing at once conflict on one section rather t
 | Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 
-Gates on current `main`: lint, typecheck, 141 files / 1600 tests, clean production build,
+Gates on current `main`: lint, typecheck, 143 files / 1621 tests, clean production build,
 Playwright across desktop/tablet/mobile including axe.
 
 **Owner actions are collected in `AI/HOSTED_APPLY_RUNBOOK.md`** — the exact unhosted migration
