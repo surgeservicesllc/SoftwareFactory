@@ -60,8 +60,20 @@ canonical; until then both readings are in circulation and they disagree.
       and a first real observed production incident.
 - [ ] **2A:** a successful live provider call, which needs a credential and the
       owner switch turned on.
-- [ ] **2B (roadmap: multi-agent teams):** everything. Teams, orchestration, handoff
-      persistence, parallel execution and team UI are all absent.
+- [x] **2B foundation started.** Migration `20260814001000` closes the graph's
+      deadlock hole and adds the two tables that make a team a team:
+      **cycle rejection** at write time (A→B→C→A satisfied every existing
+      constraint and would have stalled the graph permanently and silently),
+      readiness computed in the database, `task_dependencies_unsatisfiable` so a
+      cancelled or failed prerequisite is distinguishable from ordinary waiting,
+      `agent_handoffs` (append-only, bounded, secret-checked, and refusing a
+      handoff to the same role because that would satisfy independent review with
+      nobody independent), and `work_locks` conflicting on prefix **overlap in
+      both directions** so `lib/` blocks `lib/operations/`.
+- [ ] **2B remaining:** `teams` / `team_members` / `review_verdicts` tables, team
+      composition as a pure function, the orchestrator loop, metrics over real
+      runs, and the Team Detail UI. None of these need a credential; the live
+      multi-agent demonstration does.
 - [ ] **2C (roadmap: multi-project portfolio):** connecting more than one
       repository, and a portfolio surface that manages them. Distinct from the
       merged Resource Manager work.
@@ -80,7 +92,7 @@ canonical; until then both readings are in circulation and they disagree.
 | Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 
-Gates on current `main`: lint, typecheck, 143 files / 1621 tests, clean production build,
+Gates on current `main`: lint, typecheck, 148 files / 1665 tests, clean production build,
 Playwright across desktop/tablet/mobile including axe.
 
 **Owner actions are collected in `AI/HOSTED_APPLY_RUNBOOK.md`** — the exact unhosted migration
