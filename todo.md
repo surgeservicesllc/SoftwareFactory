@@ -47,12 +47,13 @@ is the single page that says what is actually outstanding.
       the ledger cannot represent both. Renaming is the obvious fix but
       `AI/ARCHITECTURE.md` records applied filenames as immutable, so it is an
       owner call.
-- [ ] **Confirm automatic CI is healthy again.** It stopped firing on
-      `pull_request` between 2026-08-13 19:32Z and 2026-08-14 12:05Z — roughly
-      sixteen hours during which every run was manually dispatched and pull
-      requests were ungated by default. A run appeared automatically one minute
-      after the 12:05Z push, so it looks self-healed, but the cause is unknown
-      and it may recur. Worth a glance at repository Actions settings.
+- [ ] **Automatic CI is intermittent, not fixed.** It stopped firing on
+      `pull_request` from 2026-08-13 19:32Z, fired automatically for the 12:05Z
+      and 12:19Z pushes on 2026-08-14, then did not fire again for the 14:44Z
+      push. So it is flaky rather than healed, and a pull request can silently
+      go ungated. Until the cause is found, treat a green PR as green only when
+      an Actions run actually exists for its head commit — the absence of a run
+      looks identical to a run that has not started yet.
 
 ### AI providers — blocks every live Phase 2B demonstration
 
