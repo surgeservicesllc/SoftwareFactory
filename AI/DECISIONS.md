@@ -2,6 +2,12 @@
 
 Use this append-only log for decisions that constrain future implementation. Change a decision by adding a superseding entry, not silently rewriting history.
 
+> **Filenames in the ADRs below were renumbered.** Concurrent branches shifted the
+> migration chain, so several Phase 1C migrations moved: `phase1c_enums` to `20260813000800`,
+> `phase1c_codex_execution` to `20260813000900`, and `logical_agent_roster` to
+> `20260813001000`. The decisions themselves are unchanged; only the names they point at moved,
+> and the references here have been corrected so they resolve.
+
 ## ADR-001 — Control plane before autonomous execution
 
 - Date: 2026-08-12
@@ -324,14 +330,14 @@ Use this append-only log for decisions that constrain future implementation. Cha
 
 - Date: 2026-08-13
 - Status: Superseded by ADR-049 for migration numbering and promotion state
-- Decision: Apply Phase 1E migration `20260812002800_phase1e_production_operations.sql`, the Phase 2A provider migration `20260813000100_provider_execution_layer.sql`, Phase 1E synthetic-journey migration `20260813000200_phase1e_synthetic_journeys.sql`, bot-fabric migrations `20260813000300_bot_fabric_activity_types.sql` and `20260813000400_bot_fabric.sql`, and marketing migration `20260813000500_marketing_content.sql` first. Put only the new `architect` and `performance` `agent_role` values and Phase 1C activity event values in `20260813000600_phase1c_enums.sql`. Put every dependent Phase 1C table, constraint, function, trigger, policy, grant, and data path in the subsequent `20260813000700_phase1c_codex_execution.sql` migration.
+- Decision: Apply Phase 1E migration `20260812002800_phase1e_production_operations.sql`, the Phase 2A provider migration `20260813000100_provider_execution_layer.sql`, Phase 1E synthetic-journey migration `20260813000200_phase1e_synthetic_journeys.sql`, bot-fabric migrations `20260813000300_bot_fabric_activity_types.sql` and `20260813000400_bot_fabric.sql`, and marketing migration `20260813000500_marketing_content.sql` first. Put only the new `architect` and `performance` `agent_role` values and Phase 1C activity event values in `20260813000800_phase1c_enums.sql`. Put every dependent Phase 1C table, constraint, function, trigger, policy, grant, and data path in the subsequent `20260813000900_phase1c_codex_execution.sql` migration.
 - Consequence: PostgreSQL commits enum additions before dependent use, avoiding the unsafe-new-enum-value failure that can occur when `ALTER TYPE ... ADD VALUE` and use share one migration transaction. This original numbering was superseded by ADR-049 before promotion; the canonical hosted chain now uses `130008` for Phase 1C enums, `130009` for execution, and `130010` for roster/recovery/report hardening.
 
 ## ADR-047 - Logical agents are provider-neutral and recovery requires coherent immutable evidence
 
 - Date: 2026-08-13
 - Status: Superseded by ADR-049 for migration numbering and promotion state
-- Decision: Migration `20260813000800_logical_agent_roster.sql` creates an idempotent organization-wide standard roster for Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, and CEO Reporter. Standard rows remain logical identities; provider/model are execution or explicit assignment data, not provider-account identity. Existing factory-created role references are rebound without overwriting user-created agents or their explicit Phase 2A assignments. The same migration reconciles provider-table service-role ACLs, narrows command submission to authenticated organization owners, includes acceptance criteria in the authoritative SQL risk floor, serializes active work by logical agent, and allows retry/recovery only from no-provider/branch-only intent or one coherent immutable branch/commit/optional-draft-PR evidence set. Artifact replay, live draft recovery, stale-lease terminalization, cancellation precedence, terminal pull-request projection, and success/failure/cancellation reports must all agree with the exact run/project/repository/base/head identities.
+- Decision: Migration `20260813001000_logical_agent_roster.sql` creates an idempotent organization-wide standard roster for Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, and CEO Reporter. Standard rows remain logical identities; provider/model are execution or explicit assignment data, not provider-account identity. Existing factory-created role references are rebound without overwriting user-created agents or their explicit Phase 2A assignments. The same migration reconciles provider-table service-role ACLs, narrows command submission to authenticated organization owners, includes acceptance criteria in the authoritative SQL risk floor, serializes active work by logical agent, and allows retry/recovery only from no-provider/branch-only intent or one coherent immutable branch/commit/optional-draft-PR evidence set. Artifact replay, live draft recovery, stale-lease terminalization, cancellation precedence, terminal pull-request projection, and success/failure/cancellation reports must all agree with the exact run/project/repository/base/head identities.
 - Consequence: A logical role is not an OpenAI/Anthropic account, parallel workers cannot run the same logical agent concurrently, and partial or conflicting provider evidence cannot be treated as a retryable continuation. General Phase 1C commands map to Orchestrator rather than a provider-bound catch-all. Members see bounded structured reports and provider status; raw or unbounded evidence remains server-side. This decision was ultimately promoted in the renumbered hosted chain through `130014`; live success remains unproved because provider credits are exhausted.
 
 ## ADR-048 - Worker activation and CI success use two separate fail-closed allowlists
