@@ -136,7 +136,11 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
       reads as a pass. Converters exist for container validation and CI checks.
 - [ ] Attach anchors to node runs and verifications in the database — the
       evidence model exists, the persistence for it does not.
-- [ ] Hidden-dependency detection wired to work locks.
+- [x] Lock coordination (`lib/graph/locks.ts`): a global acquisition order that
+      makes deadlock impossible rather than unlikely, all-or-nothing acquisition
+      so a node never waits while holding half its locks, contention
+      distinguished from real failure, and wave planning so contention is
+      resolved by scheduling rather than by collision and retry.
 
 ### Stage 4 — surfaces
 
