@@ -113,8 +113,12 @@ Documented in `AI/GRAPH_ENGINEERING.md`.
       Execution, time, and locking are injected, so the whole of retry,
       fallback, degradation and partial completion is tested without a
       credential.
-- [ ] Wire the runner's `executeNode` to `executeProviderTask` for MODEL nodes,
-      with per-node model tiering.
+- [x] Provider bridge (`lib/graph/provider-bridge.ts`): capability → task kind,
+      per-tier output-token ceilings, node risk into routing, excluded
+      providers for fallback, and provider outcome → node result. Deterministic
+      nodes are refused a provider call outright.
+- [ ] Assemble the bridge into a live `executeNode`. Written and unit-tested
+      against stub responses; its first real call needs a credential.
 - [ ] Fan-out onto isolated workspaces (`lib/worker/workspace.ts` already
       supports concurrent isolation; nothing fans out to it yet).
 - [ ] Integration nodes: wait, check completeness, detect conflicts, reconcile.
