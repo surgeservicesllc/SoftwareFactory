@@ -150,6 +150,49 @@ be enabled) · `rollback_operations_failure_escalates` (a failed rollback cannot
 
 ---
 
+## Phase 2C — intelligent agent & resource manager
+
+Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is built and tested.
+
+### Done
+
+- [x] Audit. The headline finding: **Phase 2B's Graph Engine does not exist** (its own plan says
+      0% implemented), so there is no "graph node" to route. The routable unit that does exist is
+      the Phase 1C task DAG.
+- [x] Fixed a duplicate migration version — `20260813000500` was claimed by both the marketing
+      migration and the Phase 1E concurrency fix, which would have collided in the Supabase
+      ledger. The latter is now `20260813001550`.
+- [x] Capability registry (`lib/resources/capabilities.ts`): twelve work capabilities declared per
+      agent **and** per model, with availability, context limits, and a project **allowlist**.
+      Every rejection reason is collected, not short-circuited.
+- [x] Observed history (`lib/resources/history.ts`): summaries refuse to compute below a minimum
+      sample count, sub-population rates are `null` rather than `0`, predictions are marked
+      evidenced or not, regret is not scored against a guess, and a standing preference needs both
+      a larger sample and a real margin before it moves.
+- [x] Circuit breakers (`lib/resources/breakers.ts`): per-fault thresholds and cooldowns, a
+      changed fault class restarts counting, open breakers say when they will retry, and cooldown
+      half-opens automatically.
+- [x] Resource manager (`lib/resources/manager.ts`): deterministic-first gate, eligibility before
+      scoring, QUALITY/SPEED/COST/BALANCED objectives, and the frozen rule that RED, judgement,
+      security, architecture and synthesis work can never be pushed onto an economical model to
+      save cost — an eligibility gate, not a weight, so no objective can outvote it. An owner
+      override selects among eligible workers and can never make an ineligible one eligible.
+- [x] 25 unit tests covering all of the above.
+
+### Remaining
+
+- [ ] Persist routing decisions, capability profiles, and breaker state (migration + RLS), and
+      surface them in a Resource Manager UI showing why each worker was selected.
+- [ ] Wire the manager into the Phase 1C task DAG so real nodes route through it.
+- [ ] **Blocked on credentials:** queues, dynamic concurrency, and the budget ladder need a worker
+      pool that executes. Specified in the plan, deliberately not simulated.
+- [ ] **Blocked on credentials:** objective §16's "historical-performance routing improvement"
+      cannot be shown on real data. No provider run has ever executed — `ANTHROPIC_API_KEY` and
+      `OPENAI_API_KEY` are absent (verified), so there is no history. The machinery is built and
+      tested against recorded fixtures and **abstains** rather than inventing numbers.
+
+---
+
 ## Bot fabric + marketing site
 
 Merged into `main`. Route groups: `app/(marketing)/` public and indexable, and
