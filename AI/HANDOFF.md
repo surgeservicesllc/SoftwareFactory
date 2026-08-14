@@ -57,7 +57,7 @@ What it does: monitors production through one bounded HTTPS-probe adapter, deriv
 What it deliberately does not do, and why:
 
 - **No rollback execution.** No deployment provider adapter exists, `policies/AUTO_ROLLBACK.md` disables automatic rollback, and migration `010` pins `auto_rollback` off. Every rollback decision records `EXECUTOR_NOT_CONNECTED`. No database or data migration is ever reversed.
-- **No repair execution.** Phase 1C is Not Connected, so repair work is created and left unassigned.
+- **No repair execution.** Repair work can now be promoted into the ordinary Phase 1C command queue (owner-only, through `submit_command`, with a live base SHA), which it previously could not be at all — `create_repair_attempt` wrote a task `claim_phase1c_run` could never select. The promoted run stops at `queued`: Phase 1C is Not Connected, no worker is registered, and migration `20260813001700` is unhosted.
 - **No deployment, merge, or scheduled monitoring.** Checks are owner-triggered; authorizing a scheduler identity must not widen `service_role`.
 
 Invariants a future change must not break: `service_role` gains no new table privileges; the four append-only evidence tables stay append-only; `production_monitors_enabled_requires_connection` stays in place so an unconnected monitor cannot be enabled; `rollback_operations_failure_escalates` stays in place so a failed rollback cannot be silent; `incidents_resolution_requires_cause` stays in place so a green deployment cannot close an incident; and `EXECUTOR_NOT_CONNECTED` stays unconditional in `autonomous_release_allowed`.
@@ -169,7 +169,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
 - [x] Documentation and scorecard distinguish hosted `130014`, local/unhosted `130015`, the prior verified production baseline, proven owner/anonymous reads, and remaining unrelated-authenticated/mutation/provider acceptance without claiming Phase 1C Connected.
-- [x] Phase 1E control plane passes lint, typecheck, 82 files/819 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
+- [x] Phase 1E control plane passes lint, typecheck, 132 files/1515 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [x] Migration `028` is hosted in the reconciled ledger. No real production target has been observed, so every Phase 1E monitoring surface remains **Not Connected** or **Unknown**.
 - [x] The control plane is served under `/solutions` and verified live: twelve pages serve both navigation landmarks, every former path returns `308`, and the console stays `noindex` and out of the sitemap. See ADR-041.
 

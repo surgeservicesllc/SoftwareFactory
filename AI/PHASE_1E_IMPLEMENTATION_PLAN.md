@@ -126,7 +126,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 | §5 Automatic protection | **COMPLETE.** SEV1/SEV2 freezes autonomous releases automatically; freeze is idempotent; resume and stop-all are owner-only, require a written reason, and are audited. | `freeze_project_releases`, `resume_project_releases`, `stop_autonomous_operations`, `/api/operations/controls` |
 | §6 Auto rollback | **DECISION PATH COMPLETE; EXECUTION BLOCKED.** Last Known Good resolves only from a deployment whose own validation passed. Eligibility is evaluated fail-closed against `AUTO_ROLLBACK.md`. A failed rollback cannot be recorded without escalating to SEV1 with owner attention — enforced by a CHECK constraint. No database or data migration is ever reversed. | `last_known_good_deployment`, `record_rollback_decision`, `record_rollback_outcome`, `lib/operations/rollback.ts` |
 | §7 Production Investigator | **COMPLETE as a deterministic engine.** Returns likely cause, cited evidence, affected subsystem, confidence, recommended action, and risk. Confidence requires corroboration. No intermediate reasoning is produced, stored, or returned. | `lib/operations/investigator.ts`, `production_diagnoses` |
-| §8 Self-healing | **CREATION COMPLETE; EXECUTION BLOCKED.** Diagnosis creates bounded repair work capped at three attempts; the third failure escalates instead of retrying. Eligibility never bypasses GREEN/YELLOW/RED — a RED repair is refused without owner approval and work above the project ceiling is refused. Assignment is recorded as `not_connected`. | `create_repair_attempt`, `record_repair_failure`, `lib/operations/repair.ts` |
+| §8 Self-healing | **CREATION AND QUEUEING COMPLETE; EXECUTION BLOCKED.** Diagnosis creates bounded repair work capped at three attempts; the third failure escalates instead of retrying. Eligibility never bypasses GREEN/YELLOW/RED — a RED repair is refused without owner approval and work above the project ceiling is refused. Repair work is now **promotable into the ordinary Phase 1C command queue** through `submit_command`, with a live base SHA, so a security-shaped repair is forced to RED and owner approval exactly as a person's command would be. Nothing claims the queued run: no worker, no provider credential. | `create_repair_attempt`, `record_repair_failure`, `lib/operations/repair.ts`, `lib/operations/promotion.ts`, `link_repair_promotion`, `/api/operations/incidents/[incidentId]/promote` |
 | §9 Synthetic testing | **COMPLETE for read paths; writes recorded not executed.** Journeys are stored per project with Basic/Standard/Critical profiles, and safety is enforced by CHECK constraint as well as in TypeScript: destructive paths and undeclared writes cannot be stored at all, and a declared safe write needs a reversal note. Execution stops at the first failing step; a declared write is recorded as `skipped` because Phase 1E has no authority to mutate a monitored production system. | migration `130002`, `synthetic_journeys`, `lib/operations/journey.ts`, `/api/operations/synthetics` |
 | §10 Operations UI | **COMPLETE.** Portfolio health, project health with reasons, incidents, monitors, provider status, audit trail, owner controls, and per-project production detail. | `app/operations/page.tsx`, `components/operations-console.tsx`, `components/project-operations-panel.tsx` |
 | §11 Event automation | **COMPLETE.** All ten event types, durable queue, unique dedupe key per organization, claim/complete with `for update skip locked`, idempotent completion, bounded attempts, and dead-lettering. Each event's planned actions are declared as data, marking deferred ones explicitly. | `operations_events`, `enqueue/claim/complete_operations_event`, `lib/operations/events.ts` |
@@ -137,7 +137,7 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### Evidence
 
 - `npm run lint`, `npm run typecheck`: pass.
-- `vitest run`: 82 files / 819 tests pass on the merged tree, including 28 Phase 1E behavioral tests, a 3-test end-to-end journey, 16 boundary contracts, and 55 policy/probe/console unit tests.
+- `vitest run`: 132 files / 1515 tests pass on the merged tree, including 30 Phase 1E behavioral tests, a 3-test end-to-end journey, 19 boundary contracts, 6 repair-promotion behaviors, 5 real-PostgreSQL concurrency tests, and 64 policy/probe/console/journey unit tests.
 - `npm run build`: compiles cleanly, including 12 operations APIs and the Operations page.
 - Playwright: 117/117 across desktop, tablet, and mobile including axe on the merged tree.
 - The end-to-end demonstration and the failed-rollback escalation run against the real migrated schema in `tests/integration/phase1e-incident-journey.behavior.test.ts`.
@@ -145,6 +145,8 @@ Nothing in the shipped UI or reports may present any blocked capability as avail
 ### What the demonstration proves, and what it cannot
 
 The journey test walks Monitor → Detect → Incident → Freeze → Rollback decision → Diagnose → Repair task → Validate → Resolve against the real schema, and separately proves failed-rollback escalation to SEV1 with owner attention. Two stages of the stated target are asserted as **blocked rather than simulated**: the Codex fix (no connected or authorized autonomous repair worker) and the deploy (no deployment adapter). The test records the exact blockers instead of skipping them.
+
+Promotion narrows the first of those two, and it is worth being precise about how much. `tests/integration/phase1e-repair-promotion.behavior.test.ts` proves against the real `submit_command` that a repair attempt now becomes a command and a task — the thing it never had — that promotion is idempotent per attempt, that a second promotion is refused, that an undiagnosed attempt is refused, that a release freeze does not block promotion while the emergency stop does, and that a security-shaped repair is forced to RED and `awaiting_approval`. What it does not prove, and what no test here can, is that anything then runs. The run reaches `queued` and stops.
 
 This is a control-plane demonstration against a migrated database, not live production evidence. Migration `028` is hosted in the reconciled chain through `130014`, but no monitor has yet observed an owner-authorized real production target. Until that observation exists, every Phase 1E surface reports **Not Connected** or **Unknown** rather than implying observation.
 
@@ -159,13 +161,15 @@ Assessed against the nine objective sections, counting only what has evidence.
 | §2 Monitoring + health | ~70% | Health derivation, history, and reasons are complete. One of five signal families has a connected adapter: the HTTPS probe covers uptime, latency, critical routes, auth, and project-reported database/job/integration endpoints. Vercel deployment status and error-rate telemetry have no provider. |
 | §3 Incident engine | 100% | Automatic creation, fingerprint dedupe, SEV1–SEV4, upward-only escalation, and every required evidence field. |
 | §4 Protection + rollback | ~60% | Freeze, resume, stop, reversal of stop, Last Known Good, eligibility, and failed-rollback escalation are complete. Rollback **execution** does not exist. |
-| §5 Investigator + self-healing | ~50% | Structured diagnosis and bounded repair-work creation with risk gating are complete. Codex execution, isolated branch, fix, tests, review, and PR do not exist. |
+| §5 Investigator + self-healing | ~65% | Structured diagnosis, bounded repair-work creation with risk gating, and promotion into the Phase 1C command queue are complete — a repair task is now claimable rather than merely unclaimed, which it was not before (`AI/PHASE_1E_TO_1C_INTEGRATION_GAP.md`). Codex execution, isolated branch, fix, tests, review, and PR do not exist. |
 | §6 Synthetics + operations UI | ~90% | Journeys are stored, safety-enforced, and executed for read paths; the operations UI covers every required view. Declared writes are recorded rather than executed. |
 | §7 Automation | 100% | All ten event types, durable queue, idempotent completion, bounded attempts, dead-lettering. |
 | §8 Resolution + reporting | 100% | Gated resolution and the daily report with every required section. |
-| §9 Security + testing | 100% | RLS + FORCE RLS on 53/53 tables, no new `service_role` grants, append-only evidence, server-only secrets, RED operations owner-gated, and the full test matrix. |
+| §9 Security + testing | 100% | RLS + FORCE RLS on 63/63 tables, no new `service_role` grants, append-only evidence, server-only secrets, RED operations owner-gated, and the full test matrix. |
 
-**Overall: roughly 85% of the objective is implemented, and the remaining ~15% is execution authority that this phase must not grant.** Rollback execution, Codex repair execution, and autonomous deployment are each blocked by a named, tested interlock rather than missing by oversight.
+**Overall: roughly 87% of the objective is implemented, and the remaining ~13% is execution authority that this phase must not grant.** Rollback execution, Codex repair execution, and autonomous deployment are each blocked by a named, tested interlock rather than missing by oversight.
+
+One caveat on that number: the promotion path raises §5 in code but not in the hosted database. Migration `20260813001700` is not applied to the hosted chain, so on the hosted instance repair promotion returns a missing-function error rather than queueing anything. The percentage describes this tree.
 
 ### Live integrations
 
@@ -191,6 +195,8 @@ Assessed against the nine objective sections, counting only what has evidence.
 ### Known limitations
 
 - Migrations `028`/`130002` are hosted in the reconciled production chain through `130014`. A fresh live-target observation is still required before a monitor may be described as Connected or healthy.
+- Migration `20260813001700` (`link_repair_promotion`) is **not** hosted. Until an owner applies it, the promote route returns a missing-function error on the hosted instance; promotion is proven in this tree only.
+- Promotion queues repair work; it does not execute it. Without a registered Phase 1C worker and a provider credential the run stays `queued`, and the route says so in its own response rather than leaving a reader to infer it.
 - Monitoring is owner-triggered rather than continuous; a scheduler identity must be authorized without widening `service_role`.
 - Synthetic write steps are declared and validated but never issued.
 - Health depends on what the monitored project's own endpoints report; SoftwareFactory does not read a monitored project's database or job runner directly.

@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   CircleGauge,
   ClipboardList,
+  Cpu,
   FileText,
   FolderKanban,
   GitBranch,
@@ -68,6 +69,7 @@ const navigationGroups = [
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
       { label: "Runs", href: "/solutions/runs", icon: GitBranch },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
+      { label: "Resources", href: "/solutions/resources", icon: Cpu },
     ],
   },
   {

@@ -33,6 +33,7 @@ const mutationRoutes = [
   "app/api/operations/events/route.ts",
   "app/api/operations/reports/route.ts",
   "app/api/operations/synthetics/route.ts",
+  "app/api/operations/incidents/[incidentId]/promote/route.ts",
 ] as const;
 
 const readRoutes = [
@@ -53,8 +54,10 @@ describe("Phase 1E route boundaries", () => {
     }
   });
 
-  it("restricts rollback decisions and emergency resume/stop to the organization owner", () => {
+  it("restricts rollback decisions, promotion, and emergency resume/stop to the organization owner", () => {
     expect(source("app/api/operations/incidents/[incidentId]/rollback/route.ts")).toMatch(/requireOwner\(context\)/);
+    // Promotion starts a Codex engineering command, so it is owner-only too.
+    expect(source("app/api/operations/incidents/[incidentId]/promote/route.ts")).toMatch(/requireOwner\(context\)/);
     const controls = source("app/api/operations/controls/route.ts");
     expect(controls).toMatch(/requireOwner\(context\)/);
     // Freezing only subtracts authority, so an administrator may do it.
@@ -63,7 +66,7 @@ describe("Phase 1E route boundaries", () => {
 
   it("requires owner or administrator access for every other mutation", () => {
     for (const route of mutationRoutes.filter(
-      (candidate) => !candidate.includes("rollback"),
+      (candidate) => !candidate.includes("rollback") && !candidate.includes("promote"),
     )) {
       expect(source(route), `${route} must check management role`).toMatch(
         /require(Manager|Owner)\(context\)/,
@@ -100,6 +103,18 @@ describe("Phase 1E route boundaries", () => {
     expect(source("lib/operations/repair.ts")).toMatch(
       /PHASE_1E_REPAIR_WORKER_CONNECTED\s*=\s*false/,
     );
+  });
+
+  it("promotes repair work through the ordinary command path, not a privileged lane", () => {
+    const route = source("app/api/operations/incidents/[incidentId]/promote/route.ts");
+    // The same entry point a person's command uses, so the risk floor applies.
+    expect(route).toMatch(/rpc\("submit_command"/);
+    expect(route).toMatch(/buildRepairCommand\(/);
+    // A live base SHA, never an invented one.
+    expect(route).toMatch(/getGitHubBranchReference\(/);
+    expect(route).toMatch(/Codex execution is Not Connected/);
+    // Command assembly must stay in the shared builder so the contract cannot drift.
+    expect(source("lib/operations/promotion.ts")).toMatch(/createPhase1CExecutionPlan\(/);
   });
 
   it("never issues a synthetic write against production", () => {
