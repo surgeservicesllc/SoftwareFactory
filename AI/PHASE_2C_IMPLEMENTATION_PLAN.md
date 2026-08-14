@@ -115,6 +115,35 @@ Blocker 1 is the one that makes §10–11 unprovable on real data. It does not p
 5. Circuit breakers with cooldown and automatic re-evaluation.
 6. Objective selection: QUALITY / SPEED / COST / BALANCED, with frozen security and risk requirements excluded from every trade-off.
 7. Routing feedback: predicted vs actual, regret, minimum sample thresholds before preferences move.
-8. Resource Manager UI showing availability, decisions, breakers, and **why this worker was selected** — reading **No data yet** wherever no run has happened.
+8. Durable memory for the above. *(Done: migration `20260814000100` plus `lib/resources/store.ts`.)*
+9. Resource Manager UI showing availability, decisions, breakers, and **why this worker was selected** — reading **No data yet** wherever no run has happened.
 
 Sections 7, 8, and 14 of the objective (queues, dynamic concurrency, budget ladder) depend on a worker pool that executes; they are specified here and deferred behind blocker 1 rather than simulated.
+
+## 5. What storing state actually fixed
+
+Step 8 was not bookkeeping. Steps 5 and 7 built pure folds over records nobody kept, and a pure
+fold is only half a circuit breaker:
+
+> A breaker held in one request's memory begins closed on every request. Three consecutive outages
+> spread across three requests each read a count of zero, so a threshold of three is never reached.
+> The breaker that exists to stop a failing provider absorbing work could not fire.
+
+The same applied to routing feedback. `measureRegret` compares an outcome against a prediction; with
+no stored prediction there was nothing to compare against, so §11 could not have worked even with a
+funded provider.
+
+`resource_breakers` is mutable state and `resource_breaker_events` / `resource_assignments` are
+append-only evidence — deliberately not one table, because they have opposite requirements. The
+read-modify-write happens in SQL under a row lock, since two concurrent requests folding the same
+breaker in application memory would each read the old count and lose an increment. The *threshold*
+stays in `lib/resources/breakers.ts` and is passed in, because two copies of the rule that decides
+when a provider is cut off would eventually be two different rules.
+
+One caveat worth recording plainly: the first version of the `closed` constraint required a zero
+fault count, which reset the counter on every write and reintroduced the exact defect the table
+exists to fix. The behavior test caught it only because it drives faults through **separate calls**.
+A single-call test would have passed against the in-memory version too, and proved nothing.
+
+Migration `20260814000100` is **not hosted**, and no routing decision has been recorded against real
+work, because no provider run has ever executed.

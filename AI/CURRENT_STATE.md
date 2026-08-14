@@ -60,6 +60,18 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 - Scheduled monitoring is **Not Connected**: checks are owner-triggered because no scheduler identity is authorized, and authorizing one must not widen `service_role`.
 - Overall Phase 1E completion is roughly **87%** in this tree (the promotion path is not hosted). The remaining ~13% is execution authority — rollback execution, Codex repair execution, and autonomous deployment — each blocked by a named, tested interlock rather than missing by oversight. `AI/PHASE_1E_IMPLEMENTATION_PLAN.md` carries the per-section breakdown, live integrations, security findings, limitations, and Phase 2A readiness.
 
+## Phase 2C resource-manager state
+
+Phase 2C is the intelligence layer that picks agent, provider, and model per unit of work. Its scoring core and its memory exist in source and in migration `20260814000100`; the migration is **unhosted**, and no routing decision has ever been recorded against real work because no provider run has executed.
+
+- The scoring core (`lib/resources/capabilities.ts`, `history.ts`, `breakers.ts`, `manager.ts`) is deterministic-gate-first: work a code path can do never buys inference, eligibility is decided before scoring, and RED/judgement/security/architecture/synthesis work can never be pushed onto an economical model to save cost — an eligibility gate rather than a weight, so no objective can outvote it. An owner override selects among eligible workers and can never make an ineligible one eligible.
+- Observed history refuses to compute below a minimum sample count, reports sub-population rates as `null` rather than `0`, marks each prediction evidenced or not, and does not score regret against a guess. Nothing here invents a metric.
+- Migration `20260814000100` adds three tables — `resource_breakers` (mutable state), `resource_breaker_events` and `resource_assignments` (append-only evidence) — all with RLS and FORCE RLS, browser SELECT only, and **no new `service_role` table privileges**. Writes go through SECURITY DEFINER functions.
+- Storing breaker state fixed a real defect rather than adding storage: a breaker folded in one request's memory begins closed on every request, so three consecutive outages spread across three requests never reached a threshold of three and the breaker could never fire. The behavior tests drive faults through separate calls for exactly that reason.
+- Fault thresholds are passed into the database from `lib/resources/breakers.ts` rather than copied into SQL, so the rule deciding when a provider is cut off has one home.
+- A predicted success rate is stored only when it was evidenced — enforced in `lib/resources/store.ts` and again by a CHECK constraint, so a null returned below the sample threshold cannot be laundered into a number that later outcomes are measured against.
+- **Not Connected / no data:** capability profiles are still code constants rather than per-organization rows; there is no Resource Manager UI; the manager is not yet wired into the Phase 1C task DAG; and queues, dynamic concurrency, and the budget ladder are specified but deliberately not simulated, because they need a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
+
 ## Durable worker implementation
 
 - `@openai/codex-sdk` is pinned at `0.147.0`; the default configured model is `gpt-5.3-codex`.
@@ -159,7 +171,7 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 
 ## Phase 1E verification evidence
 
-- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (129 files / 1483 tests on the merged tree), and a clean production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
+- Local gates on the Phase 1E tree: `npm run lint`, `npm run typecheck`, `vitest run` (131 files / 1505 tests on the merged tree), and a clean production build all pass. Merged-tree coverage is statements 72.94%, branches 69.92%, functions 64.57%, lines 74.29%; the Phase 1E modules themselves are covered by 55 dedicated unit tests.
 - Playwright passes 117/117 across desktop, tablet, and mobile including axe on the merged tree, with canonical `/solutions/operations` in the audited route set.
 - `tests/integration/phase1e-operations.behavior.test.ts` (28 tests) exercises the real migrated schema: threshold detection, deduplication, upward-only severity, automatic freeze, owner-only resume with acknowledgement, Last Known Good resolution, blocked and failed rollbacks, bounded repair attempts, resolution gating, event idempotency and dead-lettering, cross-tenant denial, anonymous denial, append-only enforcement, and sensitive-value rejection.
 - `tests/integration/phase1e-incident-journey.behavior.test.ts` walks the ordered end-to-end journey and separately proves failed-rollback escalation to SEV1 with owner attention, plus refusal to resolve on a successful deployment alone. The Codex-fix and deploy stages are asserted as **blocked with named reasons**, not simulated.
