@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–3, open in PR #27)
+Last updated: 2026-08-14 (Phase 2B graph engineering, stages 1–4, open in PR #27)
 Current `main`: `438a370` — Phase 2C Resource Manager UI
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
@@ -26,7 +26,7 @@ sections separate so two agents editing at once conflict on one section rather t
 | Phase 1D — autonomy controls | **Merged; decision layer complete, every action locked OFF** | Hosted migration `20260813000500`; executors owned elsewhere |
 | Phase 1E — production operations | **Merged; ~85% of objective** | Hosted migrations `028`/`029`; no observed production target |
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
-| Phase 2B — graph engineering | **Open in PR #27**; stages 1–3 built, hosted schema applied | Provider credentials for every live demonstration |
+| Phase 2B — graph engineering | **Open in PR #27**; stages 1–4 built, hosted schema applied | Provider credentials for every live demonstration |
 | Phase 2C — resource manager | Merged; scoring core, persistence and UI | Hosted migration `20260814000300`; wiring into the Phase 1C DAG |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 | Sign-up and sign-in | Merged (PR #15) | Custom SMTP; the owner account is unconfirmed |
@@ -267,17 +267,34 @@ frozen policies, discovery stop conditions.
 - [ ] Persist anchors against node runs and verifications. The evidence model exists; the
       persistence for it does not, and it is only meaningful once real runs produce anchors.
 
-### Stage 4 — surfaces — not started, and buildable without credentials
+### Stage 4 — surfaces — done
 
-- [ ] Graph templates (production readiness, security audit, RLS audit, bug sweep, test coverage,
-      refactor sweep, dependency audit, performance audit, mobile audit, code review, feature
-      build, incident investigation, SEO/AEO audit), with clone/save/version.
-- [ ] Workflows UI: visual nodes and edges, node detail, status, budget, concurrency, locks,
-      verification, artifacts, anchors, timeline.
-- [ ] Bot Manager proposes an execution summary before running.
-- [ ] Graph observability: critical path, parallelism, latency, retries, verifier rejection,
-      reduction ratio, completion, missing inputs.
-- [ ] Conservative graph optimizer recommendations.
+- [x] **Thirteen graph templates** (`lib/graph/templates.ts`) with clone and version. A template
+      is a starting plan, not a guarantee: the compiler still strips imaginary dependencies and
+      still picks the topology on evidence, so a template naming twelve nodes can legitimately
+      compile down to `SINGLE_AGENT`. Every template is asserted to compile, because one that
+      fails at the moment someone uses it is worse than no template. Cloning and revising never
+      mutate in place — a completed run records the template version it used, and two node sets
+      sharing a version would make that record a lie.
+- [x] **Workflows UI** at `/solutions/workflows`. Everything shown is *compiled*, not drawn:
+      topology, layering, node contracts, removed dependencies and lock waves all come from the
+      same code that would schedule the work, so the page is exact without a credential. Run-time
+      panels are empty and say which kind of empty — "no runs recorded" is not "all runs
+      succeeded".
+- [x] **Bot Manager execution summary** (`components/graph-execution-summary.tsx`): what a graph
+      would do before it does it. It states shape, width and how many nodes call a paid model, and
+      deliberately refuses to state a cost — token counts are not knowable in advance and a
+      confident wrong number gets budgeted against.
+- [x] **Graph observability** (`lib/graph/observability.ts`): critical path weighted by real node
+      time, achieved against planned parallelism, retries, verifier rejection, reduction ratio,
+      completion. Efficiency and trust are kept apart, and every rate is `null` rather than `0`
+      over zero observations, because "nothing was rejected" and "nothing was checked" are
+      opposite facts. A run with a node that never reported is not whole however much finished.
+- [x] **Conservative optimizer** (`lib/graph/optimizer.ts`): recommends, never rewrites. Needs
+      three observed runs before any structural suggestion, states a tradeoff and evidence on
+      every one, and cannot propose removing verification, weakening a lock, or lowering the tier
+      of judgement work. Its most valuable recommendation is the one an orchestration engine is
+      least inclined to make: this did not need to be a graph.
 
 ### Stage 5 — demonstrations — all blocked on provider credentials
 

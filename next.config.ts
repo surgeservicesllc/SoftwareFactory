@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
       "reports",
       "runs",
       "settings",
+      "workflows",
     ].flatMap((route) => [
       { source: `/${route}`, destination: `/solutions/${route}`, permanent: true },
       { source: `/${route}/:path*`, destination: `/solutions/${route}/:path*`, permanent: true },
