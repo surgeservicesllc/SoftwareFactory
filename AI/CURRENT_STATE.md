@@ -71,6 +71,8 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 
 ## Phase 2C resource-manager state
 
+AgentOS blocks A through G exist in source and in migrations `20260814000300`-`20260814001200`. Block G adds configuration as code: `agentos_export_project_config` and `agentos_apply_project_config` carry `agentos.yml` push and pull, `scripts/agentos.mts` is the CLI, and the round trip the spec names as acceptance is proven both through the file format and through the real migrated schema. Applying a configuration requires owner or admin; deleting is off by default and needs `--prune --yes`. **Every one of those ten migrations is unhosted**, no runner is connected, and every AgentOS surface reports **Not Connected**. Nothing in this workstream executes.
+
 Phase 2C is the intelligence layer that picks agent, provider, and model per unit of work. Its scoring core and its memory exist in source and in migration `20260814000100`; the migration is **unhosted**, and no routing decision has ever been recorded against real work because no provider run has executed.
 
 - The scoring core (`lib/resources/capabilities.ts`, `history.ts`, `breakers.ts`, `manager.ts`) is deterministic-gate-first: work a code path can do never buys inference, eligibility is decided before scoring, and RED/judgement/security/architecture/synthesis work can never be pushed onto an economical model to save cost — an eligibility gate rather than a weight, so no objective can outvote it. An owner override selects among eligible workers and can never make an ineligible one eligible.

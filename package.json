@@ -18,7 +18,8 @@
     "worker": "tsx scripts/worker.mts",
     "worker:preflight": "tsx scripts/worker-preflight.mts",
     "worker:once": "tsx scripts/worker.mts --once",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "agentos": "tsx scripts/agentos.mts"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -37,6 +38,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

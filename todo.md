@@ -1,12 +1,12 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14, end of session. **Start at the HANDOFF section below.**
+Last updated: 2026-08-15. **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
 Phase 2B graph foundation · Phase 1B adverse lifecycle · concurrently, another agent landed the
-AgentOS blocks, the Phase 1D decision trail, the Phase 1B lifecycle matrix, and the **zero-token
-Phase 1C re-architecture**.
-Current `main`: check `git log` — several agents landed work on 2026-08-14.
+AgentOS blocks **A through G** (G is `agentos.yml` push/pull plus the CLI), the Phase 1D decision
+trail, the Phase 1B lifecycle matrix, and the **zero-token Phase 1C re-architecture**.
+Current `main`: check `git log` — several agents landed work on 2026-08-14 and 2026-08-15.
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -193,7 +193,7 @@ canonical; until then both readings are in circulation and they disagree.
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
 | Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
-| AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–F built and wired** | G (CLI/YAML) and H (PWA/live viewer) unstarted; 8 unhosted migrations |
+| AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–G built and wired** | H (PWA/live viewer) unstarted; 10 unhosted migrations |
 
 Gates on current `main`: lint, typecheck, 149 files / 1674 tests, clean production build,
 Playwright across desktop/tablet/mobile including axe.
@@ -541,7 +541,7 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | Ephemeral session lifecycle | Phase 1C worker: clone → work → draft PR → destroy |
 | Least-privilege default-deny | RLS + FORCE RLS + service-role confinement |
 
-### Status — A through F are built, wired to Supabase, and pushed
+### Status — A through G are built, wired to Supabase, and pushed
 
 | Block | State | Where |
 |---|---|---|
@@ -552,11 +552,40 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | E Goals + rails | **Done** | `20260814000700`, spend/time/stuck all stop the loop |
 | F Triggers + automations | **Done** | `20260814000800` + `lib/agentos/webhook-payload.ts` |
 | Wiring | **Done** | `20260814000900` projections, 5 API routes, `/solutions/agentos` |
-| G CLI + `agentos.yml` | **Not started** | round-trip property test is the acceptance |
+| G CLI + `agentos.yml` | **Done** | `lib/agentos/project-config.ts`, `lib/agentos/cli-options.ts`, `scripts/agentos.mts`, `20260814001100`/`001200` |
 | H PWA + live viewer + activity feed | **Not started** | mostly UI over data that now exists |
 
-**Migrations `20260814000300`–`20260814001000` are all unhosted.** Add them to
+**Migrations `20260814000300`–`20260814001200` are all unhosted.** Add them to
 `AI/HOSTED_APPLY_RUNBOOK.md` before anyone applies anything.
+
+#### Block G, as built
+
+- `agentos_export_project_config` / `agentos_apply_project_config` are the only write path.
+  `authenticated` holds SELECT and nothing else on every `agentos_*` table, so a CLI writing
+  through PostgREST could not insert a row even with a valid session. Applying a configuration
+  requires **owner or admin**, not merely membership.
+- **Deleting is off by default.** `p_prune` defaults to false; a push adds and updates, and
+  reports anything the file omits as `extra` drift. The CLI needs `--prune --yes` — two separate
+  flags — and prints what it would remove before it removes anything.
+- A **builtin template is never redefined from a file**, and is excluded from export as well.
+  Exporting it would hand back a file that push refuses, breaking the round trip on any
+  organization that seeded the compound-engineer workflow.
+- A **repository grant resolves against installed repositories**. A YAML edit cannot invent
+  repository access by naming a string.
+- Round-trip acceptance is proven twice: through the file format
+  (`tests/unit/agentos-project-config.test.ts`) and through real PostgreSQL
+  (`tests/integration/agentos-project-config-sync.behavior.test.ts`).
+
+**Two traps found while building G, both worth knowing:**
+
+1. A plpgsql local named `agent_id` shadows the column of that name, so
+   `where agent_id = agent_id` is a tautology that deletes **every organization's** grants.
+   Every local in `20260814001200` is `v_`-prefixed because of this. The regression test that
+   catches it is the cross-organization bystander case — an in-organization test misses it,
+   because a later agent in the same push rewrites what an earlier one wiped.
+2. Nine integration tests assert "the newest migration is X" as a tripwire. Adding a migration
+   means updating all nine. Do **not** blanket-sed migration filenames across `tests/` —
+   `agentos-routes.contract.test.ts` reads a migration as a *source file*, not as a tripwire.
 
 ### If you pick this up next
 
