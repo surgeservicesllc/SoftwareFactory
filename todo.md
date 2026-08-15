@@ -25,7 +25,7 @@ priority queue, and evidence for items closed by the loop.
 
 - Overall: **~75% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2D ~81% (all structural rows closed; remaining gaps are live halves) · 2E 92% · 2A partial · 3 not started)
 - Last audit: 2026-08-15, this loop
-- Current loop: master iteration 16
+- Current loop: master iteration 17
 - Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
 - Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
 
@@ -63,7 +63,7 @@ priority queue, and evidence for items closed by the loop.
 
 ### Phase Certification
 
-- [ ] 1A Control Plane — surfaces live in production (all routes 200); per-page certification not re-run this loop
+- [x] 1A Control Plane — **certified this loop**: all 21 routes fetched live on the production origin, 21/21 return 200 (incl. the dynamic project-detail route added today, proving the deployment carries the current route table); per-page truthful-state evidence in `AI/PHASE_1A_CERTIFICATION.md`; e2e suite re-proves headings/viewport/axe at three widths every CI run
 - [ ] 1B GitHub — 90% (18 PASS/2 PARTIAL); remaining items owner-only (second installation + live adverse pass)
 - [ ] 1C Worker Execution — code complete, worker **LIVE and polling**; canary blocked on one owner command
 - [ ] 1D Autonomous Release — decision layer 100%; execution blocked **by design** (AGENTS.md forbids auto-merge in this line)
@@ -73,7 +73,7 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2C Portfolio — **94%** (33 PASS/2 BLOCKED); loop 11 closed the last agent-actionable row (17, explicit cross-project dependencies via `declare_cross_project_dependency`); everything left is owner-only: hosted verify (33), second repo (34)
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
-- [ ] 3 Self-Improvement — not started
+- [ ] 3 Self-Improvement — **~38% audited** (8 PASS/18 PARTIAL/11 ABSENT of 37, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: versioned frozen constitution -> improvement ledger -> baseline capture -> detectors -> submit_command intake. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
 ### External Blockers (owner-only)
 
