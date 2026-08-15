@@ -332,3 +332,157 @@ describe("the merge stage revalidates against the current head", () => {
     expect(outcome(runPipeline(input()), "merge")?.blocker).toBe("MERGE_EXECUTOR_NOT_CONNECTED");
   });
 });
+
+describe("the merge stage once an executor is connected", () => {
+  // Everything above describes a tree with no executor at all. These describe
+  // the path that only became reachable when one was built, and the point of
+  // every case is that connecting an executor authorizes nothing by itself.
+
+  const readiness = {
+    currentHeadSha: "current",
+    gatedHeadSha: "current",
+    approvedHeadSha: "current",
+    mergeability: "clean" as const,
+    pullRequestOpen: true,
+    requiredChecks: ["CI"],
+    checks: [{ name: "CI", status: "passed" as const }],
+  };
+
+  const eligible = {
+    eligible: true, blockers: [], reason: "within the allowlist",
+    repositoryFullName: "surgeservicesllc/SoftwareFactory",
+    baseBranch: "main", headBranch: "factory/docs-canary",
+    changedFiles: 1, changedLines: 4,
+  };
+
+  it("still blocks when no allowlist decision was supplied", () => {
+    // A connected executor plus a clean head is not permission. Something has
+    // to have authorized this repository and branch.
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("ALLOWLIST_NOT_CONFIGURED");
+  });
+
+  it("still blocks when the allowlist decision refused", () => {
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+      mergeEligibility: {
+        ...eligible, eligible: false,
+        blockers: ["REPOSITORY_NOT_ALLOWLISTED" as const], reason: "not allowlisted",
+      },
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("REPOSITORY_NOT_ALLOWLISTED");
+  });
+
+  it("names the missing revalidation rather than borrowing the executor blocker", () => {
+    // With an executor available, absent readiness inputs are a distinct
+    // failure: nothing was re-asked at the last moment.
+    const run = runPipeline(input({ mergeExecutorConnected: true }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("MERGE_READINESS_NOT_EVALUATED");
+  });
+
+  it("satisfies merge only when executor, readiness and allowlist all agree", () => {
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+      mergeEligibility: eligible,
+    }));
+
+    expect(outcome(run, "merge")).toMatchObject({ status: "satisfied" });
+  });
+
+  it("keeps staleness outranking the allowlist even with everything connected", () => {
+    // The ordering matters: a stale approval is about the change itself and
+    // must not be masked by a configuration answer.
+    const run = runPipeline(input({
+      mergeReadiness: { ...readiness, approvedHeadSha: "older" },
+      mergeExecutorConnected: true,
+      mergeEligibility: eligible,
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("APPROVAL_STALE");
+  });
+});
+
+describe("the deploy stage once deployment state can be established", () => {
+  // Before this, `deploy` was a single unconditional refusal. These cover the
+  // outcomes that became reachable, and the distinction that matters most is
+  // pending vs failed: only one of them should ever start a rollback.
+  //
+  // The pipeline halts at the first block, so every case here has to clear
+  // merge first. That is the point of `reaching`: it is the only way `deploy`
+  // is evaluated at all.
+  const reaching = {
+    mergeReadiness: {
+      currentHeadSha: "current",
+      gatedHeadSha: "current",
+      approvedHeadSha: "current",
+      mergeability: "clean" as const,
+      pullRequestOpen: true,
+      requiredChecks: ["CI"],
+      checks: [{ name: "CI", status: "passed" as const }],
+    },
+    mergeExecutorConnected: true,
+    mergeEligibility: {
+      eligible: true, blockers: [], reason: "within the allowlist",
+      repositoryFullName: "surgeservicesllc/SoftwareFactory",
+      baseBranch: "main", headBranch: "factory/docs-canary",
+      changedFiles: 1, changedLines: 4,
+    },
+  };
+
+  it("still blocks when nothing established what production received", () => {
+    // Merging is not shipping. An absent answer is not a passing one.
+    expect(outcome(runPipeline(input(reaching)), "deploy")?.blocker)
+      .toBe("DEPLOY_EXECUTOR_NOT_CONNECTED");
+  });
+
+  it("satisfies deploy when production has this commit and it is ready", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "deployed", deploymentId: "dpl_9", reason: "ready" },
+    }));
+
+    expect(outcome(run, "deploy")).toMatchObject({ status: "satisfied" });
+    expect(outcome(run, "deploy")?.detail).toContain("dpl_9");
+  });
+
+  it("separates a failed deployment from one still building", () => {
+    const failed = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "failed", deploymentId: "dpl_9", reason: "build error" },
+    }));
+    const pending = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "pending", deploymentId: "dpl_9", reason: "still building" },
+    }));
+
+    expect(outcome(failed, "deploy")?.blocker).toBe("DEPLOYMENT_FAILED");
+    // A build nobody waited long enough for must not raise an incident.
+    expect(outcome(pending, "deploy")?.blocker).toBe("DEPLOYMENT_PENDING");
+  });
+
+  it("blocks when no deployment for this commit was ever found", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "not_found", deploymentId: null, reason: "none appeared" },
+    }));
+
+    expect(outcome(run, "deploy")?.blocker).toBe("DEPLOYMENT_NOT_FOUND");
+  });
+
+  it("reports an unconfigured provider as the executor being absent", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "not_connected", deploymentId: null, reason: "no token" },
+    }));
+
+    expect(outcome(run, "deploy")?.blocker).toBe("DEPLOY_EXECUTOR_NOT_CONNECTED");
+  });
+});

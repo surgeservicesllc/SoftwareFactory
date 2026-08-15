@@ -56,7 +56,7 @@ create type public.verification_lens as enum (
   'correctness', 'freshness', 'evidence', 'security', 'acceptance_criteria'
 );
 
-create type public.work_lock_state as enum ('HELD', 'RELEASED', 'EXPIRED');
+create type public.graph_work_lock_state as enum ('HELD', 'RELEASED', 'EXPIRED');
 
 create type public.graph_artifact_kind as enum ('RAW', 'REDUCED', 'SYNTHESIS', 'ANCHOR');
 
@@ -315,7 +315,7 @@ create table public.graph_verifications (
 -- Locks
 -- ---------------------------------------------------------------------------
 
-create table public.work_locks (
+create table public.graph_work_locks (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   project_id uuid not null,
@@ -323,28 +323,28 @@ create table public.work_locks (
   resource_id text not null check (char_length(btrim(resource_id)) between 1 and 500),
   graph_run_id uuid,
   node_run_id uuid,
-  state public.work_lock_state not null default 'HELD',
+  state public.graph_work_lock_state not null default 'HELD',
   acquired_at timestamptz not null default now(),
   -- A lock without a heartbeat is a deadlock waiting for a crashed holder.
   heartbeat_at timestamptz not null default now(),
   expires_at timestamptz not null,
   released_at timestamptz,
   created_at timestamptz not null default now(),
-  constraint work_locks_expiry_after_acquisition check (expires_at > acquired_at),
-  constraint work_locks_released_state check (
+  constraint graph_work_locks_expiry_after_acquisition check (expires_at > acquired_at),
+  constraint graph_work_locks_released_state check (
     (state = 'RELEASED') = (released_at is not null)
   ),
-  constraint work_locks_project_fk foreign key (project_id, organization_id)
+  constraint graph_work_locks_project_fk foreign key (project_id, organization_id)
     references public.projects(id, organization_id) on delete cascade,
-  constraint work_locks_run_fk foreign key (graph_run_id, organization_id)
+  constraint graph_work_locks_run_fk foreign key (graph_run_id, organization_id)
     references public.graph_runs(id, organization_id) on delete cascade
 );
 
 -- One holder per resource per project, enforced by the database rather than by
 -- the scheduler remembering to check. A partial index lets released and expired
 -- rows accumulate as history without blocking the next acquisition.
-create unique index work_locks_one_active_holder
-  on public.work_locks (organization_id, project_id, resource_kind, resource_id)
+create unique index graph_work_locks_one_active_holder
+  on public.graph_work_locks (organization_id, project_id, resource_kind, resource_id)
   where state = 'HELD';
 
 -- ---------------------------------------------------------------------------
@@ -381,9 +381,9 @@ create index node_runs_node_idx on public.node_runs (node_id);
 create index graph_artifacts_run_idx on public.graph_artifacts (graph_run_id, kind);
 create index graph_handoffs_run_idx on public.graph_handoffs (graph_run_id);
 create index graph_verifications_subject_idx on public.graph_verifications (subject_node_run_id);
-create index work_locks_lookup_idx
-  on public.work_locks (organization_id, project_id, resource_kind, resource_id, state);
-create index work_locks_expiry_idx on public.work_locks (state, expires_at);
+create index graph_work_locks_lookup_idx
+  on public.graph_work_locks (organization_id, project_id, resource_kind, resource_id, state);
+create index graph_work_locks_expiry_idx on public.graph_work_locks (state, expires_at);
 create index graph_events_run_idx on public.graph_events (graph_run_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
@@ -412,8 +412,8 @@ alter table public.graph_handoffs enable row level security;
 alter table public.graph_handoffs force row level security;
 alter table public.graph_verifications enable row level security;
 alter table public.graph_verifications force row level security;
-alter table public.work_locks enable row level security;
-alter table public.work_locks force row level security;
+alter table public.graph_work_locks enable row level security;
+alter table public.graph_work_locks force row level security;
 alter table public.graph_events enable row level security;
 alter table public.graph_events force row level security;
 
@@ -439,7 +439,7 @@ create policy graph_handoffs_select_members on public.graph_handoffs
   for select to authenticated using (public.is_organization_member(organization_id));
 create policy graph_verifications_select_members on public.graph_verifications
   for select to authenticated using (public.is_organization_member(organization_id));
-create policy work_locks_select_members on public.work_locks
+create policy graph_work_locks_select_members on public.graph_work_locks
   for select to authenticated using (public.is_organization_member(organization_id));
 create policy graph_events_select_members on public.graph_events
   for select to authenticated using (public.is_organization_member(organization_id));
@@ -463,7 +463,7 @@ revoke all on public.node_runs from anon, authenticated;
 revoke all on public.graph_artifacts from anon, authenticated;
 revoke all on public.graph_handoffs from anon, authenticated;
 revoke all on public.graph_verifications from anon, authenticated;
-revoke all on public.work_locks from anon, authenticated;
+revoke all on public.graph_work_locks from anon, authenticated;
 revoke all on public.graph_events from anon, authenticated;
 
 grant select on public.graph_templates to authenticated;
@@ -477,7 +477,7 @@ grant select on public.node_runs to authenticated;
 grant select on public.graph_artifacts to authenticated;
 grant select on public.graph_handoffs to authenticated;
 grant select on public.graph_verifications to authenticated;
-grant select on public.work_locks to authenticated;
+grant select on public.graph_work_locks to authenticated;
 grant select on public.graph_events to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -489,7 +489,7 @@ grant select on public.graph_events to authenticated;
 -- Expiry is evaluated inside the same statement that acquires, so a crashed
 -- worker's lock cannot wedge a project forever and two callers cannot both
 -- decide an expired lock is theirs.
-create or replace function public.acquire_work_lock(
+create or replace function public.acquire_graph_work_lock(
   p_organization_id uuid,
   p_project_id uuid,
   p_resource_kind public.graph_resource_kind,
@@ -498,13 +498,13 @@ create or replace function public.acquire_work_lock(
   p_node_run_id uuid,
   p_lease_seconds integer default 300
 )
-returns public.work_locks
+returns public.graph_work_locks
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_lock public.work_locks;
+  v_lock public.graph_work_locks;
 begin
   if not public.is_organization_member(p_organization_id) then
     raise exception 'not_a_member' using errcode = '42501';
@@ -515,7 +515,7 @@ begin
   end if;
 
   -- Retire anything whose lease ran out before contending for the resource.
-  update public.work_locks
+  update public.graph_work_locks
      set state = 'EXPIRED'
    where organization_id = p_organization_id
      and project_id = p_project_id
@@ -524,7 +524,7 @@ begin
      and state = 'HELD'
      and expires_at <= now();
 
-  insert into public.work_locks (
+  insert into public.graph_work_locks (
     organization_id, project_id, resource_kind, resource_id,
     graph_run_id, node_run_id, state, expires_at
   )
@@ -543,19 +543,19 @@ exception
 end;
 $$;
 
-create or replace function public.heartbeat_work_lock(
+create or replace function public.heartbeat_graph_work_lock(
   p_lock_id uuid,
   p_lease_seconds integer default 300
 )
-returns public.work_locks
+returns public.graph_work_locks
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_lock public.work_locks;
+  v_lock public.graph_work_locks;
 begin
-  update public.work_locks
+  update public.graph_work_locks
      set heartbeat_at = now(),
          expires_at = now() + make_interval(secs => greatest(1, least(3600, p_lease_seconds)))
    where id = p_lock_id
@@ -571,16 +571,16 @@ begin
 end;
 $$;
 
-create or replace function public.release_work_lock(p_lock_id uuid)
-returns public.work_locks
+create or replace function public.release_graph_work_lock(p_lock_id uuid)
+returns public.graph_work_locks
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_lock public.work_locks;
+  v_lock public.graph_work_locks;
 begin
-  update public.work_locks
+  update public.graph_work_locks
      set state = 'RELEASED', released_at = now()
    where id = p_lock_id
      and state = 'HELD'
@@ -596,7 +596,7 @@ end;
 $$;
 
 -- Sweep abandoned locks. Safe to call repeatedly; returns how many it retired.
-create or replace function public.expire_abandoned_work_locks(p_organization_id uuid)
+create or replace function public.expire_abandoned_graph_work_locks(p_organization_id uuid)
 returns integer
 language plpgsql
 security definer
@@ -609,7 +609,7 @@ begin
     raise exception 'not_a_member' using errcode = '42501';
   end if;
 
-  update public.work_locks
+  update public.graph_work_locks
      set state = 'EXPIRED'
    where organization_id = p_organization_id
      and state = 'HELD'
@@ -620,16 +620,16 @@ begin
 end;
 $$;
 
-revoke all on function public.acquire_work_lock(
+revoke all on function public.acquire_graph_work_lock(
   uuid, uuid, public.graph_resource_kind, text, uuid, uuid, integer
 ) from public, anon;
-revoke all on function public.heartbeat_work_lock(uuid, integer) from public, anon;
-revoke all on function public.release_work_lock(uuid) from public, anon;
-revoke all on function public.expire_abandoned_work_locks(uuid) from public, anon;
+revoke all on function public.heartbeat_graph_work_lock(uuid, integer) from public, anon;
+revoke all on function public.release_graph_work_lock(uuid) from public, anon;
+revoke all on function public.expire_abandoned_graph_work_locks(uuid) from public, anon;
 
-grant execute on function public.acquire_work_lock(
+grant execute on function public.acquire_graph_work_lock(
   uuid, uuid, public.graph_resource_kind, text, uuid, uuid, integer
 ) to authenticated;
-grant execute on function public.heartbeat_work_lock(uuid, integer) to authenticated;
-grant execute on function public.release_work_lock(uuid) to authenticated;
-grant execute on function public.expire_abandoned_work_locks(uuid) to authenticated;
+grant execute on function public.heartbeat_graph_work_lock(uuid, integer) to authenticated;
+grant execute on function public.release_graph_work_lock(uuid) to authenticated;
+grant execute on function public.expire_abandoned_graph_work_locks(uuid) to authenticated;

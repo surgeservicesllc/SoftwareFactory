@@ -23,7 +23,7 @@ type QueryResult<Row> = { data: Row[] | null; error: { message: string } | null 
 /**
  * Declare what the Resource Manager needs to know about a model.
  *
- * Without this the two columns added by `20260814000200` could only be set by a
+ * Without this the two columns added by `20260814000220` could only be set by a
  * hand-written UPDATE, which left routing permanently unable to find an
  * eligible worker for demanding work. That refusal is correct — undeclared
  * fails closed — but it was not a state anyone could leave.

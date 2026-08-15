@@ -1,6 +1,6 @@
 -- Phase 2B Stage 2: the graph write boundary.
 --
--- The tables in 20260814000100 grant SELECT and nothing else. These functions
+-- The tables in 20260814002000 grant SELECT and nothing else. These functions
 -- are the only way anything is written, which is what stops a compromised
 -- browser session from fabricating a verification verdict, marking a failed
 -- node COMPLETED, or quietly raising its own budget.

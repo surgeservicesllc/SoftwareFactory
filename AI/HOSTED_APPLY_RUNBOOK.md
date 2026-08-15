@@ -68,6 +68,7 @@ Everything after that point is unhosted:
 | 4 | `20260813001700_link_promoted_repair_task.sql` | `link_repair_promotion`, owner-only | Ordinary forward migration |
 | 5 | `20260814000100_phase2c_resource_persistence.sql` | `resource_breakers`, `resource_breaker_events`, `resource_assignments` | Ordinary forward migration |
 | 6 | `20260814000200_declare_model_strength_and_context.sql` + `20260814000250_declare_model_characteristics.sql` | Owner-declared model strength/context, and the function that sets them | Ordinary forward migration |
+| 7 | `20260814001100_harden_github_connection_loss.sql` | Redefines `mark_github_connection_lost` so a revocation clears a stale suspension marker instead of reporting the wrong reason, a terminally deleted installation is recorded rather than aborting the call, and a connection with no installation row stops writing a null entity id | Ordinary forward migration. `create or replace` on one function; no table, constraint, or grant change |
 
 Migration 1 is not mine and I have not verified its frozen identity — only that it applies. Treat
 its approval requirement as still standing.
@@ -87,6 +88,17 @@ ordering or concurrency problems):
 | The three new Phase 2C tables carry RLS and FORCE RLS | **Pass** |
 | `link_repair_promotion` present and `SECURITY DEFINER` | **Pass** |
 
+Re-verified 2026-08-14 on a fresh PostgreSQL 16.13 cluster with migration 7 included:
+
+| Check | Result |
+| --- | --- |
+| All 57 migrations apply in order from empty | **Pass** |
+| RLS + FORCE RLS on every public table | **Pass — 0 missing of 83** |
+| `service_role` table privileges | **Pass — exactly the four GitHub ingress tables, SELECT/INSERT/UPDATE only, no DELETE** |
+| Both Phase 1D interlock constraints still present | **Pass** |
+| Migration 7 behavior: suspended installation + revocation | **Pass — status `error`, `suspended_at` cleared, prior state preserved as activity evidence** |
+| Migration 7 behavior: terminally deleted installation | **Pass — records the loss, returns true, leaves `deleted`/`deleted_at` untouched** |
+
 What this does **not** prove: that the hosted ledger rows match what the catalogue says, or that
 hosted-only objects behave identically. The ledger on that project was reconciled by hand once
 already, so re-list before applying rather than trusting the documented position.
@@ -98,7 +110,7 @@ already, so re-list before applying rather than trusting the documented position
    this runbook assumes is wrong, and the difference matters.
 2. Apply migration 1 only under its own fresh RED approval, after checking the frozen byte size and
    SHA. It is independent of 2–6; skipping it does not block them.
-3. Apply 2–6 in order with `supabase db push`.
+3. Apply 2–7 in order with `supabase db push`.
 4. Re-run the post-apply checks above against hosted.
 
 ## After applying
@@ -166,7 +178,7 @@ in `supabase_migrations.schema_migrations`. The first records the version, the s
 `db push` fails partway with the schema half-applied against hosted.
 
 That state existed in this repository on 2026-08-14 and is fixed: `declare_model_characteristics`
-moved to `20260814000250`, which keeps it after the `20260814000200` migration whose columns it
+moved to `20260814000250`, which keeps it after the `20260814000220` migration whose columns it
 depends on and leaves the AgentOS chain `000300`→`001000` intact. Neither file was hosted, so the
 renumber carries no ledger consequence — this was safe to fix precisely because it was caught
 before the apply.

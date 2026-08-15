@@ -178,10 +178,11 @@ describe("Phase 1E production operations behavior", () => {
     // four added by the Phase 2A provider layer, the three bot fabric
     // tables, the eleven marketing tables, the five Phase 1C execution
     // tables, the Phase 1D decision audit, the three Phase 2C resource tables,
-    // the AgentOS tables, the thirteen Phase 2B graph tables, and the four
-    // Phase 2B anchor tables. The filter below is the real guarantee — this
-    // count exists so a new table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(100);
+    // the AgentOS tables, the thirteen Phase 2B graph-engine tables, the four
+    // Phase 2B anchor tables, and the two Phase 2B task-graph tables. The
+    // filter below is the real guarantee — this count exists so a new table
+    // cannot slip in unexamined.
+    expect(rlsRows).toHaveLength(102);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

@@ -1,13 +1,121 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 2B graph engineering in PR #27; zero-token Phase 1C, AgentOS,
-Phase 2C routing, Phase 1D decision trail and probe SSRF hardening all merged)
-Current `main`: `8fd28cf` — zero-token Phase 1C Codex execution
+Last updated: 2026-08-15. **Start at the HANDOFF section below.**
+Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
+declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
+Phase 2B graph engineering (PR #27) · Phase 1B adverse lifecycle · concurrently, another agent
+landed the AgentOS blocks **A through G** (G is `agentos.yml` push/pull plus the CLI), the
+Phase 1D decision trail, the Phase 1B lifecycle matrix, and the **zero-token Phase 1C
+re-architecture**.
+Current `main`: check `git log` — several agents landed work on 2026-08-14 and 2026-08-15.
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
+
+## HANDOFF — read this first (2026-08-14, end of session)
+
+**Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq` · **PR #40 open**, CI running at handoff.
+If #40 is green, merge it. If it failed, the cause is almost certainly the
+latest-migration pin (see "The pin" below), not the code.
+
+**Active goal when this session ended:** *"fully build out 1B GitHub, 100% production
+ready and 100% connected to Supabase."* Half of that is reachable; half is not, and
+the next agent should not burn time rediscovering which.
+
+### The one thing that cannot be done from an agent container
+
+`supabase db push --dry-run` → `LegacyProjectNotLinkedError`. There is no
+`SUPABASE_ACCESS_TOKEN`, no `supabase/.temp` link, and **no Docker daemon**, so
+`supabase start` cannot run a local stack either. Both verified this session, twice.
+
+**Eleven migrations are unhosted** — everything after `20260813001400`. The exact
+list, order, and a real-PostgreSQL-16 verification of the whole chain applied from
+the hosted position are in **`AI/HOSTED_APPLY_RUNBOOK.md`**. Do not re-derive it.
+One of them (`20260813001500`) needs its own fresh RED approval against a frozen SHA.
+
+Until an owner applies those, the **newest** surfaces stay empty. But note the
+correction recorded in `AI/PHASE_1B_COMPLETION.md`: unapplied migrations do not
+mean the application is disconnected. Production serves marketing content from
+Supabase right now — verified externally, because `ContentSourceNotice` would
+render a **Demo data** banner if it were falling back to seeded copy, and does
+not on `/`, `/features` or `/pricing`. All eleven Phase 1B migrations are hosted.
+What is pending is the newest twelve migrations across all phases, one of which
+(`20260814001100`) is 1B's.
+
+### Where 1B actually stands
+
+Done and merged, or in #40:
+- Owner repository path live; draft-PR-only writes work.
+- **Adverse lifecycle** — `tests/integration/github-adverse-lifecycle.behavior.test.ts`,
+  9 tests. Approval expiry, owner-only decision, connection loss with history kept,
+  repeated loss converging, disconnect refused on mismatched installation id, rows
+  retained through disconnect, cross-tenant refusal, anonymous denial, member
+  read-without-mutate.
+
+**Next tranche, in priority order.** Each needs a mocked GitHub response rather than
+schema alone, so they belong in a route/unit test, not a PGlite behavior test:
+
+1. **Stale SHA.** A change whose `expected_blob_sha` no longer matches must be refused,
+   not overwritten. `reclaim_expired_github_change_reservation` and
+   `reserve_github_change_request` are the functions; the worker already rejects
+   `stale_base_sha`, so mirror that vocabulary rather than inventing a new code.
+2. **Rate limit must not falsely revoke.** `mark_github_connection_lost` accepts only
+   `installation_revoked`, `insufficient_permission`, `provider_authorization_failed`.
+   A 429 is none of those, and treating it as loss would disconnect a healthy
+   integration during a traffic spike. `lib/github/errors.ts` is where the
+   distinction lives; assert a 429 does **not** reach the loss path.
+3. **Webhook provider ordering.** `github-webhook-ordering.test.ts` exists — extend it
+   for out-of-order delivery of installation lifecycle events, where an older event
+   arriving late must not resurrect a terminal state.
+
+### Things that will bite you
+
+**The pin.** Nine-plus test files assert the *last* migration filename as a tripwire so
+a new migration cannot be added without someone reading the suites that replay the
+chain. It is doing its job, but with several agents landing migrations the same day it
+conflicts constantly. Resolve it to whichever filename genuinely sorts last —
+check with `ls supabase/migrations/*.sql | sort | tail -3`, do not assume your own.
+Newer suites (`phase2b-task-graph`, `phase2c-model-declaration`) deliberately assert
+`toContain(<their own migration>)` instead, because which file sorts last says nothing
+about what those tests depend on.
+
+**Two tripwire counts** move whenever a table is added: the RLS count in
+`phase1e-operations.behavior.test.ts` and the `publicTables` list in
+`hosted-service-role-table-grants.test.ts` (keep it alphabetical).
+
+**CI will not run on an unmergeable head.** If checks never appear on a PR, the PR is
+`dirty` — merge `origin/main` into the branch first. That cost a confusing half hour
+this session.
+
+### Do not do these without an explicit owner decision
+
+- **Build the 1D merge or deploy executor.** `AGENTS.md` forbids introducing auto-merge
+  or a production deployment workflow in this line of phases. The tests asserting
+  `MERGE_EXECUTOR_NOT_CONNECTED` / `DEPLOY_EXECUTOR_NOT_CONNECTED` are *designed* to
+  fail when an executor appears — that failure is the signal to stop and ask, not to
+  update the assertion.
+- **Use a provider key pasted into chat.** One was pasted this session; it is
+  compromised by having been pasted and must be rotated, never installed.
+
+## BLOCKER 2026-08-15: GitHub Actions has no runners
+
+Both required CI jobs fail three seconds after creation with `runner_id: 0` and no runner name.
+Reproduced with a deliberate re-run (run `31853623402`). Workflow YAML is valid and unchanged;
+the same tree passes lint, typecheck, 1748 tests and a clean build locally.
+
+This is account-level — check Actions minutes / billing at <https://github.com/settings/billing>.
+
+Two consequences worth stating plainly:
+
+- **No PR can be gated normally.** PR #40 was merged on local gate evidence, and its merge commit
+  says so rather than implying CI passed. Any agent that sees "checks never appeared" should
+  suspect this before suspecting its own change — though note the *other* cause of missing checks
+  is an unmergeable head, which looks identical from a distance.
+- **The Phase 1C live canary cannot run**, because it runs on Actions. The zero-token Codex
+  credential and working runners are independent blockers; both must clear before 1C can produce
+  a live branch, commit and draft PR.
 
 ## Ground rules (from `AGENTS.md` — read it before editing)
 
@@ -61,8 +169,20 @@ canonical; until then both readings are in circulation and they disagree.
       and a first real observed production incident.
 - [ ] **2A:** a successful live provider call, which needs a credential and the
       owner switch turned on.
-- [ ] **2B (roadmap: multi-agent teams):** everything. Teams, orchestration, handoff
-      persistence, parallel execution and team UI are all absent.
+- [x] **2B foundation started.** Migration `20260814001000` closes the graph's
+      deadlock hole and adds the two tables that make a team a team:
+      **cycle rejection** at write time (A→B→C→A satisfied every existing
+      constraint and would have stalled the graph permanently and silently),
+      readiness computed in the database, `task_dependencies_unsatisfiable` so a
+      cancelled or failed prerequisite is distinguishable from ordinary waiting,
+      `agent_handoffs` (append-only, bounded, secret-checked, and refusing a
+      handoff to the same role because that would satisfy independent review with
+      nobody independent), and `work_locks` conflicting on prefix **overlap in
+      both directions** so `lib/` blocks `lib/operations/`.
+- [ ] **2B remaining:** `teams` / `team_members` / `review_verdicts` tables, team
+      composition as a pure function, the orchestrator loop, metrics over real
+      runs, and the Team Detail UI. None of these need a credential; the live
+      multi-agent demonstration does.
 - [ ] **2C (roadmap: multi-project portfolio):** connecting more than one
       repository, and a portfolio surface that manages them. Distinct from the
       merged Resource Manager work.
@@ -206,10 +326,10 @@ a real typecheck failure earlier in this work.
       timestamps independently with nothing to stop them agreeing. Worth a convention (per-phase
       version ranges, or a pre-commit check that fails on a duplicate version prefix) rather than
       catching it by hand each time.
-Gates on current `main`: lint, typecheck, 143 files / 1621 tests, clean production build,
-Playwright across desktop/tablet/mobile including axe.
-| AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–F built and wired** | G (CLI/YAML) and H (PWA/live viewer) unstarted; 8 unhosted migrations |
+| AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–G built and wired** | H (PWA/live viewer) unstarted; 10 unhosted migrations |
 
+Gates on current `main`: lint, typecheck, 149 files / 1674 tests, clean production build,
+Playwright across desktop/tablet/mobile including axe.
 Gates on current `main`: lint, typecheck, 149 files / 1666 tests, clean production build,
 Playwright 126 passed across desktop/tablet/mobile including axe.
 
@@ -396,11 +516,11 @@ frozen policies, discovery stop conditions.
 
 ### Stage 2 — durability — done, and applied to hosted
 
-- [x] Thirteen tenant-scoped tables in `20260814000100_graph_engineering.sql`, all RLS + FORCE
+- [x] Thirteen tenant-scoped tables in `20260814002000_graph_engineering.sql`, all RLS + FORCE
       RLS, member-read-only, with no browser write grants.
 - [x] Work locks with heartbeat, expiry and abandoned-lock recovery, enforced by a partial
       unique index on `state = 'HELD'` rather than by the scheduler remembering.
-- [x] Write boundary (`20260814000200_graph_write_boundary.sql`): seven SECURITY DEFINER
+- [x] Write boundary (`20260814002100_graph_write_boundary.sql`): seven SECURITY DEFINER
       functions are the only way anything is written, and self-verification is refused.
 - [x] **Applied to hosted and verified**: 73 public tables at the time, all with RLS and FORCE
       RLS, seven write-boundary functions present, zero EXECUTE grants to `anon`.
@@ -545,7 +665,7 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
 
 ### Remaining
 
-- [x] **Persist breaker state and routing decisions** (migration `20260814000100`, RLS + FORCE RLS,
+- [x] **Persist breaker state and routing decisions** (migration `20260814000210`, RLS + FORCE RLS,
       no `service_role` grants). This fixed a real defect rather than adding storage: a breaker
       folded in one request's memory starts closed every request, so three consecutive outages
       spread across three requests never reached a threshold of three and the breaker could
@@ -557,7 +677,7 @@ Audit in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md`. Started; the scoring core is buil
       lost fault observation looks like health).
 - [x] **Candidates come from real tenant rows**, not code constants
       (`lib/resources/candidates.ts`): `agents` → agent profiles, `provider_model_configurations`
-      → model profiles. Migration `20260814000200` adds owner-declared `strength_tier` and
+      → model profiles. Migration `20260814000220` adds owner-declared `strength_tier` and
       `context_limit_tokens` to the Phase 2A catalogue — additively, touching nothing
       `20260813001500` redefines. Both are **nullable, and null means undeclared, never a
       default**: undeclared strength resolves to the weakest tier so it cannot pass the
@@ -641,22 +761,31 @@ Primary installation `153445938` stays active as the rollback boundary.
       retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
 - [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
       real user/email is authorized, so this cannot be faked locally.
-- [x] **Adverse lifecycle matrix** (`tests/integration/github-adverse-lifecycle.test.ts`, 12
-      tests against the real migrated schema). Covers revoked and insufficient-permission loss,
-      idempotent re-signalling, explicit disconnect, terminal deletion, and isolation. Each
-      asserts the *refusal*, because the refusals are the paths that had never been exercised:
-      a loss reason outside the declared set is rejected rather than stored; a disconnect aimed
-      at the wrong installation ID fails, so it cannot hit a connection that was since
-      re-installed; a non-owner cannot disconnect; a deleted installation cannot be restored,
-      so a revoked integration cannot quietly come back; and status and deletion marker cannot
-      disagree.
-      Provider ordering is already covered by `github-webhook-ordering.test.ts`; stale SHA and
-      approval expiry by `github-project-connection-handoff.test.ts` and the protected-approval
-      constraints. Rate limit is a provider response, not a schema state, and is handled in the
-      worker's error taxonomy.
+- [x] **Adverse lifecycle covered twice, by two agents, against the real migrated schema.**
+      `tests/integration/github-adverse-lifecycle.behavior.test.ts` (9 tests, from `main`) and
+      `tests/integration/github-adverse-lifecycle.test.ts` (12 tests, from this branch). They
+      overlap and that is fine — both survived the merge because each asserts something the
+      other does not, and deleting either to remove duplication would remove coverage with it.
+      Between them: revoked and insufficient-permission loss, idempotent re-signalling, repeated
+      loss converging on one end state, explicit disconnect, terminal deletion, approval expiry
+      (an expired row still reads `approved`; only the expiry distinguishes it), owner-only
+      decision, cross-tenant refusal of every privileged function, anonymous denial, and member
+      read-without-mutate.
+      Each asserts the *refusal*, because the refusals are the paths that had never been
+      exercised: a loss reason outside the declared set is rejected rather than stored; a
+      disconnect aimed at the wrong installation ID fails, so it cannot hit a connection that was
+      since re-installed; a non-owner cannot disconnect; a deleted installation cannot be
+      restored, so a revoked integration cannot quietly come back; and status and deletion marker
+      cannot disagree. `decide_approval` refuses a non-owner **outright** rather than recording a
+      decision that later fails validation — the stronger guarantee, because no approved-looking
+      row ever exists to be misread.
 - [x] **Disconnect and loss preserve history.** Both paths keep the installation row: the record
       of what was connected is the only thing that explains what happened afterwards, and losing
       it with the connection would be worse than the loss.
+- [ ] Still open: stale-SHA rejection, rate-limit handling that must not falsely revoke a
+      connection, and webhook provider ordering. Each needs a mocked GitHub response rather
+      than schema alone. (Provider ordering has schema-level coverage in
+      `github-webhook-ordering.test.ts`; what is missing is the provider response.)
 - [ ] Configure and verify isolated Preview Supabase values.
 
 ---
@@ -688,7 +817,7 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | Ephemeral session lifecycle | Phase 1C worker: clone → work → draft PR → destroy |
 | Least-privilege default-deny | RLS + FORCE RLS + service-role confinement |
 
-### Status — A through F are built, wired to Supabase, and pushed
+### Status — A through G are built, wired to Supabase, and pushed
 
 | Block | State | Where |
 |---|---|---|
@@ -699,11 +828,40 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | E Goals + rails | **Done** | `20260814000700`, spend/time/stuck all stop the loop |
 | F Triggers + automations | **Done** | `20260814000800` + `lib/agentos/webhook-payload.ts` |
 | Wiring | **Done** | `20260814000900` projections, 5 API routes, `/solutions/agentos` |
-| G CLI + `agentos.yml` | **Not started** | round-trip property test is the acceptance |
+| G CLI + `agentos.yml` | **Done** | `lib/agentos/project-config.ts`, `lib/agentos/cli-options.ts`, `scripts/agentos.mts`, `20260814001300`/`001400` |
 | H PWA + live viewer + activity feed | **Not started** | mostly UI over data that now exists |
 
-**Migrations `20260814000300`–`20260814001000` are all unhosted.** Add them to
+**Migrations `20260814000300`–`20260814001400` are all unhosted.** Add them to
 `AI/HOSTED_APPLY_RUNBOOK.md` before anyone applies anything.
+
+#### Block G, as built
+
+- `agentos_export_project_config` / `agentos_apply_project_config` are the only write path.
+  `authenticated` holds SELECT and nothing else on every `agentos_*` table, so a CLI writing
+  through PostgREST could not insert a row even with a valid session. Applying a configuration
+  requires **owner or admin**, not merely membership.
+- **Deleting is off by default.** `p_prune` defaults to false; a push adds and updates, and
+  reports anything the file omits as `extra` drift. The CLI needs `--prune --yes` — two separate
+  flags — and prints what it would remove before it removes anything.
+- A **builtin template is never redefined from a file**, and is excluded from export as well.
+  Exporting it would hand back a file that push refuses, breaking the round trip on any
+  organization that seeded the compound-engineer workflow.
+- A **repository grant resolves against installed repositories**. A YAML edit cannot invent
+  repository access by naming a string.
+- Round-trip acceptance is proven twice: through the file format
+  (`tests/unit/agentos-project-config.test.ts`) and through real PostgreSQL
+  (`tests/integration/agentos-project-config-sync.behavior.test.ts`).
+
+**Two traps found while building G, both worth knowing:**
+
+1. A plpgsql local named `agent_id` shadows the column of that name, so
+   `where agent_id = agent_id` is a tautology that deletes **every organization's** grants.
+   Every local in `20260814001400` is `v_`-prefixed because of this. The regression test that
+   catches it is the cross-organization bystander case — an in-organization test misses it,
+   because a later agent in the same push rewrites what an earlier one wiped.
+2. Nine integration tests assert "the newest migration is X" as a tripwire. Adding a migration
+   means updating all nine. Do **not** blanket-sed migration filenames across `tests/` —
+   `agentos-routes.contract.test.ts` reads a migration as a *source file*, not as a tripwire.
 
 ### If you pick this up next
 

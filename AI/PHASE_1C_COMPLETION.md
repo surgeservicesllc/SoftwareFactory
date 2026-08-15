@@ -122,6 +122,24 @@ message.
 Deterministic orchestration is unchanged and was already correct: no model call turns a command
 into a task, sets risk, writes acceptance criteria, validates, or decides publication.
 
+## 4b. Verified after the zero-token change
+
+Re-measured on 2026-08-14 rather than carried forward from the audit.
+
+| Check | Result |
+| --- | --- |
+| Every `.rpc()` call site resolves against the migrated schema | Pass — `supabase-rpc-contract` |
+| All ten worker RPCs exist in the chain | Pass — `register/heartbeat/finish_phase1c_worker`, `claim/heartbeat/complete_phase1c_run`, `append_phase1c_run_event`, `record_phase1c_validation`, `record_phase1c_run_artifact`, `submit_command` |
+| The full migration chain applies in order | Pass |
+| RLS and FORCE RLS on every public table | Pass — `schema-security-invariants` |
+| Worker required-check names match CI job names | Pass — `required-checks-wiring` |
+| Migration versions unique | **Fixed** — `20260814000300` was held by two migrations; `db push` would have collided on the ledger primary key and left the hosted schema half-applied |
+| No demo data in the Phase 1C path | Pass — `Demo Data` appears only in marketing surfaces |
+| Foreign keys lacking a supporting index | None. An initial sweep reported 191, but the check demanded an exact composite prefix; the tables are indexed on the leading FK column. No defect, no change made |
+| Production reachable | Pass — `/`, `/solutions`, `/platform` all `200` |
+
+Phase 1C's remaining gap is therefore entirely the credential in §5. Nothing in the code, schema, or wiring is known to be incomplete.
+
 ## 5. Owner action required
 
 Subscription auth is credential material that only the owner can produce. It cannot be derived,

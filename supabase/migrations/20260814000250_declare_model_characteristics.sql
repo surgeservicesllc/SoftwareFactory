@@ -1,6 +1,6 @@
 -- Let an owner declare a model's strength and context limit without writing SQL.
 --
--- `20260814000200` added the columns; nothing could set them except a hand
+-- `20260814000220` added the columns; nothing could set them except a hand
 -- written UPDATE, which meant the Resource Manager was permanently unable to
 -- find an eligible worker for anything demanding. That is correct behavior
 -- (undeclared fails closed) but it is not a state anyone can leave.

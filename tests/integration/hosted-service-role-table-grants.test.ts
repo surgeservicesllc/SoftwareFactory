@@ -18,6 +18,7 @@ const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
   // adding tables, and only after confirming RLS and FORCE RLS are enabled.
   "activity_events",
+  "agent_handoffs",
   "agent_runs",
   "agentos_agent_collaborators",
   "agentos_agent_filesystem_grants",
@@ -68,6 +69,7 @@ const publicTables = [
   "graph_runs",
   "graph_templates",
   "graph_verifications",
+  "graph_work_locks",
   "graphs",
   "incidents",
   "marketing_features",
