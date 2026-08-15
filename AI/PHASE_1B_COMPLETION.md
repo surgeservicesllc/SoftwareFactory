@@ -240,11 +240,24 @@ does not depend on it is complete.
 
 **1. Install the App on a second, independent GitHub account or organization.**
 
+> **The account exists as of 2026-08-15: `bubalysupport-prog`, holding
+> `bubalysupport-prog/TestMeBubaly`.** Confirmed reachable and public, and
+> confirmed to be a different owner from `surgeservicesllc` — which is the whole
+> requirement. An earlier candidate, `surgeservicesllc/TestMe`, could not serve:
+> a GitHub App installs once per account, so a repository under
+> `surgeservicesllc` joins installation `153445938` or `153479019`, and the
+> adverse pass below ends in **Uninstall** — it would have torn down the verified
+> production path. Same account also proves nothing about *cross-tenant*
+> isolation, because one account maps to one tenant and there is nothing to
+> isolate.
+>
+> What remains is the install itself, which is a browser flow no agent can
+> complete: it grants an installation against a GitHub account, and consenting to
+> that is the owner's act by design.
+
 - Service/page: `https://github.com/settings/apps/surge-softwarefactory-next/installations`
-- Button: **Install** — choose an account or organization that is *not*
-  `surgeservicesllc`
-- Field: **Repository access** → *Only select repositories* → pick one
-  throwaway repository
+- Button: **Install** — choose **`bubalysupport-prog`**
+- Field: **Repository access** → *Only select repositories* → **`TestMeBubaly`**
 - Value type: an installation, not a credential. Nothing secret is produced.
 - Where stored: SoftwareFactory records only the installation id, account login,
   and repository metadata in `github_installations` / `github_repositories`. The
