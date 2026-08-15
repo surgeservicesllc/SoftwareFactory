@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
       "connections",
       "files",
       "operations",
+      "portfolio",
       "projects",
       "reports",
       "runs",
