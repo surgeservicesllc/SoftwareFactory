@@ -26,6 +26,39 @@ and the class is stated explicitly so nothing reads as more proven than it is.
 | `npx vitest run` | PASS — 1712 tests across 152 files on the merged tree |
 | `npm run build` | PASS |
 
+## Correction 2026-08-15: Phase 1B *is* connected to Supabase
+
+An earlier session report said "connected to Supabase is false regardless of what else gets
+built". That was wrong for Phase 1B, and the error was one of scope: it treated "twelve
+migrations are unapplied" as if it meant "the application is not connected". Those are
+different claims.
+
+Measured externally against production rather than inferred:
+
+| Page | Status | Content source |
+| --- | --- | --- |
+| `https://www.theagoras.com/` | 200 | **Supabase** |
+| `https://www.theagoras.com/features` | 200 | **Supabase** |
+| `https://www.theagoras.com/pricing` | 200 | **Supabase** |
+
+The method is what makes this evidence rather than assertion. `ContentSourceNotice` renders a
+**Demo data** banner whenever `source !== "supabase"` and returns `null` otherwise, and it is
+wired into each of those pages as `<ContentSourceNotice source={content.source} />`. No banner
+appears on any of them, so each is being served from the database. A page that had lost its
+Supabase connection would fall back to seeded copy and say so.
+
+**All eleven Phase 1B migrations are hosted** — every one sorts at or below the ledger's
+high-water mark of `20260814000200`. So 1B's schema, RLS, and audited workflows are live, and
+the production application is reading through them.
+
+Exactly one Phase 1B migration is pending: `20260814001100_harden_github_connection_loss.sql`,
+which clears `suspended_at` when an installation moves to `error` and records a loss against a
+terminally deleted installation instead of aborting. Both are truthfulness fixes to an existing
+path, not the path itself.
+
+So the accurate statement is: **Phase 1B is connected to Supabase and running in production,
+with one hardening migration pending.** Not "not connected".
+
 ## New blocker found 2026-08-15: GitHub Actions cannot assign a runner
 
 Recorded here because it is not in any other document and it blocks verification of

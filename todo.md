@@ -34,8 +34,14 @@ list, order, and a real-PostgreSQL-16 verification of the whole chain applied fr
 the hosted position are in **`AI/HOSTED_APPLY_RUNBOOK.md`**. Do not re-derive it.
 One of them (`20260813001500`) needs its own fresh RED approval against a frozen SHA.
 
-Until an owner applies those, "connected to Supabase" is false no matter what else
-is built, and every new surface is correctly empty rather than broken.
+Until an owner applies those, the **newest** surfaces stay empty. But note the
+correction recorded in `AI/PHASE_1B_COMPLETION.md`: unapplied migrations do not
+mean the application is disconnected. Production serves marketing content from
+Supabase right now — verified externally, because `ContentSourceNotice` would
+render a **Demo data** banner if it were falling back to seeded copy, and does
+not on `/`, `/features` or `/pricing`. All eleven Phase 1B migrations are hosted.
+What is pending is the newest twelve migrations across all phases, one of which
+(`20260814001100`) is 1B's.
 
 ### Where 1B actually stands
 
