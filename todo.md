@@ -63,7 +63,7 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 1E Production Operations — ~87%; execution authority absent by design
 - [ ] 2A Multi-AI — provider layer built, switch OFF, no live call; zero-token conflict recorded in `AI/PHASE_1C_COMPLETION.md` §5a awaiting owner decision
 - [ ] 2B Graph Engineering — landed (PR #27, then 2E capacity integration); no live graph run yet
-- [ ] 2C Portfolio — ~43%; surface live, orchestrator/capacity landed via 2E, aggregation partial
+- [ ] 2C Portfolio — **83%** re-scored from evidence (29 PASS/2 PARTIAL/2 MISSING/2 BLOCKED); remaining agent-actionable: cross-project dependency type (17), runs grouping (24), activity view (25), sibling-isolation test (31); owner: hosted verify (33), second repo (34)
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
 - [ ] 2D Multi-Account Identity — not started as a distinct phase (connection model exists)
 - [ ] 3 Self-Improvement — not started
