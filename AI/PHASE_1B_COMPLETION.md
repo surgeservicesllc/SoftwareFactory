@@ -266,6 +266,40 @@ conflated before: all eleven Phase 1B migrations are applied to hosted
 Supabase, and production serves from it. The unapplied migrations are from
 later phases (1E, 2B, 2C, 2D, 2E) and none of them is a 1B dependency.
 
+## The verification is now a command, not a judgement
+
+Both actions below are still yours to perform. What is no longer manual is
+everything after them.
+
+`lib/github/live-acceptance.ts` states the nine conditions items 2 and 20
+depend on as one pure function of observed rows, and
+`scripts/verify-1b-live-acceptance.mts` gathers those observations and prints a
+per-condition verdict:
+
+```
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+[SOFTWAREFACTORY_FIRST_OWNER_JWT=...] \
+npx tsx scripts/verify-1b-live-acceptance.mts --installation <external-id>
+```
+
+Three properties worth knowing before you run it:
+
+- **A missing observation reads NOT_OBSERVED, never FAIL.** These items have
+  been open for days, and a harness that reported FAIL for "not done yet" would
+  make an unperformed action indistinguishable from a broken one.
+- **It refuses to run against `153445938` or `153479019`.** The pass ends in a
+  deliberate uninstall, and those two are the rollback boundary and the
+  verified production path. The warning below was prose; `PROTECTED_INSTALLATION_IDS`
+  makes it a control.
+- **Without `SOFTWAREFACTORY_FIRST_OWNER_JWT` the two cross-tenant checks stay
+  unobserved.** Service-role bypasses RLS, so probing containment with it would
+  return zero rows for reasons unrelated to the guarantee and report a green
+  result the command never actually tested.
+
+The rules are covered by `tests/unit/github-live-acceptance.test.ts` (11 tests)
+without a second GitHub account, so only the observations are waiting on you —
+not the decision about what counts as proof.
+
 ## OWNER ACTION REQUIRED
 
 Both remaining PARTIAL items need the same external resource. Everything that
