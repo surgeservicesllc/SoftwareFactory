@@ -119,7 +119,7 @@ Blocker 1 is the one that makes §10–11 unprovable on real data. It does not p
 5. Circuit breakers with cooldown and automatic re-evaluation.
 6. Objective selection: QUALITY / SPEED / COST / BALANCED, with frozen security and risk requirements excluded from every trade-off.
 7. Routing feedback: predicted vs actual, regret, minimum sample thresholds before preferences move.
-8. Durable memory for the above. *(Done: migration `20260814000100` plus `lib/resources/store.ts`.)*
+8. Durable memory for the above. *(Done: migration `20260814000300` plus `lib/resources/store.ts`.)*
 9. Resource Manager UI showing availability, decisions, breakers, and **why this worker was selected** — reading **No data yet** wherever no run has happened. *(Done: `/solutions/resources`.)*
 
 Sections 7, 8, and 14 of the objective (queues, dynamic concurrency, budget ladder) depend on a worker pool that executes; they are specified here and deferred behind blocker 1 rather than simulated.
@@ -149,5 +149,5 @@ fault count, which reset the counter on every write and reintroduced the exact d
 exists to fix. The behavior test caught it only because it drives faults through **separate calls**.
 A single-call test would have passed against the in-memory version too, and proved nothing.
 
-Migration `20260814000100` is **not hosted**, and no routing decision has been recorded against real
+Migration `20260814000300` is **not hosted**, and no routing decision has been recorded against real
 work, because no provider run has ever executed.

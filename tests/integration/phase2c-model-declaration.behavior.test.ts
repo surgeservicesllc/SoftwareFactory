@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 /**
  * Declaring a model's characteristics, against the real migrated schema.
  *
- * The reason this matters: `20260814000200` made undeclared models fail closed,
+ * The reason this matters: `20260814000220` made undeclared models fail closed,
  * which is correct but was a state nobody could leave — the columns had no
  * writer. These assert the writer exists, is owner/admin-gated, and can
  * withdraw a declaration as well as make one.

@@ -4,6 +4,11 @@ Last updated: 2026-08-13
 
 ## Mission and boundary
 
+**Phase 1B close-out merged as `c325dbb` on 2026-08-14.** Scoring is in `AI/PHASE_1B_COMPLETION.md` (18 PASS / 2 PARTIAL / 0 FAIL). Three real defects were fixed, not just covered: generic-`500` lifecycle refusals, a stale suspension marker left after a revocation, and a discovery that aborted against a terminally deleted installation. `tests/integration/github-lifecycle-matrix.test.ts` is the access-loss proof — it attempts a real change reservation after every transition rather than reading a UI label, so do not weaken it into asserting rendered state. Migration `20260814001100` is **unhosted**; apply it as item 7 of `AI/HOSTED_APPLY_RUNBOOK.md`.
+
+Two environment blockers were hit and are not code defects: Vercel's free-tier `api-deployments-free-per-day` limit, and GitHub Actions failing to assign a runner at all (`runner_id: 0`, no logs, two attempts). The second matters for Phase 1D, whose goal item 12 requires gates to rest on real CI evidence.
+
+
 Finish the Phase 1C routing projection and live acceptance without overstating status. Provider-credit recovery is no longer the task: Phase 1C was re-architected to zero-token subscription-authenticated Codex execution, so there is nothing to fund. The protected Supabase ledger reconciliation and forward-only chain through `130014` are complete on exact project `qpuofpmagrmyamahqwxw`; linked lint and focused runtime/catalog/ACL checks pass. Migration `20260813001500_expose_bounded_run_routing.sql` is local and unhosted; no earlier approval authorizes applying it. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Distinct no-claim diagnostic Actions run `31748582858` passed the exact-model GET, then the bounded non-stored Responses probe returned the safe code `credit_balance_exhausted`; Docker preload and durable claim were skipped. Durable run `f4594556-6f72-4763-a480-6993939e3651` remains failed after attempt 1 of 2, but its immutable base predates the verified production baseline; do not retry it. Activation is absent/OFF. The user-pasted OpenAI key is treated as compromised and `SOFTWAREFACTORY_OPENAI_API_KEY` has been removed from repository Actions secrets; it stays absent permanently, because Phase 1C has no paid-API path to restore it to. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected**. All automatic actions remain OFF and the global kill switch remains ON.
 
 ## Phase 1D state for the next agent
@@ -37,6 +42,32 @@ Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is applied to 
 Manual Phase 1C execution may handle only authenticated owner-submitted GREEN/YELLOW commands. RED remains non-executable. Autonomous Mode is OFF, the global kill switch is ON, and auto approve/merge/deploy/rollback are OFF. The worker ends at an open draft PR plus observed CI; it never writes the default branch or performs delivery.
 
 ## Current repository work
+
+**Phase 2B (graph engineering) is open in draft PR #27**, branch
+`claude/github-connection-confirm-qe3tqm`. Stages 1–5 are built: the pure engine
+core (`lib/graph/`), thirteen durable tables plus a SECURITY DEFINER write
+boundary (both **applied to hosted**), the runner and provider bridge, the
+templates/Workflows/observability/optimizer surfaces, and six of the seven
+demonstrations. Read `todo.md` first — it opens with a pickup section — then
+`AI/GRAPH_ENGINEERING.md` and `AI/PHASE_2B_DEMONSTRATIONS.md`.
+
+Three facts a successor needs and will not infer:
+
+- **The credential boundary is narrower than it looks.** `runGraph` takes an
+  injected `executeNode`, so every decision the engine makes is testable without
+  a provider. Only the claim that a real model satisfies these contracts needs
+  `ANTHROPIC_API_KEY` and a funded `OPENAI_API_KEY`. Stage 5 was once recorded
+  as fully credential-blocked; that was wrong, and six demonstrations now pass.
+- **Migration versions collide across concurrent workstreams.** Twice so far:
+  `20260813000500`, then `20260814000100` when Phase 2C's
+  `phase2c_resource_persistence` and Phase 2B's `graph_engineering` both claimed
+  it. The ledger stores one row per version, so the loser can never be applied.
+  `graph_engineering` was already hosted and could not move, so the unhosted
+  Phase 2C file was renamed to `20260814000300`. Check `supabase/migrations/`
+  before choosing a version.
+- **Automatic CI is intermittent.** A missing run and a not-yet-started run are
+  indistinguishable. Confirm an Actions run exists for the exact head SHA before
+  treating a PR as gated.
 
 Phase 2A is a separate advisory path. It can route a bounded task to an official Anthropic/OpenAI adapter and store a structured analysis artifact only after hosted schema, server credential, provider health, and explicit organization enablement exist. It cannot access a Git workspace or authorize a repository, approval, merge, deployment, rollback, or Phase 1C/1D switch.
 

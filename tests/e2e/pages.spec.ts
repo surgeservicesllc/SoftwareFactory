@@ -22,6 +22,7 @@ const routes = [
   { path: "/solutions/settings", heading: "Safety" },
   { path: "/solutions/agents", heading: "Agents" },
   { path: "/solutions/resources", heading: "Resource manager" },
+  { path: "/solutions/workflows", heading: "Workflows" },
   { path: "/solutions/backlog", heading: "Backlog" },
   { path: "/solutions/runs", heading: "Runs" },
   { path: "/solutions/reports", heading: "Reports" },

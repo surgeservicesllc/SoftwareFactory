@@ -3,6 +3,7 @@ import { evaluateApproval, type ApprovalResult } from "@/lib/autonomy/approval";
 import type { AutomaticAction, EffectiveAutonomyControls } from "@/lib/autonomy/controls";
 import { reclassifyAgainstDeclared, type DiffFile, type DiffRiskAssessment } from "@/lib/autonomy/diff-risk";
 import { evaluateGates, type GateEvaluation, type GateResult } from "@/lib/autonomy/gates";
+import type { EligibilityResult } from "@/lib/autonomy/merge-eligibility";
 import { evaluateMergeReadiness, type MergeReadinessRequest } from "@/lib/autonomy/merge-readiness";
 import {
   evaluatePostDeployValidation,
@@ -117,6 +118,30 @@ export interface PipelineInput {
    * the change was gated. Omitted when the run is not attempting a merge.
    */
   readonly mergeReadiness?: Omit<MergeReadinessRequest, "approved" | "executorConnected">;
+  /**
+   * Whether a merge executor is available at all. Defaults to false, so a
+   * caller that does not know stays blocked rather than being assumed capable.
+   */
+  readonly mergeExecutorConnected?: boolean;
+  /**
+   * The `AUTO_MERGE_POLICY.md` allowlist, size and scope decision. Absent means
+   * no merge target was authorized, which blocks — the same reading
+   * `merge-eligibility.ts` takes of a missing allowlist.
+   */
+  readonly mergeEligibility?: EligibilityResult;
+  /**
+   * The result of establishing whether production actually received this
+   * change. Structural rather than imported, so this module stays free of the
+   * server-only deployment adapter and remains testable as pure logic.
+   *
+   * Absent means nothing was established, which blocks. Merging is not
+   * shipping, and assuming otherwise is how a failed build reads as a release.
+   */
+  readonly deployment?: {
+    readonly outcome: "deployed" | "failed" | "pending" | "not_found" | "not_connected";
+    readonly deploymentId: string | null;
+    readonly reason: string;
+  };
   /**
    * Post-deploy validation evidence, read after a deploy rather than when the
    * change was gated. Omitting it does not mean "fine" — the stage treats an
@@ -270,33 +295,94 @@ function evaluateStage(stage: PipelineStage, context: StageContext): StageOutcom
       // Revalidate against the current head before anything is attempted: an
       // approval and a test run both describe the commit they were made
       // against, not whatever is on the branch now.
-      if (input.mergeReadiness) {
-        const readiness = evaluateMergeReadiness({
-          ...input.mergeReadiness,
-          approved: approval.decision === "APPROVED_AUTOMATICALLY",
-          executorConnected: false,
-        });
-        // Never ready in this tree, but report what else was wrong first — a
-        // stale approval or a conflict matters even once an executor exists.
-        const first = readiness.blockers.find(
-          (blocker) => blocker !== "MERGE_EXECUTOR_NOT_CONNECTED",
-        );
-        if (first) return blocked(stage, first, readiness.reason);
+      if (!input.mergeReadiness) {
+        // Two different absences. With no executor, that is the dominant fact
+        // and the older, blunter answer is the correct one. With an executor
+        // available, missing revalidation inputs mean nothing was re-asked at
+        // the last moment, which is exactly the staleness this stage exists to
+        // prevent — so it gets its own name rather than borrowing one.
+        return input.mergeExecutorConnected
+          ? blocked(
+            stage,
+            "MERGE_READINESS_NOT_EVALUATED",
+            "Merge readiness was not evaluated against the current head.",
+          )
+          : blocked(
+            stage,
+            UNEXECUTABLE_STAGES.merge,
+            "No merge executor is connected.",
+          );
       }
 
-      return blocked(
+      const readiness = evaluateMergeReadiness({
+        ...input.mergeReadiness,
+        approved: approval.decision === "APPROVED_AUTOMATICALLY",
+        executorConnected: input.mergeExecutorConnected ?? false,
+      });
+      // Report a stale approval or a conflict ahead of the executor's absence:
+      // those matter regardless of whether an executor exists.
+      const first = readiness.blockers.find(
+        (blocker) => blocker !== "MERGE_EXECUTOR_NOT_CONNECTED",
+      );
+      if (first) return blocked(stage, first, readiness.reason);
+
+      // Only the executor's own absence can remain. It outranks the allowlist
+      // because "nothing can merge" is a more fundamental answer than "this
+      // target was not authorized".
+      if (!readiness.ready) {
+        return blocked(stage, UNEXECUTABLE_STAGES.merge, readiness.reason);
+      }
+
+      // The policy's other half. An absent decision is not permission — it
+      // means no merge target was ever authorized.
+      if (!input.mergeEligibility) {
+        return blocked(
+          stage,
+          "ALLOWLIST_NOT_CONFIGURED",
+          "No auto-merge allowlist decision was supplied, so no merge target is authorized.",
+        );
+      }
+      if (!input.mergeEligibility.eligible) {
+        return blocked(
+          stage,
+          input.mergeEligibility.blockers[0] ?? "ALLOWLIST_NOT_CONFIGURED",
+          input.mergeEligibility.reason,
+        );
+      }
+
+      return satisfied(
         stage,
-        UNEXECUTABLE_STAGES.merge,
-        "No merge executor exists; introducing one is out of scope for this phase.",
+        `Every merge precondition holds against ${readiness.evaluatedHeadSha.slice(0, 7)}.`,
       );
     }
 
-    case "deploy":
-      return blocked(
-        stage,
-        UNEXECUTABLE_STAGES.deploy,
-        "No deployment adapter is connected.",
-      );
+    case "deploy": {
+      if (!input.deployment) {
+        return blocked(
+          stage,
+          UNEXECUTABLE_STAGES.deploy,
+          "No deployment adapter is connected.",
+        );
+      }
+
+      switch (input.deployment.outcome) {
+        case "deployed":
+          return satisfied(
+            stage,
+            `Production deployment ${input.deployment.deploymentId ?? "(unnamed)"} is ready.`,
+          );
+        case "failed":
+          return blocked(stage, "DEPLOYMENT_FAILED", input.deployment.reason);
+        case "pending":
+          // Not a failure. Nobody watched long enough to say, and calling that
+          // a failure would raise an incident for a build that may be fine.
+          return blocked(stage, "DEPLOYMENT_PENDING", input.deployment.reason);
+        case "not_found":
+          return blocked(stage, "DEPLOYMENT_NOT_FOUND", input.deployment.reason);
+        default:
+          return blocked(stage, UNEXECUTABLE_STAGES.deploy, input.deployment.reason);
+      }
+    }
 
     case "validate": {
       // `POST_DEPLOY_VALIDATION.md`: missing, stale, or mismatched evidence is

@@ -12,12 +12,13 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260814001100_guard_resource_assignment_candidates.sql";
+  "20260814002300_guard_resource_assignment_candidates.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
   // adding tables, and only after confirming RLS and FORCE RLS are enabled.
   "activity_events",
+  "agent_handoffs",
   "agent_runs",
   "agentos_agent_collaborators",
   "agentos_agent_filesystem_grants",
@@ -45,6 +46,8 @@ const publicTables = [
   "bot_assignments",
   "bot_roles",
   "bots",
+  "claim_acceptable_anchors",
+  "claim_anchors",
   "commands",
   "connections",
   "deployment_validations",
@@ -56,6 +59,18 @@ const publicTables = [
   "github_protected_change_approvals",
   "github_repositories",
   "github_webhook_deliveries",
+  "graph_anchors",
+  "graph_artifacts",
+  "graph_budgets",
+  "graph_edges",
+  "graph_events",
+  "graph_handoffs",
+  "graph_nodes",
+  "graph_runs",
+  "graph_templates",
+  "graph_verifications",
+  "graph_work_locks",
+  "graphs",
   "incidents",
   "marketing_features",
   "marketing_logos",
@@ -69,6 +84,9 @@ const publicTables = [
   "marketing_testimonials",
   "monitor_observations",
   "newsletter_subscribers",
+  "node_contracts",
+  "node_run_claims",
+  "node_runs",
   "operations_audit_events",
   "operations_events",
   "organization_members",
@@ -100,6 +118,7 @@ const publicTables = [
   "task_dependencies",
   "tasks",
   "test_runs",
+  "work_locks",
 ] as const;
 
 const providerIngressTables = new Set([

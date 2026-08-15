@@ -106,6 +106,10 @@ committed; the repository is consistent with that account.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
+| Phase 1B close-out (merge `c325dbb`) | `AI/PHASE_1B_COMPLETION.md`; `tests/integration/github-lifecycle-matrix.test.ts`; `tests/unit/github-lifecycle-errors.test.ts` | 18 PASS / 2 PARTIAL / 0 FAIL. Three real defects fixed: generic-500 lifecycle refusals, a stale suspension marker after revocation, and an aborted discovery against a terminally deleted installation |
+| Full chain on real PostgreSQL 16.13 | 57 migrations applied in order from empty | Pass - 0 of 83 public tables missing RLS/FORCE RLS; `service_role` on exactly the four GitHub ingress tables with no DELETE; both Phase 1D interlocks intact |
+| Merged-tree gates (2026-08-14) | `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `npx playwright test` | Pass - lint/typecheck clean; 1724 tests / 155 files; build exit 0; Playwright 126 passed, 3 skipped incl. axe |
+| GitHub Actions CI on merge SHA | Run `31848857261`, two attempts | **Could not run** - no runner assigned (`runner_id: 0`), no logs (HTTP 404), 2s duration. Account-level Actions blocker, not a code signal. Identical code passed run `31846219078` |
 | Merged-tree gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 22:00 UTC - lint/typecheck clean; **153 files/1704 tests**; production build clean. CI green on both required jobs for the commit merged as `145a31d` |
 | Phase 1D E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe | Pass - 117/117 |
 | Phase 1D control interlocks | `tests/integration/phase1d-autonomy-controls.behavior.test.ts` against the migrated schema | Pass - 35 tests: each of nine actions refused at each of two scopes, both ceilings, both mode flags, the kill switch, and a new project or organization trying to be born with authority; both constraints `convalidated`; `anon` holds no write |
