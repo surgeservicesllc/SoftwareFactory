@@ -300,6 +300,37 @@ The rules are covered by `tests/unit/github-live-acceptance.test.ts` (11 tests)
 without a second GitHub account, so only the observations are waiting on you —
 not the decision about what counts as proof.
 
+## Why no agent session can close items 2 and 20 — five checks, 2026-08-15
+
+Three sessions have now spent time re-deriving this. Recorded once, in full, so
+the next one does not.
+
+| Avenue | Result |
+|---|---|
+| A second GitHub account already present | No. `get_me` returns one User account, `surgeservicesllc`, id `316305532`, created 2026-08-12, one public repository. |
+| Create an organization via API | No such endpoint. GitHub exposes organization creation only through the enterprise admin API on GHES, not on github.com. |
+| Install the App on another account | No API exists. Installation requires the target account owner's browser consent, by design. |
+| Suspend or uninstall via the App API | `PUT /app/installations/{id}/suspended` needs a JWT signed with the App private key. No App credential is present in an agent environment: `env | grep -ciE "GITHUB_APP|PRIVATE_KEY|WEBHOOK_SECRET"` returns `0`. |
+| Reach installations with the session token | Refused at the proxy. `GET /user/installations` returns **403**: *"This GitHub API path is not available: sessions are bound to their configured repositories. Use repository-scoped endpoints."* |
+
+The last row is the decisive one and it is a deliberate property of the
+environment rather than a missing permission: agent sessions are scoped to
+their configured repositories, so every account-level and installation-level
+endpoint is out of reach no matter which token is supplied.
+
+**What this does and does not mean.** The capability behind item 2 is built and
+proven against real migrations — `github-lifecycle-matrix` runs two independent
+installations in one tenant plus a third in a second tenant, and proves a
+repository of installation B is unreachable through connection A. What is
+missing is a live second account exercising it. So the gap is in the
+*evidence*, not in the software, and the distinction matters: 18/20 is not
+"two features unbuilt", it is "two proofs that need a second GitHub account
+nobody has created yet".
+
+That is also why these two must not be promoted on the strength of the tests
+that exist. `tests/integration/phase1b-scorecard-integrity.test.ts` fails if
+anyone tries.
+
 ## OWNER ACTION REQUIRED
 
 Both remaining PARTIAL items need the same external resource. Everything that
