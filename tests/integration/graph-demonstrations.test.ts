@@ -1,5 +1,8 @@
 // @vitest-environment node
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -36,11 +39,17 @@ import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
  *   engine makes. These are decisions the engine takes on its own, and a
  *   scripted executor exercises them exactly as a real one would.
  *
- * - **Not proven here.** That a real model, called through the Phase 2A
- *   provider layer, returns output satisfying these contracts; that latency and
- *   token accounting match a real provider; that a real Codex worker produces a
- *   mergeable change. Those need `ANTHROPIC_API_KEY` and a funded
- *   `OPENAI_API_KEY`, and demonstration C is not attempted without them.
+ * - **Not proven here.** That a real model returns output satisfying these
+ *   contracts, or that a real Codex worker produces a mergeable change.
+ *
+ *   The first of those is proven in `graph-live-team-canary.test.ts`, which
+ *   drives this same engine over the zero-token subscription path with real
+ *   Claude nodes. The second needs a Codex worker claiming against hosted
+ *   Supabase and is recorded as BLOCKED_BY_1C_HOSTED_SCHEMA.
+ *
+ *   Neither needs `ANTHROPIC_API_KEY` or a funded `OPENAI_API_KEY`, and this
+ *   comment used to say they did — which was how demonstration C ended up gated
+ *   on the one thing the project forbids.
  *
  * The distinction matters because the engine's whole purpose is to refuse to
  * overclaim. A demonstration suite that quietly implied live execution would be
@@ -488,9 +497,6 @@ describe("G. a budget degrades and then stops gracefully", () => {
   });
 });
 
-const providersConfigured =
-  Boolean(process.env.ANTHROPIC_API_KEY) && Boolean(process.env.OPENAI_API_KEY);
-
 describe("C. the code-feature demonstration", () => {
   it("compiles the feature-build shape, which is provable without a provider", () => {
     const template = findTemplate("feature_build")!;
@@ -513,16 +519,36 @@ describe("C. the code-feature demonstration", () => {
     expect(review?.reason).toBe("VERIFICATION");
   });
 
-  // Skipped rather than asserted-absent: this must start running the day the
-  // credentials land, not start failing.
-  it.skipIf(!providersConfigured)(
-    "drives a real feature build through to a draft pull request",
-    () => {
-      throw new Error(
-        "Not implemented. Requires a live executeNode over the Phase 2A provider layer plus a registered Codex worker; see AI/PHASE_2B_DEMONSTRATIONS.md.",
-      );
-    },
-  );
+  /**
+   * The live half of C moved to `graph-live-team-canary.test.ts`, and its gate
+   * was wrong in a way worth recording.
+   *
+   * It used to be `it.skipIf(!ANTHROPIC_API_KEY && !OPENAI_API_KEY)` with a body
+   * that threw "Not implemented". The stub is the ordinary kind of debt. The
+   * gate was the real defect: this project's standing constraint is that normal
+   * operation costs zero funded per-token API usage, so the demonstration was
+   * gated on exactly the thing the project forbids. It could not run — not "not
+   * yet", but never — and being permanently skipped, it never said so.
+   *
+   * The live canary runs the same claim on the zero-token subscription path:
+   * five real Claude nodes, three of them concurrent, contracts enforced by the
+   * engine's own validator, and a verifier in a fresh session that receives only
+   * the artifact. Opt in with `SOFTWAREFACTORY_GRAPH_LIVE_CANARY=1`.
+   *
+   * What remains unproven is the second half of C's original claim — a Codex
+   * worker turning the plan into a diff and a draft pull request. That needs the
+   * Phase 1C worker to claim a command against hosted Supabase, and the Phase 2B
+   * graph tables are not applied to hosted. It is recorded as
+   * BLOCKED_BY_1C_HOSTED_SCHEMA in AI/PHASE_2B_COMPLETION.md rather than skipped
+   * silently, because a skipped test and a blocked one look identical in a
+   * summary line and only one of them is waiting on something real.
+   */
+  it("states where the live half of this demonstration lives", () => {
+    // A pointer, not a proof. It exists so that deleting the canary breaks
+    // something, rather than quietly reducing C to its compile-time half.
+    const canary = "tests/integration/graph-live-team-canary.test.ts";
+    expect(existsSync(resolve(import.meta.dirname, "../..", canary)), `${canary} is missing`).toBe(true);
+  });
 });
 
 /* --------------------------------------------------------------- helpers */
