@@ -1,0 +1,52 @@
+name: Phase 2A handoff canary
+
+# Goals 18, 19 and 20, live: a typed handoff from Claude to Codex, then an
+# independent review by a fresh Claude that never saw either.
+#
+# It runs here rather than locally because both subscription credentials exist
+# only as Actions secrets — which also makes this the one place the credential
+# path itself is exercised, rather than an ambient login the transport would
+# refuse anyway.
+#
+# Manual only. It consumes real subscription turns on two providers, and no
+# per-token API credit on either.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  handoff:
+    name: Claude plan to Codex implementation to fresh Claude review
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # No ANTHROPIC_API_KEY and no OPENAI_API_KEY are supplied to this step, and
+      # the script refuses to start if it finds either. Both providers
+      # authenticate from subscription material, so no step here can consume
+      # per-token API credit.
+      - name: Run the handoff canary
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
+        run: npx tsx scripts/handoff-canary.mts
