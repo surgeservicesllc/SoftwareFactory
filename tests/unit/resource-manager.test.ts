@@ -18,6 +18,7 @@ import {
   summarizePerformance,
   type RunOutcome,
 } from "@/lib/resources/history";
+import { DEFAULT_CAPACITY_LIMITS, type Reservation } from "@/lib/resources/capacity";
 import { assignWorker, type ResourceNode, type WorkerCandidate } from "@/lib/resources/manager";
 
 const agent: AgentCapabilityProfile = {
@@ -398,5 +399,142 @@ describe("resource manager assignment", () => {
     const loser = result.candidates.find((entry) => entry.agentId === "agent-unavailable");
     expect(loser?.eligible).toBe(false);
     expect(loser?.rejections).toContain("AGENT_UNAVAILABLE");
+  });
+});
+
+describe("capacity as an assignment gate", () => {
+  const busy = (count: number, overrides: Partial<Reservation> = {}): Reservation[] =>
+    Array.from({ length: count }, () => ({
+      agentId: "agent-backend",
+      provider: "openai",
+      model: "gpt-economical",
+      projectId: "project-1",
+      expiresAt: 10_000,
+      ...overrides,
+    }));
+
+  it("leaves behaviour unchanged for a caller that tracks no reservations", () => {
+    // The field is optional on purpose: absent must mean "not tracked", never
+    // an implicit limit of zero, which would refuse everything and read as a
+    // routing bug rather than a capacity one.
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [candidate()],
+      objective: "BALANCED",
+      mode: "AUTO",
+      now: 0,
+    });
+    expect(result.decision).toBe("ASSIGNED");
+    expect(result.candidates[0]?.notes).not.toContain("AT_CAPACITY");
+  });
+
+  it("makes a worker at its own limit ineligible rather than merely lower-scoring", () => {
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [candidate()],
+      objective: "BALANCED",
+      mode: "AUTO",
+      reservations: busy(DEFAULT_CAPACITY_LIMITS.perWorker),
+      now: 0,
+    });
+    expect(result.decision).toBe("NO_ELIGIBLE_WORKER");
+    expect(result.candidates[0]?.eligible).toBe(false);
+    expect(result.candidates[0]?.rejections).toContain("WORKER_AT_CAPACITY");
+    expect(result.candidates[0]?.notes).toContain("AT_CAPACITY");
+  });
+
+  it("distinguishes waiting for capacity from being misconfigured", () => {
+    const full = assignWorker({
+      node: simpleNode,
+      candidates: [candidate()],
+      objective: "BALANCED",
+      mode: "AUTO",
+      reservations: busy(DEFAULT_CAPACITY_LIMITS.perWorker),
+      now: 0,
+    });
+    // An operator told "no eligible worker" changes a declaration. Told the
+    // fleet is full, they wait or raise a limit that has a name.
+    expect(full.reason).toMatch(/at capacity/i);
+
+    const misconfigured = assignWorker({
+      node: simpleNode,
+      candidates: [candidate({ agent: { ...agent, available: false } })],
+      objective: "BALANCED",
+      mode: "AUTO",
+      reservations: [],
+      now: 0,
+    });
+    expect(misconfigured.reason).not.toMatch(/at capacity/i);
+  });
+
+  it("does not blame capacity when a candidate is also ineligible for another reason", () => {
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [candidate({ agent: { ...agent, available: false } })],
+      objective: "BALANCED",
+      mode: "AUTO",
+      reservations: busy(DEFAULT_CAPACITY_LIMITS.perWorker),
+      now: 0,
+    });
+    expect(result.decision).toBe("NO_ELIGIBLE_WORKER");
+    expect(result.reason).not.toMatch(/at capacity/i);
+  });
+
+  it("frees the worker again once its reservations expire", () => {
+    const reservations = busy(DEFAULT_CAPACITY_LIMITS.perWorker, { expiresAt: 5_000 });
+    expect(
+      assignWorker({ node: simpleNode, candidates: [candidate()], objective: "BALANCED", mode: "AUTO", reservations, now: 4_999 }).decision,
+    ).toBe("NO_ELIGIBLE_WORKER");
+    // A lease that only released on success would strand this capacity forever.
+    expect(
+      assignWorker({ node: simpleNode, candidates: [candidate()], objective: "BALANCED", mode: "AUTO", reservations, now: 5_001 }).decision,
+    ).toBe("ASSIGNED");
+  });
+
+  it("routes around a saturated worker to an eligible one on another provider", () => {
+    const architect: AgentCapabilityProfile = {
+      ...agent, agentId: "agent-backend", capabilities: ["coding", "backend", "qa"],
+    };
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [
+        candidate({ agent: architect, model: cheapModel, configuredAffinity: 0.9 }),
+        candidate({ agent: architect, model: strongModel, configuredAffinity: 0.1, breaker: closedBreaker("anthropic") }),
+      ],
+      objective: "COST",
+      mode: "AUTO",
+      reservations: busy(DEFAULT_CAPACITY_LIMITS.perWorker),
+      now: 0,
+    });
+    // The cheap model is both cheaper and more preferred; capacity still wins,
+    // because it gates and preference only weights.
+    expect(result.decision).toBe("ASSIGNED");
+    expect(result.model).toBe("claude-strong");
+  });
+
+  it("refuses an explicit override for a worker at capacity instead of exceeding the limit", () => {
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [candidate()],
+      objective: "BALANCED",
+      mode: "CODEX",
+      reservations: busy(DEFAULT_CAPACITY_LIMITS.perWorker),
+      now: 0,
+    });
+    expect(result.decision).toBe("REQUESTED_WORKER_INELIGIBLE");
+    expect(result.reason).toMatch(/WORKER_AT_CAPACITY/);
+  });
+
+  it("honours a caller-supplied limit over the default", () => {
+    const result = assignWorker({
+      node: simpleNode,
+      candidates: [candidate()],
+      objective: "BALANCED",
+      mode: "AUTO",
+      reservations: busy(1),
+      capacityLimits: { ...DEFAULT_CAPACITY_LIMITS, perWorker: 1 },
+      now: 0,
+    });
+    expect(result.candidates[0]?.rejections).toContain("WORKER_AT_CAPACITY");
   });
 });
