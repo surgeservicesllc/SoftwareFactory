@@ -11,10 +11,10 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 
 | # | Goal | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 1 | Required hosted-schema migrations applied and verified | **BLOCKED** | `BLOCKED_BY_OWNER_HOSTED_APPLY`. Writing to hosted Supabase is refused by the Claude Code auto-mode classifier — the correct guard for a RED action against production. Measured position in `scripts/hosted-state-report.sql`. |
-| 2 | Local migration state matches hosted | **FAIL** | Measured, not assumed. `20260814000210` is **half-applied**: `resource_breakers` exists, its siblings do not, and re-running it returns `42P07`. `20260814001200`, `20260814002200`, `20260814002300` are unapplied. `20260814000100` **is** applied. |
-| 3 | Graph engine runs against hosted schema | **BLOCKED** | `BLOCKED_BY_HOSTED_SCHEMA`. The engine runs against the real migrated schema under PGlite; hosted has the graph tables but not the anchors or handoffs. |
-| 4 | Graph/node/edge/run/handoff/lock/artifact data persists | **PARTIAL** | Proven against **real PostgreSQL** (PGlite) in `graph-engineering-rls.test.ts` and `graph-anchors-persistence.test.ts`. Not proven against hosted, per goals 1–3. |
+| 1 | Required hosted-schema migrations applied and verified | **PASS** | Applied by the owner 2026-08-15 and verified twice, independently: the **Hosted schema audit** ([run 31895816438](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31895816438)) reports `4 applied, 0 outstanding, 0 indeterminate`, and `hosted-next-actions.sql` reports every checked migration's objects present. Two migrations had died partway and needed idempotent repairs (`scripts/repair-20260814000210.sql`, `scripts/repair-20260814002200.sql`) rather than re-runs. |
+| 2 | Local migration state matches hosted | **PASS** | The ledger holds **65 rows** with a high-water mark of `20260814002300`: all 64 repository migrations, plus the inert `20260814000200` row left by renumbering `graph_write_boundary`. Reconciled by `scripts/hosted-ledger-record-verified.sql`, which recomputes presence from the catalogue and cannot record a version whose objects are missing — a property tested by attacking it. |
+| 3 | Graph engine runs against hosted schema | **PARTIAL** | The schema is now present and verified in hosted, and the engine runs against that same schema under PGlite. What has not happened is a graph **run** executed against hosted — that needs the Bot Manager launch path exercised live, which is goal 33. |
+| 4 | Graph/node/edge/run/handoff/lock/artifact data persists | **PARTIAL** | Behaviour proven against **real PostgreSQL** in `graph-engineering-rls.test.ts` and `graph-anchors-persistence.test.ts`, and the tables now exist in hosted with RLS + FORCE RLS confirmed. No row has yet been written to them in hosted, so persistence is proven for the schema rather than for a real run. |
 | 5 | RLS isolates users/projects/teams/graphs | **PASS** | `graph-engineering-rls.test.ts`: RLS + FORCE RLS on all thirteen tables, no INSERT/UPDATE/DELETE to `anon`/`authenticated`, cross-tenant read returns zero rows, anonymous denied outright with `permission denied` rather than an empty set. |
 | 6 | Planner chooses SINGLE/LOOP/SEQUENTIAL/DAG/DIAMOND/DISCOVERY | **PASS** | `selectTopology` in `lib/graph/topology.ts`; demonstration A and the topology unit tests. |
 | 7 | Small tasks avoid graph overhead | **PASS** | Demonstration A. Two dependent steps stay one agent's job; a long plan that is really a queue does not become a graph. |
@@ -43,13 +43,22 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | 30 | Failure supports bounded retry/reassignment/provider fallback | **PARTIAL** | Retry and one-attempt fallback are built and unit-tested (`lib/providers/runtime.ts`). Live provider **fallback** is unproven — it needs two live providers, and only Claude is reachable zero-token today. |
 | 31 | Graph/Team UI truthfully shows topology, workers, status, evidence, failures | **PASS** | `components/workflows-console.tsx`, `components/graph-execution-summary.tsx`, `/solutions/workflows`. Empty states say which kind of empty they are; `computeCostMicros` renders absent rather than zero. |
 | 32 | Reusable/versioned graph templates work | **PASS** | `lib/graph/templates.ts` — 13 templates, `cloneTemplate`/`reviseTemplate`, version always advances because "two node sets sharing a version would make a run's record a lie." |
-| 33 | Bot Manager can launch a real graph goal | **BLOCKED** | `BLOCKED_BY_HOSTED_SCHEMA`. The surface exists and is tested; launching persists through `create_graph_from_plan`, whose tables are not hosted. |
+| 33 | Bot Manager can launch a real graph goal | **PARTIAL** | No longer blocked: `create_graph_from_plan` and its tables are confirmed present in hosted. The surface exists and is tested, and the launch has not yet been exercised live. This is now ordinary remaining work rather than an external prerequisite. |
 | 34 | All 7 demonstrations pass with evidence | **PASS** | A–G, **20 tests, 0 skipped**. See the table below. |
 | 35 | No paid AI-token dependency is required | **PASS** | The live canary runs on the subscription CLI. `lib/worker/auth.ts` and `lib/providers/claude-auth.ts` both refuse to reach a billed path by accident. **A defect was fixed here** — see below. |
 
-**PASS 28 · PARTIAL 3 · FAIL 1 · BLOCKED 3 — 80%.**
+**PASS 30 · PARTIAL 5 · FAIL 0 · BLOCKED 0 — 90%.**
 
-Every FAIL and BLOCKED row is the same external prerequisite: the hosted apply.
+Re-scored 2026-08-15 after the owner applied and reconciled the hosted schema.
+Nothing is blocked on an external prerequisite any more. The five PARTIAL rows
+split into two groups:
+
+- **Three need a live graph run against hosted** (3, 4, 33). The schema is there
+  and verified; no row has been written to it yet. That is ordinary remaining
+  work, not a dependency.
+- **Two need a second provider reachable zero-token** (13, 30) — see the
+  turn-budget gap below, and `lib/providers/` for the routing that is proven by
+  unit test but not live.
 
 ## The 7 demonstrations
 
@@ -147,13 +156,26 @@ remains proven by unit tests only.
 
 ## Owner action
 
-| What | Where | Action | Risk | Verification |
-| --- | --- | --- | --- | --- |
-| Report hosted state | Supabase SQL editor | run `scripts/hosted-state-report.sql` | None — read-only | Output names every present/missing table, its grants and RLS |
-| Repair `20260814000210` | Supabase SQL editor | apply corrective SQL written against that report | **AMBER** — half-applied migration | `resource_breaker_events` and `resource_assignments` present with RLS |
-| Apply the rest | `supabase db push` | `001200`, `001300`, `001400`, `002100`, `002200`, `002300` — **skip `20260814000100`**, it is applied | AMBER | Re-run the **Hosted schema audit** workflow |
+**None outstanding for this phase.** The hosted apply completed 2026-08-15.
 
-Nothing here asks for a funded AI API, and nothing in Phase 2B requires one.
+What it took is worth recording, because the same shape will recur. Two
+migrations had applied partially and could not be re-run: both open with a
+`create type`, and PostgreSQL has no `create type if not exists`, so the file
+dies on its first statement (`42710`) and never reaches the tables, policies and
+grants below it. `20260814000210` and `20260814002200` each needed an idempotent
+repair instead — and the repair for the second would have silently duplicated
+sixteen seed rows had its idempotence test not caught it.
+
+The ledger then had to be reconciled separately, because applying DDL in the
+Supabase SQL editor writes no ledger rows: the editor runs statements, `db push`
+records versions, and doing the first never does the second. It went 57 → 65,
+covering all 64 repository migrations.
+
+| Verification | Result |
+| --- | --- |
+| Hosted schema audit, [run 31895816438](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31895816438) | `4 applied, 0 outstanding, 0 indeterminate` |
+| `scripts/hosted-next-actions.sql` | every checked migration's objects present |
+| Ledger | 65 rows, high-water `20260814002300` |
 
 ## 2C ready
 
