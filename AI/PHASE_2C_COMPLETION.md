@@ -37,9 +37,9 @@ Legend: **PASS** (built and evidenced) · **PARTIAL** · **MISSING** · **BLOCKE
 
 | # | Requirement | Status | Evidence |
 | --- | --- | --- | --- |
-| 8 | Portfolio dashboard lists every authorized project | **MISSING** | No portfolio route, component, or module exists |
-| 9 | Truthful health/status/active work/PRs/deployments/incidents | **MISSING** | `/solutions/projects/page.tsx` exists but contains no reference to health, runs, or pull requests — it is a list, not a portfolio |
-| 10 | Search/filter/sort projects | **MISSING** | — |
+| 8 | Portfolio dashboard lists every authorized project | **PASS** | `/solutions/portfolio` + `GET /api/portfolio`. Every row arrives through the caller's RLS-scoped client, so the route grants no visibility the caller lacks |
+| 9 | Truthful health/status/active work/incidents | **PASS** for commands, runs, tasks, incidents, health and connections; **MISSING** for PRs and deployments | `lib/portfolio/aggregate.ts`. Counts are `number \| null`: null means the source could not be read and renders as **Unknown**, never 0. Failed sources are named once rather than leaving rows ambiguous. Pull-request and deployment columns are not yet aggregated |
+| 10 | Search/filter/sort projects | **PASS** | Search matches name or repository, case-insensitively. Four sort orders; health sorts worst-first with unknown between degraded and healthy, and activity sorts unknown last because an unreadable run table is not evidence of being busy |
 | 11 | Project detail links Files/Backlog/Runs/Agents/Reports/Activity | **PARTIAL** | Every one of those surfaces exists under `/solutions`, but as factory-wide views. There is no per-project detail page that scopes them |
 
 ### Commands and execution — goals 12–18
@@ -93,9 +93,11 @@ Legend: **PASS** (built and evidenced) · **PARTIAL** · **MISSING** · **BLOCKE
 
 ## Score
 
-**12 PASS · 7 PARTIAL · 11 MISSING · 3 UNPROVEN · 2 BLOCKED — 35 total.**
+**15 PASS · 7 PARTIAL · 8 MISSING · 3 UNPROVEN · 2 BLOCKED — 35 total.**
 
-Counting PASS only: **34%**. Counting PASS plus the structural half of PARTIAL: roughly **45%**.
+Counting PASS only: **43%**. Counting PASS plus the structural half of PARTIAL: roughly **53%**.
+
+Goals 8–10 moved from MISSING to PASS: the portfolio surface now exists and reads real aggregates. Goal 9 is a qualified pass — pull requests and deployments are not yet columns, and that is stated in its row rather than rounded up.
 
 The distribution is the useful part. Structure is 7/7. Surface and orchestration are close to 0/19. That is a phase with a sound foundation and no product on top of it, which is a much better position than the reverse.
 
