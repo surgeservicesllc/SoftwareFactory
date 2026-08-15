@@ -87,15 +87,24 @@ can produce today, and the goal explicitly says that is not completion.**
 
 ## Score
 
-- PASS: 17 of 30
-- PARTIAL: 9 of 30
-- BLOCKED: 3 of 30
-- FAIL (absent): 0 of 30
-- Weighted completion: **≈73%**
+Counted from the table above, not carried forward from an earlier loop — the
+totals had drifted from the rows after two sessions edited them independently.
 
-No item is now absent. Every remaining gap is either an external credential or
-an owner authorization — there is no more executor code to write on the GREEN
-path.
+- PASS: 19 of 30 — items 2, 4-8, 11-13, 15-17, 23-29
+- PARTIAL: 8 of 30 — items 3, 9, 10, 14, 18, 20, 21, 22
+- BLOCKED: 2 of 30 — items 1 and 19
+- FAIL (absent): 0 of 30
+- Item 30 is dual-scored: PASS by design, BLOCKED in practice
+
+Weighted completion: **≈78%**, scoring PASS 1, PARTIAL 0.5, BLOCKED 0, and item
+30 at 0.5 → (19 + 4 + 0 + 0.5) / 30.
+
+**What that percentage does not mean.** It measures the 30 scorecard items. The
+goal itself is not satisfied by any of them: it requires a real GREEN change to
+reach production and be validated, and that has not happened. On the goal's own
+terms the loop is at 0 deliveries. No item is absent any more, and every
+remaining gap is an external credential or an owner authorization — there is no
+more executor code to write on the GREEN path.
 
 The decision half of the loop is ~95% complete. The executor half moved from ~5%
 to ~35%: merge is built and cannot run without owner authorization, deploy is
