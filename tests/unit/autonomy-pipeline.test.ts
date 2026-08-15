@@ -409,3 +409,80 @@ describe("the merge stage once an executor is connected", () => {
     expect(outcome(run, "merge")?.blocker).toBe("APPROVAL_STALE");
   });
 });
+
+describe("the deploy stage once deployment state can be established", () => {
+  // Before this, `deploy` was a single unconditional refusal. These cover the
+  // outcomes that became reachable, and the distinction that matters most is
+  // pending vs failed: only one of them should ever start a rollback.
+  //
+  // The pipeline halts at the first block, so every case here has to clear
+  // merge first. That is the point of `reaching`: it is the only way `deploy`
+  // is evaluated at all.
+  const reaching = {
+    mergeReadiness: {
+      currentHeadSha: "current",
+      gatedHeadSha: "current",
+      approvedHeadSha: "current",
+      mergeability: "clean" as const,
+      pullRequestOpen: true,
+      requiredChecks: ["CI"],
+      checks: [{ name: "CI", status: "passed" as const }],
+    },
+    mergeExecutorConnected: true,
+    mergeEligibility: {
+      eligible: true, blockers: [], reason: "within the allowlist",
+      repositoryFullName: "surgeservicesllc/SoftwareFactory",
+      baseBranch: "main", headBranch: "factory/docs-canary",
+      changedFiles: 1, changedLines: 4,
+    },
+  };
+
+  it("still blocks when nothing established what production received", () => {
+    // Merging is not shipping. An absent answer is not a passing one.
+    expect(outcome(runPipeline(input(reaching)), "deploy")?.blocker)
+      .toBe("DEPLOY_EXECUTOR_NOT_CONNECTED");
+  });
+
+  it("satisfies deploy when production has this commit and it is ready", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "deployed", deploymentId: "dpl_9", reason: "ready" },
+    }));
+
+    expect(outcome(run, "deploy")).toMatchObject({ status: "satisfied" });
+    expect(outcome(run, "deploy")?.detail).toContain("dpl_9");
+  });
+
+  it("separates a failed deployment from one still building", () => {
+    const failed = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "failed", deploymentId: "dpl_9", reason: "build error" },
+    }));
+    const pending = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "pending", deploymentId: "dpl_9", reason: "still building" },
+    }));
+
+    expect(outcome(failed, "deploy")?.blocker).toBe("DEPLOYMENT_FAILED");
+    // A build nobody waited long enough for must not raise an incident.
+    expect(outcome(pending, "deploy")?.blocker).toBe("DEPLOYMENT_PENDING");
+  });
+
+  it("blocks when no deployment for this commit was ever found", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "not_found", deploymentId: null, reason: "none appeared" },
+    }));
+
+    expect(outcome(run, "deploy")?.blocker).toBe("DEPLOYMENT_NOT_FOUND");
+  });
+
+  it("reports an unconfigured provider as the executor being absent", () => {
+    const run = runPipeline(input({
+      ...reaching,
+      deployment: { outcome: "not_connected", deploymentId: null, reason: "no token" },
+    }));
+
+    expect(outcome(run, "deploy")?.blocker).toBe("DEPLOY_EXECUTOR_NOT_CONNECTED");
+  });
+});

@@ -73,7 +73,7 @@ can produce today, and the goal explicitly says that is not completion.**
 | 17 | PR state/CI/risk/conflicts rechecked immediately before merge | **PASS** | CODE/TEST: `lib/autonomy/merge-readiness.ts`. A push after approval invalidates the approval; a push after verification invalidates the gates; a required check with no report blocks rather than reading as satisfied. |
 | 18 | GitHub auto-merge/merge uses supported APIs and branch protection | **PARTIAL** | CODE/TEST: `lib/autonomy/merge-executor.ts` now exists and `lib/autonomy/merge-eligibility.ts` closes the five conditions `AUTO_MERGE_POLICY.md` recorded as unimplemented (repository/branch allowlisting, size and scope limits, generated/binary detection, unresolved review threads, repository and branch in the audit record). The merge call pins the approved head SHA so GitHub closes the race server-side with a 409, and a test asserts the request body is exactly `commit_title`/`merge_method`/`sha` — nothing that could bypass branch protection. A 405 is final and never retried. **No merge has been executed**: with no allowlist configured, `parseMergeAllowlist` returns `null` and every caller reads that as "no target authorized". Proven by 32 unit tests and four mutations (dropped SHA guard, allowlist-absent-means-allow, prefix separator, skipped readiness re-check). |
 | 19 | Vercel preview is tracked and validated | **BLOCKED** | CODE: `lib/deploy/vercel.ts` exists but is **read-only** — it lists and reads deployments and has zero write calls. It reports Not Connected without `VERCEL_TOKEN`, which is unset. |
-| 20 | Eligible approved merge reaches real production deployment | **FAIL — ABSENT** | No deployment executor. `pipeline.ts` blocks `deploy` by name. Depends on 18 and 19. |
+| 20 | Eligible approved merge reaches real production deployment | **PARTIAL** | CODE/TEST: `lib/deploy/deployment-executor.ts`. The design point: this repository deploys through Vercel's **Git integration**, so the executing action for a merge is the merge itself; POSTing a create-deployment would produce a parallel deployment not caused by the merge and not gated by branch protection. What was missing was establishing whether production got *this exact commit*, which is now `awaitProductionDeployment`. Commit identity is exact — a healthy deployment of another commit is never accepted, or a broken release could be promoted to Last Known Good on someone else's green build. `pending` is distinct from `failed`, so a build nobody waited for cannot raise an incident, and a provider read error never concludes failure. `pipeline.ts` now returns `satisfied`, `DEPLOYMENT_FAILED`, `DEPLOYMENT_PENDING` or `DEPLOYMENT_NOT_FOUND` instead of one blanket refusal. **Not proven live**: `VERCEL_TOKEN` is unset, so the executor reports Not Connected. |
 | 21 | Post-deploy validation determines HEALTHY/FAILED | **PARTIAL** | CODE/TEST: `lib/autonomy/post-deploy.ts` decides what a validation record proves — attribution before check results, and missing/stale/mismatched evidence is `inconclusive`, never `passed`. The decision is complete; nothing produces a real record because 20 is absent. |
 | 22 | Failed qualifying release invokes existing rollback architecture | **PARTIAL** | CODE/TEST: `lib/operations/rollback.ts` decision path is complete and Last Known Good resolves only from a deployment whose own validation passed. Execution is absent. |
 | 23 | Last Known Good maintained only from validated healthy releases | **PASS** | CODE/TEST: enforced in the Last Known Good resolver. |
@@ -88,10 +88,14 @@ can produce today, and the goal explicitly says that is not completion.**
 ## Score
 
 - PASS: 17 of 30
-- PARTIAL: 8 of 30
+- PARTIAL: 9 of 30
 - BLOCKED: 3 of 30
-- FAIL (absent): 1 of 30 — item 20, the deployment executor
-- Weighted completion: **≈68%**
+- FAIL (absent): 0 of 30
+- Weighted completion: **≈73%**
+
+No item is now absent. Every remaining gap is either an external credential or
+an owner authorization — there is no more executor code to write on the GREEN
+path.
 
 The decision half of the loop is ~95% complete. The executor half moved from ~5%
 to ~35%: merge is built and cannot run without owner authorization, deploy is
@@ -118,7 +122,7 @@ CI               ✅ exists and is readable
 Preview          ⛔ DEPLOY not connected, no VERCEL_TOKEN
 Approve          ✅ would decide
 Merge            ⛔ ALLOWLIST_NOT_CONFIGURED      ← built; awaiting owner allowlist
-Production       ⛔ absent
+Production       ⛔ VERCEL_TOKEN unset; executor built
 Validate         ✅ would decide, given a record
 ```
 
@@ -254,6 +258,48 @@ dependency or a fallback to one.
 
 ### Next engineering step, needing nothing external
 
-Item 20's deployment executor, written against the Vercel API and failing closed
-as Not Connected without a token, exactly as the read-only adapter already does.
-That is the last absent executor on the GREEN path.
+**None remains on the GREEN path.** Item 20 was built in loop 3 and both
+executors now exist. What is left is four external blockers and the owner
+authorizations the policy requires — see above.
+
+---
+
+## Loop 3 addendum — item 20, the deployment executor
+
+### The design decision worth recording
+
+Item 20 reads like a request to POST Vercel's create-deployment endpoint. That
+would have been wrong. This repository deploys through Vercel's **Git
+integration**: merging to the default branch is what triggers a production
+build. An API-created deployment would be a second, parallel deployment that the
+merge did not cause, that is not attributable to the reviewed commit the way the
+Git integration makes it, and that would deploy code which never passed branch
+protection.
+
+So the executing action for a merge is the merge itself, and the half that was
+genuinely missing is establishing **whether the production deployment of that
+exact commit succeeded**. That is what turns "we merged" into "it shipped", and
+it is the evidence Phase 1E's Last Known Good and rollback paths consume.
+
+### The three rules it enforces
+
+- **Commit identity is exact.** A production deployment that is `ready` proves
+  nothing about this merge unless it is a deployment of this merge commit.
+  Matching is case-insensitive but never by prefix, because an abbreviated SHA
+  can collide with an unrelated commit and the failure mode is attributing
+  someone else's release to this change.
+- **`pending` is not `failed`.** "We stopped watching" and "it broke" call for
+  different responses; conflating them either raises false incidents or hides
+  real ones.
+- **A provider read error is not a deployment failure.** Vercel returning 500
+  once says nothing about the build, and treating it as failure would let a blip
+  roll back a good release.
+
+Proven by 16 unit tests and three mutations: dropping the commit-identity check,
+reading an API error as a failed deployment, and reporting a timed-out build as
+failed.
+
+### Still not proven live
+
+`VERCEL_TOKEN` is unset, so the executor returns `not_connected` before making
+any call. Item 20 stays PARTIAL, not PASS.

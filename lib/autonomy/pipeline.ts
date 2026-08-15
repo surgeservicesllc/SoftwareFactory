@@ -130,6 +130,19 @@ export interface PipelineInput {
    */
   readonly mergeEligibility?: EligibilityResult;
   /**
+   * The result of establishing whether production actually received this
+   * change. Structural rather than imported, so this module stays free of the
+   * server-only deployment adapter and remains testable as pure logic.
+   *
+   * Absent means nothing was established, which blocks. Merging is not
+   * shipping, and assuming otherwise is how a failed build reads as a release.
+   */
+  readonly deployment?: {
+    readonly outcome: "deployed" | "failed" | "pending" | "not_found" | "not_connected";
+    readonly deploymentId: string | null;
+    readonly reason: string;
+  };
+  /**
    * Post-deploy validation evidence, read after a deploy rather than when the
    * change was gated. Omitting it does not mean "fine" — the stage treats an
    * absent record as `inconclusive`, which is what the policy requires.
@@ -343,12 +356,33 @@ function evaluateStage(stage: PipelineStage, context: StageContext): StageOutcom
       );
     }
 
-    case "deploy":
-      return blocked(
-        stage,
-        UNEXECUTABLE_STAGES.deploy,
-        "No deployment adapter is connected.",
-      );
+    case "deploy": {
+      if (!input.deployment) {
+        return blocked(
+          stage,
+          UNEXECUTABLE_STAGES.deploy,
+          "No deployment adapter is connected.",
+        );
+      }
+
+      switch (input.deployment.outcome) {
+        case "deployed":
+          return satisfied(
+            stage,
+            `Production deployment ${input.deployment.deploymentId ?? "(unnamed)"} is ready.`,
+          );
+        case "failed":
+          return blocked(stage, "DEPLOYMENT_FAILED", input.deployment.reason);
+        case "pending":
+          // Not a failure. Nobody watched long enough to say, and calling that
+          // a failure would raise an incident for a build that may be fine.
+          return blocked(stage, "DEPLOYMENT_PENDING", input.deployment.reason);
+        case "not_found":
+          return blocked(stage, "DEPLOYMENT_NOT_FOUND", input.deployment.reason);
+        default:
+          return blocked(stage, UNEXECUTABLE_STAGES.deploy, input.deployment.reason);
+      }
+    }
 
     case "validate": {
       // `POST_DEPLOY_VALIDATION.md`: missing, stale, or mismatched evidence is
