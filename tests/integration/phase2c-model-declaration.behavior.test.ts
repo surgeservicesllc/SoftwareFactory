@@ -56,7 +56,7 @@ describe("Phase 2C model declaration", () => {
     // someone reading them — but it says nothing about *this* test, and with
     // two agents landing migrations on the same day it broke three times in an
     // hour while never once catching a real problem here.
-    expect(migrationFiles).toContain("20260814000300_declare_model_characteristics.sql");
+    expect(migrationFiles).toContain("20260814000250_declare_model_characteristics.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }

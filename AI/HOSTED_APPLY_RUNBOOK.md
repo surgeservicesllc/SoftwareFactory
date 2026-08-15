@@ -3,8 +3,12 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 
 This exists because the owner actions were previously described loosely — including by me, as
-"three unhosted migrations", which undercounted. There are **six**, and one of them has a
-materially different approval requirement from the others.
+"three unhosted migrations", which undercounted.
+
+**The current total is 15**, listed across the two tables below: seven in "What is actually
+unhosted" (row 6 bundles two migrations) and eight in "Added 2026-08-14". One of the 15 has a
+materially different approval requirement from the others. The repository total is 56 migration
+files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 
 ## What is actually unhosted
 
@@ -18,7 +22,8 @@ Everything after that point is unhosted:
 | 3 | `20260813001600_autonomy_decision_audit.sql` | Append-only `autonomy_decisions` | Ordinary forward migration |
 | 4 | `20260813001700_link_promoted_repair_task.sql` | `link_repair_promotion`, owner-only | Ordinary forward migration |
 | 5 | `20260814000100_phase2c_resource_persistence.sql` | `resource_breakers`, `resource_breaker_events`, `resource_assignments` | Ordinary forward migration |
-| 6 | `20260814000300_declare_model_characteristics.sql` + `20260814000200_declare_model_strength_and_context.sql` | Owner-declared model strength/context, and the function that sets them | Ordinary forward migration |
+| 6 | `20260814000200_declare_model_strength_and_context.sql` + `20260814000250_declare_model_characteristics.sql` | Owner-declared model strength/context, and the function that sets them | Ordinary forward migration |
+| 7 | `20260814001100_harden_github_connection_loss.sql` | Redefines `mark_github_connection_lost` so a revocation clears a stale suspension marker instead of reporting the wrong reason, a terminally deleted installation is recorded rather than aborting the call, and a connection with no installation row stops writing a null entity id | Ordinary forward migration. `create or replace` on one function; no table, constraint, or grant change |
 
 Migration 1 is not mine and I have not verified its frozen identity — only that it applies. Treat
 its approval requirement as still standing.
@@ -30,13 +35,24 @@ ordering or concurrency problems):
 
 | Check | Result |
 | --- | --- |
-| All 48 migrations apply in order from empty | **Pass** |
+| The whole chain applies in order from empty | **Pass** (48 files at the time of that run; 56 now — the later eight are covered in "Added 2026-08-14") |
 | A baseline built to exactly `20260813001400`, then the six applied in order | **Pass, each individually reported** |
 | RLS + FORCE RLS on every public table after apply | **Pass — 0 missing of 63** |
 | `service_role` table privileges after apply | **Pass — exactly the four GitHub ingress tables** |
 | `autonomous_release_allowed` still returns `EXECUTOR_NOT_CONNECTED` unconditionally | **Pass** |
 | The three new Phase 2C tables carry RLS and FORCE RLS | **Pass** |
 | `link_repair_promotion` present and `SECURITY DEFINER` | **Pass** |
+
+Re-verified 2026-08-14 on a fresh PostgreSQL 16.13 cluster with migration 7 included:
+
+| Check | Result |
+| --- | --- |
+| All 57 migrations apply in order from empty | **Pass** |
+| RLS + FORCE RLS on every public table | **Pass — 0 missing of 83** |
+| `service_role` table privileges | **Pass — exactly the four GitHub ingress tables, SELECT/INSERT/UPDATE only, no DELETE** |
+| Both Phase 1D interlock constraints still present | **Pass** |
+| Migration 7 behavior: suspended installation + revocation | **Pass — status `error`, `suspended_at` cleared, prior state preserved as activity evidence** |
+| Migration 7 behavior: terminally deleted installation | **Pass — records the loss, returns true, leaves `deleted`/`deleted_at` untouched** |
 
 What this does **not** prove: that the hosted ledger rows match what the catalogue says, or that
 hosted-only objects behave identically. The ledger on that project was reconciled by hand once
@@ -49,7 +65,7 @@ already, so re-list before applying rather than trusting the documented position
    this runbook assumes is wrong, and the difference matters.
 2. Apply migration 1 only under its own fresh RED approval, after checking the frozen byte size and
    SHA. It is independent of 2–6; skipping it does not block them.
-3. Apply 2–6 in order with `supabase db push`.
+3. Apply 2–7 in order with `supabase db push`.
 4. Re-run the post-apply checks above against hosted.
 
 ## After applying
@@ -76,6 +92,61 @@ separately, so the cause is visible rather than looking like a scoring bug.
   Sending `null` for either withdraws that declaration, which stays possible on purpose — an owner
   who realises they declared the wrong tier should be able to say "I no longer claim this" rather
   than substitute another guess.
+
+## Added 2026-08-14 — AgentOS and Phase 1D visibility
+
+Eight further migrations are unhosted. All eight apply cleanly in order against real PostgreSQL
+(PGlite) on top of everything before them, verified by the suites named beside each.
+
+| Migration | What it adds | Verified by |
+|---|---|---|
+| `20260814000300_agentos_isolation_model` | 9 tables: environments, MCP connections, skills, default-deny agent grants | `agentos-isolation.behavior` |
+
+Note: `declare_model_characteristics` was renumbered from `20260814000300` to `20260814000250` on 2026-08-14. It had collided with `agentos_isolation_model`, which two agents had independently timestamped the same. See "Version collisions" below.
+| `20260814000400_agentos_inbox` | Inbox messages, one open question per run, answer/resume routines | `agentos-inbox.behavior` |
+| `20260814000500_agentos_templates_and_chains` | Templates, chain steps, the two completion paths | `agentos-chains.behavior` |
+| `20260814000600_agentos_compound_engineer_template` | Seeds the built-in nine-step workflow (idempotent, per organization) | `agentos-chains.behavior` |
+| `20260814000700_agentos_goals` | Goals, definition of done, append-only progress, the three rails | `agentos-goals.behavior` |
+| `20260814000800_agentos_triggers_and_automations` | Triggers, deliveries, cron automations | `agentos-triggers.behavior` |
+| `20260814000900_agentos_safe_list_reads` | Five browser projections for the AgentOS console | `agentos-routes.contract` |
+| `20260814001000_phase1d_decision_visibility` | Makes `autonomy_decisions` readable + per-project autonomy status | `phase1d-decision-visibility.behavior` |
+
+What they do **not** do, which is what makes them safe to apply:
+
+- No execution authority. Every AgentOS surface reports `*_RUNNER_NOT_CONNECTED`, and the goal
+  spawn decision returns `maySpawn: false` unconditionally.
+- No new `service_role` table privileges, so the verified `026` ACL matrix is unchanged. The one
+  function `service_role` may call is `agentos_record_trigger_delivery`, and it creates only a
+  backlog task.
+- No Phase 1D control is relaxed. `20260814001000` is read-only: two projections and their grants.
+  A test asserts that reading the trail cannot change what the loop may do.
+- Every table carries RLS and FORCE RLS with browser access limited to SELECT.
+
+Order matters only in that `000600` needs `000500`, `000900` needs the tables before it, and
+`001000` needs `20260813001600`. Applying them in filename order satisfies all three.
+
+## Version collisions
+
+Two migrations must never share a version prefix. Supabase's ledger keys on the numeric prefix,
+not the filename, so two files at `20260814000300_*` are two applies competing for one primary key
+in `supabase_migrations.schema_migrations`. The first records the version, the second collides, and
+`db push` fails partway with the schema half-applied against hosted.
+
+That state existed in this repository on 2026-08-14 and is fixed: `declare_model_characteristics`
+moved to `20260814000250`, which keeps it after the `20260814000200` migration whose columns it
+depends on and leaves the AgentOS chain `000300`→`001000` intact. Neither file was hosted, so the
+renumber carries no ledger consequence — this was safe to fix precisely because it was caught
+before the apply.
+
+Nothing else in the suite catches this class of defect. Both files applied cleanly in isolation,
+both applied cleanly in filename order under PGlite (which has no ledger), and every behavioral
+test passed, because the failure lives in the ledger rather than the schema. It surfaces for the
+first time during the one operation that is hardest to reverse.
+
+`tests/integration/migration-version-uniqueness.test.ts` now asserts uniqueness, that every
+filename parses, and that filename order matches version order. It has happened twice, both times
+from separate agents picking the same timestamp in parallel, so it is checked rather than
+remembered.
 
 ## Not covered here
 

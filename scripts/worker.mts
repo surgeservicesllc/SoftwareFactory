@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { CodexAuthError, describeCodexAuth } from "@/lib/worker/auth";
 import { CodexSdkAdapter } from "@/lib/worker/codex";
 import { readWorkerConfiguration, WorkerConfigurationError } from "@/lib/worker/env";
 import { GitHubAppInstallationTokenProvider, GitHubDraftPublisher } from "@/lib/worker/github";
@@ -32,7 +33,8 @@ async function main() {
   try {
     const validator = new DeterministicValidator();
     await validator.assertAvailable(configuration.workRoot);
-    const codex = await CodexSdkAdapter.create(configuration.openAiApiKey);
+    process.stdout.write(`${describeCodexAuth(configuration.codexAuth)}\n`);
+    const codex = await CodexSdkAdapter.create(configuration.codexAuth);
     const worker = new SoftwareFactoryWorker(configuration.workerId, configuration.heartbeatMs, {
       store,
       tokenProvider: new GitHubAppInstallationTokenProvider(),
@@ -60,7 +62,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  const message = error instanceof WorkerConfigurationError
+  const message = error instanceof WorkerConfigurationError || error instanceof CodexAuthError
     ? error.message
     : safeErrorMessage(error);
   process.stderr.write(`SoftwareFactory Codex worker stopped: ${message}\n`);

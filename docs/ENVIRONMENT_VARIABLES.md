@@ -50,7 +50,9 @@ The Node worker validates all required values before registration:
 | `SOFTWAREFACTORY_REQUIRED_CHECKS` | Required exact CI job names, pipe-delimited; reviewed value is `Lint, typecheck, test, and build|Browser and accessibility tests` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Runtime Supabase URL; public value used server-side here |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only worker RPC credential |
-| `OPENAI_API_KEY` | Supported Codex SDK provider credential |
+| `SOFTWAREFACTORY_CODEX_AUTH_JSON` | Contents of `~/.codex/auth.json` from a subscription `codex login`. The zero-token default; the worker refuses to start without it |
+| `SOFTWAREFACTORY_CODEX_AUTH_MODE` | `subscription` (default) or `api_key`. The billed mode must name itself; it is never selected implicitly |
+| `OPENAI_API_KEY` | Only read in `api_key` mode, which bills per token. Setting it without that mode is a refused configuration |
 | `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY_BASE64` | Primary installation-token identity/key |
 | `GITHUB_CANDIDATE_APP_ID` / `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` | Candidate installation-token identity/key |
 | `GITHUB_COMMIT_IDENTITY_NAME` | Must resolve to `surgeservicesllc` for release |
@@ -68,7 +70,7 @@ GitHub does not permit Actions secret names beginning with `GITHUB_`. Store work
 | --- | --- |
 | `SOFTWAREFACTORY_SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` |
 | `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SERVICE_ROLE_KEY` |
-| `SOFTWAREFACTORY_OPENAI_API_KEY` | `OPENAI_API_KEY` |
+| `SOFTWAREFACTORY_CODEX_AUTH_JSON` | `SOFTWAREFACTORY_CODEX_AUTH_JSON` |
 | `SOFTWAREFACTORY_GITHUB_APP_ID` | `GITHUB_APP_ID` |
 | `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64` | `GITHUB_APP_PRIVATE_KEY_BASE64` |
 | `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID` | `GITHUB_CANDIDATE_APP_ID` |
@@ -78,7 +80,9 @@ GitHub does not permit Actions secret names beginning with `GITHUB_`. Store work
 
 The workflow sets `SOFTWAREFACTORY_REQUIRED_CHECKS` to `Lint, typecheck, test, and build|Browser and accessibility tests`. It is public policy configuration, not a secret. Do not change it independently of the exact CI job display names or the worker publisher tests.
 
-Six non-OpenAI Actions secrets are currently verified configured. `SOFTWAREFACTORY_OPENAI_API_KEY` is intentionally absent after removal of the exposed key; diagnostic run `31748582858` classified the prior project's failure as `credit_balance_exhausted`. The OpenAI secret must remain absent until the owner revokes the exposed key and provides a fresh key from a funded project through the protected secret path. Secret configuration alone is never a Connected-worker claim. Creating or changing any of these secrets is RED protected-resource work requiring exact owner approval.
+Six non-OpenAI Actions secrets are currently verified configured. `SOFTWAREFACTORY_OPENAI_API_KEY` is intentionally absent, and it is now absent **permanently rather than pending**: Phase 1C no longer has a paid-API path to restore it to. The exposed key was removed after diagnostic run `31748582858` classified the prior project's failure as `credit_balance_exhausted`, and that failure is what prompted the architecture change — a funded API balance is no longer a precondition for any run.
+
+The worker instead requires `SOFTWAREFACTORY_CODEX_AUTH_JSON`, the contents of `~/.codex/auth.json` produced by a subscription `codex login`. It carries OAuth tokens for the ChatGPT account, so it is server-only secret material subject to the same protected-resource rules. Secret configuration alone is never a Connected-worker claim. Creating or changing any of these secrets is RED protected-resource work requiring exact owner approval.
 
 The workflow also requires the non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` to equal the literal `true`. Missing, empty, or any other value skips the worker job for repository dispatch and schedule triggers. Branch-selectable manual workflow dispatch is intentionally absent. The variable is currently absent/OFF. Keep it absent while the OpenAI funding blocker remains. Change it to `true` only for the exact owner-approved diagnostic or activation window, then return it to absent immediately after job admission unless separately approved continued operation exists.
 

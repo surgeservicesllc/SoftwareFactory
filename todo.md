@@ -3,8 +3,10 @@
 Last updated: 2026-08-14, end of session. **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
-Phase 2B graph foundation (PR #40) · Phase 1B adverse lifecycle (PR #40).
-Current `main`: `2dc60e1` at handoff; PR #40 open on top of it.
+Phase 2B graph foundation · Phase 1B adverse lifecycle · concurrently, another agent landed the
+AgentOS blocks, the Phase 1D decision trail, the Phase 1B lifecycle matrix, and the **zero-token
+Phase 1C re-architecture**.
+Current `main`: check `git log` — several agents landed work on 2026-08-14.
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
@@ -173,9 +175,12 @@ canonical; until then both readings are in circulation and they disagree.
 | Phase 2A — provider execution layer | Merged | Owner-enabled `ai_provider_execution_enabled` (defaults OFF) |
 | Phase 2C — resource manager | **Merged; scoring, persistence, UI and routing built** | Unhosted migrations; no declared models; no provider run has ever executed |
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
+| AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–F built and wired** | G (CLI/YAML) and H (PWA/live viewer) unstarted; 8 unhosted migrations |
 
 Gates on current `main`: lint, typecheck, 149 files / 1674 tests, clean production build,
 Playwright across desktop/tablet/mobile including axe.
+Gates on current `main`: lint, typecheck, 149 files / 1666 tests, clean production build,
+Playwright 126 passed across desktop/tablet/mobile including axe.
 
 **Owner actions are collected in `AI/HOSTED_APPLY_RUNBOOK.md`** — the exact unhosted migration
 list, the order, and the real-PostgreSQL verification already done, so applying them is not blind.
@@ -213,6 +218,26 @@ to fail those assertions — update them deliberately rather than weakening them
 3. A missing gate result is a blocker, never a pass.
 4. Migration `20260813000500` relaxes nothing. Enabling any automatic action is a RED action
    needing a separate owner-approved migration — never a side effect of other work.
+
+### Done this session — the decision trail is now readable
+
+`autonomy_decisions` had recorded every decision since `20260813001600` and **nothing read it**.
+An append-only trail no surface can show is storage, not auditability. Added:
+
+- `list_autonomy_decisions` — what the loop decided, why it refused, against which head. Reports
+  whether an approval was *independent* rather than who signed it; the identities stay on the row
+  for a targeted audit and never reach a caller (asserted).
+- `list_autonomy_status` — the resolved envelope per project with **both interlocks and executor
+  connectivity beside it**. Nine OFF flags alone read as "ready but idle"; with these they read as
+  "nothing could run".
+- `/api/autonomy/decisions`, `/api/autonomy/status`, `/solutions/autonomy`, nav + redirect + axe.
+- Enabled actions are counted from `resolved_autonomy_controls`, never a project row, so an
+  organization override cannot read as enabled.
+
+The console deliberately offers **no toggle**. Enabling an automatic action is RED and needs its
+own owner-approved migration; a test asserts no switch control exists on the page.
+
+Migration `20260814001000_phase1d_decision_visibility.sql` is **unhosted** — add it to the runbook.
 
 ### Open, and owned by the owner
 
@@ -497,6 +522,37 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | Runner routing | Phase 2A provider routing (`lib/providers/routing.ts`) |
 | Ephemeral session lifecycle | Phase 1C worker: clone → work → draft PR → destroy |
 | Least-privilege default-deny | RLS + FORCE RLS + service-role confinement |
+
+### Status — A through F are built, wired to Supabase, and pushed
+
+| Block | State | Where |
+|---|---|---|
+| A Isolation model | **Done** | `20260814000300`, 9 tables + `agentos_resolved_agent_grants` |
+| B Filesystem ACL | **Done** | `lib/agentos/filesystem-acl.ts`, pure + exhaustively tested |
+| C Inbox | **Done** | `20260814000400`, one open question per run, resume contract |
+| D Templates + gates + chains | **Done** | `20260814000500`/`000600`, the 9-step workflow seeded |
+| E Goals + rails | **Done** | `20260814000700`, spend/time/stuck all stop the loop |
+| F Triggers + automations | **Done** | `20260814000800` + `lib/agentos/webhook-payload.ts` |
+| Wiring | **Done** | `20260814000900` projections, 5 API routes, `/solutions/agentos` |
+| G CLI + `agentos.yml` | **Not started** | round-trip property test is the acceptance |
+| H PWA + live viewer + activity feed | **Not started** | mostly UI over data that now exists |
+
+**Migrations `20260814000300`–`20260814001000` are all unhosted.** Add them to
+`AI/HOSTED_APPLY_RUNBOOK.md` before anyone applies anything.
+
+### If you pick this up next
+
+- Every block reports `*_RUNNER_NOT_CONNECTED` and `maySpawn: false`. That is the `AGENTS.md`
+  line held against a spec that assumes unattended multi-hour runs. **Do not connect a runner as
+  a side effect of building G or H** — it is a RED action needing its own owner approval.
+- The mutation-testing habit in this workstream has caught real defects repeatedly, including a
+  live prompt-injection hole in the webhook sanitizer (a fixed delimiter a payload could print).
+  When a mutation *passes*, check the mutation actually applied before concluding the guard is
+  redundant — three did not, and one revealed a guard unreachable through its normal path.
+- Two traps that bit more than once: the latest-migration tripwires in nine test files are
+  guards, but some files reference a migration filename as a *source to read* — updating those
+  breaks them. And a single `Response` object cannot be reused across concurrent fetches in a
+  test; the first reader starves the rest.
 
 ### The gap — build in this order
 

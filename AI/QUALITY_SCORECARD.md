@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-13
 
-Decision: **The Phase 1C schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
+Decision: **Phase 1C is re-architected to zero-token subscription-authenticated Codex execution and remains Not Connected pending the owner-supplied credential. The paid-API dependency is removed from the execution path: `OPENAI_API_KEY` is no longer a worker configuration field, `new Codex()` is constructed without an api key, preflight makes no `api.openai.com` request in subscription mode, and no workflow step receives a paid key. The billed mode must name itself and can never be reached by fallback. The schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
 
 Reason: exact project `qpuofpmagrmyamahqwxw` is reconciled and current through forward migration `130014`; linked lint and focused catalog/runtime/ACL checks pass. Local `130015` restores the assignment/run model constraint bound from 120 to the original 128-character provider catalogue/API contract, adds four no-secret constraints for catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded routing evidence, and closes authenticated raw routing-decision/event reads while retaining tenant-scoped model-catalogue reads, but is unhosted pending fresh exact RED approval. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; it passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Live command `0c4d0ca8-1867-4d00-80cf-476401491a17` produced durable run `f4594556-6f72-4763-a480-6993939e3651` and worker Actions run `31746057998`; a real claim, heartbeat, and provider thread occurred, then provider startup failed before changed files, commit, branch, PR, validation, or exact-head CI. Diagnostic `31748582858` identified exhausted project credits without a claim. The failed run is now stale against the verified baseline and must not be retried. The user-pasted OpenAI key is treated as compromised and its GitHub Actions secret is deleted; the other six protected secrets remain. A successful live draft-PR journey requires credits or a fresh funded replacement key, a passing provider-only diagnostic, and a new current-base command.
 
@@ -47,6 +47,33 @@ The three remaining blockers are a funded OpenAI project and rotated key (Phase 
 `VERCEL_TOKEN` (deploy and preview), and an owner decision on the `AGENTS.md` auto-merge
 prohibition. None is a code gap.
 
+### Schema and wiring guards added 2026-08-14
+
+Each of these encodes something that was already true and was verifiable only by a manual run, which does not survive the next migration. They are listed here because the scorecard previously credited manual verification as if it were standing coverage.
+
+| Guard | What it prevents | Status |
+| --- | --- | --- |
+| `tests/integration/migration-version-uniqueness.test.ts` | Two migrations sharing a version prefix. Supabase's ledger keys on the prefix, so a duplicate is two applies competing for one primary key — `db push` fails partway and leaves the hosted schema half-applied | **Caught a live defect.** `20260814000300` was held by both `agentos_isolation_model` and `declare_model_characteristics`; the latter moved to `20260814000250`. Neither was hosted, so the fix carried no ledger consequence |
+| `tests/integration/schema-security-invariants.test.ts` | A new table shipping without RLS, or `service_role` quietly gaining a table privilege | Pass - RLS and FORCE RLS on every public table across the whole chain; `service_role` limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write anywhere |
+| `tests/integration/required-checks-wiring.test.ts` | A renamed CI job leaving a live Phase 1C run waiting for a check that never reports — a hang rather than an error, after real work has been pushed | Pass - `SOFTWAREFACTORY_REQUIRED_CHECKS` matches `ci.yml` job names in both directions |
+| `tests/integration/supabase-rpc-contract.test.ts` (pre-existing) | An `.rpc()` argument-name typo that type-checks and only fails against a real database | Pass - every call site in `app`, `lib`, `scripts` resolves against the migrated schema |
+
+Two findings while writing these turned out to be the code being right and the assertion being wrong: `newsletter_subscribers` is deliberately policyless behind the SECURITY DEFINER `subscribe_to_newsletter`, and the four `service_role` tables are not the names assumed. Both corrections went into the tests.
+
+### Authorization boundary audit, 2026-08-14
+
+Every `app/api/**/route.ts` was checked for an authentication guard. **74 of 74 are guarded.**
+
+Most do not call an auth helper directly — they delegate to a shared boundary that authenticates the caller, resolves the exact active organization, and reads through the caller's own JWT so the RPC enforces membership rather than the route re-implementing it: `tenantRpcListResponse` / `tenantRpcDetailResponse` (`lib/server/tenant-list.ts`), `operationsContext` (`lib/operations/route.ts`), and `prepareGitHubRepositoryRequest` (`lib/github/route.ts`). Concentrating the check is why the count is 74 rather than 74-minus-the-ones-someone-forgot.
+
+Five routes are unauthenticated by design and were confirmed to be the intended set: `auth/sign-in`, `auth/sign-up`, `auth/magic-link`, `auth/resend-confirmation`, and `newsletter`. The newsletter route writes through the SECURITY DEFINER `subscribe_to_newsletter` into a table that holds RLS with no policy, so an anonymous caller can insert a subscription and read nothing.
+
+Recorded because an audit with no record is an audit that gets repeated. A first pass using a naive grep reported 32 unguarded routes; every one was a false positive from the shared-helper indirection. The finding is that the boundary is centralized, not that it is missing.
+
+### Deployment position
+
+Measured 2026-08-14 22:29 UTC rather than inferred from merges succeeding. `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**. The served build's sitemap `lastmod` is `2026-08-14T21:38:25Z`, so production lags `main`. Vercel returned `api-deployments-free-per-day` at 21:54, 22:02, and 22:17 UTC, and a preview succeeded at 22:16 — the free-tier cap throttles rather than blocking outright for a day, contrary to its own message. No `VERCEL_TOKEN` exists in any agent environment, so the deployment list cannot be read and the lag's precise cause is not established. An owner redeploy of `main` from the Vercel dashboard is the remedy.
+
 ### Secret boundary
 
 Scanned on 2026-08-14 across every tracked file and the full git history for OpenAI keys, GitHub
@@ -62,7 +89,11 @@ committed; the repository is consistent with that account.
 
 | Area | Evidence | Status |
 | --- | --- | --- |
-| Phase 1D gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 - lint/typecheck clean; 120 files/1407 tests; production build clean |
+| Phase 1B close-out (merge `c325dbb`) | `AI/PHASE_1B_COMPLETION.md`; `tests/integration/github-lifecycle-matrix.test.ts`; `tests/unit/github-lifecycle-errors.test.ts` | 18 PASS / 2 PARTIAL / 0 FAIL. Three real defects fixed: generic-500 lifecycle refusals, a stale suspension marker after revocation, and an aborted discovery against a terminally deleted installation |
+| Full chain on real PostgreSQL 16.13 | 57 migrations applied in order from empty | Pass - 0 of 83 public tables missing RLS/FORCE RLS; `service_role` on exactly the four GitHub ingress tables with no DELETE; both Phase 1D interlocks intact |
+| Merged-tree gates (2026-08-14) | `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `npx playwright test` | Pass - lint/typecheck clean; 1724 tests / 155 files; build exit 0; Playwright 126 passed, 3 skipped incl. axe |
+| GitHub Actions CI on merge SHA | Run `31848857261`, two attempts | **Could not run** - no runner assigned (`runner_id: 0`), no logs (HTTP 404), 2s duration. Account-level Actions blocker, not a code signal. Identical code passed run `31846219078` |
+| Merged-tree gates | `npm run lint`, `npm run typecheck`, `vitest run`, `npm run build` | Pass on the merged tree at 2026-08-14 22:00 UTC - lint/typecheck clean; **153 files/1704 tests**; production build clean. CI green on both required jobs for the commit merged as `145a31d` |
 | Phase 1D E2E/accessibility | Local Playwright across desktop/tablet/mobile with axe | Pass - 117/117 |
 | Phase 1D control interlocks | `tests/integration/phase1d-autonomy-controls.behavior.test.ts` against the migrated schema | Pass - 35 tests: each of nine actions refused at each of two scopes, both ceilings, both mode flags, the kill switch, and a new project or organization trying to be born with authority; both constraints `convalidated`; `anon` holds no write |
 | Phase 1D decision modules | `tests/unit/autonomy-*.test.ts` | Pass - 277 tests across 12 files: controls, diff risk, gates, agents, approval, retries, autopilot, decision records, merge revalidation, recovery, post-deploy validation, and the stage machine |

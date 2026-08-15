@@ -19,6 +19,19 @@ describe("Phase 1C durable worker workflow", () => {
     expect(workflow).not.toMatch(/\bpush:\s*$/m);
   });
 
+  it("cannot consume per-token API credit, because no step receives a paid key", () => {
+    // The cost rule stated as a contract on the deployed workflow rather than
+    // as an intention: a run cannot bill what it was never given.
+    // Matches an actual environment assignment, not the mere mention of a name
+    // — the workflow documents the rule in a comment, and forbidding the word
+    // would ban the explanation along with the practice.
+    expect(workflow).not.toMatch(/^\s*(OPENAI|ANTHROPIC)_API_KEY:/m);
+    expect(workflow).not.toMatch(/secrets\.SOFTWAREFACTORY_OPENAI_API_KEY/);
+    expect(workflow).not.toMatch(/^\s*SOFTWAREFACTORY_CODEX_AUTH_MODE:\s*api_key/m);
+    // Subscription credentials are what it does receive.
+    expect(workflow).toContain("SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}");
+  });
+
   it("does not give the workflow token repository write authority", () => {
     expect(workflow).toMatch(/permissions:\s*\r?\n\s+contents: read/);
     expect(workflow).not.toMatch(/pull-requests:\s*write/);
@@ -32,7 +45,7 @@ describe("Phase 1C durable worker workflow", () => {
   });
 
   it("uses server-only secrets, an isolated temp workspace, and the approved identity", () => {
-    expect(workflow).toContain("SOFTWAREFACTORY_OPENAI_API_KEY");
+    expect(workflow).toContain("SOFTWAREFACTORY_CODEX_AUTH_JSON");
     expect(workflow).toContain("SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY");
     expect(workflow).toContain("GITHUB_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_ID }}");
     expect(workflow).toContain("GITHUB_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64 }}");
@@ -43,21 +56,21 @@ describe("Phase 1C durable worker workflow", () => {
     expect(workflow).toContain("GITHUB_COMMIT_IDENTITY_EMAIL: surgeservicesllc@gmail.com");
     expect(workflow).not.toContain("NEXT_PUBLIC_OPENAI");
     const installStep = workflow.split("- name: Install the locked worker runtime")[1]
-      ?.split("- name: Verify the configured OpenAI project and model")[0] ?? "";
+      ?.split("- name: Verify the pinned Codex CLI")[0] ?? "";
     expect(installStep).not.toContain("secrets.");
   });
 
-  it("verifies OpenAI access before a dispatched run can consume a durable attempt", () => {
-    const preflightSection = workflow.split("- name: Verify the configured OpenAI project and model")[1]
+  it("verifies the worker before a dispatched run can consume a durable attempt", () => {
+    const preflightSection = workflow.split("- name: Verify the pinned Codex CLI")[1]
       ?.split("- name: Preload the pinned validation sandbox")[0] ?? "";
-    const modelStep = preflightSection.split("- name: Verify one bounded OpenAI response")[0] ?? "";
-    const preflightIndex = workflow.indexOf("- name: Verify the configured OpenAI project and model");
+    const modelStep = preflightSection.split("- name: Report the resolved authentication")[0] ?? "";
+    const preflightIndex = workflow.indexOf("- name: Verify the pinned Codex CLI");
     const claimIndex = workflow.indexOf("- name: Claim and execute one durable run");
 
     expect(preflightIndex).toBeGreaterThan(0);
     expect(claimIndex).toBeGreaterThan(preflightIndex);
     expect(modelStep).not.toContain("if:");
-    expect(preflightSection).toContain("OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}");
+    expect(preflightSection).toContain("SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}");
     expect(preflightSection).toContain("npm run worker:preflight");
     expect(preflightSection).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
     expect(preflightSection).not.toContain("GITHUB_APP_PRIVATE_KEY");

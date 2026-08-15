@@ -47,15 +47,20 @@ jobs:
       - name: Install the locked worker runtime
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Verify the configured OpenAI project and model
+      # No OPENAI_API_KEY is supplied to any step. Codex authenticates with the
+      # owner's ChatGPT subscription, so no step here can consume per-token API
+      # credit. Supplying the key without also setting
+      # SOFTWAREFACTORY_CODEX_AUTH_MODE=api_key is a configuration error the
+      # worker refuses, rather than a silent return to billing.
+      - name: Verify the pinned Codex CLI and resolved authentication mode
         env:
-          OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
         run: npm run worker:preflight
 
-      - name: Verify one bounded OpenAI response without claiming a run
+      - name: Report the resolved authentication without claiming a run
         if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'softwarefactory_phase1c_preflight' }}
         env:
-          OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
         run: npm run worker:preflight -- --execute
 
       - name: Preload the pinned validation sandbox
@@ -70,7 +75,7 @@ jobs:
           SOFTWAREFACTORY_WORK_ROOT: ${{ runner.temp }}/softwarefactory-worker
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.SOFTWAREFACTORY_OPENAI_API_KEY }}
+          SOFTWAREFACTORY_CODEX_AUTH_JSON: ${{ secrets.SOFTWAREFACTORY_CODEX_AUTH_JSON }}
           GITHUB_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_ID }}
           GITHUB_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64 }}
           GITHUB_CANDIDATE_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID }}

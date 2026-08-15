@@ -1,6 +1,8 @@
 import type { CodexOptions, ThreadEvent, ThreadOptions } from "@openai/codex-sdk";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { CodexAuthResolution } from "@/lib/worker/auth";
 import { controlledProcessEnvironment } from "@/lib/worker/env";
 import { hasLikelySecret, redactText } from "@/lib/worker/redact";
 import type { WorkerEvent, WorkerJob, WorkerUsage } from "@/lib/worker/types";
@@ -67,12 +69,29 @@ function modelShellEnvironment(environment: Readonly<Record<string, string>>) {
   return allowed;
 }
 
+/**
+ * Write the subscription credential into the per-run CODEX_HOME.
+ *
+ * The per-run home is deliberately fresh, so the CLI cannot pick up ambient
+ * credentials from the machine. That isolation is what makes seeding necessary:
+ * there is nothing to find unless this puts it there. The file is written
+ * owner-only, inside a directory that is removed with the run.
+ */
+export async function seedCodexHome(codexHome: string, authJson: string): Promise<void> {
+  await mkdir(codexHome, { recursive: true, mode: 0o700 });
+  await writeFile(path.join(codexHome, "auth.json"), authJson, { encoding: "utf8", mode: 0o600 });
+}
+
+export function codexHomeFor(workspace: PreparedWorkspace): string {
+  return path.join(workspace.runDirectory, "codex-home");
+}
+
 export function codexClientOptions(
-  apiKey: string,
+  auth: CodexAuthResolution,
   workspace: PreparedWorkspace,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): CodexOptions {
-  const codexHome = path.join(workspace.runDirectory, "codex-home");
+  const codexHome = codexHomeFor(workspace);
   const clientEnvironment = {
     ...controlledProcessEnvironment(environment),
     CODEX_HOME: codexHome,
@@ -81,7 +100,10 @@ export function codexClientOptions(
   };
 
   return {
-    apiKey,
+    // Omitted entirely in subscription mode. Passing `undefined` rather than a
+    // key is what keeps the run off per-token API billing: the CLI then falls
+    // back to the auth.json this run seeded.
+    ...(auth.apiKey ? { apiKey: auth.apiKey } : {}),
     env: clientEnvironment,
     config: {
       allow_login_shell: false,
@@ -266,20 +288,60 @@ function parseStructuredResult(value: string) {
 
 export class CodexSdkAdapter {
   constructor(
-    private readonly apiKey: string,
-    private readonly clientFactory: (apiKey: string, workspace: PreparedWorkspace) => CodexClientLike,
+    private readonly auth: CodexAuthResolution,
+    private readonly clientFactory: (
+      auth: CodexAuthResolution,
+      workspace: PreparedWorkspace,
+    ) => CodexClientLike,
   ) {}
 
-  static async create(apiKey: string) {
+  static async create(auth: CodexAuthResolution) {
     const { Codex } = await import("@openai/codex-sdk");
     return new CodexSdkAdapter(
-      apiKey,
-      (key, workspace) => new Codex(codexClientOptions(key, workspace)),
+      auth,
+      (resolved, workspace) => new Codex(codexClientOptions(resolved, workspace)),
     );
   }
 
+  /**
+   * Values that must never survive into a persisted error message.
+   *
+   * In subscription mode the credential is a JSON document containing OAuth
+   * tokens, so the individual token values are redacted rather than the whole
+   * blob — a provider error is unlikely to quote the file verbatim, but very
+   * capable of quoting one token out of it.
+   */
+  private redactionSecrets(): string[] {
+    if (this.auth.apiKey) return [this.auth.apiKey];
+    if (!this.auth.authJson) return [];
+
+    const secrets: string[] = [];
+    const collect = (value: unknown) => {
+      if (typeof value === "string" && value.trim().length >= 8) secrets.push(value);
+      else if (value && typeof value === "object") Object.values(value).forEach(collect);
+    };
+    try {
+      collect(JSON.parse(this.auth.authJson));
+    } catch {
+      // Resolution already validated the shape; a parse failure here means the
+      // value cannot be decomposed, so fall back to redacting it whole.
+      return [this.auth.authJson];
+    }
+    return secrets;
+  }
+
+  /**
+   * Place the subscription credential where the CLI will look, before any turn
+   * runs. A no-op in api_key mode, where the SDK carries the key directly.
+   */
+  async prepare(workspace: PreparedWorkspace): Promise<void> {
+    if (this.auth.authJson) {
+      await seedCodexHome(codexHomeFor(workspace), this.auth.authJson);
+    }
+  }
+
   createSession(job: WorkerJob, workspace: PreparedWorkspace): CodexSession {
-    const client = this.clientFactory(this.apiKey, workspace);
+    const client = this.clientFactory(this.auth, workspace);
     const threadOptions: ThreadOptions = {
       model: job.model,
       workingDirectory: workspace.directory,
@@ -334,7 +396,7 @@ export class CodexSdkAdapter {
               if (terminalFailure) {
                 throw new Error(redactText(terminalFailure, {
                   maximumLength: 1_000,
-                  secrets: [this.apiKey],
+                  secrets: this.redactionSecrets(),
                 }));
               }
               throw error;
@@ -369,7 +431,7 @@ export class CodexSdkAdapter {
         if (terminalFailure) {
           throw new Error(redactText(terminalFailure, {
             maximumLength: 1_000,
-            secrets: [this.apiKey],
+            secrets: this.redactionSecrets(),
           }));
         }
         const threadId = thread.id;

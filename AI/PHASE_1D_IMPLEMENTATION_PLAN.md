@@ -29,7 +29,7 @@ At the original audit, most of the **right-hand half** of that loop already exis
 | Risk Gate | PARTIAL — `lib/risk.ts` classifies from *explicitly supplied factors* and evaluates authorization. Nothing classifies an actual diff. | Phase 1A |
 | Auto Approve / Merge | MISSING — no approval decision type, no self-approval rule, no merge adapter. `AGENTS.md` forbids introducing an auto-merge workflow. | — |
 | Deploy | **BLOCKED** — no deployment adapter. | — |
-| Validate | COMPLETE — `deployment_validations`, health derivation, synthetic profiles, bounded HTTPS probes. | Phase 1E |
+| Validate | **The audit got this wrong.** It recorded COMPLETE on the strength of `deployment_validations`, health derivation, synthetic profiles, and bounded HTTPS probes. Those are storage and probing. Nothing decided what a validation record *proved*, and the orchestrator's `validate` stage reported satisfied unconditionally — the opposite of what `POST_DEPLOY_VALIDATION.md` requires. Corrected on 2026-08-14; see §6. | Phase 1E storage; Phase 1D decision |
 | Rollback | DECISION PATH COMPLETE, EXECUTION BLOCKED — Last Known Good resolves only from a deployment whose own validation passed; failed rollback must escalate to SEV1. | Phase 1E |
 | Incident / Repair | CREATION COMPLETE, EXECUTION BLOCKED — bounded to three attempts, escalates instead of retrying. | Phase 1E |
 | Report | COMPLETE — `generate_operations_report`. | Phase 1E |
@@ -72,11 +72,12 @@ safely or honestly in this phase).
 | 12 | Approval decision tri-state | **MISSING** | `evaluateRiskAuthorization` returns a different, execution-oriented vocabulary |
 | 13 | No-self-approval rule | **MISSING** | Nothing compares author to approver |
 | 14 | Orchestrator stage machine | **MISSING** | — |
-| 15 | Branch-protection revalidation | **COMPLETE** | `lib/autonomy/merge-readiness.ts` — conflicts, stale approval, stale gates, dismissed reviews, and required checks re-asked against the current head |
+| 15 | Branch-protection revalidation | **MISSING** | Nothing re-asks the merge preconditions against the current head. Closed later by `lib/autonomy/merge-readiness.ts`; see §4 |
 | 16 | Merge executor | **BLOCKED** | `AGENTS.md` forbids an auto-merge workflow in this line of phases |
 | 17 | Deploy executor | **BLOCKED** | No Vercel API connection; `VERCEL_TOKEN` unset |
 | 18 | Preview validation | **BLOCKED** | Same |
-| 19 | Post-deploy validation | **COMPLETE** | Phase 1E `deployment_validations`, probes, synthetic profiles |
+| 19 | Post-deploy validation — storage | **COMPLETE** | Phase 1E `deployment_validations`, probes, synthetic profiles |
+| 19a | Post-deploy validation — decision | **BROKEN**, missed by this audit | The `validate` stage reported satisfied unconditionally, so absent evidence read as success. `POST_DEPLOY_VALIDATION.md` requires `inconclusive`. Corrected on 2026-08-14; see §6 |
 | 20 | Last Known Good | **COMPLETE** | `last_known_good_deployment`, resolves only from a validated deployment |
 | 21 | Rollback decision | **COMPLETE** | `record_rollback_decision`, fail-closed |
 | 22 | Rollback execution | **BLOCKED** | No adapter; `policies/AUTO_ROLLBACK.md` disables it; migration `010` pins `auto_rollback = false` |
@@ -157,6 +158,24 @@ an executor will see those assertions fail and have to update them deliberately.
 
 This is a control-plane demonstration against a migrated database. It is not evidence that any
 autonomous action ran in production, because none can.
+
+### What this audit itself got wrong
+
+Two findings were reached after the audit was written, by reading each `/policies` file against
+the code rather than against memory. Both were the same failure: a default that reported success
+where the policy required the opposite. Neither was caught by any test, because in both cases
+the wrong answer was also the *unreachable* answer today.
+
+| Corrected | The audit said | What was true | Closed by |
+| --- | --- | --- | --- |
+| Post-deploy validation | Row 19 **COMPLETE** on the strength of Phase 1E storage | Storage was complete; nothing decided what a record proved. The `validate` stage returned satisfied unconditionally, so a run that validated nothing would have reported success the moment a deploy executor existed. `POST_DEPLOY_VALIDATION.md` requires missing, stale, or mismatched evidence to be `inconclusive`, never `passed` | `lib/autonomy/post-deploy.ts`; the pipeline routes the absent case through the same evaluation, and a test asserts the stage is unreachable so connecting an executor forces a review |
+| Authority-widening classification | Not examined | `RISK_CLASSIFICATION.md` lists "enabling or widening autonomous approval, merge, deploy, or rollback authority" as RED. The classifier scored it YELLOW — a migration flipping `auto_merge` to true matched only the `supabase/migrations/` path rule and looked like an ordinary schema change. That is the loop-grants-itself-power case the control model exists to prevent | `AUTHORITY_WIDENING` and `AUDIT_EVIDENCE_DESTRUCTION` content rules in `lib/autonomy/diff-risk.ts`; `lib/autonomy/controls.ts` is RED by path |
+| Safety-relevant AI memory | Not examined | `PROTECTED_RESOURCES.md` prohibits an automated system from weakening its own guardrails, and lists safety-relevant AI memory as requiring elevated review. `AI/DECISIONS.md` classified as documentation-only, so an otherwise-GREEN diff could have deleted the entry requiring owner approval for RED | Raised to `safety-relevant-memory` (YELLOW). Status memory stays GREEN because every material change must update it |
+
+The general lesson, recorded because it will recur: a stage that cannot be reached is not a stage
+that is correct. Both defects sat behind an earlier blocker, so no test failed and no behavior was
+wrong — and both would have become wrong at exactly the moment an executor was connected, which
+is the worst possible moment to discover them.
 
 
 ## 7. Credential state observed at implementation time
