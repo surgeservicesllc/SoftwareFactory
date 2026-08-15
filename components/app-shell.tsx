@@ -19,7 +19,6 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  UserRound,
   Workflow,
   X,
 } from "lucide-react";
@@ -160,9 +159,9 @@ function Sidebar({
 }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
-      <div className="mb-7 px-2">
-        <Logo />
-      </div>
+      {/* No brand here. The marketing global navigation renders directly above
+          this shell and already carries it, so a second logo one row down was
+          the same identity twice with nothing to distinguish them. */}
       <Navigation onNavigate={onNavigate} isSuperAdmin={viewer.isSuperAdmin} />
       {viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">
@@ -226,7 +225,17 @@ export function AppShell({
         <Sidebar viewer={viewer} />
       </aside>
 
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:left-64 xl:px-8">
+      {/*
+        Mobile only. On desktop this bar held a status line, a super-admin badge,
+        the signed-in email and a sign-out button -- every one of which the global
+        navigation immediately above already showed, so the page opened with the
+        same identity stated twice and sixty-four pixels of chrome between the
+        reader and the content.
+
+        It survives on small screens because it carries the button that opens the
+        navigation drawer, which has no other entry point.
+      */}
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:hidden">
         <div className="flex items-center gap-3 xl:hidden">
           <button
             type="button"
@@ -239,32 +248,6 @@ export function AppShell({
           </button>
           <Logo />
         </div>
-        <div className="hidden items-center gap-2 text-sm text-muted xl:flex">
-          <ShieldCheck className="size-4 text-accent" aria-hidden="true" />
-          Execution locked — nothing runs without you
-        </div>
-        {viewer.signedIn ? (
-          <div className="flex items-center gap-2">
-            {viewer.isSuperAdmin ? (
-              <span className="hidden items-center gap-1.5 rounded-md border border-[var(--accent-border)] bg-[var(--accent-surface)] px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--accent-text)] sm:inline-flex">
-                <ShieldCheck className="size-3" aria-hidden="true" />
-                Super admin
-              </span>
-            ) : null}
-            <span
-              className="hidden max-w-[200px] truncate text-sm text-muted md:inline"
-              title={viewer.email ?? undefined}
-            >
-              {viewer.displayName ?? viewer.email}
-            </span>
-            <SignOutButton className="btn btn-secondary btn-sm" />
-          </div>
-        ) : (
-          <Link href="/auth/sign-in" className="btn btn-secondary btn-sm">
-            <UserRound className="size-4" aria-hidden="true" />
-            Sign in
-          </Link>
-        )}
       </header>
 
       {mobileOpen ? (
@@ -289,7 +272,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <main id="main-content" className="min-h-screen pt-16 xl:pl-64">
+      <main id="main-content" className="min-h-screen pt-16 xl:pl-64 xl:pt-0">
         <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>
