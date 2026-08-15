@@ -1,0 +1,42 @@
+name: Hosted schema audit
+
+# Read-only. Reports which recent migrations have actually reached the hosted
+# database, by probing for the tables they create rather than trusting the
+# ledger or the runbook. Both have been wrong before, in both directions.
+#
+# Manual only: this is a question you ask, not something that needs to run on a
+# schedule. It issues HEAD requests exclusively and prints table names and
+# verdicts, never a key, a URL credential, or a row.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Report which migrations reached hosted
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Probe hosted for the tables recent migrations create
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/hosted-schema-audit.mts
