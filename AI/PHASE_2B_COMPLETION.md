@@ -23,7 +23,7 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | 10 | Invalid output fails/retries under bounded policy | **PASS** | `DEFAULT_RETRY_POLICY`, demonstration D. |
 | 11 | Real dependencies control node readiness | **PASS** | Scheduler is a pure function of state; demonstration D blocks a failed node's dependants without killing unrelated work. |
 | 12 | Independent nodes execute concurrently | **PASS** | Demonstration B observes the runner dispatching **20** inspectors in one batch. The live canary observes **3 real Claude executions** in one batch. |
-| 13 | Claude/Codex routing uses the existing 2A provider layer | **PARTIAL** | The routing engine, adapters and fallback are built and unit-tested in `lib/providers/`. The live canary calls the subscription transport directly rather than through `routeProvider`, so *routing* is not exercised live. |
+| 13 | Claude/Codex routing uses the existing 2A provider layer | **PARTIAL** | The routing engine, adapters and fallback are built and unit-tested in `lib/providers/`. The live canary calls the Agent SDK directly rather than through the 2A transport — see "The 2A/2B turn-budget gap" below, which is a real architectural gap rather than a shortcut. |
 | 14 | Dynamic team uses the smallest capable specialist set | **PASS** | Capability-gated selection; demonstration A's refusal to expand is the same rule. |
 | 15 | Parallel coding uses isolated workspaces | **PASS** | `lib/graph/fan-out.ts`: writers always isolated, readers share, over-ceiling writers **deferred rather than run unisolated**. |
 | 16 | Shared resource conflicts create a dependency or lock | **PASS** | Demonstration E refuses to compile two nodes writing one resource, and discovers a read-after-write dependency nobody proposed. |
@@ -96,6 +96,45 @@ suite read 6/7 with the seventh quietly unreachable.
 
 It now runs on the zero-token subscription path, which is the path the rest of
 the system already uses.
+
+## The 2A/2B turn-budget gap
+
+Found while re-auditing goal 13, and worth stating precisely because the first
+version of this scorecard got the reason wrong.
+
+The live canary calls `@anthropic-ai/claude-agent-sdk` directly instead of going
+through `executeClaudeThroughCli`. That reads like a shortcut. It is not: for
+three of the five nodes it is not currently possible.
+
+`lib/providers/claude-cli-transport.ts` hard-codes `const MAX_TURNS = 1` and
+passes it as `maxTurns`. That is the right shape for what 2A was built for — an
+advisory task is one prompt and one structured answer, and a single turn makes
+cost and latency bounded and predictable.
+
+2B's graph nodes are a different shape. An inspector node that must locate a file,
+grep it, read the relevant part and then answer needs several turns; the canary's
+inspectors run with `maxTurns: 6` and use them. Routed through the transport as it
+stands, those nodes would get one turn and answer from whatever a single tool call
+returned — which is exactly the "narrating instead of answering" failure the node
+contracts exist to catch.
+
+So this is an integration gap between two phases that were each internally
+consistent:
+
+- **2A** correctly treats a provider call as one bounded advisory round trip.
+- **2B** correctly treats a node as a unit of work that may need to look things up.
+
+Neither is wrong on its own terms. What is missing is a per-request turn budget on
+the transport, so a graph node can declare how many turns its job needs and the
+provider layer can bound it, rather than the bound being a module constant. That
+is a small change to `ClaudeCliTransportOptions` and a policy decision about who
+sets the ceiling — deliberately **not** made here, because widening a cost bound
+in the provider layer to make a demonstration pass is the wrong direction, and it
+belongs to 2A's owner rather than to this phase.
+
+Until then, goal 13's live proof is limited to the two nodes that genuinely are
+single-turn advisory work (synthesis and verification). The routing engine itself
+remains proven by unit tests only.
 
 ## What is still not proven
 
