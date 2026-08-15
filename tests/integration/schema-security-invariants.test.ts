@@ -158,6 +158,83 @@ describe("the service_role ACL matrix", () => {
   });
 });
 
+describe("SECURITY DEFINER functions", () => {
+  it("all pin a search_path", async () => {
+    // A SECURITY DEFINER function runs with its owner's privileges. Without a
+    // pinned search_path, a caller who can create objects in a schema earlier
+    // on that path can shadow a table or operator the body resolves
+    // unqualified, and the function will execute their version as the owner.
+    // That is privilege escalation, and it is invisible in the function body.
+    const result = await db.query<{ proname: string; args: string; proconfig: string[] | null }>(`
+      select proc.proname, pg_get_function_identity_arguments(proc.oid) as args, proc.proconfig
+      from pg_catalog.pg_proc proc
+      join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+      where namespace.nspname = 'public' and proc.prosecdef
+      order by proc.proname
+    `);
+
+    const unpinned = result.rows
+      .filter((row) => !(row.proconfig ?? []).some((c) => c.toLowerCase().startsWith("search_path=")))
+      .map((row) => `${row.proname}(${row.args})`);
+
+    expect(unpinned).toEqual([]);
+    expect(result.rows.length).toBeGreaterThan(100);
+  });
+
+  it("lets anonymous callers execute exactly one of them", async () => {
+    // The entire anonymous attack surface against privileged code. A new grant
+    // here is a new way for an unauthenticated request to run as the owner, so
+    // it should be a deliberate, reviewed change rather than a side effect.
+    const result = await db.query<{ proname: string }>(`
+      select proc.proname
+      from pg_catalog.pg_proc proc
+      join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+      where namespace.nspname = 'public' and proc.prosecdef
+        and has_function_privilege('anon', proc.oid, 'EXECUTE')
+      order by proc.proname
+    `);
+
+    expect(result.rows.map((row) => row.proname)).toEqual(["subscribe_to_newsletter"]);
+  });
+
+  it("limits service_role to the GitHub ingress and Phase 1C worker RPCs", async () => {
+    const result = await db.query<{ proname: string }>(`
+      select distinct proc.proname
+      from pg_catalog.pg_proc proc
+      join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+      where namespace.nspname = 'public' and proc.prosecdef
+        and has_function_privilege('service_role', proc.oid, 'EXECUTE')
+      order by proc.proname
+    `);
+
+    // service_role bypasses RLS, so each of these is privileged code reachable
+    // by the worker's key. Pinned by name: the set should change only when a
+    // phase deliberately gives the worker a new capability.
+    expect(result.rows.map((row) => row.proname)).toEqual([
+      "agentos_record_trigger_delivery",
+      "append_phase1c_run_event",
+      "claim_phase1c_run",
+      "complete_github_change_request",
+      "complete_phase1c_run",
+      "disconnect_github_connection",
+      "fail_github_change_request",
+      "fail_github_change_request_with_evidence",
+      "finish_phase1c_worker",
+      "heartbeat_phase1c_run",
+      "heartbeat_phase1c_worker",
+      "jsonb_has_sensitive_keys",
+      "mark_github_connection_lost",
+      "process_github_webhook_delivery",
+      "reconcile_github_repository_grants",
+      "record_phase1c_run_artifact",
+      "record_phase1c_validation",
+      "recover_github_change_request_with_provider_evidence",
+      "register_phase1c_worker",
+      "sync_github_installation",
+    ]);
+  });
+});
+
 describe("anonymous access", () => {
   it("holds no write privilege on any public table", async () => {
     const result = await db.query<{ table_name: string; privilege_type: string }>(`
