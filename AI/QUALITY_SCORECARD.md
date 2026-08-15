@@ -239,6 +239,37 @@ committed; the repository is consistent with that account.
 7. Preserve durable repository/base SHA, neutral logical agent, routing reasons, lease, recovery state, timeline, validation, artifacts, changed paths, usage, factory branch/commit/open draft PR, stable exact-head CI, structured report, activity, cancellation state, and final-result evidence.
 8. Prove no default-branch write, PR approval/merge, deployment, rollback, RED execution, workflow/provider-setting change, or secret disclosure occurred, and complete the remaining unrelated-authenticated/mutation-denial matrix.
 
+## Phase 2E portfolio scheduling evidence, 2026-08-15
+
+| Check | Result |
+|---|---|
+| Unit and integration tests | 2360 passed, 0 failed, 2 skipped |
+| Playwright, desktop + tablet + mobile with axe | 132 passed, 3 skipped |
+| Lint | 0 errors, 3 warnings (all pre-existing, in test files) |
+| Typecheck | clean |
+| Production build | succeeds |
+| Migration chain on PGlite from empty | 70 applied in order |
+| Tables under RLS + FORCE RLS | 104 of 104 |
+| `service_role` table privileges | still exactly the four GitHub ingress tables |
+
+The five required canaries run in `tests/integration/phase2e-portfolio-scheduling.behavior.test.ts`,
+each against two competing projects in one organization, and each asserting on the run a worker
+actually claimed through `claim_phase1c_run` rather than on a projection:
+
+| Canary | What it proves |
+|---|---|
+| A — competing projects | Beta queued first, Alpha (P1) claimed first, Beta claimed on release |
+| B — P0 | Ceiling 1 with 1 reserved: routine work withheld, an incident-linked repair claimed at effective P0, the routine run still `queued` afterwards |
+| C — capacity | Project ceiling 1 with worker capacity 2: excess withheld with `projectActive: 1, projectLimit: 1`, claimed after release |
+| D — failure | Three outages open a breaker, work withheld naming it, another provider's breaker does not interfere, cooldown admits one trial, the trial consumes the window, success reopens |
+| E — reprioritize | Focus set and cleared in one statement, next claim follows it, the running run keeps its lease token, one activity event |
+
+**What this evidence does not cover.** PGlite is a single connection, so every claim above is
+sequential. These prove ordering, ceilings, release and recovery; they do not prove behaviour
+under simultaneous contention, which rests on the `for update ... skip locked` the claim has used
+since Phase 1C and which these changes did not alter. Nothing here is hosted: 29 migrations remain
+unapplied to hosted Supabase.
+
 ## Release-blocking invariants
 
 - Configuration, source code, a queued row, a mocked SDK result, or a GitHub Actions file never counts as Connected.

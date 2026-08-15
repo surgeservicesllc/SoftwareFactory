@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-15. **Start at the HANDOFF section below.**
+Last updated: 2026-08-15 (Phase 2E). **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
 Phase 2B graph engineering (PR #27) · Phase 1B adverse lifecycle · concurrently, another agent
@@ -14,7 +14,71 @@ Several agents work this repository concurrently. This file is the shared pictur
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
 
-## HANDOFF — read this first (2026-08-14, end of session)
+## HANDOFF — Phase 2E portfolio scheduling (2026-08-15, this session)
+
+**Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq`, pushed. Six migrations,
+`20260815000100` through `20260815000600`. Full scorecard in `AI/PHASE_2E_COMPLETION.md`:
+**33 PASS · 2 PARTIAL · 0 FAIL · 1 BLOCKED — 92%**.
+
+### What the factory can do now that it could not before
+
+It schedules a *portfolio*. `claim_phase1c_run` was already durable, lease-based and
+dependency-aware, and it had no way to compare two projects: a P3 chore outranked
+critical work whenever its task priority happened to be higher, and concurrency was
+bounded only by how many workers were registered. Now:
+
+- Projects carry P0–P3, strategic focus, an engineering pause, and a run ceiling.
+  Owner-only functions set each and write an activity event.
+- Ceilings exist at four levels — worker, project, provider account (or a single
+  connection), and portfolio — and a reserve inside the portfolio ceiling that only
+  effective-P0 work may occupy.
+- Waiting work gains a priority tier per fairness interval, floored at P1, so nothing
+  starves and nothing ages into the emergency reserve.
+- An open circuit breaker withholds work from the provider it names; the cooldown
+  admits exactly one trial, and taking it restarts the clock.
+- Every assignment is recorded with project, task, agent, provider, connection and
+  reason. Work that was ready and withheld by a ceiling is recorded too, deduplicated
+  per minute so a polling worker cannot flood the audit.
+- `/solutions/portfolio` shows capacity, the queue in scheduler order with a reason on
+  every waiting item, and per-project scheduling state.
+
+### Two defects fixed that were not features
+
+1. **One logical agent per organization made portfolio concurrency impossible.** The
+   scheduler refuses a second concurrent run for one agent, and the roster gave the
+   whole factory one Backend and one QA. Everything else in 2E would have been enforced
+   on a factory that still ran one project at a time. Agents are now cloned per project.
+2. **The portfolio console counted statuses no enum can hold** — commands in `planning`
+   and `blocked`, tasks in `ready`, incidents in `acknowledged` and `mitigating`. Every
+   project reported zero open incidents however many were open, and queued tasks were
+   not counted at all. A test now reads the enums out of the migration.
+
+### Genuinely open, and why
+
+- **Goal 9 (2D Identity Router).** There is no `lib/identity/` in this repository; 2D is
+  not built. The capability is enforced by the claim path's connection joins. When 2D
+  lands it should replace that join, not duplicate it.
+- **Goal 17 (work locks).** Two lock mechanisms exist — the 1C agent-level exclusion and
+  the 2B `graph_work_locks`/`task_work_locks` — and are not unified. Nothing is unsafe;
+  they simply do not know about each other.
+- **Goal 35 (hosted).** 29 migrations are unapplied to hosted Supabase. Verified locally
+  across the full 70-migration chain. Owner action, unchanged: `AI/HOSTED_APPLY_RUNBOOK.md`.
+
+### Before you add a migration
+
+Eleven test files pin the newest migration filename, and three more derive counts from
+the migrations directory. They exist so a new migration cannot land without those
+suites being re-run against it. Update the pins and the two count sentences in
+`AI/HOSTED_APPLY_RUNBOOK.md`; the failures tell you exactly what to change.
+
+Note one ordering constraint the repair test now encodes: `20260815000500` and
+`20260815000600` define `language sql` functions over `resource_breakers`, whose bodies
+PostgreSQL resolves at creation. They cannot be applied to a database where
+`20260814000210` is half-applied — the repair has to run first.
+
+---
+
+## HANDOFF — previous session (2026-08-14)
 
 **Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq` · **PR #40 open**, CI running at handoff.
 If #40 is green, merge it. If it failed, the cause is almost certainly the

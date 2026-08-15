@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { SchedulingView } from "@/lib/portfolio/scheduling";
@@ -32,8 +33,8 @@ const SORT_LABELS: Readonly<Record<SortKey, string>> = {
 function Count({ value, label }: { value: number | null; label: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-xs text-neutral-500">{label}</span>
-      <span className={value === null ? "text-sm text-neutral-500 italic" : "text-sm font-medium"}>
+      <span className="text-xs text-muted">{label}</span>
+      <span className={value === null ? "text-sm text-muted italic" : "text-sm font-medium"}>
         {value === null ? "Unknown" : value}
       </span>
     </div>
@@ -44,7 +45,7 @@ function Total({ label, value }: { label: string; value: number }) {
   return (
     <Card>
       <div className="flex flex-col">
-        <span className="text-xs text-neutral-500">{label}</span>
+        <span className="text-xs text-muted">{label}</span>
         <span className="text-2xl font-semibold">{value}</span>
       </div>
     </Card>
@@ -107,7 +108,7 @@ function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
             <Total label="Ordinary ceiling" value={capacity.ordinaryCeiling} />
             <Total label="Reserved for P0" value={capacity.emergencyReserved} />
           </div>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-muted">
             {`Portfolio ceiling ${capacity.organizationLimit}, of which ${capacity.emergencyReserved} `}
             {"are reserved for emergency work — routine work stops at "}
             {`${capacity.ordinaryCeiling} so an incident never has to interrupt a running job. `}
@@ -148,7 +149,7 @@ function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
                       {" · "}
                       {item.projectName}
                     </span>
-                    <span className="text-xs uppercase tracking-wide text-neutral-500">
+                    <span className="text-xs uppercase tracking-wide text-muted">
                       {`${priorityLabel(item.effectivePriority)} effective`}
                       {item.effectivePriority !== item.projectPriority
                         && ` (project ${priorityLabel(item.projectPriority)})`}
@@ -157,7 +158,7 @@ function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
                     </span>
                   </div>
                   <span className="text-sm">{item.taskTitle}</span>
-                  <span className="text-xs text-neutral-500">
+                  <span className="text-xs text-muted">
                     {item.runStatus === "running"
                       ? `Running for ${waitedLabel(item.waitingSeconds)}`
                       : `Waiting ${waitedLabel(item.waitingSeconds)}`}
@@ -186,7 +187,7 @@ function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="font-medium">{project.projectName}</span>
-                      <span className="text-xs uppercase tracking-wide text-neutral-500">
+                      <span className="text-xs uppercase tracking-wide text-muted">
                         {priorityLabel(project.engineeringPriority)}
                         {project.strategicFocus && " · strategic focus"}
                         {project.engineeringPaused && " · paused"}
@@ -265,7 +266,16 @@ export function PortfolioConsole() {
   }, [view, query, sort]);
 
   if (error) return <Notice tone="danger">{error}</Notice>;
-  if (!view) return <p className="text-sm text-neutral-500">Loading the portfolio…</p>;
+  if (!view) {
+    // Labelled the way every other console labels its spinner, so an
+    // accessibility sweep can wait for the settled state rather than auditing
+    // the loading one — and so a screen reader is told what is loading.
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the portfolio" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -287,7 +297,7 @@ export function PortfolioConsole() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Search projects</span>
+          <span className="text-xs text-muted">Search projects</span>
           <input
             type="search"
             value={query}
@@ -297,7 +307,7 @@ export function PortfolioConsole() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Sort by</span>
+          <span className="text-xs text-muted">Sort by</span>
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as SortKey)}
@@ -332,11 +342,11 @@ export function PortfolioConsole() {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-col">
                       <span className="font-medium">{project.name}</span>
-                      <span className="text-xs text-neutral-500">
+                      <span className="text-xs text-muted">
                         {project.repository ?? "No repository bound"}
                       </span>
                     </div>
-                    <span className="text-xs uppercase tracking-wide text-neutral-500">
+                    <span className="text-xs uppercase tracking-wide text-muted">
                       {project.status}
                     </span>
                   </div>
@@ -347,16 +357,16 @@ export function PortfolioConsole() {
                     <Count value={project.openTasks} label="Open tasks" />
                     <Count value={project.openIncidents} label="Incidents" />
                     <div className="flex flex-col">
-                      <span className="text-xs text-neutral-500">Health</span>
+                      <span className="text-xs text-muted">Health</span>
                       <span className="text-sm">{project.health}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-xs text-neutral-500">Connection</span>
+                      <span className="text-xs text-muted">Connection</span>
                       <ConnectionLabel health={project.connectionHealth} />
                     </div>
                   </div>
 
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted">
                     {project.autonomousMode
                       ? `Autonomous mode on, ceiling ${project.maximumAutonomousRisk}`
                       : "Autonomous mode off"}
