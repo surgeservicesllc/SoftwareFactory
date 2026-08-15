@@ -597,3 +597,40 @@ describe("pasting is the whole interaction", () => {
     expect(posted).toHaveLength(0);
   });
 });
+
+describe("one primary action, not a menu", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  it("leads with sign-in and folds the key away", async () => {
+    // Three ways to connect shown at once turns a login into a decision. The
+    // existing tests could not see this: <details> keeps its content in the
+    // DOM when closed, so querying for the field passes either way.
+    stubRoutedFetch(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    // The label sits in a span inside the summary, so both elements match.
+    const [summaryText] = await screen.findAllByText(/paste a key instead/i);
+    const disclosure = summaryText.closest("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
+
+    // The sign-in is not behind anything.
+    expect(screen.getByRole("link", { name: /sign in with openrouter/i })).toBeVisible();
+  });
+
+  it("opens the key path when asked for", async () => {
+    stubRoutedFetch(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    const [summaryText] = await screen.findAllByText(/paste a key instead/i);
+    await user.click(summaryText);
+
+    const disclosure = summaryText.closest("details");
+    expect(disclosure).toHaveAttribute("open");
+    expect(screen.getByLabelText(/anthropic api key/i)).toBeInTheDocument();
+  });
+});
