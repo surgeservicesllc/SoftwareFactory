@@ -73,11 +73,14 @@ export async function GET() {
         ProjectRow["maximumAutonomousRisk"],
     }));
 
-    const [commands, runs, tasks, incidents, connectionRows] = await Promise.all([
+    const [commands, runs, tasks, incidents, changeRequests, deployments, connectionRows] =
+      await Promise.all([
       readStatusRows(client, "commands", organizationId),
       readStatusRows(client, "agent_runs", organizationId),
       readStatusRows(client, "tasks", organizationId),
       readStatusRows(client, "incidents", organizationId),
+      readStatusRows(client, "github_change_requests", organizationId),
+      readStatusRows(client, "deployments", organizationId),
       client
         .from("project_connections")
         .select("project_id,connections(status,provider)")
@@ -106,6 +109,8 @@ export async function GET() {
       runs,
       tasks,
       incidents,
+      changeRequests,
+      deployments,
       connections,
     };
 
