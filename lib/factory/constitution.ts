@@ -1,8 +1,4 @@
-import {
-  FROZEN_POLICIES,
-  FROZEN_POLICY_DETAIL,
-  type FrozenPolicy,
-} from "@/lib/graph/frozen";
+import { FROZEN_POLICIES, FROZEN_POLICY_DETAIL } from "@/lib/graph/frozen";
 
 /**
  * The factory constitution: the frozen policies, versioned, applied to any
