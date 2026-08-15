@@ -135,13 +135,17 @@ describe("a provider that is not set up", () => {
     expect(screen.queryByText(/^verified$/i)).not.toBeInTheDocument();
   });
 
-  it("shows the exact variable and a link to the page that issues a key", async () => {
+  it("takes the key here instead of naming an environment variable", async () => {
+    // What replaced the old instructions: no variable name to learn, no
+    // hosting dashboard to visit. Anthropic restricted OAuth to its own
+    // products, so a key is unavoidable — but everything around it is not.
     stubRoutedFetch(providerPayload({ credentialReady: false, probeVerdict: "not_configured", probeReason: null, probeLive: false }));
     const user = await openPicker();
     await user.click(await screen.findByRole("button", { name: /claude/i }));
 
-    expect(await screen.findByText("ANTHROPIC_API_KEY")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open key page/i })).toHaveAttribute(
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    expect(field).toHaveAttribute("type", "password");
+    expect(screen.getByRole("link", { name: /get a key from anthropic/i })).toHaveAttribute(
       "href",
       "https://platform.claude.com/settings/keys",
     );
@@ -448,5 +452,92 @@ describe("one click is offered for every provider, not just OpenRouter", () => {
     expect(screen.queryByText(/get openrouter in one click/i)).not.toBeInTheDocument();
     expect(await screen.findAllByRole("link", { name: /sign in with openrouter/i }))
       .toHaveLength(1);
+  });
+});
+
+describe("pasting a key", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubKeyPost(response: { ok: boolean; body: unknown }) {
+    const posted: unknown[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 400,
+          json: async () => response.body,
+        };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return { posted, fetchMock };
+  }
+
+  async function typeKey(user: ReturnType<typeof userEvent.setup>, key: string) {
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.type(await screen.findByLabelText(/anthropic api key/i), key);
+    await user.click(screen.getByRole("button", { name: /^connect$/i }));
+  }
+
+  it("sends the key and re-checks once it is accepted", async () => {
+    const { posted, fetchMock } = stubKeyPost({
+      ok: true, body: { connected: true, verdict: "verified" },
+    });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-a-real-looking-key");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      provider: "anthropic", key: "sk-ant-api03-a-real-looking-key",
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(
+        (call) => String(call[0]).includes("/api/bots/providers?refresh=1"),
+      )).toBe(true);
+    });
+  });
+
+  it("reports the provider's own verdict rather than a generic failure", async () => {
+    // A valid key on an account with no credit must not read as a bad key.
+    const { posted } = stubKeyPost({
+      ok: false,
+      body: { connected: false, verdict: "no_credit", message: "The key is valid but the account has no available credit." },
+    });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-valid-but-broke");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no available credit/i);
+    // The panel must still be open. A nested form would have bubbled this
+    // submit to the register handler, registering the bot and closing it.
+    expect(screen.getByLabelText(/anthropic api key/i)).toBeInTheDocument();
+  });
+
+  it("will not submit something too short to be a key", async () => {
+    const { posted } = stubKeyPost({ ok: true, body: { connected: true } });
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.type(await screen.findByLabelText(/anthropic api key/i), "short");
+
+    expect(screen.getByRole("button", { name: /^connect$/i })).toBeDisabled();
+    expect(posted).toHaveLength(0);
+  });
+
+  it("clears the field once the key is stored, so it is not left on screen", async () => {
+    stubKeyPost({ ok: true, body: { connected: true, verdict: "verified" } });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-a-real-looking-key");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/anthropic api key/i)).toHaveValue("");
+    });
   });
 });

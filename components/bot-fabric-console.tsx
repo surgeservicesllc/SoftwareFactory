@@ -810,7 +810,9 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
       <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
         {provider.id === "openrouter"
           ? "One click. No key, no terminal, no variable name."
-          : "No key to find and nothing to paste. This bills nothing per token."}
+          : "Bills nothing per token. Anthropic restricts OAuth to its own products, "
+            + "so this is not a supported way for third-party software to reach Claude — "
+            + "prefer a key or OpenRouter above."}
       </p>
 
       {provider.id !== "openrouter" ? (
@@ -898,6 +900,121 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
   );
 }
 
+/**
+ * Paste a key, and it is connected.
+ *
+ * This replaced two steps that had nothing to do with the key: find the right
+ * environment variable name, and set it in a hosting dashboard. Anthropic
+ * restricted OAuth to its own products in February 2026, so an API key is the
+ * only supported way for software like this to reach Claude — which makes the
+ * key unavoidable and everything around it worth deleting.
+ *
+ * The field is a password input so a shoulder or a screen share does not read
+ * it, and the value is never put in component state longer than the submit.
+ */
+function PasteKey({
+  provider,
+  onConnected,
+}: {
+  provider: ProviderSetup;
+  onConnected: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState("");
+
+  // A plain container, not a form. This renders inside the register form, and
+  // a nested form is invalid HTML: the submit event bubbles to the outer
+  // handler, which registers the bot and unmounts this panel before the result
+  // of the key request can be shown.
+  const submit = () => {
+    if (saving || value.trim().length < 16) return;
+    setSaving(true);
+    setFailed("");
+    void fetch("/api/bots/connect/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: provider.id, key: value.trim() }),
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          // The provider's own verdict, so a key that is valid but out of
+          // credit is not reported as a bad key.
+          setFailed(body?.message ?? body?.error?.message ?? "That key could not be used.");
+          return;
+        }
+        setValue("");
+        onConnected();
+      })
+      .catch(() => setFailed("That key could not be saved."))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-0 flex-1">
+          <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+            Paste your {provider.vendor} API key
+          </span>
+          <input
+            type="password"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter still connects, which a form would have given for free.
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="sk-..."
+            className="input font-mono"
+            aria-label={`${provider.vendor} API key`}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={saving || value.trim().length < 16}
+          className="btn btn-primary btn-sm"
+        >
+          {saving ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Check className="size-3.5" aria-hidden="true" />
+          )}
+          Connect
+        </button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {provider.apiKeyUrl ? (
+          <a
+            href={provider.apiKeyUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-text)] hover:underline"
+          >
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+            Get a key from {provider.vendor}
+          </a>
+        ) : null}
+        <p className="text-xs text-[var(--text-faint)]">
+          Verified before it is saved, then encrypted. It is never shown again.
+        </p>
+      </div>
+
+      {failed ? (
+        <p className="mt-2 text-xs text-[var(--danger)]" role="alert">{failed}</p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Copies a variable name so nobody retypes it and mistypes it. */
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -958,38 +1075,14 @@ function ProviderSetupSteps({
         <p className="mt-2 text-sm text-[var(--warning)]">{provider.probeReason}</p>
       ) : null}
 
-      <ol className="mt-3 space-y-3 text-sm text-[var(--text-muted)]">
-        <li className="flex flex-wrap items-center gap-2">
-          <span className="text-[var(--text-faint)]">1.</span>
-          <span>Get a key from {provider.vendor}</span>
-          {provider.apiKeyUrl ? (
-            <a
-              href={provider.apiKeyUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="btn btn-secondary btn-sm"
-            >
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              Open key page
-            </a>
-          ) : null}
-        </li>
-        <li className="flex flex-wrap items-center gap-2">
-          <span className="text-[var(--text-faint)]">2.</span>
-          <span>Set it as this environment variable on the server</span>
-          <code className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono text-xs text-[var(--text)]">
-            {provider.credentialRef}
-          </code>
-          {provider.credentialRef ? <CopyButton value={provider.credentialRef} /> : null}
-        </li>
-      </ol>
+      <PasteKey provider={provider} onConnected={onRecheck} />
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onRecheck}
           disabled={checking}
-          className="btn btn-primary btn-sm"
+          className="btn btn-secondary btn-sm"
         >
           {checking ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -999,7 +1092,7 @@ function ProviderSetupSteps({
           Check again
         </button>
         <p className="text-xs text-[var(--text-faint)]">
-          The key never passes through this page. The server reads the variable directly.
+          Already set {provider.credentialRef} as a server environment variable? That still works.
         </p>
       </div>
     </div>

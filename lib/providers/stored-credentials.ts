@@ -27,10 +27,20 @@ import { isCredentialStoreConfigured, openSecret } from "@/lib/server/secret-box
 const OVERLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
   claude: CLAUDE_AUTH_ENVIRONMENT_KEYS.oauthToken,
   codex: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
-  // A key obtained through OAuth fills the same variable an operator would have
-  // set by hand, so every reader downstream — probe, resolver, worker — needs
-  // no knowledge of where it came from.
+  // A key obtained through OAuth or pasted into the console fills the same
+  // variable an operator would have set by hand, so every reader downstream —
+  // probe, resolver, worker — needs no knowledge of where it came from.
   openrouter: "OPENROUTER_API_KEY",
+  // Pasted provider keys. Kept under distinct purposes from the subscription
+  // credentials above: an API key and an OAuth token bill differently, and the
+  // seal is bound to the purpose so one can never be opened as the other.
+  anthropic_api: "ANTHROPIC_API_KEY",
+  openai_api: "OPENAI_API_KEY",
+  google_api: "GEMINI_API_KEY",
+  xai_api: "XAI_API_KEY",
+  mistral_api: "MISTRAL_API_KEY",
+  deepseek_api: "DEEPSEEK_API_KEY",
+  groq_api: "GROQ_API_KEY",
 });
 
 export type CredentialOverlay = Readonly<Record<string, string>>;
