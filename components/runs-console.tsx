@@ -81,6 +81,27 @@ function statusTone(status: string) {
   return "neutral";
 }
 
+type ProjectGroup = { id: string; name: string; runs: Run[] };
+
+// The portfolio view of the same list: runs grouped under the project that
+// owns them, in the order of each project's most recent run. A run whose
+// bounded projection carries no project is grouped under an honest label
+// rather than attributed to anything.
+function groupRunsByProject(runs: Run[]): ProjectGroup[] {
+  const groups = new Map<string, ProjectGroup>();
+  for (const run of runs) {
+    const id = run.project?.id ?? "unattributed";
+    const group = groups.get(id) ?? {
+      id,
+      name: run.project?.name ?? "Project unavailable",
+      runs: [],
+    };
+    group.runs.push(run);
+    groups.set(id, group);
+  }
+  return [...groups.values()];
+}
+
 export function RunsConsole() {
   const { state, reload } = useTenantList<Run>(
     "/api/runs",
@@ -159,32 +180,44 @@ export function RunsConsole() {
         emptyDescription="A connected worker creates a durable run here after the orchestrator resolves a command to one exact repository."
       >
         {(runs) => (
-          <ul className="divide-y divide-[var(--border)]">
-            {runs.map((run) => (
-              <li key={run.id} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">{run.task?.title ?? "Untitled work"}</p>
-                  <p className="mt-0.5 text-sm text-muted">
-                    {run.project?.name ?? "Project unavailable"} · {run.agent?.name ?? "Unassigned"} · {formatDateTime(run.startedAt ?? run.createdAt)}
-                  </p>
-                  <p className="mt-1 break-words text-xs text-muted">
-                    {run.provider
-                      ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
-                      : "No provider/model routing target is recorded for this run."}
-                  </p>
-                  <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+          <div className="divide-y divide-[var(--border)]">
+            {groupRunsByProject(runs).map((group) => (
+              <section key={group.id} aria-label={`Runs for ${group.name}`}>
+                <div className="flex items-baseline justify-between gap-3 bg-[var(--surface-inset)] px-5 py-2">
+                  <h3 className="min-w-0 truncate text-sm font-semibold text-foreground">{group.name}</h3>
+                  <span className="shrink-0 text-xs text-faint">
+                    {group.runs.length === 1 ? "1 run" : `${group.runs.length} runs`}
+                  </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 md:shrink-0">
-                  {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
-                  <StatusBadge tone={statusTone(run.status)}>{run.status.replace(/_/g, " ")}</StatusBadge>
-                  <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
-                    View run
-                  </button>
-                </div>
-              </li>
+                <ul className="divide-y divide-[var(--border)]">
+                  {group.runs.map((run) => (
+                    <li key={run.id} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{run.task?.title ?? "Untitled work"}</p>
+                        <p className="mt-0.5 text-sm text-muted">
+                          {run.agent?.name ?? "Unassigned"} · {formatDateTime(run.startedAt ?? run.createdAt)}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-muted">
+                          {run.provider
+                            ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
+                            : "No provider/model routing target is recorded for this run."}
+                        </p>
+                        <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+                        {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
+                        <StatusBadge tone={statusTone(run.status)}>{run.status.replace(/_/g, " ")}</StatusBadge>
+                        <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
+                          View run
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </TenantListShell>
 

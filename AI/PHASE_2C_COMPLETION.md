@@ -19,15 +19,16 @@ So this phase is not a schema project. It is a surface, an orchestrator, and a c
 
 ## Score
 
-**29 PASS · 2 PARTIAL · 2 MISSING · 0 UNPROVEN · 2 BLOCKED — 35 total.**
+**32 PASS · 0 PARTIAL · 1 MISSING · 0 UNPROVEN · 2 BLOCKED — 35 total.**
 
-Counting PASS only: **83%**. With the structural half of the PARTIALs: roughly **86%**.
+Counting PASS only: **91%**.
 
 Re-scored 2026-08-15 by the master loop, from evidence rather than intention:
 
 - Loops 2–8 closed goals 9, 11, 13, 18, 26, 27, 28 and 29 — isolation and archive proven by negative tests against the migrated schema, deletion resolved by discovery (structurally impossible, now instructively refused), the report and portfolio reconciling against each other.
 - Phase 2E had already closed 16 and 19–23; the original audit predated its landing, and those rows now cite the scheduling suite's real claims rather than the plan.
-- The remaining agent-actionable rows are 17 (a cross-project dependency type), 24 (project grouping on the runs surface), 25 (a portfolio activity view) and 31 (a sibling-isolation negative test for agent context). Row 24 and 31 are the two PARTIALs; 17 and 25 the two MISSING.
+- Loop 10 closed 24, 25 and 31. The runs console groups runs under the owning project with per-project counts, and runs with no project in their bounded projection sit under "Project unavailable" rather than being attributed; the activity console derives per-project facet chips (with counts) from the loaded events and filters on selection, with organization-level events in their own bucket — both asserted by component tests. Goal 31 is proven at the only boundary that exists: `claim_phase1c_run`'s payload is the worker's entire context, its 41 columns are pinned, every identifier in a claim belongs to the claimed project and none to its sibling, and a valid lease on one project's run is refused for heartbeat and completion against the sibling's running run (`phase2e-portfolio-scheduling.behavior.test.ts`).
+- The one remaining agent-actionable row is 17: an explicit cross-project dependency type. `graph_edges` are within a graph and a graph belongs to one project; nothing yet models "project B's work waits on project A's".
 - 33 awaits the hosted-ledger verification and 34 awaits a second repository — both owner actions recorded in `todo.md`.
 
 ## Owner action required
