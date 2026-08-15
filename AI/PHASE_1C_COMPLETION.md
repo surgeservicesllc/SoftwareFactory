@@ -177,6 +177,36 @@ workflow page that simply shows nothing happened.
 Ordering matters: set the secret first, then the variable, then dispatch. A run that starts
 without the credential consumes a durable attempt before failing.
 
+### How the worker is actually triggered
+
+Two facts about `codex-worker.yml` that change what you have to do, neither of which was written
+down before.
+
+**You probably do not need to dispatch anything.** The workflow carries
+`schedule: cron "*/5 * * * *"`. Once the activation variable is `true`, a run starts every five
+minutes on its own and claims whatever work is queued. Submitting a command and waiting is the
+normal path.
+
+**The preflight cannot be triggered from the GitHub web interface.** It is a
+`repository_dispatch` event, and GitHub offers no button for those — only `workflow_dispatch`
+appears in the Actions UI, and this workflow does not declare one. The no-claim preflight
+therefore requires an API call with a token that has `repo` scope:
+
+```
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer <token>" \
+  https://api.github.com/repos/surgeservicesllc/SoftwareFactory/dispatches \
+  -d '{"event_type":"softwarefactory_phase1c_preflight"}'
+```
+
+**Warning about Actions minutes.** A five-minute cron is 288 runs per day. Each exits quickly
+when no work is queued, but the billable floor is one minute per run, so leaving the activation
+variable on costs roughly 288 Actions minutes a day whether or not anything is claimed. That is
+the strongest practical reason to return it to `false` after a canary, beyond the authority
+argument — and it matters immediately, because Actions minutes on this repository are currently
+exhausted.
+
 ### What the preflight will tell you, verified 2026-08-14
 
 Each case was executed against the real script, not described from the code.
