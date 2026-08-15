@@ -9,6 +9,13 @@ decision layer, Phase 1E operations, and the Phase 2A/2B/2C work all merged.
 Audit date: 2026-08-14. Loop 1: AUDIT and TRACE complete; EXECUTE CANARY not yet
 reached, for the reasons in **Dependency blockers**.
 
+Loop 2 (2026-08-15): FIX applied to the earliest pure-engineering gap on the
+GREEN path — item 18, the merge executor, plus the five `AUTO_MERGE_POLICY.md`
+eligibility conditions that were recorded as unimplemented. Baseline re-verified:
+lint PASS, typecheck PASS, **1846 tests across 163 files** PASS, build PASS.
+The canary remains BLOCKED_BY_1C; see **Dependency blockers**, which are
+unchanged and all external.
+
 ## Baseline verified before scoring
 
 | Gate | Result |
@@ -64,7 +71,7 @@ can produce today, and the goal explicitly says that is not completion.**
 | 15 | YELLOW requires enhanced gates, auto-progresses only when explicitly allowed | **PASS** | CODE/TEST: `gates.ts` YELLOW set. |
 | 16 | RED stops before protected production action | **PASS** | CODE/TEST: RED resolves owner-only, outranking controls, ceiling and approval alike. |
 | 17 | PR state/CI/risk/conflicts rechecked immediately before merge | **PASS** | CODE/TEST: `lib/autonomy/merge-readiness.ts`. A push after approval invalidates the approval; a push after verification invalidates the gates; a required check with no report blocks rather than reading as satisfied. |
-| 18 | GitHub auto-merge/merge uses supported APIs and branch protection | **FAIL — ABSENT** | No merge adapter exists anywhere in the tree. `pipeline.ts` blocks `merge` by name. This is the single largest missing executor and it is pure engineering — no external credential is required, because the existing GitHub App already holds the installation identity. |
+| 18 | GitHub auto-merge/merge uses supported APIs and branch protection | **PARTIAL** | CODE/TEST: `lib/autonomy/merge-executor.ts` now exists and `lib/autonomy/merge-eligibility.ts` closes the five conditions `AUTO_MERGE_POLICY.md` recorded as unimplemented (repository/branch allowlisting, size and scope limits, generated/binary detection, unresolved review threads, repository and branch in the audit record). The merge call pins the approved head SHA so GitHub closes the race server-side with a 409, and a test asserts the request body is exactly `commit_title`/`merge_method`/`sha` — nothing that could bypass branch protection. A 405 is final and never retried. **No merge has been executed**: with no allowlist configured, `parseMergeAllowlist` returns `null` and every caller reads that as "no target authorized". Proven by 32 unit tests and four mutations (dropped SHA guard, allowlist-absent-means-allow, prefix separator, skipped readiness re-check). |
 | 19 | Vercel preview is tracked and validated | **BLOCKED** | CODE: `lib/deploy/vercel.ts` exists but is **read-only** — it lists and reads deployments and has zero write calls. It reports Not Connected without `VERCEL_TOKEN`, which is unset. |
 | 20 | Eligible approved merge reaches real production deployment | **FAIL — ABSENT** | No deployment executor. `pipeline.ts` blocks `deploy` by name. Depends on 18 and 19. |
 | 21 | Post-deploy validation determines HEALTHY/FAILED | **PARTIAL** | CODE/TEST: `lib/autonomy/post-deploy.ts` decides what a validation record proves — attribution before check results, and missing/stale/mismatched evidence is `inconclusive`, never `passed`. The decision is complete; nothing produces a real record because 20 is absent. |
@@ -81,12 +88,18 @@ can produce today, and the goal explicitly says that is not completion.**
 ## Score
 
 - PASS: 17 of 30
-- PARTIAL: 7 of 30
+- PARTIAL: 8 of 30
 - BLOCKED: 3 of 30
-- FAIL (absent): 2 of 30 — items 18 and 20, the merge and deploy executors
-- Weighted completion: **≈62%**
+- FAIL (absent): 1 of 30 — item 20, the deployment executor
+- Weighted completion: **≈68%**
 
-The decision half of the loop is ~95% complete. The executor half is ~5%.
+The decision half of the loop is ~95% complete. The executor half moved from ~5%
+to ~35%: merge is built and cannot run without owner authorization, deploy is
+still absent, and the worker is still credential-blocked.
+
+**Nothing here is a claim that a merge happened.** The goal is explicit that an
+APPROVED record is not proof, and the same standard applies to a tested
+executor. Item 18 stays PARTIAL until a real merge SHA exists.
 
 ## Canary status
 
@@ -104,7 +117,7 @@ Draft PR         ✅ exists (Phase 1B)
 CI               ✅ exists and is readable
 Preview          ⛔ DEPLOY not connected, no VERCEL_TOKEN
 Approve          ✅ would decide
-Merge            ⛔ MERGE_EXECUTOR_NOT_CONNECTED  ← absent entirely
+Merge            ⛔ ALLOWLIST_NOT_CONFIGURED      ← built; awaiting owner allowlist
 Production       ⛔ absent
 Validate         ✅ would decide, given a record
 ```
@@ -191,3 +204,56 @@ a real deployment id.
 **NO.** Phase 1D is ~62% complete, the executor half is essentially unbuilt, and
 no autonomous change has reached production. Re-evaluate when the canary
 produces a real run, branch, commit, PR, merge SHA, and deployment id.
+
+---
+
+## Loop 2 addendum — what changed, and what did not
+
+### Built
+
+- `lib/autonomy/merge-eligibility.ts` — the five `AUTO_MERGE_POLICY.md` conditions
+  that the policy itself recorded as unimplemented. Every branch fails closed;
+  an unconfigured allowlist authorizes nothing rather than everything.
+- `lib/autonomy/merge-executor.ts` — the GitHub merge call, which cannot bypass
+  branch protection and cannot merge a commit the approval did not cover.
+- `lib/autonomy/pipeline.ts` — the merge stage now reaches a `satisfied` outcome
+  when, and only when, executor connectivity, readiness and the allowlist all
+  agree. The previous "out of scope for this phase" refusal is gone; the
+  refusals that replaced it are specific.
+
+### Deliberately not done
+
+**No allowlist is configured, and I did not configure one.** `AUTO_MERGE_POLICY.md`
+step 5 requires explicit owner approval for the precise allowlist and limits, and
+step 4 requires a disposable-repository pilot first. Writing an allowlist into the
+repository would have satisfied the letter of item 18 by removing the control the
+policy exists to impose. The executor is therefore inert by construction, which is
+the correct resting state rather than an oversight.
+
+**The two Phase 1D interlocks were not touched.** `autonomous_mode` and all nine
+actions remain constrained OFF by CHECK constraint, and the kill switch remains
+locked ON. Lifting either is RED under this repository's own `diff-risk.ts` and
+needs owner approval. The correct order is executor first, proof second, interlock
+last.
+
+### Zero-token status
+
+Unchanged and still true. The merge executor is GitHub REST plus deterministic
+TypeScript. It makes no model call of any kind, so it adds no token cost in either
+the funded or the subscription sense. Nothing in this loop introduced a paid API
+dependency or a fallback to one.
+
+### Still blocking the canary — all external, none of them engineering
+
+1. Codex subscription credential unset → the worker cannot produce the branch.
+   **BLOCKED_BY_1C.**
+2. `VERCEL_TOKEN` unset → no preview, no deployment, no post-deploy validation.
+3. Vercel free-tier daily deployment quota.
+4. The two interlock CHECK constraints, which need an owner-approved migration
+   *after* an executor is proven, not before.
+
+### Next engineering step, needing nothing external
+
+Item 20's deployment executor, written against the Vercel API and failing closed
+as Not Connected without a token, exactly as the read-only adapter already does.
+That is the last absent executor on the GREEN path.

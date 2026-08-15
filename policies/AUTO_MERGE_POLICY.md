@@ -29,9 +29,11 @@ Eligibility is recalculated after every push, rebase, review change, check rerun
 
 ### Which of these are implemented
 
-Phase 1D implements the *evaluation* of this list in `lib/autonomy/`. It executes no merge — the
-decision always ends at `MERGE_EXECUTOR_NOT_CONNECTED` — but the conditions themselves are real,
-tested code rather than a future intention:
+Phase 1D implements the *evaluation* of this list in `lib/autonomy/`, and now also the execution.
+The conditions are real, tested code rather than a future intention. No merge has been executed:
+with no allowlist configured, the decision still ends at `MERGE_EXECUTOR_NOT_CONNECTED` or
+`ALLOWLIST_NOT_CONFIGURED`, which is the intended resting state until an owner authorizes a
+target.
 
 | Condition | Where |
 | --- | --- |
@@ -44,11 +46,32 @@ tested code rather than a future intention:
 | No protected resource, secret, auth boundary, destructive migration, billing, DNS, or workflow permission touched | `diff-risk.ts` RED factors, enforced by the security agent in `agents.ts` |
 | No security finding, incident, freeze, kill switch, or owner-attention flag | `agents.ts` for findings; `controls.ts` envelope for freeze and kill switch; `merge-readiness.ts` for `OPEN_INCIDENT` and `OWNER_ATTENTION_REQUIRED` |
 | Recalculated after every push | The staleness model above; nothing is carried forward across a head change |
-| Audit record with risk rationale, evidence, policy version, actor, project, and commit SHA | `autonomy_decisions`, append-only. **Repository and branch are not yet stored** |
+| Audit record with risk rationale, evidence, policy version, actor, project, and commit SHA | `autonomy_decisions`, append-only; repository, branch and change size now travel on the eligibility result |
+| The target repository and branch are explicitly allowlisted | `merge-eligibility.ts`. An unconfigured or malformed allowlist authorizes **nothing** rather than everything |
+| Within approved size/scope limits | `merge-eligibility.ts` — file count, line count, and path prefixes, with the separator enforced so `docs` does not authorize `docs-internal` |
+| No unexplained generated or binary content | `merge-eligibility.ts` — lockfiles, bundles, build directories, source maps, and binary extensions, plus GitHub's own "no patch produced" signal |
+| No unresolved review thread | `merge-eligibility.ts` |
 
-Still unimplemented from the list above: repository/branch allowlisting, size and scope limits,
-generated/binary content detection, unresolved-review-thread detection, and repository and branch
-in the audit record. No merge executor exists, so none of these gaps can currently be reached.
+A merge executor now exists: `lib/autonomy/merge-executor.ts`. What it deliberately cannot do
+matters more than what it does.
+
+- It sends the approved head SHA on every merge call, so GitHub compares it server-side and
+  returns 409 if the head moved. That closes the window between "readiness said yes" and the
+  merge itself, which no amount of re-reading before the call can close.
+- It sends exactly `commit_title`, `merge_method` and `sha`. Nothing that could disable admin
+  enforcement or otherwise bypass branch protection is sent, and a test asserts the request body
+  contains those three keys and no others.
+- It takes the readiness and eligibility decisions as arguments rather than recomputing them, so
+  it cannot reach a conclusion different from the one that was audited — only decline to act.
+- A 405 from branch protection is final and is never retried. A retry must recompute eligibility
+  from scratch, which is the caller's job, not the executor's.
+
+Still unimplemented: nothing from the eligibility list above. What remains before an automatic
+merge may actually run is **process, not code** — steps 3 through 6 of the enabling process
+below (observation-only comparison, a disposable-repository pilot, explicit owner approval of the
+precise allowlist, and a recorded enabling decision). The executor stays inert until an owner
+supplies an allowlist, because `parseMergeAllowlist` returns `null` when none is configured and
+every caller treats `null` as "no target is authorized".
 
 ## Always excluded in Phase 1
 

@@ -332,3 +332,80 @@ describe("the merge stage revalidates against the current head", () => {
     expect(outcome(runPipeline(input()), "merge")?.blocker).toBe("MERGE_EXECUTOR_NOT_CONNECTED");
   });
 });
+
+describe("the merge stage once an executor is connected", () => {
+  // Everything above describes a tree with no executor at all. These describe
+  // the path that only became reachable when one was built, and the point of
+  // every case is that connecting an executor authorizes nothing by itself.
+
+  const readiness = {
+    currentHeadSha: "current",
+    gatedHeadSha: "current",
+    approvedHeadSha: "current",
+    mergeability: "clean" as const,
+    pullRequestOpen: true,
+    requiredChecks: ["CI"],
+    checks: [{ name: "CI", status: "passed" as const }],
+  };
+
+  const eligible = {
+    eligible: true, blockers: [], reason: "within the allowlist",
+    repositoryFullName: "surgeservicesllc/SoftwareFactory",
+    baseBranch: "main", headBranch: "factory/docs-canary",
+    changedFiles: 1, changedLines: 4,
+  };
+
+  it("still blocks when no allowlist decision was supplied", () => {
+    // A connected executor plus a clean head is not permission. Something has
+    // to have authorized this repository and branch.
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("ALLOWLIST_NOT_CONFIGURED");
+  });
+
+  it("still blocks when the allowlist decision refused", () => {
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+      mergeEligibility: {
+        ...eligible, eligible: false,
+        blockers: ["REPOSITORY_NOT_ALLOWLISTED" as const], reason: "not allowlisted",
+      },
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("REPOSITORY_NOT_ALLOWLISTED");
+  });
+
+  it("names the missing revalidation rather than borrowing the executor blocker", () => {
+    // With an executor available, absent readiness inputs are a distinct
+    // failure: nothing was re-asked at the last moment.
+    const run = runPipeline(input({ mergeExecutorConnected: true }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("MERGE_READINESS_NOT_EVALUATED");
+  });
+
+  it("satisfies merge only when executor, readiness and allowlist all agree", () => {
+    const run = runPipeline(input({
+      mergeReadiness: readiness,
+      mergeExecutorConnected: true,
+      mergeEligibility: eligible,
+    }));
+
+    expect(outcome(run, "merge")).toMatchObject({ status: "satisfied" });
+  });
+
+  it("keeps staleness outranking the allowlist even with everything connected", () => {
+    // The ordering matters: a stale approval is about the change itself and
+    // must not be masked by a configuration answer.
+    const run = runPipeline(input({
+      mergeReadiness: { ...readiness, approvedHeadSha: "older" },
+      mergeExecutorConnected: true,
+      mergeEligibility: eligible,
+    }));
+
+    expect(outcome(run, "merge")?.blocker).toBe("APPROVAL_STALE");
+  });
+});
