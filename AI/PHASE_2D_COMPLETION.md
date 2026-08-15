@@ -54,7 +54,7 @@ that turns that description into an authorized choice.
 | 1 | Account ≠ Connection ≠ Provider ≠ Agent ≠ Project ≠ Repository ≠ Worker | **PASS (loop 1)** | Provider and Connection are now separable: `routeConnectionIdentity` answers "which connection", `lib/providers/routing.ts` still answers "which provider", and a mapping names a capability rather than a provider. Account remains a label, which is correct — the account is the provider's, the connection is ours. |
 | 2 | Multiple GitHub accounts / org installations coexist | **PARTIAL** | Schema supports it: `github_installations_connection_unique` is one installation per connection, and `github_installations_external_unique` binds an installation id to exactly one organization. `tests/integration/github-lifecycle-matrix.test.ts` proves two independent installations in one tenant stay isolated. **No second live GitHub account exists** — carried over from Phase 1B item 2. |
 | 3 | Multiple Vercel accounts / teams coexist | **PARTIAL (loop 5)** | Structurally multi-account: `resolveDeploymentCredential` routes `deploy.preview`/`deploy.production` through the Identity Router, dereferences the routed connection's `secret_reference` server-side (`env://` today; vault schemes refuse by name until a client exists), and the adapter authenticates each read with its own connection's token — two projects, two connections, two accounts in one process, proven in `deployment-credential.test.ts` and `deploy-vercel.test.ts`. Legacy projects keep the ambient `VERCEL_TOKEN` exactly as before. The live half stays blocked: no real Vercel connection row exists (owner action). |
-| 4 | Multiple Supabase project connections coexist | **FAIL — ABSENT** | Same shape: `lib/supabase/env.ts` resolves one project from environment. No connection row participates. |
+| 4 | Multiple Supabase project connections coexist | **PARTIAL (loop 6)** | `resolveDatabaseCredential` routes `database.read`/`database.migrate` through the Identity Router and dereferences the routed connection's secret — two projects, two Supabase connections, two credentials in one process, proven in `connection-credential.test.ts`, with read and migrate as separate authorizations (read access never implies migrate). Honestly noted: no module in the tree operates on an external project database yet — the app's own `lib/supabase/env.ts` control-plane client is not a workload target — so this is the doorway such a module must use, not a doorway anything walks through today. |
 | 5 | Multiple Claude worker / session connections | **PARTIAL** | `lib/providers/claude-cli-transport.ts` reaches Claude through the Claude Code CLI on the owner's subscription at zero API cost, which is the right substrate. It resolves one ambient session, not a chosen connection. |
 | 6 | Multiple Codex worker / session connections | **PARTIAL** | Phase 1C is re-architected to zero-token subscription Codex, but is Not Connected pending the owner credential, and resolves one ambient session. |
 | 7 | Stable id, provider, account label, capabilities, status, ownership | **PASS (loop 1)** | `connections.capabilities` added, validated against the closed `connection_capability_types` vocabulary by trigger. Health, `health_checked_at`, `max_concurrency` and `active_leases` added alongside. |
@@ -79,7 +79,7 @@ that turns that description into an authorized choice.
 | 26 | Fallback uses only explicitly eligible connections | **PASS (loop 1)** | Fallback ranges only over connections the project mapped to the capability and that pass every eligibility check. `allowFallback: false` refuses instead. |
 | 27 | Cross-account fallback is audited | **PASS (loop 3)** | Append-only `connection_routing_decisions` (migration `20260815001100`): every routed submission records the router's answer — selection with `used_fallback` and the full `rejected[]` list, or refusal with its named code — before the command acts on it, and a recording failure fails the submission. RLS member-read, definer-only write, immutability proven against the migrated chain in `connection-registry.test.ts`. |
 | 28 | 2A provider routing integrates with Identity Router | **PARTIAL (loop 2)** | The seam now exists where connections are actually chosen: `POST /api/commands` consults `routeConnectionIdentity` with `repository.write` before persisting. For a project with capability-labelled mappings the router is binding — a refusal refuses the command (409, router's named reason), a selection disagreeing with the resolved primary binding is surfaced as a contradiction (409, never a tiebreak), and a registry read failure fails closed (503) instead of degrading to the unrouted path. Legacy projects proceed exactly as before and the response says so (`connectionRouting.mode: "legacy"`). Five route tests. Remaining for PASS: the 2A provider-selection module itself still never consults connection identity (its live path is OFF by owner decision), and no real project mapping is capability-labelled yet. |
-| 29 | 2B graph nodes resolve connections through router | **FAIL — ABSENT** | `lib/graph/` resolves providers, not connections. |
+| 29 | 2B graph nodes resolve connections through router | **PARTIAL (loop 6)** | `lib/graph/connection-bridge.ts`: a MODEL node resolves `inference.advisory` through the Identity Router; DETERMINISTIC and ANCHOR nodes never touch the registry (proven: the client is not called), mirroring `assertNodeMayCallProvider` on the provider side. Kept separate from the deliberately pure `provider-bridge.ts` because provider selection and identity selection are different decisions. No graph has ever executed a MODEL node live (2A is OFF by owner decision), so the runner wiring joins the live half. |
 | 30 | 2C portfolio shows connection / account health per project | **PARTIAL** | Portfolio surfaces project health. Per-project connection identity and health are not shown, because a project's connection set is not capability-labelled. |
 | 31 | Concurrency / rate / capacity limits enforced | **PASS (loop 4)** | Re-scored against the Phase 2E scheduler, which landed after this audit: `portfolio_capacity_verdict` enforces a connection-specific ceiling at claim time, counted live from running runs with unexpired leases — self-correcting on lease expiry, which a stored counter structurally cannot be. The previously untested connection-level branch is now proven end-to-end (`phase2e-portfolio-scheduling.behavior.test.ts`: withheld at ceiling with the audited reason, neighbour unaffected, released with capacity). The router's capacity input is the same live count (`routable-candidates.ts` counts `agent_runs`, never `active_leases` — proven by a test where the stored counter claims exhaustion and is ignored), and the two declared ceilings (`connections.max_concurrency`, connection-specific `provider_capacity_limits`) reconcile strictest-wins. "Lease acquisition" needed no new machinery: the lease **is** the run lease. |
 | 32 | RLS prevents cross-user / org connection access | **PASS** | RLS + FORCE RLS on `connections` and `project_connections`; owner allowed / unrelated denied / anonymous denied proven in `tests/integration/github-rls-behavior.test.ts` and the lifecycle matrix. |
@@ -88,17 +88,24 @@ that turns that description into an authorized choice.
 | 35 | At least two distinct real connection identities proven | **BLOCKED** | Requires a second real account on some provider. Carried over from Phase 1B item 2. |
 | 36 | No paid AI-token dependency | **PASS** | Phase 1C is zero-token subscription Codex; `claude-cli-transport.ts` reaches Claude on the owner's subscription with a verified live canary. No paid key is a configuration field on either path. |
 
-## Score after loop 5 (2026-08-15, master loop iteration 15)
+## Score after loop 6 (2026-08-15, master loop iteration 16)
 
 Counted from the table above rather than carried forward — the loop 1 tally
 was off by one (row 28 was FAIL-ABSENT but not counted as such) and loops 2-4
 propagated the error. The table is the record; these are its true totals:
 
 - PASS: 23 of 36
-- PARTIAL: 10 of 36
-- FAIL (absent): 2 of 36 — goals 4, 29
+- PARTIAL: 12 of 36
+- FAIL (absent): 0 of 36
 - BLOCKED: 1 of 36 — goal 35
-- Weighted completion: **≈79%** (≈43% at audit, then ≈72% / ≈74% / ≈76% / ≈78% by loop, each about one row lower than stated at the time)
+- Weighted completion: **≈81%** (≈43% at audit, then ≈72% / ≈74% / ≈76% / ≈78% / ≈79% by loop)
+
+Nothing in the 2D scorecard is absent any more. Every remaining gap is either
+the live half of a structural PASS/PARTIAL (a second real account, a real
+Vercel/Supabase connection row, a first live graph run, the 2A execution
+switch — all owner decisions or owner-blocked), or the ambient-session rows
+(5, 6, 16, 33) whose resolution is a worker-architecture decision, not a
+missing binding.
 
 Loop 3 closed row 27: identity-routing decisions are durable, append-only
 evidence, recorded before they are acted on. Loop 4 closed row 31 partly by
