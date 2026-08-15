@@ -269,9 +269,25 @@ a real typecheck failure earlier in this work.
 
 ### Security — rotate these
 
-- [ ] **Rotate the `sb_secret_` Supabase key** exposed in a screenshot, and update the Vercel
-      environment variable.
-- [ ] **Rotate the `sbp_` Supabase personal access token** pasted into a session transcript.
+Both were tested against the live provider on 2026-08-15 11:49Z rather than assumed. One is
+closed and one is not, and the open one is the more dangerous of the two.
+
+- [x] **The `sb_secret_` Supabase service key is revoked.** Exposed in a screenshot. A request
+      carrying it now returns `401` from the project's REST API, so the rotation happened and the
+      old value is dead.
+- [ ] **The `sbp_` Supabase personal access token is STILL LIVE.** Pasted into a session
+      transcript, so it must be treated as public. `GET https://api.supabase.com/v1/projects`
+      carrying it returned **`200`**.
+      That is **account-level** Management API access, not project-scoped: it can enumerate every
+      project on the account, read and write configuration, and execute SQL. It is a strictly
+      wider credential than the service key that was correctly rotated.
+      Revoke it at **supabase.com/dashboard/account/tokens**. Nothing in this repository needs it —
+      the hosted audit below deliberately runs on the service-role key instead, precisely so that
+      verifying hosted state never requires a token like this one again.
+
+A note on how this was checked, because the method matters for the next one: confirming a leaked
+credential is dead is done by *using* it once and requiring a rejection. A credential assumed
+rotated because someone remembers rotating it is not rotated. This one was.
 
 ### AI providers — blocks every live Phase 2B demonstration
 
