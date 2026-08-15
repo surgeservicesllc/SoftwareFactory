@@ -296,3 +296,54 @@ So the first step of "Order of operations" above — re-list the remote ledger
 before trusting any documented position — is not optional caution here. Open
 the integrations page linked above, confirm what the integration is set to do
 on merge, and only then decide whether a manual push is needed at all.
+
+## The ledger drift blocking every apply, and the exact fix
+
+The Supabase integration's config-parse failure is fixed. It now reaches the
+migration comparison and fails there instead, on every merge to `main`:
+
+```
+Remote migration versions not found in local migrations directory.
+```
+
+That message names no version, so here is the derivation.
+
+Supabase's ledger keys on the **numeric version prefix** only. A migration
+renamed in a way that changes that prefix, *after* it was applied, leaves the
+old version in the remote ledger with no local file to match — which is exactly
+this error. Seven migration renames exist in this repository's history; six kept
+a prefix that still exists locally and are harmless. One did not:
+
+| Renamed from | Renamed to | Old prefix still present locally? |
+| --- | --- | --- |
+| `20260814002000_graph_engineering.sql` | `20260814000100_graph_engineering.sql` | **No** |
+
+`AI/HANDOFF.md` records that `graph_engineering` "was already hosted and could
+not move". If it was applied while still named `20260814002000`, the remote
+ledger holds `20260814002000`, no local file carries that prefix, and the
+comparison fails exactly as observed.
+
+**This is a derivation, not a measurement.** No credential in the agent
+environment can read the remote ledger, so confirm before acting:
+
+```bash
+supabase link --project-ref qpuofpmagrmyamahqwxw
+supabase migration list          # remote column should show 20260814002000
+```
+
+If it is there and `20260814000100` is not, the schema effect is already
+present and must not be re-run. Repair history only:
+
+```bash
+supabase migration repair --status reverted 20260814002000
+supabase migration repair --status applied  20260814000100
+supabase migration list          # re-list before trusting the result
+```
+
+If `migration list` shows something else, stop and re-derive — the table above
+is the only candidate this analysis produced, not a guarantee that it is the
+only one.
+
+Until this clears, **no migration reaches hosted by any path**: the integration
+fails at comparison, and a manual `db push` would be working from the same
+mismatched ledger.
