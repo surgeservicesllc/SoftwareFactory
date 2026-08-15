@@ -59,6 +59,27 @@ path, not the path itself.
 So the accurate statement is: **Phase 1B is connected to Supabase and running in production,
 with one hardening migration pending.** Not "not connected".
 
+## Does the one pending 1B migration cause a live defect? No — but it is latent
+
+Asked because "one migration pending" and "production is broken" are not the same thing, and the
+difference decides whether this is urgent.
+
+`20260814001100_harden_github_connection_loss.sql` fixes three shapes in
+`mark_github_connection_lost`. Each requires a specific state to manifest:
+
+| Defect | Manifests when | Currently? |
+| --- | --- | --- |
+| `suspended_at` left set on a move to `error`, so surfaces keep saying "suspended" after the real evidence was revocation | An installation is revoked or loses permission | **No** — installation `153479019` is healthy |
+| A terminally deleted installation aborts the call, and both callers swallow it, so a real discovery is recorded nowhere | A late loss discovery lands against an already-deleted installation | **No** — no terminal deletion has occurred |
+| An activity event written against `github_installation` with a null entity id | A GitHub connection exists with no installation row | **No** — the live connection has one |
+
+So the healthy path is production-ready and connected, and none of the three are firing today.
+
+That is not a reason to leave it. Every one of them is an **adverse-path truthfulness** defect —
+exactly the thing Phase 1B exists to get right — and each would be wrong the *first* time it
+occurred, which is the moment an operator most needs the surface to be accurate. It is latent,
+not harmless.
+
 ## New blocker found 2026-08-15: GitHub Actions cannot assign a runner
 
 Recorded here because it is not in any other document and it blocks verification of
