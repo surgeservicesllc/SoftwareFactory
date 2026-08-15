@@ -107,14 +107,27 @@ export function isDeploymentProviderConfigured(): boolean {
  */
 export async function listRecentDeployments(
   projectId: string,
-  options: { readonly target?: DeploymentTarget; readonly limit?: number } = {},
+  options: {
+    readonly target?: DeploymentTarget;
+    readonly limit?: number;
+    /**
+     * A connection-resolved credential from the Identity Router
+     * (`resolveDeploymentCredential`). When present it is used instead of the
+     * ambient token, which is what makes two Vercel accounts readable in one
+     * deployment: each read carries its own connection's token. Absent, the
+     * ambient `VERCEL_TOKEN` keeps working exactly as before Phase 2D.
+     */
+    readonly credential?: { readonly token: string };
+  } = {},
 ): Promise<DeploymentReadResult> {
-  const token = process.env.VERCEL_TOKEN;
+  const token = options.credential?.token ?? process.env.VERCEL_TOKEN;
   if (!token) {
     return {
       status: "not_connected",
       deployments: [],
-      reason: "No VERCEL_TOKEN is configured, so deployment state cannot be read.",
+      reason:
+        "No connection-resolved deployment credential was supplied and no ambient "
+        + "VERCEL_TOKEN is configured, so deployment state cannot be read.",
     };
   }
 
