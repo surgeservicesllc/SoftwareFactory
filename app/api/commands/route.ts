@@ -177,6 +177,27 @@ export async function POST(request: Request) {
     }
     if (identity.mode === "routed") {
       const routed = identity.result;
+      // The decision is durable evidence before it is acted on — a refusal is
+      // evidence on its own, and recording only selections would make the
+      // audit read as if the router never said no. A recording failure fails
+      // the submission: acting on an unrecorded decision would be exactly the
+      // unauditable routing this table exists to end.
+      const { error: decisionError } = await supabase.rpc(
+        "record_connection_routing_decision",
+        {
+          p_capability: "repository.write",
+          p_connection_id: routed.outcome === "SELECTED" ? routed.connectionId : null,
+          p_considered_count: routed.consideredCount,
+          p_decision: routed.outcome,
+          p_project_id: parsed.data.projectId,
+          p_refusal_code: routed.outcome === "REFUSED" ? routed.code : null,
+          p_rejected: routed.rejected,
+          p_used_fallback: routed.outcome === "SELECTED" ? routed.usedFallback : false,
+        },
+      );
+      if (decisionError) {
+        return databaseErrorResponse(decisionError);
+      }
       if (routed.outcome === "REFUSED") {
         return jsonNoStore(
           {
