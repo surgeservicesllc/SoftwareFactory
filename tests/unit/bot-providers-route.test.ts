@@ -28,15 +28,26 @@ beforeEach(() => {
     activeOrganization: { id: "org_1", role: "owner" },
     client: {},
   });
+  // The route probes present credentials, so an unstubbed fetch here would
+  // issue real requests to Anthropic and OpenAI from a unit test.
+  vi.stubGlobal("fetch", vi.fn(async () => ({
+    ok: true, status: 200, json: async () => ({ data: [] }),
+  })));
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
-async function readProviders() {
-  const response = await GET();
+/** The route reads `?refresh=1`, so every call needs a Request. */
+function probeRequest(refresh = false) {
+  return new Request(`https://factory.test/api/bots/providers${refresh ? "?refresh=1" : ""}`);
+}
+
+async function readProviders(refresh = false) {
+  const response = await GET(probeRequest(refresh));
   const body = (await response.json()) as {
     providers: Array<Record<string, unknown>>;
   };
@@ -146,7 +157,7 @@ describe("who may ask", () => {
       Object.assign(new Error("unauthorized"), { status: 401 }),
     );
 
-    const response = await GET();
+    const response = await GET(probeRequest());
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
@@ -156,5 +167,64 @@ describe("who may ask", () => {
     // Setup state changes the moment an operator sets a variable; a cached
     // "needs a key" would outlive the fix.
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+});
+
+describe("the live probe behind the badge", () => {
+  it("reports verified when the provider accepts the key", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-value");
+    const { body } = await readProviders(true);
+
+    expect(body.providers.find((entry) => entry.id === "anthropic")).toMatchObject({
+      credentialReady: true,
+      probeVerdict: "verified",
+      probeLive: true,
+    });
+  });
+
+  it("distinguishes a rejected key from an account with no credit", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-value");
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 401, json: async () => ({ error: { type: "authentication_error" } }),
+    })));
+    let body = (await readProviders(true)).body;
+    expect(body.providers.find((entry) => entry.id === "anthropic")?.probeVerdict)
+      .toBe("rejected");
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 402, json: async () => ({}),
+    })));
+    body = (await readProviders(true)).body;
+    // These need different fixes, so the badge must not merge them.
+    expect(body.providers.find((entry) => entry.id === "anthropic")?.probeVerdict)
+      .toBe("no_credit");
+  });
+
+  it("does not probe a provider whose key is absent", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { body } = await readProviders(true);
+
+    expect(body.providers.find((entry) => entry.id === "anthropic")).toMatchObject({
+      probeVerdict: "not_configured", probeLive: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("never returns the key or a provider error body alongside the verdict", async () => {
+    const secret = "sk-ant-super-secret-0123456789";
+    vi.stubEnv("ANTHROPIC_API_KEY", secret);
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 401,
+      json: async () => ({ error: { message: `bad key ${secret}` } }),
+    })));
+
+    const { body } = await readProviders(true);
+
+    expect(JSON.stringify(body)).not.toContain(secret);
+    expect(JSON.stringify(body)).not.toContain("bad key");
   });
 });

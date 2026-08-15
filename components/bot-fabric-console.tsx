@@ -649,9 +649,10 @@ function PostingCard({
 /**
  * What the server knows about each provider's setup.
  *
- * `credentialReady` means a variable is populated — not that the key works.
- * The naming is deliberate and the interface keeps the distinction: nothing
- * here is allowed to render the word "Connected" off a presence check.
+ * `credentialReady` means a variable is populated. `probeVerdict` is what the
+ * provider said when asked, and only `verified` means the bot could actually
+ * run. The interface keeps the two separate: a present key that the provider
+ * rejects must never render as ready.
  */
 type ProviderSetup = {
   id: string;
@@ -665,19 +666,60 @@ type ProviderSetup = {
   credentialRef: string | null;
   credentialReady: boolean;
   credentialOptional: boolean;
+  probeVerdict:
+    | "verified" | "rejected" | "no_credit" | "rate_limited"
+    | "unreachable" | "not_configured" | "not_probed";
+  probeReason: string | null;
+  probeLive: boolean;
   requiresBaseUrl: boolean;
   docsUrl: string;
   apiKeyUrl: string | null;
 };
 
+/**
+ * How a verdict reads on a tile.
+ *
+ * Every non-verified state is visually distinct from verified, because the
+ * whole point of probing is that "a key is present" and "the key works" are
+ * different facts. A rejected key and an exhausted balance get different words
+ * too: they need different fixes.
+ */
+function providerBadge(state: ProviderSetup) {
+  switch (state.probeVerdict) {
+    case "verified":
+      return { label: "Verified", Icon: CheckCircle2, className: "text-[var(--success)]" };
+    case "rejected":
+      return { label: "Key rejected", Icon: CircleSlash, className: "text-[var(--danger)]" };
+    case "no_credit":
+      return { label: "No credit", Icon: CircleSlash, className: "text-[var(--danger)]" };
+    case "rate_limited":
+      return { label: "Throttled", Icon: RefreshCw, className: "text-[var(--warning)]" };
+    case "unreachable":
+      return { label: "Unreachable", Icon: RefreshCw, className: "text-[var(--warning)]" };
+    case "not_probed":
+      return { label: "Key detected", Icon: KeyRound, className: "text-[var(--text-muted)]" };
+    default:
+      return { label: "Needs a key", Icon: KeyRound, className: "text-[var(--text-faint)]" };
+  }
+}
+
+/** Only a verified provider can actually run a bot. */
+function isProviderUsable(state: ProviderSetup) {
+  return state.credentialOptional || state.probeVerdict === "verified"
+    || state.probeVerdict === "not_probed";
+}
+
 function useProviderSetup() {
   const [providers, setProviders] = useState<ProviderSetup[] | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (refresh = false) => {
     setChecking(true);
     try {
-      const response = await fetch("/api/bots/providers", { cache: "no-store" });
+      const response = await fetch(
+        `/api/bots/providers${refresh ? "?refresh=1" : ""}`,
+        { cache: "no-store" },
+      );
       if (!response.ok) {
         setProviders([]);
         return;
@@ -748,8 +790,16 @@ function ProviderSetupSteps({
   return (
     <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4">
       <p className="text-sm font-medium text-[var(--text)]">
-        Two steps and {provider.label} is ready
+        {provider.probeVerdict === "not_configured"
+          ? `Two steps and ${provider.label} is ready`
+          : `${provider.vendor} could not use this key`}
       </p>
+
+      {provider.probeReason && provider.probeVerdict !== "not_configured" ? (
+        // The provider's own verdict, so nobody re-issues a working key because
+        // the real problem was an empty balance or a busy endpoint.
+        <p className="mt-2 text-sm text-[var(--warning)]">{provider.probeReason}</p>
+      ) : null}
 
       <ol className="mt-3 space-y-3 text-sm text-[var(--text-muted)]">
         <li className="flex flex-wrap items-center gap-2">
@@ -820,7 +870,10 @@ function BotDirectory({
   const modelListId = "bot-model-suggestions";
   // Nothing is typed for a ready provider: the name, model and variable are all
   // known. The form below only appears when something genuinely needs a choice.
-  const needsSetup = Boolean(setup && !setup.credentialReady && !setup.credentialOptional);
+  // Gated on the verdict, not on presence. A key the provider rejects cannot
+  // run a bot, so registering against it would create a record that looks ready
+  // and is not.
+  const needsSetup = Boolean(setup && !isProviderUsable(setup));
 
   return (
     <div className="space-y-5">
@@ -875,15 +928,11 @@ function BotDirectory({
                   if (state.credentialOptional) {
                     return <span className="text-xs text-[var(--text-faint)]">No key needed</span>;
                   }
-                  return state.credentialReady ? (
-                    <span className="flex items-center gap-1 text-xs text-[var(--success)]">
-                      <CheckCircle2 className="size-3" aria-hidden="true" />
-                      Key detected
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-xs text-[var(--text-faint)]">
-                      <KeyRound className="size-3" aria-hidden="true" />
-                      Needs a key
+                  const badge = providerBadge(state);
+                  return (
+                    <span className={cn("flex items-center gap-1 text-xs", badge.className)}>
+                      <badge.Icon className="size-3" aria-hidden="true" />
+                      {badge.label}
                     </span>
                   );
                 })()}
@@ -924,7 +973,11 @@ function BotDirectory({
               <p className="text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
 
               {needsSetup && setup ? (
-                <ProviderSetupSteps provider={setup} onRecheck={() => void check()} checking={checking} />
+                <ProviderSetupSteps
+                  provider={setup}
+                  onRecheck={() => void check(true)}
+                  checking={checking}
+                />
               ) : null}
 
               {setup && !needsSetup ? (
@@ -933,7 +986,9 @@ function BotDirectory({
                   <span className="text-sm text-[var(--text)]">
                     {setup.credentialOptional
                       ? `${provider.label} needs no key. Ready to register as ${draft.model}.`
-                      : `${setup.credentialRef} is set. Ready to register ${provider.label} as ${draft.model}.`}
+                      : setup.probeVerdict === "verified"
+                        ? `${provider.vendor} verified this key. Ready to register ${provider.label} as ${draft.model}.`
+                        : `${setup.credentialRef} is set. Ready to register ${provider.label} as ${draft.model}.`}
                   </span>
                 </div>
               ) : null}

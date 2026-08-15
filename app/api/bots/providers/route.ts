@@ -1,55 +1,109 @@
 import { BOT_PROVIDERS } from "@/lib/bots/catalog";
 import { isCredentialPresent } from "@/lib/bots/credentials";
+import { probeProviderCredential, type ProbeResult } from "@/lib/bots/provider-probe";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore } from "@/lib/server/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 /**
- * Which providers are already set up on this server.
+ * Which providers are set up, and whether their keys actually work.
  *
- * This is what turns registering a bot from a typing exercise into a click: the
- * console can say "Claude is ready" instead of asking someone to remember that
- * the variable is spelled `ANTHROPIC_API_KEY`.
+ * Presence alone was never enough to justify a badge: a revoked key and a
+ * healthy one look identical until something calls the provider. So this also
+ * probes, using unbilled model-list endpoints, and reports what the provider
+ * said.
  *
- * The response is deliberately, boringly boolean. `isCredentialPresent` reads
- * the variable only to test it for a non-empty string, and nothing here returns
- * a value, a prefix, a length, or a hash. A length would narrow which key it is;
- * a prefix would identify the account. Presence is the entire useful signal and
- * also the entire safe one.
+ * Two costs are managed here rather than in the client.
  *
- * `credentialReady` is not a claim that the credential *works*. It says a
- * variable is populated. A revoked or credit-exhausted key is indistinguishable
- * from a good one without calling the provider, so the field is named for what
- * it actually knows and the interface must not relabel it "Connected".
+ * **Money.** None. Model-list endpoints consume no tokens, so checking often
+ * cannot turn into spend.
+ *
+ * **Rate limits.** Real. A probe is a live request, and a console that
+ * re-rendered would issue ten of them. Verdicts are therefore cached briefly,
+ * and only credentials that are actually present are probed — a provider with
+ * no key cannot be verified and asking would be a guaranteed 401.
+ *
+ * The response never carries a credential value, prefix, length, or hash. It
+ * carries a verdict and a sentence.
  */
 
 export const runtime = "nodejs";
 
-export async function GET() {
+const PROBE_CACHE_TTL_MS = 60_000;
+
+type CacheEntry = { readonly result: ProbeResult; readonly expiresAt: number };
+
+/**
+ * Per-instance and deliberately simple.
+ *
+ * A serverless instance may be recycled, which costs an extra probe and nothing
+ * else. The cache exists to stop a re-rendering console from issuing a burst,
+ * not to be a source of truth — `?refresh=1` bypasses it so a person who just
+ * set a key is never told stale news.
+ */
+const probeCache = new Map<string, CacheEntry>();
+
+async function resolveProbe(
+  providerId: string,
+  credentialRef: string | null,
+  refresh: boolean,
+): Promise<ProbeResult> {
+  const now = Date.now();
+  const cached = probeCache.get(providerId);
+  if (!refresh && cached && cached.expiresAt > now) return cached.result;
+
+  const result = await probeProviderCredential(
+    providerId as Parameters<typeof probeProviderCredential>[0],
+    credentialRef,
+  );
+  probeCache.set(providerId, { result, expiresAt: now + PROBE_CACHE_TTL_MS });
+  return result;
+}
+
+export async function GET(request: Request) {
   try {
     // Membership is required: knowing which providers an organization has
     // configured is itself information about that organization.
     await requireActiveOrganization();
 
-    return jsonNoStore({
-      providers: BOT_PROVIDERS.map((provider) => ({
-        id: provider.id,
-        label: provider.label,
-        vendor: provider.vendor,
-        monogram: provider.monogram,
-        accent: provider.accent,
-        summary: provider.summary,
-        suggestedModels: provider.suggestedModels,
-        defaultModel: provider.suggestedModels[0] ?? null,
-        credentialRef: provider.defaultCredentialRef,
-        credentialReady: isCredentialPresent(provider.defaultCredentialRef),
-        /** True when the provider needs no credential at all. */
-        credentialOptional: provider.defaultCredentialRef === null,
-        requiresBaseUrl: provider.requiresBaseUrl,
-        docsUrl: provider.docsUrl,
-        apiKeyUrl: provider.apiKeyUrl,
-      })),
-    });
+    const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+
+    const providers = await Promise.all(
+      BOT_PROVIDERS.map(async (provider) => {
+        const credentialReady = isCredentialPresent(provider.defaultCredentialRef);
+
+        // Only present credentials are probed. Probing an absent one is a
+        // guaranteed rejection that would read as "your key is bad" when the
+        // truth is "you have not set one".
+        const probe = credentialReady
+          ? await resolveProbe(provider.id, provider.defaultCredentialRef, refresh)
+          : null;
+
+        return {
+          id: provider.id,
+          label: provider.label,
+          vendor: provider.vendor,
+          monogram: provider.monogram,
+          accent: provider.accent,
+          summary: provider.summary,
+          suggestedModels: provider.suggestedModels,
+          defaultModel: provider.suggestedModels[0] ?? null,
+          credentialRef: provider.defaultCredentialRef,
+          credentialReady,
+          credentialOptional: provider.defaultCredentialRef === null,
+          /** `verified` is the only verdict that means the bot could run. */
+          probeVerdict: probe?.verdict ?? (credentialReady ? "not_probed" : "not_configured"),
+          probeReason: probe?.reason ?? null,
+          /** False when the verdict came from local state rather than the provider. */
+          probeLive: probe?.live ?? false,
+          requiresBaseUrl: provider.requiresBaseUrl,
+          docsUrl: provider.docsUrl,
+          apiKeyUrl: provider.apiKeyUrl,
+        };
+      }),
+    );
+
+    return jsonNoStore({ providers });
   } catch (error) {
     return botFabricErrorResponse(
       error,
