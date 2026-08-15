@@ -22,6 +22,12 @@ async function main() {
   }
 
   const configuration = readWorkerConfiguration();
+  // Reported before any other check. Authentication is the part of this setup
+  // an operator is most likely to get wrong, and a failure further down — an
+  // unavailable Docker image, an unreachable database — would otherwise leave
+  // them unable to tell whether their credential was even accepted.
+  process.stdout.write(`${describeCodexAuth(configuration.codexAuth)}\n`);
+
   const store = SupabaseWorkerStore.create({
     url: configuration.supabaseUrl,
     serviceRoleKey: configuration.supabaseServiceRoleKey,
@@ -33,7 +39,6 @@ async function main() {
   try {
     const validator = new DeterministicValidator();
     await validator.assertAvailable(configuration.workRoot);
-    process.stdout.write(`${describeCodexAuth(configuration.codexAuth)}\n`);
     const codex = await CodexSdkAdapter.create(configuration.codexAuth);
     const worker = new SoftwareFactoryWorker(configuration.workerId, configuration.heartbeatMs, {
       store,

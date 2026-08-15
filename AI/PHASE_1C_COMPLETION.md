@@ -158,6 +158,62 @@ and no code change substitutes for it.
   canary — command → `factory/*` branch → commit → draft PR — with no `api.openai.com` request in
   the run is the acceptance proof.
 
+**The credential alone is not enough to make anything run.** `.github/workflows/codex-worker.yml`
+gates every job on `if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' }}`. While that
+variable is absent, a dispatched run is *skipped silently* — no error, no failed job, nothing in
+the log to explain it. Configuring the secret and dispatching without setting it produces a
+workflow page that simply shows nothing happened.
+
+- **Service/page:** GitHub → repository **Settings** → **Secrets and variables** → **Actions** →
+  the **Variables** tab. This is a different tab from Secrets, and the value is a variable rather
+  than a secret; setting it in the wrong tab leaves the gate unsatisfied with no diagnostic.
+- **Name and value:** `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` = `true`. Not secret — it is an
+  on/off switch, and its value appears in workflow logs.
+- **Afterwards:** return it to `false` or delete it once the canary is done. It is the activation
+  switch for a worker that can create branches and draft pull requests, and it should not be left
+  on between deliberate runs. `AI/CURRENT_STATE.md` records the intended resting state as
+  absent/OFF.
+
+Ordering matters: set the secret first, then the variable, then dispatch. A run that starts
+without the credential consumes a durable attempt before failing.
+
+### How the worker is actually triggered
+
+Two facts about `codex-worker.yml` that change what you have to do, neither of which was written
+down before.
+
+**You probably do not need to dispatch anything.** The workflow carries
+`schedule: cron "*/5 * * * *"`. Once the activation variable is `true`, a run starts every five
+minutes on its own and claims whatever work is queued. Submitting a command and waiting is the
+normal path.
+
+**The preflight cannot be triggered from the GitHub web interface.** It is a
+`repository_dispatch` event, and GitHub offers no button for those — only `workflow_dispatch`
+appears in the Actions UI, and this workflow does not declare one. The no-claim preflight
+therefore requires an API call with a token that has `repo` scope:
+
+```
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer <token>" \
+  https://api.github.com/repos/surgeservicesllc/SoftwareFactory/dispatches \
+  -d '{"event_type":"softwarefactory_phase1c_preflight"}'
+```
+
+**Actions minutes, measured rather than calculated.** An earlier version of this section warned
+that the five-minute cron costs roughly 288 Actions minutes a day. That was arithmetic from the
+cron expression, and checking the run history refutes it on two counts.
+
+Every scheduled run while the activation variable is unset completes as **skipped** — the job's
+`if` gate is false, so no runner is allocated and no minutes are billed. And GitHub throttles
+scheduled workflows well below their declared cadence on repositories like this one: the observed
+interval is roughly hourly, not five-minutely.
+
+So the cron is not consuming quota today, and it is not a contributor to the Actions exhaustion
+this repository is currently under. The cost only begins when the activation variable is `true`,
+and then each run does real work rather than skipping. Turning it off after a canary is still
+right, but for the authority reason rather than a billing one.
+
 ### What the preflight will tell you, verified 2026-08-14
 
 Each case was executed against the real script, not described from the code.
