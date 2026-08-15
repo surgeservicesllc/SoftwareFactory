@@ -43,6 +43,12 @@ export type BotProvider = {
   /** Whether a bot on this provider must carry its own endpoint. */
   requiresBaseUrl: boolean;
   docsUrl: string;
+  /**
+   * The exact page that issues a key, so setup is a link rather than a hunt.
+   * `null` where the provider issues no key (a self-hosted gateway) or where
+   * the operator chooses the endpoint themselves.
+   */
+  apiKeyUrl: string | null;
 };
 
 export const BOT_PROVIDERS: readonly BotProvider[] = [
@@ -57,6 +63,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "ANTHROPIC_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://platform.claude.com/docs",
+    apiKeyUrl: "https://platform.claude.com/settings/keys",
   },
   {
     id: "openai",
@@ -69,6 +76,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "OPENAI_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://platform.openai.com/docs",
+    apiKeyUrl: "https://platform.openai.com/api-keys",
   },
   {
     id: "google",
@@ -81,6 +89,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "GEMINI_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://ai.google.dev/gemini-api/docs",
+    apiKeyUrl: "https://aistudio.google.com/apikey",
   },
   {
     id: "xai",
@@ -93,6 +102,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "XAI_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://docs.x.ai",
+    apiKeyUrl: "https://console.x.ai",
   },
   {
     id: "mistral",
@@ -105,6 +115,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "MISTRAL_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://docs.mistral.ai",
+    apiKeyUrl: "https://console.mistral.ai/api-keys",
   },
   {
     id: "deepseek",
@@ -117,6 +128,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "DEEPSEEK_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://api-docs.deepseek.com",
+    apiKeyUrl: "https://platform.deepseek.com/api_keys",
   },
   {
     id: "groq",
@@ -129,6 +141,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "GROQ_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://console.groq.com/docs",
+    apiKeyUrl: "https://console.groq.com/keys",
   },
   {
     id: "openrouter",
@@ -141,6 +154,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "OPENROUTER_API_KEY",
     requiresBaseUrl: false,
     docsUrl: "https://openrouter.ai/docs",
+    apiKeyUrl: "https://openrouter.ai/settings/keys",
   },
   {
     id: "selfhosted",
@@ -153,6 +167,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: null,
     requiresBaseUrl: true,
     docsUrl: "https://docs.vllm.ai",
+    apiKeyUrl: null,
   },
   {
     id: "custom",
@@ -165,6 +180,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     defaultCredentialRef: "BOT_CREDENTIAL_CUSTOM",
     requiresBaseUrl: true,
     docsUrl: "https://platform.openai.com/docs/api-reference",
+    apiKeyUrl: null,
   },
 ];
 
