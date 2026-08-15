@@ -200,12 +200,19 @@ curl -X POST \
   -d '{"event_type":"softwarefactory_phase1c_preflight"}'
 ```
 
-**Warning about Actions minutes.** A five-minute cron is 288 runs per day. Each exits quickly
-when no work is queued, but the billable floor is one minute per run, so leaving the activation
-variable on costs roughly 288 Actions minutes a day whether or not anything is claimed. That is
-the strongest practical reason to return it to `false` after a canary, beyond the authority
-argument — and it matters immediately, because Actions minutes on this repository are currently
-exhausted.
+**Actions minutes, measured rather than calculated.** An earlier version of this section warned
+that the five-minute cron costs roughly 288 Actions minutes a day. That was arithmetic from the
+cron expression, and checking the run history refutes it on two counts.
+
+Every scheduled run while the activation variable is unset completes as **skipped** — the job's
+`if` gate is false, so no runner is allocated and no minutes are billed. And GitHub throttles
+scheduled workflows well below their declared cadence on repositories like this one: the observed
+interval is roughly hourly, not five-minutely.
+
+So the cron is not consuming quota today, and it is not a contributor to the Actions exhaustion
+this repository is currently under. The cost only begins when the activation variable is `true`,
+and then each run does real work rather than skipping. Turning it off after a canary is still
+right, but for the authority reason rather than a billing one.
 
 ### What the preflight will tell you, verified 2026-08-14
 
