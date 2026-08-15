@@ -92,6 +92,24 @@ this session.
 - **Use a provider key pasted into chat.** One was pasted this session; it is
   compromised by having been pasted and must be rotated, never installed.
 
+## BLOCKER 2026-08-15: GitHub Actions has no runners
+
+Both required CI jobs fail three seconds after creation with `runner_id: 0` and no runner name.
+Reproduced with a deliberate re-run (run `31853623402`). Workflow YAML is valid and unchanged;
+the same tree passes lint, typecheck, 1748 tests and a clean build locally.
+
+This is account-level — check Actions minutes / billing at <https://github.com/settings/billing>.
+
+Two consequences worth stating plainly:
+
+- **No PR can be gated normally.** PR #40 was merged on local gate evidence, and its merge commit
+  says so rather than implying CI passed. Any agent that sees "checks never appeared" should
+  suspect this before suspecting its own change — though note the *other* cause of missing checks
+  is an unmergeable head, which looks identical from a distance.
+- **The Phase 1C live canary cannot run**, because it runs on Actions. The zero-token Codex
+  credential and working runners are independent blockers; both must clear before 1C can produce
+  a live branch, commit and draft PR.
+
 ## Ground rules (from `AGENTS.md` — read it before editing)
 
 - Truthful labels only. **Demo Data** for seeded values, **Not Connected** for absent providers.

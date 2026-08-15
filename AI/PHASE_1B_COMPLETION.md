@@ -26,6 +26,29 @@ and the class is stated explicitly so nothing reads as more proven than it is.
 | `npx vitest run` | PASS — 1712 tests across 152 files on the merged tree |
 | `npm run build` | PASS |
 
+## New blocker found 2026-08-15: GitHub Actions cannot assign a runner
+
+Recorded here because it is not in any other document and it blocks verification of
+everything below, not just Phase 1B.
+
+Both required CI jobs now fail **three seconds** after creation with `runner_id: 0` and an
+empty `runner_name` — no runner is ever assigned. A `rerun_failed_jobs` reproduced it exactly
+(runs `31853623402`, jobs `94934079261` / `94934079132`). The workflow YAML parses and is
+unchanged, and the same tree passes every gate locally: lint, typecheck, 1748 tests across 158
+files, clean production build.
+
+This is an account-level GitHub Actions problem — most likely exhausted included minutes or a
+billing hold — and it corroborates the earlier note that automatic CI had not fired on a pull
+request since 2026-08-13 19:32Z.
+
+Why it matters beyond CI: **the Phase 1C live canary runs on GitHub Actions.** Even once the
+zero-token Codex subscription credential is configured, no canary can execute until runners are
+available again. The two blockers are independent and both must clear.
+
+**Owner action:** open <https://github.com/settings/billing> (or the organization's billing
+page) and check Actions minutes and payment status. Verify by re-running any failed job and
+confirming it reaches a runner rather than failing in seconds.
+
 ## Scorecard
 
 | # | Goal item | Score | Evidence |
