@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -341,7 +342,12 @@ export function PortfolioConsole() {
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-col">
-                      <span className="font-medium">{project.name}</span>
+                      <Link
+                        href={`/solutions/portfolio/${project.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {project.name}
+                      </Link>
                       <span className="text-xs text-muted">
                         {project.repository ?? "No repository bound"}
                       </span>
