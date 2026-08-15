@@ -1,0 +1,36 @@
+name: Phase 2A Claude worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Verify Claude subscription authentication
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      CI: true
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Verify Claude Code
+        run: claude --version
+
+      - name: Verify Claude OAuth authentication
+        run: |
+          claude -p "Reply with exactly: CLAUDE_OAUTH_OK"
