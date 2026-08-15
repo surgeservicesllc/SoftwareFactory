@@ -245,3 +245,76 @@ describe("the phase2c repair", () => {
     await db.close();
   }, 300_000);
 });
+
+/**
+ * `scripts/hosted-ledger-record-verified.sql` writes ledger rows, which is the
+ * one operation in this repair sequence that cannot be undone by pushing.
+ *
+ * Recording a version whose objects are missing makes `supabase db push` skip
+ * that migration forever: it reads as applied, so it is never run, and nothing
+ * short of deleting the row brings it back. The file is written so that outcome
+ * is unreachable rather than merely discouraged — it recomputes presence from
+ * the catalogue and its `where` clause cannot select an incomplete version.
+ *
+ * That is a safety property, so it is tested by trying to violate it.
+ */
+describe("the verified ledger recorder", () => {
+  async function recorderSql(): Promise<string> {
+    const raw = await readFile(
+      resolve(repositoryRoot, "scripts/hosted-ledger-record-verified.sql"),
+      "utf8",
+    );
+    return raw.slice(0, raw.indexOf("-- Confirm."));
+  }
+
+  async function bootstrapWithLedger(): Promise<PGlite> {
+    const db = await bootstrap();
+    await db.exec(`
+      create schema if not exists supabase_migrations;
+      create table supabase_migrations.schema_migrations (version text primary key);
+    `);
+    await applyChain(db);
+    return db;
+  }
+
+  async function ledgerCount(db: PGlite): Promise<number> {
+    const { rows } = await db.query<{ count: number }>(
+      "select count(*)::int as count from supabase_migrations.schema_migrations",
+    );
+    return rows[0].count;
+  }
+
+  it("records every fully-present migration, and stays put on a second run", async () => {
+    const db = await bootstrapWithLedger();
+    const sql = await recorderSql();
+
+    await db.exec(sql);
+    const first = await ledgerCount(db);
+    expect(first).toBeGreaterThan(0);
+
+    await db.exec(sql);
+    expect(await ledgerCount(db)).toBe(first);
+
+    await db.close();
+  }, 300_000);
+
+  it("refuses to record a version whose objects are not all there", async () => {
+    const db = await bootstrapWithLedger();
+    const sql = await recorderSql();
+    await db.exec(sql);
+
+    // Make 20260814002200 incomplete — three of its four tables — and forget it.
+    await db.exec("drop table public.claim_anchors cascade;");
+    await db.exec("delete from supabase_migrations.schema_migrations where version = '20260814002200';");
+
+    await db.exec(sql);
+
+    const { rows } = await db.query(
+      "select 1 from supabase_migrations.schema_migrations where version = '20260814002200'",
+    );
+    // Recording it here would make `db push` skip it permanently.
+    expect(rows, "an incomplete migration was recorded as applied").toEqual([]);
+
+    await db.close();
+  }, 300_000);
+});
