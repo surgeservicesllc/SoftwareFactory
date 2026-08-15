@@ -81,23 +81,28 @@ that turns that description into an authorized choice.
 | 28 | 2A provider routing integrates with Identity Router | **PARTIAL (loop 2)** | The seam now exists where connections are actually chosen: `POST /api/commands` consults `routeConnectionIdentity` with `repository.write` before persisting. For a project with capability-labelled mappings the router is binding — a refusal refuses the command (409, router's named reason), a selection disagreeing with the resolved primary binding is surfaced as a contradiction (409, never a tiebreak), and a registry read failure fails closed (503) instead of degrading to the unrouted path. Legacy projects proceed exactly as before and the response says so (`connectionRouting.mode: "legacy"`). Five route tests. Remaining for PASS: the 2A provider-selection module itself still never consults connection identity (its live path is OFF by owner decision), and no real project mapping is capability-labelled yet. |
 | 29 | 2B graph nodes resolve connections through router | **FAIL — ABSENT** | `lib/graph/` resolves providers, not connections. |
 | 30 | 2C portfolio shows connection / account health per project | **PARTIAL** | Portfolio surfaces project health. Per-project connection identity and health are not shown, because a project's connection set is not capability-labelled. |
-| 31 | Concurrency / rate / capacity limits enforced | **PARTIAL (loop 1)** | `max_concurrency` / `active_leases` exist, the database refuses to record more work than the ceiling, and the router refuses an exhausted connection (`CAPACITY_EXHAUSTED`). **Lease acquisition and queueing are not built**, so nothing yet increments the counter. |
+| 31 | Concurrency / rate / capacity limits enforced | **PASS (loop 4)** | Re-scored against the Phase 2E scheduler, which landed after this audit: `portfolio_capacity_verdict` enforces a connection-specific ceiling at claim time, counted live from running runs with unexpired leases — self-correcting on lease expiry, which a stored counter structurally cannot be. The previously untested connection-level branch is now proven end-to-end (`phase2e-portfolio-scheduling.behavior.test.ts`: withheld at ceiling with the audited reason, neighbour unaffected, released with capacity). The router's capacity input is the same live count (`routable-candidates.ts` counts `agent_runs`, never `active_leases` — proven by a test where the stored counter claims exhaustion and is ignored), and the two declared ceilings (`connections.max_concurrency`, connection-specific `provider_capacity_limits`) reconcile strictest-wins. "Lease acquisition" needed no new machinery: the lease **is** the run lease. |
 | 32 | RLS prevents cross-user / org connection access | **PASS** | RLS + FORCE RLS on `connections` and `project_connections`; owner allowed / unrelated denied / anonymous denied proven in `tests/integration/github-rls-behavior.test.ts` and the lifecycle matrix. |
 | 33 | Workers receive only target-project credentials / context | **PARTIAL** | GitHub tokens are repository-scoped per request. Worker sessions are ambient, so scoping is by process, not by project. |
 | 34 | Hosted schema / RLS / indexes support multi-account operation | **PARTIAL (loop 1)** | The schema now expresses capability, health and capacity, with two routing indexes. Verified on a real PostgreSQL 16.13 cluster: 65 migrations apply, 0 of 103 tables missing RLS/FORCE RLS, `service_role` still on exactly four tables. **Unhosted** — no Supabase credential exists in this environment. |
 | 35 | At least two distinct real connection identities proven | **BLOCKED** | Requires a second real account on some provider. Carried over from Phase 1B item 2. |
 | 36 | No paid AI-token dependency | **PASS** | Phase 1C is zero-token subscription Codex; `claude-cli-transport.ts` reaches Claude on the owner's subscription with a verified live canary. No paid key is a configuration field on either path. |
 
-## Score after loop 3 (2026-08-15, master loop iteration 13)
+## Score after loop 4 (2026-08-15, master loop iteration 14)
 
-- PASS: 21 of 36
-- PARTIAL: 12 of 36
+- PASS: 22 of 36
+- PARTIAL: 11 of 36
 - FAIL (absent): 2 of 36 — goals 3, 4, 29
 - BLOCKED: 1 of 36 — goal 35
-- Weighted completion: **≈76%** (≈43% at audit, ≈72% after loop 1, ≈74% after loop 2)
+- Weighted completion: **≈78%** (≈43% at audit, then ≈72% / ≈74% / ≈76% by loop)
 
 Loop 3 closed row 27: identity-routing decisions are durable, append-only
-evidence, recorded before they are acted on.
+evidence, recorded before they are acted on. Loop 4 closed row 31 partly by
+re-audit — the 2E scheduler that landed after this audit already enforces
+connection ceilings at claim time from live run counts — and partly by
+repairing the router's capacity input to read that same live count instead
+of the drift-prone stored counter, with the strictest of the two declared
+ceilings.
 
 Loop 2 closed the seam row 28 named as absent: the Identity Router is now
 consulted where work is created (`POST /api/commands`), binding for

@@ -81,6 +81,7 @@ function registryTable(rows: RegistryRow[] | null, error: { message: string } | 
   const builder = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
+    gt: vi.fn(() => builder),
     in: vi.fn(() => builder),
     then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
   };
@@ -97,6 +98,10 @@ function configuredClient(options: {
   registryError?: boolean;
   /** Make record_connection_routing_decision fail. */
   decisionError?: boolean;
+  /** Running agent_runs rows counted as live leases. */
+  runningRunRows?: RegistryRow[];
+  /** Connection-specific provider_capacity_limits rows. */
+  capacityLimitRows?: RegistryRow[];
 }) {
   const submission = {
     command_id: commandId,
@@ -132,6 +137,10 @@ function configuredClient(options: {
       ]);
     }
     if (table === "connections") return registryTable(options.connectionRows ?? []);
+    if (table === "agent_runs") return registryTable(options.runningRunRows ?? []);
+    if (table === "provider_capacity_limits") {
+      return registryTable(options.capacityLimitRows ?? []);
+    }
     throw new Error(`Unexpected table ${table}`);
   });
   requireActiveOrganization.mockResolvedValue({
@@ -490,6 +499,59 @@ describe("POST /api/commands", () => {
     });
     expect(createGitHubInstallationToken).not.toHaveBeenCalled();
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connection at its scheduler ceiling, counted from live runs", async () => {
+    // One connection-specific ceiling of 1 in provider_capacity_limits, one
+    // running run on that connection. The router's capacity input is the live
+    // run count — the same number the claim path enforces — so the routed
+    // submission is refused CAPACITY_EXHAUSTED before anything persists.
+    const rpc = configuredClient({
+      capacityLimitRows: [
+        { connection_id: target.connection_id, maximum_concurrent_runs: 1 },
+      ],
+      connectionRows: [routableConnection(target.connection_id)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+      runningRunRows: [{ connection_id: target.connection_id }],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", expect.objectContaining({
+      p_decision: "REFUSED",
+      p_refusal_code: "CAPACITY_EXHAUSTED",
+    }));
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("ignores the stored active_leases counter in favour of the live count", async () => {
+    // The stored counter cannot decay when a lease expires, so it is never
+    // consulted. A connection whose stored counter claims exhaustion but has
+    // no live running runs is routable.
+    configuredClient({
+      capacityLimitRows: [
+        { connection_id: target.connection_id, maximum_concurrent_runs: 1 },
+      ],
+      connectionRows: [
+        routableConnection(target.connection_id, { active_leases: 99, max_concurrency: 1 }),
+      ],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+      runningRunRows: [],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: { connectionId: target.connection_id, mode: "routed" },
+      },
+    });
   });
 
   it("fails closed when the connection registry cannot be read", async () => {

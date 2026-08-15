@@ -1904,3 +1904,64 @@ describe("cross-project work exists only through an explicit dependency", { time
     }
   });
 });
+
+describe("a connection-specific ceiling binds one account, not the portfolio", { timeout: 180_000 }, () => {
+  /**
+   * 2D goal 31, proven at the boundary that enforces it. The verdict's
+   * connection-level branch was the one ceiling no test exercised: a
+   * `provider_capacity_limits` row naming a connection caps work bound to
+   * that connection at claim time, counted live from running runs with
+   * unexpired leases — while the neighbour project's own connection keeps
+   * working and the capped work stays queued, starting the moment the
+   * connection's slot frees.
+   */
+  it("withholds work at the connection's ceiling and releases it with capacity", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_provider_capacity_limit($1::uuid,'openai',1::smallint,$2::uuid)",
+        [organizationId, alpha.connectionId],
+      );
+
+      const alphaFirst = await submit(db, alpha, "conn-ceiling-a1", "build_feature", "backend");
+      const alphaSecond = await submit(db, alpha, "conn-ceiling-a2", "build_feature", "frontend");
+      const betaFirst = await submit(db, beta, "conn-ceiling-b1", "build_feature", "backend");
+      await registerWorker(db, "conn-ceiling-worker", 3);
+
+      // Alpha's first run occupies the connection's single slot.
+      const first = await claim(db, "conn-ceiling-worker");
+      expect(first).not.toBeNull();
+      expect(first!.task_id).toBe(alphaFirst.task_id);
+
+      // Alpha's second task is older than Beta's, but its connection is at
+      // ceiling — the scheduler passes over it and hands out Beta's work.
+      const second = await claim(db, "conn-ceiling-worker");
+      expect(second).not.toBeNull();
+      expect(second!.task_id).toBe(betaFirst.task_id);
+      expect(await claim(db, "conn-ceiling-worker")).toBeNull();
+
+      // The pass-over is audited with the ceiling that caused it.
+      await db.exec("reset role");
+      const withheld = await db.query<{ reason: string }>(
+        `select reason from public.scheduling_decisions
+         where decision = 'withheld' and project_id = $1`,
+        [alpha.projectId],
+      );
+      expect(
+        withheld.rows.some((row) => row.reason.includes("Connection is at its concurrency ceiling")),
+      ).toBe(true);
+
+      // Releasing the slot releases exactly the capped work.
+      await finish(db, "conn-ceiling-worker", first!);
+      const freed = await claim(db, "conn-ceiling-worker");
+      expect(freed).not.toBeNull();
+      expect(freed!.task_id).toBe(alphaSecond.task_id);
+    } finally {
+      await db.close();
+    }
+  });
+});
