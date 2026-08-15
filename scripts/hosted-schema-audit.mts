@@ -57,31 +57,67 @@ function requireEnvironment(name: string): string {
   return value;
 }
 
-async function tableExists(baseUrl: string, key: string, table: string): Promise<boolean | null> {
-  const response = await fetch(`${baseUrl}/rest/v1/${encodeURIComponent(table)}?limit=1`, {
-    method: "HEAD",
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-  }).catch(() => null);
+type Probe = { readonly exists: boolean | null; readonly status: number | null; readonly detail: string };
 
-  if (!response) return null;
-  if (response.status === 404) return false;
-  // 200 and 206 both mean the relation resolved. Anything else (401, 403, 5xx)
-  // is a question this probe cannot answer, and guessing would defeat the point.
-  if (response.status === 200 || response.status === 206) return true;
-  return null;
+/**
+ * `select=*&limit=0` asks for the relation and no rows. A present table answers
+ * `200 []`; an absent one answers `404`. Reading zero rows keeps this a question
+ * about the schema rather than about the data, which is what makes the output
+ * safe to print in a public log.
+ *
+ * GET rather than HEAD: PostgREST answers HEAD, but the status alone cannot be
+ * told apart from a proxy that rejected the method, and this probe's whole value
+ * is that its failures are legible.
+ */
+async function probeTable(baseUrl: string, key: string, table: string): Promise<Probe> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/rest/v1/${encodeURIComponent(table)}?select=*&limit=0`, {
+      method: "GET",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
+    });
+  } catch (error) {
+    return { exists: null, status: null, detail: error instanceof Error ? error.message : "request failed" };
+  }
+
+  if (response.status === 404) return { exists: false, status: 404, detail: "not found" };
+  if (response.ok) return { exists: true, status: response.status, detail: "present" };
+
+  // Anything else -- 401, 403, 5xx -- is a question this probe cannot answer.
+  // Report the provider's own message rather than guessing, and never the key.
+  let message = `HTTP ${response.status}`;
+  try {
+    const body = (await response.json()) as { message?: string; hint?: string };
+    if (body?.message) message += `: ${body.message}`;
+    if (body?.hint) message += ` (${body.hint})`;
+  } catch {
+    // A body that will not parse is not extra information; the status stands.
+  }
+  return { exists: null, status: response.status, detail: message };
+}
+
+async function tableExists(baseUrl: string, key: string, table: string): Promise<boolean | null> {
+  return (await probeTable(baseUrl, key, table)).exists;
 }
 
 async function main(): Promise<void> {
   const baseUrl = requireEnvironment("NEXT_PUBLIC_SUPABASE_URL").replace(/\/$/, "");
   const key = requireEnvironment("SUPABASE_SERVICE_ROLE_KEY");
 
-  const control = await tableExists(baseUrl, key, CONTROL_TABLE);
-  if (control !== true) {
+  const control = await probeTable(baseUrl, key, CONTROL_TABLE);
+  if (control.exists !== true) {
     // Without this, "everything is missing" and "the probe is broken" look the
     // same, and the first reading would send someone to re-apply a live schema.
+    //
+    // The observed status is printed because the first version of this omitted
+    // it, and a control failure with no status is a dead end for whoever reads
+    // the log -- the guard fired correctly and still told them nothing useful.
     console.error(
       `The control table \`${CONTROL_TABLE}\` did not resolve, so this audit cannot distinguish `
-      + "an unapplied migration from a failing probe. Check the URL and key before reading anything below.",
+      + "an unapplied migration from a failing probe.\n"
+      + `  observed: ${control.detail}\n`
+      + "  A 401 or 403 means the key is wrong or lacks REST access; a 404 means the URL is not "
+      + "this project's REST endpoint. Neither says anything about the migrations.",
     );
     process.exit(2);
   }
