@@ -227,6 +227,30 @@ Each case was executed against the real script, not described from the code.
 
 The success path was checked for leakage specifically: token values placed in the credential appear **zero** times in the output. The run also exercises the pinned CLI check, which passes — `codex-cli 0.147.0` is present and matches the reviewed release, so that assertion is live rather than skipped.
 
+### Why the preflight evidence above is not accidentally green
+
+`lib/providers/claude-cli-transport.ts` makes a point worth repeating here, because it applies to
+this document's evidence: a machine running SoftwareFactory may itself be signed in to the
+provider, and a run that authenticates with an ambient credential proves nothing — not that the
+configured credential works, not that an unconfigured deployment fails closed. It is a canary that
+is green because the cage is open.
+
+Checked on the container that produced the preflight results above:
+
+| | |
+| --- | --- |
+| `~/.codex/auth.json` | **absent** (`~/.codex` holds only a `tmp` directory) |
+| `CODEX_HOME` | unset |
+| `CODEX_*` / `OPENAI_*` in the environment | none |
+
+So the four preflight cases were decided by the credential each case supplied, not by an ambient
+login. The one that reported `startup preflight passed (subscription)` did so on the fabricated
+credential given to it.
+
+The same fact is why no Codex canary can be run from here regardless of intent: there is no
+credential in this environment, ambient or configured. `~/.claude` *is* present, which is what the
+transport module is describing — but that is Claude, and Phase 1C runs on Codex.
+
 **Platform limitation to flag honestly:** whether an unattended, non-interactive GitHub Actions
 run may use ChatGPT-subscription credentials is a policy question about the ChatGPT plan, not a
 technical one about this repository. The code path works with whatever the CLI accepts. If the
