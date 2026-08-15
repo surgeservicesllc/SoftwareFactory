@@ -395,3 +395,58 @@ describe("subscription sign-in", () => {
     expect(await screen.findByText(/two steps and groq is ready/i)).toBeInTheDocument();
   });
 });
+
+describe("one click is offered for every provider, not just OpenRouter", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubConnect(providers: unknown) {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providers };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("offers Claude in one click, ahead of the terminal route", async () => {
+    // The friction that mattered: clicking Claude used to lead to a command.
+    // OpenRouter serves Claude models and has a real third-party OAuth flow,
+    // so the fastest path to Claude is a single link.
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    const oneClick = await screen.findByRole("link", { name: /sign in with openrouter/i });
+    expect(oneClick).toHaveAttribute("href", "/api/bots/connect/oauth/start");
+    expect(screen.getByText(/get claude in one click/i)).toBeInTheDocument();
+  });
+
+  it("keeps the zero-cost subscription route available as the alternative", async () => {
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    // Still there, and still labelled as the one that bills nothing per token.
+    expect(await screen.findByText(/or use your anthropic subscription instead/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/bills nothing per token/i)).toBeInTheDocument();
+  });
+
+  it("does not offer OpenRouter to itself twice", async () => {
+    stubConnect(providerPayload({
+      ...notConfigured, id: "openrouter", label: "OpenRouter", vendor: "OpenRouter",
+      credentialRef: "OPENROUTER_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /openrouter/i }));
+
+    expect(screen.queryByText(/get openrouter in one click/i)).not.toBeInTheDocument();
+    expect(await screen.findAllByRole("link", { name: /sign in with openrouter/i }))
+      .toHaveLength(1);
+  });
+});

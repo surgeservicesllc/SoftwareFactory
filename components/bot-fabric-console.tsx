@@ -805,13 +805,34 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
       <p className="text-sm font-medium text-[var(--text)]">
         {provider.id === "openrouter"
           ? `Sign in with ${provider.vendor}`
-          : `Sign in with your ${provider.vendor} subscription`}
+          : `Or use your ${provider.vendor} subscription instead`}
       </p>
       <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
         {provider.id === "openrouter"
           ? "One click. No key, no terminal, no variable name."
           : "No key to find and nothing to paste. This bills nothing per token."}
       </p>
+
+      {provider.id !== "openrouter" ? (
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+          {/* The frictionless route to this same model. OpenRouter serves
+              Claude, GPT and Gemini, and it is the only provider here with a
+              third-party OAuth flow — so clicking through it is genuinely one
+              click, where the subscription path below needs a terminal. */}
+          <p className="text-sm font-medium text-[var(--text)]">
+            Fastest: get {provider.label} in one click
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+            Sign in to OpenRouter and {provider.label} works immediately — no terminal, no key.
+            Usage is billed by OpenRouter per token.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/oauth/start" className="btn btn-primary btn-sm mt-3">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with OpenRouter
+          </a>
+        </div>
+      ) : null}
 
       {provider.id === "openrouter" ? (
         <div className="mt-3">
