@@ -60,16 +60,16 @@ nothing can withdraw a change that did not.
 | 9 | Measures worker/provider availability | **PARTIAL** | `resource_breaker_events` plus the Phase 2D `connections.health` added this session. Not trended. |
 | 10 | Measures queue/bottleneck/latency | **PASS (loop 21)** | The queue domain derives depth and oldest-queued age from `agent_runs`; an hour of queue age starts costing points, a day zeroes the domain. |
 | 11 | Measures real usage/cost where available | **PARTIAL** | `lib/providers/usage.ts` accounts usage. Cost is deliberately absent — the zero-token paths have no per-token cost, and the brief says not to optimize cost without real data. |
-| 12 | Detects recurring failure patterns | **FAIL — ABSENT** | `lib/operations/fingerprint.ts` deduplicates incidents by fingerprint, which is the right primitive, but nothing mines it for recurrence. |
-| 13 | Detects flaky workflows/tests | **FAIL — ABSENT** | Requires same-input different-outcome analysis over `test_runs`. Not built. |
+| 12 | Detects recurring failure patterns | **PASS (loop 22)** | `detect_factory_improvements` mines the incident dedupe counter: a fingerprint at three or more occurrences is a finding carrying its history; zero fingerprinted incidents abstains by name. Positive detection proven against the migrated chain. |
+| 13 | Detects flaky workflows/tests | **PASS (loop 22)** | A test kind with both outcomes in one window and at least four terminal runs is a finding with the pass/fail split as evidence; a thinner sample abstains naming the kind and the floor. Both paths proven. |
 | 14 | Detects inefficient graph topology | **PARTIAL** | `lib/graph/optimizer.ts` does exactly this, for a single graph, on demand. Not run as a standing audit. |
 | 15 | Detects fake/unnecessary edges | **PARTIAL** | Same module, same limitation. |
 | 16 | Detects excessive sequential depth | **PARTIAL** | Same module, same limitation. |
-| 17 | Detects unnecessary AI nodes where deterministic code works | **FAIL — ABSENT** | Arguably the highest-value detector in the list and the one most aligned with the zero-token constraint. Nothing attempts it. |
+| 17 | Detects unnecessary AI nodes where deterministic code works | **PARTIAL (loop 22)** | The detector exists with a stated floor: a model-executed node completing in under a second across three or more runs is named as a *candidate* for a deterministic rewrite, never a verdict. With no live graph run, only the abstention path is exercised — proven — and the positive path awaits the first real graph execution. |
 | 18 | Detects poor routing/model selection | **PARTIAL** | `provider_routing_decisions` is immutable and records the decision. Outcomes are never joined back to it. |
-| 19 | Detects repeated provider/agent underperformance | **FAIL — ABSENT** | Needs the join in row 18 plus a threshold. |
+| 19 | Detects repeated provider/agent underperformance | **PARTIAL (loop 22)** | The detector exists: a provider/model pair failing at least half of five or more terminal runs is a finding. Only the abstention path is live-exercisable today (no five terminal runs exist); it is proven, and the positive path awaits real execution history. |
 | 20 | Detects stale/dead code/configuration | **PARTIAL** | Two real instances were found *by hand* this session: an unused `fail_github_change_request` overload, and an unset SMTP port that silently disabled migration apply. Both prove the category is real; neither was found by a detector. |
-| 21 | Identifies technical debt | **FAIL — ABSENT** | No inventory. |
+| 21 | Identifies technical debt | **PASS (loop 22)** | A standing inventory of three schema-grounded debts: legacy unlabelled connection mappings, commands stuck in submitted for a week, and improvements accepted a week ago with no implementation entry. Zero is a real answer, so these never abstain; the forgotten-improvement case is proven positively. |
 | 22 | Creates evidence-backed improvement proposals | **PARTIAL (improved loop 19)** | The persistence half now exists: `improvement_ledger` (migration `20260815001200`) records proposals durably, and the boundary refuses one without a non-empty baseline by name ("a recommendation, not an improvement"). What still does not exist is anything that *creates* proposals from telemetry — the detectors (goals 12-21) remain unbuilt, so today every proposal is owner-authored. |
 | 23 | Proposals include benefit, risk, evidence, acceptance criteria | **PASS (loop 19)** | The proposal entry type requires all of it at the schema boundary: title, what changes, a falsifiable prediction, a non-empty baseline, acceptance criteria, and the constitution version that judged the intent. A row missing any of them cannot exist (`improvement_ledger_entry_shape`), proven in `improvement-ledger.behavior.test.ts`. |
 | 24 | Improvements become normal backlog/tasks/graphs | **PARTIAL (loop 19)** | The implementation entry type binds a proposal to a real `commands` row by composite foreign key, and it is refused until a decision row says `accepted` — so the only implementation path the ledger can record is the ordinary `submit_command` door. Nothing yet *automates* that routing; today an owner submits the command and links it. |
@@ -92,15 +92,17 @@ nothing can withdraw a change that did not.
 Re-scored 2026-08-15 (master loop iteration 18) after the versioned
 constitution landed as the plan's step 1:
 
-- PASS: 19 of 37
-- PARTIAL: 13 of 37
-- FAIL (absent): 5 of 37
-- Weighted completion: **≈65%** (counts above are the record; the weighting
+- PASS: 22 of 37
+- PARTIAL: 15 of 37
+- FAIL (absent): 0 of 37
+- Weighted completion: **≈73%** (counts above are the record; the weighting
   follows the audit's original discount for thin live telemetry)
 
-Loop 21 landed the self-audit engine — goals 1 and 2, plus the aggregation
-half of 3, 5, 6, 8 and 10. The remaining absents are the detectors (12, 13,
-17, 19, 21).
+Loops 21-22 landed the self-audit engine and all five detectors. **Nothing
+in this scorecard is absent any more.** Every remaining PARTIAL is a live
+half — telemetry that stays thin until the factory executes real work, a
+detector's positive path awaiting real history, or an execution switch that
+is OFF by owner decision.
 
 Loop 19 landed the improvement ledger (plan step 2): the
 proposal/decision/implementation/evaluation lifecycle is durable,

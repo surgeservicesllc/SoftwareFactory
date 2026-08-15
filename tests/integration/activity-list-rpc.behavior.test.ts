@@ -68,7 +68,7 @@ describe("safe activity list RPC", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
     expect(migrationFiles.at(-1)).toBe(
-      "20260815001400_factory_self_audit.sql",
+      "20260815001500_factory_detectors.sql",
     );
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
