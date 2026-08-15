@@ -55,6 +55,13 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",
+  provider_credentials:
+    "Holds sealed credential envelopes. A policy would imply some role may read the "
+    + "column; none may. Every table privilege is revoked from anon, authenticated and "
+    + "service_role, and the only readers are definer functions.",
+  provider_connect_sessions:
+    "Holds sign-in code digests. Same reasoning: reading this table must be impossible "
+    + "rather than merely restricted, so there is no role for a policy to describe.",
 });
 
 let db: PGlite;
@@ -214,6 +221,12 @@ describe("SECURITY DEFINER functions", () => {
       "agentos_record_trigger_delivery",
       "append_phase1c_run_event",
       "claim_phase1c_run",
+      // The provider sign-in path, added with the credential vault. `claim_`
+      // and `resolve_` are reachable only by presenting a valid one-time code,
+      // and `read_` returns ciphertext that is useless without
+      // SOFTWAREFACTORY_CREDENTIAL_KEY, which is deliberately not in the
+      // database. The server has no other privileged identity to call them with.
+      "claim_provider_connect_session",
       "complete_github_change_request",
       "complete_phase1c_run",
       "disconnect_github_connection",
@@ -225,11 +238,13 @@ describe("SECURITY DEFINER functions", () => {
       "jsonb_has_sensitive_keys",
       "mark_github_connection_lost",
       "process_github_webhook_delivery",
+      "read_provider_credential",
       "reconcile_github_repository_grants",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
+      "resolve_provider_connect_session",
       "sync_github_installation",
     ]);
   });

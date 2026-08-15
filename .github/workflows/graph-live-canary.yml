@@ -1,0 +1,49 @@
+name: Phase 2B graph live canary
+
+# Demonstration C's live half, run where the subscription credential exists.
+#
+# Locally the canary falls back to the Agent SDK directly, because the Phase 2A
+# transport deliberately carries no ambient CLAUDE_* into its child and would
+# refuse. Here the credential is configured, so the graph's nodes execute
+# *through* the provider layer — which is what goal 13 asks for and what a local
+# run cannot show.
+#
+# Manual only: it consumes real subscription turns, and no per-token API credit.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Five real Claude nodes through the provider transport
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # No ANTHROPIC_API_KEY is supplied. The subscription path refuses to start
+      # if one is present, so this cannot quietly become a billed run.
+      - name: Run the graph live canary
+        env:
+          SOFTWAREFACTORY_GRAPH_LIVE_CANARY: "1"
+          SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx vitest run tests/integration/graph-live-team-canary.test.ts

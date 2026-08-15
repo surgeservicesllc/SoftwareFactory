@@ -133,8 +133,10 @@ describe("BotFabricConsole", () => {
       expect(screen.getByRole("button", { name: /grok/i })).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /gemini/i })).toBeInTheDocument();
+    // The wording changed when the picker was redesigned, but the guarantee it
+    // states has not: this page never receives a key.
     expect(
-      screen.getByText(/you reference the variable name, never paste a key/i),
+      screen.getByText(/never pass through this page/i),
     ).toBeInTheDocument();
   });
 

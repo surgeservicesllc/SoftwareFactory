@@ -3,8 +3,12 @@
 import {
   ArrowRight,
   Bot,
+  Check,
   CheckCircle2,
+  ChevronDown,
   CircleSlash,
+  Copy,
+  ExternalLink,
   KeyRound,
   Loader2,
   Pause,
@@ -640,6 +644,211 @@ function PostingCard({
   );
 }
 
+/* --------------------------------------------------- provider setup state */
+
+/**
+ * What the server knows about each provider's setup.
+ *
+ * `credentialReady` means a variable is populated. `probeVerdict` is what the
+ * provider said when asked, and only `verified` means the bot could actually
+ * run. The interface keeps the two separate: a present key that the provider
+ * rejects must never render as ready.
+ */
+type ProviderSetup = {
+  id: string;
+  label: string;
+  vendor: string;
+  monogram: string;
+  accent: string;
+  summary: string;
+  suggestedModels: string[];
+  defaultModel: string | null;
+  credentialRef: string | null;
+  credentialReady: boolean;
+  credentialOptional: boolean;
+  probeVerdict:
+    | "verified" | "rejected" | "no_credit" | "rate_limited"
+    | "unreachable" | "not_configured" | "not_probed";
+  probeReason: string | null;
+  probeLive: boolean;
+  requiresBaseUrl: boolean;
+  docsUrl: string;
+  apiKeyUrl: string | null;
+};
+
+/**
+ * How a verdict reads on a tile.
+ *
+ * Every non-verified state is visually distinct from verified, because the
+ * whole point of probing is that "a key is present" and "the key works" are
+ * different facts. A rejected key and an exhausted balance get different words
+ * too: they need different fixes.
+ */
+function providerBadge(state: ProviderSetup) {
+  switch (state.probeVerdict) {
+    case "verified":
+      return { label: "Verified", Icon: CheckCircle2, className: "text-[var(--success)]" };
+    case "rejected":
+      return { label: "Key rejected", Icon: CircleSlash, className: "text-[var(--danger)]" };
+    case "no_credit":
+      return { label: "No credit", Icon: CircleSlash, className: "text-[var(--danger)]" };
+    case "rate_limited":
+      return { label: "Throttled", Icon: RefreshCw, className: "text-[var(--warning)]" };
+    case "unreachable":
+      return { label: "Unreachable", Icon: RefreshCw, className: "text-[var(--warning)]" };
+    case "not_probed":
+      return { label: "Key detected", Icon: KeyRound, className: "text-[var(--text-muted)]" };
+    default:
+      return { label: "Needs a key", Icon: KeyRound, className: "text-[var(--text-faint)]" };
+  }
+}
+
+/** Only a verified provider can actually run a bot. */
+function isProviderUsable(state: ProviderSetup) {
+  return state.credentialOptional || state.probeVerdict === "verified"
+    || state.probeVerdict === "not_probed";
+}
+
+function useProviderSetup() {
+  const [providers, setProviders] = useState<ProviderSetup[] | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const check = useCallback(async (refresh = false) => {
+    setChecking(true);
+    try {
+      const response = await fetch(
+        `/api/bots/providers${refresh ? "?refresh=1" : ""}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        setProviders([]);
+        return;
+      }
+      const body = (await response.json()) as { providers?: ProviderSetup[] };
+      setProviders(body.providers ?? []);
+    } catch {
+      // A failed read must not read as "nothing is set up"; an empty list and a
+      // failed request are rendered the same way, as "cannot tell".
+      setProviders([]);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Deferred for the same reason the fabric load is: setting state straight
+    // from an effect body is what `react-hooks/set-state-in-effect` forbids.
+    const timer = window.setTimeout(() => void check(), 0);
+    return () => window.clearTimeout(timer);
+  }, [check]);
+
+  return { providers, checking, check };
+}
+
+/** Copies a variable name so nobody retypes it and mistypes it. */
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      className="btn btn-secondary btn-sm shrink-0"
+      aria-label={`Copy ${value}`}
+    >
+      {copied ? (
+        <Check className="size-3.5 text-[var(--success)]" aria-hidden="true" />
+      ) : (
+        <Copy className="size-3.5" aria-hidden="true" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+/**
+ * Setup instructions for a provider whose variable is not populated.
+ *
+ * This is the honest version of "sign in". No provider here offers an OAuth
+ * flow that mints a key for a third-party application, so the fastest real path
+ * is a direct link to the page that issues one plus the exact variable to set.
+ */
+function ProviderSetupSteps({
+  provider,
+  onRecheck,
+  checking,
+}: {
+  provider: ProviderSetup;
+  onRecheck: () => void;
+  checking: boolean;
+}) {
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4">
+      <p className="text-sm font-medium text-[var(--text)]">
+        {provider.probeVerdict === "not_configured"
+          ? `Two steps and ${provider.label} is ready`
+          : `${provider.vendor} could not use this key`}
+      </p>
+
+      {provider.probeReason && provider.probeVerdict !== "not_configured" ? (
+        // The provider's own verdict, so nobody re-issues a working key because
+        // the real problem was an empty balance or a busy endpoint.
+        <p className="mt-2 text-sm text-[var(--warning)]">{provider.probeReason}</p>
+      ) : null}
+
+      <ol className="mt-3 space-y-3 text-sm text-[var(--text-muted)]">
+        <li className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-faint)]">1.</span>
+          <span>Get a key from {provider.vendor}</span>
+          {provider.apiKeyUrl ? (
+            <a
+              href={provider.apiKeyUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="btn btn-secondary btn-sm"
+            >
+              <ExternalLink className="size-3.5" aria-hidden="true" />
+              Open key page
+            </a>
+          ) : null}
+        </li>
+        <li className="flex flex-wrap items-center gap-2">
+          <span className="text-[var(--text-faint)]">2.</span>
+          <span>Set it as this environment variable on the server</span>
+          <code className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono text-xs text-[var(--text)]">
+            {provider.credentialRef}
+          </code>
+          {provider.credentialRef ? <CopyButton value={provider.credentialRef} /> : null}
+        </li>
+      </ol>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onRecheck}
+          disabled={checking}
+          className="btn btn-primary btn-sm"
+        >
+          {checking ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+          )}
+          Check again
+        </button>
+        <p className="text-xs text-[var(--text-faint)]">
+          The key never passes through this page. The server reads the variable directly.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- bots */
 
 function BotDirectory({
@@ -652,8 +861,19 @@ function BotDirectory({
   mutate: MutateFn;
 }) {
   const [draft, setDraft] = useState<BotDraft | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const { providers, checking, check } = useProviderSetup();
   const provider = draft ? findBotProvider(draft.provider) : null;
+  const setup = draft
+    ? providers?.find((entry) => entry.id === draft.provider) ?? null
+    : null;
   const modelListId = "bot-model-suggestions";
+  // Nothing is typed for a ready provider: the name, model and variable are all
+  // known. The form below only appears when something genuinely needs a choice.
+  // Gated on the verdict, not on presence. A key the provider rejects cannot
+  // run a bot, so registering against it would create a record that looks ready
+  // and is not.
+  const needsSetup = Boolean(setup && !isProviderUsable(setup));
 
   return (
     <div className="space-y-5">
@@ -665,8 +885,8 @@ function BotDirectory({
           <div>
             <h2 className="text-sm font-semibold text-white">Connect a bot</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-              Pick a provider and everything else is pre-filled. Credentials stay in server-side
-              environment variables — you reference the variable name, never paste a key.
+              Pick a provider. Anything already set up connects in one click — no typing.
+              Keys live in server-side environment variables and never pass through this page.
             </p>
           </div>
         </div>
@@ -677,7 +897,10 @@ function BotDirectory({
               <button
                 type="button"
                 disabled={!fabric.canManage}
-                onClick={() => setDraft(draftForProvider(entry))}
+                onClick={() => {
+                  setDraft(draftForProvider(entry));
+                  setShowAdvanced(false);
+                }}
                 aria-pressed={draft?.provider === entry.id}
                 className={cn(
                   "flex w-full min-h-20 flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
@@ -694,7 +917,25 @@ function BotDirectory({
                   {entry.monogram}
                 </span>
                 <span className="text-sm font-semibold text-[var(--text)]">{entry.label}</span>
-                <span className="text-xs text-[var(--text-faint)]">{entry.vendor}</span>
+                {(() => {
+                  const state = providers?.find((item) => item.id === entry.id);
+                  // Until the check returns, the vendor name is shown rather
+                  // than a guess. Claiming "needs a key" before knowing would
+                  // send people to set one they may already have.
+                  if (!state) {
+                    return <span className="text-xs text-[var(--text-faint)]">{entry.vendor}</span>;
+                  }
+                  if (state.credentialOptional) {
+                    return <span className="text-xs text-[var(--text-faint)]">No key needed</span>;
+                  }
+                  const badge = providerBadge(state);
+                  return (
+                    <span className={cn("flex items-center gap-1 text-xs", badge.className)}>
+                      <badge.Icon className="size-3" aria-hidden="true" />
+                      {badge.label}
+                    </span>
+                  );
+                })()}
               </button>
             </li>
           ))}
@@ -721,12 +962,60 @@ function BotDirectory({
                 },
                 `${draft.name.trim()} is registered. Run a readiness check to confirm its credential resolves.`,
               ).then((ok) => {
-                if (ok) setDraft(null);
+                if (ok) {
+                  setDraft(null);
+                  setShowAdvanced(false);
+                }
               });
             }}
           >
-            <p className="md:col-span-2 text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
+            <div className="md:col-span-2">
+              <p className="text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
 
+              {needsSetup && setup ? (
+                <ProviderSetupSteps
+                  provider={setup}
+                  onRecheck={() => void check(true)}
+                  checking={checking}
+                />
+              ) : null}
+
+              {setup && !needsSetup ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--success-border)] bg-[var(--success-surface)] px-4 py-3">
+                  <CheckCircle2 className="size-4 text-[var(--success)]" aria-hidden="true" />
+                  <span className="text-sm text-[var(--text)]">
+                    {setup.credentialOptional
+                      ? `${provider.label} needs no key. Ready to register as ${draft.model}.`
+                      : setup.probeVerdict === "verified"
+                        ? `${provider.vendor} verified this key. Ready to register ${provider.label} as ${draft.model}.`
+                        : `${setup.credentialRef} is set. Ready to register ${provider.label} as ${draft.model}.`}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* The three fields below used to be the whole form. They are all
+                  pre-filled from the catalogue, so they are folded away: a
+                  person who just wants Claude never opens this. */}
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((open) => !open)}
+                aria-expanded={showAdvanced}
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-white"
+              >
+                <ChevronDown
+                  className={cn("size-3.5 transition-transform", showAdvanced && "rotate-180")}
+                  aria-hidden="true"
+                />
+                {showAdvanced ? "Hide" : "Customise"} name, model and endpoint
+              </button>
+            </div>
+
+            <div
+              className={cn(
+                "grid gap-4 md:col-span-2 md:grid-cols-2",
+                showAdvanced ? "" : "hidden",
+              )}
+            >
             <Field label="Bot name" htmlFor="bot-name">
               <input
                 id="bot-name"
@@ -801,6 +1090,8 @@ function BotDirectory({
               />
             </Field>
 
+            </div>
+
             <div className="flex flex-col gap-3 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                 <ShieldCheck className="size-4 text-[var(--accent)]" aria-hidden="true" />
@@ -812,7 +1103,9 @@ function BotDirectory({
                 </button>
                 <button
                   type="submit"
-                  disabled={busyKey === "register" || !draft.name.trim() || !draft.model.trim()}
+                  disabled={
+                    busyKey === "register" || !draft.name.trim() || !draft.model.trim() || needsSetup
+                  }
                   className="btn btn-primary justify-center"
                 >
                   {busyKey === "register" ? (
@@ -820,7 +1113,7 @@ function BotDirectory({
                   ) : (
                     <Plus className="size-4" aria-hidden="true" />
                   )}
-                  Register bot
+                  {needsSetup ? `Set ${setup?.credentialRef ?? "the key"} first` : `Connect ${provider.label}`}
                 </button>
               </div>
             </div>

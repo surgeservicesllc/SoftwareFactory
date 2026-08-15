@@ -1025,3 +1025,69 @@ persistent containers, raw cloud credentials for agents, and the spec's own out-
    required checks, or signature requirements is an owner-approved protected action.
 6. **`theagoras.com` Vercel aliases** are unexplained. Verify ownership and routing intent
    before retaining or removing them.
+
+## Provider sign-in (in progress)
+
+**Goal from the owner:** "I do not want to have to know any values, make it
+simple, login to the (for example) claude bot itself."
+
+**The finding that shapes this.** Anthropic has no third-party OAuth. The only
+supported way to obtain a Claude *subscription* token is `claude setup-token` /
+`claude login` — Anthropic's own CLI running their own OAuth in the operator's
+browser. Embedding a "Sign in with Claude" button would mean impersonating the
+Claude Code CLI's private OAuth client: undocumented, breaks without notice, and
+not ours to use. **Do not do it.** The same holds for Codex (`codex login`).
+
+Subscription mode is also the $0 path. `lib/providers/claude-auth.ts` and
+`lib/worker/auth.ts` already resolve it and already refuse to reach api_key mode
+by fallback. The connect UI ignored all of this and only offered API keys, which
+is both harder and the billed route.
+
+**Owner decisions (asked and answered):**
+- Full in-app login, accepting that the app stores the token.
+- Subscription sign-in is the default; API keys stay available but secondary and
+  labelled as billed per token.
+
+**The flow to build.** The operator never sees a token or a variable name:
+
+1. Click "Sign in with Claude" in the bot console.
+2. Server creates a single-use connect session (code from
+   `generateConnectCode`, ~10 minute TTL, owner-scoped).
+3. UI shows one pre-filled command to copy.
+4. That command runs Anthropic's real browser login locally, captures the
+   resulting token, and POSTs it to the control plane over HTTPS.
+5. Server seals it with `sealSecret` and marks the session claimed.
+6. The existing live probe verifies it; the tile flips to Verified.
+
+### Done
+
+- `lib/server/secret-box.ts` — AES-256-GCM sealing, key derived per
+  (organization, purpose), master key from `SOFTWAREFACTORY_CREDENTIAL_KEY` and
+  never defaulted. 16 tests, 3 mutations verified. Commit `1edeb1e`.
+
+### Next, in order
+
+1. **Migration** — `provider_credentials` (organization_id, purpose, sealed
+   envelope, created_by, rotated_at; RLS + FORCE RLS; owner/admin only; no
+   browser SELECT of the envelope) and `provider_connect_sessions` (code hash,
+   purpose, expires_at, claimed_at, single-use partial unique index on open
+   sessions). Both need audit events.
+2. **Routes** — `POST /api/bots/connect` creates a session and returns the
+   command; `POST /api/bots/connect/claim` accepts the token, seals it, marks
+   claimed. Claim must be constant-time on the code, rate-limited, and must
+   refuse an expired or already-claimed session.
+3. **CLI** — `scripts/connect.mts`: runs `claude setup-token`, posts the result,
+   prints nothing sensitive.
+4. **Resolver** — teach `resolveClaudeAuth` to read the sealed store before the
+   environment, so a signed-in token wins over a stale variable.
+5. **UI** — "Sign in with your Claude subscription" as the primary action;
+   API-key path demoted and labelled billed.
+
+### Owner action still required
+
+`SOFTWAREFACTORY_CREDENTIAL_KEY` must be set before any credential can be
+sealed — 32+ random bytes, base64. Generate with
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+Store in Vercel → Settings → Environment Variables, marked Sensitive, Production
+and Preview. Never in source control. Rotating it makes every stored credential
+unopenable, which is the intended blast radius.

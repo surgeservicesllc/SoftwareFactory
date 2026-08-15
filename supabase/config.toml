@@ -78,13 +78,22 @@ otp_length = 8
 # not intended to reach end users — so without this, sign-up succeeds and the
 # account can then never be confirmed or signed in to.
 #
-# Every value is read from the environment. No credential belongs in this file:
-# it is source-controlled, and `pass` is a live secret. `supabase config push`
-# fails if any of these are unset, which is deliberate — a partially configured
-# mailer would be pushed as a broken one.
+# Every credential is read from the environment. No credential belongs in this
+# file: it is source-controlled, and `pass` is a live secret. `supabase config
+# push` fails if any of those are unset, which is deliberate — a partially
+# configured mailer would be pushed as a broken one.
+#
+# `port` is the exception, and it has to be. It is typed `uint16`, so when the
+# variable is unset the literal substitution parses as empty and the CLI aborts
+# with ProjectConfigParseError before reading anything else in this file. That
+# took the whole config down, not just the mailer: the Supabase GitHub
+# integration parses this file before applying migrations, so an unset SMTP port
+# silently blocked every migration apply on merge to `main`. The port is not a
+# secret and this repository already declares 587 in `.env.example`, so it is a
+# literal. Host, user and pass stay in the environment and still fail loudly.
 enabled = true
 host = "env(SUPABASE_AUTH_SMTP_HOST)"
-port = "env(SUPABASE_AUTH_SMTP_PORT)"
+port = 587
 user = "env(SUPABASE_AUTH_SMTP_USER)"
 pass = "env(SUPABASE_AUTH_SMTP_PASS)"
 # The From address. Its domain must be verified with the provider, or mail is

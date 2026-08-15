@@ -17,6 +17,8 @@ const latestMigration =
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
   // adding tables, and only after confirming RLS and FORCE RLS are enabled.
+  // Both carry RLS and FORCE RLS with no policy at all, which is stricter than
+  // the rest of this list rather than weaker: no role may read them directly.
   "activity_events",
   "agent_handoffs",
   "agent_runs",
@@ -49,6 +51,7 @@ const publicTables = [
   "claim_acceptable_anchors",
   "claim_anchors",
   "commands",
+  "connection_capability_types",
   "connections",
   "deployment_validations",
   "deployments",
@@ -90,10 +93,6 @@ const publicTables = [
   "operations_events",
   "organization_members",
   "organizations",
-  "phase1c_run_artifacts",
-  "phase1c_run_events",
-  "phase1c_run_validations",
-  "phase1c_workers",
   "policies",
   "production_diagnoses",
   "production_monitors",
@@ -103,6 +102,8 @@ const publicTables = [
   "projects",
   "provider_agent_assignments",
   "provider_capacity_limits",
+  "provider_connect_sessions",
+  "provider_credentials",
   "provider_model_configurations",
   "provider_routing_decisions",
   "provider_run_events",
