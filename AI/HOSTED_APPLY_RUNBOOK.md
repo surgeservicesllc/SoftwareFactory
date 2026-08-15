@@ -5,11 +5,17 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 16**, listed across the tables below: seven in "What is actually
+**The current total is 23**, listed across the tables below: seven in "What is actually
 unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", and one in "Added later
 the same day". One of the 15 has a
-materially different approval requirement from the others. The repository total is 57 migration
+materially different approval requirement from the others. The repository total is 64 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
+
+These two numbers have gone stale three times, because several agents add migrations in parallel
+and none of them is reading this paragraph. `tests/integration/hosted-runbook-counts.test.ts` now
+derives both from the migration directory and fails when they drift, so the next person to add a
+migration is told to update this sentence rather than discovering later that it lied. The tables
+below are not machine-checked and can still fall behind the totals.
 
 > ## Measured against hosted, 2026-08-14 21:00Z — this section supersedes the table below
 >
