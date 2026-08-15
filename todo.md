@@ -25,7 +25,7 @@ priority queue, and evidence for items closed by the loop.
 
 - Overall: **~75% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2D ~81% (all structural rows closed; remaining gaps are live halves) · 2E 92% · 2A partial · 3 not started)
 - Last audit: 2026-08-15, this loop
-- Current loop: master iteration 16
+- Current loop: master iteration 17
 - Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
 - Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
 
@@ -63,7 +63,7 @@ priority queue, and evidence for items closed by the loop.
 
 ### Phase Certification
 
-- [ ] 1A Control Plane — surfaces live in production (all routes 200); per-page certification not re-run this loop
+- [x] 1A Control Plane — **certified this loop**: all 21 routes fetched live on the production origin, 21/21 return 200 (incl. the dynamic project-detail route added today, proving the deployment carries the current route table); per-page truthful-state evidence in `AI/PHASE_1A_CERTIFICATION.md`; e2e suite re-proves headings/viewport/axe at three widths every CI run
 - [ ] 1B GitHub — 90% (18 PASS/2 PARTIAL); remaining items owner-only (second installation + live adverse pass)
 - [ ] 1C Worker Execution — code complete, worker **LIVE and polling**; canary blocked on one owner command
 - [ ] 1D Autonomous Release — decision layer 100%; execution blocked **by design** (AGENTS.md forbids auto-merge in this line)
