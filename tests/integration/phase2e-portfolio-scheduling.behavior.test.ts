@@ -1,0 +1,876 @@
+// @vitest-environment node
+
+import { readdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Phase 2E: does the factory schedule a *portfolio*, or one project at a time?
+ *
+ * The distinction these tests are built around: a queue that stores work in
+ * priority order proves nothing, because the old scheduler already ordered by
+ * `task.priority`. What was missing was any relationship *between* projects —
+ * two projects had no relative standing, no shared ceiling, and no way for an
+ * incident in one to outrank routine work in another.
+ *
+ * So every test here involves at least two projects competing, and asserts on
+ * which run a real worker actually claimed through `claim_phase1c_run` — not on
+ * what a view says the order should be.
+ *
+ * PGlite is a single connection, so these are sequential claims rather than
+ * simultaneous ones. That is a genuine limit: it proves ordering, ceilings and
+ * releases, and it cannot prove race behaviour under contention. The `for
+ * update ... skip locked` that handles contention is unchanged from Phase 1C.
+ */
+
+const repositoryRoot = resolve(import.meta.dirname, "../..");
+const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
+const latestMigration = "20260815000400_phase2e_project_scoped_agents.sql";
+
+const ownerId = "00000000-0000-4000-8000-0000000002e1";
+const outsiderId = "00000000-0000-4000-8000-0000000002e2";
+const organizationId = "10000000-0000-4000-8000-0000000002e1";
+
+interface ProjectFixture {
+  readonly connectionId: string;
+  readonly externalInstallationId: number;
+  readonly externalRepositoryId: number;
+  readonly installationId: string;
+  readonly name: string;
+  readonly projectId: string;
+  readonly repository: string;
+  readonly repositoryId: string;
+}
+
+const alpha: ProjectFixture = {
+  connectionId: "30000000-0000-4000-8000-0000000002e1",
+  externalInstallationId: 153445938,
+  externalRepositoryId: 99887761,
+  installationId: "40000000-0000-4000-8000-0000000002e1",
+  name: "Alpha",
+  projectId: "20000000-0000-4000-8000-0000000002e1",
+  repository: "surgeservicesllc/alpha",
+  repositoryId: "50000000-0000-4000-8000-0000000002e1",
+};
+
+const beta: ProjectFixture = {
+  connectionId: "30000000-0000-4000-8000-0000000002e2",
+  externalInstallationId: 153445939,
+  externalRepositoryId: 99887762,
+  installationId: "40000000-0000-4000-8000-0000000002e2",
+  name: "Beta",
+  projectId: "20000000-0000-4000-8000-0000000002e2",
+  repository: "surgeservicesllc/beta",
+  repositoryId: "50000000-0000-4000-8000-0000000002e2",
+};
+
+const appId = 4573846;
+
+async function database() {
+  const db = new PGlite({ extensions: { pgcrypto } });
+  await db.exec(`
+    create schema if not exists auth;
+    create table auth.users (
+      id uuid primary key default gen_random_uuid(),
+      raw_user_meta_data jsonb not null default '{}'::jsonb
+    );
+    create or replace function auth.uid()
+    returns uuid language sql stable as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+    $$;
+    create or replace function auth.jwt()
+    returns jsonb language sql stable as $$
+      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
+    $$;
+    create role anon nologin;
+    create role authenticated nologin;
+    create role service_role nologin bypassrls;
+  `);
+
+  const migrations = (await readdir(migrationsRoot))
+    .filter((file) => /^\d+.*\.sql$/.test(file))
+    .sort();
+  // Pinned so a new migration cannot land without this suite being re-run
+  // against it. Portfolio scheduling touches the claim path, which nearly
+  // every other durable behaviour depends on.
+  expect(migrations.at(-1)).toBe(latestMigration);
+  for (const migration of migrations) {
+    await db.exec(await readFile(resolve(migrationsRoot, migration), "utf8"));
+  }
+  return db;
+}
+
+function seedProject(project: ProjectFixture) {
+  return `
+    insert into public.projects (
+      id, organization_id, name, status, github_repository, default_branch, created_by
+    ) values (
+      '${project.projectId}', '${organizationId}', '${project.name}', 'active',
+      '${project.repository}', 'main', '${ownerId}'
+    );
+    insert into public.connections (
+      id, organization_id, name, provider, status, external_account_label,
+      secret_reference, created_by
+    ) values (
+      '${project.connectionId}', '${organizationId}', 'GitHub App ${project.name}',
+      'github', 'connected', 'surgeservicesllc', 'env://GITHUB_APP', '${ownerId}'
+    );
+    insert into public.github_installations (
+      id, organization_id, connection_id, external_installation_id, app_id,
+      app_slug, account_id, account_login, account_type, target_type,
+      repository_selection, status, installed_at, created_by
+    ) values (
+      '${project.installationId}', '${organizationId}', '${project.connectionId}',
+      ${project.externalInstallationId}, ${appId}, 'softwarefactory', 839271,
+      'surgeservicesllc', 'Organization', 'Organization', 'selected', 'active',
+      now(), '${ownerId}'
+    );
+    insert into public.github_repositories (
+      id, organization_id, installation_id, external_repository_id, owner_login,
+      name, full_name, default_branch, html_url, private, visibility, selected,
+      github_updated_at
+    ) values (
+      '${project.repositoryId}', '${organizationId}', '${project.installationId}',
+      ${project.externalRepositoryId}, 'surgeservicesllc',
+      '${project.repository.split("/")[1]}', '${project.repository}', 'main',
+      'https://github.com/${project.repository}', true, 'private', true, now()
+    );
+    insert into public.project_connections (
+      organization_id, project_id, connection_id, github_repository_id, is_primary, created_by
+    ) values (
+      '${organizationId}', '${project.projectId}', '${project.connectionId}',
+      '${project.repositoryId}', true, '${ownerId}'
+    );
+  `;
+}
+
+async function seedPortfolio(db: PGlite) {
+  await db.exec(`
+    insert into auth.users (id) values ('${ownerId}'), ('${outsiderId}');
+    insert into public.organizations (id, name, slug, created_by)
+    values ('${organizationId}', 'Portfolio Factory', 'phase2e-portfolio', '${ownerId}');
+    ${seedProject(alpha)}
+    ${seedProject(beta)}
+  `);
+}
+
+async function actAs(db: PGlite, userId: string, role = "authenticated") {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', $1, false)", [userId]);
+  await db.exec(`set role ${role}`);
+}
+
+async function asWorker(db: PGlite) {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', '', false)");
+  await db.exec("set role service_role");
+}
+
+function commandParameters(project: ProjectFixture, commandType: string, agentRole: string) {
+  return {
+    acceptanceCriteria: ["The requested outcome is verified."],
+    agentRole,
+    budget: {
+      ciTimeoutMs: 900000,
+      maximumDurationMs: 2700000,
+      maximumInputTokens: 200000,
+      maximumOutputTokens: 50000,
+      maximumRepairAttempts: 1,
+      maximumTurns: 4,
+    },
+    commandType,
+    dependencyTaskIds: [] as string[],
+    executionMode: "manual",
+    model: "gpt-5.3-codex",
+    plan: {
+      requiresDraftPullRequest: true,
+      stages: [
+        "inspect", "implement", "validate", "policy_scan", "commit",
+        "draft_pull_request", "ci", "report",
+      ],
+      workflow: "codex_draft_pr",
+    },
+    provider: "openai",
+    repositoryBinding: {
+      appId,
+      baseBranch: "main",
+      baseSha: "a".repeat(40),
+      connectionId: project.connectionId,
+      externalInstallationId: project.externalInstallationId,
+      externalRepositoryId: project.externalRepositoryId,
+      installationId: project.installationId,
+      repositoryId: project.repositoryId,
+    },
+    riskAssessment: { requestedRisk: "green" },
+  };
+}
+
+async function submit(
+  db: PGlite,
+  project: ProjectFixture,
+  key: string,
+  commandType = "audit",
+  agentRole = "qa",
+) {
+  await actAs(db, ownerId);
+  const { rows } = await db.query<{ command_id: string; task_id: string }>(
+    "select command_id, task_id from public.submit_command($1,$2,$3,$4::jsonb,$5)",
+    [
+      project.projectId,
+      // Deliberately kept free of the words that make a command RED. An earlier
+      // version interpolated the idempotency key into the prompt, and a key
+      // containing "rls" classified the command as RED, which never enters
+      // Phase 1C at all — the queue was empty for a reason that had nothing to
+      // do with scheduling.
+      `Improve the ${project.name} dashboard copy.`,
+      "green",
+      JSON.stringify(commandParameters(project, commandType, agentRole)),
+      key,
+    ],
+  );
+  return rows[0];
+}
+
+async function registerWorker(db: PGlite, workerId: string, capacity = 1) {
+  await asWorker(db);
+  await db.query("select * from public.register_phase1c_worker($1,$2,$3::jsonb)", [
+    workerId, "1.0.0", JSON.stringify({ providers: ["openai"] }),
+  ]);
+  await db.exec("reset role");
+  await db.query(
+    "update public.phase1c_workers set maximum_concurrent_runs = $2 where worker_id = $1",
+    [workerId, capacity],
+  );
+}
+
+interface ClaimedRun {
+  lease_token: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+}
+
+async function claim(db: PGlite, workerId: string) {
+  await asWorker(db);
+  const { rows } = await db.query<ClaimedRun>(
+    "select run_id, project_id, task_id, lease_token from public.claim_phase1c_run($1,$2,$3,$4)",
+    [workerId, "openai", "gpt-5.3-codex", 120],
+  );
+  return rows[0] ?? null;
+}
+
+async function finish(db: PGlite, workerId: string, run: ClaimedRun) {
+  await asWorker(db);
+  await db.query(
+    `select * from public.complete_phase1c_run(
+       $1,$2::uuid,$3::uuid,'failed','Stopped for the capacity test.',null,
+       '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'stopped_for_test',
+       'Released deliberately so the next claim can be observed.',false)`,
+    [workerId, run.run_id, run.lease_token],
+  );
+}
+
+async function setPriority(db: PGlite, project: ProjectFixture, priority: number) {
+  await actAs(db, ownerId);
+  await db.query(
+    "select * from public.set_project_engineering_priority($1::uuid,$2::smallint,$3)",
+    [project.projectId, priority, "Portfolio scheduling test"],
+  );
+}
+
+async function setLimits(
+  db: PGlite,
+  limits: {
+    emergencyReserved?: number;
+    global?: number;
+    project?: ProjectFixture;
+    projectLimit?: number;
+  },
+) {
+  await actAs(db, ownerId);
+  await db.query(
+    `select * from public.set_portfolio_capacity_limits(
+       $1::uuid,$2::smallint,$3::smallint,null,$4::uuid,$5::smallint)`,
+    [
+      organizationId,
+      limits.global ?? null,
+      limits.emergencyReserved ?? null,
+      limits.project?.projectId ?? null,
+      limits.projectLimit ?? null,
+    ],
+  );
+}
+
+describe("Phase 2E portfolio scheduling", { timeout: 180_000 }, () => {
+  it("gives the worker the higher-priority project's work first — canary A", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      // Beta's work is queued first, so age alone would hand it the worker.
+      await submit(db, beta, "beta-routine");
+      await submit(db, alpha, "alpha-routine");
+      await setPriority(db, beta, 3);
+      await setPriority(db, alpha, 1);
+      await registerWorker(db, "portfolio-worker-a");
+
+      const first = await claim(db, "portfolio-worker-a");
+      expect(first?.project_id).toBe(alpha.projectId);
+
+      // And the point of a portfolio rather than a preference: once Alpha's
+      // work is running, Beta is next rather than starved.
+      await finish(db, "portfolio-worker-a", first!);
+      const second = await claim(db, "portfolio-worker-a");
+      expect(second?.project_id).toBe(beta.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps a slot for an incident and does not kill anything to make it — canary B", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      // One slot in total, of which one is reserved for emergencies: ordinary
+      // work may use zero. This is the reservation in its starkest form.
+      await setLimits(db, { emergencyReserved: 1, global: 1 });
+
+      await submit(db, beta, "beta-routine");
+      await registerWorker(db, "portfolio-worker-b");
+
+      expect(await claim(db, "portfolio-worker-b")).toBeNull();
+
+      // A withheld decision is recorded, naming the reserve as the reason.
+      await actAs(db, ownerId);
+      const withheld = await db.query<{ decision: string; reason: string }>(
+        `select decision, reason from public.scheduling_decisions
+         where organization_id = $1 order by occurred_at desc limit 1`,
+        [organizationId],
+      );
+      expect(withheld.rows[0]).toMatchObject({ decision: "withheld" });
+      expect(withheld.rows[0].reason).toMatch(/reserved for emergency/i);
+
+      // Now real emergency work: an incident with a repair attempt bound to the
+      // task, which is what the 1E→1C promotion writes.
+      const emergency = await submit(db, alpha, "alpha-incident");
+      await db.exec("reset role");
+      await db.query(
+        `insert into public.incidents (
+           id, organization_id, project_id, title, description, severity, status, detected_at
+         ) values (
+           '70000000-0000-4000-8000-0000000002e1', $1, $2, 'Checkout is failing',
+           'Errors on the production checkout path.', 'critical', 'open', now()
+         )`,
+        [organizationId, alpha.projectId],
+      );
+      await db.query(
+        `insert into public.repair_attempts (
+           organization_id, project_id, incident_id, task_id, attempt_number, state
+         ) values ($1, $2, '70000000-0000-4000-8000-0000000002e1', $3, 1, 'created')`,
+        [organizationId, alpha.projectId, emergency.task_id],
+      );
+
+      const claimed = await claim(db, "portfolio-worker-b");
+      expect(claimed?.project_id).toBe(alpha.projectId);
+      expect(claimed?.task_id).toBe(emergency.task_id);
+
+      await actAs(db, ownerId);
+      const assignment = await db.query<{
+        decision: string;
+        effective_priority: number;
+        reason: string;
+      }>(
+        `select decision, effective_priority, reason from public.scheduling_decisions
+         where run_id = $1`,
+        [claimed!.run_id],
+      );
+      expect(assignment.rows[0]).toMatchObject({
+        decision: "assigned",
+        effective_priority: 0,
+      });
+
+      // Beta's routine work was never cancelled to make room — it is still
+      // queued, waiting for capacity rather than destroyed by the emergency.
+      // Read outside the browser role: `agent_runs` is deliberately not
+      // selectable by `authenticated`.
+      await db.exec("reset role");
+      const betaRuns = await db.query<{ status: string }>(
+        `select run.status::text from public.agent_runs run where run.project_id = $1`,
+        [beta.projectId],
+      );
+      expect(betaRuns.rows.map((row) => row.status)).toEqual(["queued"]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("queues excess work and starts it only as capacity releases — canary C", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, {
+        emergencyReserved: 0,
+        global: 4,
+        project: alpha,
+        projectLimit: 1,
+      });
+
+      // Two units of work in Alpha, and different roles so the agent-exclusion
+      // rule is not what limits them: the project ceiling should be.
+      await submit(db, alpha, "alpha-first", "audit", "qa");
+      await submit(db, alpha, "alpha-second", "build_feature", "backend");
+      await registerWorker(db, "portfolio-worker-c", 2);
+
+      const first = await claim(db, "portfolio-worker-c");
+      expect(first?.project_id).toBe(alpha.projectId);
+
+      // Capacity, not the worker, is what stops the second: the worker is
+      // declared able to hold two leases.
+      expect(await claim(db, "portfolio-worker-c")).toBeNull();
+
+      await actAs(db, ownerId);
+      const withheld = await db.query<{ capacity: Record<string, unknown>; reason: string }>(
+        `select reason, capacity from public.scheduling_decisions
+         where decision = 'withheld' order by occurred_at desc limit 1`,
+      );
+      expect(withheld.rows[0].reason).toMatch(/Project is at its concurrency ceiling/);
+      expect(withheld.rows[0].capacity).toMatchObject({ projectActive: 1, projectLimit: 1 });
+
+      await finish(db, "portfolio-worker-c", first!);
+      const second = await claim(db, "portfolio-worker-c");
+      expect(second?.project_id).toBe(alpha.projectId);
+      expect(second?.run_id).not.toBe(first!.run_id);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("reprioritizes the queue on an owner command without disturbing running work — canary E", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await setPriority(db, alpha, 2);
+      await setPriority(db, beta, 2);
+
+      // Alpha starts something and keeps running throughout.
+      await submit(db, alpha, "alpha-running", "audit", "qa");
+      await registerWorker(db, "portfolio-worker-e", 3);
+      const running = await claim(db, "portfolio-worker-e");
+      expect(running?.project_id).toBe(alpha.projectId);
+
+      // Queue one unit in each project, Beta's first so age favours it.
+      await submit(db, beta, "beta-next", "build_feature", "backend");
+      await submit(db, alpha, "alpha-next", "build_feature", "backend");
+
+      // "Focus engineering capacity on Project A."
+      await actAs(db, ownerId);
+      const focused = await db.query<{ project_id: string; strategic_focus: boolean }>(
+        "select project_id, strategic_focus from public.focus_portfolio_engineering($1::uuid,$2::uuid[],$3)",
+        [organizationId, [alpha.projectId], "Focus engineering capacity on Alpha"],
+      );
+      expect(
+        focused.rows.find((row) => row.project_id === alpha.projectId)?.strategic_focus,
+      ).toBe(true);
+      expect(
+        focused.rows.find((row) => row.project_id === beta.projectId)?.strategic_focus,
+      ).toBe(false);
+
+      const next = await claim(db, "portfolio-worker-e");
+      expect(next?.project_id).toBe(alpha.projectId);
+
+      // The run that was already going is untouched: same lease, still running.
+      await db.exec("reset role");
+      const untouched = await db.query<{ lease_token: string; status: string }>(
+        "select status::text, lease_token::text from public.agent_runs where id = $1",
+        [running!.run_id],
+      );
+      expect(untouched.rows[0]).toMatchObject({
+        lease_token: running!.lease_token,
+        status: "running",
+      });
+
+      // History survives the reprioritization.
+      await db.exec("reset role");
+      const history = await db.query<{ event_type: string }>(
+        `select event_type::text from public.activity_events
+         where organization_id = $1 and event_type::text = 'project.strategic_focus_changed'`,
+        [organizationId],
+      );
+      expect(history.rows).toHaveLength(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("runs two projects at once, which a shared agent roster made impossible", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+
+      // The same role in both projects. Before project-scoped agents these two
+      // shared one Backend agent and could never hold leases simultaneously.
+      await submit(db, alpha, "alpha-feature", "build_feature", "backend");
+      await submit(db, beta, "beta-feature", "build_feature", "backend");
+      await registerWorker(db, "portfolio-worker-f", 2);
+
+      const first = await claim(db, "portfolio-worker-f");
+      const second = await claim(db, "portfolio-worker-f");
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      expect(new Set([first!.project_id, second!.project_id])).toEqual(
+        new Set([alpha.projectId, beta.projectId]),
+      );
+
+      await db.exec("reset role");
+      const live = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.agent_runs
+         where status = 'running' and lease_expires_at > now()`,
+      );
+      expect(live.rows[0].count).toBe(2);
+
+      // Each project got its own agent rather than sharing one.
+      // `submit_command` derives the role from the command type — build_feature
+      // is `architect` — and overwrites whatever agentRole was passed, so the
+      // role is asserted as the database actually assigns it.
+      const agents = await db.query<{ project_id: string | null }>(
+        `select project_id::text from public.agents
+         where organization_id = $1 and role = 'architect'
+         order by project_id nulls first`,
+        [organizationId],
+      );
+      expect(agents.rows.map((row) => row.project_id)).toEqual([
+        null, alpha.projectId, beta.projectId,
+      ]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("stops scheduling a paused project and resumes it exactly where it was", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await setPriority(db, alpha, 1);
+      await setPriority(db, beta, 2);
+
+      await submit(db, alpha, "alpha-paused");
+      await submit(db, beta, "beta-open");
+      await registerWorker(db, "portfolio-worker-p");
+
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_project_engineering_pause($1::uuid, true, $2)",
+        [alpha.projectId, "Owner paused Alpha while a migration lands"],
+      );
+
+      // Alpha outranks Beta and would otherwise win; paused means paused.
+      const duringPause = await claim(db, "portfolio-worker-p");
+      expect(duringPause?.project_id).toBe(beta.projectId);
+      await finish(db, "portfolio-worker-p", duringPause!);
+
+      expect(await claim(db, "portfolio-worker-p")).toBeNull();
+
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_project_engineering_pause($1::uuid, false, null)",
+        [alpha.projectId],
+      );
+      const afterResume = await claim(db, "portfolio-worker-p");
+      expect(afterResume?.project_id).toBe(alpha.projectId);
+
+      // A resumed project keeps no stale explanation of a pause that ended.
+      await db.exec("reset role");
+      const project = await db.query<{
+        engineering_pause_reason: string | null;
+        engineering_paused_at: string | null;
+        engineering_paused_by: string | null;
+      }>(
+        `select engineering_paused_at, engineering_paused_by::text, engineering_pause_reason
+         from public.projects where id = $1`,
+        [alpha.projectId],
+      );
+      expect(project.rows[0]).toEqual({
+        engineering_pause_reason: null,
+        engineering_paused_at: null,
+        engineering_paused_by: null,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("promotes waiting work one tier per interval, and never into the emergency reserve", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      const priorities = await db.query<{
+        aged_far: number;
+        aged_one: number;
+        emergency: number;
+        focused: number;
+        fresh: number;
+      }>(`
+        select
+          public.effective_work_priority(3::smallint, false, false, now(), 900, now()) as fresh,
+          public.effective_work_priority(
+            3::smallint, false, false, now() - interval '16 minutes', 900, now()
+          ) as aged_one,
+          -- Ten hours of waiting: far past every promotion step available.
+          public.effective_work_priority(
+            3::smallint, false, false, now() - interval '10 hours', 900, now()
+          ) as aged_far,
+          public.effective_work_priority(
+            1::smallint, true, false, now() - interval '10 hours', 900, now()
+          ) as focused,
+          public.effective_work_priority(3::smallint, false, true, now(), 900, now()) as emergency
+      `);
+
+      expect(priorities.rows[0]).toEqual({
+        aged_far: 1,
+        aged_one: 2,
+        emergency: 0,
+        focused: 1,
+        fresh: 3,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("lets an aged low-priority project beat a fresh higher-priority one", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await setPriority(db, beta, 3);
+      await setPriority(db, alpha, 1);
+
+      const aged = await submit(db, beta, "beta-waiting");
+      await submit(db, alpha, "alpha-fresh");
+
+      // Beta has been waiting long enough for two promotions: P3 → P1. Alpha is
+      // P1 and newer, so the oldest-first tie-break hands the worker to Beta.
+      await db.exec("reset role");
+      await db.query(
+        "update public.agent_runs set created_at = now() - interval '40 minutes' where task_id = $1",
+        [aged.task_id],
+      );
+
+      await registerWorker(db, "portfolio-worker-fair");
+      const claimed = await claim(db, "portfolio-worker-fair");
+      expect(claimed?.project_id).toBe(beta.projectId);
+
+      await actAs(db, ownerId);
+      const decision = await db.query<{ effective_priority: number }>(
+        "select effective_priority from public.scheduling_decisions where run_id = $1",
+        [claimed!.run_id],
+      );
+      expect(decision.rows[0].effective_priority).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("holds a worker to its declared capacity", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 8 });
+      await submit(db, alpha, "alpha-one", "audit", "qa");
+      await submit(db, beta, "beta-one", "build_feature", "backend");
+      // Capacity one: ample portfolio headroom, distinct projects, distinct
+      // agents. The only thing left to stop the second claim is the worker.
+      await registerWorker(db, "portfolio-worker-single", 1);
+
+      expect(await claim(db, "portfolio-worker-single")).not.toBeNull();
+      expect(await claim(db, "portfolio-worker-single")).toBeNull();
+
+      await registerWorker(db, "portfolio-worker-second", 1);
+      expect(await claim(db, "portfolio-worker-second")).not.toBeNull();
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("enforces a provider account ceiling across the whole portfolio", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 8 });
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_provider_capacity_limit($1::uuid,'openai',1::smallint,null)",
+        [organizationId],
+      );
+
+      await submit(db, alpha, "alpha-provider", "audit", "qa");
+      await submit(db, beta, "beta-provider", "build_feature", "backend");
+      await registerWorker(db, "portfolio-worker-x", 4);
+      await registerWorker(db, "portfolio-worker-y", 4);
+
+      expect(await claim(db, "portfolio-worker-x")).not.toBeNull();
+      // A second worker, a second project, a second agent, portfolio headroom
+      // to spare — and still no claim, because the provider account is the
+      // binding constraint.
+      expect(await claim(db, "portfolio-worker-y")).toBeNull();
+
+      await actAs(db, ownerId);
+      const withheld = await db.query<{ reason: string }>(
+        `select reason from public.scheduling_decisions
+         where decision = 'withheld' order by occurred_at desc limit 1`,
+      );
+      expect(withheld.rows[0].reason).toMatch(/Provider account is at its concurrency ceiling/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("records what it assigned, and does not record the same withholding twice a minute", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 1 });
+      await submit(db, alpha, "alpha-audit", "audit", "qa");
+      await submit(db, beta, "beta-audit", "build_feature", "backend");
+      await registerWorker(db, "portfolio-worker-audit", 4);
+
+      const claimed = await claim(db, "portfolio-worker-audit");
+      await actAs(db, ownerId);
+      const assignment = await db.query<{
+        agent_id: string | null;
+        connection_id: string | null;
+        model: string;
+        project_id: string | null;
+        provider: string;
+        reason: string;
+        task_id: string | null;
+        worker_id: string;
+      }>(
+        `select project_id::text, task_id::text, agent_id::text, connection_id::text,
+           worker_id, provider, model, reason
+         from public.scheduling_decisions where run_id = $1`,
+        [claimed!.run_id],
+      );
+      // Goal 28, item by item.
+      expect(assignment.rows[0].project_id).toBe(claimed!.project_id);
+      expect(assignment.rows[0].task_id).toBe(claimed!.task_id);
+      expect(assignment.rows[0].agent_id).not.toBeNull();
+      expect(assignment.rows[0].connection_id).not.toBeNull();
+      expect(assignment.rows[0]).toMatchObject({
+        model: "gpt-5.3-codex",
+        provider: "openai",
+        worker_id: "portfolio-worker-audit",
+      });
+      expect(assignment.rows[0].reason.length).toBeGreaterThan(0);
+
+      // Three more polls against an unchanged ceiling.
+      await claim(db, "portfolio-worker-audit");
+      await claim(db, "portfolio-worker-audit");
+      await claim(db, "portfolio-worker-audit");
+
+      await actAs(db, ownerId);
+      const withheld = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.scheduling_decisions
+         where decision = 'withheld'`,
+      );
+      expect(withheld.rows[0].count).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps the decision log append-only and inside the organization", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 2 });
+      await submit(db, alpha, "alpha-rls");
+      await registerWorker(db, "portfolio-worker-rls");
+      // Without a claim there is nothing to protect, and a row-level trigger on
+      // an empty table would let this whole test pass while proving nothing.
+      expect(await claim(db, "portfolio-worker-rls")).not.toBeNull();
+
+      await db.exec("reset role");
+      await expect(
+        db.query("update public.scheduling_decisions set reason = 'rewritten'"),
+      ).rejects.toThrow(/append-only/);
+      await expect(
+        db.query("delete from public.scheduling_decisions"),
+      ).rejects.toThrow(/append-only/);
+
+      await actAs(db, outsiderId);
+      const outsider = await db.query("select 1 from public.scheduling_decisions");
+      expect(outsider.rows).toHaveLength(0);
+
+      await db.exec("reset role");
+      await db.query("select set_config('request.jwt.claim.sub', '', false)");
+      await db.exec("set role anon");
+      await expect(
+        db.query("select 1 from public.scheduling_decisions"),
+      ).rejects.toThrow(/permission denied/);
+      await db.exec("reset role");
+
+      // service_role runs the worker, and still holds nothing on these tables.
+      const grants = await db.query<{ table_name: string }>(
+        `select table_name from information_schema.role_table_grants
+         where grantee = 'service_role'
+           and table_name in ('scheduling_decisions', 'provider_capacity_limits')`,
+      );
+      expect(grants.rows).toHaveLength(0);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses portfolio controls to anyone who is not an owner", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await actAs(db, outsiderId);
+
+      await expect(
+        db.query("select * from public.set_project_engineering_priority($1::uuid,0::smallint,null)", [
+          alpha.projectId,
+        ]),
+      ).rejects.toThrow(/only an organization owner/);
+      await expect(
+        db.query("select * from public.set_project_engineering_pause($1::uuid,true,$2)", [
+          alpha.projectId, "Not mine to pause",
+        ]),
+      ).rejects.toThrow(/only an organization owner/);
+      await expect(
+        db.query("select * from public.focus_portfolio_engineering($1::uuid,$2::uuid[],null)", [
+          organizationId, [alpha.projectId],
+        ]),
+      ).rejects.toThrow(/only an organization owner/);
+      await expect(
+        db.query(
+          `select * from public.set_portfolio_capacity_limits(
+             $1::uuid,9::smallint,null,null,null,null)`,
+          [organizationId],
+        ),
+      ).rejects.toThrow(/only an organization owner/);
+      await expect(
+        db.query(
+          "select * from public.set_provider_capacity_limit($1::uuid,'openai',9::smallint,null)",
+          [organizationId],
+        ),
+      ).rejects.toThrow(/only an organization owner/);
+
+      // And an owner cannot silently pause without saying why.
+      await actAs(db, ownerId);
+      await expect(
+        db.query("select * from public.set_project_engineering_pause($1::uuid,true,null)", [
+          alpha.projectId,
+        ]),
+      ).rejects.toThrow(/pause reason is required/);
+    } finally {
+      await db.close();
+    }
+  });
+});
