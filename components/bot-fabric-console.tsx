@@ -927,14 +927,15 @@ function PasteKey({
   // a nested form is invalid HTML: the submit event bubbles to the outer
   // handler, which registers the bot and unmounts this panel before the result
   // of the key request can be shown.
-  const submit = () => {
-    if (saving || value.trim().length < 16) return;
+  const submit = (candidate = value) => {
+    const trimmed = candidate.trim();
+    if (saving || trimmed.length < 16) return;
     setSaving(true);
     setFailed("");
     void fetch("/api/bots/connect/key", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: provider.id, key: value.trim() }),
+      body: JSON.stringify({ provider: provider.id, key: trimmed }),
     })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
@@ -962,6 +963,18 @@ function PasteKey({
             type="password"
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            onPaste={(event) => {
+              // Pasting a key is the whole interaction, so it is also the
+              // submit. Requiring a button press afterwards adds a step whose
+              // only purpose is confirming what the paste already said.
+              const pasted = event.clipboardData.getData("text").trim();
+              event.preventDefault();
+              setValue(pasted);
+              // `submit` decides whether this is long enough to be a key. The
+              // check lived here too, which made a test of it vacuous: both
+              // guards had to be removed before anything failed.
+              submit(pasted);
+            }}
             onKeyDown={(event) => {
               // Enter still connects, which a form would have given for free.
               if (event.key === "Enter") {
@@ -978,7 +991,7 @@ function PasteKey({
         </label>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => submit()}
           disabled={saving || value.trim().length < 16}
           className="btn btn-primary btn-sm"
         >

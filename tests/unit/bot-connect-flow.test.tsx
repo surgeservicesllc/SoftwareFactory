@@ -541,3 +541,59 @@ describe("pasting a key", () => {
     });
   });
 });
+
+describe("pasting is the whole interaction", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  it("connects on paste, with no button press afterwards", async () => {
+    // As close to an OAuth return as policy allows for Anthropic: the paste is
+    // the last thing anyone does. A confirm click would only restate it.
+    const posted: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return { ok: true, status: 200, json: async () => ({ connected: true }) };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    }));
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    field.focus();
+    await user.paste("sk-ant-api03-pasted-straight-in");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({ key: "sk-ant-api03-pasted-straight-in" });
+  });
+
+  it("ignores a paste too short to be a key rather than posting it", async () => {
+    const posted: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return { ok: true, status: 200, json: async () => ({ connected: true }) };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    }));
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    field.focus();
+    await user.paste("oops");
+
+    // A stray paste must not fire a request that will certainly fail.
+    expect(posted).toHaveLength(0);
+  });
+});
