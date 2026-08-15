@@ -3,6 +3,7 @@
 import { GitBranch, ShieldCheck, Timer, Workflow } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { GraphLaunchControl } from "@/components/graph-launch-control";
 import { Card, EmptyState, MetricCard, SectionTitle, StatusBadge } from "@/components/ui";
 import type { GraphPreview, PreviewNode } from "@/lib/graph/preview";
 
@@ -365,6 +366,11 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
               ))}
             </div>
           </Card>
+
+          {/* After the compiled plan, deliberately: recording a graph is a
+              consequence of reading what it would do, not an invitation ahead
+              of it. */}
+          <GraphLaunchControl templateKey={active.key} templateName={active.name} />
 
           <Card>
             <SectionTitle title="Runs, verification, artifacts and anchors" />
