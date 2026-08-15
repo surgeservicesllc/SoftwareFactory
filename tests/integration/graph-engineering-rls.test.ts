@@ -22,7 +22,7 @@ const graphTables = [
   "graph_artifacts",
   "graph_handoffs",
   "graph_verifications",
-  "graph_work_locks",
+  "work_locks",
   "graph_events",
 ] as const;
 
@@ -227,7 +227,7 @@ describe("Phase 2B graph engineering schema", () => {
 
     async function acquire(resourceId: string) {
       return db.query<{ id: string; state: string }>(
-        `select id, state from public.acquire_graph_work_lock(
+        `select id, state from public.acquire_work_lock(
            $1::uuid, $2::uuid, $3::public.graph_resource_kind, $4::text, $5::uuid, $6::uuid, $7::integer)`,
         lockArgs(resourceId),
       );
@@ -245,7 +245,7 @@ describe("Phase 2B graph engineering schema", () => {
     it("frees the resource once released", async () => {
       await assumeRole(db, "authenticated", ownerOneId);
       const held = await acquire("lib/released.ts");
-      await db.query("select id from public.release_graph_work_lock($1::uuid)", [held.rows[0].id]);
+      await db.query("select id from public.release_work_lock($1::uuid)", [held.rows[0].id]);
 
       const again = await acquire("lib/released.ts");
       expect(again.rows[0].state).toBe("HELD");
@@ -258,7 +258,7 @@ describe("Phase 2B graph engineering schema", () => {
       // Simulate a crashed worker: the lease lapses and no one released it.
       await resetRole(db);
       await db.query(
-        `update public.graph_work_locks
+        `update public.work_locks
             set acquired_at = now() - interval '10 minutes',
                 heartbeat_at = now() - interval '10 minutes',
                 expires_at = now() - interval '1 minute'
@@ -272,7 +272,7 @@ describe("Phase 2B graph engineering schema", () => {
 
       await resetRole(db);
       const previous = await db.query<{ state: string }>(
-        "select state from public.graph_work_locks where id = $1",
+        "select state from public.work_locks where id = $1",
         [abandoned.rows[0].id],
       );
       expect(previous.rows[0].state).toBe("EXPIRED");
@@ -284,19 +284,19 @@ describe("Phase 2B graph engineering schema", () => {
 
       await resetRole(db);
       const before = await db.query<{ expires_at: string }>(
-        "select expires_at from public.graph_work_locks where id = $1",
+        "select expires_at from public.work_locks where id = $1",
         [held.rows[0].id],
       );
 
       await assumeRole(db, "authenticated", ownerOneId);
-      await db.query("select id from public.heartbeat_graph_work_lock($1::uuid, $2::integer)", [
+      await db.query("select id from public.heartbeat_work_lock($1::uuid, $2::integer)", [
         held.rows[0].id,
         600,
       ]);
 
       await resetRole(db);
       const after = await db.query<{ expires_at: string }>(
-        "select expires_at from public.graph_work_locks where id = $1",
+        "select expires_at from public.work_locks where id = $1",
         [held.rows[0].id],
       );
       expect(Date.parse(after.rows[0].expires_at)).toBeGreaterThan(
@@ -308,7 +308,7 @@ describe("Phase 2B graph engineering schema", () => {
       await assumeRole(db, "authenticated", ownerTwoId);
       await expect(
         db.query(
-          `select id from public.acquire_graph_work_lock(
+          `select id from public.acquire_work_lock(
              $1::uuid, $2::uuid, $3::public.graph_resource_kind, $4::text, $5::uuid, $6::uuid, $7::integer)`,
           lockArgs("cross/tenant.ts"),
         ),
@@ -321,7 +321,7 @@ describe("Phase 2B graph engineering schema", () => {
 
       await resetRole(db);
       await db.query(
-        `update public.graph_work_locks
+        `update public.work_locks
             set acquired_at = now() - interval '10 minutes',
                 expires_at = now() - interval '1 minute'
           where id = $1`,
@@ -329,11 +329,11 @@ describe("Phase 2B graph engineering schema", () => {
       );
 
       await assumeRole(db, "authenticated", ownerOneId);
-      const swept = await db.query<{ expire_abandoned_graph_work_locks: number }>(
-        "select public.expire_abandoned_graph_work_locks($1::uuid)",
+      const swept = await db.query<{ expire_abandoned_work_locks: number }>(
+        "select public.expire_abandoned_work_locks($1::uuid)",
         [organizationOneId],
       );
-      expect(Number(swept.rows[0].expire_abandoned_graph_work_locks)).toBeGreaterThanOrEqual(1);
+      expect(Number(swept.rows[0].expire_abandoned_work_locks)).toBeGreaterThanOrEqual(1);
     });
   });
 

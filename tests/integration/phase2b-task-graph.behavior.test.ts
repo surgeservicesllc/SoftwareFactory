@@ -212,42 +212,42 @@ describe("Phase 2B task graph and handoffs", () => {
   it("locks a path prefix, and conflicts on overlap in both directions", async () => {
     await actAs(db, ownerId);
     const { rows: first } = await db.query<{ lock_id: string; acquired: boolean }>(
-      `select lock_id, acquired from public.acquire_work_lock($1::uuid, 'lib/operations', $2::uuid, 'backend'::public.agent_role)`,
+      `select lock_id, acquired from public.acquire_task_work_lock($1::uuid, 'lib/operations', $2::uuid, 'backend'::public.agent_role)`,
       [projectId, b],
     );
     expect(first[0].acquired).toBe(true);
 
     // A nested path is the same subsystem, so it must conflict.
     const { rows: nested } = await db.query<{ acquired: boolean; conflicting_prefix: string }>(
-      `select acquired, conflicting_prefix from public.acquire_work_lock($1::uuid, 'lib/operations/probe.ts', $2::uuid, 'qa'::public.agent_role)`,
+      `select acquired, conflicting_prefix from public.acquire_task_work_lock($1::uuid, 'lib/operations/probe.ts', $2::uuid, 'qa'::public.agent_role)`,
       [projectId, c],
     );
     expect(nested[0]).toMatchObject({ acquired: false, conflicting_prefix: "lib/operations" });
 
     // And the reverse: a parent of a held path overlaps it too.
     const { rows: parent } = await db.query<{ acquired: boolean }>(
-      `select acquired from public.acquire_work_lock($1::uuid, 'lib', $2::uuid, 'qa'::public.agent_role)`,
+      `select acquired from public.acquire_task_work_lock($1::uuid, 'lib', $2::uuid, 'qa'::public.agent_role)`,
       [projectId, c],
     );
     expect(parent[0].acquired).toBe(false);
 
     // An unrelated subsystem is free.
     const { rows: other } = await db.query<{ acquired: boolean }>(
-      `select acquired from public.acquire_work_lock($1::uuid, 'components', $2::uuid, 'frontend'::public.agent_role)`,
+      `select acquired from public.acquire_task_work_lock($1::uuid, 'components', $2::uuid, 'frontend'::public.agent_role)`,
       [projectId, c],
     );
     expect(other[0].acquired).toBe(true);
 
     // Releasing frees the prefix; releasing twice is not an error.
-    expect((await db.query<{ release_work_lock: boolean }>(
-      `select public.release_work_lock($1::uuid)`, [first[0].lock_id],
-    )).rows[0].release_work_lock).toBe(true);
-    expect((await db.query<{ release_work_lock: boolean }>(
-      `select public.release_work_lock($1::uuid)`, [first[0].lock_id],
-    )).rows[0].release_work_lock).toBe(false);
+    expect((await db.query<{ release_task_work_lock: boolean }>(
+      `select public.release_task_work_lock($1::uuid)`, [first[0].lock_id],
+    )).rows[0].release_task_work_lock).toBe(true);
+    expect((await db.query<{ release_task_work_lock: boolean }>(
+      `select public.release_task_work_lock($1::uuid)`, [first[0].lock_id],
+    )).rows[0].release_task_work_lock).toBe(false);
 
     const { rows: reacquired } = await db.query<{ acquired: boolean }>(
-      `select acquired from public.acquire_work_lock($1::uuid, 'lib/operations', $2::uuid, 'qa'::public.agent_role)`,
+      `select acquired from public.acquire_task_work_lock($1::uuid, 'lib/operations', $2::uuid, 'qa'::public.agent_role)`,
       [projectId, c],
     );
     expect(reacquired[0].acquired).toBe(true);
@@ -258,23 +258,23 @@ describe("Phase 2B task graph and handoffs", () => {
     for (const bad of ["/etc/passwd", "lib/../../etc"]) {
       await expect(
         db.query(
-          `select acquired from public.acquire_work_lock($1::uuid, $2::text, $3::uuid, 'backend'::public.agent_role)`,
+          `select acquired from public.acquire_task_work_lock($1::uuid, $2::text, $3::uuid, 'backend'::public.agent_role)`,
           [projectId, bad, b],
         ),
         bad,
-      ).rejects.toThrow(/violates check|work_locks_path_prefix_check/i);
+      ).rejects.toThrow(/violates check|task_work_locks_path_prefix_check/i);
     }
   });
 
   it("shows nothing to another organization and grants service_role nothing", async () => {
     await actAs(db, outsiderId);
     expect((await db.query(`select 1 from public.agent_handoffs`)).rows).toHaveLength(0);
-    expect((await db.query(`select 1 from public.work_locks`)).rows).toHaveLength(0);
+    expect((await db.query(`select 1 from public.task_work_locks`)).rows).toHaveLength(0);
 
     await db.exec("reset role");
     const { rows } = await db.query(
       `select table_name from information_schema.role_table_grants
-       where grantee = 'service_role' and table_name in ('agent_handoffs', 'work_locks')`,
+       where grantee = 'service_role' and table_name in ('agent_handoffs', 'task_work_locks')`,
     );
     expect(rows).toHaveLength(0);
   });
