@@ -23,7 +23,7 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | 10 | Invalid output fails/retries under bounded policy | **PASS** | `DEFAULT_RETRY_POLICY`, demonstration D. |
 | 11 | Real dependencies control node readiness | **PASS** | Scheduler is a pure function of state; demonstration D blocks a failed node's dependants without killing unrelated work. |
 | 12 | Independent nodes execute concurrently | **PASS** | Demonstration B observes the runner dispatching **20** inspectors in one batch. The live canary observes **3 real Claude executions** in one batch. |
-| 13 | Claude/Codex routing uses the existing 2A provider layer | **PARTIAL** | The routing engine, adapters and fallback are built and unit-tested in `lib/providers/`. The live canary calls the Agent SDK directly rather than through the 2A transport — see "The 2A/2B turn-budget gap" below, which is a real architectural gap rather than a shortcut. |
+| 13 | Claude/Codex routing uses the existing 2A provider layer | **PASS** | **Closed 2026-08-15**, after the turn-budget gap below was fixed rather than worked around. `graph-live-team-canary.test.ts` now executes its nodes through `executeClaudeThroughCli`, and [run 31899176257](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31899176257) confirms it did: `executing through the Phase 2A provider transport (subscription credential configured)`, five nodes, 244s, zero API tokens. Locally, with no configured credential, the transport refuses by design and the canary falls back to the SDK and says so — because "no credential here" and "the provider layer is broken" must not look alike. |
 | 14 | Dynamic team uses the smallest capable specialist set | **PASS** | Capability-gated selection; demonstration A's refusal to expand is the same rule. |
 | 15 | Parallel coding uses isolated workspaces | **PASS** | `lib/graph/fan-out.ts`: writers always isolated, readers share, over-ceiling writers **deferred rather than run unisolated**. |
 | 16 | Shared resource conflicts create a dependency or lock | **PASS** | Demonstration E refuses to compile two nodes writing one resource, and discovers a read-after-write dependency nobody proposed. |
@@ -47,7 +47,7 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | 34 | All 7 demonstrations pass with evidence | **PASS** | A–G, **20 tests, 0 skipped**. See the table below. |
 | 35 | No paid AI-token dependency is required | **PASS** | The live canary runs on the subscription CLI. `lib/worker/auth.ts` and `lib/providers/claude-auth.ts` both refuse to reach a billed path by accident. **A defect was fixed here** — see below. |
 
-**PASS 31 · PARTIAL 4 · FAIL 0 · BLOCKED 0 — 94%.**
+**PASS 32 · PARTIAL 3 · FAIL 0 · BLOCKED 0 — 96%.**
 
 Re-scored twice on 2026-08-15. First after the owner applied and reconciled the
 hosted schema, which cleared every BLOCKED row. Then again, downward, after
