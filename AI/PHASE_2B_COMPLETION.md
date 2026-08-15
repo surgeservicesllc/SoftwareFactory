@@ -13,8 +13,8 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | --- | --- | --- | --- |
 | 1 | Required hosted-schema migrations applied and verified | **PASS** | Applied by the owner 2026-08-15 and verified twice, independently: the **Hosted schema audit** ([run 31895816438](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/31895816438)) reports `4 applied, 0 outstanding, 0 indeterminate`, and `hosted-next-actions.sql` reports every checked migration's objects present. Two migrations had died partway and needed idempotent repairs (`scripts/repair-20260814000210.sql`, `scripts/repair-20260814002200.sql`) rather than re-runs. |
 | 2 | Local migration state matches hosted | **PASS** | The ledger holds **65 rows** with a high-water mark of `20260814002300`: all 64 repository migrations, plus the inert `20260814000200` row left by renumbering `graph_write_boundary`. Reconciled by `scripts/hosted-ledger-record-verified.sql`, which recomputes presence from the catalogue and cannot record a version whose objects are missing — a property tested by attacking it. |
-| 3 | Graph engine runs against hosted schema | **PARTIAL** | The schema is now present and verified in hosted, and the engine runs against that same schema under PGlite. What has not happened is a graph **run** executed against hosted — that needs the Bot Manager launch path exercised live, which is goal 33. |
-| 4 | Graph/node/edge/run/handoff/lock/artifact data persists | **PARTIAL** | Behaviour proven against **real PostgreSQL** in `graph-engineering-rls.test.ts` and `graph-anchors-persistence.test.ts`, and the tables now exist in hosted with RLS + FORCE RLS confirmed. No row has yet been written to them in hosted, so persistence is proven for the schema rather than for a real run. |
+| 3 | Graph engine runs against hosted schema | **PARTIAL** | The schema is present and verified in hosted, and the engine runs against that same schema under PGlite. Nothing connects the two: no application code calls the graph write boundary, so there is no path by which the engine reaches hosted. That is goal 33, and it is unbuilt rather than unexercised. |
+| 4 | Graph/node/edge/run/handoff/lock/artifact data persists | **PARTIAL** | Behaviour proven against **real PostgreSQL** in `graph-engineering-rls.test.ts` and `graph-anchors-persistence.test.ts`, and the tables exist in hosted with RLS + FORCE RLS confirmed. No row has been written in hosted and none can be until goal 33 is built — the SECURITY DEFINER functions are granted to `authenticated` only, and `service_role` holds **zero** execute grants on the write boundary, so no server-side key can write these tables by design. |
 | 5 | RLS isolates users/projects/teams/graphs | **PASS** | `graph-engineering-rls.test.ts`: RLS + FORCE RLS on all thirteen tables, no INSERT/UPDATE/DELETE to `anon`/`authenticated`, cross-tenant read returns zero rows, anonymous denied outright with `permission denied` rather than an empty set. |
 | 6 | Planner chooses SINGLE/LOOP/SEQUENTIAL/DAG/DIAMOND/DISCOVERY | **PASS** | `selectTopology` in `lib/graph/topology.ts`; demonstration A and the topology unit tests. |
 | 7 | Small tasks avoid graph overhead | **PASS** | Demonstration A. Two dependent steps stay one agent's job; a long plan that is really a queue does not become a graph. |
@@ -43,22 +43,34 @@ the live half of C runs in `tests/integration/graph-live-team-canary.test.ts`.
 | 30 | Failure supports bounded retry/reassignment/provider fallback | **PARTIAL** | Retry and one-attempt fallback are built and unit-tested (`lib/providers/runtime.ts`). Live provider **fallback** is unproven — it needs two live providers, and only Claude is reachable zero-token today. |
 | 31 | Graph/Team UI truthfully shows topology, workers, status, evidence, failures | **PASS** | `components/workflows-console.tsx`, `components/graph-execution-summary.tsx`, `/solutions/workflows`. Empty states say which kind of empty they are; `computeCostMicros` renders absent rather than zero. |
 | 32 | Reusable/versioned graph templates work | **PASS** | `lib/graph/templates.ts` — 13 templates, `cloneTemplate`/`reviseTemplate`, version always advances because "two node sets sharing a version would make a run's record a lie." |
-| 33 | Bot Manager can launch a real graph goal | **PARTIAL** | No longer blocked: `create_graph_from_plan` and its tables are confirmed present in hosted. The surface exists and is tested, and the launch has not yet been exercised live. This is now ordinary remaining work rather than an external prerequisite. |
+| 33 | Bot Manager can launch a real graph goal | **FAIL** | **Corrected 2026-08-15.** This row previously read PARTIAL on the claim that "the surface exists and is tested". That is false in the sense that matters. `app/(portal)/solutions/workflows/page.tsx` is a *synchronous* component rendering `previewTemplate()` from in-memory templates; it touches no database. Searching the whole tree for `create_graph_from_plan`, `start_graph_run`, `record_node_state` and `graph_runs` across `app/`, `lib/` and `components/` returns **nothing**. There is no API route, no client action, and no code path of any kind that could write a row to the graph tables. The launch path is not built. |
 | 34 | All 7 demonstrations pass with evidence | **PASS** | A–G, **20 tests, 0 skipped**. See the table below. |
 | 35 | No paid AI-token dependency is required | **PASS** | The live canary runs on the subscription CLI. `lib/worker/auth.ts` and `lib/providers/claude-auth.ts` both refuse to reach a billed path by accident. **A defect was fixed here** — see below. |
 
-**PASS 30 · PARTIAL 5 · FAIL 0 · BLOCKED 0 — 90%.**
+**PASS 30 · PARTIAL 4 · FAIL 1 · BLOCKED 0 — 89%.**
 
-Re-scored 2026-08-15 after the owner applied and reconciled the hosted schema.
-Nothing is blocked on an external prerequisite any more. The five PARTIAL rows
-split into two groups:
+Re-scored twice on 2026-08-15. First after the owner applied and reconciled the
+hosted schema, which cleared every BLOCKED row. Then again, downward, after
+checking a claim this document had been making without evidence.
 
-- **Three need a live graph run against hosted** (3, 4, 33). The schema is there
-  and verified; no row has been written to it yet. That is ordinary remaining
-  work, not a dependency.
-- **Two need a second provider reachable zero-token** (13, 30) — see the
-  turn-budget gap below, and `lib/providers/` for the routing that is proven by
-  unit test but not live.
+**Goal 33 was scored PARTIAL on the words "the surface exists and is tested".**
+It does not. The workflows console renders a design-time preview from in-memory
+templates and touches no database, and no code anywhere in `app/`, `lib/` or
+`components/` calls the graph write boundary. The launch path is unbuilt, not
+unexercised — a distinction the earlier wording erased, and the same class of
+overclaim demonstration C's permanent skip belonged to.
+
+That correction propagates. Goals 3 and 4 are not waiting for someone to press a
+button; they are waiting for the button to exist. The remaining rows:
+
+- **Goal 33 is a build** — an API route and a client action calling
+  `create_graph_from_plan` as an authenticated user. Note that `service_role`
+  holds **zero** execute grants on the write boundary, so this cannot be done
+  with a server key; it needs a real session, by design.
+- **Goals 3 and 4 follow from 33** and need nothing else.
+- **Goals 13 and 30** need a second provider reachable zero-token. 13's mechanism
+  now exists — `resolveMaxTurns` lets a caller declare a budget within a
+  clamped ceiling — but the routing engine is still proven by unit test only.
 
 ## The 7 demonstrations
 

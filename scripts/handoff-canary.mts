@@ -34,11 +34,15 @@
  * refuses to start if an API key is present in a slot that would bill.
  */
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { z } from "zod";
+
+const run = promisify(execFile);
 
 const planSchema = z.object({
   summary: z.string().min(1),
@@ -190,6 +194,20 @@ async function main(): Promise<void> {
 
   const workspace = await mkdtemp(path.join(tmpdir(), "handoff-canary-"));
   try {
+    // Codex refuses to work outside a trusted directory, and it is right to:
+    // an agent writing into an arbitrary path has no baseline to diff against
+    // and no boundary to respect. The first run of this canary failed exactly
+    // there.
+    //
+    // The fix is to give it a real repository rather than pass
+    // `--skip-git-repo-check`, which would silence the check instead of
+    // satisfying it. An empty commit is the baseline, so what Codex does next is
+    // a genuine diff -- which is also what the reviewer should be shown, rather
+    // than a file's contents with no indication of what changed.
+    await run("git", ["init", "--quiet", "--initial-branch=main"], { cwd: workspace });
+    await run("git", ["config", "user.email", "canary@softwarefactory.invalid"], { cwd: workspace });
+    await run("git", ["config", "user.name", "handoff canary"], { cwd: workspace });
+    await run("git", ["commit", "--quiet", "--allow-empty", "-m", "baseline"], { cwd: workspace });
     // ---------------------------------------------------------------- step 1
     const planSystem =
       "You are the planner. Produce an implementation plan as structured data. "
@@ -224,21 +242,23 @@ async function main(): Promise<void> {
 
     await codex(implementPrompt, workspace);
 
-    const produced = plan.files[0].path.replace(/^\.?\//, "");
-    let diff: string;
-    try {
-      diff = await readFile(path.join(workspace, produced), "utf8");
-    } catch {
-      fail(`Codex did not produce ${produced}. Goal 18 not demonstrated.`);
-    }
-    if (!diff.trim()) fail(`Codex produced an empty ${produced}.`);
-    console.log(`CODEX OK  ${produced} is ${diff.length} bytes`);
+    // What changed, from git rather than from Codex's own account of it. An
+    // agent's summary of its work is exactly the kind of claim this repository
+    // refuses to treat as evidence.
+    await run("git", ["add", "-A"], { cwd: workspace });
+    const { stdout: diff } = await run("git", ["diff", "--cached"], {
+      cwd: workspace,
+      maxBuffer: 4_000_000,
+    });
+    if (!diff.trim()) fail("Codex changed nothing. Goal 18 not demonstrated.");
+    const { stdout: names } = await run("git", ["diff", "--cached", "--name-only"], { cwd: workspace });
+    console.log(`CODEX OK  ${names.trim().split("\n").length} file(s) changed, ${diff.length} bytes of diff`);
 
     // ---------------------------------------------------------------- step 4
     // The reviewer receives the artifact and the criteria. Nothing else exists
     // in this string, and that is asserted below rather than intended.
     const reviewPrompt = [
-      "Review this file against the criteria. Report problems as findings.",
+      "Review this diff against the criteria. Report problems as findings.",
       "",
       "```",
       diff,
