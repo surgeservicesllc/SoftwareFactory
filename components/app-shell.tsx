@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldCheck,
   UserRound,
+  Workflow,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -68,6 +69,7 @@ const navigationGroups = [
     heading: "Work",
     items: [
       { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
+      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
       { label: "Runs", href: "/solutions/runs", icon: GitBranch },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },

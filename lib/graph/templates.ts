@@ -1,0 +1,497 @@
+import { z } from "zod";
+
+import { defineNode, type NodeCapability, type NodeContract } from "@/lib/graph/contracts";
+import type { ProposedEdge } from "@/lib/graph/dependencies";
+import type { ResourceRef, RiskLevel } from "@/lib/graph/types";
+
+/**
+ * Graph templates.
+ *
+ * A template is a *starting plan*, not a guarantee. It declares the nodes a
+ * recurring job usually needs and the dependencies it believes exist; the
+ * compiler then applies the same scrutiny it applies to a planner's output —
+ * fake edges are still removed, write conflicts are still detected, and the
+ * topology is still chosen on evidence. A template that names twelve nodes can
+ * legitimately compile down to `SINGLE_AGENT`, and that is a success rather than
+ * a bug.
+ *
+ * The reason templates exist is economy: the planning call that produces this
+ * node set costs money and time on every run, and for recurring work — an RLS
+ * audit, a dependency sweep — the answer is the same each time. Skipping the
+ * planner for known-shaped work is the cheapest possible improvement.
+ *
+ * Templates are versioned and cloned rather than edited in place, because a run
+ * has to be reproducible from the template version it used. Editing a template
+ * under a completed run would make its evidence unreadable.
+ */
+
+export const TEMPLATE_CATEGORIES = ["AUDIT", "BUILD", "REVIEW", "INVESTIGATION"] as const;
+export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
+
+export type TemplateNode = {
+  readonly nodeId: string;
+  readonly job: string;
+  readonly capability: NodeCapability;
+  readonly executor: NodeContract["executor"];
+  readonly dependsOn?: readonly string[];
+  readonly reads?: readonly ResourceRef[];
+  readonly writes?: readonly ResourceRef[];
+  /** Structured output is the default; a node opts into prose explicitly. */
+  readonly prose?: boolean;
+};
+
+export type GraphTemplate = {
+  readonly key: string;
+  readonly name: string;
+  readonly category: TemplateCategory;
+  readonly summary: string;
+  readonly version: number;
+  readonly risk: RiskLevel;
+  readonly discovery?: boolean;
+  readonly nodes: readonly TemplateNode[];
+  readonly proposedEdges: readonly ProposedEdge[];
+  /**
+   * Resources the template knows two nodes will both write, and has arranged to
+   * serialize. Declaring it here is what stops compilation failing on a conflict
+   * the template author already thought about.
+   */
+  readonly resolvedWriteConflicts?: readonly string[];
+};
+
+const findingsSchema = z.object({
+  findings: z.array(
+    z.object({
+      title: z.string(),
+      severity: z.enum(["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]),
+      location: z.string(),
+      evidence: z.string(),
+    }),
+  ),
+});
+
+const reportSchema = z.object({
+  summary: z.string(),
+  findings: z.array(z.object({ title: z.string(), severity: z.string() })),
+  recommendation: z.string(),
+});
+
+const planSchema = z.object({
+  steps: z.array(z.object({ description: z.string(), rationale: z.string() })),
+});
+
+/**
+ * Which schema a capability's output must satisfy.
+ *
+ * Extraction and review nodes produce findings that a reduce step consumes, so
+ * prose from them is a contract violation rather than a style preference.
+ */
+function schemaFor(node: TemplateNode): z.ZodTypeAny {
+  if (node.prose) return z.string();
+  switch (node.capability) {
+    case "planning":
+    case "architecture":
+      return planSchema;
+    case "synthesis":
+    case "reporting":
+      return reportSchema;
+    default:
+      return findingsSchema;
+  }
+}
+
+/** Turn a template's declarative nodes into full contracts the compiler accepts. */
+export function templateNodeContracts(template: GraphTemplate): readonly NodeContract[] {
+  return template.nodes.map((node) =>
+    defineNode({
+      nodeId: node.nodeId,
+      job: node.job,
+      executor: node.executor,
+      capability: node.capability,
+      // A node's input is whatever its dependencies handed it. An entry node
+      // receives the goal, which is legitimately a string.
+      inputSchema: (node.dependsOn ?? []).length === 0 ? z.string() : z.unknown(),
+      outputSchema: schemaFor(node),
+      dependsOn: node.dependsOn ?? [],
+      reads: node.reads ?? [],
+      writes: node.writes ?? [],
+      risk: template.risk,
+    }),
+  );
+}
+
+const file = (id: string): ResourceRef => ({ kind: "file", id });
+
+/**
+ * A wide audit: many independent inspectors converging on one report.
+ *
+ * The inspectors declare no dependencies on each other because they genuinely
+ * have none — this is the shape the fake-edge test exists to protect. Only the
+ * reduce step waits.
+ */
+function auditTemplate(input: {
+  key: string;
+  name: string;
+  summary: string;
+  areas: readonly { id: string; job: string }[];
+  capability?: NodeCapability;
+  category?: TemplateCategory;
+}): GraphTemplate {
+  const capability = input.capability ?? "review";
+  const inspectors: TemplateNode[] = input.areas.map((area) => ({
+    nodeId: area.id,
+    job: area.job,
+    capability,
+    executor: "MODEL",
+  }));
+
+  return {
+    key: input.key,
+    name: input.name,
+    category: input.category ?? "AUDIT",
+    summary: input.summary,
+    version: 1,
+    risk: "GREEN",
+    nodes: [
+      ...inspectors,
+      {
+        nodeId: "reduce",
+        job: "Deduplicate and rank the findings from every inspector.",
+        capability: "extraction",
+        executor: "DETERMINISTIC",
+        dependsOn: inspectors.map((node) => node.nodeId),
+      },
+      {
+        nodeId: "report",
+        job: `Write the ${input.name.toLowerCase()} report from the reduced findings.`,
+        capability: "reporting",
+        executor: "MODEL",
+        dependsOn: ["reduce"],
+      },
+    ],
+    proposedEdges: [
+      ...inspectors.map((node) => ({
+        from: node.nodeId,
+        to: "reduce",
+        reason: "DATA" as const,
+        detail: `The reduce step consumes ${node.nodeId}'s findings.`,
+      })),
+      {
+        from: "reduce",
+        to: "report",
+        reason: "DATA" as const,
+        detail: "The report is written from the reduced finding set.",
+      },
+    ],
+  };
+}
+
+export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
+  auditTemplate({
+    key: "production_readiness",
+    name: "Production Readiness",
+    summary:
+      "Checks the things that break on the first real day: configuration, migrations, error handling, observability and rollback.",
+    areas: [
+      { id: "config", job: "Check configuration and environment handling for missing or unsafe defaults." },
+      { id: "migrations", job: "Check migrations apply cleanly, in order, and are recorded." },
+      { id: "errors", job: "Check error handling, timeouts and retries on every external call." },
+      { id: "observability", job: "Check that a failure would be visible: logs, metrics, alerts." },
+      { id: "rollback", job: "Check the rollback path exists and has been exercised." },
+    ],
+  }),
+  auditTemplate({
+    key: "security_audit",
+    name: "Security Audit",
+    summary:
+      "Authentication, authorization, secret handling, input validation and dependency exposure.",
+    areas: [
+      { id: "authn", job: "Review authentication: session handling, confirmation, and account recovery." },
+      { id: "authz", job: "Review authorization: every privileged path checks the caller." },
+      { id: "secrets", job: "Look for credentials in browser code, logs, fixtures or database rows." },
+      { id: "input", job: "Review input validation and injection surfaces." },
+      { id: "deps", job: "Review dependencies for known vulnerable versions." },
+    ],
+    capability: "security_review",
+  }),
+  auditTemplate({
+    key: "rls_audit",
+    name: "RLS Audit",
+    summary:
+      "Every exposed table has RLS and FORCE RLS, an ownership predicate, and no write grant to a browser role.",
+    areas: [
+      { id: "coverage", job: "Find any public table without RLS and FORCE RLS enabled." },
+      { id: "predicates", job: "Check each policy scopes rows by tenant ownership rather than by role alone." },
+      { id: "grants", job: "Check anon and authenticated hold no INSERT, UPDATE or DELETE grant." },
+      { id: "definers", job: "Check every SECURITY DEFINER function re-validates its caller." },
+    ],
+    capability: "security_review",
+  }),
+  auditTemplate({
+    key: "bug_sweep",
+    name: "Bug Sweep",
+    summary: "Looks for defects by class rather than by file, so the same mistake is found everywhere it was made.",
+    areas: [
+      { id: "boundaries", job: "Off-by-one, empty-collection and boundary handling." },
+      { id: "async", job: "Unawaited promises, races, and unhandled rejections." },
+      { id: "nullability", job: "Values treated as present that the type says may be absent." },
+      { id: "state", job: "State transitions that can be entered twice or left incomplete." },
+    ],
+  }),
+  auditTemplate({
+    key: "test_coverage",
+    name: "Test Coverage",
+    summary: "Finds behaviour with no test, and tests that would pass against a broken implementation.",
+    areas: [
+      { id: "untested", job: "Find exported behaviour with no corresponding test." },
+      { id: "shallow", job: "Find tests that assert a call happened rather than that it did the right thing." },
+      { id: "adverse", job: "Find missing error, empty and authorization cases." },
+    ],
+    capability: "qa",
+  }),
+  auditTemplate({
+    key: "refactor_sweep",
+    name: "Refactor Sweep",
+    summary: "Duplication, dead code, and abstractions that have stopped paying for themselves.",
+    areas: [
+      { id: "duplication", job: "Find logic duplicated across modules." },
+      { id: "dead", job: "Find unreachable or unreferenced code." },
+      { id: "abstractions", job: "Find indirection with a single caller." },
+    ],
+  }),
+  auditTemplate({
+    key: "dependency_audit",
+    name: "Dependency Audit",
+    summary: "Version drift, unused packages, duplicate transitive versions and licence exposure.",
+    areas: [
+      { id: "vulnerable", job: "Find dependencies on versions with known advisories." },
+      { id: "unused", job: "Find declared dependencies nothing imports." },
+      { id: "duplicates", job: "Find multiple versions of one package in the tree." },
+      { id: "licences", job: "Find licences incompatible with distribution." },
+    ],
+  }),
+  auditTemplate({
+    key: "performance_audit",
+    name: "Performance Audit",
+    summary: "Query patterns, payload sizes, render cost and caching.",
+    areas: [
+      { id: "queries", job: "Find N+1 queries and missing indexes on filtered columns." },
+      { id: "payloads", job: "Find responses returning more data than the caller uses." },
+      { id: "render", job: "Find client components that could be server components." },
+      { id: "caching", job: "Find repeated work that is not cached and safely could be." },
+    ],
+  }),
+  auditTemplate({
+    key: "mobile_audit",
+    name: "Mobile Audit",
+    summary: "Layout, tap targets, and content that only works with a mouse and a wide viewport.",
+    areas: [
+      { id: "layout", job: "Find layouts that overflow or collapse below tablet width." },
+      { id: "targets", job: "Find tap targets below the minimum comfortable size." },
+      { id: "interaction", job: "Find hover-only affordances with no touch equivalent." },
+    ],
+  }),
+  auditTemplate({
+    key: "seo_aeo_audit",
+    name: "SEO and AEO Audit",
+    summary: "Metadata, structured data, crawlability, and whether an answer engine can quote the page.",
+    areas: [
+      { id: "metadata", job: "Check titles, descriptions and canonical URLs per route." },
+      { id: "structured", job: "Check structured data is present and valid." },
+      { id: "crawl", job: "Check robots, sitemap and indexability of public routes." },
+      { id: "answerable", job: "Check pages state their claims in extractable, quotable form." },
+    ],
+    capability: "reporting",
+  }),
+  {
+    key: "code_review",
+    name: "Code Review",
+    summary:
+      "Three independent reviewers with different briefs, reduced and then synthesized. Independence is the point: one reviewer with three instructions produces one opinion.",
+    category: "REVIEW",
+    version: 1,
+    risk: "GREEN",
+    nodes: [
+      { nodeId: "correctness", job: "Review for correctness defects.", capability: "review", executor: "MODEL" },
+      { nodeId: "security", job: "Review for security defects.", capability: "security_review", executor: "MODEL" },
+      { nodeId: "quality", job: "Review for simplification and reuse.", capability: "review", executor: "MODEL" },
+      {
+        nodeId: "reduce",
+        job: "Deduplicate findings across the three reviews.",
+        capability: "extraction",
+        executor: "DETERMINISTIC",
+        dependsOn: ["correctness", "security", "quality"],
+      },
+      {
+        nodeId: "synthesis",
+        job: "Rank what matters and state what to change.",
+        capability: "synthesis",
+        executor: "MODEL",
+        dependsOn: ["reduce"],
+      },
+    ],
+    proposedEdges: [
+      { from: "correctness", to: "reduce", reason: "DATA", detail: "Reduce consumes correctness findings." },
+      { from: "security", to: "reduce", reason: "DATA", detail: "Reduce consumes security findings." },
+      { from: "quality", to: "reduce", reason: "DATA", detail: "Reduce consumes quality findings." },
+      { from: "reduce", to: "synthesis", reason: "DATA", detail: "Synthesis reads the reduced set." },
+    ],
+  },
+  {
+    key: "feature_build",
+    name: "Feature Build",
+    summary:
+      "Plan, build in parallel where the files genuinely differ, integrate, then review with a verifier that never saw the implementation reasoning.",
+    category: "BUILD",
+    version: 1,
+    risk: "YELLOW",
+    nodes: [
+      { nodeId: "plan", job: "Decompose the feature into independent units of work.", capability: "planning", executor: "MODEL" },
+      {
+        nodeId: "implement_api",
+        job: "Implement the server route and its validation.",
+        capability: "implementation",
+        executor: "MODEL",
+        dependsOn: ["plan"],
+        writes: [file("app/api")],
+      },
+      {
+        nodeId: "implement_ui",
+        job: "Implement the interface.",
+        capability: "implementation",
+        executor: "MODEL",
+        dependsOn: ["plan"],
+        writes: [file("components")],
+      },
+      {
+        nodeId: "implement_tests",
+        job: "Write the tests for the described behaviour.",
+        capability: "qa",
+        executor: "MODEL",
+        dependsOn: ["plan"],
+        writes: [file("tests")],
+      },
+      {
+        nodeId: "integrate",
+        job: "Integrate the branches and resolve what they share.",
+        capability: "implementation",
+        executor: "DETERMINISTIC",
+        dependsOn: ["implement_api", "implement_ui", "implement_tests"],
+      },
+      {
+        nodeId: "verify",
+        job: "Run the tests and record the result as evidence.",
+        capability: "qa",
+        executor: "ANCHOR",
+        dependsOn: ["integrate"],
+      },
+      {
+        nodeId: "review",
+        job: "Review the integrated change without the implementation transcript.",
+        capability: "review",
+        executor: "MODEL",
+        dependsOn: ["verify"],
+      },
+    ],
+    proposedEdges: [
+      { from: "plan", to: "implement_api", reason: "DATA", detail: "The plan names the unit of work." },
+      { from: "plan", to: "implement_ui", reason: "DATA", detail: "The plan names the unit of work." },
+      { from: "plan", to: "implement_tests", reason: "DATA", detail: "The plan names the behaviour to test." },
+      { from: "implement_api", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "implement_ui", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "implement_tests", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "integrate", to: "verify", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Tests run against the integrated tree." },
+      { from: "verify", to: "review", reason: "VERIFICATION", detail: "Review reads the verified result." },
+    ],
+  },
+  {
+    key: "incident_investigation",
+    name: "Incident Investigation",
+    summary:
+      "An open-ended search: rounds continue until a round finds nothing new, rather than until a fixed node count is exhausted.",
+    category: "INVESTIGATION",
+    version: 1,
+    risk: "YELLOW",
+    discovery: true,
+    nodes: [
+      { nodeId: "triage", job: "Establish what is failing and when it started.", capability: "review", executor: "MODEL" },
+      {
+        nodeId: "logs",
+        job: "Search logs and events around the onset.",
+        capability: "extraction",
+        executor: "MODEL",
+        dependsOn: ["triage"],
+      },
+      {
+        nodeId: "changes",
+        job: "Identify changes deployed near the onset.",
+        capability: "extraction",
+        executor: "MODEL",
+        dependsOn: ["triage"],
+      },
+      {
+        nodeId: "reproduce",
+        job: "Attempt a reproduction and record the observation.",
+        capability: "qa",
+        executor: "ANCHOR",
+        dependsOn: ["triage"],
+      },
+      {
+        nodeId: "cause",
+        job: "State the cause, cite the evidence, and say what would disprove it.",
+        capability: "synthesis",
+        executor: "MODEL",
+        dependsOn: ["logs", "changes", "reproduce"],
+      },
+    ],
+    proposedEdges: [
+      { from: "triage", to: "logs", reason: "DATA", detail: "Triage bounds the search window." },
+      { from: "triage", to: "changes", reason: "DATA", detail: "Triage bounds the search window." },
+      { from: "triage", to: "reproduce", reason: "DATA", detail: "Triage states what to reproduce." },
+      { from: "logs", to: "cause", reason: "DATA", detail: "The cause cites log evidence." },
+      { from: "changes", to: "cause", reason: "DATA", detail: "The cause cites the change set." },
+      { from: "reproduce", to: "cause", reason: "VERIFICATION", detail: "A reproduction confirms or refutes the cause." },
+    ],
+  },
+]);
+
+export function findTemplate(key: string): GraphTemplate | null {
+  return GRAPH_TEMPLATES.find((template) => template.key === key) ?? null;
+}
+
+export function templatesByCategory(category: TemplateCategory): readonly GraphTemplate[] {
+  return GRAPH_TEMPLATES.filter((template) => template.category === category);
+}
+
+/**
+ * Clone a template for editing.
+ *
+ * Cloning rather than mutating is what keeps a completed run readable: its
+ * evidence refers to a template key and version, and both must still mean what
+ * they meant when it ran. A clone starts at version 1 under its own key.
+ */
+export function cloneTemplate(
+  template: GraphTemplate,
+  overrides: { key: string; name?: string; summary?: string },
+): GraphTemplate {
+  return {
+    ...template,
+    key: overrides.key,
+    name: overrides.name ?? `${template.name} (copy)`,
+    summary: overrides.summary ?? template.summary,
+    version: 1,
+  };
+}
+
+/**
+ * Save an edit as a new version of the same template.
+ *
+ * The version always advances, even when the edit looks cosmetic: a run records
+ * the version it used, and two different node sets sharing a version number
+ * would make that record a lie.
+ */
+export function reviseTemplate(
+  template: GraphTemplate,
+  changes: Partial<Omit<GraphTemplate, "key" | "version">>,
+): GraphTemplate {
+  return { ...template, ...changes, key: template.key, version: template.version + 1 };
+}

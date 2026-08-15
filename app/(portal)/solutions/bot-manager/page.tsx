@@ -1,5 +1,6 @@
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
+import { GraphExecutionSummary } from "@/components/graph-execution-summary";
 import { Card, PageHeader, SectionTitle } from "@/components/ui";
 import { WorkerStatusBadge } from "@/components/worker-status";
 
@@ -28,25 +29,29 @@ export default function BotManagerPage() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <BotManagerWorkspace />
 
-        <Card className="h-fit p-5">
-          <SectionTitle title="What happens next" />
-          <ol className="mt-4 space-y-4">
-            {lifecycle.map(([title, description], index) => (
-              <li key={title} className="flex gap-3">
-                <span
-                  className="tabular grid size-6 shrink-0 place-items-center rounded-full border border-line-strong text-xs font-semibold text-muted"
-                  aria-hidden="true"
-                >
-                  {index + 1}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-1 text-sm text-muted">{description}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </Card>
+        <div className="space-y-4">
+          <GraphExecutionSummary templateKey="code_review" />
+
+          <Card className="h-fit p-5">
+            <SectionTitle title="What happens next" />
+            <ol className="mt-4 space-y-4">
+              {lifecycle.map(([title, description], index) => (
+                <li key={title} className="flex gap-3">
+                  <span
+                    className="tabular grid size-6 shrink-0 place-items-center rounded-full border border-line-strong text-xs font-semibold text-muted"
+                    aria-hidden="true"
+                  >
+                    {index + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{title}</p>
+                    <p className="mt-1 text-sm text-muted">{description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        </div>
       </div>
     </>
   );
