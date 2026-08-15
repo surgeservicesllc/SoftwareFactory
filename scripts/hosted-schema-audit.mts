@@ -55,8 +55,8 @@ type Expectation = {
  */
 const EXPECTATIONS: readonly Expectation[] = [
   { migration: "20260814000210_phase2c_resource_persistence", tables: ["resource_breakers", "resource_breaker_events", "resource_assignments"] },
-  { migration: "20260814001200_phase2b_task_graph_and_handoffs", tables: ["agent_handoffs", "work_locks"] },
-  { migration: "20260814002000_graph_engineering", tables: ["graphs", "graph_runs", "node_runs", "graph_work_locks", "graph_events"] },
+  { migration: "20260814001200_phase2b_task_graph_and_handoffs", tables: ["agent_handoffs", "task_work_locks"] },
+  { migration: "20260814000100_graph_engineering", tables: ["graphs", "graph_runs", "node_runs", "work_locks", "graph_events"] },
   { migration: "20260814002200_graph_anchors", tables: ["graph_anchors", "node_run_claims", "claim_anchors", "claim_acceptable_anchors"] },
 ];
 

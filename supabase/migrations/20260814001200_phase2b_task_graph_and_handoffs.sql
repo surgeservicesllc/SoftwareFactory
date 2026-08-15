@@ -13,7 +13,7 @@
 --
 -- The other two tables are what makes a team a team rather than a set of
 -- individuals: `agent_handoffs` is the durable typed artifact one specialist
--- leaves for the next, and `work_locks` stops two specialists editing the same
+-- leaves for the next, and `task_work_locks` stops two specialists editing the same
 -- subsystem in parallel.
 --
 -- None of this executes anything. Phase 2B coordinates advisory work; it
@@ -214,7 +214,7 @@ create trigger agent_handoffs_append_only
 -- diffs and, worse, overlapping migrations. The lock is on a path prefix
 -- because that is the unit a subsystem actually occupies.
 
-create table public.work_locks (
+create table public.task_work_locks (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   project_id uuid not null,
@@ -233,36 +233,36 @@ create table public.work_locks (
   acquired_at timestamptz not null default now(),
   released_at timestamptz,
 
-  constraint work_locks_project_fk
+  constraint task_work_locks_project_fk
     foreign key (project_id, organization_id)
     references public.projects(id, organization_id) on delete cascade,
-  constraint work_locks_task_fk
+  constraint task_work_locks_task_fk
     foreign key (held_by_task_id, organization_id)
     references public.tasks(id, organization_id) on delete cascade
 );
 
-comment on table public.work_locks is
+comment on table public.task_work_locks is
   'Advisory lock over a path prefix, so two specialists cannot edit one subsystem in parallel. Released rows are kept as history rather than deleted.';
 
 -- One live lock per prefix per project. A released lock does not block, which
 -- is why the index is partial rather than a plain unique constraint.
-create unique index work_locks_live_prefix_unique
-  on public.work_locks (project_id, path_prefix)
+create unique index task_work_locks_live_prefix_unique
+  on public.task_work_locks (project_id, path_prefix)
   where released_at is null;
 
-create index work_locks_project_live
-  on public.work_locks (project_id)
+create index task_work_locks_project_live
+  on public.task_work_locks (project_id)
   where released_at is null;
 
-alter table public.work_locks enable row level security;
-alter table public.work_locks force row level security;
+alter table public.task_work_locks enable row level security;
+alter table public.task_work_locks force row level security;
 
-create policy work_locks_select_members
-  on public.work_locks for select to authenticated
+create policy task_work_locks_select_members
+  on public.task_work_locks for select to authenticated
   using (public.is_organization_member(organization_id));
 
-revoke all on table public.work_locks from anon, authenticated;
-grant select on table public.work_locks to authenticated;
+revoke all on table public.task_work_locks from anon, authenticated;
+grant select on table public.task_work_locks to authenticated;
 
 /*
  * Acquire a lock over a path prefix.
@@ -272,7 +272,7 @@ grant select on table public.work_locks to authenticated;
  * the same subsystem. Comparing only exact prefixes would make the lock look
  * like it worked while allowing precisely the collision it exists to prevent.
  */
-create or replace function public.acquire_work_lock(
+create or replace function public.acquire_task_work_lock(
   p_project_id uuid,
   p_path_prefix text,
   p_task_id uuid,
@@ -290,7 +290,7 @@ set search_path = pg_catalog
 as $function$
 declare
   project_record public.projects%rowtype;
-  existing public.work_locks%rowtype;
+  existing public.task_work_locks%rowtype;
   normalized text := btrim(p_path_prefix);
   new_id uuid;
 begin
@@ -311,7 +311,7 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_project_id::text, 0));
 
   select * into existing
-  from public.work_locks
+  from public.task_work_locks
   where project_id = p_project_id
     and released_at is null
     and (
@@ -325,7 +325,7 @@ begin
     return;
   end if;
 
-  insert into public.work_locks (
+  insert into public.task_work_locks (
     organization_id, project_id, path_prefix, held_by_task_id, held_by_role
   ) values (
     project_record.organization_id, p_project_id, normalized, p_task_id, p_role
@@ -336,28 +336,28 @@ begin
 end;
 $function$;
 
-comment on function public.acquire_work_lock(uuid, text, uuid, public.agent_role) is
+comment on function public.acquire_task_work_lock(uuid, text, uuid, public.agent_role) is
   'Acquire an advisory path-prefix lock. Conflicts on overlap in either direction, so lib/ blocks lib/operations/ and the reverse. Serialized per project by an advisory transaction lock.';
 
-revoke all on function public.acquire_work_lock(uuid, text, uuid, public.agent_role)
+revoke all on function public.acquire_task_work_lock(uuid, text, uuid, public.agent_role)
   from public, anon, service_role;
-grant execute on function public.acquire_work_lock(uuid, text, uuid, public.agent_role)
+grant execute on function public.acquire_task_work_lock(uuid, text, uuid, public.agent_role)
   to authenticated;
 
-create or replace function public.release_work_lock(p_lock_id uuid)
+create or replace function public.release_task_work_lock(p_lock_id uuid)
 returns boolean
 language plpgsql
 security definer
 set search_path = pg_catalog
 as $function$
 declare
-  lock_record public.work_locks%rowtype;
+  lock_record public.task_work_locks%rowtype;
 begin
   if auth.uid() is null then
     raise exception using errcode = '42501', message = 'authentication is required';
   end if;
 
-  select * into lock_record from public.work_locks where id = p_lock_id;
+  select * into lock_record from public.task_work_locks where id = p_lock_id;
   if not found then
     return false;
   end if;
@@ -371,13 +371,13 @@ begin
     return false;
   end if;
 
-  update public.work_locks set released_at = now() where id = p_lock_id;
+  update public.task_work_locks set released_at = now() where id = p_lock_id;
   return true;
 end;
 $function$;
 
-revoke all on function public.release_work_lock(uuid) from public, anon, service_role;
-grant execute on function public.release_work_lock(uuid) to authenticated;
+revoke all on function public.release_task_work_lock(uuid) from public, anon, service_role;
+grant execute on function public.release_task_work_lock(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Recording a handoff
