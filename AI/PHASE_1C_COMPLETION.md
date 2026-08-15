@@ -158,6 +158,19 @@ and no code change substitutes for it.
   canary — command → `factory/*` branch → commit → draft PR — with no `api.openai.com` request in
   the run is the acceptance proof.
 
+### What the preflight will tell you, verified 2026-08-14
+
+Each case was executed against the real script, not described from the code.
+
+| Configuration | Output |
+| --- | --- |
+| No credential set | `SUBSCRIPTION_CREDENTIAL_MISSING` — "Run `codex login` on a machine signed in to the intended ChatGPT account and store the resulting ~/.codex/auth.json as that secret." |
+| A `codex login --api-key` file pasted into the secret | `SUBSCRIPTION_CREDENTIAL_IS_API_KEY` — "That file was written by `codex login --api-key`, which bills per token. Re-run `codex login` and complete the browser flow instead." |
+| A valid subscription credential | "Codex authenticates with the owner's ChatGPT subscription. No per-token API billing is possible." then "startup preflight passed (subscription)" |
+| A stray `OPENAI_API_KEY` alongside a valid credential | `API_KEY_MODE_NOT_ENABLED` — "Per-token billing is never chosen implicitly; set SOFTWAREFACTORY_CODEX_AUTH_MODE=api_key to opt in deliberately." |
+
+The success path was checked for leakage specifically: token values placed in the credential appear **zero** times in the output. The run also exercises the pinned CLI check, which passes — `codex-cli 0.147.0` is present and matches the reviewed release, so that assertion is live rather than skipped.
+
 **Platform limitation to flag honestly:** whether an unattended, non-interactive GitHub Actions
 run may use ChatGPT-subscription credentials is a policy question about the ChatGPT plan, not a
 technical one about this repository. The code path works with whatever the CLI accepts. If the

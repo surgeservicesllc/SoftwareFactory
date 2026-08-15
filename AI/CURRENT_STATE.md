@@ -219,18 +219,15 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - Hosted pricing rows still carry `/sign-in` as their call to action and cannot be edited from the application, so `normalizeCtaHref` maps the legacy path forward on read.
 - Owner actions and verification commands are in `docs/AUTH_RUNBOOK.md`.
 
-## Production deployment position, verified 2026-08-14 22:13 UTC
+## Production deployment position, verified 2026-08-14 23:04 UTC
 
 Measured directly rather than inferred from a merge succeeding.
 
-- `https://www.theagoras.com` and `https://www.theagoras.com/solutions` both return **200**. Production is live and externally observable.
-- The served build's sitemap reports `lastmod` `2026-08-14T21:38:25Z`, which corresponds to the deploy triggered by `8fd28cf`.
-- **Production is behind `main`.** `f793268` and `145a31d` merged after that build and are not deployed.
-- Vercel returned `api-deployments-free-per-day` — the free tier's 100-deployments-per-day cap, reached by this session's pull-request volume — on deployments at roughly 21:54 and 22:02 UTC. Its message said to retry in 24 hours.
-- That message overstated it. A preview deployment succeeded at 22:16 UTC, so the cap throttles rather than blocking outright for a day. **Production had still not advanced past the 21:38 build as of 22:16**, despite `main` moving at 21:43 and 22:13.
-- What is therefore established: production lags `main`, and rate-limit rejections were observed in that window. What is **not** established is the precise cause of the lag. A rejected production deployment does not appear to be retried automatically, but this environment holds no `VERCEL_TOKEN`, so the deployment list cannot be read and the distinction between "rejected and not retried" and "queued behind the cap" cannot be settled from here.
-- Build identity is inferred from the served sitemap's `lastmod`, which changes only on rebuild. That is a reasonable proxy, not a deployment ID.
-- The remedy, if production is still behind after the cap resets, is an owner-triggered redeploy of `main` from the Vercel dashboard. No code change affects any of this.
+- `https://www.theagoras.com`, `/solutions`, and `/platform` all return **200**.
+- The served build's sitemap reports `lastmod` `2026-08-14T23:03:49Z`, which corresponds to the deploy triggered by `baf8ce0`. **Production is current with `main`.**
+- It was behind for roughly ninety minutes. Vercel returned `api-deployments-free-per-day` — the free tier's hundred-per-day cap, reached by this session's pull-request volume — on deployments at 21:54, 22:02, 22:17, and 22:33 UTC, while previews succeeded at 22:16 and 22:48. The cap throttles rather than blocking for a day, contrary to its own "retry in 24 hours" message.
+- A rejected deployment is not retried automatically, so the lag persisted until a later merge gave Vercel a fresh commit to build once capacity returned. If production is ever behind again for this reason, the remedies are another push to `main` or an owner redeploy from the Vercel dashboard; no code change affects it.
+- Build identity is inferred from the served sitemap's `lastmod`, which changes only on rebuild. That is a reasonable proxy, not a deployment ID — this environment holds no `VERCEL_TOKEN`, so the deployment list cannot be read.
 
 ## Migration ledger integrity
 

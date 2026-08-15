@@ -49,6 +49,33 @@ describe("secret handling boundaries", () => {
     }
   });
 
+  it("documents every environment variable the worker reads", () => {
+    // `.env.example` is what an operator copies. A variable the worker requires
+    // but the template omits produces a worker that refuses to start, with the
+    // reason visible only in a zod error — and nothing in the file to suggest
+    // what is missing. Three were missing when this was written:
+    // `SOFTWAREFACTORY_CODEX_AUTH_JSON`, which the worker cannot start without,
+    // and both halves of the commit identity.
+    const source = ["lib/worker/env.ts", "lib/worker/auth.ts"]
+      .map((file) => readRepositoryFile(file))
+      .join("\n");
+
+    const referenced = new Set(
+      source.match(
+        /\b(?:SOFTWAREFACTORY_[A-Z0-9_]+|GITHUB_COMMIT_IDENTITY_[A-Z]+|SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_URL|OPENAI_API_KEY)\b/g,
+      ) ?? [],
+    );
+
+    const template = readRepositoryFile(".env.example");
+    const undocumented = [...referenced]
+      .filter((name) => !new RegExp(`^${name}=`, "m").test(template))
+      .sort();
+
+    expect(undocumented).toEqual([]);
+    // Guards against the regex silently matching nothing.
+    expect(referenced.size).toBeGreaterThan(8);
+  });
+
   it("never gives sensitive variables a NEXT_PUBLIC_ prefix", () => {
     const envTemplate = readRepositoryFile(".env.example");
 
