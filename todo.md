@@ -14,6 +14,78 @@ Several agents work this repository concurrently. This file is the shared pictur
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
 
+## MASTER COMPLETION LEDGER (2026-08-15, master certification loop)
+
+This section is the authoritative completion ledger required by the master
+certification loop. Phase detail lives in the per-phase sections below and in
+`AI/PHASE_*_COMPLETION.md`; this section holds the cross-phase picture, the
+priority queue, and evidence for items closed by the loop.
+
+### Current Certification
+
+- Overall: **~70% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio ~43% · 2E 92% · 2A partial · 2D/3 not started)
+- Last audit: 2026-08-15, this loop
+- Current loop: master iteration 1
+- Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
+- Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
+
+### P0 Critical
+
+- [x] Determine whether the zero-token worker credential is configured | 1C | **PROVEN LIVE**: Actions run `31894356952` (2026-08-15 16:01Z) logs "Codex authenticates with the owner's ChatGPT subscription. No per-token API billing is possible." then "worker … is ready"; schedule runs every ~5 min, all green | loop | —
+- [ ] Determine real hosted migration ledger position | DB | Owner's SQL Editor: inserting version `20260813001500` failed `duplicate key … schema_migrations_pkey` ⇒ hosted ledger is **ahead of** the documented `20260813001400` position; Supabase GitHub integration ("Supabase Preview" check + `supabase/config.toml`) is the likely applier on merge | owner (run: `select count(*), max(version) from supabase_migrations.schema_migrations;`) | —
+- [ ] Live 1C canary: command → claim → factory branch → commit → draft PR → CI | 1C | Worker polls every 5 min and exits idle: nothing is queued. `submit_command` requires an authenticated session (not executable by service_role — verified ACL) | owner (browser: `/solutions/bot-manager`, GREEN command) | worker LIVE ✔
+- [x] Correct AI memory claiming worker "Not Connected pending credential" | docs | This commit — `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md` headlines contradicted the Actions evidence | loop | —
+
+### P1 Required
+
+- [ ] Hosted-vs-local schema diff once ledger position is known | DB | blocked by P0 ledger item | loop | P0
+- [ ] Runbook `AI/HOSTED_APPLY_RUNBOOK.md` rebased on the real hosted position (its baseline claim `ends at 20260813001400` is now disproven) | DB | duplicate-key proof above | loop | P0
+- [ ] 2C portfolio: PR/deployment columns, per-project detail page, global bot-manager goals | 2C | `AI/PHASE_2C_COMPLETION.md` scorecard | loop | —
+- [ ] Cross-project isolation negative test (project A lock ↛ project B claim) | 2C/2E | scorecard goal 18 UNPROVEN | loop | —
+- [ ] Second real repository/installation for multi-project live proof | 2C | goal 34 | owner | —
+
+### P2 Improvement
+
+- [ ] Per-project detail page scoping Files/Backlog/Runs/Agents/Reports/Activity (goal 11 PARTIAL)
+- [ ] Portfolio roll-up report (goal 26 PARTIAL)
+- [ ] Project archive operation + history-preservation test (goal 28 PARTIAL)
+
+### P3 Optimization
+
+- [ ] Guarded project-deletion path (goal 29 UNPROVEN — highest-risk unknown in 2C audit)
+
+### Phase Certification
+
+- [ ] 1A Control Plane — surfaces live in production (all routes 200); per-page certification not re-run this loop
+- [ ] 1B GitHub — 90% (18 PASS/2 PARTIAL); remaining items owner-only (second installation + live adverse pass)
+- [ ] 1C Worker Execution — code complete, worker **LIVE and polling**; canary blocked on one owner command
+- [ ] 1D Autonomous Release — decision layer 100%; execution blocked **by design** (AGENTS.md forbids auto-merge in this line)
+- [ ] 1E Production Operations — ~87%; execution authority absent by design
+- [ ] 2A Multi-AI — provider layer built, switch OFF, no live call; zero-token conflict recorded in `AI/PHASE_1C_COMPLETION.md` §5a awaiting owner decision
+- [ ] 2B Graph Engineering — landed (PR #27, then 2E capacity integration); no live graph run yet
+- [ ] 2C Portfolio — ~43%; surface live, orchestrator/capacity landed via 2E, aggregation partial
+- [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
+- [ ] 2D Multi-Account Identity — not started as a distinct phase (connection model exists)
+- [ ] 3 Self-Improvement — not started
+
+### External Blockers (owner-only)
+
+1. **1C canary**: browser → `/solutions/bot-manager` → GREEN command ("Create a Phase 1C canary documentation file and produce a draft PR"). Worker claims within ~5 min. Verify: `factory/*` branch + draft PR appear.
+2. **Hosted ledger position**: SQL Editor → `select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations;` → paste result. Do **not** insert ledger rows manually — the integration appears to manage them.
+3. **Second repository/installation** for 2C goal 34 (GitHub → SoftwareFactory App → Configure).
+4. **Phase 2A paid-adapter decision**: exempt / remove / re-base (latent, switch OFF).
+
+### Completed Evidence (this loop)
+
+- Worker LIVE: Actions `31894356952`, job `95035227290`, steps all green, log lines quoted above; secret `SOFTWAREFACTORY_CODEX_AUTH_JSON` present (masked) in step env.
+- Hosted ledger ahead of docs: owner screenshot, SQL Editor error `23505` on version `20260813001500`.
+- Zero-token certification: `phase1c-worker-workflow.contract` asserts no step receives a paid key; worker log confirms subscription mode in production.
+
+### Regression Findings
+
+- `AI/CURRENT_STATE.md` + `AI/QUALITY_SCORECARD.md` claimed 1C "Not Connected pending the owner-supplied subscription credential" after the credential was configured and the worker live — stale-memory regression, corrected this commit.
+- `AI/HOSTED_APPLY_RUNBOOK.md` baseline ("hosted ledger ends at `20260813001400`") disproven by the duplicate-key error; runbook needs rebasing once the real position is known (P1).
+
 ## HANDOFF — Phase 2E portfolio scheduling (2026-08-15, this session)
 
 **Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq`, pushed. Six migrations,
