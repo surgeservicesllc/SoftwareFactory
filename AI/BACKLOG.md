@@ -148,6 +148,25 @@ The work, in order:
 Until step 4 lands, Phase 2E goal 17 stays PARTIAL, and the reason is written
 out in `AI/PHASE_2E_COMPLETION.md` rather than left as a bare score.
 
+## The 2C advisory capacity gate should read the durable limits
+
+Found while merging Phase 2E with `main` (2026-08-15).
+
+`lib/resources/capacity.ts` gates routing on `DEFAULT_CAPACITY_LIMITS`
+(2 per worker, 6 per provider, 8 per project) held in code. Phase 2E stores the
+authoritative limits in `organizations`, `projects`, `provider_capacity_limits`
+and `phase1c_workers`, and enforces them inside the claim transaction.
+
+Both are wanted — one previews, one decides — but the previewing one currently
+guesses. When they disagree, the Resource Manager proposes work the scheduler
+refuses, and the queue fills with items blocked by a ceiling the router never
+consulted.
+
+The work: source `CapacityLimits` from the durable rows (a small read on the
+organization, project and provider rows, or a projection alongside
+`portfolio_capacity_verdict`), and keep the constants only as the values used
+when no row exists. No behaviour of the authoritative gate changes.
+
 ## Deferred
 
 - Phase 1C live Codex/OpenAI worker execution: published and schema-current but **Not Connected** until a funded replacement credential passes no-claim preflight and a new current-base command completes live acceptance.

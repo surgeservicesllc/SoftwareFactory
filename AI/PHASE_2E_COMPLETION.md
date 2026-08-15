@@ -66,7 +66,7 @@ and `tests/unit/portfolio-open-statuses.test.ts`.
 | 6 | Owner can pause/resume project engineering | PASS | `set_project_engineering_pause`; a pause requires a reason, a resume clears all three pause columns. Test: "stops scheduling a paused project and resumes it exactly where it was". |
 | 7 | Global and per-project concurrency limits | PASS | `organizations.maximum_concurrent_runs` and `projects.maximum_concurrent_runs`, enforced in `portfolio_capacity_verdict`. Canary C. |
 | 8 | Claude/Codex worker capacity tracked | PASS | `phase1c_workers.maximum_concurrent_runs`, measured from live leases rather than `current_run_id`. Test: "holds a worker to its declared capacity". |
-| 9 | 2D Identity Router supplies eligible connections | PARTIAL | No `lib/identity/` module exists in this repository — 2D is not built. The *capability* is enforced: the claim path requires a connected connection, an unsuspended installation and a selected repository, and `provider_capacity_limits` can bound a single connection. When 2D lands it should replace that join rather than duplicate it. |
+| 9 | 2D Identity Router supplies eligible connections | PARTIAL | Re-scored after merging `main`: the router now exists at `lib/connections/identity-router.ts` (Phase 2D loop 1), which the earlier audit of this branch predated. The scheduler still does not call it, and cannot — a claim is one atomic SQL statement and the router is TypeScript. The correct seam is upstream: the router picks the connection when work is created, and the claim re-verifies that connection is still connected, unsuspended and bound to a selected repository, which it already does. Wiring that selection is 2D's own open row 28 ("2A provider routing integrates with Identity Router — ABSENT"), and 2E should not reimplement it in SQL. |
 | 10 | 2A routing supplies eligible provider/model | PASS | Provider and model are decided upstream by `lib/providers/routing.ts` and `lib/resources/candidates.ts`; the scheduler filters on them and never picks its own. |
 | 11 | 2B Graph Engine requests capacity rather than assuming it | PASS | `RunnerDependencies.requestCapacity`; concurrency is `min(budget, grant)` and a zero grant ends the run `CAPACITY_WITHHELD` rather than `STALLED`. `graph-capacity-request.test.ts`. |
 | 12 | Scheduler selects only authorized/healthy/available workers | PASS | Worker liveness, connection authorization, and now circuit-breaker health. Canary D. |
@@ -118,6 +118,34 @@ every claim above is sequential. They prove ordering, ceilings, release and
 recovery. They do not prove behaviour under simultaneous contention — that
 rests on the `for update … skip locked` the claim has used since Phase 1C,
 which these changes did not alter.
+
+---
+
+## Two capacity mechanisms now exist, and they must not drift
+
+Merging `main` brought `lib/resources/capacity.ts` (PR #91), an in-memory
+capacity gate for the 2C Resource Manager with its own `perWorker`,
+`perProvider` and `perProject` limits and a hardcoded
+`DEFAULT_CAPACITY_LIMITS` of 2/6/8. This branch added a durable SQL gate inside
+the claim transaction with limits stored per organization, project, provider,
+connection and worker.
+
+They are not redundant — they answer different questions at different moments.
+The 2C gate is advisory and runs at *routing* time, deciding which worker and
+model a unit of work should prefer. The 2E gate is authoritative and runs at
+*claim* time, deciding whether that work may start at all. Only the second can
+be atomic with the claim, and only the second survives a restart.
+
+What is genuinely wrong is that the advisory one carries its own numbers. A
+routing decision made against `perProject: 8` while the database says 2 will
+keep proposing work that the scheduler then refuses, and the console will show
+a queue full of items whose stated reason is a limit the router never saw.
+
+The fix is small and is not done here: `CapacityLimits` should be read from the
+durable rows rather than defaulted in code, so the advisory gate is a preview
+of the authoritative one instead of a second opinion. Recorded in
+`AI/BACKLOG.md`. Nothing is unsafe in the meantime — the authoritative gate is
+the one that decides, and it is the stricter of the two by default.
 
 ---
 
