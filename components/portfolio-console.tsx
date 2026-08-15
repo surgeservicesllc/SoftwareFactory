@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import type { SchedulingView } from "@/lib/portfolio/scheduling";
 import {
   filterProjects,
   sortProjects,
@@ -60,8 +61,161 @@ function ConnectionLabel({ health }: { health: PortfolioProject["connectionHealt
   return <span className="text-sm">{text}</span>;
 }
 
+function priorityLabel(priority: number) {
+  return `P${priority}`;
+}
+
+function waitedLabel(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+/**
+ * Capacity, the queue, and the bottleneck.
+ *
+ * Same rule as the counts above: nothing here is computed in the browser. Every
+ * number and every reason comes from the functions the scheduler itself calls,
+ * so the console cannot show a queue order the scheduler would not follow.
+ */
+function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
+  const { capacity, projects, queue, unavailable } = scheduling;
+  const running = queue.filter((item) => item.runStatus === "running");
+  const waiting = queue.filter((item) => item.runStatus === "queued");
+  const blocked = waiting.filter((item) => item.blockedReason !== null);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SectionTitle title="Portfolio capacity" />
+
+      {unavailable.length > 0 && (
+        <Notice tone="warning">
+          {`These scheduling sources could not be read, so they are not shown: ${unavailable.join(", ")}.`}
+        </Notice>
+      )}
+
+      {capacity === null ? (
+        <EmptyState
+          title="Capacity is unknown"
+          description="The portfolio capacity projection could not be read, so no figures are shown here rather than showing zeros."
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Total label="Running now" value={capacity.activeRuns} />
+            <Total label="Queued" value={capacity.queuedRuns} />
+            <Total label="Ordinary ceiling" value={capacity.ordinaryCeiling} />
+            <Total label="Reserved for P0" value={capacity.emergencyReserved} />
+          </div>
+          <p className="text-xs text-neutral-500">
+            {`Portfolio ceiling ${capacity.organizationLimit}, of which ${capacity.emergencyReserved} `}
+            {"are reserved for emergency work — routine work stops at "}
+            {`${capacity.ordinaryCeiling} so an incident never has to interrupt a running job. `}
+            {`Queued work gains one priority tier every ${Math.round(capacity.fairnessPromotionSeconds / 60)} minutes it waits.`}
+          </p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {/* Workers are not organization-scoped in Phase 1C, so these are
+                factory-wide totals. Labelled rather than quietly implied. */}
+            <Count value={capacity.workerCount} label="Workers (factory-wide)" />
+            <Count value={capacity.workerCapacity} label="Worker slots (factory-wide)" />
+            <Count value={capacity.openBreakers} label="Open circuit breakers" />
+            <Count value={capacity.pausedProjects} label="Paused projects" />
+          </div>
+          {capacity.emergencyQueued > 0 && (
+            <Notice tone="warning">
+              {`${capacity.emergencyQueued} emergency ${capacity.emergencyQueued === 1 ? "item is" : "items are"} queued.`}
+            </Notice>
+          )}
+        </>
+      )}
+
+      <SectionTitle title={`Queue (${waiting.length} waiting, ${running.length} running)`} />
+
+      {queue.length === 0 ? (
+        <EmptyState
+          title="Nothing queued or running"
+          description="No work is waiting for capacity in this portfolio."
+        />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {queue.map((item) => (
+            <li key={item.runId}>
+              <Card>
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">
+                      {item.queuePosition === null ? "Running" : `#${item.queuePosition}`}
+                      {" · "}
+                      {item.projectName}
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-neutral-500">
+                      {`${priorityLabel(item.effectivePriority)} effective`}
+                      {item.effectivePriority !== item.projectPriority
+                        && ` (project ${priorityLabel(item.projectPriority)})`}
+                      {item.emergency && " · emergency"}
+                      {item.strategicFocus && " · focused"}
+                    </span>
+                  </div>
+                  <span className="text-sm">{item.taskTitle}</span>
+                  <span className="text-xs text-neutral-500">
+                    {item.runStatus === "running"
+                      ? `Running for ${waitedLabel(item.waitingSeconds)}`
+                      : `Waiting ${waitedLabel(item.waitingSeconds)}`}
+                    {item.blockedReason !== null && ` — ${item.blockedReason}`}
+                  </span>
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {blocked.length > 0 && (
+        <Notice tone="warning">
+          {`${blocked.length} queued ${blocked.length === 1 ? "item is" : "items are"} held by a ceiling or an unhealthy provider. The reason is on each row.`}
+        </Notice>
+      )}
+
+      {projects.length > 0 && (
+        <>
+          <SectionTitle title="Project scheduling" />
+          <ul className="flex flex-col gap-2">
+            {projects.map((project) => (
+              <li key={project.projectId}>
+                <Card>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">{project.projectName}</span>
+                      <span className="text-xs uppercase tracking-wide text-neutral-500">
+                        {priorityLabel(project.engineeringPriority)}
+                        {project.strategicFocus && " · strategic focus"}
+                        {project.engineeringPaused && " · paused"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <Count value={project.activeRuns} label="Running" />
+                      <Count value={project.queuedRuns} label="Queued" />
+                      <Count value={project.maximumConcurrentRuns} label="Ceiling" />
+                    </div>
+                    {project.engineeringPaused && (
+                      <Notice tone="warning">
+                        {`Engineering paused: ${project.engineeringPauseReason ?? "no reason recorded"}.`}
+                      </Notice>
+                    )}
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PortfolioConsole() {
   const [view, setView] = useState<PortfolioView | null>(null);
+  const [scheduling, setScheduling] = useState<SchedulingView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("attention");
@@ -79,6 +233,27 @@ export function PortfolioConsole() {
       .catch((cause: unknown) => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "Unexpected error.");
       });
+    // Scheduling is fetched separately and its failure is not fatal: the
+    // portfolio is still worth showing without it, and the panel says so.
+    fetch("/api/portfolio/scheduling", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return response.json() as Promise<{ scheduling: SchedulingView }>;
+      })
+      .then((body) => {
+        if (!cancelled) setScheduling(body.scheduling);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScheduling({
+            capacity: null,
+            projects: [],
+            queue: [],
+            unavailable: ["capacity", "queue", "projects"],
+          });
+        }
+      });
+
     return () => {
       cancelled = true;
     };
@@ -134,6 +309,8 @@ export function PortfolioConsole() {
           </select>
         </label>
       </div>
+
+      {scheduling !== null && <SchedulingPanel scheduling={scheduling} />}
 
       <SectionTitle title={`Projects (${shown.length})`} />
 

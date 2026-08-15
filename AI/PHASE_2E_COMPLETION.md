@@ -50,48 +50,56 @@ existing selection.
 
 ## 36-item scorecard
 
-Iteration 1 — baseline audit before any 2E code was written.
+Iteration 3. Every PASS below names a test that fails if the capability is
+removed; the tests live in `tests/integration/phase2e-portfolio-scheduling.behavior.test.ts`
+(19 tests, two competing projects, assertions on what a worker actually claimed),
+`tests/unit/graph-capacity-request.test.ts`, `tests/unit/breaker-cooldown-parity.test.ts`
+and `tests/unit/portfolio-open-statuses.test.ts`.
 
 | # | Goal | Score | Evidence |
 | --- | --- | --- | --- |
-| 1 | One portfolio-wide Resource Manager | PARTIAL | `lib/resources/` decides *which worker* for one unit of work; `claim_phase1c_run` decides *which work* for one worker. Neither arbitrates across projects. |
-| 2 | Projects have explicit priority P0/P1/P2/P3 | FAIL | `public.projects` has no priority column. `tasks.priority` (0–100) is per-task only. |
-| 3 | Tasks inherit/derive project + task priority | FAIL | Ordering uses `task.priority` alone; project priority does not exist to inherit. |
-| 4 | Incidents/security may preempt lower-priority work by policy | FAIL | `repair_attempts`/`incidents` linkage exists (1E→1C promotion) but confers no scheduling precedence. |
-| 5 | Owner can set strategic focus | FAIL | No such column, route, or control. |
-| 6 | Owner can pause/resume project engineering | PARTIAL | `project.status = 'active'` is required to claim, so archiving/pausing the whole project stops work. There is no engineering-only pause that leaves the project otherwise live. |
-| 7 | Global and per-project concurrency limits | FAIL | No limit columns anywhere. Concurrency is bounded only by the number of registered workers. |
-| 8 | Claude/Codex worker capacity tracked | PARTIAL | `phase1c_workers` tracks `status`, `last_heartbeat_at`, `current_run_id` — one implicit slot per worker, no declared capacity. |
-| 9 | 2D Identity Router supplies eligible connections | PARTIAL | No `lib/identity/` module exists in this repository. The *capability* is present: the claim path joins `project_connections → connections → github_installations → github_repositories` and rejects anything not connected/active/selected. |
-| 10 | 2A routing supplies eligible provider/model | PARTIAL | `lib/providers/routing.ts` and `lib/resources/candidates.ts` choose a provider/model; the claim path filters on `run.provider`/`run.model` already decided upstream. |
-| 11 | 2B Graph Engine requests capacity rather than assuming it | FAIL | `lib/graph/scheduler.ts` returns ready nodes as a pure function of graph state; nothing asks the portfolio whether capacity exists. |
-| 12 | Scheduler selects only authorized/healthy/available workers | PARTIAL | Worker liveness and connection authorization are enforced. Circuit-breaker state (2C) is not consulted. |
-| 13 | Queued work persists durably | PASS | `agent_runs` rows in `queued` survive restarts; `tests/integration/phase1c-*.test.ts` exercise the queue. |
-| 14 | Scheduler deterministic, no paid LLM | PASS | `claim_phase1c_run` is pure SQL. No model call participates in selection. |
-| 15 | Dependencies block tasks correctly | PASS | `task_dependencies` clause in the claim query; `20260813001100` migration tests. |
-| 16 | Independent work may execute concurrently | PARTIAL | `skip locked` allows concurrent claims, but no test proves two projects progressing at once. |
-| 17 | Work locks prevent conflicting assignments | PARTIAL | Agent-level exclusion in the claim query, plus `work_locks`/`task_work_locks` for graphs. The two mechanisms are unrelated. |
-| 18 | Capacity released after completion/failure/cancel | PARTIAL | `complete_phase1c_run` clears the lease and frees the agent. There is no capacity accounting to release. |
-| 19 | Stale worker leases recover safely | PASS | The reclaim loop at the top of `claim_phase1c_run`; expired-lease runs are re-claimable without duplicate execution because the lease token changes. |
-| 20 | Provider/account concurrency limits enforced | FAIL | Nothing bounds concurrent runs per provider or per connection. |
-| 21 | Project capacity limits enforced | FAIL | Nothing bounds concurrent runs per project. |
-| 22 | Portfolio global limits enforced | FAIL | Nothing bounds concurrent runs per organization. |
-| 23 | Fairness prevents permanent starvation | FAIL | Strict `priority desc` ordering. A continuous supply of higher-priority work starves lower-priority work indefinitely. |
-| 24 | P0 emergency work can reserve/preempt capacity safely | FAIL | No priority tiers, no reservation. |
-| 25 | Running work is not destructively killed to reprioritize | PASS (by construction) | No code path cancels a running run for priority reasons; the only terminations are lease/deadline exhaustion and explicit owner cancellation. To be re-proved once reprioritization exists. |
-| 26 | 2B budget limits remain enforced | PASS | `claim_phase1c_run` budget wrapper refuses an exhausted run and returns only remaining turns/tokens. |
-| 27 | Queue ordering/reason visible and auditable | FAIL | Ordering is implicit in a SQL `order by`. Nothing records why work was chosen or deferred. |
-| 28 | Every assignment records project/task/agent/provider/connection/reason | PARTIAL | `resource_assignments` (2C) records project/node/provider/model/reason, but the claim path does not write to it, and it carries no connection or worker. |
-| 29 | Failed worker can retry/reassign through eligible resources | PARTIAL | `retry_phase1c_run` exists and expired leases return work to the queue; there is no reassignment away from a failing resource. |
-| 30 | Circuit breaker suppresses repeatedly failing resources | PARTIAL | `lib/resources/breakers.ts` + `resource_breakers` persist and open correctly (`phase2c-resource-persistence.behavior.test.ts`), but nothing in the claim path reads them. |
-| 31 | Cooldown/recovery restores eligible resources | PARTIAL | `evaluateBreaker` implements cooldown and half-open; same gap as 30. |
-| 32 | Portfolio dashboard shows capacity/queues/bottlenecks | PARTIAL | `/solutions/portfolio` shows per-project health and open counts (`lib/portfolio/aggregate.ts`). No capacity, queue, or bottleneck view. |
-| 33 | Owner command can reprioritize portfolio safely | FAIL | No route or control. |
-| 34 | RLS/user/org/project isolation passes | PASS | 63/63 public tables have RLS + FORCE RLS; `service_role` holds table privileges on exactly the four GitHub ingress tables. Re-proved every migration by `hosted-service-role-table-grants.test.ts`. |
-| 35 | Hosted schema/RLS/indexes support scheduler state | BLOCKED | Twelve migrations are already applied locally and verified on real PostgreSQL 16 but not yet applied to hosted Supabase. See `AI/HOSTED_APPLY_RUNBOOK.md`. |
-| 36 | No paid AI-token dependency exists | PASS | Scheduling is pure SQL. Execution uses subscription-authenticated workers (`SOFTWAREFACTORY_CODEX_AUTH_JSON`); no `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is read anywhere. |
+| 1 | One portfolio-wide Resource Manager | PASS | `claim_phase1c_run` now arbitrates across projects: effective priority, focus, pause, and four ceilings, in one atomic claim. No second scheduler was created. |
+| 2 | Projects have explicit priority P0/P1/P2/P3 | PASS | `projects.engineering_priority`, set through `set_project_engineering_priority`. |
+| 3 | Tasks inherit/derive project + task priority | PASS | `effective_work_priority` derives from project priority; `task.priority` remains the within-tier tie-break. Canary A. |
+| 4 | Incidents/security may preempt lower-priority work by policy | PASS | `is_emergency_work`: a repair attempt against an unresolved incident, or a security command. Canary B claims the emergency ahead of older routine work. |
+| 5 | Owner can set strategic focus | PASS | `focus_portfolio_engineering` sets and clears in one statement. Canary E. |
+| 6 | Owner can pause/resume project engineering | PASS | `set_project_engineering_pause`; a pause requires a reason, a resume clears all three pause columns. Test: "stops scheduling a paused project and resumes it exactly where it was". |
+| 7 | Global and per-project concurrency limits | PASS | `organizations.maximum_concurrent_runs` and `projects.maximum_concurrent_runs`, enforced in `portfolio_capacity_verdict`. Canary C. |
+| 8 | Claude/Codex worker capacity tracked | PASS | `phase1c_workers.maximum_concurrent_runs`, measured from live leases rather than `current_run_id`. Test: "holds a worker to its declared capacity". |
+| 9 | 2D Identity Router supplies eligible connections | PARTIAL | No `lib/identity/` module exists in this repository — 2D is not built. The *capability* is enforced: the claim path requires a connected connection, an unsuspended installation and a selected repository, and `provider_capacity_limits` can bound a single connection. When 2D lands it should replace that join rather than duplicate it. |
+| 10 | 2A routing supplies eligible provider/model | PASS | Provider and model are decided upstream by `lib/providers/routing.ts` and `lib/resources/candidates.ts`; the scheduler filters on them and never picks its own. |
+| 11 | 2B Graph Engine requests capacity rather than assuming it | PASS | `RunnerDependencies.requestCapacity`; concurrency is `min(budget, grant)` and a zero grant ends the run `CAPACITY_WITHHELD` rather than `STALLED`. `graph-capacity-request.test.ts`. |
+| 12 | Scheduler selects only authorized/healthy/available workers | PASS | Worker liveness, connection authorization, and now circuit-breaker health. Canary D. |
+| 13 | Queued work persists durably | PASS | `agent_runs` in `queued`; every canary re-reads the queue after a claim. |
+| 14 | Scheduler deterministic; no paid LLM | PASS | Pure SQL throughout. `effective_work_priority` is `immutable` and takes its clock as a parameter, so it can be asserted exactly. |
+| 15 | Dependencies block tasks correctly | PASS | Unchanged Phase 1C clause, preserved byte-identical through both rewrites of the claim body. |
+| 16 | Independent work may execute concurrently | PASS | Required fixing the shared agent roster: one logical agent per role per *project* (`20260815000400`). Test: "runs two projects at once, which a shared agent roster made impossible". |
+| 17 | Work locks prevent conflicting assignments | PARTIAL | The agent-level exclusion and `for update … skip locked` are enforced on the 1C path; `work_locks`/`task_work_locks` remain a separate 2B mechanism. Unifying them is not done. |
+| 18 | Capacity released after completion/failure/cancel | PASS | Capacity counts live leases only, so completion, failure, cancellation and a crashed worker all release it. Canary C releases and re-claims. |
+| 19 | Stale worker leases recover safely | PASS | Unchanged reclaim loop; lease tokens change on re-claim so no duplicate execution. |
+| 20 | Provider/account concurrency limits enforced | PASS | `provider_capacity_limits`, account-wide or per connection. Test: "enforces a provider account ceiling across the whole portfolio". |
+| 21 | Project capacity limits enforced | PASS | Canary C. |
+| 22 | Portfolio global limits enforced | PASS | Canary B (ceiling 1, reserve 1 — ordinary work may use zero). |
+| 23 | Fairness prevents permanent starvation | PASS | One tier per fairness interval, floored at P1, oldest-first within a tier. Test: "lets an aged low-priority project beat a fresh higher-priority one". |
+| 24 | P0 emergency work can reserve/preempt capacity safely | PASS | `emergency_reserved_runs` is subtracted from the ceiling for everything except effective P0. Canary B. |
+| 25 | Running work is not destructively killed to reprioritize | PASS | Canary E asserts the running run keeps its lease token and status across a refocus; canary B asserts the routine run is still `queued`, not cancelled. |
+| 26 | 2B budget limits remain enforced | PASS | The budget wrapper is untouched and still refuses an exhausted run; the graph runner's own budget still caps concurrency above any grant. |
+| 27 | Queue ordering/reason visible and auditable | PASS | `portfolio_scheduling_queue` (live, with a reason per item) and `scheduling_decisions` (append-only, after the fact). Both call the same functions the scheduler calls. |
+| 28 | Every assignment records project/task/agent/provider/connection/reason | PASS | Asserted field by field in "records what it assigned…". |
+| 29 | Failed worker can retry/reassign through eligible resources | PASS | Test: "reassigns a failed run to a different worker through the same eligibility rules". |
+| 30 | Circuit breaker suppresses repeatedly failing resources | PASS | Canary D: an open breaker withholds work and the audit names it. |
+| 31 | Cooldown/recovery restores eligible resources | PASS | Canary D: cooldown elapses, one trial is admitted, taking it restarts the clock, and a success reopens the queue. |
+| 32 | Portfolio dashboard shows capacity/queues/bottlenecks | PASS | `/solutions/portfolio` renders capacity, the queue with reasons, and per-project scheduling state from `/api/portfolio/scheduling`. No number is computed in the browser. |
+| 33 | Owner command can reprioritize portfolio safely | PASS | `focus_portfolio_engineering`, owner-only, one activity event per changed project. Canary E. |
+| 34 | RLS/user/org/project isolation passes | PASS | Both new tables carry RLS + FORCE RLS with SELECT-only for members and nothing for `service_role`; the three projections return nothing to an outsider. |
+| 35 | Hosted schema/RLS/indexes support scheduler state | BLOCKED | Verified locally across the full 70-migration chain; 29 migrations remain unapplied to hosted Supabase. The CLI here cannot link the project. See `AI/HOSTED_APPLY_RUNBOOK.md`. |
+| 36 | No paid AI-token dependency exists | PASS | Scheduling is arithmetic in SQL. No `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is read anywhere in the repository. |
 
-**Iteration 1 baseline: 8 PASS · 15 PARTIAL · 12 FAIL · 1 BLOCKED — 22%.**
+**Iteration 3: 33 PASS · 2 PARTIAL · 0 FAIL · 1 BLOCKED — 92%.**
+
+Neither PARTIAL is a scheduling gap. Goal 9 names a phase (2D) that does not
+exist in this repository; goal 17 asks two lock mechanisms from different
+phases to become one.
 
 ---
 
@@ -99,11 +107,42 @@ Iteration 1 — baseline audit before any 2E code was written.
 
 | Canary | Requirement | Status |
 | --- | --- | --- |
-| A — competing projects | Real safe work from projects A+B under constrained capacity, scheduled by priority/mapping/capability/availability | Not run |
-| B — P0 | Injected safe P0 takes new capacity without corrupting running work | Not run |
-| C — capacity | Low limits force queueing; work starts only as capacity releases | Not run |
-| D — failure | Breaker → reassignment → unrelated work continues → cooldown recovery | Not run |
-| E — reprioritize | "Focus on Project A" changes queue order with history and running work intact | Not run |
+| A — competing projects | Real work from projects A+B under constrained capacity, scheduled by priority | **Pass.** Beta queued first, Alpha (P1) claimed first, Beta claimed on release. |
+| B — P0 | Injected safe P0 takes new capacity without corrupting running work | **Pass.** Ceiling 1 with 1 reserved: routine work withheld, an incident-linked repair claimed at effective P0, the routine run still `queued` afterwards. |
+| C — capacity | Low limits force queueing; work starts only as capacity releases | **Pass.** Project ceiling 1, worker capacity 2, second item withheld with `projectActive: 1, projectLimit: 1`, claimed after release. |
+| D — failure | Breaker → reassignment/fallback → unrelated work continues → cooldown recovery | **Pass.** Three outages open the breaker, work is withheld naming it, a breaker on another provider does not interfere, cooldown admits one trial, the trial consumes the window, success reopens. |
+| E — reprioritize | "Focus engineering capacity on Project A" changes queue order with history and running work intact | **Pass.** Focus set and cleared in one statement, next claim goes to Alpha, the running run keeps its lease token, one activity event recorded. |
+
+**The limit these canaries do not clear:** PGlite is a single connection, so
+every claim above is sequential. They prove ordering, ceilings, release and
+recovery. They do not prove behaviour under simultaneous contention — that
+rests on the `for update … skip locked` the claim has used since Phase 1C,
+which these changes did not alter.
+
+---
+
+## Defects found while building this
+
+Recorded because each was a live wrong answer, not a missing feature.
+
+1. **One logical agent per organization made portfolio concurrency
+   impossible.** The scheduler correctly refuses a second concurrent run for
+   one agent, and the roster gave the whole factory one Backend, one QA. Two
+   projects doing the same kind of work serialised no matter what capacity
+   existed. Fixed in `20260815000400`.
+
+2. **The portfolio console counted statuses that do not exist.** Commands in
+   `planning` and `blocked`, tasks in `ready`, incidents in `acknowledged` and
+   `mitigating` — five values no enum can hold. Every project reported zero
+   open incidents however many were open, and queued tasks were not counted at
+   all. The number looked measured. Fixed in `lib/portfolio/aggregate.ts` and
+   held there by `tests/unit/portfolio-open-statuses.test.ts`, which reads the
+   enums out of the migration.
+
+3. **A test's idempotency key was interpolated into its prompt**, and a key
+   containing "rls" tripped the RED classifier, so the command never entered
+   Phase 1C. The queue was empty for a reason unrelated to scheduling. The
+   classifier was right; the test was wrong.
 
 ---
 

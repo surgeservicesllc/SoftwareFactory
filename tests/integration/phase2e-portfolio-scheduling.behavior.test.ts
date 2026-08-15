@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000400_phase2e_project_scoped_agents.sql";
+const latestMigration = "20260815000600_phase2e_portfolio_visibility.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -779,6 +779,289 @@ describe("Phase 2E portfolio scheduling", { timeout: 180_000 }, () => {
          where decision = 'withheld'`,
       );
       expect(withheld.rows[0].count).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("suppresses a failing provider, keeps other work moving, and recovers — canary D", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-breaker", "audit", "qa");
+      await registerWorker(db, "portfolio-worker-d", 2);
+
+      // Three consecutive outages on the model this factory actually uses.
+      // Driven through separate calls because that is how a breaker really
+      // accumulates — one failed request at a time.
+      await actAs(db, ownerId);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await db.query(
+          `select * from public.record_resource_breaker_fault(
+             $1::uuid, 'openai/gpt-5.3-codex', 'outage', 3)`,
+          [organizationId],
+        );
+      }
+      await db.exec("reset role");
+      const opened = await db.query<{ state: string }>(
+        "select state from public.resource_breakers where target = 'openai/gpt-5.3-codex'",
+      );
+      expect(opened.rows[0].state).toBe("open");
+
+      // The work is otherwise perfectly schedulable: capacity everywhere, an
+      // idle worker, an active project. Health is the only thing stopping it.
+      expect(await claim(db, "portfolio-worker-d")).toBeNull();
+
+      await actAs(db, ownerId);
+      const withheld = await db.query<{ reason: string }>(
+        `select reason from public.scheduling_decisions
+         where decision = 'withheld' order by occurred_at desc limit 1`,
+      );
+      expect(withheld.rows[0].reason).toMatch(/3 consecutive outage failures/);
+
+      // A breaker on a different provider is not this provider's problem.
+      await db.query(
+        "select * from public.record_resource_breaker_success($1::uuid, 'openai/gpt-5.3-codex')",
+        [organizationId],
+      );
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await db.query(
+          `select * from public.record_resource_breaker_fault(
+             $1::uuid, 'anthropic', 'rate_limit', 2)`,
+          [organizationId],
+        );
+      }
+      const unrelated = await claim(db, "portfolio-worker-d");
+      expect(unrelated?.project_id).toBe(alpha.projectId);
+      await finish(db, "portfolio-worker-d", unrelated!);
+
+      // Re-open the model breaker, then let its cooldown elapse. The trial is
+      // admitted — and taking it restarts the clock, so a second poller in the
+      // same window is suppressed again rather than both being let through.
+      await actAs(db, ownerId);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await db.query(
+          `select * from public.record_resource_breaker_fault(
+             $1::uuid, 'openai/gpt-5.3-codex', 'outage', 3)`,
+          [organizationId],
+        );
+      }
+      await submit(db, beta, "beta-after-breaker", "build_feature", "architect");
+      await submit(db, alpha, "alpha-after-breaker", "build_feature", "architect");
+      await db.exec("reset role");
+      await db.query(
+        `update public.resource_breakers set opened_at = now() - interval '10 minutes'
+         where target = 'openai/gpt-5.3-codex'`,
+      );
+
+      const trial = await claim(db, "portfolio-worker-d");
+      expect(trial).not.toBeNull();
+      await registerWorker(db, "portfolio-worker-d2", 2);
+      expect(await claim(db, "portfolio-worker-d2")).toBeNull();
+
+      // The trial succeeding closes the breaker, and normal service resumes.
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.record_resource_breaker_success($1::uuid, 'openai/gpt-5.3-codex')",
+        [organizationId],
+      );
+      expect(await claim(db, "portfolio-worker-d2")).not.toBeNull();
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("reassigns a failed run to a different worker through the same eligibility rules", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const submitted = await submit(db, alpha, "alpha-retry", "audit", "qa");
+      await registerWorker(db, "portfolio-worker-r1");
+      await registerWorker(db, "portfolio-worker-r2");
+
+      const first = await claim(db, "portfolio-worker-r1");
+      expect(first).not.toBeNull();
+      await asWorker(db);
+      await db.query(
+        `select * from public.complete_phase1c_run(
+           $1,$2::uuid,$3::uuid,'failed','The provider failed mid-run.',null,
+           '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'provider_outage',
+           'The provider returned a server error.',true)`,
+        [ "portfolio-worker-r1", first!.run_id, first!.lease_token ],
+      );
+
+      await actAs(db, ownerId);
+      await db.query("select * from public.retry_phase1c_run($1::uuid,$2::uuid,$3)", [
+        organizationId, first!.run_id, "Retrying after a provider outage",
+      ]);
+
+      // A different worker picks it up: reassignment goes back through the same
+      // eligibility rules rather than pinning the work to the worker that failed.
+      const second = await claim(db, "portfolio-worker-r2");
+      expect(second?.task_id).toBe(submitted.task_id);
+
+      await actAs(db, ownerId);
+      const assignments = await db.query<{ worker_id: string }>(
+        `select worker_id from public.scheduling_decisions
+         where decision = 'assigned' and task_id = $1 order by occurred_at`,
+        [submitted.task_id],
+      );
+      expect(assignments.rows.map((row) => row.worker_id)).toEqual([
+        "portfolio-worker-r1", "portfolio-worker-r2",
+      ]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("shows the queue in the order the scheduler would take it, with reasons", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, {
+        emergencyReserved: 0,
+        global: 4,
+        project: alpha,
+        projectLimit: 1,
+      });
+      await setPriority(db, alpha, 1);
+      await setPriority(db, beta, 3);
+
+      await submit(db, alpha, "alpha-running", "audit", "qa");
+      await submit(db, alpha, "alpha-waiting", "build_feature", "architect");
+      await submit(db, beta, "beta-waiting", "audit", "qa");
+      await registerWorker(db, "portfolio-worker-q", 4);
+      const running = await claim(db, "portfolio-worker-q");
+      expect(running?.project_id).toBe(alpha.projectId);
+
+      await actAs(db, ownerId);
+      const queue = await db.query<{
+        blocked_reason: string | null;
+        effective_priority: number;
+        project_name: string;
+        queue_position: number | null;
+        run_status: string;
+      }>(
+        "select * from public.portfolio_scheduling_queue($1::uuid, 50)",
+        [organizationId],
+      );
+
+      // Running first, then the queue in scheduler order: Alpha is P1 and Beta
+      // is P3, so Alpha's queued item leads even though both are waiting.
+      expect(queue.rows.map((row) => row.run_status)).toEqual([
+        "running", "queued", "queued",
+      ]);
+      expect(queue.rows.map((row) => row.project_name)).toEqual(["Alpha", "Alpha", "Beta"]);
+      expect(queue.rows.map((row) => row.queue_position)).toEqual([null, 1, 2]);
+
+      // And each queued item says why it is not moving. Alpha's is capacity —
+      // its project ceiling is one and one is running. Beta has room.
+      expect(queue.rows[1].blocked_reason).toMatch(/Project is at its concurrency ceiling/);
+      expect(queue.rows[2].blocked_reason).toBeNull();
+      expect(queue.rows[0].blocked_reason).toBeNull();
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("says a paused project is paused rather than blaming capacity", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await submit(db, alpha, "alpha-paused-queue", "audit", "qa");
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_project_engineering_pause($1::uuid, true, $2)",
+        [alpha.projectId, "Owner paused Alpha for a release freeze"],
+      );
+
+      const queue = await db.query<{ blocked_reason: string | null }>(
+        "select blocked_reason from public.portfolio_scheduling_queue($1::uuid, 50)",
+        [organizationId],
+      );
+      expect(queue.rows[0].blocked_reason).toBe("Project engineering is paused.");
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("reports capacity the console can show without inventing anything", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 1, global: 3 });
+      await setPriority(db, beta, 3);
+      await submit(db, alpha, "alpha-overview", "audit", "qa");
+      await submit(db, beta, "beta-overview", "build_feature", "architect");
+      await registerWorker(db, "portfolio-worker-o", 2);
+      await claim(db, "portfolio-worker-o");
+
+      await actAs(db, ownerId);
+      const overview = await db.query<{
+        active_runs: number;
+        emergency_reserved: number;
+        focused_projects: number;
+        open_breakers: number;
+        ordinary_ceiling: number;
+        organization_limit: number;
+        paused_projects: number;
+        queued_runs: number;
+        worker_capacity: number;
+        worker_count: number;
+      }>("select * from public.portfolio_capacity_overview($1::uuid)", [organizationId]);
+
+      expect(overview.rows[0]).toMatchObject({
+        active_runs: 1,
+        emergency_reserved: 1,
+        focused_projects: 0,
+        open_breakers: 0,
+        ordinary_ceiling: 2,
+        organization_limit: 3,
+        paused_projects: 0,
+        queued_runs: 1,
+        worker_capacity: 2,
+        worker_count: 1,
+      });
+
+      const projects = await db.query<{
+        active_runs: number;
+        engineering_priority: number;
+        project_name: string;
+        queued_runs: number;
+      }>("select * from public.portfolio_project_capacity($1::uuid)", [organizationId]);
+      // Ordered by priority, so the console reads worst-first without sorting.
+      expect(projects.rows.map((row) => row.project_name)).toEqual(["Alpha", "Beta"]);
+      expect(projects.rows[0]).toMatchObject({ active_runs: 1, engineering_priority: 2 });
+      expect(projects.rows[1]).toMatchObject({ engineering_priority: 3, queued_runs: 1 });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("shows an outsider nothing through the queue and capacity projections", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await submit(db, alpha, "alpha-isolated", "audit", "qa");
+      await actAs(db, outsiderId);
+
+      // The projections are SECURITY DEFINER over tables the browser cannot
+      // read at all, so membership is the only thing standing between an
+      // outsider and another organization's queue.
+      const queue = await db.query(
+        "select * from public.portfolio_scheduling_queue($1::uuid, 50)", [organizationId],
+      );
+      const overview = await db.query(
+        "select * from public.portfolio_capacity_overview($1::uuid)", [organizationId],
+      );
+      const projects = await db.query(
+        "select * from public.portfolio_project_capacity($1::uuid)", [organizationId],
+      );
+      expect(queue.rows).toHaveLength(0);
+      expect(overview.rows).toHaveLength(0);
+      expect(projects.rows).toHaveLength(0);
     } finally {
       await db.close();
     }

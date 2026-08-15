@@ -5,10 +5,10 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 27**, listed across the tables below: seven in "What is actually
+**The current total is 29**, listed across the tables below: seven in "What is actually
 unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", one in "Added later
-the same day", and four in "Added 2026-08-15". One of them has a
-materially different approval requirement from the others. The repository total is 68 migration
+the same day", and six in "Added 2026-08-15". One of them has a
+materially different approval requirement from the others. The repository total is 70 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
@@ -234,6 +234,8 @@ projects, real claims through `claim_phase1c_run`).
 | `20260815000200_phase2e_portfolio_scheduling` | Project priority/focus/pause/ceiling columns, organization ceilings and reserve, worker capacity, `provider_capacity_limits`, append-only `scheduling_decisions`, the priority and verdict functions, and the five owner controls | `phase2e-portfolio-scheduling.behavior` |
 | `20260815000300_phase2e_portfolio_scheduler` | Portfolio-aware selection inside the existing claim path | `phase2e-portfolio-scheduling.behavior` |
 | `20260815000400_phase2e_project_scoped_agents` | One logical agent per role per project, so two projects can run the same role at once | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000500_phase2e_breaker_aware_scheduling` | The cooldown rule in SQL, and selection that consults the 2C circuit breakers it already stored | `phase2e-portfolio-scheduling.behavior`, `breaker-cooldown-parity` |
+| `20260815000600_phase2e_portfolio_visibility` | Three browser projections: the queue in scheduler order with reasons, portfolio capacity, per-project scheduling state | `phase2e-portfolio-scheduling.behavior` |
 
 What they do **not** do:
 
