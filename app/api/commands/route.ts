@@ -18,6 +18,7 @@ import {
 } from "@/lib/orchestration/command";
 import { dispatchPhase1CWorker } from "@/lib/orchestration/dispatch";
 import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import { evaluateConnectionIdentity } from "@/lib/connections/routable-candidates";
 import {
   createGitHubInstallationToken,
   GitHubApiError,
@@ -151,6 +152,58 @@ export async function POST(request: Request) {
     }
 
     const target = targetData as CommandTarget;
+
+    // Phase 2D seam: the Identity Router is consulted where work is created.
+    // A Phase 1C command exercises `repository.write` — the worker pushes a
+    // branch and opens a draft PR through the chosen connection. For a project
+    // with capability-labelled mappings the router's word is binding: a
+    // refusal refuses the command, and a selection that disagrees with the
+    // resolved primary binding is a contradiction to surface, never a
+    // tiebreak to guess. A project with only legacy (unlabelled) mappings
+    // proceeds exactly as before Phase 2D, and the response says so.
+    const identity = await evaluateConnectionIdentity(
+      supabase, parsed.data.projectId, "repository.write",
+    );
+    if (identity.mode === "error") {
+      return jsonNoStore(
+        {
+          error: {
+            code: "connection_registry_unavailable",
+            message: "The connection registry could not be read; refusing to route work without it.",
+          },
+        },
+        { status: 503 },
+      );
+    }
+    if (identity.mode === "routed") {
+      const routed = identity.result;
+      if (routed.outcome === "REFUSED") {
+        return jsonNoStore(
+          {
+            error: {
+              code: "connection_routing_refused",
+              message: `The identity router refused to choose a connection: ${routed.reason}`,
+            },
+          },
+          { status: 409 },
+        );
+      }
+      if (routed.connectionId !== target.connection_id) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "connection_routing_disagreement",
+              message:
+                "The identity router selected a different connection than the project's resolved "
+                + "primary GitHub binding. The mappings contradict each other; fix the project's "
+                + "connection mappings rather than letting either side guess.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const requestedRisk = parsed.data.risk.toUpperCase() as "GREEN" | "YELLOW" | "RED";
     const riskAssessment = assessCommandRisk({
       acceptanceCriteria,
@@ -292,6 +345,18 @@ export async function POST(request: Request) {
           baseBranch: target.base_branch,
           baseSha,
           commandType: parsed.data.commandType,
+          // The identity decision travels with the submission result so the
+          // caller can see which path chose the connection. It contains ids
+          // and refusal codes only — the router never returns secrets.
+          connectionRouting: identity.mode === "legacy"
+            ? { mode: "legacy", reason: identity.reason }
+            : {
+                mode: "routed",
+                connectionId: identity.result.outcome === "SELECTED" ? identity.result.connectionId : null,
+                consideredCount: identity.result.consideredCount,
+                rejected: identity.result.rejected,
+                usedFallback: identity.result.outcome === "SELECTED" ? identity.result.usedFallback : false,
+              },
           dependencyTaskIds,
           effectiveRisk: riskAssessment.effectiveRisk.toLowerCase(),
           model: executionPlan.model,

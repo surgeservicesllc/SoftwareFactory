@@ -23,9 +23,9 @@ priority queue, and evidence for items closed by the loop.
 
 ### Current Certification
 
-- Overall: **~73% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2E 92% · 2A partial · 2D/3 not started)
+- Overall: **~74% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2D ~74% (registry + router + command seam) · 2E 92% · 2A partial · 3 not started)
 - Last audit: 2026-08-15, this loop
-- Current loop: master iteration 11
+- Current loop: master iteration 12
 - Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
 - Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
 
@@ -48,6 +48,7 @@ priority queue, and evidence for items closed by the loop.
 
 - [ ] Per-project detail page scoping Files/Backlog/Runs/Agents/Reports/Activity (goal 11 PARTIAL)
 - [x] Portfolio roll-up report | 2C | Closed loop 7 — and the audit line was wrong: the daily report was already organization-wide with a portfolio health histogram and attributed risks. The real gap was the healthy majority having no row anywhere. Migration `20260815000800` adds a bounded per-project array (worst-health first, archived included so week-over-week reconciles) with the same open-work counts the portfolio console shows; policy version → phase1e-operations-v2 | loop | —
+- [x] Identity Router wired into command submission | 2D | Closed loop 12 (2D row 28's named absence: "the seam where a connection would be chosen does not exist"). `lib/connections/routable-candidates.ts` loads capability-labelled mappings and runs the pure router; `POST /api/commands` consults it with `repository.write` before any GitHub call or persistence. Labelled project: router refusal → 409 named reason; selection disagreeing with the resolved primary binding → 409 contradiction, never a tiebreak; registry read failure → 503 fail-closed. Legacy project: proceeds as before, response says `connectionRouting.mode: "legacy"`. Five route tests; existing 12 unaffected | loop | —
 - [x] Explicit cross-project dependency type | 2C | Closed loop 11 (goal 17, the last agent-actionable portfolio row). Migration `20260815001000`: `declare_cross_project_dependency` / `release_cross_project_dependency` — owner-only, reason required, events in both projects, cycle/duplicate/terminal/self refusals by name, generic not-found outside the caller's org. Edges land in `task_dependencies`, which the claim gate already joins by organization (not project) — the scheduler needed no change. `submit_command` carried forward with one surgical replay-check amendment so declared cross-project edges (declaration evidence) never fail an honest idempotent replay. Four behavior tests: withhold-until-honest-completion, refusal battery, release-without-touching-submission-evidence, replay survival | loop | —
 - [x] Portfolio lens on runs + activity, and the agent-context isolation proof | 2C | Closed loop 10. Runs console groups under the owning project with honest counts (no-project runs get "Project unavailable", never attributed); activity console derives per-project facet chips with counts from the loaded events (org-level events get their own bucket) and filters on selection — both asserted by component tests. Goal 31 proven negatively in `phase2e-portfolio-scheduling.behavior.test.ts`: the claim payload's 41 columns are pinned as the worker's entire context, every identifier in it belongs to the claimed project and none to the sibling, and a valid lease on project A's run is refused for heartbeat and completion against project B's running run while B's rightful worker still completes it | loop | —
 - [x] Project archive operation + history-preservation test | 2C | Closed loop 6: `archive_project`/`unarchive_project` (migration `20260815000700`) — owner-only, reason required to archive, immutable activity events, deletes nothing. Behavior test archives a project with real queued work: work stops (claim filter), history rows survive, unarchive makes the same run claimable with no resubmission. API actions + panel buttons added | loop | —
@@ -67,7 +68,7 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2B Graph Engineering — landed (PR #27, then 2E capacity integration); no live graph run yet
 - [ ] 2C Portfolio — **94%** (33 PASS/2 BLOCKED); loop 11 closed the last agent-actionable row (17, explicit cross-project dependencies via `declare_cross_project_dependency`); everything left is owner-only: hosted verify (33), second repo (34)
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
-- [ ] 2D Multi-Account Identity — not started as a distinct phase (connection model exists)
+- [ ] 2D Multi-Account Identity — **~74%** (20 PASS/13 PARTIAL/2 ABSENT/1 BLOCKED of 36); loop 12 wired the Identity Router into `POST /api/commands` (row 28: binding for labelled projects, legacy-transparent, fails closed); remaining agent-actionable: fallback-audit persistence (27), lease acquisition (31), Vercel/Supabase/2B bindings (3, 4, 29); owner: second real account (35)
 - [ ] 3 Self-Improvement — not started
 
 ### External Blockers (owner-only)
