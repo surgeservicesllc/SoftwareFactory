@@ -118,6 +118,36 @@ Implemented, hosted in the reconciled chain, and locally verified against the mi
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
 - [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
 
+## Phase 2B task work locks need a lease before anything can gate on them
+
+Found while closing Phase 2E goal 17 (2026-08-15).
+
+`public.task_work_locks` records `acquired_at` and `released_at` and nothing
+else. There is no `expires_at`, no heartbeat, and no expiry sweep, so a lock
+whose holder crashed — or whose task was cancelled between acquiring and
+releasing — is held forever. Today that is invisible, because nothing consults
+these locks when work is scheduled.
+
+It stops being invisible the moment anything does. Phase 2E deliberately did
+not make `claim_phase1c_run` respect these locks for exactly this reason: a
+Phase 1C command declares no file scope, so the sound rule is that an
+undeclared scope overlaps everything, and that rule over a lock that cannot
+expire is a project that never schedules again with nothing to clear it.
+
+The work, in order:
+
+1. Add `expires_at` and `heartbeat_at` to `task_work_locks`, mirroring
+   `graph_work_locks` (which already has both plus
+   `expire_abandoned_graph_work_locks`).
+2. Give `acquire_task_work_lock` a bounded lease and add a heartbeat function.
+3. Add an expiry sweep, and treat an expired lock as not held when testing for
+   conflicts.
+4. Only then gate `claim_phase1c_run` on held locks in the same project, and
+   record the refusal in `scheduling_decisions` like every other withholding.
+
+Until step 4 lands, Phase 2E goal 17 stays PARTIAL, and the reason is written
+out in `AI/PHASE_2E_COMPLETION.md` rather than left as a bare score.
+
 ## Deferred
 
 - Phase 1C live Codex/OpenAI worker execution: published and schema-current but **Not Connected** until a funded replacement credential passes no-claim preflight and a new current-base command completes live acceptance.

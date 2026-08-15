@@ -74,7 +74,7 @@ and `tests/unit/portfolio-open-statuses.test.ts`.
 | 14 | Scheduler deterministic; no paid LLM | PASS | Pure SQL throughout. `effective_work_priority` is `immutable` and takes its clock as a parameter, so it can be asserted exactly. |
 | 15 | Dependencies block tasks correctly | PASS | Unchanged Phase 1C clause, preserved byte-identical through both rewrites of the claim body. |
 | 16 | Independent work may execute concurrently | PASS | Required fixing the shared agent roster: one logical agent per role per *project* (`20260815000400`). Test: "runs two projects at once, which a shared agent roster made impossible". |
-| 17 | Work locks prevent conflicting assignments | PARTIAL | The agent-level exclusion and `for update … skip locked` are enforced on the 1C path; `work_locks`/`task_work_locks` remain a separate 2B mechanism. Unifying them is not done. |
+| 17 | Work locks prevent conflicting assignments | PARTIAL | Both mechanisms work and neither knows about the other. On the 1C path: agent-level exclusion plus `for update … skip locked`. On the 2B path: `graph_work_locks` (leased) and `task_work_locks` (path-prefix). Deliberately **not** unified in this phase — see below. |
 | 18 | Capacity released after completion/failure/cancel | PASS | Capacity counts live leases only, so completion, failure, cancellation and a crashed worker all release it. Canary C releases and re-claims. |
 | 19 | Stale worker leases recover safely | PASS | Unchanged reclaim loop; lease tokens change on re-claim so no duplicate execution. |
 | 20 | Provider/account concurrency limits enforced | PASS | `provider_capacity_limits`, account-wide or per connection. Test: "enforces a provider account ceiling across the whole portfolio". |
@@ -118,6 +118,33 @@ every claim above is sequential. They prove ordering, ceilings, release and
 recovery. They do not prove behaviour under simultaneous contention — that
 rests on the `for update … skip locked` the claim has used since Phase 1C,
 which these changes did not alter.
+
+---
+
+## Why goal 17 was left PARTIAL rather than closed
+
+The obvious way to close it is to make `claim_phase1c_run` refuse a run while
+another task holds a `task_work_locks` row in the same project. A Phase 1C
+command declares no file scope, so the only sound rule would be that an
+undeclared scope overlaps everything — blunt, but conservative in the right
+direction, and two lines of SQL.
+
+It was not done because `task_work_locks` has no expiry. It has `acquired_at`
+and `released_at` and nothing else: no heartbeat, no `expires_at`, no sweep.
+Its sibling `graph_work_locks` has all three. A lock that is never released —
+because the holder crashed, or its task was cancelled between acquisition and
+release — is invisible today, since nothing consults these locks at claim time.
+Gating the scheduler on them would convert that dormant leak into a project
+that never schedules again, with no error and no expiry to clear it, and this
+phase is what made within-project concurrency possible in the first place.
+
+The prerequisite is therefore a lease on `task_work_locks` — expiry, heartbeat,
+and an expiry sweep, matching what `graph_work_locks` already does — after
+which the claim-time gate is small and safe. That is recorded in
+`AI/BACKLOG.md` under Phase 2B rather than bolted on here, because it is a
+change to 2B's table and 2B's release path, not to the scheduler.
+
+Trading a real wedge risk for a scorecard row would be the wrong exchange.
 
 ---
 
