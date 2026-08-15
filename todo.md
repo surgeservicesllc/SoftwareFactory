@@ -48,7 +48,7 @@ priority queue, and evidence for items closed by the loop.
 
 - [ ] Per-project detail page scoping Files/Backlog/Runs/Agents/Reports/Activity (goal 11 PARTIAL)
 - [ ] Portfolio roll-up report (goal 26 PARTIAL)
-- [ ] Project archive operation + history-preservation test (goal 28 PARTIAL)
+- [x] Project archive operation + history-preservation test | 2C | Closed loop 6: `archive_project`/`unarchive_project` (migration `20260815000700`) — owner-only, reason required to archive, immutable activity events, deletes nothing. Behavior test archives a project with real queued work: work stops (claim filter), history rows survive, unarchive makes the same run claimable with no resubmission. API actions + panel buttons added | loop | —
 
 ### P3 Optimization
 
