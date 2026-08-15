@@ -1458,3 +1458,138 @@ describe("projects cannot be deleted, and the schema is why", { timeout: 180_000
     }
   });
 });
+
+describe("an agent's context is exactly one project", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 31. The row returned by `claim_phase1c_run` is the entire
+   * context a worker receives — there is no second channel — so isolation is
+   * provable at that one boundary. Two claims follow: every identifier in the
+   * payload belongs to the claimed project and none to its sibling, and the
+   * lease the payload carries authorises nothing against the sibling's run.
+   * The payload's column list is pinned because any new context field is a
+   * new place a sibling could leak, and must re-answer this test's question.
+   */
+  it("hands the worker only the claimed project's identifiers, and pins the payload shape", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-context", "build_feature", "backend");
+      await submit(db, beta, "beta-context", "build_feature", "backend");
+      await registerWorker(db, "context-worker", 1);
+
+      await asWorker(db);
+      const { rows } = await db.query<Record<string, unknown>>(
+        "select * from public.claim_phase1c_run($1,$2,$3,$4)",
+        ["context-worker", "openai", "gpt-5.3-codex", 120],
+      );
+      const payload = rows[0];
+      expect(payload).toBeDefined();
+
+      // Which project won the claim is the scheduler's business, not this
+      // test's. Whichever it was, the payload must be entirely that project's.
+      const claimed = payload.project_id === alpha.projectId ? alpha : beta;
+      const sibling = claimed === alpha ? beta : alpha;
+      expect(payload.project_id).toBe(claimed.projectId);
+      expect(payload.connection_id).toBe(claimed.connectionId);
+      expect(payload.repository_id).toBe(claimed.repositoryId);
+      expect(payload.internal_installation_id).toBe(claimed.installationId);
+      expect(Number(payload.external_installation_id)).toBe(claimed.externalInstallationId);
+      expect(Number(payload.external_repository_id)).toBe(claimed.externalRepositoryId);
+      expect(payload.repository_full_name).toBe(claimed.repository);
+
+      // Nothing of the sibling leaks through any field — not its ids, not its
+      // repository, not even its name in the prompt.
+      const serialized = JSON.stringify(payload, (_key, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      );
+      for (const leaked of [
+        sibling.projectId, sibling.connectionId, sibling.repositoryId,
+        sibling.installationId, sibling.repository, sibling.name,
+        String(sibling.externalInstallationId), String(sibling.externalRepositoryId),
+      ]) {
+        expect(serialized).not.toContain(leaked);
+      }
+
+      // The worker's whole world, by column name. A field added here without
+      // updating this pin is a field nobody asked the leak question about.
+      expect(Object.keys(payload).sort()).toEqual([
+        "acceptance_criteria", "agent_id", "app_id", "attempt_number",
+        "base_branch", "base_sha", "cancellation_requested", "ci_timeout_ms",
+        "command_id", "command_type", "connection_id",
+        "external_installation_id", "external_repository_id",
+        "internal_installation_id", "lease_expires_at", "lease_token",
+        "logical_agent_role", "maximum_duration_ms", "maximum_input_tokens",
+        "maximum_output_tokens", "maximum_repair_attempts", "maximum_turns",
+        "model", "organization_id", "owner_approval_expires_at",
+        "owner_approval_id", "plan", "project_id", "prompt", "provider",
+        "recovery_head_branch", "recovery_head_sha",
+        "recovery_provider_run_reference", "recovery_pull_request_number",
+        "recovery_pull_request_url", "recovery_usage", "repository_full_name",
+        "repository_id", "requested_risk", "run_id", "task_id",
+      ]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses one project's lease against the sibling's running run", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-lease", "build_feature", "backend");
+      await submit(db, beta, "beta-lease", "build_feature", "backend");
+      await registerWorker(db, "lease-worker-a", 1);
+      await registerWorker(db, "lease-worker-b", 1);
+
+      const first = await claim(db, "lease-worker-a");
+      const second = await claim(db, "lease-worker-b");
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      expect(new Set([first!.project_id, second!.project_id])).toEqual(
+        new Set([alpha.projectId, beta.projectId]),
+      );
+
+      // Worker A holds a perfectly valid lease — on its own run. Against the
+      // sibling's running run, that lease is worth nothing.
+      await asWorker(db);
+      await expect(
+        db.query(
+          "select * from public.heartbeat_phase1c_run($1,$2::uuid,$3::uuid,120)",
+          ["lease-worker-a", second!.run_id, first!.lease_token],
+        ),
+      ).rejects.toThrow(/run deadline is missing or expired/);
+      await expect(
+        db.query(
+          `select * from public.complete_phase1c_run(
+             $1,$2::uuid,$3::uuid,'failed','Cross-project completion attempt.',null,
+             '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'cross_project_attempt',
+             'This call must never succeed.',false)`,
+          ["lease-worker-a", second!.run_id, first!.lease_token],
+        ),
+      ).rejects.toThrow(/active run lease required/);
+
+      // The refusal was about identity, not both calls being broken: the
+      // sibling's run is untouched and its rightful worker can still act.
+      await db.exec("reset role");
+      const untouched = await db.query<{ lease_worker_id: string; status: string }>(
+        "select status::text, lease_worker_id from public.agent_runs where id = $1",
+        [second!.run_id],
+      );
+      expect(untouched.rows[0]).toMatchObject({
+        lease_worker_id: "lease-worker-b", status: "running",
+      });
+      await finish(db, "lease-worker-b", second!);
+
+      await db.exec("reset role");
+      const finished = await db.query<{ status: string }>(
+        "select status::text from public.agent_runs where id = $1",
+        [second!.run_id],
+      );
+      expect(finished.rows[0].status).toBe("failed");
+    } finally {
+      await db.close();
+    }
+  });
+});

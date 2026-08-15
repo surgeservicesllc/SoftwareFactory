@@ -75,6 +75,52 @@ describe("Phase 1C control-plane consoles", () => {
     expect(screen.getByText("No errors")).toBeInTheDocument();
   });
 
+  it("groups the runs list under the project that owns each run", async () => {
+    const baseRun = {
+      status: "succeeded",
+      startedAt: "2026-08-13T12:00:00Z",
+      completedAt: "2026-08-13T12:10:00Z",
+      createdAt: "2026-08-13T12:00:00Z",
+      durationMs: 600000,
+      risk: "green",
+      agent: { id: "agent", name: "Frontend" },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/runs") return jsonResponse({ runs: [
+        { ...baseRun, id: "run-app-1", branch: "factory/app-1",
+          project: { id: "project-app", name: "SoftwareFactory" },
+          task: { id: "task-1", title: "Fix mobile layout" } },
+        { ...baseRun, id: "run-gateway-1", branch: "factory/gateway-1",
+          project: { id: "project-gateway", name: "Gateway" },
+          task: { id: "task-2", title: "Harden webhook retries" } },
+        { ...baseRun, id: "run-app-2", branch: "factory/app-2",
+          project: { id: "project-app", name: "SoftwareFactory" },
+          task: { id: "task-3", title: "Tighten empty states" } },
+        { ...baseRun, id: "run-orphan", branch: "factory/orphan",
+          project: null,
+          task: { id: "task-4", title: "Unattributed maintenance" } },
+      ] });
+      throw new Error(`Unexpected fetch ${String(input)}`);
+    }));
+
+    render(<RunsConsole />);
+
+    // One section per owning project, carrying its own honest count.
+    const application = await screen.findByRole("region", { name: "Runs for SoftwareFactory" });
+    expect(application).toHaveTextContent("2 runs");
+    expect(application).toHaveTextContent("Fix mobile layout");
+    expect(application).toHaveTextContent("Tighten empty states");
+
+    const gateway = screen.getByRole("region", { name: "Runs for Gateway" });
+    expect(gateway).toHaveTextContent("1 run");
+    expect(gateway).toHaveTextContent("Harden webhook retries");
+
+    // A run with no project in its bounded projection is grouped under an
+    // honest label, not attributed to a project.
+    const orphaned = screen.getByRole("region", { name: "Runs for Project unavailable" });
+    expect(orphaned).toHaveTextContent("Unattributed maintenance");
+  });
+
   it("offers a bounded retry only when run detail marks a terminal run retryable", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
