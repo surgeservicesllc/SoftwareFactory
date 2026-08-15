@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 import { resolveClaudeAuth } from "@/lib/providers/claude-auth";
 import {
   executeClaudeThroughCli,
+  resolveMaxTurns,
   type ClaudeQueryFn,
   type ClaudeSdkMessage,
 } from "@/lib/providers/claude-cli-transport";
@@ -261,5 +262,38 @@ describe("failures", () => {
         queryFn,
       }),
     ).rejects.not.toThrow(new RegExp(OAUTH_TOKEN));
+  });
+});
+
+
+/**
+ * The turn budget is a cost bound, so its edges are tested rather than trusted.
+ *
+ * Phase 2B needed more than one turn for nodes that must find, read and answer;
+ * Phase 2A needed the bound to stay a bound. Both hold only if the default is
+ * untouched and the ceiling actually clamps.
+ */
+describe("the declared turn budget", () => {
+  it("gives one turn to a caller that does not ask", () => {
+    // Every advisory caller is in this branch, so their cost is unchanged.
+    expect(resolveMaxTurns(undefined)).toBe(1);
+  });
+
+  it("honours a declared budget within the ceiling", () => {
+    expect(resolveMaxTurns(6)).toBe(6);
+  });
+
+  it("clamps rather than throwing when a caller asks for too many", () => {
+    // Throwing would turn a cost preference into an outage, which is a worse
+    // failure than quietly getting fewer turns than requested.
+    expect(resolveMaxTurns(500)).toBe(8);
+  });
+
+  it("refuses to go below one, however it is asked", () => {
+    expect(resolveMaxTurns(0)).toBe(1);
+    expect(resolveMaxTurns(-4)).toBe(1);
+    expect(resolveMaxTurns(2.7)).toBe(2);
+    expect(resolveMaxTurns(Number.NaN)).toBe(1);
+    expect(resolveMaxTurns(Number.POSITIVE_INFINITY)).toBe(1);
   });
 });

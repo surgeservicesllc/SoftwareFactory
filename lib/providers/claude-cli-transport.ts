@@ -96,18 +96,53 @@ const DENIED_TOOLS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * One turn. An advisory task is a single question with a single structured
- * answer; a multi-turn loop here would be an agent, which is Phase 1C's job and
- * explicitly not a second worker to be built in 2A.
+ * One turn, by default. An advisory task is a single question with a single
+ * structured answer; a multi-turn loop here would be an agent, which is Phase
+ * 1C's job and explicitly not a second worker to be built in 2A.
+ *
+ * The default is deliberately unchanged. What is new is that a caller may ask
+ * for more, up to `MAX_TURNS_CEILING`, and Phase 2B is why: a graph node that
+ * has to locate a file, grep it, read the relevant part and then answer cannot
+ * do that in one turn. Given one, it answers from whatever a single tool call
+ * returned -- which is the narrate-instead-of-answer failure the node contracts
+ * exist to catch, and it would not even fail loudly.
+ *
+ * The bound stays a bound. It is not removed, it is not raised by default, and
+ * it cannot be raised without a caller naming a number that the ceiling then
+ * clamps. Cost stays predictable for every existing caller and becomes
+ * declarable for the one that needs it.
  */
-const MAX_TURNS = 1;
+const DEFAULT_MAX_TURNS = 1;
+
+/**
+ * The hard ceiling on a declared turn budget.
+ *
+ * Eight is enough for a node that must find, read and answer, and small enough
+ * that a runaway loop is bounded by something other than hope. A caller asking
+ * for more gets eight, silently -- clamping rather than throwing, because a
+ * provider call failing over a budget request would turn a cost preference into
+ * an outage.
+ */
+const MAX_TURNS_CEILING = 8;
 
 export interface ClaudeCliTransportOptions {
   /** Working directory the read-only tools are scoped to. */
   readonly workingDirectory: string;
   readonly allowedTools?: readonly string[];
+  /**
+   * How many turns this one request may take. Omitted means one, which is what
+   * every advisory caller wants. Clamped to [1, MAX_TURNS_CEILING].
+   */
+  readonly maxTurns?: number;
   /** Injected for tests; defaults to the real SDK. */
   readonly queryFn?: ClaudeQueryFn;
+}
+
+/** Resolve a caller's request against the default and the ceiling. */
+export function resolveMaxTurns(requested: number | undefined): number {
+  if (requested === undefined) return DEFAULT_MAX_TURNS;
+  if (!Number.isFinite(requested)) return DEFAULT_MAX_TURNS;
+  return Math.min(MAX_TURNS_CEILING, Math.max(1, Math.floor(requested)));
 }
 
 /** The slice of the Agent SDK this transport uses. */
@@ -244,7 +279,7 @@ export async function executeClaudeThroughCli(
           allowedTools: [...(options.allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
           disallowedTools: [...DENIED_TOOLS],
           permissionMode: "default",
-          maxTurns: MAX_TURNS,
+          maxTurns: resolveMaxTurns(options.maxTurns),
           // The schema travels with the request, not merely as a sentence in the
           // system prompt. See the note on SCHEMA_ENFORCEMENT below.
           outputFormat: { type: "json_schema", schema: PROVIDER_RESULT_JSON_SCHEMA },
