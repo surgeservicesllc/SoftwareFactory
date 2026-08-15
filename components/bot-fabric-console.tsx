@@ -1088,7 +1088,22 @@ function ProviderSetupSteps({
         <p className="mt-2 text-sm text-[var(--warning)]">{provider.probeReason}</p>
       ) : null}
 
-      <PasteKey provider={provider} onConnected={onRecheck} />
+      {/* Collapsed by default. Three ways to connect shown at once is its own
+          friction: it turns a login into a decision. The sign-in above is the
+          answer for almost everyone, so the rest waits until asked for. */}
+      <details className="mt-3 group">
+        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--text-muted)] hover:text-white">
+          <span className="inline-flex items-center gap-1.5">
+            <ChevronDown
+              className="size-3.5 transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+            Paste a key instead
+          </span>
+        </summary>
+
+        <PasteKey provider={provider} onConnected={onRecheck} />
+      </details>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
