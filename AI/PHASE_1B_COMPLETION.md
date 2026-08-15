@@ -233,6 +233,39 @@ Extending the matrix to the revocation path exposed two more defects in
 Both were confirmed by running the new cases against the pre-fix function: the
 suspension marker survived, and the terminal call raised.
 
+## Re-verified 2026-08-15, against merged `main`
+
+Re-run because a later session's goal asked for Phase 1B at 100%. The score is
+unchanged at **18 PASS / 2 PARTIAL / 0 FAIL — 90%**, and nothing regressed:
+`github-lifecycle-matrix`, `github-adverse-lifecycle.behavior`,
+`github-rls-behavior`, `github-integration.contract` and
+`github-repository-grants` pass, 45 tests, against the merged 72-migration
+chain.
+
+The two PARTIAL items were re-checked against the environment rather than
+against memory, and both blockers were reproduced today:
+
+- **The authenticated GitHub identity is a single User account.** `get_me`
+  returns `surgeservicesllc`, id `316305532`, created 2026-08-12, one public
+  repository. Item 2 needs an installation on an account or organization that
+  is *not* this one.
+- **No available tool can perform either action.** The GitHub toolset in this
+  environment covers repositories, branches, files, issues, pull requests,
+  reviews and Actions. It exposes nothing for installing a GitHub App on an
+  account, suspending an installation, or uninstalling one — which is what
+  items 2 and 20 require. The REST API has no organization-creation endpoint
+  either, so this is not a permissions gap that a broader token would close.
+
+So the remaining 10% is not engineering work that has been deferred; it is two
+console actions on GitHub that only the account owner can perform, unchanged
+and fully specified under OWNER ACTION REQUIRED above. Everything that does
+not depend on them is done and covered.
+
+What "100% connected to Supabase" means for 1B, restated because it has been
+conflated before: all eleven Phase 1B migrations are applied to hosted
+Supabase, and production serves from it. The unapplied migrations are from
+later phases (1E, 2B, 2C, 2D, 2E) and none of them is a 1B dependency.
+
 ## OWNER ACTION REQUIRED
 
 Both remaining PARTIAL items need the same external resource. Everything that
