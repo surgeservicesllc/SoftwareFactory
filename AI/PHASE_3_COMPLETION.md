@@ -78,8 +78,8 @@ nothing can withdraw a change that did not.
 | 27 | Self-change receives independent fresh review | **PASS** | `lib/autonomy/approval.ts` enforces absolute no-self-approval at every risk level, including for an owner. |
 | 28 | Tests/CI/security are mandatory anchors | **PASS** | `lib/autonomy/gates.ts` treats a missing gate result as a blocker and distinguishes `not_connected` from `not_run`. |
 | 29 | Cannot self-approve protected RED changes | **PASS** | RED resolves owner-only, outranking controls, ceiling and approval. |
-| 30 | Cannot modify frozen policies to improve its own score | **PARTIAL** | Strong but incomplete. `lib/graph/frozen.ts` gates graph *plans*; `lib/autonomy/diff-risk.ts` classifies authority-widening diffs RED on content wherever they appear. Neither is **versioned**, and neither covers a self-improvement proposal, which is the actor Phase 3 introduces. |
-| 31 | Self-improvement can be disabled / emergency-stopped | **PARTIAL** | Emergency stop and project freeze exist and are enforced in the resolver. There is no self-improvement subject for them to stop yet. |
+| 30 | Cannot modify frozen policies to improve its own score | **PASS (loop 18)** | `lib/factory/constitution.ts`: the frozen policies, versioned (`factory-constitution-v1`), extended with the three factory-level rules (zero-token, append-only evidence, constitution-immutable-to-subjects), judging every subject including `self_improvement_proposal`. Every check names the version that judged it, so a future improvement ledger records *under which constitution* a proposal was allowed. A subject modifying the constitution is refused by name for every subject in the vocabulary; `lib/autonomy/diff-risk.ts` continues to classify authority-widening diffs RED on content. Pinned in `factory-constitution.test.ts`. |
+| 31 | Self-improvement can be disabled / emergency-stopped | **PARTIAL (improved loop 18)** | The subject now exists and the constitution refuses it under an active emergency stop (proven by test). What still does not exist is a running self-improvement loop for the stop to halt — that arrives with the improvement ledger and detectors, and this gate is already waiting for it. |
 | 32 | Before/after metrics determine whether improvement helped | **FAIL — ABSENT** | **The central gap.** Nothing captures a baseline, and nothing compares after-state to it. |
 | 33 | Failed improvement is rejected/rolled back | **FAIL — ABSENT** | Depends on 32. |
 | 34 | Successful improvement records measurable evidence | **FAIL — ABSENT** | Depends on 32. |
@@ -89,10 +89,13 @@ nothing can withdraw a change that did not.
 
 ## Score
 
-- PASS: 8 of 37
-- PARTIAL: 18 of 37
+Re-scored 2026-08-15 (master loop iteration 18) after the versioned
+constitution landed as the plan's step 1:
+
+- PASS: 9 of 37
+- PARTIAL: 17 of 37
 - FAIL (absent): 11 of 37
-- Weighted completion: **≈38%**
+- Weighted completion: **≈40%**
 
 The safety half scores well and is largely inherited. The measurement half —
 which is what makes this Phase 3 rather than a recommendation engine — is
