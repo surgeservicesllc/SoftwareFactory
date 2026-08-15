@@ -203,6 +203,28 @@ export function PortfolioControls() {
           >
             Clear focus
           </button>
+          <button
+            type="button"
+            className="rounded border border-edge px-3 py-1 text-sm hover:bg-surface"
+            disabled={disabled || trimmedReason === ""}
+            title="An archive reason is required"
+            onClick={() => run({ action: "archive", projectId, reason: trimmedReason })}
+          >
+            Archive project
+          </button>
+          <button
+            type="button"
+            className="rounded border border-edge px-3 py-1 text-sm hover:bg-surface"
+            disabled={disabled}
+            onClick={() =>
+              run({
+                action: "unarchive",
+                projectId,
+                ...(trimmedReason ? { reason: trimmedReason } : {}),
+              })}
+          >
+            Unarchive
+          </button>
         </div>
 
         {state.phase === "done" && <Notice tone="info">{state.message}</Notice>}

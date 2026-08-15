@@ -69,11 +69,27 @@ const setCapacity = z.object({
   { message: "At least one capacity limit must be supplied." },
 );
 
+const archive = z.object({
+  action: z.literal("archive"),
+  projectId: z.string().uuid(),
+  // The database refuses a silent archive; mirrored so the refusal is a
+  // message at the boundary rather than a constraint error.
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+
+const unarchive = z.object({
+  action: z.literal("unarchive"),
+  projectId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(500).optional(),
+}).strict();
+
 const controlsRequestSchema = z.discriminatedUnion("action", [
   setPriority,
   setPause,
   focus,
   setCapacity,
+  archive,
+  unarchive,
 ]);
 
 export async function POST(request: Request) {
@@ -107,6 +123,22 @@ export async function POST(request: Request) {
         const { data, error } = await client.rpc("focus_portfolio_engineering", {
           p_organization_id: activeOrganization.id,
           p_project_ids: body.projectIds,
+          p_reason: body.reason ?? null,
+        });
+        if (error) return databaseErrorResponse(error);
+        return jsonNoStore({ result: data });
+      }
+      case "archive": {
+        const { data, error } = await client.rpc("archive_project", {
+          p_project_id: body.projectId,
+          p_reason: body.reason,
+        });
+        if (error) return databaseErrorResponse(error);
+        return jsonNoStore({ result: data });
+      }
+      case "unarchive": {
+        const { data, error } = await client.rpc("unarchive_project", {
+          p_project_id: body.projectId,
           p_reason: body.reason ?? null,
         });
         if (error) return databaseErrorResponse(error);
