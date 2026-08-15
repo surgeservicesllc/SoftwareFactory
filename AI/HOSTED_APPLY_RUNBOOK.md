@@ -5,10 +5,10 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 23**, listed across the tables below: seven in "What is actually
-unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", and one in "Added later
-the same day". One of the 15 has a
-materially different approval requirement from the others. The repository total is 64 migration
+**The current total is 24**, listed across the tables below: seven in "What is actually
+unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", one in "Added later
+the same day", and one in "Added for Phase 2D". One of them has a
+materially different approval requirement from the others. The repository total is 65 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
@@ -254,3 +254,19 @@ remembered.
   `vercel.com/sso-api`, verified 2026-08-14. See `AI/PRODUCTION_OBSERVATION_EVIDENCE.md` — the
   monitoring consequence is smaller than it first appears, because `https://www.theagoras.com`
   returns `200` and is externally observable.
+
+## Added for Phase 2D
+
+| Migration | What it does | Approval |
+| --- | --- | --- |
+| `20260814002400_connection_registry_multi_account.sql` | Makes the connection registry describe capability, health and capacity so more than one account per provider becomes routable. Adds `connection_capability_types` (a closed, read-only vocabulary), `connections.capabilities` / `health` / `health_checked_at` / `max_concurrency` / `active_leases`, `project_connections.capability` / `priority`, two routing indexes, and the caller-scoped `list_project_connection_identities(uuid)` projection that never exposes `secret_reference`. | Ordinary forward migration |
+
+It authorizes nothing on its own. No connection gains a capability it was not already
+exercising, no project gains a mapping, and a newly created connection is deliberately
+routable for nothing until a capability is declared — `capabilities` defaults to `[]` and
+`health` defaults to `offline`, so a row existing is never mistaken for a verified account.
+
+Verified on a real PostgreSQL 16.13 cluster with the whole chain applied from empty: all 65
+migrations apply in order, 0 of 103 public tables are missing RLS or FORCE RLS, `service_role`
+still holds table privileges on exactly the four GitHub ingress tables, and the new vocabulary
+table is readable by `authenticated` but writable by nobody through a browser.
