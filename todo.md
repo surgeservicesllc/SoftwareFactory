@@ -552,10 +552,10 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 | E Goals + rails | **Done** | `20260814000700`, spend/time/stuck all stop the loop |
 | F Triggers + automations | **Done** | `20260814000800` + `lib/agentos/webhook-payload.ts` |
 | Wiring | **Done** | `20260814000900` projections, 5 API routes, `/solutions/agentos` |
-| G CLI + `agentos.yml` | **Done** | `lib/agentos/project-config.ts`, `lib/agentos/cli-options.ts`, `scripts/agentos.mts`, `20260814001100`/`001200` |
+| G CLI + `agentos.yml` | **Done** | `lib/agentos/project-config.ts`, `lib/agentos/cli-options.ts`, `scripts/agentos.mts`, `20260814001300`/`001400` |
 | H PWA + live viewer + activity feed | **Not started** | mostly UI over data that now exists |
 
-**Migrations `20260814000300`–`20260814001200` are all unhosted.** Add them to
+**Migrations `20260814000300`–`20260814001400` are all unhosted.** Add them to
 `AI/HOSTED_APPLY_RUNBOOK.md` before anyone applies anything.
 
 #### Block G, as built
@@ -580,7 +580,7 @@ multi-tenant control plane.** Where they disagree, `AGENTS.md` wins:
 
 1. A plpgsql local named `agent_id` shadows the column of that name, so
    `where agent_id = agent_id` is a tautology that deletes **every organization's** grants.
-   Every local in `20260814001200` is `v_`-prefixed because of this. The regression test that
+   Every local in `20260814001400` is `v_`-prefixed because of this. The regression test that
    catches it is the cross-organization bystander case — an in-organization test misses it,
    because a later agent in the same push rewrites what an earlier one wiped.
 2. Nine integration tests assert "the newest migration is X" as a tripwire. Adding a migration
