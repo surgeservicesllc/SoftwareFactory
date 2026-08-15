@@ -26,6 +26,46 @@ and the class is stated explicitly so nothing reads as more proven than it is.
 | `npx vitest run` | PASS — 1712 tests across 152 files on the merged tree |
 | `npm run build` | PASS |
 
+## The remaining owner action is cheaper than this document implies
+
+Items 2 and 20 are written as needing "one live second GitHub account/organization
+installation", and every summary since has repeated the *account* half. Checked against the
+real account state:
+
+- `surgeservicesllc` is a **User** account, created 2026-08-12, with **one** repository.
+- No organizations exist under it.
+- The live installation is `account_type: 'User'`, `target_type: 'User'`.
+
+**A free GitHub organization under the existing account satisfies item 2.** No second email, no
+second login, no second identity to manage — <https://github.com/account/organizations/new>,
+free plan, then install the same App on it and add one throwaway repository.
+
+That is worth stating because "get a second GitHub account" reads as heavier than it is, and the
+cost of an owner action changes whether it gets done.
+
+### Why an organization install is substantively better than box-ticking
+
+`github_installations.account_type` and `target_type` are both constrained to
+`('Organization', 'User')`, and **only the `User` branch has ever been exercised live.** An
+organization installation is not the same request shape: it carries organization-level
+permission grants, member-visibility rules, and a different `target_type`, and
+`github_installations_external_unique` then genuinely holds two distinct provider installation
+ids rather than one.
+
+So the second installation tests a code path the live path never has — which is the actual
+reason item 2 is open, rather than a formality about counting installations.
+
+### Exact steps
+
+1. <https://github.com/account/organizations/new> — free plan, any name.
+2. Create one throwaway repository inside it.
+3. Install App `4582606` on that organization, scoped to that repository only.
+4. In SoftwareFactory, connect it as a second connection and sync.
+5. Verify: two rows in `github_installations` with different `external_installation_id`, one
+   `account_type = 'User'` and one `'Organization'`; then confirm a repository of one is
+   unreachable through the other's connection (the lifecycle matrix already asserts `23514`
+   for this against migrations — this proves it live).
+
 ## Correction 2026-08-15: Phase 1B *is* connected to Supabase
 
 An earlier session report said "connected to Supabase is false regardless of what else gets
