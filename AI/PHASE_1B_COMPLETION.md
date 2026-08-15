@@ -143,6 +143,29 @@ available again. The two blockers are independent and both must clear.
 page) and check Actions minutes and payment status. Verify by re-running any failed job and
 confirming it reaches a runner rather than failing in seconds.
 
+## Evidence audit 2026-08-15: the scoring holds, apart from the one row already fixed
+
+Item 8 turned out to be scored on code rather than on a test, so the obvious question is whether
+it was the only one. Checked rather than assumed.
+
+**Every test file cited anywhere in this document exists** — nineteen of them, all present. So
+item 8's problem was never a missing file; it was a file that existed and did not cover the claim
+attributed to it. That is the harder failure to spot, because the citation looks satisfied.
+
+Spot-checked the claims where being wrong would matter most:
+
+| Claim | Verified |
+| --- | --- |
+| Item 10: "invalid signature rejected **before any database access**" | Yes — the test asserts `401` **and** that `from` and `rpc` were never called. The ordering claim is genuinely tested, not implied by the status code alone. |
+| Item 9: "no merge or default-branch mutation endpoint exists anywhere in the API surface" | Yes — asserted as `not.toMatch(/mergeGitHub|\/merges|\/merge\b/)` against the route source. |
+
+So the remaining PASS rows can be relied on. Item 8 was an isolated case, now corrected with
+`tests/unit/github-stale-file-refusal.test.ts`.
+
+Worth keeping in mind for any future scoring: a cited file that exists is not evidence that the
+claim is covered. The check that found item 8 was grepping the whole tree for the error code the
+claim depends on — `stale_file` — and getting nothing.
+
 ## Scorecard
 
 | # | Goal item | Score | Evidence |
