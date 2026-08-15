@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-15 (Phase 2E). **Start at the HANDOFF section below.**
+Last updated: 2026-08-15 (Phase 2C resource gates). **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
 Phase 2B graph engineering (PR #27) · Phase 1B adverse lifecycle · concurrently, another agent
@@ -14,7 +14,74 @@ Several agents work this repository concurrently. This file is the shared pictur
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
 
-## HANDOFF — Phase 2E portfolio scheduling (2026-08-15, this session)
+## HANDOFF — Phase 2C resource gates (2026-08-15, latest session)
+
+**Branch:** `claude/github-connection-confirm-qe3tqm` · **PR #95 open**, CI green on the
+first three commits, fourth in flight at handoff. If it is green, merge it.
+
+Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` §2.1.
+
+- **Capacity** (`lib/resources/capacity.ts`) is now *called*. It had shipped with tests
+  and no caller, which is the same defect as Phase 2B goal 33 — a surface that exists,
+  is tested, and no code path reaches. Wired into `assignWorker` as an eligibility gate
+  beside capability, risk and breakers, never as a score weight: a weight can be
+  outvoted, and "we exceeded the concurrency limit because the model was cheap" is not
+  a trade anyone chose.
+- **Dispatch** (`lib/resources/dispatch.ts`) joins `lib/graph/scheduler.ts` to
+  `assignWorker`. It is deliberately not a loop over the single-node decision —
+  `assignWorker` is told the reservations live *now*, so two nodes released in one tick
+  both see the same free slot. Reservations thread forward through the batch instead.
+- **Rate accounting** (`lib/resources/rate-limits.ts`) is a third gate, not more
+  capacity. Short calls separate them: six concurrent slots filled by two-second calls
+  is 180 requests a minute while never showing more than six in flight. A rate refusal
+  carries `retryAfterMs`; a capacity refusal deliberately does not, because a window
+  clears at a computable time and a concurrency refusal does not.
+
+### Genuinely open, and why
+
+- **Nothing here is persisted.** All three are pure functions; the caller owns the
+  reservation set and the rate window, so a process restart forgets both. The plan rows
+  say **COMPLETE (in-process; not yet persisted)** rather than COMPLETE, deliberately.
+  Making them durable is the next real unit of work in this workstream, and the pattern
+  to reuse is the `operations_events` one (`for update skip locked`, unique dedupe keys,
+  bounded attempts) rather than a second invention.
+- **Nothing calls `dispatch` yet.** It is reachable and tested but not on the 1C claim
+  path, for the reason recorded in `CURRENT_STATE.md`: that path is hosted and live,
+  nothing executes regardless, and changing it now buys no behaviour while risking
+  conflicts with concurrent agents. Whoever wires it should do so with a worker pool
+  that actually executes, or the same "built but unreachable" trap repeats one level up.
+
+### Two corrections landed with it
+
+1. `AI/CURRENT_STATE.md` still called migration `20260814000210` **unhosted**. It is
+   hosted. It had been applied only partially — far enough to create `resource_breakers`,
+   which is why re-running it raised `42P07` instead of doing nothing — and
+   `scripts/repair-20260814000210.sql` completed it before the ledger was reconciled.
+2. **The hosted number below is stale.** The previous section says 29 migrations are
+   unapplied. The ledger now carries 65 rows covering all 64 files up to
+   `20260814002300`, with `scripts/hosted-schema-audit.mts` reporting 0 outstanding and
+   0 indeterminate. **8** migrations are unapplied to hosted: `20260814002400`,
+   `20260814002500`, and the six Phase 2E files. Owner action, runbook unchanged.
+
+### Owner-only, not agent-actionable
+
+These are the whole reason this workstream is not at 100%, and no amount of building
+closes them:
+
+- **Codex quota** — exhausted until **2026-08-20**. Blocks 2A goals 18/19, the live half
+  of 2B goal 30, and 1E rows 14/16. Recorded as `BLOCKED_BY_CODEX_QUOTA`. Buying credits
+  is explicitly *not* the recommendation; the constraint is zero funded per-token usage.
+- **GitHub App install** on `bubalysupport-prog`, selecting `TestMeBubaly` (1B items 2
+  and 20).
+- **Record a graph** via `/solutions/workflows` (2B goals 3 and 4). The launch path
+  exists and is tested; it needs one owner action to produce a real row.
+- **Vercel** is refusing preview deployments on PR #95 with
+  `api-deployments-free-per-day`. Account-level daily cap, unrelated to any diff, and the
+  only remedy it offers is a paid upgrade — left alone on purpose.
+
+---
+
+## HANDOFF — Phase 2E portfolio scheduling (2026-08-15, previous session)
 
 **Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq`, pushed. Six migrations,
 `20260815000100` through `20260815000600`. Full scorecard in `AI/PHASE_2E_COMPLETION.md`:
@@ -61,8 +128,9 @@ bounded only by how many workers were registered. Now:
 - **Goal 17 (work locks).** Two lock mechanisms exist — the 1C agent-level exclusion and
   the 2B `graph_work_locks`/`task_work_locks` — and are not unified. Nothing is unsafe;
   they simply do not know about each other.
-- **Goal 35 (hosted).** 29 migrations are unapplied to hosted Supabase. Verified locally
-  across the full 70-migration chain. Owner action, unchanged: `AI/HOSTED_APPLY_RUNBOOK.md`.
+- **Goal 35 (hosted).** ~~29 migrations are unapplied to hosted Supabase.~~ **Superseded —
+  see the section above: the ledger was reconciled and 8 are unapplied, of 72 files.**
+  Verified locally across the full chain. Owner action, unchanged: `AI/HOSTED_APPLY_RUNBOOK.md`.
 
 ### Before you add a migration
 

@@ -63,6 +63,7 @@ const assignment: ResourceAssignment = Object.freeze({
       score: 0.81,
       components: { capabilityFit: 1, reliability: 0.9, speed: 1000, cost: 0.02, affinity: 0.5 },
       rejections: Object.freeze([]),
+      retryAfterMs: null,
       notes: Object.freeze([]),
       prediction: Object.freeze({
         expectedSuccessRate: 0.9,
