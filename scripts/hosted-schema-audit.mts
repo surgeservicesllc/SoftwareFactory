@@ -8,20 +8,35 @@
  * the position was written down once and then trusted, and the ledger and the
  * schema had drifted apart in the meantime.
  *
- * So this asks the schema. For each table a recent migration creates, it issues
- * a `HEAD` against PostgREST: 200 means the table is there, 404 means it is not.
- * That is a direct observation of the thing in question, and it needs no
+ * So this asks the schema. For each table a recent migration creates, it asks
+ * PostgREST for the relation and zero rows, and reads the answer. It needs no
  * database password and no personal access token — only the service-role key
- * that GitHub Actions already holds for the Phase 1C worker.
+ * GitHub Actions already holds for the Phase 1C worker.
+ *
+ * **A 403 is a positive result here, and that is the whole trick.**
+ *
+ * `service_role` holds table grants on exactly four GitHub-ingress tables in
+ * this schema and nothing else — a deliberate control, asserted by
+ * `hosted-service-role-table-grants.test.ts`. So this key cannot SELECT from
+ * almost any table the audit needs to ask about, and the first working version
+ * of this script failed on its own control table for exactly that reason.
+ *
+ * The obvious repair — grant `service_role` SELECT so the probe can read — would
+ * weaken a security boundary to make a check pass. That is the wrong trade at
+ * any price, and it is also unnecessary, because PostgREST already separates the
+ * two cases: a table that does not exist never reaches a privilege check and
+ * answers 404 from the schema cache, while a table that exists and is unreadable
+ * answers 403 and names the relation. **Refusing to read it is proof it is
+ * there.** The lockdown supplies the signal rather than obstructing it.
  *
  * What it deliberately does **not** do:
  *
  * - It does not read `supabase_migrations.schema_migrations`. PostgREST cannot
  *   reach that schema, and the ledger is the artifact under suspicion anyway.
  *   A table's presence is the fact; the ledger row is a claim about the fact.
- * - It does not write. Every request is a `HEAD`.
- * - It never prints the key, the URL's credentials, or any row. Only table names
- *   and status codes, so the output is safe in a public Actions log.
+ * - It does not write, and it does not request a single row.
+ * - It never prints the key, the URL's credentials, or any data. Only table
+ *   names and verdicts, so the output is safe in a public Actions log.
  *
  * A table present here with no ledger row is the dangerous combination — that is
  * the state where `supabase db push` tries to re-create it and fails partway. The
@@ -80,20 +95,45 @@ async function probeTable(baseUrl: string, key: string, table: string): Promise<
     return { exists: null, status: null, detail: error instanceof Error ? error.message : "request failed" };
   }
 
-  if (response.status === 404) return { exists: false, status: 404, detail: "not found" };
-  if (response.ok) return { exists: true, status: response.status, detail: "present" };
+  if (response.ok) return { exists: true, status: response.status, detail: "present and readable" };
 
-  // Anything else -- 401, 403, 5xx -- is a question this probe cannot answer.
-  // Report the provider's own message rather than guessing, and never the key.
-  let message = `HTTP ${response.status}`;
+  let body: { message?: string; hint?: string; code?: string } = {};
   try {
-    const body = (await response.json()) as { message?: string; hint?: string };
-    if (body?.message) message += `: ${body.message}`;
-    if (body?.hint) message += ` (${body.hint})`;
+    body = (await response.json()) as typeof body;
   } catch {
     // A body that will not parse is not extra information; the status stands.
   }
-  return { exists: null, status: response.status, detail: message };
+  const message = body.message ?? `HTTP ${response.status}`;
+
+  // `permission denied for table X` is a *positive* existence result, and this
+  // is the case that matters most here.
+  //
+  // `service_role` holds table grants on exactly four GitHub-ingress tables in
+  // this schema and nothing else -- a deliberate control, asserted by
+  // tests/integration/hosted-service-role-table-grants.test.ts and hardened
+  // again by #49. So the key this audit runs on cannot SELECT from almost any
+  // table it needs to ask about.
+  //
+  // The obvious fix -- grant service_role SELECT so the probe can read -- would
+  // weaken a security boundary to make a check pass, which is the wrong trade at
+  // any price. It is also unnecessary: PostgREST distinguishes the two cases by
+  // itself. A table that does not exist never reaches a privilege check and
+  // answers 404 from the schema cache; a table that exists and is unreadable
+  // answers 403 and names the relation. Refusing to read it is proof it is
+  // there.
+  if (response.status === 403 && /permission denied for (table|relation|view)/i.test(message)) {
+    return { exists: true, status: 403, detail: "present (not readable by this role, as designed)" };
+  }
+
+  // PGRST205 is PostgREST's "not in the schema cache", which is the honest
+  // negative: the relation is absent, so the migration has not applied.
+  if (response.status === 404 || body.code === "PGRST205") {
+    return { exists: false, status: response.status, detail: "absent" };
+  }
+
+  let detail = `HTTP ${response.status}: ${message}`;
+  if (body.hint) detail += ` (${body.hint})`;
+  return { exists: null, status: response.status, detail };
 }
 
 async function tableExists(baseUrl: string, key: string, table: string): Promise<boolean | null> {
@@ -121,7 +161,7 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
-  console.log(`Control: \`${CONTROL_TABLE}\` resolved, so the probe reaches the database.\n`);
+  console.log(`Control: \`${CONTROL_TABLE}\` — ${control.detail}. The probe reaches the database.\n`);
 
   let applied = 0;
   let missing = 0;
