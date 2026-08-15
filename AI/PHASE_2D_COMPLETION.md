@@ -53,7 +53,7 @@ that turns that description into an authorized choice.
 | --- | --- | --- | --- |
 | 1 | Account ≠ Connection ≠ Provider ≠ Agent ≠ Project ≠ Repository ≠ Worker | **PASS (loop 1)** | Provider and Connection are now separable: `routeConnectionIdentity` answers "which connection", `lib/providers/routing.ts` still answers "which provider", and a mapping names a capability rather than a provider. Account remains a label, which is correct — the account is the provider's, the connection is ours. |
 | 2 | Multiple GitHub accounts / org installations coexist | **PARTIAL** | Schema supports it: `github_installations_connection_unique` is one installation per connection, and `github_installations_external_unique` binds an installation id to exactly one organization. `tests/integration/github-lifecycle-matrix.test.ts` proves two independent installations in one tenant stay isolated. **No second live GitHub account exists** — carried over from Phase 1B item 2. |
-| 3 | Multiple Vercel accounts / teams coexist | **FAIL — ABSENT** | `connection_provider` names `vercel`, but `lib/deploy/vercel.ts` reads a single process-wide `VERCEL_TOKEN` and never consults a connection row. One account is structurally the maximum. |
+| 3 | Multiple Vercel accounts / teams coexist | **PARTIAL (loop 5)** | Structurally multi-account: `resolveDeploymentCredential` routes `deploy.preview`/`deploy.production` through the Identity Router, dereferences the routed connection's `secret_reference` server-side (`env://` today; vault schemes refuse by name until a client exists), and the adapter authenticates each read with its own connection's token — two projects, two connections, two accounts in one process, proven in `deployment-credential.test.ts` and `deploy-vercel.test.ts`. Legacy projects keep the ambient `VERCEL_TOKEN` exactly as before. The live half stays blocked: no real Vercel connection row exists (owner action). |
 | 4 | Multiple Supabase project connections coexist | **FAIL — ABSENT** | Same shape: `lib/supabase/env.ts` resolves one project from environment. No connection row participates. |
 | 5 | Multiple Claude worker / session connections | **PARTIAL** | `lib/providers/claude-cli-transport.ts` reaches Claude through the Claude Code CLI on the owner's subscription at zero API cost, which is the right substrate. It resolves one ambient session, not a chosen connection. |
 | 6 | Multiple Codex worker / session connections | **PARTIAL** | Phase 1C is re-architected to zero-token subscription Codex, but is Not Connected pending the owner credential, and resolves one ambient session. |
@@ -88,13 +88,17 @@ that turns that description into an authorized choice.
 | 35 | At least two distinct real connection identities proven | **BLOCKED** | Requires a second real account on some provider. Carried over from Phase 1B item 2. |
 | 36 | No paid AI-token dependency | **PASS** | Phase 1C is zero-token subscription Codex; `claude-cli-transport.ts` reaches Claude on the owner's subscription with a verified live canary. No paid key is a configuration field on either path. |
 
-## Score after loop 4 (2026-08-15, master loop iteration 14)
+## Score after loop 5 (2026-08-15, master loop iteration 15)
 
-- PASS: 22 of 36
-- PARTIAL: 11 of 36
-- FAIL (absent): 2 of 36 — goals 3, 4, 29
+Counted from the table above rather than carried forward — the loop 1 tally
+was off by one (row 28 was FAIL-ABSENT but not counted as such) and loops 2-4
+propagated the error. The table is the record; these are its true totals:
+
+- PASS: 23 of 36
+- PARTIAL: 10 of 36
+- FAIL (absent): 2 of 36 — goals 4, 29
 - BLOCKED: 1 of 36 — goal 35
-- Weighted completion: **≈78%** (≈43% at audit, then ≈72% / ≈74% / ≈76% by loop)
+- Weighted completion: **≈79%** (≈43% at audit, then ≈72% / ≈74% / ≈76% / ≈78% by loop, each about one row lower than stated at the time)
 
 Loop 3 closed row 27: identity-routing decisions are durable, append-only
 evidence, recorded before they are acted on. Loop 4 closed row 31 partly by
