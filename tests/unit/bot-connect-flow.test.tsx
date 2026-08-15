@@ -299,3 +299,99 @@ describe("a key that is present but does not work", () => {
     expect(urls.some((url) => url.includes("/api/bots/providers?refresh=1"))).toBe(true);
   });
 });
+
+describe("subscription sign-in", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubWithConnect(providers: unknown, command = "npx -y tsx scripts/connect.mts claude --code abc --host https://f.test") {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providers };
+      }
+      if (String(url) === "/api/bots/connect") {
+        return { ok: true, status: 200, json: async () => ({ command, expiresInSeconds: 600 }) };
+      }
+      if (init?.method === "POST") return { ok: true, status: 201, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("offers subscription sign-in ahead of the API key for Claude", async () => {
+    stubWithConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    expect(await screen.findByRole("button", { name: /sign in with anthropic/i }))
+      .toBeInTheDocument();
+    // The key route is still reachable, but named as the alternative and named
+    // as billed, so the free path is the obvious one.
+    expect(screen.getByText(/or use an api key instead \(billed per token\)/i))
+      .toBeInTheDocument();
+  });
+
+  it("hands over one command and never a token", async () => {
+    const command = "npx -y tsx scripts/connect.mts claude --code SECRETCODE --host https://f.test";
+    stubWithConnect(providerPayload(notConfigured), command);
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+
+    expect(await screen.findByText(command)).toBeInTheDocument();
+    // The browser is told what to run and learns nothing else. The token comes
+    // back from the operator's machine straight to the server.
+    expect(screen.getByText(/works once and expires in 10 minutes/i)).toBeInTheDocument();
+  });
+
+  it("re-checks with a cache bypass once the operator says they ran it", async () => {
+    const fetchMock = stubWithConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+    await user.click(await screen.findByRole("button", { name: /i have run it/i }));
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/api/bots/providers?refresh=1"))).toBe(true);
+  });
+
+  it("reports a refusal from the server rather than showing a dead command", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      if (String(url) === "/api/bots/connect") {
+        return {
+          ok: false, status: 503,
+          json: async () => ({ error: { message: "SOFTWAREFACTORY_CREDENTIAL_KEY is not set." } }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+
+    // A command that could never be redeemed would fail minutes later with no
+    // explanation.
+    expect(await screen.findByText(/CREDENTIAL_KEY is not set/i)).toBeInTheDocument();
+    expect(screen.queryByText(/scripts\/connect.mts/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer subscription sign-in for a provider that has none", async () => {
+    stubWithConnect(providerPayload({
+      ...notConfigured, id: "groq", label: "Groq", vendor: "Groq",
+      credentialRef: "GROQ_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /groq/i }));
+
+    expect(screen.queryByRole("button", { name: /sign in with groq/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/two steps and groq is ready/i)).toBeInTheDocument();
+  });
+});

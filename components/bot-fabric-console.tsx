@@ -745,6 +745,100 @@ function useProviderSetup() {
   return { providers, checking, check };
 }
 
+/**
+ * The sign-in panel.
+ *
+ * Primary because subscription auth is both simpler and free: it bills nothing
+ * per token, which is the standing constraint on this factory. The API-key path
+ * still exists below it, labelled as billed, for anyone who wants it.
+ *
+ * The command is shown rather than run in the browser because the login belongs
+ * to the provider. Anthropic and OpenAI have no third-party OAuth, so the only
+ * supported way to obtain a subscription credential is their own tool opening
+ * their own browser flow. This hands over one pre-filled line and never sees
+ * the token that comes back.
+ */
+function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onDone: () => void }) {
+  const [command, setCommand] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [failed, setFailed] = useState("");
+
+  const start = useCallback(async () => {
+    setStarting(true);
+    setFailed("");
+    try {
+      const response = await fetch("/api/bots/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: provider.id === "anthropic" ? "claude" : "codex" }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setFailed(body?.error?.message ?? "The sign-in could not be started.");
+        return;
+      }
+      setCommand(body.command as string);
+    } catch {
+      setFailed("The sign-in could not be started.");
+    } finally {
+      setStarting(false);
+    }
+  }, [provider.id]);
+
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4">
+      <p className="text-sm font-medium text-[var(--text)]">
+        Sign in with your {provider.vendor} subscription
+      </p>
+      <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+        No key to find and nothing to paste. This bills nothing per token.
+      </p>
+
+      {command ? (
+        <div className="mt-3 space-y-3">
+          <p className="text-sm text-[var(--text-muted)]">
+            Run this once. Your browser will open for {provider.vendor} to sign you in.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono text-xs text-[var(--text)]">
+              {command}
+            </code>
+            <CopyButton value={command} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={onDone} className="btn btn-primary btn-sm">
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              I have run it
+            </button>
+            {/* Said plainly, because the link stops working and a person who
+                wanders off should know why it failed when they return. */}
+            <p className="text-xs text-[var(--text-faint)]">
+              This link works once and expires in 10 minutes.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void start()}
+            disabled={starting}
+            className="btn btn-primary btn-sm"
+          >
+            {starting ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <KeyRound className="size-3.5" aria-hidden="true" />
+            )}
+            Sign in with {provider.vendor}
+          </button>
+          {failed ? <p className="text-xs text-[var(--danger)]">{failed}</p> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Copies a variable name so nobody retypes it and mistypes it. */
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -790,9 +884,13 @@ function ProviderSetupSteps({
   return (
     <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4">
       <p className="text-sm font-medium text-[var(--text)]">
-        {provider.probeVerdict === "not_configured"
-          ? `Two steps and ${provider.label} is ready`
-          : `${provider.vendor} could not use this key`}
+        {provider.probeVerdict !== "not_configured"
+          ? `${provider.vendor} could not use this key`
+          : provider.id === "anthropic" || provider.id === "openai"
+            // Named as the alternative, and named as billed, so the cheaper
+            // path above is the obvious one.
+            ? `Or use an API key instead (billed per token)`
+            : `Two steps and ${provider.label} is ready`}
       </p>
 
       {provider.probeReason && provider.probeVerdict !== "not_configured" ? (
@@ -971,6 +1069,10 @@ function BotDirectory({
           >
             <div className="md:col-span-2">
               <p className="text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
+
+              {needsSetup && setup && (setup.id === "anthropic" || setup.id === "openai") ? (
+                <SubscriptionSignIn provider={setup} onDone={() => void check(true)} />
+              ) : null}
 
               {needsSetup && setup ? (
                 <ProviderSetupSteps
