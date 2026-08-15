@@ -76,6 +76,25 @@ describe("required check wiring", () => {
     expect([...awaited].sort()).toEqual([...produced].sort());
   });
 
+  it("preloads exactly the validation image the validator demands", async () => {
+    // The workflow pulls a pinned digest; `DeterministicValidator` refuses to
+    // run against anything but `PINNED_VALIDATION_IMAGE`. Bumping one without
+    // the other fails a live run *after* it has claimed a durable attempt and
+    // prepared a workspace — the expensive place to discover a typo.
+    const validation = await readFile(
+      resolve(repositoryRoot, "lib/worker/validation.ts"),
+      "utf8",
+    );
+    const expected = /PINNED_VALIDATION_IMAGE = "([^"]+)"/.exec(validation)?.[1];
+
+    expect(expected, "PINNED_VALIDATION_IMAGE not found in lib/worker/validation.ts").toBeDefined();
+    expect(expected).toMatch(/@sha256:[0-9a-f]{64}$/);
+    expect(
+      worker.includes(`docker pull ${expected}`),
+      `codex-worker.yml must preload ${expected}`,
+    ).toBe(true);
+  });
+
   it("keeps the merge-readiness fixtures on the same names", async () => {
     // `evaluateMergeReadiness` treats an unreported required check as blocking.
     // Its tests encode these names as fixtures, so they drift silently too.
