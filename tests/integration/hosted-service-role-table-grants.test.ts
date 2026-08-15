@@ -52,6 +52,7 @@ const publicTables = [
   "claim_anchors",
   "commands",
   "connection_capability_types",
+  "connection_routing_decisions",
   "connections",
   "deployment_validations",
   "deployments",
