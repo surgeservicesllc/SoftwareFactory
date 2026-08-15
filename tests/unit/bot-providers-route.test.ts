@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { randomBytes } from "node:crypto";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -8,6 +10,15 @@ const requireActiveOrganization = vi.fn();
 
 // Only the entry point is replaced. Mocking the whole module would remove
 // `SupabaseTenantError`, which the shared error handler needs to classify.
+const serviceRpc = vi.fn(
+  async (_name: string, _args: Record<string, string>): Promise<{
+    data: string | null; error: unknown;
+  }> => ({ data: null, error: null }),
+);
+vi.mock("@/lib/github/service-role", () => ({
+  createSupabaseGitHubWebhookClient: () => ({ rpc: serviceRpc }),
+}));
+
 vi.mock("@/lib/supabase/tenant", async () => {
   const actual = await vi.importActual<typeof import("@/lib/supabase/tenant")>(
     "@/lib/supabase/tenant",
@@ -203,7 +214,11 @@ describe("the live probe behind the badge", () => {
 
   it("does not probe a provider whose key is absent", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) => ({
+        ok: true, status: 200, json: async () => ({}),
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const { body } = await readProviders(true);
@@ -228,3 +243,73 @@ describe("the live probe behind the badge", () => {
     expect(JSON.stringify(body)).not.toContain("bad key");
   });
 });
+
+describe("a credential that arrived through OAuth", () => {
+  it("reports the provider as ready and verified without any environment variable", async () => {
+    // The whole point of one-click sign-in: nothing was ever set in a
+    // dashboard, and the console must still say the provider is usable.
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("SOFTWAREFACTORY_CREDENTIAL_KEY", randomBytes(32).toString("base64"));
+
+    const { sealSecret } = await import("@/lib/server/secret-box");
+    const sealed = sealSecret("sk-or-v1-signed-in", {
+      organizationId: "org_1", purpose: "openrouter",
+    });
+    serviceRpc.mockImplementation(async (_name: string, args: Record<string, string>) => (
+      args.p_purpose === "openrouter" ? { data: sealed, error: null } : { data: null, error: null }
+    ));
+
+    const { body } = await readProviders(true);
+
+    expect(body.providers.find((entry) => entry.id === "openrouter")).toMatchObject({
+      credentialReady: true, probeVerdict: "verified",
+    });
+  });
+
+  it("probes with the stored key rather than an empty environment variable", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("SOFTWAREFACTORY_CREDENTIAL_KEY", randomBytes(32).toString("base64"));
+
+    const { sealSecret } = await import("@/lib/server/secret-box");
+    const sealed = sealSecret("sk-or-v1-signed-in", {
+      organizationId: "org_1", purpose: "openrouter",
+    });
+    serviceRpc.mockImplementation(async (_name: string, args: Record<string, string>) => (
+      args.p_purpose === "openrouter" ? { data: sealed, error: null } : { data: null, error: null }
+    ));
+
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) => ({
+        ok: true, status: 200, json: async () => ({}),
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await readProviders(true);
+
+    const openRouterCall = fetchMock.mock.calls.find(
+      (call) => String(call[0]).includes("openrouter.ai"),
+    );
+    const headers = (openRouterCall?.[1] as RequestInit | undefined)?.headers as
+      Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe("Bearer sk-or-v1-signed-in");
+  });
+
+  it("never returns the stored key to the browser", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_CREDENTIAL_KEY", randomBytes(32).toString("base64"));
+    const { sealSecret } = await import("@/lib/server/secret-box");
+    serviceRpc.mockImplementation(async (_name: string, args: Record<string, string>) => (
+      args.p_purpose === "openrouter"
+        ? { data: sealPurpose(sealSecret), error: null }
+        : { data: null, error: null }
+    ));
+
+    const { body } = await readProviders(true);
+
+    expect(JSON.stringify(body)).not.toContain("sk-or-v1-signed-in");
+  });
+});
+
+function sealPurpose(seal: typeof import("@/lib/server/secret-box").sealSecret) {
+  return seal("sk-or-v1-signed-in", { organizationId: "org_1", purpose: "openrouter" });
+}

@@ -245,6 +245,10 @@ describe("SECURITY DEFINER functions", () => {
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
       "resolve_provider_connect_session",
+      // Stores a credential obtained through an OAuth callback. Server-only:
+      // a browser must never write that table directly, or the seal would be
+      // whatever the browser sent.
+      "store_provider_credential",
       "sync_github_installation",
     ]);
   });

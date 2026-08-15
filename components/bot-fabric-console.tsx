@@ -709,6 +709,21 @@ function isProviderUsable(state: ProviderSetup) {
     || state.probeVerdict === "not_probed";
 }
 
+/**
+ * What each callback outcome means, in words rather than a code.
+ *
+ * `expired` and `invalid` are kept apart because they need different actions: a
+ * sign-in that timed out just needs starting again, while an invalid one means
+ * the callback did not match the request that started it — worth noticing.
+ */
+const CONNECT_OUTCOMES: Readonly<Record<string, string>> = Object.freeze({
+  connected: "Signed in. The provider is connected and ready to use.",
+  expired: "That sign-in took too long and expired. Start it again.",
+  invalid: "That sign-in did not match the one you started. Nothing was connected.",
+  refused: "The provider refused the sign-in. Nothing was connected.",
+  failed: "The sign-in could not be completed. Nothing was connected.",
+});
+
 function useProviderSetup() {
   const [providers, setProviders] = useState<ProviderSetup[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -788,13 +803,36 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
   return (
     <div className="mt-4 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4">
       <p className="text-sm font-medium text-[var(--text)]">
-        Sign in with your {provider.vendor} subscription
+        {provider.id === "openrouter"
+          ? `Sign in with ${provider.vendor}`
+          : `Sign in with your ${provider.vendor} subscription`}
       </p>
       <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-        No key to find and nothing to paste. This bills nothing per token.
+        {provider.id === "openrouter"
+          ? "One click. No key, no terminal, no variable name."
+          : "No key to find and nothing to paste. This bills nothing per token."}
       </p>
 
-      {command ? (
+      {provider.id === "openrouter" ? (
+        <div className="mt-3">
+          {/* One click, no terminal. OpenRouter publishes a documented OAuth
+              flow for third-party applications, so this is the only provider
+              here that can offer the sign-in everyone expects — and it fronts
+              Claude, GPT and Gemini behind one credential. */}
+          {/* A real anchor, not `next/link`: this target is a route handler
+              that issues a 302 to another origin, and a client-side navigation
+              cannot follow a cross-origin redirect. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/oauth/start" className="btn btn-primary btn-sm">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with OpenRouter
+          </a>
+          <p className="mt-2 text-xs text-[var(--text-faint)]">
+            Opens OpenRouter, you approve, and you are back here. Gives you Claude, GPT and
+            Gemini through one sign-in.
+          </p>
+        </div>
+      ) : command ? (
         <div className="mt-3 space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
             Run this once. Your browser will open for {provider.vendor} to sign you in.
@@ -961,6 +999,26 @@ function BotDirectory({
   const [draft, setDraft] = useState<BotDraft | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { providers, checking, check } = useProviderSetup();
+  // The OAuth callback lands back here with an outcome in the query string,
+  // because a redirect is the only channel it has. Reported once and then
+  // cleared from the URL so a refresh does not repeat a stale result.
+  const [connectOutcome, setConnectOutcome] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const outcome = params.get("connect");
+      if (!outcome) return;
+      setConnectOutcome(outcome);
+      params.delete("connect");
+      const query = params.toString();
+      window.history.replaceState(
+        null, "", `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+      if (outcome === "connected") void check(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [check]);
   const provider = draft ? findBotProvider(draft.provider) : null;
   const setup = draft
     ? providers?.find((entry) => entry.id === draft.provider) ?? null
@@ -988,6 +1046,20 @@ function BotDirectory({
             </p>
           </div>
         </div>
+
+        {connectOutcome ? (
+          <p
+            className={cn(
+              "mt-4 rounded-lg border px-4 py-3 text-xs",
+              connectOutcome === "connected"
+                ? "border-[var(--success-border)] bg-[var(--success-surface)] text-[var(--text)]"
+                : "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
+            )}
+            aria-live="polite"
+          >
+            {CONNECT_OUTCOMES[connectOutcome] ?? CONNECT_OUTCOMES.failed}
+          </p>
+        ) : null}
 
         <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           {BOT_PROVIDERS.map((entry) => (
@@ -1070,7 +1142,8 @@ function BotDirectory({
             <div className="md:col-span-2">
               <p className="text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
 
-              {needsSetup && setup && (setup.id === "anthropic" || setup.id === "openai") ? (
+              {needsSetup && setup
+                && (setup.id === "anthropic" || setup.id === "openai" || setup.id === "openrouter") ? (
                 <SubscriptionSignIn provider={setup} onDone={() => void check(true)} />
               ) : null}
 

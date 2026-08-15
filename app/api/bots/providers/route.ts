@@ -1,6 +1,7 @@
 import { BOT_PROVIDERS } from "@/lib/bots/catalog";
 import { isCredentialPresent } from "@/lib/bots/credentials";
 import { probeProviderCredential, type ProbeResult } from "@/lib/bots/provider-probe";
+import { loadStoredCredentialOverlay } from "@/lib/providers/stored-credentials";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore } from "@/lib/server/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -47,6 +48,7 @@ async function resolveProbe(
   providerId: string,
   credentialRef: string | null,
   refresh: boolean,
+  explicitSecret: string | null,
 ): Promise<ProbeResult> {
   const now = Date.now();
   const cached = probeCache.get(providerId);
@@ -55,6 +57,7 @@ async function resolveProbe(
   const result = await probeProviderCredential(
     providerId as Parameters<typeof probeProviderCredential>[0],
     credentialRef,
+    explicitSecret,
   );
   probeCache.set(providerId, { result, expiresAt: now + PROBE_CACHE_TTL_MS });
   return result;
@@ -62,21 +65,27 @@ async function resolveProbe(
 
 export async function GET(request: Request) {
   try {
+    const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+
+    // A credential signed in through OAuth lives in the vault, not the
+    // environment. Reading it here means the console reports one connection
+    // state whichever way the credential arrived.
     // Membership is required: knowing which providers an organization has
     // configured is itself information about that organization.
-    await requireActiveOrganization();
-
-    const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+    const { activeOrganization } = await requireActiveOrganization();
+    const stored = await loadStoredCredentialOverlay(activeOrganization.id);
 
     const providers = await Promise.all(
       BOT_PROVIDERS.map(async (provider) => {
-        const credentialReady = isCredentialPresent(provider.defaultCredentialRef);
+        const ref = provider.defaultCredentialRef;
+        const storedSecret = ref ? stored[ref] ?? null : null;
+        const credentialReady = Boolean(storedSecret) || isCredentialPresent(ref);
 
         // Only present credentials are probed. Probing an absent one is a
         // guaranteed rejection that would read as "your key is bad" when the
         // truth is "you have not set one".
         const probe = credentialReady
-          ? await resolveProbe(provider.id, provider.defaultCredentialRef, refresh)
+          ? await resolveProbe(provider.id, ref, refresh, storedSecret)
           : null;
 
         return {

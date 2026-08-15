@@ -27,6 +27,10 @@ import { isCredentialStoreConfigured, openSecret } from "@/lib/server/secret-box
 const OVERLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
   claude: CLAUDE_AUTH_ENVIRONMENT_KEYS.oauthToken,
   codex: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
+  // A key obtained through OAuth fills the same variable an operator would have
+  // set by hand, so every reader downstream — probe, resolver, worker — needs
+  // no knowledge of where it came from.
+  openrouter: "OPENROUTER_API_KEY",
 });
 
 export type CredentialOverlay = Readonly<Record<string, string>>;
