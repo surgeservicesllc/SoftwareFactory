@@ -10,7 +10,10 @@ import { compileGraph, type CompiledGraph, type CompiledNode } from "@/lib/graph
 import { defineNode, validateNodeOutput } from "@/lib/graph/contracts";
 import { runGraph, type NodeExecutionResult } from "@/lib/graph/runner";
 import { DEFAULT_RETRY_POLICY } from "@/lib/graph/types";
+import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
+import { executeClaudeThroughCli } from "@/lib/providers/claude-cli-transport";
 import { PROVIDER_RESULT_JSON_SCHEMA } from "@/lib/providers/contract";
+import type { ProviderRunRequest } from "@/lib/providers/types";
 
 /**
  * Demonstration C, live — a real multi-node graph driven by a real model.
@@ -116,14 +119,65 @@ const BRIEFS: Record<string, { readonly system: string; readonly task: string }>
 };
 
 /**
- * One real Claude execution. A new `query()` each time, which is what makes the
- * verifier's context fresh by construction rather than by assertion.
+ * Which path the nodes run on, decided once and reported.
+ *
+ * When a subscription credential is configured this goes through the Phase 2A
+ * transport — the same code an API-path caller uses, so goal 13's "routing uses
+ * the existing provider layer" is exercised rather than asserted. With no
+ * configured credential the transport would refuse (it deliberately carries no
+ * ambient `CLAUDE_*` into its child), so the canary falls back to the Agent SDK
+ * directly and says so.
+ *
+ * The fallback is not a workaround for the transport being awkward. It is the
+ * difference between "no credential is configured here" and "the provider layer
+ * does not work", and collapsing those would make a green run meaningless.
  */
+const claudeAuth = tryResolveClaudeAuth();
+const VIA_PROVIDER_LAYER = "resolution" in claudeAuth;
+
+/** One real Claude execution. A new session each time — that is the isolation. */
 async function runClaude(
   system: string,
   task: string,
   options: { readonly readOnly: boolean; readonly maxTurns: number },
 ): Promise<Artifact> {
+  if ("resolution" in claudeAuth) {
+    const request: ProviderRunRequest = {
+      runId: `graph-canary-${Date.now()}`,
+      taskKind: "status_report",
+      agentRole: "orchestrator",
+      agentId: "graph-canary",
+      instructions: task,
+      context: {
+        projectName: "SoftwareFactory",
+        repositoryFullName: "surgeservicesllc/SoftwareFactory",
+        defaultBranch: "main",
+        riskLevel: "GREEN",
+        priorArtifacts: [],
+        memoryExcerpts: [],
+      },
+      model: "claude-opus-5",
+      maxOutputTokens: 4_000,
+      timeoutMs: 300_000,
+    };
+
+    const execution = await executeClaudeThroughCli(
+      request,
+      { system, task },
+      new AbortController().signal,
+      claudeAuth.resolution,
+      {
+        workingDirectory: process.cwd(),
+        allowedTools: options.readOnly ? ["Read", "Glob", "Grep"] : [],
+        // The declared turn budget, which is the change that made this path
+        // usable for graph nodes at all: at one turn an inspector answers from
+        // whatever a single tool call returned.
+        maxTurns: options.maxTurns,
+      },
+    );
+    return artifactSchema.parse(JSON.parse(execution.text));
+  }
+
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
   let raw = "";
@@ -205,6 +259,14 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
   it("fans out, synthesizes, and verifies with a fresh context", async () => {
     const graph = buildGraph();
     expect(graph.maxParallelism).toBe(INSPECTORS.length);
+
+    // Reported, not silently chosen: a reader of this output must be able to
+    // tell whether the provider layer was exercised or bypassed.
+    console.log(
+      VIA_PROVIDER_LAYER
+        ? "executing through the Phase 2A provider transport (subscription credential configured)"
+        : "executing through the Agent SDK directly (no configured credential; transport would refuse)",
+    );
 
     const artifacts = new Map<string, Artifact>();
     let inFlight = 0;
