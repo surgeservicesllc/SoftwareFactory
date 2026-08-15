@@ -46,7 +46,14 @@ test("loads the control plane without browser errors", async ({
   await expect(page).toHaveTitle(/AI Software Factory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: /softwarefactory dashboard/i }).first()).toBeVisible();
+  // The shell's own logo renders only in the mobile header: the marketing
+  // global navigation sits directly above the console and already carries the
+  // brand, so a second identity one row down was deliberately removed. This
+  // asserts the affordance that actually survives on every breakpoint and in
+  // both signed-in and signed-out states.
+  await expect(
+    page.getByRole("link", { name: /ai software factory home/i }).first(),
+  ).toBeVisible();
   // Every surface now reads live tenant records, so there is no seeded
   // content left to label. The truthfulness contract is stronger this way:
   // rather than labelling fake rows, the console shows none at all.
