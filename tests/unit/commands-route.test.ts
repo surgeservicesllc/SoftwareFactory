@@ -73,10 +73,28 @@ function commandRequest(
   });
 }
 
+type RegistryRow = Record<string, unknown>;
+
+/** A thenable PostgREST-shaped builder resolving to fixed rows. */
+function registryTable(rows: RegistryRow[] | null, error: { message: string } | null = null) {
+  const result = { data: rows, error };
+  const builder = {
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    in: vi.fn(() => builder),
+    then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
+  };
+  return builder;
+}
+
 function configuredClient(options: {
   requiresApproval?: boolean;
   targetData?: typeof target | null;
   targetError?: { code?: string; message?: string } | null;
+  /** project_connections rows; defaults to one legacy (unlabelled) mapping. */
+  mappingRows?: RegistryRow[];
+  connectionRows?: RegistryRow[];
+  registryError?: boolean;
 }) {
   const submission = {
     command_id: commandId,
@@ -98,11 +116,36 @@ function configuredClient(options: {
       ),
     };
   });
+  const from = vi.fn((table: string) => {
+    if (options.registryError) return registryTable(null, { message: "registry unavailable" });
+    if (table === "project_connections") {
+      return registryTable(options.mappingRows ?? [
+        { capability: null, connection_id: target.connection_id, priority: 100 },
+      ]);
+    }
+    if (table === "connections") return registryTable(options.connectionRows ?? []);
+    throw new Error(`Unexpected table ${table}`);
+  });
   requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: organizationId, role: "owner" },
-    client: { rpc },
+    client: { from, rpc },
   });
   return rpc;
+}
+
+/** A healthy, labelled, declared `repository.write` connection row. */
+function routableConnection(id: string, overrides: RegistryRow = {}): RegistryRow {
+  return {
+    active_leases: 0,
+    capabilities: ["repository.write"],
+    external_account_label: "surgeservicesllc",
+    health: "connected",
+    id,
+    max_concurrency: null,
+    provider: "github",
+    status: "connected",
+    ...overrides,
+  };
 }
 
 describe("POST /api/commands", () => {
@@ -314,6 +357,108 @@ describe("POST /api/commands", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "submit_command", expect.objectContaining({
       p_requested_risk: "red",
     }));
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("proceeds on legacy mappings and says the router was not authoritative", async () => {
+    // The default fixture is one unlabelled mapping — the pre-2D world. The
+    // command must proceed exactly as before, and the response must say which
+    // path chose the connection rather than implying the router did.
+    configuredClient({});
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: {
+          mode: "legacy",
+          reason: expect.stringContaining("No capability-labelled connection mappings"),
+        },
+      },
+    });
+  });
+
+  it("routes through the identity router when the project labels its mappings", async () => {
+    configuredClient({
+      connectionRows: [routableConnection(target.connection_id)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: {
+          connectionId: target.connection_id,
+          mode: "routed",
+          rejected: [],
+          usedFallback: false,
+        },
+      },
+    });
+  });
+
+  it("refuses the command when the router refuses, naming the router's reason", async () => {
+    // The one labelled mapping points at an unauthorized connection. Routing
+    // must refuse the submission before any GitHub call or persistence — an
+    // unauthorized identity is not a tiebreak candidate.
+    configuredClient({
+      connectionRows: [routableConnection(target.connection_id, { health: "unauthorized" })],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "connection_routing_refused",
+        message: expect.stringContaining("identity router refused"),
+      },
+    });
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a routing disagreement instead of letting either side guess", async () => {
+    // The router selects a different (eligible) connection than the resolved
+    // primary binding. Contradictory mappings are an owner problem to fix,
+    // never a silent tiebreak.
+    const otherConnection = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    configuredClient({
+      connectionRows: [routableConnection(otherConnection)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: otherConnection, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "connection_routing_disagreement" },
+    });
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the connection registry cannot be read", async () => {
+    // A registry outage must not silently bypass routing enforcement by
+    // degrading to the legacy path.
+    configuredClient({ registryError: true });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "connection_registry_unavailable" },
+    });
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
   });
 });
