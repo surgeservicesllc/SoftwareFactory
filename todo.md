@@ -52,7 +52,7 @@ priority queue, and evidence for items closed by the loop.
 
 ### P3 Optimization
 
-- [ ] Guarded project-deletion path (goal 29 UNPROVEN — highest-risk unknown in 2C audit)
+- [x] Guarded project-deletion path | 2C | Closed loop 8 by discovery: every project is born with a `project.created` activity event, `activity_events` references projects ON DELETE RESTRICT, and the trail is append-only — so **projects cannot be deleted, from their first moment, structurally**. Migration `20260815000900` adds the trigger that names that rule (instructive refusal instead of a cryptic FK error), with no escape hatch because none could work. Tests prove the refusal, the birth-record lock even with the trigger dropped, and the trail's immutability | loop | —
 
 ### Phase Certification
 

@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000800_report_per_project_view.sql";
+const latestMigration = "20260815000900_guard_project_deletion.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -1393,6 +1393,66 @@ describe("the daily report carries the per-project view", { timeout: 180_000 }, 
       expect(rows.size).toBe(2);
       expect(rows.get(alpha.projectId)).toMatchObject({ open_runs: 1, open_tasks: 1 });
       expect(rows.get(beta.projectId)).toMatchObject({ status: "archived" });
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("projects cannot be deleted, and the schema is why", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 29, resolved by discovery rather than construction. Every
+   * project is born with a 'project.created' activity event; activity_events
+   * references projects with ON DELETE RESTRICT; and the append-only trigger
+   * makes the birth record permanent. A project's audit trail is literally
+   * what makes it undeletable, from its first moment. The new trigger only
+   * *names* that rule before the constraint fires.
+   */
+  it("refuses deletion with instructions, even for the most privileged role", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await db.exec("reset role");
+
+      await expect(
+        db.query("delete from public.projects where id = $1", [alpha.projectId]),
+      ).rejects.toThrow(/archive_project/);
+
+      const survivor = await db.query<{ count: number }>(
+        "select count(*)::int as count from public.projects where id = $1",
+        [alpha.projectId],
+      );
+      expect(survivor.rows[0].count).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("holds even without the trigger, because the birth record restricts", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await db.exec("reset role");
+
+      // The direct seed insert still fired projects_audit_change: the project
+      // was born with history.
+      const birth = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.activity_events
+         where project_id = $1 and event_type = 'project.created'`,
+        [beta.projectId],
+      );
+      expect(birth.rows[0].count).toBe(1);
+
+      // Drop the instructive trigger and try again: the RESTRICT constraint
+      // is the deeper lock, and the trail itself cannot be cleared first —
+      // activity_events is append-only.
+      await db.exec("drop trigger projects_guarded_deletion on public.projects");
+      await expect(
+        db.query("delete from public.projects where id = $1", [beta.projectId]),
+      ).rejects.toThrow(/activity_events/);
+      await expect(
+        db.query("delete from public.activity_events where project_id = $1", [beta.projectId]),
+      ).rejects.toThrow(/append-only|immutable/i);
     } finally {
       await db.close();
     }
