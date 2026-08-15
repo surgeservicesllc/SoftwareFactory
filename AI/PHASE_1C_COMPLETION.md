@@ -158,6 +158,25 @@ and no code change substitutes for it.
   canary — command → `factory/*` branch → commit → draft PR — with no `api.openai.com` request in
   the run is the acceptance proof.
 
+**The credential alone is not enough to make anything run.** `.github/workflows/codex-worker.yml`
+gates every job on `if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' }}`. While that
+variable is absent, a dispatched run is *skipped silently* — no error, no failed job, nothing in
+the log to explain it. Configuring the secret and dispatching without setting it produces a
+workflow page that simply shows nothing happened.
+
+- **Service/page:** GitHub → repository **Settings** → **Secrets and variables** → **Actions** →
+  the **Variables** tab. This is a different tab from Secrets, and the value is a variable rather
+  than a secret; setting it in the wrong tab leaves the gate unsatisfied with no diagnostic.
+- **Name and value:** `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` = `true`. Not secret — it is an
+  on/off switch, and its value appears in workflow logs.
+- **Afterwards:** return it to `false` or delete it once the canary is done. It is the activation
+  switch for a worker that can create branches and draft pull requests, and it should not be left
+  on between deliberate runs. `AI/CURRENT_STATE.md` records the intended resting state as
+  absent/OFF.
+
+Ordering matters: set the secret first, then the variable, then dispatch. A run that starts
+without the credential consumes a durable attempt before failing.
+
 ### What the preflight will tell you, verified 2026-08-14
 
 Each case was executed against the real script, not described from the code.
