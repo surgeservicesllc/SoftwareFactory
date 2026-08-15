@@ -220,3 +220,61 @@ describe("releasing a slot", () => {
     expect(release(result.reservations, stale)).toHaveLength(1);
   });
 });
+
+describe("rate accounting across a tick", () => {
+  it("threads the window forward, so a batch cannot walk through a nearly-full limit", () => {
+    // The same defect as the capacity one, in a different currency: routing
+    // every node against the window as it stood at the start of the tick lets
+    // an entire batch through a limit with one request left in it.
+    const result = dispatch({
+      ...base,
+      requests: [request("node-a"), request("node-b"), request("node-c")],
+      capacityLimits: { perWorker: 10, perProvider: 10, perProject: 10 },
+      rateEvents: [],
+      ratePolicy: { windowMs: 60_000, maxRequests: 2, maxTokens: null },
+    });
+
+    expect(result.dispatched).toHaveLength(2);
+    expect(result.withheld[0]?.reason).toBe("DEFERRED");
+    expect(result.rateEvents).toHaveLength(2);
+  });
+
+  it("records the tick's requests as estimates rather than measurements", () => {
+    const result = dispatch({ ...base, requests: [request("node-a")], rateEvents: [] });
+    expect(result.rateEvents[0]?.estimated).toBe(true);
+    expect(result.rateEvents[0]?.provider).toBe("openai");
+  });
+
+  it("defers a rate-limited node and reports when it clears", () => {
+    const full = [
+      { provider: "openai", at: 900, tokens: 10, estimated: false },
+      { provider: "openai", at: 950, tokens: 10, estimated: false },
+    ];
+    const result = dispatch({
+      ...base,
+      requests: [request("node-a")],
+      rateEvents: full,
+      ratePolicy: { windowMs: 60_000, maxRequests: 2, maxTokens: null },
+    });
+
+    expect(result.withheld[0]?.reason).toBe("DEFERRED");
+    expect(result.withheld[0]?.assignment.candidates[0]?.rejections).toContain("REQUEST_RATE_EXCEEDED");
+    // Unlike a capacity refusal, this one can say when to come back.
+    expect(result.withheld[0]?.assignment.candidates[0]?.retryAfterMs).toBe(900 + 60_000 - base.now);
+  });
+
+  it("leaves rate unaccounted when the caller does not pass a window", () => {
+    const result = dispatch({ ...base, requests: [request("node-a")] });
+    expect(result.dispatched).toHaveLength(1);
+    expect(result.rateEvents).toHaveLength(0);
+    expect(result.dispatched[0]?.assignment.candidates[0]?.notes).not.toContain("RATE_LIMITED");
+  });
+
+  it("does not charge a deterministic node against the rate window", () => {
+    const deterministic = request("node-det", { node: node("node-det", { deterministicHandlerAvailable: true }) });
+    const result = dispatch({ ...base, requests: [deterministic], rateEvents: [] });
+    expect(result.dispatched).toHaveLength(1);
+    // No provider call was made, so nothing may be counted against the limit.
+    expect(result.rateEvents).toHaveLength(0);
+  });
+});

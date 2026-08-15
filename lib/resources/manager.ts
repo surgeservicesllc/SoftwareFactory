@@ -16,6 +16,12 @@ import {
 } from "@/lib/resources/capacity";
 import { evaluateBreaker, type BreakerRecord } from "@/lib/resources/breakers";
 import {
+  admitsRate,
+  type RateEvent,
+  type RateLimitPolicy,
+  type RateRefusal,
+} from "@/lib/resources/rate-limits";
+import {
   predictFrom,
   type ObservedPerformance,
   type Prediction,
@@ -87,6 +93,13 @@ export interface ResourceRequest {
    */
   readonly reservations?: readonly Reservation[];
   readonly capacityLimits?: CapacityLimits;
+  /**
+   * Requests already made in the current window. Optional for the same reason
+   * `reservations` is: absent means "this caller does not account for rate",
+   * not "no requests are permitted".
+   */
+  readonly rateEvents?: readonly RateEvent[];
+  readonly ratePolicy?: RateLimitPolicy;
   readonly now: number;
 }
 
@@ -100,7 +113,8 @@ export type ScoreNote =
   | "INSUFFICIENT_HISTORY"
   | "BREAKER_OPEN"
   | "RISK_REQUIRES_STRONG_MODEL"
-  | "AT_CAPACITY";
+  | "AT_CAPACITY"
+  | "RATE_LIMITED";
 
 export interface ScoredWorker {
   readonly agentId: string;
@@ -115,7 +129,13 @@ export interface ScoredWorker {
     readonly cost: number | null;
     readonly affinity: number;
   };
-  readonly rejections: readonly (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal)[];
+  readonly rejections: readonly (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal | RateRefusal)[];
+  /**
+   * When a rate refusal could clear, in millis. Null unless rate accounting
+   * refused this candidate. A concurrency refusal has no equivalent, because
+   * nobody can say when another run will finish.
+   */
+  readonly retryAfterMs: number | null;
   readonly notes: readonly ScoreNote[];
   readonly prediction: Prediction;
 }
@@ -205,7 +225,7 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
     });
 
     const breaker = evaluateBreaker(candidate.breaker, request.now);
-    const rejections: (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal)[] = [
+    const rejections: (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal | RateRefusal)[] = [
       ...capability.rejections,
     ];
     const notes: ScoreNote[] = [];
@@ -241,6 +261,26 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
       }
     }
 
+    // Rate is the third gate, and it asks a question capacity cannot: not "is a
+    // slot free" but "has too much happened recently". Short calls satisfy a
+    // concurrency cap continuously while still exceeding a per-minute limit, so
+    // one does not imply the other.
+    let retryAfterMs: number | null = null;
+    if (request.rateEvents) {
+      const verdict = admitsRate(
+        request.rateEvents,
+        candidate.model.provider,
+        request.now,
+        node.estimatedContextTokens,
+        request.ratePolicy,
+      );
+      if (!verdict.admitted) {
+        rejections.push(verdict.refusal!);
+        notes.push("RATE_LIMITED");
+        retryAfterMs = verdict.retryAfterMs;
+      }
+    }
+
     if (!candidate.performance) notes.push("INSUFFICIENT_HISTORY");
 
     return {
@@ -257,6 +297,7 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
         affinity: candidate.configuredAffinity,
       },
       rejections: Object.freeze(rejections),
+      retryAfterMs,
       notes: Object.freeze(notes),
       prediction: predictFrom(candidate.performance),
     };

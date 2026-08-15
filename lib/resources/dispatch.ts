@@ -53,6 +53,11 @@ import {
   type Reservation,
 } from "@/lib/resources/capacity";
 import {
+  recordRequest,
+  type RateEvent,
+  type RateLimitPolicy,
+} from "@/lib/resources/rate-limits";
+import {
   assignWorker,
   type ResourceAssignment,
   type ResourceNode,
@@ -82,6 +87,14 @@ export interface DispatchInput {
   /** Reservations already held when the tick begins. */
   readonly reservations: readonly Reservation[];
   readonly capacityLimits?: CapacityLimits;
+  /**
+   * Requests already made in the rate window. Threaded forward through the
+   * batch exactly as reservations are, and for the same reason: a tick that
+   * routed every node against the window as it stood at the *start* could
+   * admit a whole batch through a limit with one request left.
+   */
+  readonly rateEvents?: readonly RateEvent[];
+  readonly ratePolicy?: RateLimitPolicy;
   /** How long an accepted assignment holds its slot. */
   readonly leaseDurationMs: number;
   readonly now: number;
@@ -107,6 +120,11 @@ export interface DispatchResult {
   readonly withheld: readonly Withheld[];
   /** Reservations held when the tick ends: the input set plus this tick's. */
   readonly reservations: readonly Reservation[];
+  /**
+   * Rate events after the tick, or the input unchanged when the caller does not
+   * account for rate. Token counts here are estimates until settled.
+   */
+  readonly rateEvents: readonly RateEvent[];
 }
 
 const RISK_ORDER: Readonly<Record<RiskLevel, number>> = Object.freeze({
@@ -159,7 +177,11 @@ function canRetryLater(assignment: ResourceAssignment): boolean {
         (rejection) =>
           rejection === "WORKER_AT_CAPACITY"
           || rejection === "PROVIDER_AT_CAPACITY"
-          || rejection === "PROJECT_AT_CAPACITY",
+          || rejection === "PROJECT_AT_CAPACITY"
+          // A rate refusal is the most clearly temporary of all: unlike
+          // capacity, it even reports when it lifts.
+          || rejection === "REQUEST_RATE_EXCEEDED"
+          || rejection === "TOKEN_RATE_EXCEEDED",
       ),
   );
 }
@@ -178,6 +200,7 @@ export function dispatch(input: DispatchInput): DispatchResult {
   // The working set grows within the tick. This is the whole point: node n sees
   // the slots taken by nodes 1..n-1 of the same batch.
   let held: Reservation[] = [...input.reservations];
+  let rateEvents: readonly RateEvent[] | undefined = input.rateEvents;
 
   for (const request of dispatchOrder(input.requests)) {
     const assignment = assignWorker({
@@ -190,6 +213,8 @@ export function dispatch(input: DispatchInput): DispatchResult {
       requestedProvider: request.requestedProvider,
       reservations: held,
       capacityLimits: limits,
+      rateEvents,
+      ratePolicy: input.ratePolicy,
       now: input.now,
     });
 
@@ -233,6 +258,20 @@ export function dispatch(input: DispatchInput): DispatchResult {
     });
 
     held = [...held, reservation];
+    if (rateEvents) {
+      // Recorded as an estimate, because the real token count is only known
+      // after the call. `settleTokens` replaces it with the measurement.
+      rateEvents = recordRequest(
+        rateEvents,
+        {
+          provider: assignment.provider!,
+          at: input.now,
+          tokens: request.node.estimatedContextTokens,
+          estimated: true,
+        },
+        input.ratePolicy?.windowMs,
+      );
+    }
     dispatched.push(Object.freeze({ nodeId: request.node.nodeId, assignment, reservation }));
   }
 
@@ -240,6 +279,7 @@ export function dispatch(input: DispatchInput): DispatchResult {
     dispatched: Object.freeze(dispatched),
     withheld: Object.freeze(withheld),
     reservations: Object.freeze(held),
+    rateEvents: Object.freeze(rateEvents ?? []),
   });
 }
 
