@@ -111,8 +111,8 @@ right trade: the isolation is worth more than a green box.
 | 15 | An unavailable provider never receives work | **PASS** | Eligibility is decided before scoring; `PROVIDER_NOT_CONNECTED` excludes a candidate outright. An override at an unavailable target yields `OVERRIDE_TARGET_UNAVAILABLE` rather than silently rerouting. |
 | 16 | Eligible fallback works | **PASS** | `planFallback`, one controlled attempt, `FALLBACK_APPLIED` recorded. |
 | 17 | Fallback cannot bypass RED / security / provider policy | **PASS** | `fallbackEligible` is a declared property of the error class, not a runtime guess. `errors.ts`: "a rejected prompt would be rejected on policy grounds anywhere, and re-routing it is policy shopping". `unauthorized`, `forbidden`, `request_rejected` and `cancelled` are all ineligible. `RISK_ABOVE_PROJECT_CEILING` and `requiresOwnerApproval` survive fallback. |
-| 18 | Claude → Codex typed handoff | **BLOCKED_BY_1C** | `buildHandoffContext` and `agent_handoffs` exist and are tested. A live handoff needs a registered Phase 1C worker; none is registered in any verified environment. Not faked. |
-| 19 | Codex → FRESH Claude independent review | **BLOCKED_BY_1C** | Same dependency. The independence *rules* are implemented and tested (below); only the live demonstration is blocked. |
+| 18 | Claude → Codex typed handoff | **PARTIAL** | **Half proven live, 2026-08-15.** `scripts/handoff-canary.mts` ran in Actions on both subscription credentials: Claude produced the plan and the typed artifact satisfied the handoff contract *before* Codex saw it — `PLAN OK files=2 criteria=12`, zero API tokens. The Codex half is `BLOCKED_BY_CODEX_QUOTA`, not by design: the CLI started, passed its trusted-directory check, and returned `You've hit your usage limit … try again at Aug 20th, 2026 10:05 AM`. Re-dispatch the workflow after that date. |
+| 19 | Codex → FRESH Claude independent review | **BLOCKED_BY_CODEX_QUOTA** | Reclassified from BLOCKED_BY_1C: the worker exists and runs, so 1C is no longer the dependency. The reviewer step is implemented in the same canary and is reached only after Codex produces a diff, so it has not executed. The independence rules are implemented and tested, and the equivalent live proof exists for the graph engine in `graph-live-team-canary.test.ts`, where a fresh Claude verifier does run. |
 | 20 | Reviewer receives artifact + criteria only, never implementer chat | **PASS** | `buildHandoffContext` passes recorded `ProviderArtifactSummary` rows. `ProviderRunContext` documents that agents exchange work "through SoftwareFactory records, never through a shared provider chat history" — there is no conversation object to leak, by construction. |
 | 21 | A worker cannot approve itself | **PASS** | `evaluateReviewIndependence` → `REVIEWER_IS_IMPLEMENTER`. The rule is about the *agent*, not the provider: an implementation agent can never sign off on its own work, whichever model executed it. `REVIEWER_SHARES_PROVIDER` is an additional requirement where a step declares it. |
 | 22 | Metrics show only real usage / cost / performance | **PASS** | `computeCostMicros` returns `null` when any model lacks declared pricing — "a fabricated total is worse than an absent one, because it gets believed". Usage comes from the provider's own reported counts. |
@@ -139,6 +139,32 @@ and it would be believed.
 ## Codex regression
 
 Untouched and green. No file under `lib/worker/` is modified by this change.
+
+## The Codex subscription quota
+
+Recorded because it changes what "blocked" means for goals 18 and 19, and
+because the error message invites a response this project does not take.
+
+The handoff canary reached Codex on 2026-08-15 and got:
+
+    You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage
+    to purchase more credits or try again at Aug 20th, 2026 10:05 AM.
+
+**This is a quota, not a fault.** Nothing is misconfigured. The credential
+resolved, the CLI started, the trusted-directory check passed, and the run was
+refused by the plan's own usage ceiling. Re-dispatching the workflow on or after
+20 August is the entire remedy, and it costs nothing.
+
+**The purchase link is not a recommendation.** This project's standing rule is
+that normal operation consumes no funded per-token AI credit, and buying Codex
+credits is exactly that. Waiting for the reset is the correct action. It is
+written down so a future reader hitting the same message does not mistake the
+vendor's suggestion for this repository's advice.
+
+It also qualifies Phase 1C's status. The worker is registered, enabled and
+claiming — that is verified — but a claimed run that reaches Codex before the
+reset will fail the same way. "The worker is live" and "the worker can execute"
+are different claims, and only the first is currently true.
 
 ## Blockers and owner action
 
