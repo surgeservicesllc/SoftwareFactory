@@ -19,16 +19,17 @@ So this phase is not a schema project. It is a surface, an orchestrator, and a c
 
 ## Score
 
-**32 PASS · 0 PARTIAL · 1 MISSING · 0 UNPROVEN · 2 BLOCKED — 35 total.**
+**33 PASS · 0 PARTIAL · 0 MISSING · 0 UNPROVEN · 2 BLOCKED — 35 total.**
 
-Counting PASS only: **91%**.
+Counting PASS only: **94%**. Every remaining row is owner-blocked; there is no
+agent-actionable portfolio work left in this scorecard.
 
 Re-scored 2026-08-15 by the master loop, from evidence rather than intention:
 
 - Loops 2–8 closed goals 9, 11, 13, 18, 26, 27, 28 and 29 — isolation and archive proven by negative tests against the migrated schema, deletion resolved by discovery (structurally impossible, now instructively refused), the report and portfolio reconciling against each other.
 - Phase 2E had already closed 16 and 19–23; the original audit predated its landing, and those rows now cite the scheduling suite's real claims rather than the plan.
 - Loop 10 closed 24, 25 and 31. The runs console groups runs under the owning project with per-project counts, and runs with no project in their bounded projection sit under "Project unavailable" rather than being attributed; the activity console derives per-project facet chips (with counts) from the loaded events and filters on selection, with organization-level events in their own bucket — both asserted by component tests. Goal 31 is proven at the only boundary that exists: `claim_phase1c_run`'s payload is the worker's entire context, its 41 columns are pinned, every identifier in a claim belongs to the claimed project and none to its sibling, and a valid lease on one project's run is refused for heartbeat and completion against the sibling's running run (`phase2e-portfolio-scheduling.behavior.test.ts`).
-- The one remaining agent-actionable row is 17: an explicit cross-project dependency type. `graph_edges` are within a graph and a graph belongs to one project; nothing yet models "project B's work waits on project A's".
+- Loop 11 closed 17, the last agent-actionable row. Half the rule had held since Phase 1C — `submit_command` refuses dependency IDs outside the command's own project, so implicit coupling was already impossible — and the claim gate joins prerequisites by organization, not project, so the scheduler was always ready to respect a cross-project edge. What never existed was an authorized doorway. Migration `20260815001000` adds `declare_cross_project_dependency` and `release_cross_project_dependency`: owner-only, reason required, immutable activity events in *both* projects, instructive refusals for same-project pairs, terminal tasks, duplicates, self-reference, and cycles, with the generic not-found for anything outside the caller's organization. Edges land in the `task_dependencies` table the claim gate already consumes — no scheduler change was needed, which is the point. `submit_command` is carried forward with one surgical change so idempotent replays ignore declared cross-project edges (declaration evidence, not submission evidence). Four behavior tests prove the arc: coupling withholds the dependent until the prerequisite completes with real evidence, every dishonest declaration is refused by name, release frees the dependent without touching submission edges, and an honest replay survives a coupling declared after it.
 - 33 awaits the hosted-ledger verification and 34 awaits a second repository — both owner actions recorded in `todo.md`.
 
 ## Owner action required

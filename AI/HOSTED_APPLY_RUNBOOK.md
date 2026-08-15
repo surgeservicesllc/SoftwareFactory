@@ -5,11 +5,12 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 35**, listed across the tables below: seven in "What is actually
-unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", one in "Added later
-the same day", one in "Added for Phase 2D", and six in "Added 2026-08-15". One of them has a
-materially different approval requirement from the others. The repository total is 76 migration
+**The current total is 36**, listed across the tables below. One of them has a
+materially different approval requirement from the others. The repository total is 77 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
+(The per-section breakdown that used to live in this sentence drifted from the tables twice
+and is gone; the derived totals above are the numbers a reader may trust, and the guard test
+asserts them.)
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
 and none of them is reading this paragraph. `tests/integration/hosted-runbook-counts.test.ts` now
@@ -224,9 +225,10 @@ Order matters only in that `000600` needs `000500`, `000900` needs the tables be
 
 ## Added 2026-08-15 — Phase 2E portfolio scheduling
 
-Four further migrations, verified together by
-`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` (13 tests, two competing
-projects, real claims through `claim_phase1c_run`).
+The portfolio migrations, verified together by
+`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` (two competing
+projects, real claims through `claim_phase1c_run`; the suite pins the migration tail,
+so it cannot pass without having applied every row below).
 
 | Migration | What it adds | Verified by |
 |---|---|---|
@@ -236,6 +238,10 @@ projects, real claims through `claim_phase1c_run`).
 | `20260815000400_phase2e_project_scoped_agents` | One logical agent per role per project, so two projects can run the same role at once | `phase2e-portfolio-scheduling.behavior` |
 | `20260815000500_phase2e_breaker_aware_scheduling` | The cooldown rule in SQL, and selection that consults the 2C circuit breakers it already stored | `phase2e-portfolio-scheduling.behavior`, `breaker-cooldown-parity` |
 | `20260815000600_phase2e_portfolio_visibility` | Three browser projections: the queue in scheduler order with reasons, portfolio capacity, per-project scheduling state | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000700_project_archive_operation` | `archive_project`/`unarchive_project`: owner-only, reason required, immutable events, deletes nothing; the claim path's `status = 'active'` filter is what stops new work | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000800_report_per_project_view` | The daily report gains a bounded per-project array (worst health first, archived included); policy version `phase1e-operations-v2` | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000900_guard_project_deletion` | An instructive BEFORE DELETE refusal naming the structural rule: every project's append-only activity trail already restricts deletion from its first recorded moment | `phase2e-portfolio-scheduling.behavior` |
+| `20260815001000_cross_project_dependencies` | `declare_cross_project_dependency`/`release_cross_project_dependency`: owner-only, reason required, events in both projects, cycle-refusing; edges land in `task_dependencies`, which the claim gate already respects. Carries `submit_command` forward so replays ignore declared cross-project edges | `phase2e-portfolio-scheduling.behavior` |
 
 What they do **not** do:
 

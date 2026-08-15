@@ -23,9 +23,9 @@ priority queue, and evidence for items closed by the loop.
 
 ### Current Certification
 
-- Overall: **~72% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 91% · 2E 92% · 2A partial · 2D/3 not started)
+- Overall: **~73% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2E 92% · 2A partial · 2D/3 not started)
 - Last audit: 2026-08-15, this loop
-- Current loop: master iteration 10
+- Current loop: master iteration 11
 - Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
 - Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
 
@@ -48,6 +48,7 @@ priority queue, and evidence for items closed by the loop.
 
 - [ ] Per-project detail page scoping Files/Backlog/Runs/Agents/Reports/Activity (goal 11 PARTIAL)
 - [x] Portfolio roll-up report | 2C | Closed loop 7 — and the audit line was wrong: the daily report was already organization-wide with a portfolio health histogram and attributed risks. The real gap was the healthy majority having no row anywhere. Migration `20260815000800` adds a bounded per-project array (worst-health first, archived included so week-over-week reconciles) with the same open-work counts the portfolio console shows; policy version → phase1e-operations-v2 | loop | —
+- [x] Explicit cross-project dependency type | 2C | Closed loop 11 (goal 17, the last agent-actionable portfolio row). Migration `20260815001000`: `declare_cross_project_dependency` / `release_cross_project_dependency` — owner-only, reason required, events in both projects, cycle/duplicate/terminal/self refusals by name, generic not-found outside the caller's org. Edges land in `task_dependencies`, which the claim gate already joins by organization (not project) — the scheduler needed no change. `submit_command` carried forward with one surgical replay-check amendment so declared cross-project edges (declaration evidence) never fail an honest idempotent replay. Four behavior tests: withhold-until-honest-completion, refusal battery, release-without-touching-submission-evidence, replay survival | loop | —
 - [x] Portfolio lens on runs + activity, and the agent-context isolation proof | 2C | Closed loop 10. Runs console groups under the owning project with honest counts (no-project runs get "Project unavailable", never attributed); activity console derives per-project facet chips with counts from the loaded events (org-level events get their own bucket) and filters on selection — both asserted by component tests. Goal 31 proven negatively in `phase2e-portfolio-scheduling.behavior.test.ts`: the claim payload's 41 columns are pinned as the worker's entire context, every identifier in it belongs to the claimed project and none to the sibling, and a valid lease on project A's run is refused for heartbeat and completion against project B's running run while B's rightful worker still completes it | loop | —
 - [x] Project archive operation + history-preservation test | 2C | Closed loop 6: `archive_project`/`unarchive_project` (migration `20260815000700`) — owner-only, reason required to archive, immutable activity events, deletes nothing. Behavior test archives a project with real queued work: work stops (claim filter), history rows survive, unarchive makes the same run claimable with no resubmission. API actions + panel buttons added | loop | —
 
@@ -64,7 +65,7 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 1E Production Operations — ~87%; execution authority absent by design
 - [ ] 2A Multi-AI — provider layer built, switch OFF, no live call; zero-token conflict recorded in `AI/PHASE_1C_COMPLETION.md` §5a awaiting owner decision
 - [ ] 2B Graph Engineering — landed (PR #27, then 2E capacity integration); no live graph run yet
-- [ ] 2C Portfolio — **91%** (32 PASS/0 PARTIAL/1 MISSING/2 BLOCKED); loop 10 closed runs grouping (24), activity facets (25), sibling-isolation tests (31); remaining agent-actionable: cross-project dependency type (17); owner: hosted verify (33), second repo (34)
+- [ ] 2C Portfolio — **94%** (33 PASS/2 BLOCKED); loop 11 closed the last agent-actionable row (17, explicit cross-project dependencies via `declare_cross_project_dependency`); everything left is owner-only: hosted verify (33), second repo (34)
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
 - [ ] 2D Multi-Account Identity — not started as a distinct phase (connection model exists)
 - [ ] 3 Self-Improvement — not started
