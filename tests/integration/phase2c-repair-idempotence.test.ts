@@ -71,7 +71,7 @@ const DEPENDS_ON_TARGET = "20260814002300_guard_resource_assignment_candidates.s
  */
 const LATER_DEPENDANTS = [
   "20260815000500_phase2e_breaker_aware_scheduling.sql",
-  "20260815000600_phase2e_portfolio_visibility.sql",
+  "20260815000700_project_archive_operation.sql",
 ] as const;
 
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {

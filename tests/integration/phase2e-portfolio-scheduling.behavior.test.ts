@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000600_phase2e_portfolio_visibility.sql";
+const latestMigration = "20260815000700_project_archive_operation.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -1250,6 +1250,109 @@ describe("connection loss degrades only the affected project", { timeout: 180_00
       const reclaimed = await claim(db, "loss-recovery-worker");
       expect(reclaimed).not.toBeNull();
       expect(reclaimed!.project_id).toBe(alpha.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("archive preserves history and stops new work", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 28. Archive existed only as an enum value — nothing could
+   * set it, so "archive preserves history" was unfalsifiable. Now that it is
+   * an operation, the claim is tested the only way it means anything: archive
+   * a project that has real queued work and real history, and show the work
+   * stops, the history stays, and unarchiving resumes exactly where it was.
+   */
+  it("archives, withholds, preserves, and resumes", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-history", "build_feature", "backend");
+      await submit(db, beta, "beta-open", "build_feature", "backend");
+      await registerWorker(db, "archive-worker", 2);
+
+      // A non-owner cannot archive, and the refusal names the rule.
+      await actAs(db, outsiderId);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,$2)", [
+          alpha.projectId, "tidying up",
+        ]),
+      ).rejects.toThrow(/organization owner/);
+
+      // An owner cannot archive silently.
+      await actAs(db, ownerId);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,null)", [alpha.projectId]),
+      ).rejects.toThrow(/reason is required/);
+
+      const archived = await db.query<{ status: string }>(
+        "select status::text from public.archive_project($1::uuid,$2)",
+        [alpha.projectId, "Superseded by the beta rewrite"],
+      );
+      expect(archived.rows[0].status).toBe("archived");
+
+      // New work stops: only beta's run is offered.
+      const first = await claim(db, "archive-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(beta.projectId);
+      expect(await claim(db, "archive-worker")).toBeNull();
+
+      // History stays: the queued run, its task and command keep their rows,
+      // and the archive itself is an immutable activity event with the reason.
+      await db.exec("reset role");
+      const history = await db.query<{ runs: number; tasks: number; commands: number }>(
+        `select
+           (select count(*)::int from public.agent_runs where project_id = $1) as runs,
+           (select count(*)::int from public.tasks where project_id = $1) as tasks,
+           (select count(*)::int from public.commands where project_id = $1) as commands`,
+        [alpha.projectId],
+      );
+      expect(history.rows[0]).toEqual({ runs: 1, tasks: 1, commands: 1 });
+
+      const event = await db.query<{ metadata: { reason?: string } }>(
+        `select metadata from public.activity_events
+         where project_id = $1 and event_type = 'project.archived'`,
+        [alpha.projectId],
+      );
+      expect(event.rows).toHaveLength(1);
+      expect(event.rows[0].metadata.reason).toBe("Superseded by the beta rewrite");
+
+      // Unarchive restores to active and the same queued run becomes claimable
+      // with no resubmission — the history was the work, and it survived.
+      await actAs(db, ownerId);
+      const restored = await db.query<{ status: string }>(
+        "select status::text from public.unarchive_project($1::uuid,$2)",
+        [alpha.projectId, "Beta rewrite cancelled"],
+      );
+      expect(restored.rows[0].status).toBe("active");
+
+      const reclaimed = await claim(db, "archive-worker");
+      expect(reclaimed).not.toBeNull();
+      expect(reclaimed!.project_id).toBe(alpha.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses to archive twice and to unarchive the unarchived", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await actAs(db, ownerId);
+      await expect(
+        db.query("select * from public.unarchive_project($1::uuid,null)", [alpha.projectId]),
+      ).rejects.toThrow(/not archived/);
+
+      await db.query("select * from public.archive_project($1::uuid,$2)", [
+        alpha.projectId, "First archive",
+      ]);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,$2)", [
+          alpha.projectId, "Second archive",
+        ]),
+      ).rejects.toThrow(/already archived/);
     } finally {
       await db.close();
     }
