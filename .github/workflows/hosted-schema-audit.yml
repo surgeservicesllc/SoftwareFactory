@@ -36,7 +36,10 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Probe hosted for the tables recent migrations create
+        # Secret names match codex-worker.yml. The environment variable names the
+        # script reads are the repository's usual ones; only the secrets carrying
+        # them are `SOFTWAREFACTORY_`-prefixed.
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx scripts/hosted-schema-audit.mts
