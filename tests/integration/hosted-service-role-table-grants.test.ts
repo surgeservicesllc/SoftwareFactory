@@ -12,11 +12,13 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260814002500_provider_credential_vault.sql";
+  "20260815000600_phase2e_portfolio_visibility.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
   // adding tables, and only after confirming RLS and FORCE RLS are enabled.
+  // Both carry RLS and FORCE RLS with no policy at all, which is stricter than
+  // the rest of this list rather than weaker: no role may read them directly.
   "activity_events",
   "agent_handoffs",
   "agent_runs",
@@ -103,8 +105,7 @@ const publicTables = [
   "project_health_snapshots",
   "projects",
   "provider_agent_assignments",
-  // Both carry RLS and FORCE RLS with no policy at all, which is stricter than
-  // the rest of this list rather than weaker: no role may read them directly.
+  "provider_capacity_limits",
   "provider_connect_sessions",
   "provider_credentials",
   "provider_model_configurations",
@@ -118,6 +119,7 @@ const publicTables = [
   "resource_breaker_events",
   "resource_breakers",
   "rollback_operations",
+  "scheduling_decisions",
   "synthetic_journeys",
   "task_dependencies",
   "task_work_locks",

@@ -15,6 +15,7 @@ const routes = [
   { path: "/solutions", heading: "Dashboard" },
   { path: "/solutions/operations", heading: "Operations" },
   { path: "/solutions/projects", heading: "Projects" },
+  { path: "/solutions/portfolio", heading: "Portfolio" },
   { path: "/solutions/files", heading: "Files" },
   { path: "/solutions/bot-manager", heading: "Bot Manager" },
   { path: "/solutions/connections", heading: "Connections" },

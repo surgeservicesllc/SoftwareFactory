@@ -17,6 +17,52 @@ Phase 1B is scored item by item in `AI/PHASE_1B_COMPLETION.md`: **18 PASS, 2 PAR
 
 What remains for Phase 1B is not engineering. Items 2 and 20 need one live second GitHub account/organization installation plus one deliberate live adverse-event pass on that throwaway installation; exact pages, fields, and verification are under OWNER ACTION REQUIRED in `AI/PHASE_1B_COMPLETION.md`.
 
+## Phase 2E - portfolio resource optimization (2026-08-15, branch `claude/softwarefactory-phase-1e-ops-mjdiiq`)
+
+Scored item by item in `AI/PHASE_2E_COMPLETION.md`: **33 PASS, 2 PARTIAL, 0 FAIL, 1 BLOCKED - 92%**.
+
+The factory now schedules across projects rather than one project at a time.
+`claim_phase1c_run` was already a durable, lease-based, dependency-aware scheduler; what it
+lacked was any relationship *between* projects. Six migrations (`20260815000100`-`20260815000600`)
+add the portfolio state and the arbitration over it, inside the existing claim path rather than
+beside it:
+
+- P0-P3 project priority, strategic focus, an engineering pause, and per-project run ceilings,
+  each set by an owner-only function that writes an activity event.
+- Ceilings at four levels - worker, project, provider account or single connection, and
+  portfolio - plus a reserve inside the portfolio ceiling that only effective-P0 work may take.
+  Preemption is that subtraction: nothing is ever cancelled to make room.
+- Aging that promotes queued work one tier per fairness interval, floored at P1, so nothing
+  starves and nothing ages into the emergency reserve.
+- Circuit-breaker health consulted at selection, with a cooldown that admits exactly one trial.
+- `scheduling_decisions`, append-only: every assignment with its project, task, agent, provider,
+  connection and reason, and every ready-but-withheld item with the ceiling that held it.
+- Three browser projections behind `/solutions/portfolio`: the queue in scheduler order with a
+  reason per item, portfolio capacity, and per-project scheduling state.
+
+The graph engine now *requests* capacity (`RunnerDependencies.requestCapacity`) instead of taking
+its concurrency from its own budget, and a zero grant ends a run `CAPACITY_WITHHELD` rather than
+`STALLED`.
+
+Two defects were fixed that were not missing features. Logical agents were one per role per
+*organization*, and the scheduler correctly refuses a second concurrent run for one agent, so two
+projects doing the same kind of work serialised however much capacity existed - every other 2E
+control would have been enforced on a factory that still ran one project at a time. And the
+portfolio console counted status values none of the relevant enums can hold (`planning`,
+`blocked`, `ready`, `acknowledged`, `mitigating`), so every project reported zero open incidents
+however many were open, and queued tasks were not counted at all.
+
+Verification: 2360 unit/integration tests pass, 132 Playwright checks pass across desktop, tablet
+and mobile with axe, lint and typecheck are clean, and the production build succeeds. The five
+required canaries all pass against two competing projects, asserting on what a worker actually
+claimed. What they do not cover: PGlite is a single connection, so every claim is sequential -
+they prove ordering, ceilings, release and recovery, not behaviour under simultaneous contention,
+which rests on the unchanged `for update ... skip locked`.
+
+Still open: goal 9 names Phase 2D, which does not exist in this repository; goal 17 asks the 1C
+agent-level exclusion and the 2B lock tables to become one mechanism; goal 35 needs the hosted
+apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
+
 ## Published Phase 2A provider layer
 
 - Main contains the common `ProviderAdapter` contract plus official Anthropic and OpenAI adapters, server-only configuration, health/model discovery, structured artifacts, usage accounting, deterministic routing, controlled one-attempt fallback, and independent-review rules.

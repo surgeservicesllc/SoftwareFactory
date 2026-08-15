@@ -19,11 +19,31 @@ import type { RiskLevel } from "@/lib/risk";
 export type ProjectHealth = "unknown" | "healthy" | "degraded" | "unhealthy";
 export type ProjectStatus = "draft" | "active" | "paused" | "archived";
 
-/** Statuses that mean a unit of work is still in flight. */
-const OPEN_COMMAND_STATUSES = new Set(["queued", "planning", "running", "blocked"]);
-const OPEN_RUN_STATUSES = new Set(["queued", "claimed", "running"]);
-const OPEN_TASK_STATUSES = new Set(["backlog", "ready", "in_progress", "blocked"]);
-const OPEN_INCIDENT_STATUSES = new Set(["open", "acknowledged", "mitigating"]);
+/**
+ * Statuses that mean a unit of work is still in flight.
+ *
+ * Every name here exists in the corresponding Postgres enum, which was not
+ * true when this file was written: it counted commands in `planning` and
+ * `blocked`, tasks in `ready`, and incidents in `acknowledged` or `mitigating`,
+ * none of which are values any of those enums can hold. A status that cannot
+ * occur matches nothing, so the console reported a confident zero for work that
+ * was plainly in flight — the worst kind of wrong number, because it looks
+ * measured. Tasks in `queued` and commands in `submitted` were missed the same
+ * way, by omission rather than invention.
+ *
+ * `tests/unit/portfolio-open-statuses.test.ts` reads the enums out of the
+ * migrations and fails if a name here is not one of them.
+ */
+const OPEN_COMMAND_STATUSES = new Set([
+  "submitted", "awaiting_approval", "queued", "running",
+]);
+const OPEN_RUN_STATUSES = new Set(["queued", "running"]);
+const OPEN_TASK_STATUSES = new Set([
+  "backlog", "awaiting_approval", "queued", "in_progress", "blocked",
+]);
+// Stated as everything short of resolution. An incident that has been
+// investigated or mitigated but not resolved is still an incident.
+const OPEN_INCIDENT_STATUSES = new Set(["open", "investigating", "mitigated"]);
 
 export interface ProjectRow {
   readonly id: string;

@@ -1,8 +1,12 @@
 # Handoff
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 ## Mission and boundary
+
+**Phase 2E portfolio scheduling landed on `claude/softwarefactory-phase-1e-ops-mjdiiq` on 2026-08-15** (migrations `20260815000100`-`20260815000600`, scored 33/36 PASS in `AI/PHASE_2E_COMPLETION.md`). Read that file and the 2E handoff block at the top of `todo.md` before touching the claim path: `claim_phase1c_run` now orders by effective priority and filters on four ceilings plus circuit-breaker health, and its body has been rewritten twice by copying the previous version and editing it, so a third rewrite should do the same rather than retyping it. Two ordering facts matter operationally — the six new migrations are unhosted, and `20260815000500`/`20260815000600` cannot apply to a database where `20260814000210` is half-applied, because their `language sql` bodies are resolved at creation.
+
+
 
 **Phase 1B close-out merged as `c325dbb` on 2026-08-14.** Scoring is in `AI/PHASE_1B_COMPLETION.md` (18 PASS / 2 PARTIAL / 0 FAIL). Three real defects were fixed, not just covered: generic-`500` lifecycle refusals, a stale suspension marker left after a revocation, and a discovery that aborted against a terminally deleted installation. `tests/integration/github-lifecycle-matrix.test.ts` is the access-loss proof — it attempts a real change reservation after every transition rather than reading a UI label, so do not weaken it into asserting rendered state. Migration `20260814001100` is **unhosted**; apply it as item 7 of `AI/HOSTED_APPLY_RUNBOOK.md`.
 
