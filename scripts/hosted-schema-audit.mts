@@ -13,6 +13,11 @@
  * database password and no personal access token — only the service-role key
  * GitHub Actions already holds for the Phase 1C worker.
  *
+ * **Read the limit below before acting on the output.** This probe can prove a
+ * table is *there*; it cannot prove one is *absent*. For that,
+ * `scripts/hosted-state-report.sql` reads `pg_class` in the SQL editor and is
+ * the authority. This script is the cheap, repeatable check between those.
+ *
  * **A 403 is a positive result here, and that is the whole trick.**
  *
  * `service_role` holds table grants on exactly four GitHub-ingress tables in
@@ -125,10 +130,24 @@ async function probeTable(baseUrl: string, key: string, table: string): Promise<
     return { exists: true, status: 403, detail: "present (not readable by this role, as designed)" };
   }
 
-  // PGRST205 is PostgREST's "not in the schema cache", which is the honest
-  // negative: the relation is absent, so the migration has not applied.
+  // 404 / PGRST205 means "not in PostgREST's schema cache", and that is NOT the
+  // same as "does not exist" -- a distinction this script originally got wrong,
+  // in the dangerous direction.
+  //
+  // A table is missing from the cache when it does not exist, OR when it exists
+  // with no privileges granted on it. A migration that created a table and then
+  // failed before its grant statements ran leaves exactly the second shape.
+  // `20260814000210_phase2c_resource_persistence` was in that state: this audit
+  // reported `resource_breakers` absent, and re-running the file failed with
+  // `42P07: relation "resource_breakers" already exists`.
+  //
+  // So this is reported as NOT VISIBLE rather than absent, and the summary sends
+  // the reader to scripts/hosted-state-report.sql, which reads pg_class and has
+  // no such blind spot. Naming the limit is the only honest option here: REST
+  // genuinely cannot separate these two cases, and a confident wrong answer
+  // about production schema is worse than an admitted gap.
   if (response.status === 404 || body.code === "PGRST205") {
-    return { exists: false, status: response.status, detail: "absent" };
+    return { exists: false, status: response.status, detail: "not visible to PostgREST" };
   }
 
   let detail = `HTTP ${response.status}: ${message}`;
@@ -184,17 +203,17 @@ async function main(): Promise<void> {
       verdict = "APPLIED";
       applied += 1;
     } else if (present.length === 0) {
-      verdict = "NOT APPLIED";
+      verdict = "NOT VISIBLE";
       missing += 1;
     } else {
       // The worst outcome and the reason this reports per table rather than per
       // migration: a half-applied migration cannot simply be re-run.
-      verdict = "PARTIALLY APPLIED";
+      verdict = "PARTLY VISIBLE";
       missing += 1;
     }
 
     console.log(`${verdict.padEnd(18)} ${expectation.migration}`);
-    if (absent.length > 0) console.log(`                   absent: ${absent.join(", ")}`);
+    if (absent.length > 0) console.log(`                   not visible: ${absent.join(", ")}`);
     if (indeterminate.length > 0) console.log(`                   could not determine: ${indeterminate.join(", ")}`);
   }
 
@@ -202,9 +221,12 @@ async function main(): Promise<void> {
 
   if (missing > 0) {
     console.log(
-      "\nA migration reported NOT APPLIED whose ledger row already exists will be skipped by "
-      + "`supabase db push` rather than applied. Run step 0 of scripts/hosted-ledger-repair.sql "
-      + "to compare this result against the ledger before pushing.",
+      "\nNOT VISIBLE does not mean absent. PostgREST cannot see a table that exists with no "
+      + "grants on it, which is exactly what a migration that failed before its grant statements "
+      + "leaves behind -- and re-running that migration fails with `42P07: relation already "
+      + "exists`.\n"
+      + "Before applying anything, run scripts/hosted-state-report.sql in the SQL editor. It reads "
+      + "pg_class directly and separates the two cases this probe cannot.",
     );
   }
 
