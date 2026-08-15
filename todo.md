@@ -73,7 +73,7 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2C Portfolio — **94%** (33 PASS/2 BLOCKED); loop 11 closed the last agent-actionable row (17, explicit cross-project dependencies via `declare_cross_project_dependency`); everything left is owner-only: hosted verify (33), second repo (34)
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
-- [ ] 3 Self-Improvement — not started
+- [ ] 3 Self-Improvement — **~38% audited** (8 PASS/18 PARTIAL/11 ABSENT of 37, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: versioned frozen constitution -> improvement ledger -> baseline capture -> detectors -> submit_command intake. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
 ### External Blockers (owner-only)
 
