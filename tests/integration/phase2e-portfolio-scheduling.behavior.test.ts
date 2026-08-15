@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000700_project_archive_operation.sql";
+const latestMigration = "20260815000800_report_per_project_view.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -1353,6 +1353,46 @@ describe("archive preserves history and stops new work", { timeout: 180_000 }, (
           alpha.projectId, "Second archive",
         ]),
       ).rejects.toThrow(/already archived/);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("the daily report carries the per-project view", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 26. The report was organization-wide with a health
+   * histogram and attributed risks — and a healthy project had no row
+   * anywhere, so "how is this project" had no answer for the majority. The
+   * projects array closes that, and this asserts the property that makes it
+   * a portfolio report: every project appears, healthy and archived included.
+   */
+  it("gives every project a row, with counts matching the tables", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-open", "build_feature", "backend");
+
+      await actAs(db, ownerId);
+      await db.query("select * from public.archive_project($1::uuid,$2)", [
+        beta.projectId, "Report coverage test",
+      ]);
+
+      const generated = await db.query<{ content: { policy_version: string; projects: readonly {
+        project_id: string; status: string; open_runs: number; open_tasks: number;
+      }[] } }>(
+        "select content from public.generate_operations_report($1::uuid, 24)",
+        [organizationId],
+      );
+      const content = generated.rows[0].content;
+      expect(content.policy_version).toBe("phase1e-operations-v2");
+
+      const rows = new Map(content.projects.map((row) => [row.project_id, row]));
+      // Both projects present: the healthy-and-busy one and the archived one.
+      expect(rows.size).toBe(2);
+      expect(rows.get(alpha.projectId)).toMatchObject({ open_runs: 1, open_tasks: 1 });
+      expect(rows.get(beta.projectId)).toMatchObject({ status: "archived" });
     } finally {
       await db.close();
     }
