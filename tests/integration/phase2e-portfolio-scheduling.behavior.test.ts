@@ -1157,3 +1157,101 @@ describe("Phase 2E portfolio scheduling", { timeout: 180_000 }, () => {
     }
   });
 });
+
+describe("connection loss degrades only the affected project", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 27, asserted as a negative test rather than inferred from
+   * the per-installation isolation Phase 1B proved. The claim path filters on
+   * `connection.status = 'connected'` and an active, unsuspended installation,
+   * so a lost connection must do exactly two things: withhold the lost
+   * project's work, and change nothing about its neighbour.
+   */
+  it("withholds the lost project's work and leaves the neighbour claimable", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+
+      await submit(db, alpha, "alpha-work", "build_feature", "backend");
+      await submit(db, beta, "beta-work", "build_feature", "backend");
+      await registerWorker(db, "loss-isolation-worker", 2);
+
+      // A server-side discovery marks alpha's connection lost.
+      await asWorker(db);
+      await db.query(
+        "select * from public.mark_github_connection_lost($1::uuid,$2::uuid,$3)",
+        [null, alpha.connectionId, "installation_revoked"],
+      );
+
+      // Beta claims; alpha's queued run is not offered to anyone.
+      const first = await claim(db, "loss-isolation-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(beta.projectId);
+
+      const second = await claim(db, "loss-isolation-worker");
+      expect(second).toBeNull();
+
+      // The withheld work is still queued — degraded, not destroyed. Recovery
+      // needs no resubmission, only a restored connection.
+      await db.exec("reset role");
+      const alphaRun = await db.query<{ status: string }>(
+        `select status::text from public.agent_runs where project_id = $1`,
+        [alpha.projectId],
+      );
+      expect(alphaRun.rows.map((row) => row.status)).toEqual(["queued"]);
+
+      // And the loss is evidence, not just state: the connection reports error.
+      const connection = await db.query<{ status: string }>(
+        `select status::text from public.connections where id = $1`,
+        [alpha.connectionId],
+      );
+      expect(connection.rows[0].status).toBe("error");
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("resumes the withheld project exactly where it was once the connection recovers", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-recovers", "build_feature", "backend");
+      await registerWorker(db, "loss-recovery-worker", 2);
+
+      await asWorker(db);
+      await db.query(
+        "select * from public.mark_github_connection_lost($1::uuid,$2::uuid,$3)",
+        [null, alpha.connectionId, "provider_authorization_failed"],
+      );
+      expect(await claim(db, "loss-recovery-worker")).toBeNull();
+
+      // Reconnection restores the connection, installation, and repository
+      // selection — the loss function de-selects repositories, and a real
+      // resync (`reconcile_github_repository_grants`) re-selects them. None of
+      // it touches the queue, so the same run becomes claimable without
+      // resubmission.
+      await db.exec("reset role");
+      await db.query(
+        `update public.connections set status = 'connected' where id = $1`,
+        [alpha.connectionId],
+      );
+      await db.query(
+        `update public.github_installations
+         set status = 'active', suspended_at = null where connection_id = $1`,
+        [alpha.connectionId],
+      );
+      await db.query(
+        `update public.github_repositories set selected = true
+         where installation_id = $1`,
+        [alpha.installationId],
+      );
+
+      const reclaimed = await claim(db, "loss-recovery-worker");
+      expect(reclaimed).not.toBeNull();
+      expect(reclaimed!.project_id).toBe(alpha.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+});
