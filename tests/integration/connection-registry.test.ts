@@ -273,4 +273,104 @@ describe("Phase 2D connection registry", () => {
     );
     expect(Number(legacy.rows[0]!.total)).toBe(0);
   });
+
+  it("records selections and refusals as immutable, member-readable routing evidence", async () => {
+    // Phase 2D row 27: the router's answer becomes durable. Both outcomes are
+    // recorded — an audit of only selections would read as if the router
+    // never said no.
+    await asRole("authenticated", ownerId);
+    const selected = await db.query<{ id: string }>(
+      `select public.record_connection_routing_decision(
+         $1::uuid, 'repository.write', 'SELECTED', $2::uuid, null, false, 2,
+         $3::jsonb
+       ) as id`,
+      [projectId, primaryConnectionId, JSON.stringify([
+        { connectionId: backupConnectionId, reason: "CAPACITY_EXHAUSTED" },
+      ])],
+    );
+    expect(selected.rows[0]!.id).toMatch(/^[0-9a-f-]{36}$/);
+    await db.query(
+      `select public.record_connection_routing_decision(
+         $1::uuid, 'deploy.preview', 'REFUSED', null, 'NO_MAPPING', false, 0, '[]'::jsonb
+       )`,
+      [projectId],
+    );
+
+    const visible = await db.query<{ decision: string; refusal_code: string | null }>(
+      `select decision, refusal_code from public.connection_routing_decisions
+       where project_id = $1 order by created_at`,
+      [projectId],
+    );
+    expect(visible.rows.map((row) => row.decision)).toEqual(["SELECTED", "REFUSED"]);
+    expect(visible.rows[1]!.refusal_code).toBe("NO_MAPPING");
+
+    // Append-only holds even for the most privileged role.
+    await asOwnerOfDatabase();
+    await expect(
+      db.query("update public.connection_routing_decisions set refusal_code = 'EDITED'"),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      db.query("delete from public.connection_routing_decisions"),
+    ).rejects.toThrow(/append-only/);
+
+    // An outsider sees nothing and can record nothing; anonymous is denied.
+    await asRole("authenticated", outsiderId);
+    const foreign = await db.query("select 1 from public.connection_routing_decisions");
+    expect(foreign.rows).toHaveLength(0);
+    await expect(
+      db.query(
+        `select public.record_connection_routing_decision(
+           $1::uuid, 'repository.write', 'REFUSED', null, 'NO_MAPPING', false, 0, '[]'::jsonb
+         )`,
+        [projectId],
+      ),
+    ).rejects.toThrow(/project not found/);
+    await asRole("anon");
+    await expect(
+      db.query("select 1 from public.connection_routing_decisions"),
+    ).rejects.toThrow(/permission denied/);
+    await db.exec("reset role");
+  });
+
+  it("refuses evidence rows that lie about themselves", async () => {
+    await asRole("authenticated", ownerId);
+    // A selection without a connection selected nothing.
+    await expect(
+      db.query(
+        `select public.record_connection_routing_decision(
+           $1::uuid, 'repository.write', 'SELECTED', null, null, false, 1, '[]'::jsonb
+         )`,
+        [projectId],
+      ),
+    ).rejects.toThrow(/connection_routing_decisions_shape/);
+    // A refusal with a connection is a contradiction.
+    await expect(
+      db.query(
+        `select public.record_connection_routing_decision(
+           $1::uuid, 'repository.write', 'REFUSED', $2::uuid, 'NO_MAPPING', false, 1, '[]'::jsonb
+         )`,
+        [projectId, primaryConnectionId],
+      ),
+    ).rejects.toThrow(/connection_routing_decisions_shape/);
+    // A capability outside the vocabulary cannot be recorded.
+    await expect(
+      db.query(
+        `select public.record_connection_routing_decision(
+           $1::uuid, 'time.travel', 'REFUSED', null, 'NO_MAPPING', false, 0, '[]'::jsonb
+         )`,
+        [projectId],
+      ),
+    ).rejects.toThrow(/foreign key|violates/i);
+    // A connection outside the caller's organization gets the generic answer.
+    await expect(
+      db.query(
+        `select public.record_connection_routing_decision(
+           $1::uuid, 'repository.write', 'SELECTED',
+           '99999999-9999-4999-8999-999999999999'::uuid, null, false, 1, '[]'::jsonb
+         )`,
+        [projectId],
+      ),
+    ).rejects.toThrow(/connection not found/);
+    await db.exec("reset role");
+  });
 });

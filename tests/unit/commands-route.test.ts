@@ -95,6 +95,8 @@ function configuredClient(options: {
   mappingRows?: RegistryRow[];
   connectionRows?: RegistryRow[];
   registryError?: boolean;
+  /** Make record_connection_routing_decision fail. */
+  decisionError?: boolean;
 }) {
   const submission = {
     command_id: commandId,
@@ -105,6 +107,12 @@ function configuredClient(options: {
     was_created: true,
   };
   const rpc = vi.fn((name: string) => {
+    if (name === "record_connection_routing_decision") {
+      return Promise.resolve({
+        data: options.decisionError ? null : "decision-id",
+        error: options.decisionError ? { code: "42501", message: "denied" } : null,
+      });
+    }
     if (name === "record_phase1c_dispatch_outcome") {
       return Promise.resolve({ data: null, error: null });
     }
@@ -380,7 +388,7 @@ describe("POST /api/commands", () => {
   });
 
   it("routes through the identity router when the project labels its mappings", async () => {
-    configuredClient({
+    const rpc = configuredClient({
       connectionRows: [routableConnection(target.connection_id)],
       mappingRows: [
         { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
@@ -390,6 +398,17 @@ describe("POST /api/commands", () => {
     const response = await POST(commandRequest("https://factory.example"));
 
     expect(response.status).toBe(202);
+    // The decision is durable evidence, recorded before the command persists.
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", {
+      p_capability: "repository.write",
+      p_connection_id: target.connection_id,
+      p_considered_count: 1,
+      p_decision: "SELECTED",
+      p_project_id: projectId,
+      p_refusal_code: null,
+      p_rejected: [],
+      p_used_fallback: false,
+    });
     expect(await response.json()).toMatchObject({
       orchestration: {
         connectionRouting: {
@@ -406,7 +425,7 @@ describe("POST /api/commands", () => {
     // The one labelled mapping points at an unauthorized connection. Routing
     // must refuse the submission before any GitHub call or persistence — an
     // unauthorized identity is not a tiebreak candidate.
-    configuredClient({
+    const rpc = configuredClient({
       connectionRows: [routableConnection(target.connection_id, { health: "unauthorized" })],
       mappingRows: [
         { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
@@ -416,12 +435,37 @@ describe("POST /api/commands", () => {
     const response = await POST(commandRequest("https://factory.example"));
 
     expect(response.status).toBe(409);
+    // The refusal is recorded — an audit of only selections would read as if
+    // the router never said no.
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", expect.objectContaining({
+      p_connection_id: null,
+      p_decision: "REFUSED",
+      p_refusal_code: "CONNECTION_UNHEALTHY",
+    }));
     expect(await response.json()).toMatchObject({
       error: {
         code: "connection_routing_refused",
         message: expect.stringContaining("identity router refused"),
       },
     });
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("fails the submission when the routing decision cannot be recorded", async () => {
+    // Acting on an unrecorded decision would be exactly the unauditable
+    // routing the evidence table exists to end.
+    configuredClient({
+      connectionRows: [routableConnection(target.connection_id)],
+      decisionError: true,
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
     expect(createGitHubInstallationToken).not.toHaveBeenCalled();
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
   });

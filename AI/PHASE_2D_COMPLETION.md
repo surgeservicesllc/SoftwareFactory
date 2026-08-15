@@ -77,7 +77,7 @@ that turns that description into an authorized choice.
 | 24 | Existing runs retain historical connection identity | **PARTIAL** | `github_change_requests.connection_id` is retained. Provider runs record a routing decision but not a connection identity, because none exists. |
 | 25 | Routing respects project / account / provider restrictions | **PASS (loop 1)** | `policy.permittedProviders` refuses an out-of-policy mapping (`PROVIDER_NOT_PERMITTED`) rather than skipping it. |
 | 26 | Fallback uses only explicitly eligible connections | **PASS (loop 1)** | Fallback ranges only over connections the project mapped to the capability and that pass every eligibility check. `allowFallback: false` refuses instead. |
-| 27 | Cross-account fallback is audited | **PARTIAL (loop 1)** | The result carries `usedFallback` and a `rejected[]` list of every skipped connection with its reason, and contains no secret material so it is safe to log. **Not yet persisted** to an audit table. |
+| 27 | Cross-account fallback is audited | **PASS (loop 3)** | Append-only `connection_routing_decisions` (migration `20260815001100`): every routed submission records the router's answer — selection with `used_fallback` and the full `rejected[]` list, or refusal with its named code — before the command acts on it, and a recording failure fails the submission. RLS member-read, definer-only write, immutability proven against the migrated chain in `connection-registry.test.ts`. |
 | 28 | 2A provider routing integrates with Identity Router | **PARTIAL (loop 2)** | The seam now exists where connections are actually chosen: `POST /api/commands` consults `routeConnectionIdentity` with `repository.write` before persisting. For a project with capability-labelled mappings the router is binding — a refusal refuses the command (409, router's named reason), a selection disagreeing with the resolved primary binding is surfaced as a contradiction (409, never a tiebreak), and a registry read failure fails closed (503) instead of degrading to the unrouted path. Legacy projects proceed exactly as before and the response says so (`connectionRouting.mode: "legacy"`). Five route tests. Remaining for PASS: the 2A provider-selection module itself still never consults connection identity (its live path is OFF by owner decision), and no real project mapping is capability-labelled yet. |
 | 29 | 2B graph nodes resolve connections through router | **FAIL — ABSENT** | `lib/graph/` resolves providers, not connections. |
 | 30 | 2C portfolio shows connection / account health per project | **PARTIAL** | Portfolio surfaces project health. Per-project connection identity and health are not shown, because a project's connection set is not capability-labelled. |
@@ -88,13 +88,16 @@ that turns that description into an authorized choice.
 | 35 | At least two distinct real connection identities proven | **BLOCKED** | Requires a second real account on some provider. Carried over from Phase 1B item 2. |
 | 36 | No paid AI-token dependency | **PASS** | Phase 1C is zero-token subscription Codex; `claude-cli-transport.ts` reaches Claude on the owner's subscription with a verified live canary. No paid key is a configuration field on either path. |
 
-## Score after loop 2 (2026-08-15, master loop iteration 12)
+## Score after loop 3 (2026-08-15, master loop iteration 13)
 
-- PASS: 20 of 36
-- PARTIAL: 13 of 36
+- PASS: 21 of 36
+- PARTIAL: 12 of 36
 - FAIL (absent): 2 of 36 — goals 3, 4, 29
 - BLOCKED: 1 of 36 — goal 35
-- Weighted completion: **≈74%** (was ≈43% at audit, ≈72% after loop 1)
+- Weighted completion: **≈76%** (≈43% at audit, ≈72% after loop 1, ≈74% after loop 2)
+
+Loop 3 closed row 27: identity-routing decisions are durable, append-only
+evidence, recorded before they are acted on.
 
 Loop 2 closed the seam row 28 named as absent: the Identity Router is now
 consulted where work is created (`POST /api/commands`), binding for

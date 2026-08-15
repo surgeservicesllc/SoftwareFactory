@@ -5,8 +5,8 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 36**, listed across the tables below. One of them has a
-materially different approval requirement from the others. The repository total is 77 migration
+**The current total is 37**, listed across the tables below. One of them has a
+materially different approval requirement from the others. The repository total is 78 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 (The per-section breakdown that used to live in this sentence drifted from the tables twice
 and is gone; the derived totals above are the numbers a reader may trust, and the guard test
@@ -242,6 +242,7 @@ so it cannot pass without having applied every row below).
 | `20260815000800_report_per_project_view` | The daily report gains a bounded per-project array (worst health first, archived included); policy version `phase1e-operations-v2` | `phase2e-portfolio-scheduling.behavior` |
 | `20260815000900_guard_project_deletion` | An instructive BEFORE DELETE refusal naming the structural rule: every project's append-only activity trail already restricts deletion from its first recorded moment | `phase2e-portfolio-scheduling.behavior` |
 | `20260815001000_cross_project_dependencies` | `declare_cross_project_dependency`/`release_cross_project_dependency`: owner-only, reason required, events in both projects, cycle-refusing; edges land in `task_dependencies`, which the claim gate already respects. Carries `submit_command` forward so replays ignore declared cross-project edges | `phase2e-portfolio-scheduling.behavior` |
+| `20260815001100_connection_routing_decisions` | Append-only `connection_routing_decisions` + `record_connection_routing_decision`: the Identity Router's selections and refusals become durable, member-readable evidence with every rejected candidate and its named reason | `connection-registry` |
 
 What they do **not** do:
 
