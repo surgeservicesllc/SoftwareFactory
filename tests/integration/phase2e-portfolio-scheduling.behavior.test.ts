@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000900_guard_project_deletion.sql";
+const latestMigration = "20260815001000_cross_project_dependencies.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -169,7 +169,12 @@ async function asWorker(db: PGlite) {
   await db.exec("set role service_role");
 }
 
-function commandParameters(project: ProjectFixture, commandType: string, agentRole: string) {
+function commandParameters(
+  project: ProjectFixture,
+  commandType: string,
+  agentRole: string,
+  dependencyTaskIds: string[] = [],
+) {
   return {
     acceptanceCriteria: ["The requested outcome is verified."],
     agentRole,
@@ -182,7 +187,7 @@ function commandParameters(project: ProjectFixture, commandType: string, agentRo
       maximumTurns: 4,
     },
     commandType,
-    dependencyTaskIds: [] as string[],
+    dependencyTaskIds,
     executionMode: "manual",
     model: "gpt-5.3-codex",
     plan: {
@@ -214,6 +219,7 @@ async function submit(
   key: string,
   commandType = "audit",
   agentRole = "qa",
+  dependencyTaskIds: string[] = [],
 ) {
   await actAs(db, ownerId);
   const { rows } = await db.query<{ command_id: string; task_id: string }>(
@@ -227,11 +233,83 @@ async function submit(
       // do with scheduling.
       `Improve the ${project.name} dashboard copy.`,
       "green",
-      JSON.stringify(commandParameters(project, commandType, agentRole)),
+      JSON.stringify(commandParameters(project, commandType, agentRole, dependencyTaskIds)),
       key,
     ],
   );
   return rows[0];
+}
+
+/**
+ * Drives a claimed run to an honest `succeeded` completion: recorded
+ * validation, branch and commit artifacts, a canonical draft-PR artifact for
+ * the run's own repository, then terminal evidence with a passing check. This
+ * is the same evidence chain the contract suite proves the worker must
+ * produce; nothing here bypasses a guard.
+ */
+async function succeed(
+  db: PGlite,
+  workerId: string,
+  run: ClaimedRun,
+  project: ProjectFixture,
+  pullNumber: number,
+) {
+  await asWorker(db);
+  const headBranch = `factory/${project.name.toLowerCase()}-cross-dep-${pullNumber}`;
+  const headSha = "c".repeat(40);
+  await db.query("select public.record_phase1c_validation($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
+    workerId, run.run_id, run.lease_token, 1, "diff-check", "git diff --check", "passed", 5, "clean",
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "branch", headBranch, null,
+    JSON.stringify({ protected: false }),
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "commit", headSha, null,
+    JSON.stringify({ branch: headBranch }),
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "pull_request",
+    `https://github.com/${project.repository}/pull/${pullNumber}`, pullNumber,
+    JSON.stringify({ commitSha: headSha }),
+  ]);
+  await db.query(
+    "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+    [
+      workerId, run.run_id, run.lease_token, "succeeded",
+      "The prerequisite work is finished and evidenced.",
+      `provider-run-${pullNumber}`, JSON.stringify({ inputTokens: 10, outputTokens: 10 }),
+      JSON.stringify(["README.md"]),
+      JSON.stringify([{ name: "CI", status: "completed", conclusion: "success" }]),
+      null, null, false,
+    ],
+  );
+}
+
+async function declareDependency(
+  db: PGlite,
+  dependentTaskId: string,
+  prerequisiteTaskId: string,
+  reason: string | null,
+) {
+  await actAs(db, ownerId);
+  return db.query<{ dependency_id: string }>(
+    "select * from public.declare_cross_project_dependency($1::uuid,$2::uuid,$3)",
+    [dependentTaskId, prerequisiteTaskId, reason],
+  );
+}
+
+async function releaseDependency(
+  db: PGlite,
+  dependentTaskId: string,
+  prerequisiteTaskId: string,
+  reason: string | null,
+) {
+  await actAs(db, ownerId);
+  return db.query(
+    "select * from public.release_cross_project_dependency($1::uuid,$2::uuid,$3)",
+    [dependentTaskId, prerequisiteTaskId, reason],
+  );
 }
 
 async function registerWorker(db: PGlite, workerId: string, capacity = 1) {
@@ -1588,6 +1666,239 @@ describe("an agent's context is exactly one project", { timeout: 180_000 }, () =
         [second!.run_id],
       );
       expect(finished.rows[0].status).toBe("failed");
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("cross-project work exists only through an explicit dependency", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 17. Half of this rule has held since Phase 1C:
+   * `submit_command` refuses dependency IDs outside the command's own project,
+   * so implicit coupling is impossible. And the claim gate joins prerequisites
+   * by organization, not project — the scheduler was always ready to respect a
+   * cross-project edge. `declare_cross_project_dependency` is the authorized
+   * doorway that can finally create one, and these tests prove the whole arc:
+   * declared coupling withholds the dependent, honest completion releases it,
+   * every dishonest declaration is refused by name, release restores the
+   * dependent without touching submission evidence, and an idempotent replay
+   * of the originating command survives a coupling declared after it.
+   */
+  it("withholds the dependent project's work until the prerequisite completes", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const prerequisite = await submit(db, alpha, "coupling-prerequisite", "build_feature", "backend");
+      const dependent = await submit(db, beta, "coupling-dependent", "build_feature", "backend");
+
+      await declareDependency(
+        db, dependent.task_id, prerequisite.task_id,
+        "Beta consumes the API Alpha is about to publish.",
+      );
+
+      // The coupling is visible from both sides, with the reason attached.
+      await db.exec("reset role");
+      const events = await db.query<{ project_id: string; metadata: { reason: string } }>(
+        `select project_id, metadata from public.activity_events
+         where event_type = 'task.cross_project_dependency_declared' order by created_at`,
+      );
+      expect(events.rows.map((row) => row.project_id).sort()).toEqual(
+        [alpha.projectId, beta.projectId].sort(),
+      );
+      for (const row of events.rows) {
+        expect(row.metadata.reason).toBe("Beta consumes the API Alpha is about to publish.");
+      }
+
+      await registerWorker(db, "coupling-worker", 2);
+
+      // Beta's run exists and is queued, but the portfolio offers only Alpha.
+      const first = await claim(db, "coupling-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(alpha.projectId);
+      const withheld = await claim(db, "coupling-worker");
+      expect(withheld).toBeNull();
+
+      // The prerequisite finishes honestly; the gate lifts on real evidence.
+      await succeed(db, "coupling-worker", first!, alpha, 41);
+      const released = await claim(db, "coupling-worker");
+      expect(released).not.toBeNull();
+      expect(released!.project_id).toBe(beta.projectId);
+      expect(released!.task_id).toBe(dependent.task_id);
+
+      // Declaring against already-finished work would gate nothing, and the
+      // boundary says so instead of recording a dead edge.
+      const late = await submit(db, beta, "coupling-late", "build_feature", "backend");
+      await expect(
+        declareDependency(db, late.task_id, prerequisite.task_id, "Too late to matter."),
+      ).rejects.toThrow(/already complete/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses every dishonest declaration by name", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const alphaFirst = await submit(db, alpha, "refusals-alpha-1", "build_feature", "backend");
+      const alphaSecond = await submit(db, alpha, "refusals-alpha-2", "build_feature", "frontend");
+      const betaFirst = await submit(db, beta, "refusals-beta-1", "build_feature", "backend");
+
+      // No reason, no coupling.
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, null),
+      ).rejects.toThrow(/dependency reason is required/);
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, "   "),
+      ).rejects.toThrow(/dependency reason is required/);
+
+      // A task cannot wait on itself.
+      await expect(
+        declareDependency(db, betaFirst.task_id, betaFirst.task_id, "Self-referential."),
+      ).rejects.toThrow(/cannot depend on itself/);
+
+      // Same-project pairs belong to submission, and the refusal says where.
+      await expect(
+        declareDependency(db, alphaSecond.task_id, alphaFirst.task_id, "Wrong doorway."),
+      ).rejects.toThrow(/declared at submission/);
+
+      // An outsider learns nothing: not ownership, not existence.
+      await actAs(db, outsiderId);
+      await expect(
+        db.query(
+          "select * from public.declare_cross_project_dependency($1::uuid,$2::uuid,$3)",
+          [betaFirst.task_id, alphaSecond.task_id, "Not my portfolio."],
+        ),
+      ).rejects.toThrow(/task not found/);
+
+      // Duplicates are refused, not silently absorbed.
+      await declareDependency(
+        db, betaFirst.task_id, alphaSecond.task_id, "Beta waits on Alpha's frontend work.",
+      );
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, "Again."),
+      ).rejects.toThrow(/already declared/);
+
+      // The reverse edge would deadlock both projects; refused before it can.
+      await expect(
+        declareDependency(db, alphaSecond.task_id, betaFirst.task_id, "Mutual dependence."),
+      ).rejects.toThrow(/create a cycle/);
+
+      // A prerequisite that already failed will never complete, and a
+      // dependency on it would block forever. The worker fails Alpha's first
+      // task for real, then the boundary refuses it as a prerequisite.
+      await registerWorker(db, "refusals-worker", 1);
+      const claimed = await claim(db, "refusals-worker");
+      expect(claimed).not.toBeNull();
+      expect(claimed!.task_id).toBe(alphaFirst.task_id);
+      await finish(db, "refusals-worker", claimed!);
+      const late = await submit(db, beta, "refusals-beta-2", "build_feature", "frontend");
+      await expect(
+        declareDependency(db, late.task_id, alphaFirst.task_id, "Waiting on failed work."),
+      ).rejects.toThrow(/will never complete/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("releases the coupling on demand, but never touches submission evidence", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const alphaFirst = await submit(db, alpha, "release-alpha-1", "build_feature", "backend");
+      const alphaSecond = await submit(
+        db, alpha, "release-alpha-2", "build_feature", "frontend", [alphaFirst.task_id],
+      );
+      const betaFirst = await submit(db, beta, "release-beta-1", "build_feature", "backend");
+
+      await declareDependency(
+        db, betaFirst.task_id, alphaFirst.task_id, "Beta ships after Alpha's foundation.",
+      );
+
+      // Both dependents are withheld: Alpha's second task by its submission
+      // edge, Beta's task by the declared coupling. Only the prerequisite runs.
+      await registerWorker(db, "release-worker", 3);
+      const first = await claim(db, "release-worker");
+      expect(first).not.toBeNull();
+      expect(first!.task_id).toBe(alphaFirst.task_id);
+      expect(await claim(db, "release-worker")).toBeNull();
+
+      // Releasing the declared coupling frees Beta immediately — no completion
+      // required — and both projects record why.
+      await releaseDependency(
+        db, betaFirst.task_id, alphaFirst.task_id,
+        "Beta's consumer moved to the published contract; the wait is obsolete.",
+      );
+      const freed = await claim(db, "release-worker");
+      expect(freed).not.toBeNull();
+      expect(freed!.task_id).toBe(betaFirst.task_id);
+
+      await db.exec("reset role");
+      const releaseEvents = await db.query<{ project_id: string }>(
+        `select project_id from public.activity_events
+         where event_type = 'task.cross_project_dependency_released'`,
+      );
+      expect(releaseEvents.rows.map((row) => row.project_id).sort()).toEqual(
+        [alpha.projectId, beta.projectId].sort(),
+      );
+
+      // Alpha's submission edge is not this control's to release.
+      await expect(
+        releaseDependency(db, alphaSecond.task_id, alphaFirst.task_id, "Trying anyway."),
+      ).rejects.toThrow(/submission evidence/);
+      // And a coupling that does not exist is not found, not invented.
+      await expect(
+        releaseDependency(db, betaFirst.task_id, alphaFirst.task_id, "Releasing twice."),
+      ).rejects.toThrow(/dependency not found/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps idempotent replays honest after a coupling is declared", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const prerequisite = await submit(db, alpha, "replay-alpha", "build_feature", "backend");
+
+      // Submission still refuses an implicit cross-project dependency with its
+      // deliberately generic error — the carried-forward body did not soften.
+      await actAs(db, ownerId);
+      await expect(
+        db.query(
+          "select command_id from public.submit_command($1,$2,$3,$4::jsonb,$5)",
+          [
+            beta.projectId, "Improve the Beta dashboard copy.", "green",
+            JSON.stringify(commandParameters(beta, "build_feature", "backend", [prerequisite.task_id])),
+            "replay-implicit",
+          ],
+        ),
+      ).rejects.toThrow(/invalid command dependencies/);
+
+      // A dependent command submitted, then coupled, then replayed with the
+      // same idempotency key: the replay succeeds, because the cross-project
+      // edge is declaration evidence, not unexplained submission evidence.
+      const dependent = await submit(db, beta, "replay-beta", "build_feature", "backend");
+      await declareDependency(
+        db, dependent.task_id, prerequisite.task_id, "Declared between submit and replay.",
+      );
+      const replayed = await submit(db, beta, "replay-beta", "build_feature", "backend");
+      expect(replayed.command_id).toBe(dependent.command_id);
+      expect(replayed.task_id).toBe(dependent.task_id);
+
+      // The declared edge survived the replay untouched.
+      await db.exec("reset role");
+      const edge = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.task_dependencies
+         where task_id = $1 and depends_on_task_id = $2`,
+        [dependent.task_id, prerequisite.task_id],
+      );
+      expect(edge.rows[0].count).toBe(1);
     } finally {
       await db.close();
     }

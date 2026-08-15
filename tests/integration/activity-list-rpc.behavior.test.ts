@@ -68,7 +68,7 @@ describe("safe activity list RPC", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
     expect(migrationFiles.at(-1)).toBe(
-      "20260815000900_guard_project_deletion.sql",
+      "20260815001000_cross_project_dependencies.sql",
     );
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
