@@ -90,6 +90,80 @@ async function presentTables(db: PGlite): Promise<string[]> {
   return rows.map((row) => row.relname);
 }
 
+/**
+ * `20260814002200_graph_anchors` failed the same way and needs the same remedy:
+ * its enum `anchor_kind` exists, so the original file dies at its first
+ * statement with `42710` before reaching the four tables it creates.
+ */
+const ANCHORS = "20260814002200_graph_anchors.sql";
+const ANCHOR_TABLES = [
+  "claim_acceptable_anchors", "claim_anchors", "graph_anchors", "node_run_claims",
+] as const;
+
+async function anchorRepairSql(): Promise<string> {
+  const raw = await readFile(resolve(repositoryRoot, "scripts/repair-20260814002200.sql"), "utf8");
+  return raw.slice(0, raw.indexOf("-- Verify."));
+}
+
+describe("the graph anchors repair", () => {
+  it("completes a migration that stopped after its enums", async () => {
+    const db = await bootstrap();
+    await applyChain(db, { skip: [ANCHORS] });
+
+    // Reproduce the hosted state: the enums landed, nothing after them did.
+    const original = await readFile(resolve(migrationsDirectory, ANCHORS), "utf8");
+    await db.exec(original.slice(0, original.indexOf("create table public.graph_anchors")));
+
+    // The owner's error, reproduced.
+    await expect(db.exec(original)).rejects.toThrow(/already exists/i);
+
+    await db.exec(await anchorRepairSql());
+
+    const { rows } = await db.query<{ relname: string; ok: boolean }>(
+      `select relname, (relrowsecurity and relforcerowsecurity) as ok from pg_class
+        where relnamespace = 'public'::regnamespace and relname = any($1) order by relname`,
+      [ANCHOR_TABLES as unknown as string[]],
+    );
+    expect(rows.map((r) => r.relname)).toEqual([...ANCHOR_TABLES]);
+    for (const row of rows) expect(row.ok, `${row.relname} missing RLS`).toBe(true);
+
+    // The column the failed run never reached.
+    const { rows: column } = await db.query(
+      `select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'graph_verifications'
+          and column_name = 'anchor_count'`,
+    );
+    expect(column).toHaveLength(1);
+
+    await db.close();
+  }, 300_000);
+
+  it("changes nothing when the migration already applied in full", async () => {
+    const db = await bootstrap();
+    await applyChain(db);
+
+    await db.exec(await anchorRepairSql());
+
+    const { rows } = await db.query<{ count: number }>(
+      `select count(*)::int as count from pg_policies
+        where schemaname = 'public' and tablename = any($1)`,
+      [ANCHOR_TABLES as unknown as string[]],
+    );
+    // Recreated, not duplicated.
+    expect(rows[0].count).toBe(4);
+
+    // This migration seeds reference rows, which is the one thing in it that
+    // would change *data* rather than schema on a re-run. The first version of
+    // the repair duplicated them and this assertion is why that was caught.
+    const { rows: seeded } = await db.query<{ count: number }>(
+      `select count(*)::int as count from public.claim_acceptable_anchors`,
+    );
+    expect(seeded[0].count).toBe(16);
+
+    await db.close();
+  }, 300_000);
+});
+
 describe("the phase2c repair", () => {
   it("completes a half-applied migration", async () => {
     const db = await bootstrap();
