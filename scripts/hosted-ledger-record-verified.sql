@@ -1,16 +1,24 @@
--- What to do next, one row per migration. Read-only. Single statement, so the
--- Supabase SQL editor shows the whole answer rather than only the last result.
+-- Record every migration whose objects are verified present. Run once.
 --
--- This exists because the two facts that decide the next action live in
--- different places and disagree:
+-- This is the safe form of "insert the missing ledger rows". It does not take a
+-- list of versions on trust -- it recomputes presence from the catalogue and
+-- inserts only where EVERY expected object is there.
 --
---   * the **schema** says what is actually there;
---   * the **ledger** says what `supabase db push` believes is there.
+-- That property is the point. Recording a version whose objects are missing is
+-- the one mistake `supabase db push` can never recover from: the version reads
+-- as applied, the migration is skipped forever, and no amount of pushing brings
+-- it back. Here that outcome is not merely discouraged, it is unreachable --
+-- the `where` clause cannot select such a row.
 --
--- Neither alone tells you what to run. A version recorded whose objects are
--- missing gets skipped forever. Objects present whose version is unrecorded gets
--- re-applied and fails on the first `create`. Both states exist in this database
--- right now, which is why the ACTION column is computed from the pair.
+-- Safe to re-run. `on conflict do nothing` leaves existing rows alone, and a
+-- second run selects nothing because the rows now exist.
+--
+-- It does NOT touch `20260814000200`, the ledger row with no file. That row is
+-- left from renumbering `graph_write_boundary` to `20260814002100`, and whatever
+-- it recorded is accounted for by versions already in the ledger. It is inert:
+-- `db push` reads files and asks whether each is recorded, so a row with no file
+-- is never consulted. Deleting it buys nothing and risks re-applying something
+-- already present, so it stays.
 
 with expected(version, kind, name) as (values
   -- 20260814000100 graph_engineering (a representative sample of its 13 tables)
@@ -88,22 +96,15 @@ rolled as (
   from observed o
   group by o.version
 )
-select
-  r.version,
-  r.present_objects || '/' || r.expected_objects as objects,
-  case when r.in_ledger then 'yes' else 'no' end as in_ledger,
-  case
-    when r.present_objects = 0 and not r.in_ledger
-      then 'PUSH - not applied, not recorded. Ordinary forward migration.'
-    when r.present_objects = r.expected_objects and r.in_ledger
-      then 'NOTHING - applied and recorded.'
-    when r.present_objects = r.expected_objects and not r.in_ledger
-      then 'RECORD ONLY - objects exist but no ledger row. A push would re-apply and fail; insert the version instead.'
-    when r.present_objects = 0 and r.in_ledger
-      then 'LEDGER WRONG - recorded but nothing is there. db push will SKIP this forever. Delete the row, then push.'
-    when r.present_objects > 0 and r.present_objects < r.expected_objects
-      then 'HALF APPLIED - needs an idempotent repair, not a re-run. Do not push.'
-    else 'INSPECT'
-  end as action
-from rolled r
-order by r.version;
+insert into supabase_migrations.schema_migrations (version)
+select r.version
+  from rolled r
+ where r.present_objects = r.expected_objects
+   and not r.in_ledger
+on conflict (version) do nothing;
+
+-- Confirm. Expect zero rows from the first query: every repository migration
+-- whose objects this file knows how to check is now recorded.
+
+select count(*) as ledger_rows, max(version) as high_water
+  from supabase_migrations.schema_migrations;
