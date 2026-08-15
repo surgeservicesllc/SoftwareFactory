@@ -1,14 +1,96 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-14 (Phase 1E→1C repair promotion; Phase 2C persistence/UI/routing; probe
-SSRF hardening; Supabase RPC contract verification; AgentOS blocks A–F wired; Phase 1D decision
-trail made readable)
-Current `main`: `5364b66` plus this session's AgentOS and Phase 1D work — check `git log`
+Last updated: 2026-08-14, end of session. **Start at the HANDOFF section below.**
+Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
+declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
+Phase 2B graph foundation · Phase 1B adverse lifecycle · concurrently, another agent landed the
+AgentOS blocks, the Phase 1D decision trail, the Phase 1B lifecycle matrix, and the **zero-token
+Phase 1C re-architecture**.
+Current `main`: check `git log` — several agents landed work on 2026-08-14.
 Owner of this file: **whichever agent is currently working. Update it before your session ends.**
 
 Several agents work this repository concurrently. This file is the shared picture: what is
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
+
+## HANDOFF — read this first (2026-08-14, end of session)
+
+**Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq` · **PR #40 open**, CI running at handoff.
+If #40 is green, merge it. If it failed, the cause is almost certainly the
+latest-migration pin (see "The pin" below), not the code.
+
+**Active goal when this session ended:** *"fully build out 1B GitHub, 100% production
+ready and 100% connected to Supabase."* Half of that is reachable; half is not, and
+the next agent should not burn time rediscovering which.
+
+### The one thing that cannot be done from an agent container
+
+`supabase db push --dry-run` → `LegacyProjectNotLinkedError`. There is no
+`SUPABASE_ACCESS_TOKEN`, no `supabase/.temp` link, and **no Docker daemon**, so
+`supabase start` cannot run a local stack either. Both verified this session, twice.
+
+**Eleven migrations are unhosted** — everything after `20260813001400`. The exact
+list, order, and a real-PostgreSQL-16 verification of the whole chain applied from
+the hosted position are in **`AI/HOSTED_APPLY_RUNBOOK.md`**. Do not re-derive it.
+One of them (`20260813001500`) needs its own fresh RED approval against a frozen SHA.
+
+Until an owner applies those, "connected to Supabase" is false no matter what else
+is built, and every new surface is correctly empty rather than broken.
+
+### Where 1B actually stands
+
+Done and merged, or in #40:
+- Owner repository path live; draft-PR-only writes work.
+- **Adverse lifecycle** — `tests/integration/github-adverse-lifecycle.behavior.test.ts`,
+  9 tests. Approval expiry, owner-only decision, connection loss with history kept,
+  repeated loss converging, disconnect refused on mismatched installation id, rows
+  retained through disconnect, cross-tenant refusal, anonymous denial, member
+  read-without-mutate.
+
+**Next tranche, in priority order.** Each needs a mocked GitHub response rather than
+schema alone, so they belong in a route/unit test, not a PGlite behavior test:
+
+1. **Stale SHA.** A change whose `expected_blob_sha` no longer matches must be refused,
+   not overwritten. `reclaim_expired_github_change_reservation` and
+   `reserve_github_change_request` are the functions; the worker already rejects
+   `stale_base_sha`, so mirror that vocabulary rather than inventing a new code.
+2. **Rate limit must not falsely revoke.** `mark_github_connection_lost` accepts only
+   `installation_revoked`, `insufficient_permission`, `provider_authorization_failed`.
+   A 429 is none of those, and treating it as loss would disconnect a healthy
+   integration during a traffic spike. `lib/github/errors.ts` is where the
+   distinction lives; assert a 429 does **not** reach the loss path.
+3. **Webhook provider ordering.** `github-webhook-ordering.test.ts` exists — extend it
+   for out-of-order delivery of installation lifecycle events, where an older event
+   arriving late must not resurrect a terminal state.
+
+### Things that will bite you
+
+**The pin.** Nine-plus test files assert the *last* migration filename as a tripwire so
+a new migration cannot be added without someone reading the suites that replay the
+chain. It is doing its job, but with several agents landing migrations the same day it
+conflicts constantly. Resolve it to whichever filename genuinely sorts last —
+check with `ls supabase/migrations/*.sql | sort | tail -3`, do not assume your own.
+Newer suites (`phase2b-task-graph`, `phase2c-model-declaration`) deliberately assert
+`toContain(<their own migration>)` instead, because which file sorts last says nothing
+about what those tests depend on.
+
+**Two tripwire counts** move whenever a table is added: the RLS count in
+`phase1e-operations.behavior.test.ts` and the `publicTables` list in
+`hosted-service-role-table-grants.test.ts` (keep it alphabetical).
+
+**CI will not run on an unmergeable head.** If checks never appear on a PR, the PR is
+`dirty` — merge `origin/main` into the branch first. That cost a confusing half hour
+this session.
+
+### Do not do these without an explicit owner decision
+
+- **Build the 1D merge or deploy executor.** `AGENTS.md` forbids introducing auto-merge
+  or a production deployment workflow in this line of phases. The tests asserting
+  `MERGE_EXECUTOR_NOT_CONNECTED` / `DEPLOY_EXECUTOR_NOT_CONNECTED` are *designed* to
+  fail when an executor appears — that failure is the signal to stop and ask, not to
+  update the assertion.
+- **Use a provider key pasted into chat.** One was pasted this session; it is
+  compromised by having been pasted and must be rotated, never installed.
 
 ## Ground rules (from `AGENTS.md` — read it before editing)
 
@@ -62,8 +144,20 @@ canonical; until then both readings are in circulation and they disagree.
       and a first real observed production incident.
 - [ ] **2A:** a successful live provider call, which needs a credential and the
       owner switch turned on.
-- [ ] **2B (roadmap: multi-agent teams):** everything. Teams, orchestration, handoff
-      persistence, parallel execution and team UI are all absent.
+- [x] **2B foundation started.** Migration `20260814001000` closes the graph's
+      deadlock hole and adds the two tables that make a team a team:
+      **cycle rejection** at write time (A→B→C→A satisfied every existing
+      constraint and would have stalled the graph permanently and silently),
+      readiness computed in the database, `task_dependencies_unsatisfiable` so a
+      cancelled or failed prerequisite is distinguishable from ordinary waiting,
+      `agent_handoffs` (append-only, bounded, secret-checked, and refusing a
+      handoff to the same role because that would satisfy independent review with
+      nobody independent), and `work_locks` conflicting on prefix **overlap in
+      both directions** so `lib/` blocks `lib/operations/`.
+- [ ] **2B remaining:** `teams` / `team_members` / `review_verdicts` tables, team
+      composition as a pure function, the orchestrator loop, metrics over real
+      runs, and the Team Detail UI. None of these need a credential; the live
+      multi-agent demonstration does.
 - [ ] **2C (roadmap: multi-project portfolio):** connecting more than one
       repository, and a portfolio surface that manages them. Distinct from the
       merged Resource Manager work.
@@ -83,6 +177,8 @@ canonical; until then both readings are in circulation and they disagree.
 | Bot fabric + marketing site | Merged | Hosted marketing migration |
 | AgentOS (spec in `docs/AGENTOS_SPEC.md`) | **Blocks A–F built and wired** | G (CLI/YAML) and H (PWA/live viewer) unstarted; 8 unhosted migrations |
 
+Gates on current `main`: lint, typecheck, 149 files / 1674 tests, clean production build,
+Playwright across desktop/tablet/mobile including axe.
 Gates on current `main`: lint, typecheck, 149 files / 1666 tests, clean production build,
 Playwright 126 passed across desktop/tablet/mobile including axe.
 
@@ -380,9 +476,22 @@ Primary installation `153445938` stays active as the rollback boundary.
       retiring any primary access. Support ticket `#4660724` stays open for the primary webhook.
 - [ ] Live two-tenant, anonymous and privileged-RPC matrix with real caller sessions. Only one
       real user/email is authorized, so this cannot be faked locally.
-- [ ] Remaining adverse cases: stale SHA, approval expiry, revoked/insufficient permission,
-      rate limit, provider ordering, terminal deletion/restore, idempotent recovery.
-- [ ] Verify explicit disconnect/loss state and history preservation.
+- [x] **Adverse lifecycle now covered against the real migrated schema**
+      (`tests/integration/github-adverse-lifecycle.behavior.test.ts`, 9 tests). These had
+      **zero** coverage and are the states the integration enters once something has already
+      gone wrong — where a control that silently does nothing costs most and is noticed least.
+      Approval expiry (an expired row still reads `approved`; only the expiry distinguishes it),
+      owner-only decision, connection loss with history preserved, repeated loss converging on
+      one end state, disconnect refused against a mismatched installation id, rows retained
+      through disconnect, cross-tenant refusal of every privileged function, anonymous denial,
+      and member read-without-mutate.
+      Three assumptions the schema corrected: approvals cannot be created already-approved;
+      loss reasons are an allowlist; and `decide_approval` refuses a non-owner **outright**
+      rather than recording a decision that later fails validation — the stronger guarantee,
+      because no approved-looking row ever exists to be misread.
+- [ ] Still open: stale-SHA rejection, rate-limit handling that must not falsely revoke a
+      connection, and webhook provider ordering. Each needs a mocked GitHub response rather
+      than schema alone.
 - [ ] Configure and verify isolated Preview Supabase values.
 
 ---
