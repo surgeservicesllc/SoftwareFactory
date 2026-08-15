@@ -357,11 +357,13 @@ export function PortfolioConsole() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
                     <Count value={project.openCommands} label="Commands" />
                     <Count value={project.activeRuns} label="Active runs" />
                     <Count value={project.openTasks} label="Open tasks" />
                     <Count value={project.openIncidents} label="Incidents" />
+                    <Count value={project.draftPullRequests} label="Draft PRs" />
+                    <Count value={project.activeDeployments} label="Deploys active" />
                     <div className="flex flex-col">
                       <span className="text-xs text-muted">Health</span>
                       <span className="text-sm">{project.health}</span>

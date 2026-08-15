@@ -40,7 +40,7 @@ priority queue, and evidence for items closed by the loop.
 
 - [ ] Hosted-vs-local schema diff once ledger position is known | DB | blocked by P0 ledger item | loop | P0
 - [ ] Runbook `AI/HOSTED_APPLY_RUNBOOK.md` rebased on the real hosted position (its baseline claim `ends at 20260813001400` is now disproven) | DB | duplicate-key proof above | loop | P0
-- [ ] 2C portfolio: PR/deployment columns, per-project detail page, global bot-manager goals | 2C | `AI/PHASE_2C_COMPLETION.md` scorecard | loop | —
+- [ ] 2C portfolio: ~~PR/deployment columns~~ (closed loop 3: `draftPullRequests` from completed change requests — the schema forces a PR number on completion, so the count is truthful; `activeDeployments` incl. rolling_back; null still renders Unknown), per-project detail page, global bot-manager goals | 2C | `AI/PHASE_2C_COMPLETION.md` scorecard | loop | —
 - [x] Cross-project isolation negative tests | 2C/2E | goal 18: two live leases across projects already proven (2E "runs two projects at once"). Goal 27 closed this loop: `mark_github_connection_lost` on project A withholds A's queued run (claim filters `connection.status='connected'` + active unsuspended installation), leaves B claimable, keeps A's run `queued` for recovery; restoring connection+installation+repository selection makes the same run claimable with no resubmission. `phase2e-portfolio-scheduling.behavior.test.ts`, 21/21 | loop | —
 - [ ] Second real repository/installation for multi-project live proof | 2C | goal 34 | owner | —
 
