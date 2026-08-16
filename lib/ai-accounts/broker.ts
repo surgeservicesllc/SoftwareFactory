@@ -32,6 +32,8 @@ export type AiAccountRow = {
   provider: string;
   auth_method: string;
   display_name: string;
+  /** Which provider account signed in — display data, absent until known. */
+  provider_identity?: string | null;
   status: string;
   credential_purpose: string;
   last_verified_at: string | null;

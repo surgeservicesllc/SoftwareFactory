@@ -25,9 +25,9 @@ on:
       scope:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
-          applies only the idempotent function-only broker migrations
-          (20260816000400/000500) and records them in history — the
-          surgical path when the full push is blocked by ledger drift.
+          applies only the idempotent broker migrations
+          (20260816000400 through 000600) and records them in history —
+          the surgical path when the full push is blocked by ledger drift.
         required: false
         default: all
         type: choice
@@ -158,7 +158,8 @@ jobs:
           fi
           for FILE in \
             supabase/migrations/20260816000400_inspect_ai_auth_sessions.sql \
-            supabase/migrations/20260816000500_remove_ai_account.sql
+            supabase/migrations/20260816000500_remove_ai_account.sql \
+            supabase/migrations/20260816000600_ai_account_identity.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -172,6 +173,7 @@ jobs:
           }
           repair 20260816000400
           repair 20260816000500
+          repair 20260816000600
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
