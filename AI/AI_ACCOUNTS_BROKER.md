@@ -113,7 +113,7 @@ by GitHub on quiet repositories), and manually via `workflow_dispatch`.
 | Symptom | Meaning | Fix |
 | --- | --- | --- |
 | "Waiting for a factory worker" never advances | Workflow disabled, or no runner picked it up | Check the go-live variable; run the workflow manually from the Actions tab |
-| Session fails with "Only Claude accounts can be signed in by the worker" | A Codex session reached the broker | Expected — use the Codex button's command flow |
+| Session fails with "Only Claude accounts can be signed in by the worker" | The session was claimed by a worker predating the Codex driver (#146, 2026-08-16) | Retry — current workers drive `codex login` via the callback-address relay |
 | Sign-in fails citing a withheld provider message | The provider's error contained a token shape; the database refused to store it | Start again; check the Actions run log (tokens are never printed there either) |
 | Account shows "Needs sign-in again" | The verification path demoted it (`mark_ai_account_needs_reauth`) | Click Reconnect — the same broker flow against that account |
 | Credential stored but bot not Ready | Overlay bridge cannot see the purpose | Hosted DB may predate `list_provider_credential_purposes`; base slots still work via the fallback; apply the migration |

@@ -115,6 +115,18 @@ worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
 owner's live click-through of Remove and a fresh Connect (real provider
 auth — cannot be exercised by an agent).
 
+**CODEX ERROR TRIAGED (2026-08-16 17:42Z):** the owner's "Only Claude
+accounts…" failure came from a pre-#146 worker — the string no longer exists
+in code, and the first Codex-capable worker run (31961503881, 17:28-17:33)
+saw zero pending sessions, so no Codex attempt has yet reached the new
+driver. Fresh evidence: the driver's URL phase is probe-PASSED against real
+codex-cli 0.147.0 in this container (auth URL captured with client_id +
+redirect_uri, port parse 1455, paste roundtrip); the session projection
+prints live rows (000400 serving); apply runs for 000600/000700 succeeded;
+b6f8fe2 deploy READY; cron handover confirmed (worker 31962262809 live on
+b6f8fe2). AWAITING: one owner Codex click-through (REAL PROVIDER AUTH
+REQUIRED).
+
 **VERIFYING-DEATH ROOT CAUSE (2026-08-16 16:50Z, named from code against the
 live symptom):** the owner's 16:3x sign-in reached "Verifying account" and
 died there — the CLI's paste prompt reads raw keypresses, where Enter is a
@@ -325,8 +337,9 @@ real worker status; everything wired end-to-end.
   PASS (recorded above); `server-only` split into `lib/security/
   secret-box-core` + `lib/ai-accounts/purposes` so the worker seals/opens
   under plain Node — guarded re-exports keep app imports unchanged. Codex
-  refused honestly ("Only Claude accounts…") pending localhost-callback
-  work | PASS — 9 runner tests + 18 route tests; script boots under tsx and
+  refusal RETIRED 2026-08-16 (#146): the worker now drives `codex login`
+  via the callback-address relay; the URL phase is probe-PASSED against
+  codex-cli 0.147.0 | PASS — 9 runner tests + 18 route tests; script boots under tsx and
   refuses with named env vars; NOT live-tested end-to-end (needs owner:
   Actions secrets SOFTWAREFACTORY_CREDENTIAL_KEY + repo var
   SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true, then a real click-through) |
