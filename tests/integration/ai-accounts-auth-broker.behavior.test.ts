@@ -377,6 +377,22 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     )).rejects.toThrow(/foreign key/i);
   });
 
+  it("describes recent sessions for the worker's log without the sealed code", async () => {
+    const inspected = await db.query<Record<string, unknown>>(
+      "select * from public.inspect_ai_auth_sessions(50)",
+    );
+    // The suites above created many sessions; the projection sees them.
+    expect(inspected.rows.length).toBeGreaterThanOrEqual(3);
+    const columns = Object.keys(inspected.rows[0]);
+    expect(columns).toContain("inspected_status");
+    expect(columns.join(",")).not.toMatch(/relay|sealed|login_url/);
+    // Browser roles are denied outright.
+    await assumeRole(db, ownerId);
+    await expect(db.query("select * from public.inspect_ai_auth_sessions(5)"))
+      .rejects.toThrow(/permission denied/);
+    await resetRole(db);
+  });
+
   it("finds the open session an account already has, so a refresh resumes it", async () => {
     const accountId = await createAccount("Claude account 9", "claude_9");
     const sessionId = await openSession(accountId);
@@ -467,6 +483,50 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
       [organizationId],
     )).rejects.toThrow(/permission denied/);
     await resetRole(db);
+  });
+
+  it("removing an account deletes it whole but detaches bots rather than deleting them", async () => {
+    const accountId = await createAccount("Claude account 10", "claude_10");
+    const sessionId = await openSession(accountId);
+    // Give it a credential and a referencing bot, so removal has real stakes.
+    await db.query(
+      `insert into public.provider_credentials
+         (organization_id, purpose, sealed_envelope, source, created_by)
+       values ($1, 'claude_10', $2, 'connect_session', $3)`,
+      [organizationId, envelope, ownerId],
+    );
+    await db.query(`
+      insert into public.bots (organization_id, name, provider, model, created_by, ai_account_id)
+      values ($1, 'Remove-test bot', 'anthropic', 'claude-opus-5', $2, $3)
+    `, [organizationId, ownerId, accountId]);
+
+    await assumeRole(db, ownerId);
+    const removed = await db.query<{ remove_ai_account: boolean }>(
+      "select public.remove_ai_account($1::uuid, $2::uuid)",
+      [organizationId, accountId],
+    );
+    expect(removed.rows[0].remove_ai_account).toBe(true);
+    await resetRole(db);
+
+    const account = await db.query(
+      "select 1 from public.ai_accounts where id = $1", [accountId],
+    );
+    expect(account.rows).toHaveLength(0);
+    const session = await db.query(
+      "select 1 from public.ai_auth_sessions where id = $1", [sessionId],
+    );
+    expect(session.rows).toHaveLength(0);
+    const credential = await db.query(
+      "select 1 from public.provider_credentials where organization_id = $1 and purpose = 'claude_10'",
+      [organizationId],
+    );
+    expect(credential.rows).toHaveLength(0);
+    // The bot survives, detached.
+    const bot = await db.query<{ ai_account_id: string | null }>(
+      "select ai_account_id from public.bots where name = 'Remove-test bot'",
+    );
+    expect(bot.rows).toHaveLength(1);
+    expect(bot.rows[0].ai_account_id).toBeNull();
   });
 
   it("demotes an account to needs_reauth when its credential stops working", async () => {

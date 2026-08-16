@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 22**, listed in the measured section below. The repository total is 86 migration
+**The current total is 24**, listed in the measured section below. The repository total is 88 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
 outstanding. (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
@@ -31,13 +31,13 @@ stated position, and fails when they drift.)
 > supabase migration repair --status reverted 20260814002000
 > supabase migration repair --status applied  20260814000100
 > supabase migration list        # re-list; the comparison error should be gone
-> supabase db push               # applies the 22 outstanding below, in order
+> supabase db push               # applies the 24 outstanding below, in order
 > ```
 >
 > If `migration list` shows anything other than the predicted state, stop and re-derive —
 > do not force the repair.
 >
-> ### The 22 outstanding, in apply order
+> ### The 24 outstanding, in apply order
 >
 > `20260814002400_connection_registry_multi_account` · `20260814002500_provider_credential_vault`
 > · `20260814002600_store_provider_credential` · `20260815000100`–`20260815000600` (Phase 2E
@@ -47,7 +47,7 @@ stated position, and fails when they drift.)
 > `20260815001200_improvement_ledger` · `20260815001300_improvement_measurement` ·
 > `20260815001400_factory_self_audit` · `20260815001500_factory_detectors` ·
 > `20260815001600_detector_intake` · `20260816000100_ai_accounts_auth_broker`
-> · `20260816000200_ai_account_verification` · `20260816000300_resume_ai_auth_session`
+> · `20260816000200_ai_account_verification` · `20260816000300_resume_ai_auth_session` · `20260816000400_inspect_ai_auth_sessions` · `20260816000500_remove_ai_account`
 >
 > Each is described, with its verifying suite, in the per-section tables below. None grants
 > execution authority or new `service_role` table privileges. **Before pushing**, note the 2E
@@ -298,6 +298,8 @@ so it cannot pass without having applied every row below).
 | `20260816000100_ai_accounts_auth_broker` | `ai_accounts` (provider sign-ins as first-class identities, no secrets stored) + `ai_auth_sessions` (the broker state machine a worker drives through the provider's real login: pending→initializing→awaiting_user→authenticated→verifying→connected, with failed/expired/revoked terminals) + nullable `bots.ai_account_id`; RLS+FORCE with no direct table access for any role, definer-function transitions, activity events throughout | `ai-accounts-auth-broker.behavior` |
 | `20260816000200_ai_account_verification` | `list_ai_accounts_for_verification` + `mark_ai_account_verified`: the sweep's two hands — enumerate connected subscription accounts, record a shape-level pass as `last_verified_at` (no event; a routine pass is a timestamp, not a transition); demotion stays with `mark_ai_account_needs_reauth` | `ai-accounts-auth-broker.behavior` |
 | `20260816000300_resume_ai_auth_session` | `find_open_ai_auth_session`: the open session an account already has, so a page refresh resumes the sign-in instead of superseding it (authenticated, member-checked, projection excludes the sealed code) | `ai-accounts-auth-broker.behavior` |
+| `20260816000400_inspect_ai_auth_sessions` | `inspect_ai_auth_sessions`: bounded read-only session-state projection for the worker's log (status/timing/linkage, never the sealed code) — the diagnosis surface after two live runs and a watching owner disagreed about whether sessions existed | `ai-accounts-auth-broker.behavior` |
+| `20260816000500_remove_ai_account` | `remove_ai_account`: stronger than disconnect — deletes the account, its credential, and its sessions; bots detach (never deleted) and read "no account attached" | `ai-accounts-auth-broker.behavior` |
 
 What they do **not** do:
 

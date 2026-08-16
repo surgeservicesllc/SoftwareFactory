@@ -88,6 +88,28 @@ describe("AiAccountsPanel", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("removes an account only after an in-place confirmation that names the deletion", async () => {
+    const calls: string[] = [];
+    stubAccounts([connectedAccount], (url, init) => {
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/ai-accounts/acc-1/remove") {
+        return { ok: true, status: 200, json: async () => ({ removed: true }) } as unknown as Response;
+      }
+      return null;
+    });
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AiAccountsPanel canManage onChanged={onChanged} />);
+
+    await user.click(await screen.findByRole("button", { name: /^remove$/i }));
+    expect(calls).not.toContain("POST /api/ai-accounts/acc-1/remove");
+    await user.click(screen.getByRole("button", { name: /delete this account/i }));
+
+    expect(calls).toContain("POST /api/ai-accounts/acc-1/remove");
+    expect(onChanged).toHaveBeenCalled();
+  });
+
   it("reconnects a specific account through the broker flow", async () => {
     const connectBodies: Array<Record<string, unknown>> = [];
     stubAccounts([reauthAccount], (url, init) => {

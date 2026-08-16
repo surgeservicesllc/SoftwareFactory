@@ -52,6 +52,24 @@ async function main() {
     process.stdout.write(`Marked ${expired} stale sign-in session(s) expired.\n`);
   }
 
+  // The queue as this run actually sees it — status and timing only, so a
+  // disagreement between a spinner and a worker stops being an argument.
+  const inspected = await store.inspectSessions(10);
+  if (inspected.length === 0) {
+    process.stdout.write("Session table: empty (no sign-in has ever reached the database).\n");
+  } else {
+    for (const row of inspected) {
+      process.stdout.write(
+        `Session ${String(row.inspected_session_id).slice(0, 8)}…`
+        + ` provider=${row.inspected_provider}`
+        + ` status=${row.inspected_status}`
+        + ` worker=${row.inspected_worker_id ?? "-"}`
+        + ` created=${row.inspected_created_at}`
+        + ` expires=${row.inspected_expires_at}\n`,
+      );
+    }
+  }
+
   // The verification sweep: every connected account's claim re-tested against
   // the vault (row exists, seal opens, shape matches). Shape-level only — a
   // pass never asserts the provider still honors the token.
@@ -65,22 +83,43 @@ async function main() {
   const deadline = Date.now() + env.SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS;
   const dependencies = productionAuthBrokerDependencies(store);
 
+  // Linger rather than exit on idle: a person who clicks Connect a minute
+  // after this run starts must not wait for the next scheduled run. The
+  // whole window stays covered; the workflow timeout is the hard stop.
+  const IDLE_POLL_MS = 10_000;
+  const SWEEP_EVERY_TICKS = 30;
+
   let handled = 0;
+  let idleTicks = 0;
+  let announcedIdle = false;
   for (;;) {
     if (Date.now() >= deadline) {
-      process.stdout.write("Auth broker deadline reached; exiting cleanly.\n");
+      process.stdout.write(
+        `Deadline reached; handled ${handled} sign-in session(s) this window.\n`,
+      );
       break;
     }
     const outcome = await runAuthBrokerOnce(env.SOFTWAREFACTORY_WORKER_ID, dependencies);
     if (outcome === "idle") {
-      process.stdout.write(
-        handled === 0
-          ? "No sign-in sessions were pending.\n"
-          : `Handled ${handled} sign-in session(s); none left pending.\n`,
-      );
-      break;
+      if (!announcedIdle) {
+        process.stdout.write(
+          handled === 0
+            ? "No sign-in sessions pending; staying available for new ones.\n"
+            : `Handled ${handled} sign-in session(s); staying available for new ones.\n`,
+        );
+        announcedIdle = true;
+      }
+      idleTicks += 1;
+      if (idleTicks % SWEEP_EVERY_TICKS === 0) {
+        await store.expireStale();
+      }
+      await new Promise((resolveSleep) => setTimeout(
+        resolveSleep, Math.min(IDLE_POLL_MS, Math.max(0, deadline - Date.now())),
+      ));
+      continue;
     }
     handled += 1;
+    announcedIdle = false;
     process.stdout.write(`Sign-in session ${outcome}.\n`);
   }
 }
