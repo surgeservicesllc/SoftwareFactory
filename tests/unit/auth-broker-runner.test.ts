@@ -127,6 +127,27 @@ describe("runAuthBrokerOnce", () => {
     expect(outcome).toBe("idle");
   });
 
+  it("fails fast when a relay code predates this worker's login", async () => {
+    // A code sealed before the claim belongs to a dead worker's login — no
+    // fresh login can verify it, so the session fails immediately with a
+    // message that says to sign in again, and no login is ever started.
+    const store = makeStore({
+      readRelayCode: vi.fn(async () => "sealed-from-a-previous-attempt"),
+    });
+    const startLogin = vi.fn();
+    const outcome = await runAuthBrokerOnce("worker-1", {
+      store,
+      startLogin,
+      openRelayCode: vi.fn(),
+      sealCredential: vi.fn(),
+    });
+    expect(outcome).toBe("failed");
+    expect(startLogin).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(
+      session.sessionId, expect.stringMatching(/sign in again/i),
+    );
+  });
+
   it("fails the session when nobody relays a code in time", async () => {
     const store = makeStore();
     const cli = makeCli();
