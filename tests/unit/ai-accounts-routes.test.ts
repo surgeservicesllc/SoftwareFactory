@@ -168,6 +168,33 @@ describe("POST /api/ai-accounts/connect", () => {
     });
   });
 
+  it("resumes an open session on refresh instead of superseding it", async () => {
+    rpc.mockImplementation(async (fn: string) => {
+      if (fn === "list_ai_accounts") {
+        return { data: [accountRow({ status: "pending" })], error: null };
+      }
+      if (fn === "find_open_ai_auth_session") {
+        return {
+          data: [{
+            open_session_id: sessionId,
+            open_status: "awaiting_user",
+            open_expires_at: new Date(Date.now() + 600_000).toISOString(),
+          }],
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    const response = await connect(post("/api/ai-accounts/connect", { provider: "anthropic" }));
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ sessionId, resumed: true });
+    // The session a worker may already be driving is NOT superseded.
+    expect(rpc).not.toHaveBeenCalledWith("open_ai_auth_session", expect.anything());
+  });
+
   it("reuses a disconnected account rather than burning a slot", async () => {
     rpc.mockImplementation(async (fn: string) => {
       if (fn === "list_ai_accounts") {

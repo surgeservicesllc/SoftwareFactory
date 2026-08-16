@@ -117,7 +117,7 @@ describe("AiAccountsPanel", () => {
     await user.click(await screen.findByRole("button", { name: /reconnect/i }));
 
     // The broker flow starts against exactly that account.
-    expect(await screen.findByText(/waiting for a factory worker/i)).toBeInTheDocument();
+    expect(await screen.findByText(/connecting claude/i)).toBeInTheDocument();
     expect(connectBodies[0]).toEqual({ provider: "anthropic", accountId: "acc-2" });
   });
 

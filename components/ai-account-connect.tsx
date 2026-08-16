@@ -1,20 +1,22 @@
 "use client";
 
-import { Check, ExternalLink, KeyRound, Loader2, XCircle } from "lucide-react";
+import { Check, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { cn } from "@/lib/cn";
 
 /**
  * The auto-completing sign-in: every state shown here is read from the broker
  * session row, never assumed. The person clicks Connect, a factory worker
- * runs the provider's real login, this component surfaces the login URL,
+ * runs the provider's real login, this component surfaces the sign-in step,
  * takes the confirmation code, and flips to Connected when the database says
  * so — there is no "I have signed in — check now" button, because nothing
  * needs the person to claim anything.
  *
- * Honesty over choreography: if no worker claims the session, this says so
- * and offers the manual path rather than spinning forever; if the sign-in
- * fails, the reason (already sanitized server-side) is shown with a way to
- * start again.
+ * The rendering follows the BotBuildv2 rule: the person should understand
+ * Claude, account, status — never workers, brokers, or CLIs. Progress is a
+ * five-step checklist; errors are calm and actionable; anything technical
+ * lives behind "View technical details".
  */
 
 type SessionView = {
@@ -34,16 +36,13 @@ export type AiAccountConnectProps = {
   accountId?: string;
   /** Called when the account reaches connected, with its account id. */
   onConnected: (accountId: string) => Promise<void> | void;
-  /** The person chose the manual command path instead. */
+  /** The person chose the manual command path instead (diagnostics-grade). */
   onFallback: () => void;
   /**
    * The broker could not even start a session — its backend is not available
-   * here (migration not applied, or the endpoint failed outright). When set,
-   * the caller degrades to its own path immediately and the person never
-   * sees an error for a button they clicked once; when absent, the failed
-   * state renders with the reason. The distinction matters: a sign-in that
-   * failed MIDWAY is a real event worth showing, but "could not start" on
-   * the first click must never be a dead end.
+   * here. When set, the caller degrades to its own path immediately; when
+   * absent, a calm failed state renders. A sign-in that failed MIDWAY always
+   * renders, because that is a real event.
    */
   onUnavailable?: () => void;
   /** The person cancelled out of the sign-in entirely. */
@@ -51,7 +50,7 @@ export type AiAccountConnectProps = {
 };
 
 const POLL_MS = 3_000;
-/** After this long with no worker claim, say so and offer the manual path. */
+/** After this long with no worker claim, say so and offer a way out. */
 const WORKER_STALL_MS = 75_000;
 
 type Phase =
@@ -63,6 +62,57 @@ type Phase =
   | "finishing"
   | "connected"
   | "failed";
+
+/** The §10 checklist: which of the five steps are done/current at a phase. */
+function checklistPosition(phase: Phase): number {
+  switch (phase) {
+    case "starting": return 0;
+    case "waiting_worker": return 0;
+    case "initializing": return 1;
+    case "awaiting_user": return 2;
+    case "submitting_code": return 2;
+    case "finishing": return 3;
+    case "connected": return 4;
+    default: return 0;
+  }
+}
+
+function ProgressChecklist({ phase, providerLabel }: { phase: Phase; providerLabel: string }) {
+  const steps = [
+    "Preparing connection",
+    `${providerLabel} opened`,
+    "Waiting for sign-in",
+    "Verifying account",
+    "Ready",
+  ];
+  const position = checklistPosition(phase);
+  return (
+    <ol className="mt-4 space-y-2" aria-label="Connection progress">
+      {steps.map((step, index) => {
+        const done = index < position || phase === "connected";
+        const current = index === position && phase !== "connected";
+        return (
+          <li key={step} className="flex items-center gap-2.5 text-sm">
+            {done ? (
+              <Check className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+            ) : current ? (
+              <Loader2 className="size-4 shrink-0 animate-spin text-[var(--accent-text)]" aria-hidden="true" />
+            ) : (
+              <span className="grid size-4 shrink-0 place-items-center" aria-hidden="true">
+                <span className="size-2 rounded-full border border-[var(--border)]" />
+              </span>
+            )}
+            <span className={cn(
+              done ? "text-[var(--text)]" : current ? "font-medium text-[var(--text)]" : "text-[var(--text-muted)]",
+            )}>
+              {step}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 export function AiAccountConnect({
   providerId,
@@ -77,7 +127,7 @@ export function AiAccountConnect({
   const [session, setSession] = useState<SessionView | null>(null);
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState("");
-  const [workerWoken, setWorkerWoken] = useState(false);
+  const [failureDetail, setFailureDetail] = useState("");
   const [stalled, setStalled] = useState(false);
   // Set when start() runs; 0 only before the first attempt.
   const startedAtRef = useRef(0);
@@ -128,13 +178,13 @@ export function AiAccountConnect({
         case "revoked":
           doneRef.current = true;
           stopPolling();
+          // Calm and actionable; the stored reason is technical detail.
           setNotice(
-            view.status === "failed"
-              ? view.failureReason ?? "The sign-in failed."
-              : view.status === "expired"
-                ? "The sign-in ran out of time before it finished."
-                : "The sign-in was cancelled.",
+            view.status === "expired"
+              ? "The sign-in ran out of time."
+              : "We couldn't finish signing you in. Your account wasn't changed.",
           );
+          setFailureDetail(view.failureReason ?? "");
           setPhase("failed");
           break;
         default:
@@ -150,6 +200,7 @@ export function AiAccountConnect({
     startedAtRef.current = Date.now();
     setPhase("starting");
     setNotice("");
+    setFailureDetail("");
     setCode("");
     setStalled(false);
     try {
@@ -164,22 +215,23 @@ export function AiAccountConnect({
         sessionId?: string;
         accountId?: string;
         workerWoken?: boolean;
+        resumed?: boolean;
         error?: { message?: string };
       };
       if (!response.ok || !body.sessionId) {
-        // Could not even start: the broker's backend is not available here.
-        // A person who clicked one button must not meet an error for it —
-        // degrade to the caller's own path when one exists.
+        // Could not even start: the connection backend is not available
+        // here. A person who clicked one button must not meet an error for
+        // it — degrade to the caller's own path when one exists.
         if (onUnavailable) {
           doneRef.current = true;
           onUnavailable();
           return;
         }
-        setNotice(body.error?.message ?? "The sign-in could not be started.");
+        setNotice("We couldn't finish signing you in. Your account wasn't changed.");
+        setFailureDetail(body.error?.message ?? "");
         setPhase("failed");
         return;
       }
-      setWorkerWoken(Boolean(body.workerWoken));
       setPhase("waiting_worker");
       const sessionId = body.sessionId;
       stopPolling();
@@ -191,7 +243,7 @@ export function AiAccountConnect({
         onUnavailable();
         return;
       }
-      setNotice("The sign-in could not be started.");
+      setNotice("We couldn't finish signing you in. Your account wasn't changed.");
       setPhase("failed");
     }
   }, [accountId, onUnavailable, providerId, readSession, stopPolling]);
@@ -229,7 +281,7 @@ export function AiAccountConnect({
       });
       if (!response.ok) {
         const body = (await response.json()) as { error?: { message?: string } };
-        setNotice(body.error?.message ?? "The code was not accepted.");
+        setNotice(body.error?.message ?? "The code was not accepted. Try pasting it again.");
         setPhase("awaiting_user");
         return;
       }
@@ -243,13 +295,15 @@ export function AiAccountConnect({
 
   if (phase === "connected") {
     return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
-        <p className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
-          <Check className="size-4 text-emerald-500" aria-hidden="true" />
-          {providerLabel} is connected
-        </p>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          The account is signed in and its credential is sealed in the vault.
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-500/10">
+          <Check className="size-6 text-emerald-500" aria-hidden="true" />
+        </span>
+        <h3 className="mt-3 text-lg font-semibold text-[var(--text)]">
+          {providerLabel} connected
+        </h3>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Your {providerLabel} account is ready to use.
         </p>
       </div>
     );
@@ -257,48 +311,70 @@ export function AiAccountConnect({
 
   if (phase === "failed") {
     return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
-        <p className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
-          <XCircle className="size-4 text-red-500" aria-hidden="true" />
-          The {providerLabel} sign-in did not finish
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+        <h3 className="text-lg font-semibold text-[var(--text)]">
+          We couldn&apos;t finish signing you in
+        </h3>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          {notice || "Your account wasn't changed."}
         </p>
-        {notice ? <p className="mt-1 text-xs text-[var(--text-muted)]">{notice}</p> : null}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={() => void start()} className="btn btn-primary btn-sm">
-            Start again
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => void start()} className="btn btn-primary">
+            Try Again
           </button>
-          <button type="button" onClick={onFallback} className="btn btn-secondary btn-sm">
-            Use the manual command instead
-          </button>
-          <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm">
+          <button type="button" onClick={() => void cancel()} className="btn btn-secondary">
             Close
           </button>
         </div>
+        {failureDetail ? (
+          <details className="mt-4 text-left">
+            <summary className="cursor-pointer text-xs text-[var(--text-muted)]">
+              View technical details
+            </summary>
+            <p className="mt-2 rounded-lg bg-[var(--surface-inset)] p-3 text-xs text-[var(--text-muted)]">
+              {failureDetail}
+            </p>
+            <button
+              type="button"
+              onClick={onFallback}
+              className="btn btn-secondary btn-sm mt-2"
+            >
+              Use the developer connection instead
+            </button>
+          </details>
+        ) : null}
       </div>
     );
   }
 
-  if (phase === "awaiting_user" || phase === "submitting_code") {
-    return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
-        <p className="text-sm font-semibold text-[var(--text)]">
-          Sign in to {providerLabel}
-        </p>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          Your sign-in page is ready. Finish signing in with {providerLabel}, then paste the
-          confirmation code it shows you.
-        </p>
-        {session?.loginUrl ? (
-          <a
-            href={session.loginUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="btn btn-primary btn-sm mt-3 inline-flex items-center gap-1.5"
-          >
-            <ExternalLink className="size-3.5" aria-hidden="true" />
-            Continue to {providerLabel} sign-in
-          </a>
-        ) : null}
+  const waitingForCode = phase === "awaiting_user" || phase === "submitting_code";
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+      <h3 className="text-lg font-semibold text-[var(--text)]">
+        Connecting {providerLabel}
+      </h3>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">
+        {waitingForCode
+          ? "Complete sign-in in the secure browser window, then paste the confirmation code below."
+          : "This completes on its own — no steps to run."}
+      </p>
+
+      <ProgressChecklist phase={phase} providerLabel={providerLabel} />
+
+      {waitingForCode && session?.loginUrl ? (
+        <a
+          href={session.loginUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="btn btn-primary mt-4 inline-flex items-center gap-1.5"
+        >
+          <ExternalLink className="size-4" aria-hidden="true" />
+          Open {providerLabel} Sign-In
+        </a>
+      ) : null}
+
+      {waitingForCode ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor={`relay-code-${providerId}`}>
             Confirmation code from {providerLabel}
@@ -310,61 +386,34 @@ export function AiAccountConnect({
             placeholder="Paste the confirmation code here"
             autoComplete="off"
             spellCheck={false}
-            className="w-64 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-1.5 text-sm text-[var(--text)]"
+            className="w-72 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text)]"
           />
           <button
             type="button"
             onClick={() => void submitCode()}
             disabled={phase === "submitting_code" || code.trim().length === 0}
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary"
           >
             {phase === "submitting_code" ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <KeyRound className="size-3.5" aria-hidden="true" />
-            )}
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : null}
             Finish connecting
           </button>
         </div>
-        {notice ? <p className="mt-2 text-xs text-amber-600">{notice}</p> : null}
-        <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm mt-3">
-          Cancel
-        </button>
-      </div>
-    );
-  }
+      ) : null}
 
-  const waitingCopy = phase === "starting"
-    ? `Starting the ${providerLabel} sign-in…`
-    : phase === "initializing"
-      ? `A factory worker is starting ${providerLabel}'s real sign-in…`
-      : phase === "finishing"
-        ? "Finishing the sign-in — checking the account actually works…"
-        : workerWoken
-          ? "Waiting for a factory worker to pick this up…"
-          : "Waiting for a factory worker — it wakes on a schedule, so this can take a few minutes…";
+      {notice && waitingForCode ? (
+        <p className="mt-2 text-xs text-amber-600" aria-live="polite">{notice}</p>
+      ) : null}
 
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
-      <p className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
-        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        {waitingCopy}
-      </p>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">
-        Nothing to copy and no terminal — this page updates by itself at each step.
-      </p>
       {stalled && phase === "waiting_worker" ? (
-        <p className="mt-2 text-xs text-amber-600">
-          No worker has picked this up yet. It may not be enabled — you can keep waiting, or
-          use the manual command below.
+        <p className="mt-3 text-sm text-[var(--text-muted)]" aria-live="polite">
+          This is taking longer than usual. You can keep waiting, or try again in a
+          few minutes.
         </p>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {stalled && phase === "waiting_worker" ? (
-          <button type="button" onClick={onFallback} className="btn btn-secondary btn-sm">
-            Use the manual command instead
-          </button>
-        ) : null}
+
+      <div className="mt-4">
         <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm">
           Cancel
         </button>

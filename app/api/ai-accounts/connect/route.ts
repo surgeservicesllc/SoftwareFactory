@@ -86,6 +86,30 @@ export async function POST(request: Request) {
     let accountId: string;
     if (plan.kind === "reuse") {
       accountId = plan.accountId;
+
+      // Resume, don't duplicate: a refresh mid-sign-in (or a double click)
+      // returns the session that already exists instead of superseding the
+      // one a worker may be driving and restarting the person's progress.
+      const open = await client.rpc("find_open_ai_auth_session", {
+        p_organization_id: activeOrganization.id,
+        p_ai_account_id: accountId,
+      });
+      const openRow = ((open.data ?? []) as Array<{
+        open_session_id: string;
+        open_expires_at: string;
+      }>)[0];
+      if (!open.error && openRow) {
+        return jsonNoStore({
+          accountId,
+          sessionId: openRow.open_session_id,
+          expiresInSeconds: Math.max(
+            0,
+            Math.floor((new Date(openRow.open_expires_at).getTime() - Date.now()) / 1000),
+          ),
+          resumed: true,
+          workerWoken: false,
+        });
+      }
     } else {
       const created = await client.rpc("create_ai_account", {
         p_organization_id: activeOrganization.id,
