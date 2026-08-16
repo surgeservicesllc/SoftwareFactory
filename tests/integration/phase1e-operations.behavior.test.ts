@@ -182,10 +182,11 @@ describe("Phase 1E production operations behavior", () => {
     // Phase 2B anchor tables, the two Phase 2B task-graph tables, the Phase 2D
     // connection capability vocabulary, the two provider credential-vault
     // tables, the two Phase 2E portfolio-scheduling tables, the Phase 2D
-    // connection-routing evidence table, and the Phase 3 improvement ledger.
+    // connection-routing evidence table, the Phase 3 improvement ledger, and
+    // the two AI-account auth-broker tables.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(109);
+    expect(rlsRows).toHaveLength(111);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
