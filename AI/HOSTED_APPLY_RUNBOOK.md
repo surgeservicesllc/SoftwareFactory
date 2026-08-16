@@ -1,16 +1,62 @@
 # Applying the unhosted migrations
 
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
+Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-This exists because the owner actions were previously described loosely — including by me, as
-"three unhosted migrations", which undercounted.
+**The current total is 19**, listed in the measured section below. The repository total is 83 migration
+files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
+outstanding. (The guard test derives both numbers from the migration directory and this document's
+stated position, and fails when they drift.)
 
-**The current total is 42**, listed across the tables below. One of them has a
-materially different approval requirement from the others. The repository total is 83 migration
-files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
-(The per-section breakdown that used to live in this sentence drifted from the tables twice
-and is gone; the derived totals above are the numbers a reader may trust, and the guard test
-asserts them.)
+> ## Measured against hosted, 2026-08-16 — this section supersedes everything below
+>
+> The owner ran, in the production project's SQL Editor:
+> `select count(*), max(version) from supabase_migrations.schema_migrations;`
+> → **count 65, max `20260814002300`** (screenshot evidence, 2026-08-16).
+>
+> **The count arithmetic confirms the `20260814002000` derivation at the bottom of this
+> document.** The repository holds exactly **64** files at or before `20260814002300`; hosted
+> holds **65** rows. The one extra hosted row is `20260814002000_graph_engineering` — applied
+> under that version, then renamed locally to `20260814000100` — precisely the remote-only
+> version that makes the Supabase integration's comparison fail on every merge and blocks
+> every apply path. It is a ledger-bookkeeping problem, not missing schema: the graph
+> engineering DDL is present on hosted.
+>
+> ### Owner order of operations (repair first, then push)
+>
+> ```bash
+> supabase link --project-ref qpuofpmagrmyamahqwxw
+> supabase migration list        # confirm: remote shows 20260814002000, not 20260814000100
+> # History repair only — no DDL runs:
+> supabase migration repair --status reverted 20260814002000
+> supabase migration repair --status applied  20260814000100
+> supabase migration list        # re-list; the comparison error should be gone
+> supabase db push               # applies the 19 outstanding below, in order
+> ```
+>
+> If `migration list` shows anything other than the predicted state, stop and re-derive —
+> do not force the repair.
+>
+> ### The 19 outstanding, in apply order
+>
+> `20260814002400_connection_registry_multi_account` · `20260814002500_provider_credential_vault`
+> · `20260814002600_store_provider_credential` · `20260815000100`–`20260815000600` (Phase 2E
+> scheduling, six files) · `20260815000700_project_archive_operation` ·
+> `20260815000800_report_per_project_view` · `20260815000900_guard_project_deletion` ·
+> `20260815001000_cross_project_dependencies` · `20260815001100_connection_routing_decisions` ·
+> `20260815001200_improvement_ledger` · `20260815001300_improvement_measurement` ·
+> `20260815001400_factory_self_audit` · `20260815001500_factory_detectors` ·
+> `20260815001600_detector_intake`
+>
+> Each is described, with its verifying suite, in the per-section tables below. None grants
+> execution authority or new `service_role` table privileges. **Before pushing**, note the 2E
+> capacity defaults (portfolio ceiling 4, 1 reserved, 2 per project, 1 per worker) take effect
+> on apply — raise them first with `set_portfolio_capacity_limits` if the factory should run
+> wider. After pushing, re-run the post-apply checks listed in the rehearsal section.
+>
+> The historical position `20260813001400` and the 2026-08-14 measurement (45 rows /
+> `20260814000200`) below are retained as history; the measured position above is the one
+> to trust.
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
 and none of them is reading this paragraph. `tests/integration/hosted-runbook-counts.test.ts` now
