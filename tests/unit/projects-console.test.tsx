@@ -181,6 +181,49 @@ describe("ProjectsConsole GitHub evidence", () => {
     expect(await screen.findByText("Author: Unknown · Mergeability: Unknown")).toBeInTheDocument();
     expect(screen.getByText("Status: queued · Conclusion: —")).toBeInTheDocument();
   });
+
+  it("does not call a cancelled check run a failing check", async () => {
+    // The worker queue cancels its own superseded beats by design; only a
+    // conclusion carrying failure evidence may raise "failing on the main
+    // branch" (owner was misled by a cancelled beat on 2026-08-16).
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return projectsResponse();
+      if (url === "/api/github/connections") return connectionsResponse({ lastSyncedAt: null, private: false });
+      if (url.includes("/branches?")) return jsonResponse({ branches: [{ name: "main", protected: true, sha: branchSha }] });
+      if (url.includes("/commits?")) return jsonResponse({ commits: [] });
+      if (url.includes("/pulls?")) return jsonResponse({ pullRequests: [] });
+      if (url.includes("/checks?")) {
+        return jsonResponse({ checkRuns: [{
+          completedAt: "2026-08-16T20:00:00.000Z",
+          conclusion: "success",
+          id: 101,
+          name: "CI",
+          startedAt: "2026-08-16T19:55:00.000Z",
+          status: "completed",
+          url: null,
+        }, {
+          completedAt: "2026-08-16T19:45:00.000Z",
+          conclusion: "cancelled",
+          id: 102,
+          name: "Superseded worker beat",
+          startedAt: "2026-08-16T19:44:00.000Z",
+          status: "completed",
+          url: null,
+        }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByText("Public")).toBeInTheDocument();
+    // The cancelled run still shows its literal conclusion in the detail row…
+    expect(await screen.findByText("Status: completed · Conclusion: cancelled")).toBeInTheDocument();
+    // …but raises no failure warning and does not flip the summary to Failing.
+    expect(screen.queryByText(/failing on the main branch/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Failing")).not.toBeInTheDocument();
+  });
 });
 
 describe("ProjectsConsole add-project form", () => {
