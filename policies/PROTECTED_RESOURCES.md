@@ -59,6 +59,27 @@ The following are protected by subject matter even if repository path names chan
 - `policies/**`, `AGENTS.md`, and safety-relevant AI memory;
 - production deployment, DNS, billing, rollback, and provider-permission configuration.
 
+## Owner-frozen: the AI-account connection path (2026-08-16)
+
+The owner verified the end-to-end Claude connection live and ordered it
+protected: **no modification without a specific owner instruction.** This is
+stronger than elevated review — it is a freeze. It covers:
+
+- `lib/worker/auth-broker.ts`, `scripts/auth-broker.mts`, and
+  `.github/workflows/auth-broker.yml`;
+- the broker migrations (`20260816000100`–`20260816000700`) and their
+  functions;
+- `components/ai-account-connect.tsx`, the connect/session/code/cancel
+  routes under `app/api/ai-accounts/**`, and `lib/ai-accounts/**`.
+
+Diagnosis stays allowed: reading logs, running read-only probes, and
+reporting findings. When a defect is found, the finding and a proposed fix
+go to the owner; the fix lands only on their instruction. Verified-working
+configuration at freeze time: main `74843ef` (worker release `85c4b14`
+lineage — Enter-as-keystroke submission, stale-code fail-fast, 25-minute
+linger with release-SHA self-handover, Codex callback-address relay,
+identity capture).
+
 Documentation-only clarification may be GREEN/YELLOW, but any semantic reduction in protection is RED.
 
 ## Which of these are enforced in code

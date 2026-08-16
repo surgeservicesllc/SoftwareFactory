@@ -115,6 +115,15 @@ worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
 owner's live click-through of Remove and a fresh Connect (real provider
 auth — cannot be exercised by an agent).
 
+**CLAUDE E2E VERIFIED LIVE ×2, PATH FROZEN BY OWNER (2026-08-16 ~18:00Z):**
+the owner confirmed "Claude connected, it is working perfectly" after the
+coverage fix — the second live end-to-end connection (first: 17:18Z). The
+owner ordered the connection path protected: no modification without a
+specific owner instruction. Recorded as a freeze in
+policies/PROTECTED_RESOURCES.md (frozen files listed there; diagnosis stays
+allowed, fixes go to the owner as proposals). Frozen-good configuration:
+main 74843ef.
+
 **COVERAGE REGRESSION FIXED (2026-08-16 17:47Z):** the owner's "Claude is
 now not connecting" was a coverage gap, not a code change — the Claude
 sign-in code is byte-identical to what connected them at 17:18. The 4.5-min
