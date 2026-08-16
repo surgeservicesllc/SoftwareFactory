@@ -358,4 +358,50 @@ describe("the improvement ledger", () => {
     expect(lifecycle.rows[0]!.lesson).toContain("did not hold");
     await db.exec("reset role");
   });
+
+  it("audits its own health from real telemetry, scoring only what it can see", async () => {
+    // State at this point in the suite: one open incident (from the
+    // regression test above), no terminal runs, no validations, no
+    // deployments, no repairs, no autonomy decisions, nothing queued, and no
+    // open breakers. The audit must score exactly the two domains that hold
+    // evidence and name every domain it cannot measure.
+    await asRole("authenticated", ownerId);
+    const audited = await db.query<{ report: {
+      policyVersion: string;
+      domains: Record<string, { measured: boolean; reason?: string; score?: number; open?: number }>;
+      score: { value: number | null; measuredDomains: number; totalDomains: number; confidence?: number; abstained: boolean };
+    } }>(
+      "select public.audit_factory_health($1::uuid) as report",
+      [projectId],
+    );
+    const report = audited.rows[0]!.report;
+
+    expect(report.policyVersion).toBe("factory-self-audit-v1");
+    for (const domain of ["runs", "validations", "verifier", "repairs", "deployments", "queue"]) {
+      expect(report.domains[domain]!.measured).toBe(false);
+      expect(report.domains[domain]!.reason).toBeTruthy();
+    }
+    expect(report.domains.incidents).toMatchObject({ measured: true, open: 1, score: 75 });
+    expect(report.domains.breakers).toMatchObject({ measured: true, open: 0, score: 100 });
+
+    // The score is the mean of the two measured domains, and the confidence
+    // says how little of the factory was actually visible.
+    expect(report.score).toMatchObject({
+      abstained: false, measuredDomains: 2, totalDomains: 8, value: 87.5,
+    });
+    expect(report.score.confidence).toBe(0.25);
+    await db.exec("reset role");
+  });
+
+  it("refuses a self-audit to outsiders and the unauthenticated", async () => {
+    await asRole("authenticated", outsiderId);
+    await expect(
+      db.query("select public.audit_factory_health($1::uuid)", [projectId]),
+    ).rejects.toThrow(/project not found/);
+    await asRole("anon");
+    await expect(
+      db.query("select public.audit_factory_health($1::uuid)", [projectId]),
+    ).rejects.toThrow(/authentication is required|permission denied/);
+    await db.exec("reset role");
+  });
 });

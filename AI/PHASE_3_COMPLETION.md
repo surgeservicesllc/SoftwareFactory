@@ -49,16 +49,16 @@ nothing can withdraw a change that did not.
 
 | # | Goal | Score | Evidence |
 | --- | --- | --- | --- |
-| 1 | Factory can audit its own repository/system | **FAIL — ABSENT** | No self-audit module. Nothing reads the telemetry tables as evidence about the factory. |
-| 2 | Self-health score uses real evidence | **FAIL — ABSENT** | No health score exists. |
-| 3 | Measures run success/failure | **PARTIAL** | `agent_runs`, `graph_runs`, `node_runs` and `provider_run_events` record it. Nothing aggregates it. |
+| 1 | Factory can audit its own repository/system | **PASS (loop 21)** | `audit_factory_health` (migration `20260815001400`) reads eight telemetry domains — runs, validations, verifier decisions, repairs, incidents, deployments, breakers, queue — as evidence about the factory, tenant-scoped, project-filterable, member-callable. Proven against the migrated chain including the unmeasured-domain discipline. |
+| 2 | Self-health score uses real evidence | **PASS (loop 21)** | The score is the unweighted mean of the domains that actually hold evidence, each scored by a stated fixed rule; unmeasured domains are named with reasons and excluded; `confidence` reports how much of the factory was visible; zero evidence abstains with a reason instead of inventing a number. The test pins today's honest reality: two of eight domains measured, confidence 0.25. |
+| 3 | Measures run success/failure | **PASS (loop 21)** | Recorded since 1C; now aggregated by the self-audit's runs domain (success rate over terminal runs in the window, unmeasured when none). |
 | 4 | Measures graph/node performance | **PARTIAL** | `node_runs` carries timings; `lib/graph/optimizer.ts` reads them for one graph. No cross-graph view. |
-| 5 | Measures verifier rejection | **PARTIAL** | `autonomy_decisions` is append-only with named blocker codes — the right substrate. Never aggregated. |
-| 6 | Measures retries/repair loops | **PARTIAL** | `repair_attempts` and bounded retry budgets in `lib/autonomy/retries.ts`. Not measured over time. |
+| 5 | Measures verifier rejection | **PASS (loop 21)** | Aggregated by the verifier domain: decisions vs NOT_APPROVED over the window. |
+| 6 | Measures retries/repair loops | **PASS (loop 21)** | Aggregated by the repairs domain: attempts vs outright failures over the window. |
 | 7 | Measures CI/build/test failures | **PARTIAL** | `test_runs` exists. CI results are readable from GitHub but not ingested. |
-| 8 | Measures deployment/rollback/incidents | **PARTIAL** | `deployments`, `deployment_validations`, `incidents` all exist (Phase 1E). Unaggregated, and no monitor has observed a real production target. |
+| 8 | Measures deployment/rollback/incidents | **PASS (loop 21)** | Aggregated by the deployments and incidents domains (deploy success rate; open incidents always measured, each costing 25 points). Still true that no monitor has observed a real production target — the aggregation is honest about that by having nothing to aggregate until one does. |
 | 9 | Measures worker/provider availability | **PARTIAL** | `resource_breaker_events` plus the Phase 2D `connections.health` added this session. Not trended. |
-| 10 | Measures queue/bottleneck/latency | **PARTIAL** | `node_run_claims` and `operations_events` carry the data; nothing derives queue depth or wait time. |
+| 10 | Measures queue/bottleneck/latency | **PASS (loop 21)** | The queue domain derives depth and oldest-queued age from `agent_runs`; an hour of queue age starts costing points, a day zeroes the domain. |
 | 11 | Measures real usage/cost where available | **PARTIAL** | `lib/providers/usage.ts` accounts usage. Cost is deliberately absent — the zero-token paths have no per-token cost, and the brief says not to optimize cost without real data. |
 | 12 | Detects recurring failure patterns | **FAIL — ABSENT** | `lib/operations/fingerprint.ts` deduplicates incidents by fingerprint, which is the right primitive, but nothing mines it for recurrence. |
 | 13 | Detects flaky workflows/tests | **FAIL — ABSENT** | Requires same-input different-outcome analysis over `test_runs`. Not built. |
@@ -92,10 +92,15 @@ nothing can withdraw a change that did not.
 Re-scored 2026-08-15 (master loop iteration 18) after the versioned
 constitution landed as the plan's step 1:
 
-- PASS: 12 of 37
-- PARTIAL: 18 of 37
-- FAIL (absent): 7 of 37
-- Weighted completion: **≈53%**
+- PASS: 19 of 37
+- PARTIAL: 13 of 37
+- FAIL (absent): 5 of 37
+- Weighted completion: **≈65%** (counts above are the record; the weighting
+  follows the audit's original discount for thin live telemetry)
+
+Loop 21 landed the self-audit engine — goals 1 and 2, plus the aggregation
+half of 3, 5, 6, 8 and 10. The remaining absents are the detectors (12, 13,
+17, 19, 21).
 
 Loop 19 landed the improvement ledger (plan step 2): the
 proposal/decision/implementation/evaluation lifecycle is durable,

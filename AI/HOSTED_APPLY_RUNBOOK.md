@@ -5,8 +5,8 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 39**, listed across the tables below. One of them has a
-materially different approval requirement from the others. The repository total is 80 migration
+**The current total is 40**, listed across the tables below. One of them has a
+materially different approval requirement from the others. The repository total is 81 migration
 files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
 (The per-section breakdown that used to live in this sentence drifted from the tables twice
 and is gone; the derived totals above are the numbers a reader may trust, and the guard test
@@ -245,6 +245,7 @@ so it cannot pass without having applied every row below).
 | `20260815001100_connection_routing_decisions` | Append-only `connection_routing_decisions` + `record_connection_routing_decision`: the Identity Router's selections and refusals become durable, member-readable evidence with every rejected candidate and its named reason | `connection-registry` |
 | `20260815001200_improvement_ledger` | Append-only `improvement_ledger` + four recorder functions: Phase 3's proposal/decision/implementation/evaluation lifecycle, refusing proposals without baselines, shortcuts past acceptance, re-decisions, and second evaluations | `improvement-ledger.behavior` |
 | `20260815001300_improvement_measurement` | `capture_improvement_baseline` (fourteen-day telemetry window, unmeasured sources named rather than zeroed) + `evaluate_improvement_from_telemetry` (fixed direction table, derived outcome, refuses to guess when nothing compares) | `improvement-ledger.behavior` |
+| `20260815001400_factory_self_audit` | `audit_factory_health`: eight telemetry domains read as evidence, each scored by a stated rule or reported unmeasured with a reason; overall score over measured domains only, with confidence and abstention | `improvement-ledger.behavior` |
 
 What they do **not** do:
 
