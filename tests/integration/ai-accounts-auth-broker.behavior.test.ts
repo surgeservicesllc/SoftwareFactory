@@ -377,6 +377,33 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     )).rejects.toThrow(/foreign key/i);
   });
 
+  it("cancels an in-flight sign-in without touching the account or its credential", async () => {
+    const accountId = await createAccount("Claude account 8", "claude_8");
+    const sessionId = await openSession(accountId);
+
+    await assumeRole(db, ownerId);
+    const cancelled = await db.query<{ cancel_ai_auth_session: boolean }>(
+      "select public.cancel_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, sessionId],
+    );
+    expect(cancelled.rows[0].cancel_ai_auth_session).toBe(true);
+    // Cancelling twice is a no-op, not an error — the person double-clicked.
+    const again = await db.query<{ cancel_ai_auth_session: boolean }>(
+      "select public.cancel_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, sessionId],
+    );
+    expect(again.rows[0].cancel_ai_auth_session).toBe(false);
+    await resetRole(db);
+
+    expect(await sessionStatus(sessionId)).toBe("revoked");
+    const account = await db.query<{ status: string }>(
+      "select status from public.ai_accounts where id = $1",
+      [accountId],
+    );
+    // The account is untouched: cancelling a sign-in is not disconnecting.
+    expect(account.rows[0].status).toBe("pending");
+  });
+
   it("demotes an account to needs_reauth when its credential stops working", async () => {
     const accountId = await createAccount("Claude account 7", "claude_7");
     const marked = await db.query<{ mark_ai_account_needs_reauth: boolean }>(
