@@ -22,6 +22,18 @@ on:
       confirm:
         description: 'Type "apply" to run against the production project'
         required: true
+      scope:
+        description: >-
+          "all" pushes every outstanding migration; "broker-functions"
+          applies only the idempotent function-only broker migrations
+          (20260816000400/000500) and records them in history — the
+          surgical path when the full push is blocked by ledger drift.
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - broker-functions
 
 permissions:
   contents: read
@@ -95,32 +107,77 @@ jobs:
             npx supabase migration list --db-url "$DB_URL"
           fi
 
-      - name: Repair the renamed graph-engineering ledger row (idempotent)
-        # If the remote still records 20260814002000, move that history to the
-        # file's current name 20260814000100. If it was already repaired, both
-        # greps miss and this step is a no-op — never a failure.
+      - name: Repair stale ledger rows (idempotent)
+        # Two known history-only repairs, each applied only when the live
+        # listing shows the stale row. 20260814002000 was renamed to
+        # 20260814000100; remote-only 20260814000200 is the pre-split name
+        # of 20260814000210/000220/000250, all three of which the remote
+        # ledger already records — reverting the stale row is bookkeeping,
+        # not DDL. If neither row is present, this is a no-op.
         run: |
           if [ "$MODE" = "token" ]; then
             LIST=$(npx supabase migration list --linked)
           else
             LIST=$(npx supabase migration list --db-url "$DB_URL")
           fi
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status "$1" "$2"
+            else
+              npx supabase migration repair --status "$1" "$2" --db-url "$DB_URL"
+            fi
+          }
           if echo "$LIST" | grep -q "20260814002000"; then
             echo "Repairing: 20260814002000 -> 20260814000100 (history only, no DDL)"
-            if [ "$MODE" = "token" ]; then
-              npx supabase migration repair --status reverted 20260814002000
-              npx supabase migration repair --status applied 20260814000100
-            else
-              npx supabase migration repair --status reverted 20260814002000 --db-url "$DB_URL"
-              npx supabase migration repair --status applied 20260814000100 --db-url "$DB_URL"
-            fi
+            repair reverted 20260814002000
+            repair applied 20260814000100
           else
-            echo "No 20260814002000 row found; repair not needed."
+            echo "No 20260814002000 row found; that repair is not needed."
+          fi
+          if echo "$LIST" | grep -q '` `.*20260814000200'; then
+            echo "Reverting stale remote-only row 20260814000200 (its DDL lives on as 000210/000220/000250, all recorded)"
+            repair reverted 20260814000200
+          else
+            echo "No remote-only 20260814000200 row found; that repair is not needed."
           fi
 
-      - name: Push the outstanding migrations
+      - name: Apply the broker function migrations surgically (scope=broker-functions)
+        # Both files are purely `create or replace function` plus grants —
+        # idempotent by construction — so applying them directly cannot
+        # disturb existing schema. psql is preinstalled on the runner, and
+        # Supabase's DDL event trigger reloads the PostgREST schema cache
+        # so the functions become callable immediately. History rows are
+        # recorded so the ledger stays truthful.
+        if: ${{ inputs.scope == 'broker-functions' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          for FILE in \
+            supabase/migrations/20260816000400_inspect_ai_auth_sessions.sql \
+            supabase/migrations/20260816000500_remove_ai_account.sql
+          do
+            echo "Applying ${FILE}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          done
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          repair 20260816000400
+          repair 20260816000500
+          echo "Broker function migrations applied and recorded."
+
+      - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
         # in a non-interactive shell it is simply unread.
+        if: ${{ inputs.scope != 'broker-functions' }}
         run: |
           if [ "$MODE" = "token" ]; then
             echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
