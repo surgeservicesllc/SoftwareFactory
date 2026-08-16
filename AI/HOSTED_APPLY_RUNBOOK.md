@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 25**, listed in the measured section below. The repository total is 89 migration
+**The current total is 26**, listed in the measured section below. The repository total is 90 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
 outstanding. (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
