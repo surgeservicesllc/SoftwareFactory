@@ -36,6 +36,16 @@ export type AiAccountConnectProps = {
   onConnected: (accountId: string) => Promise<void> | void;
   /** The person chose the manual command path instead. */
   onFallback: () => void;
+  /**
+   * The broker could not even start a session — its backend is not available
+   * here (migration not applied, or the endpoint failed outright). When set,
+   * the caller degrades to its own path immediately and the person never
+   * sees an error for a button they clicked once; when absent, the failed
+   * state renders with the reason. The distinction matters: a sign-in that
+   * failed MIDWAY is a real event worth showing, but "could not start" on
+   * the first click must never be a dead end.
+   */
+  onUnavailable?: () => void;
   /** The person cancelled out of the sign-in entirely. */
   onClose: () => void;
 };
@@ -60,6 +70,7 @@ export function AiAccountConnect({
   accountId,
   onConnected,
   onFallback,
+  onUnavailable,
   onClose,
 }: AiAccountConnectProps) {
   const [phase, setPhase] = useState<Phase>("starting");
@@ -156,6 +167,14 @@ export function AiAccountConnect({
         error?: { message?: string };
       };
       if (!response.ok || !body.sessionId) {
+        // Could not even start: the broker's backend is not available here.
+        // A person who clicked one button must not meet an error for it —
+        // degrade to the caller's own path when one exists.
+        if (onUnavailable) {
+          doneRef.current = true;
+          onUnavailable();
+          return;
+        }
         setNotice(body.error?.message ?? "The sign-in could not be started.");
         setPhase("failed");
         return;
@@ -167,10 +186,15 @@ export function AiAccountConnect({
       pollRef.current = window.setInterval(() => void readSession(sessionId), POLL_MS);
       void readSession(sessionId);
     } catch {
+      if (onUnavailable) {
+        doneRef.current = true;
+        onUnavailable();
+        return;
+      }
       setNotice("The sign-in could not be started.");
       setPhase("failed");
     }
-  }, [accountId, providerId, readSession, stopPolling]);
+  }, [accountId, onUnavailable, providerId, readSession, stopPolling]);
 
   useEffect(() => {
     // Deferred a tick so the effect body itself sets no state — the kick-off

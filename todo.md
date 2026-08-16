@@ -77,6 +77,20 @@ priority queue, and evidence for items closed by the loop.
 
 ### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
 
+**LIVE DEFECT (owner report + screenshot, 2026-08-16 15:22Z) — FIXED SAME
+HOUR:** clicking Claude in production showed "The Claude sign-in did not
+finish — The sign-in could not be started" — the broker backend is not
+available on hosted (its migrations/worker are among the owner-gated go-live
+steps), and the UI surfaced that as a dead-end error tile requiring another
+click. Fix: `AiAccountConnect` gained `onUnavailable` — when the broker
+cannot even START a session, the console degrades to the command flow
+automatically (zero extra clicks, no error tile), exactly as if the broker
+had never been offered; mid-journey failures (worker/timeout) still render
+honestly with Start again. The AI Accounts panel's Reconnect keeps the
+error tile (it has no command fallback). Console test now pins the
+automatic degrade: broker 503 → `connect.mts claude` command visible with
+no error and no second click.
+
 **MERGED TO MAIN 2026-08-16 14:47Z:** PR #136 "BotBuild foundation: AI
 accounts, auth broker, worker runner, unbounded slots, auto-completing UI"
 squash-merged as `859ceed` with both real CI checks green on head `8d08307`

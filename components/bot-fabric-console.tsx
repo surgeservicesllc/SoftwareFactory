@@ -2267,6 +2267,13 @@ function SubscriptionQuickConnect({
           setBrokerActive(false);
           void start(connectedSlots);
         }}
+        // The broker backend being unavailable must never cost the person a
+        // click: the command flow starts by itself, exactly as if the broker
+        // had never been offered.
+        onUnavailable={() => {
+          setBrokerActive(false);
+          void start(connectedSlots);
+        }}
         onClose={() => setBrokerActive(false)}
       />
     );
