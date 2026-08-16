@@ -107,8 +107,15 @@ async function main() {
 
   // The verification sweep: every connected account's claim re-tested against
   // the vault (row exists, seal opens, shape matches). Shape-level only — a
-  // pass never asserts the provider still honors the token.
-  const sweep = await verifyStoredAccounts(store);
+  // pass never asserts the provider still honors the token. And never fatal:
+  // a sweep that cannot read must not take down sign-in coverage — the first
+  // live connected account exposed exactly that, killing every worker at
+  // startup while both providers' Connect buttons starved.
+  const sweep = await verifyStoredAccounts(store).catch((error) => {
+    const message = error instanceof Error ? error.message : "unexpected error";
+    process.stdout.write(`Verification sweep skipped: ${message}\n`);
+    return { verified: 0, demoted: 0 };
+  });
   if (sweep.verified > 0 || sweep.demoted > 0) {
     process.stdout.write(
       `Verified ${sweep.verified} account(s); demoted ${sweep.demoted} to needs_reauth.\n`,
