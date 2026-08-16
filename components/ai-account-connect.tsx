@@ -347,6 +347,31 @@ export function AiAccountConnect({
     );
   }
 
+  // A worker that never picks the session up must not read as progress. After
+  // the stall window the spinner stops pretending: what happened, that
+  // nothing broke, and the two honest moves.
+  if (stalled && phase === "waiting_worker") {
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+        <h3 className="text-lg font-semibold text-[var(--text)]">
+          {providerLabel} sign-in isn&apos;t responding yet
+        </h3>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          The secure service that runs {providerLabel} sign-ins hasn&apos;t picked this up.
+          Nothing was changed — you can try again, or come back in a few minutes.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => void start()} className="btn btn-primary">
+            Try Again
+          </button>
+          <button type="button" onClick={() => void cancel()} className="btn btn-secondary">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const waitingForCode = phase === "awaiting_user" || phase === "submitting_code";
 
   return (
@@ -404,13 +429,6 @@ export function AiAccountConnect({
 
       {notice && waitingForCode ? (
         <p className="mt-2 text-xs text-amber-600" aria-live="polite">{notice}</p>
-      ) : null}
-
-      {stalled && phase === "waiting_worker" ? (
-        <p className="mt-3 text-sm text-[var(--text-muted)]" aria-live="polite">
-          This is taking longer than usual. You can keep waiting, or try again in a
-          few minutes.
-        </p>
       ) : null}
 
       <div className="mt-4">
