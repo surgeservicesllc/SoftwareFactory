@@ -80,9 +80,9 @@ nothing can withdraw a change that did not.
 | 29 | Cannot self-approve protected RED changes | **PASS** | RED resolves owner-only, outranking controls, ceiling and approval. |
 | 30 | Cannot modify frozen policies to improve its own score | **PASS (loop 18)** | `lib/factory/constitution.ts`: the frozen policies, versioned (`factory-constitution-v1`), extended with the three factory-level rules (zero-token, append-only evidence, constitution-immutable-to-subjects), judging every subject including `self_improvement_proposal`. Every check names the version that judged it, so a future improvement ledger records *under which constitution* a proposal was allowed. A subject modifying the constitution is refused by name for every subject in the vocabulary; `lib/autonomy/diff-risk.ts` continues to classify authority-widening diffs RED on content. Pinned in `factory-constitution.test.ts`. |
 | 31 | Self-improvement can be disabled / emergency-stopped | **PARTIAL (improved loop 18)** | The subject now exists and the constitution refuses it under an active emergency stop (proven by test). What still does not exist is a running self-improvement loop for the stop to halt — that arrives with the improvement ledger and detectors, and this gate is already waiting for it. |
-| 32 | Before/after metrics determine whether improvement helped | **PARTIAL (loop 19)** | The structure is now enforced: a proposal cannot exist without a baseline, an evaluation cannot exist without a measured after-state and an outcome against the prediction, a second evaluation is refused as score shopping, and both live in one append-only lifecycle. What remains absent is the *capture and comparison machinery* — nothing yet reads the telemetry tables into a baseline or computes the outcome; today a human measures and records. That is the next ordered step. |
+| 32 | Before/after metrics determine whether improvement helped | **PASS (loop 20)** | The machinery now exists and the system does the determining: `capture_improvement_baseline` reads real telemetry over a fourteen-day window (unmeasured sources named in `unavailable`, never zeroed), and `evaluate_improvement_from_telemetry` recaptures, compares metric by metric against a fixed direction table, derives improved/no_change/regressed, and refuses to guess when nothing is comparable. All three paths proven against the migrated chain, including a real regression (an incident opens between baseline and evaluation). Telemetry stays thin until the factory does live work; abstention-by-refusal is the honest answer to that, and it is tested. |
 | 33 | Failed improvement is rejected/rolled back | **PARTIAL (loop 19)** | `regressed` is a first-class recorded outcome with a mandatory lesson, and rejection is a first-class decision with a mandatory reason. Rollback execution remains absent by design (Phase 1D/1E posture). |
-| 34 | Successful improvement records measurable evidence | **PARTIAL (loop 19)** | The evaluation entry records the measured after-state against the proposal's baseline and prediction, append-only. Awaits the capture machinery (32) for the numbers to come from telemetry rather than hands. |
+| 34 | Successful improvement records measurable evidence | **PASS (loop 20)** | `evaluate_improvement_from_telemetry` records the recaptured metrics, the per-metric comparisons, and the derivation counts in the append-only evaluation entry — the numbers come from telemetry, not hands, and the single-evaluation rule keeps them from being reshopped. |
 | 35 | Improvement history is durable/auditable | **PARTIAL** | `autonomy_decisions` is append-only with RLS and rejects unexplained refusals — the right precedent. No improvement-history table. |
 | 36 | RLS / security / project isolation passes | **PASS** | 0 of 103 public tables missing RLS/FORCE RLS, verified on a real PostgreSQL 16.13 cluster; `service_role` on exactly four ingress tables. |
 | 37 | No paid AI-token dependency | **PASS** | `lib/providers/claude-cli-transport.ts` reaches Claude on the owner's subscription with a verified live canary; Phase 1C is zero-token subscription Codex. No paid key is a configuration field on either path. |
@@ -92,10 +92,10 @@ nothing can withdraw a change that did not.
 Re-scored 2026-08-15 (master loop iteration 18) after the versioned
 constitution landed as the plan's step 1:
 
-- PASS: 10 of 37
-- PARTIAL: 20 of 37
+- PASS: 12 of 37
+- PARTIAL: 18 of 37
 - FAIL (absent): 7 of 37
-- Weighted completion: **≈47%**
+- Weighted completion: **≈53%**
 
 Loop 19 landed the improvement ledger (plan step 2): the
 proposal/decision/implementation/evaluation lifecycle is durable,

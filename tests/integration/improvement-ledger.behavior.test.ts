@@ -243,4 +243,119 @@ describe("the improvement ledger", () => {
     expect(row.rows[0]!.project_id).toBeNull();
     await db.exec("reset role");
   });
+
+  it("captures a baseline from real telemetry, naming what it cannot measure", async () => {
+    await asRole("authenticated", ownerId);
+    const captured = await db.query<{ baseline: {
+      metrics: Record<string, number>;
+      unavailable: string[];
+      window: { days: number };
+    } }>(
+      "select public.capture_improvement_baseline($1::uuid) as baseline",
+      [projectId],
+    );
+    const baseline = captured.rows[0]!.baseline;
+
+    // Streams nothing has ever written are named, never zeroed.
+    expect(baseline.unavailable.sort()).toEqual(["deployments", "runs", "validations"]);
+    expect(baseline.metrics).not.toHaveProperty("runsTotal");
+    // Zero open incidents is a real measurement: the table exists and is empty
+    // in the honest sense, unlike a telemetry stream with no writer yet.
+    expect(baseline.metrics.incidentsOpen).toBe(0);
+    expect(baseline.metrics.schedulingWithheld).toBe(0);
+    expect(baseline.window.days).toBe(14);
+    await db.exec("reset role");
+  });
+
+  it("derives the outcome from telemetry, and refuses to guess when nothing compares", async () => {
+    await asRole("authenticated", ownerId);
+    // A proposal whose baseline claims two open incidents: current telemetry
+    // says zero, so the derived outcome is an improvement.
+    const improvedProposal = await db.query<{ id: string }>(
+      `select public.record_improvement_proposal(
+         $1::uuid, 'Close out incident backlog', 'Resolve the two open production incidents.',
+         'Open incidents drop to zero and stay there.',
+         '{"metrics": {"incidentsOpen": 2}}'::jsonb,
+         '["Zero open incidents"]'::jsonb, 'factory-constitution-v1'
+       ) as id`,
+      [projectId],
+    );
+    await db.query(
+      "select public.record_improvement_decision($1::uuid, 'accepted', 'Baseline is the incident table itself.')",
+      [improvedProposal.rows[0]!.id],
+    );
+    const evaluated = await db.query<{ outcome: string }>(
+      `select outcome from public.evaluate_improvement_from_telemetry(
+         $1::uuid, 'The backlog cleared and the telemetry showed it without hands on the numbers.'
+       )`,
+      [improvedProposal.rows[0]!.id],
+    );
+    expect(evaluated.rows[0]!.outcome).toBe("improved");
+
+    // A proposal whose baseline names only a stream nothing has written:
+    // nothing is comparable, and the machinery refuses to invent an outcome.
+    const incomparable = await db.query<{ id: string }>(
+      `select public.record_improvement_proposal(
+         $1::uuid, 'Cut failed runs', 'Reduce failed worker runs.',
+         'Failed runs drop by half.',
+         '{"metrics": {"runsFailed": 6}}'::jsonb,
+         '["Failed runs halve"]'::jsonb, 'factory-constitution-v1'
+       ) as id`,
+      [projectId],
+    );
+    await db.query(
+      "select public.record_improvement_decision($1::uuid, 'accepted', 'Worth trying.')",
+      [incomparable.rows[0]!.id],
+    );
+    await expect(
+      db.query(
+        "select outcome from public.evaluate_improvement_from_telemetry($1::uuid, 'No lesson yet.')",
+        [incomparable.rows[0]!.id],
+      ),
+    ).rejects.toThrow(/nothing can be compared/);
+    await db.exec("reset role");
+  });
+
+  it("reports a regression as a regression, with the lesson recorded", async () => {
+    // The world gets worse between baseline and evaluation: an incident opens.
+    await asRole("authenticated", ownerId);
+    const proposal = await db.query<{ id: string }>(
+      `select public.record_improvement_proposal(
+         $1::uuid, 'Keep incidents at zero', 'Tighten the deploy validation gate.',
+         'Open incidents stay at zero.',
+         '{"metrics": {"incidentsOpen": 0}}'::jsonb,
+         '["No new incidents"]'::jsonb, 'factory-constitution-v1'
+       ) as id`,
+      [projectId],
+    );
+    await db.query(
+      "select public.record_improvement_decision($1::uuid, 'accepted', 'The gate is worth tightening.')",
+      [proposal.rows[0]!.id],
+    );
+
+    await db.exec("reset role");
+    await db.query(
+      `insert into public.incidents (organization_id, project_id, title, severity, status)
+       values ($1, $2, 'Health endpoint failing', 'high', 'open')`,
+      [organizationId, projectId],
+    );
+
+    await asRole("authenticated", ownerId);
+    const evaluated = await db.query<{ outcome: string; compared: unknown }>(
+      `select outcome, compared from public.evaluate_improvement_from_telemetry(
+         $1::uuid, 'The gate did not hold; the incident opened anyway. The validation set needs the probe case.'
+       )`,
+      [proposal.rows[0]!.id],
+    );
+    expect(evaluated.rows[0]!.outcome).toBe("regressed");
+
+    const lifecycle = await db.query<{ outcome: string | null; lesson: string | null }>(
+      `select outcome, lesson from public.improvement_ledger
+       where proposal_id = $1 and entry_type = 'evaluation'`,
+      [proposal.rows[0]!.id],
+    );
+    expect(lifecycle.rows[0]!.outcome).toBe("regressed");
+    expect(lifecycle.rows[0]!.lesson).toContain("did not hold");
+    await db.exec("reset role");
+  });
 });
