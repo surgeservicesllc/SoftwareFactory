@@ -253,11 +253,16 @@ describe("SECURITY DEFINER functions", () => {
       "heartbeat_phase1c_run",
       "heartbeat_phase1c_worker",
       "jsonb_has_sensitive_keys",
+      // The verification sweep's two hands: enumerate connected subscription
+      // accounts, and record a shape-level pass. Demotion is the function
+      // below; a pass is a timestamp, not an event.
+      "list_ai_accounts_for_verification",
       // Purpose names only — the unbounded-accounts overlay has to discover
       // which slots exist before reading them; ciphertext still comes one
       // purpose at a time through read_provider_credential.
       "list_provider_credential_purposes",
       "mark_ai_account_needs_reauth",
+      "mark_ai_account_verified",
       "mark_ai_auth_session_verifying",
       "mark_github_connection_lost",
       "process_github_webhook_delivery",

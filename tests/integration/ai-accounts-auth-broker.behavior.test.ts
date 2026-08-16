@@ -458,4 +458,50 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(account.rows[0].status).toBe("needs_reauth");
     expect(account.rows[0].last_error).toContain("refused");
   });
+
+  it("enumerates only connected accounts for verification, and a pass is a timestamp", async () => {
+    // From the tests above, at least one account is connected (the happy
+    // walk) and at least one is needs_reauth (the demotion just before).
+    const listed = await db.query<{
+      verifiable_account_id: string; verifiable_purpose: string;
+    }>("select * from public.list_ai_accounts_for_verification()");
+    const purposes = listed.rows.map((row) => row.verifiable_purpose);
+    expect(purposes).toContain("claude");
+    // The demoted account is not swept: a seal-open pass cannot disprove a
+    // provider refusal, so needs_reauth is repaired by a person, not a sweep.
+    expect(purposes).not.toContain("claude_7");
+
+    const connectedId = listed.rows.find((row) => row.verifiable_purpose === "claude")!
+      .verifiable_account_id;
+    const before = await db.query<{ last_verified_at: string }>(
+      "select last_verified_at from public.ai_accounts where id = $1", [connectedId],
+    );
+    const marked = await db.query<{ mark_ai_account_verified: boolean }>(
+      "select public.mark_ai_account_verified($1::uuid, $2::uuid)",
+      [organizationId, connectedId],
+    );
+    expect(marked.rows[0].mark_ai_account_verified).toBe(true);
+    const after = await db.query<{ last_verified_at: string }>(
+      "select last_verified_at from public.ai_accounts where id = $1", [connectedId],
+    );
+    expect(new Date(after.rows[0].last_verified_at).getTime())
+      .toBeGreaterThanOrEqual(new Date(before.rows[0].last_verified_at).getTime());
+
+    // And a non-connected account refuses the pass rather than lying.
+    const demoted = await db.query<{ id: string }>(
+      "select id from public.ai_accounts where credential_purpose = 'claude_7' and organization_id = $1",
+      [organizationId],
+    );
+    const refused = await db.query<{ mark_ai_account_verified: boolean }>(
+      "select public.mark_ai_account_verified($1::uuid, $2::uuid)",
+      [organizationId, demoted.rows[0].id],
+    );
+    expect(refused.rows[0].mark_ai_account_verified).toBe(false);
+
+    // Browser roles cannot call either function.
+    await assumeRole(db, ownerId);
+    await expect(db.query("select * from public.list_ai_accounts_for_verification()"))
+      .rejects.toThrow(/permission denied/);
+    await resetRole(db);
+  });
 });

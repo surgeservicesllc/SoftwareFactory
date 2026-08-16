@@ -30,6 +30,13 @@ export type ClaimedAuthSession = Readonly<{
   purpose: string;
 }>;
 
+export type VerifiableAccount = Readonly<{
+  organizationId: string;
+  accountId: string;
+  provider: string;
+  purpose: string;
+}>;
+
 export type AuthBrokerStore = Readonly<{
   claim: (workerId: string) => Promise<ClaimedAuthSession | null>;
   reportLoginUrl: (sessionId: string, loginUrl: string) => Promise<boolean>;
@@ -38,6 +45,12 @@ export type AuthBrokerStore = Readonly<{
   complete: (sessionId: string, sealedEnvelope: string) => Promise<void>;
   fail: (sessionId: string, reason: string) => Promise<void>;
   expireStale: () => Promise<number>;
+  listAccountsForVerification: () => Promise<VerifiableAccount[]>;
+  readStoredCredential: (organizationId: string, purpose: string) => Promise<string | null>;
+  markAccountVerified: (organizationId: string, accountId: string) => Promise<boolean>;
+  markAccountNeedsReauth: (
+    organizationId: string, accountId: string, reason: string,
+  ) => Promise<boolean>;
 }>;
 
 /**
@@ -139,6 +152,90 @@ export async function runAuthBrokerOnce(
   }
 }
 
+/**
+ * What "this credential is the right kind" means per provider. Shape only:
+ * the sweep proves the seal opens and the contents look like the credential
+ * the account claims, never that the provider still honors it — that verdict
+ * comes from real use, and arrives through `markAccountNeedsReauth`.
+ */
+export function credentialShapeProblem(provider: string, plaintext: string): string | null {
+  if (provider === "anthropic") {
+    return /^sk-ant-[A-Za-z0-9_-]{24,}$/.test(plaintext.trim())
+      ? null
+      : "The stored Claude credential is not shaped like a subscription token.";
+  }
+  if (provider === "openai") {
+    try {
+      const parsed: unknown = JSON.parse(plaintext);
+      return parsed !== null && typeof parsed === "object"
+        ? null
+        : "The stored Codex credential is not the auth file the CLI writes.";
+    } catch {
+      return "The stored Codex credential is not the auth file the CLI writes.";
+    }
+  }
+  // An unknown provider's shape is not checkable; that is a pass, not a fail.
+  return null;
+}
+
+export type VerificationSweepResult = Readonly<{
+  verified: number;
+  demoted: number;
+}>;
+
+/**
+ * Re-tests every connected subscription account's claim against the vault:
+ * the row exists, the seal opens, the shape matches. A pass refreshes
+ * `last_verified_at`; a named failure demotes to needs_reauth with a reason
+ * a person can act on. Plaintext lives only inside this function.
+ */
+export async function verifyStoredAccounts(
+  store: AuthBrokerStore,
+  open: (sealed: string, context: { organizationId: string; purpose: string }) => string
+    = (sealed, context) => openSecret(sealed, context),
+): Promise<VerificationSweepResult> {
+  let verified = 0;
+  let demoted = 0;
+
+  for (const account of await store.listAccountsForVerification()) {
+    const demote = async (reason: string) => {
+      await store.markAccountNeedsReauth(account.organizationId, account.accountId, reason);
+      demoted += 1;
+    };
+
+    const sealed = await store.readStoredCredential(account.organizationId, account.purpose);
+    if (!sealed) {
+      await demote("The account says connected but no stored credential exists. Sign in again.");
+      continue;
+    }
+
+    let plaintext: string;
+    try {
+      plaintext = open(sealed, {
+        organizationId: account.organizationId,
+        purpose: account.purpose,
+      });
+    } catch {
+      await demote(
+        "The stored credential cannot be opened; it may have been sealed under a rotated key. Sign in again.",
+      );
+      continue;
+    }
+
+    const problem = credentialShapeProblem(account.provider, plaintext);
+    if (problem) {
+      await demote(`${problem} Sign in again.`);
+      continue;
+    }
+
+    if (await store.markAccountVerified(account.organizationId, account.accountId)) {
+      verified += 1;
+    }
+  }
+
+  return { verified, demoted };
+}
+
 // ---------------------------------------------------------------------------
 // Supabase store
 // ---------------------------------------------------------------------------
@@ -230,6 +327,56 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
     const { data, error } = await this.client.rpc("expire_ai_auth_sessions");
     if (error) throw new Error("Expiring stale sessions failed.");
     return typeof data === "number" ? data : 0;
+  };
+
+  listAccountsForVerification = async (): Promise<VerifiableAccount[]> => {
+    const { data, error } = await this.client.rpc("list_ai_accounts_for_verification");
+    if (error) throw new Error("Listing accounts for verification failed.");
+    return ((data ?? []) as Array<{
+      verifiable_organization_id: string;
+      verifiable_account_id: string;
+      verifiable_provider: string;
+      verifiable_purpose: string;
+    }>).map((row) => ({
+      organizationId: row.verifiable_organization_id,
+      accountId: row.verifiable_account_id,
+      provider: row.verifiable_provider,
+      purpose: row.verifiable_purpose,
+    }));
+  };
+
+  readStoredCredential = async (
+    organizationId: string, purpose: string,
+  ): Promise<string | null> => {
+    const { data, error } = await this.client.rpc("read_provider_credential", {
+      p_organization_id: organizationId,
+      p_purpose: purpose,
+    });
+    if (error) throw new Error("Reading the stored credential failed.");
+    return typeof data === "string" && data.length > 0 ? data : null;
+  };
+
+  markAccountVerified = async (
+    organizationId: string, accountId: string,
+  ): Promise<boolean> => {
+    const { data, error } = await this.client.rpc("mark_ai_account_verified", {
+      p_organization_id: organizationId,
+      p_ai_account_id: accountId,
+    });
+    if (error) throw new Error("Recording the verification failed.");
+    return data === true;
+  };
+
+  markAccountNeedsReauth = async (
+    organizationId: string, accountId: string, reason: string,
+  ): Promise<boolean> => {
+    const { data, error } = await this.client.rpc("mark_ai_account_needs_reauth", {
+      p_organization_id: organizationId,
+      p_ai_account_id: accountId,
+      p_reason: reason,
+    });
+    if (error) throw new Error("Recording the demotion failed.");
+    return data === true;
   };
 }
 

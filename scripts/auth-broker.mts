@@ -4,6 +4,7 @@ import {
   productionAuthBrokerDependencies,
   runAuthBrokerOnce,
   SupabaseAuthBrokerStore,
+  verifyStoredAccounts,
 } from "@/lib/worker/auth-broker";
 
 /**
@@ -49,6 +50,16 @@ async function main() {
   const expired = await store.expireStale();
   if (expired > 0) {
     process.stdout.write(`Marked ${expired} stale sign-in session(s) expired.\n`);
+  }
+
+  // The verification sweep: every connected account's claim re-tested against
+  // the vault (row exists, seal opens, shape matches). Shape-level only — a
+  // pass never asserts the provider still honors the token.
+  const sweep = await verifyStoredAccounts(store);
+  if (sweep.verified > 0 || sweep.demoted > 0) {
+    process.stdout.write(
+      `Verified ${sweep.verified} account(s); demoted ${sweep.demoted} to needs_reauth.\n`,
+    );
   }
 
   const deadline = Date.now() + env.SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS;
