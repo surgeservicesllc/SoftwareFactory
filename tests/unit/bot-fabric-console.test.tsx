@@ -176,8 +176,10 @@ describe("BotFabricConsole", () => {
       .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
     expect(provisionBody[0]).toMatchObject({ provider: "anthropic", credential: "subscription" });
 
-    // Many Claude bots: the follow-up action repeats the finish.
+    // Many Claude bots: the follow-up action repeats the finish — and a
+    // second account can be signed in alongside the first.
     expect(screen.getByRole("button", { name: /add another claude bot/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /connect another claude account/i })).toBeInTheDocument();
   });
 
   it("connects Codex the same way: its own sign-in, then a Ready bot", async () => {

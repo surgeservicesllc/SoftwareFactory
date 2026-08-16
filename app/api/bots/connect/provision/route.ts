@@ -33,7 +33,7 @@ const requestSchema = z.object({
    * subscription credential ("subscription"). Resolved against the catalog
    * here so an arbitrary variable name can never arrive from the browser.
    */
-  credential: z.enum(["default", "subscription"]).default("default"),
+  credential: z.enum(["default", "subscription", "subscription_2", "subscription_3"]).default("default"),
   /** Create a further numbered bot even when one already exists. */
   additional: z.boolean().default(false),
 }).strict();
@@ -51,7 +51,8 @@ export async function POST(request: Request) {
     }
 
     const provider = findBotProvider(parsed.data.provider);
-    if (parsed.data.credential === "subscription" && !provider?.subscriptionCredentialRef) {
+    const wantsSubscription = parsed.data.credential.startsWith("subscription");
+    if (wantsSubscription && !provider?.subscriptionCredentialRef) {
       return jsonNoStore(
         {
           error: {
@@ -62,10 +63,18 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const options: ProvisionOptions = parsed.data.credential === "subscription"
+    // "subscription" is account slot 1 (the base variable); "subscription_2"
+    // and "subscription_3" are the suffixed slot variables. The browser only
+    // ever names an enum value — the variable itself comes from the catalog.
+    const slotSuffix = parsed.data.credential === "subscription_2"
+      ? "_2"
+      : parsed.data.credential === "subscription_3"
+        ? "_3"
+        : "";
+    const options: ProvisionOptions = wantsSubscription
       ? {
           additional: parsed.data.additional,
-          credentialRef: provider?.subscriptionCredentialRef ?? null,
+          credentialRef: `${provider?.subscriptionCredentialRef}${slotSuffix}`,
         }
       : { additional: parsed.data.additional };
 

@@ -69,6 +69,16 @@ describe("POST /api/bots/connect/provision", () => {
     expect(ensureProviderBot).not.toHaveBeenCalled();
   });
 
+  it("resolves account slots to the suffixed subscription variables, server-side", async () => {
+    const response = await POST(post({ provider: "anthropic", credential: "subscription_2" }));
+
+    expect(response.status).toBe(200);
+    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "anthropic", {
+      additional: false,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2",
+    });
+  });
+
   it("passes the additional flag through so many bots can be connected", async () => {
     const response = await POST(post({
       provider: "anthropic", credential: "subscription", additional: true,

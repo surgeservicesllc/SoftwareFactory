@@ -2123,6 +2123,10 @@ function SubscriptionQuickConnect({
   const [command, setCommand] = useState("");
   const [detail, setDetail] = useState("");
   const [readyBots, setReadyBots] = useState(0);
+  // Which account slot the flow is currently connecting (0-based). A ref, not
+  // state: the polling interval must always read the live value.
+  const slotRef = useRef(0);
+  const [connectedSlots, setConnectedSlots] = useState(0);
   const pollRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -2138,11 +2142,12 @@ function SubscriptionQuickConnect({
       const response = await fetch("/api/bots/providers", { cache: "no-store" });
       if (!response.ok) return false;
       const body = (await response.json()) as {
-        providers?: { id: string; subscriptionReady?: boolean }[];
+        providers?: { id: string; subscriptionReady?: boolean; subscriptionSlots?: boolean[] }[];
       };
-      return Boolean(
-        body.providers?.find((entry) => entry.id === providerId)?.subscriptionReady,
-      );
+      const entry = body.providers?.find((candidate) => candidate.id === providerId);
+      const slot = slotRef.current;
+      // Slot-aware when the response carries slots; the base flag otherwise.
+      return Boolean(entry?.subscriptionSlots?.[slot] ?? (slot === 0 && entry?.subscriptionReady));
     } catch {
       return false;
     }
@@ -2150,15 +2155,21 @@ function SubscriptionQuickConnect({
 
   const provision = useCallback(async (additional: boolean) => {
     setPhase("provisioning");
+    const slot = slotRef.current;
     try {
       const response = await fetch("/api/bots/connect/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: providerId, credential: "subscription", additional }),
+        body: JSON.stringify({
+          provider: providerId,
+          credential: slot === 0 ? "subscription" : `subscription_${slot + 1}`,
+          additional,
+        }),
       });
       const body = (await response.json()) as { outcome?: string };
       if (!response.ok) throw new Error();
       setReadyBots((count) => count + (body.outcome === "created" ? 1 : 0));
+      setConnectedSlots((count) => Math.max(count, slot + 1));
       await onReady();
       setPhase("ready");
     } catch {
@@ -2177,7 +2188,8 @@ function SubscriptionQuickConnect({
     return true;
   }, [isSignedIn, provision, stopPolling]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (slot = 0) => {
+    slotRef.current = slot;
     setPhase("starting");
     setDetail("");
     // Already signed in from before? Then this is genuinely one click.
@@ -2186,7 +2198,9 @@ function SubscriptionQuickConnect({
       const response = await fetch("/api/bots/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ purpose }),
+        // Slot 1 is the base purpose; further account slots are suffixed and
+        // sealed separately, so several accounts stay signed in at once.
+        body: JSON.stringify({ purpose: slot === 0 ? purpose : `${purpose}_${slot + 1}` }),
       });
       const body = (await response.json()) as {
         command?: string;
@@ -2223,14 +2237,31 @@ function SubscriptionQuickConnect({
             {readyBots} {provider.label} bots are connected and Ready.
           </p>
         ) : null}
-        <button
-          type="button"
-          onClick={() => void provision(true)}
-          className="btn btn-secondary btn-sm mt-3"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          Add another {provider.label} bot
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void provision(true)}
+            className="btn btn-secondary btn-sm"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            Add another {provider.label} bot
+          </button>
+          {connectedSlots < 3 ? (
+            <button
+              type="button"
+              onClick={() => void start(connectedSlots)}
+              className="btn btn-secondary btn-sm"
+            >
+              <KeyRound className="size-3.5" aria-hidden="true" />
+              Connect another {provider.label} account
+            </button>
+          ) : null}
+        </div>
+        {connectedSlots > 1 ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            {connectedSlots} {provider.label} accounts are signed in simultaneously.
+          </p>
+        ) : null}
       </div>
     );
   }

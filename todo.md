@@ -120,7 +120,8 @@ deploy completed 13:09Z, /solutions/bot-manager 200):**
   4/4 (incl. the catalog↔server-constant pin and the never-probe rule),
   console 10/10 incl. a full button→command→check→Ready walk. tsc clean,
   eslint 0 errors, adjacent suites 37/37.
-- **Iteration 2 — Codex parity (PR #TBD):** the owner asked for "the same
+- **Iteration 2 — Codex parity (PR #134, squash `5ff8d45`, CI green,
+production deploy completed 13:22Z):** the owner asked for "the same
   for codex", and the plumbing was already symmetric (`codex` purpose,
   `codex login` plan in connect.mts, `SOFTWAREFACTORY_CODEX_AUTH_JSON`
   overlay, catalog subscription ref on openai). `ClaudeQuickConnect`
@@ -132,9 +133,22 @@ deploy completed 13:09Z, /solutions/bot-manager 200):**
   Console suite 11/11 incl. a full Codex walk (button → `connect.mts codex`
   command → check → provision {provider:"openai",credential:"subscription"}
   → Ready). tsc + lint clean.
-- **Open next:** live round-trips with the owner (Claude and Codex commands,
-  bots appear Ready in production); true multi-ACCOUNT vault slots —
-  iteration 3; subscription tiles on non-empty fleets — iteration 3.
+- **Iteration 3 — multi-account slots (PR #TBD):** the vault audit settled
+  it — `purpose` is pattern-checked (`^[a-z][a-z0-9_]{1,62}$`), not
+  enum-constrained, so account slots need NO migration. Purposes
+  `claude_2/claude_3/codex_2/codex_3` (bounded) added to the connect route
+  and the connect script (same login plan as the base, sealed under its own
+  purpose); overlay maps each slot to a suffixed variable
+  (`…_OAUTH_TOKEN_2` etc.); provider status reports per-slot readiness
+  (`subscriptionSlots`); provision accepts `subscription_2/_3` resolved
+  server-side; the ready state gains "Connect another <label> account"
+  (up to 3 accounts signed in simultaneously) alongside "Add another bot".
+  Honest limitation recorded: the live worker consumes slot 1's credential
+  today — further slots store, read Ready, and are assignable; wiring slot
+  selection into worker execution is worker-side follow-up work.
+- **Open next:** live round-trips with the owner (Claude and Codex sign-ins,
+  bots appear Ready in production; second-account slot proof); subscription
+  tiles on non-empty fleets; worker-side slot selection.
 
 ### Owner goal — production Magic Link sign-in fix (2026-08-16)
 

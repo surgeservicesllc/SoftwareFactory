@@ -27,6 +27,15 @@ import { isCredentialStoreConfigured, openSecret } from "@/lib/server/secret-box
 const OVERLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
   claude: CLAUDE_AUTH_ENVIRONMENT_KEYS.oauthToken,
   codex: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
+  // Account slots: a second and third signed-in subscription per provider,
+  // each under its own purpose (the seal binds to it) and its own variable,
+  // so bots can reference distinct accounts. The live worker consumes slot 1
+  // today; further slots store, read Ready, and are assignable — wiring a
+  // slot into worker execution is a worker-side change, recorded in todo.md.
+  claude_2: `${CLAUDE_AUTH_ENVIRONMENT_KEYS.oauthToken}_2`,
+  claude_3: `${CLAUDE_AUTH_ENVIRONMENT_KEYS.oauthToken}_3`,
+  codex_2: "SOFTWAREFACTORY_CODEX_AUTH_JSON_2",
+  codex_3: "SOFTWAREFACTORY_CODEX_AUTH_JSON_3",
   // A key obtained through OAuth or pasted into the console fills the same
   // variable an operator would have set by hand, so every reader downstream —
   // probe, resolver, worker — needs no knowledge of where it came from.

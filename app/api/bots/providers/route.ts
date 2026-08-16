@@ -88,9 +88,14 @@ export async function GET(request: Request) {
         // model-list endpoints authenticate API keys, not subscription
         // tokens, and a guaranteed 401 would read as "your sign-in is bad".
         const subscriptionRef = provider.subscriptionCredentialRef;
-        const subscriptionReady = Boolean(
-          subscriptionRef && (stored[subscriptionRef] || isCredentialPresent(subscriptionRef)),
-        );
+        // Slot 1 is the base ref; slots 2 and 3 are the same variable
+        // suffixed, mirroring the account-slot purposes in the vault overlay.
+        const subscriptionSlots = subscriptionRef
+          ? [subscriptionRef, `${subscriptionRef}_2`, `${subscriptionRef}_3`].map(
+              (slotRef) => Boolean(stored[slotRef] || isCredentialPresent(slotRef)),
+            )
+          : [];
+        const subscriptionReady = subscriptionSlots.some(Boolean);
         const credentialReady = keyReady || subscriptionReady;
 
         // Only present API keys are probed. Probing an absent one is a
@@ -115,6 +120,8 @@ export async function GET(request: Request) {
           subscriptionCredentialRef: provider.subscriptionCredentialRef,
           /** True when a signed-in subscription credential is stored or set. */
           subscriptionReady,
+          /** Per-account-slot readiness: [slot 1, slot 2, slot 3]. */
+          subscriptionSlots,
           /** `verified` is the only verdict that means the bot could run. */
           probeVerdict: probe?.verdict ?? (credentialReady ? "not_probed" : "not_configured"),
           probeReason: probe?.reason ?? null,

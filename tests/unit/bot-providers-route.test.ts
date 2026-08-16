@@ -87,6 +87,21 @@ describe("GET /api/bots/providers", () => {
     expect(anthropic.probeVerdict).toBe("not_probed");
   });
 
+  it("reports per-account-slot readiness so several accounts can be signed in at once", async () => {
+    loadStoredCredentialOverlay.mockResolvedValue({
+      SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2: "second-account-token",
+    });
+
+    const anthropic = (await providerStatuses()).find(
+      (provider) => provider.id === "anthropic",
+    )! as ProviderStatus & { subscriptionSlots?: boolean[] };
+
+    expect(anthropic.subscriptionSlots).toEqual([false, true, false]);
+    // Any signed-in slot counts as connected.
+    expect(anthropic.subscriptionReady).toBe(true);
+    expect(anthropic.credentialReady).toBe(true);
+  });
+
   it("reports not configured when neither key nor subscription exists", async () => {
     const anthropic = (await providerStatuses()).find((provider) => provider.id === "anthropic")!;
 

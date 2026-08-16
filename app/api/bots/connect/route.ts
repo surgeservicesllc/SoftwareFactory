@@ -29,7 +29,14 @@ import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
 
-const PURPOSES = ["claude", "codex"] as const;
+/**
+ * `claude_2` and friends are account slots: the same login as the base
+ * purpose, stored under a distinct purpose so several subscription accounts
+ * can be signed in simultaneously. Bounded to the slots the console offers;
+ * the vault's purpose pattern (`^[a-z][a-z0-9_]{1,62}$`) admits them without
+ * any schema change.
+ */
+const PURPOSES = ["claude", "claude_2", "claude_3", "codex", "codex_2", "codex_3"] as const;
 
 const requestSchema = z.object({
   purpose: z.enum(PURPOSES),
