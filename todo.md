@@ -138,6 +138,24 @@ real cause (invalid vs expired vs different-browser-session); lifetime
 installed-but-empty: click Connect GitHub again — GitHub re-issues the
 callback for installation 153479019 and persist adopts it.
 
+**CANARY ROUND 3 — REAL CAUSES CAPTURED AND FIXED (20:16Z):** the owner
+queued "Audit Round 2" (run 8b5fdd2c, worker run 31970012582 on 3aa6cb6 —
+the first run carrying the truth-telling fix), and both real failures
+surfaced exactly as designed. (A) Run failure `worker_failed`:
+"Dependency bootstrap failed" — npm ci inside the pinned container dies
+extracting the next package's docs tree onto the bind-mounted workspace
+(TAR_ENTRY_ERROR ENOENT on node_modules/next/dist/docs/**.md, ENOTEMPTY
+cleanup); deterministic 3/3; same lockfile installs clean on plain
+runners, so it is the container/bind-mount npm extraction path. Fix:
+bootstrap retries once on a cleaned node_modules and reports both
+outputs on a double failure. (B) Recording failure 23514:
+tasks_blocked_reason_check caps blocked_reason at 1000 chars
+(20260813000900) and redactText appended "\n[TRUNCATED]" BEYOND its
+1000-char cap → 1012 chars → every long failure overflowed the
+constraint by construction. Fix: the marker now counts inside the cap.
+The stuck run recovers by lease-expiry reap → retryable attempt; the
+next scheduled worker beat claims it with both fixes aboard.
+
 **FIRST LIVE CANARY BLOCKED BY MUTE FAILURES (20:05Z, in progress):** the
 owner queued the first real command (c618be8e, YELLOW: full site audit →
 draft PR with docs/AUDIT_2026-08-16.md). The worker claimed it twice
