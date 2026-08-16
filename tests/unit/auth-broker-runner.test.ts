@@ -164,6 +164,31 @@ describe("runAuthBrokerOnce", () => {
     expect(store.fail).not.toHaveBeenCalled();
   });
 
+  it("abandons a session that is cancelled mid-drive instead of waiting out the window", async () => {
+    let statusPolls = 0;
+    const store = makeStore({
+      readRelayCode: vi.fn(async () => null),
+      readSessionStatus: vi.fn(async () => (++statusPolls >= 3 ? "revoked" : "awaiting_user")),
+    });
+    const cli = makeCli();
+    const clock = virtualClock();
+
+    const outcome = await runAuthBrokerOnce("worker-1", {
+      store,
+      startLogin: async () => cli,
+      openRelayCode: vi.fn(),
+      sealCredential: vi.fn(),
+      sleep: clock.sleep,
+      now: clock.now,
+    });
+
+    expect(outcome).toBe("failed");
+    // Abandoned quietly: the session is already terminal, nothing to mark.
+    expect(store.fail).not.toHaveBeenCalled();
+    expect(cli.submitCode).not.toHaveBeenCalled();
+    expect(cli.dispose).toHaveBeenCalled();
+  });
+
   it("fails fast when a relay code predates this worker's login", async () => {
     // A code sealed before the claim belongs to a dead worker's login — no
     // fresh login can verify it, so the session fails immediately with a

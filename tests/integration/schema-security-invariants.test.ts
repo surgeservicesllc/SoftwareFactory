@@ -270,6 +270,9 @@ describe("SECURITY DEFINER functions", () => {
       "mark_github_connection_lost",
       "process_github_webhook_delivery",
       "read_ai_auth_relay_code",
+      // Status only, never the sealed code: a worker mid-drive can notice a
+      // cancel and stop instead of blind-waiting out the relay window.
+      "read_ai_auth_session_status",
       "read_provider_credential",
       "reconcile_github_repository_grants",
       "record_phase1c_run_artifact",

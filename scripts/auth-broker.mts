@@ -29,7 +29,7 @@ const environmentSchema = z.object({
     .default("auth-broker-local"),
   /** Overall wall-clock budget; the workflow timeout is the hard stop. */
   SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS: z.coerce.number().int()
-    .min(60_000).max(40 * 60_000).default(25 * 60_000),
+    .min(60_000).max(350 * 60_000).default(25 * 60_000),
   /**
    * The commit this worker was released from. When set, the idle loop
    * compares it against the repository's current default branch and exits
