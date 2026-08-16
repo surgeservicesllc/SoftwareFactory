@@ -77,6 +77,20 @@ priority queue, and evidence for items closed by the loop.
 
 ### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
 
+**MERGED TO MAIN 2026-08-16 14:47Z:** PR #136 "BotBuild foundation: AI
+accounts, auth broker, worker runner, unbounded slots, auto-completing UI"
+squash-merged as `859ceed` with both real CI checks green on head `8d08307`
+(Lint/typecheck/test/build job 95180034616 success 14:45:37Z; Browser/a11y
+job 95180034594 success 14:43:26Z; full local gate: vitest 2804/0, tsc
+clean, eslint 0 errors, production build exit 0). Vercel production deploy
+of `859ceed`: **VERIFIED — status API `success`, "Deployment has
+completed", 14:49:27Z**; live `/solutions/bot-manager` re-checked 200
+after the deploy. Go-live remains gated on three owner
+actions (migration apply per runbook; Actions secret
+SOFTWAREFACTORY_CREDENTIAL_KEY; repo var
+SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true) — documented in
+`AI/AI_ACCOUNTS_BROKER.md`.
+
 Full spec: uploads/cda1f8a5-BotBuild.txt. Mission: no terminal in normal
 onboarding — Add AI Account → pick Claude/Codex → Connect → provider's real
 sign-in → automatic detection → Connected → create/assign bots. AI Account
