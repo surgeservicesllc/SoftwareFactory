@@ -2,6 +2,18 @@
 
 Last updated: 2026-08-16
 
+## Project ↔ repository picker (2026-08-16, branch `feat/project-repo-picker`)
+
+Owners/admins can now choose, change, and unlink which GitHub repository an existing
+project connects to, end to end: migration `20260816001400_project_repository_picker`
+(two definer functions, serialized with handoff and change reservations, uniqueness
+refusals that name the holding project), `PUT`/`DELETE
+/api/projects/[projectId]/repository`, and a per-project picker in the Connections
+console with explicit no-installation / zero-repository / projects-load-failure states.
+The migration is **unhosted**; apply it through `AI/HOSTED_APPLY_RUNBOOK.md` (its counts
+are updated). Nothing here touches the frozen AI-account connection path, execution
+authority, or RLS.
+
 ## Newest (2026-08-16 ~21:30Z): both provider paths frozen; GitHub install host-skew fixed
 
 Both AI-account connection paths are owner-frozen — Claude (ADR-072) and now

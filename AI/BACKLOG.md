@@ -2,6 +2,21 @@
 
 Last triaged: 2026-08-13
 
+## Project repository picker (2026-08-16)
+
+- [x] Add `set_project_github_repository` and `unlink_project_github_repository`
+  (migration `20260816001400`): owner/admin-only, serialized with handoff and change
+  reservations, one non-archived project per repository with the conflicting project
+  named, immutable activity evidence, `authenticated`-only grants.
+- [x] Expose them at `PUT`/`DELETE /api/projects/[projectId]/repository` behind
+  same-origin and owner/admin checks; map the uniqueness race to a readable 409.
+- [x] Add the per-project repository picker to the Connections console with truthful
+  no-installation, zero-repository, and projects-load-failure states.
+- [x] Cover route authorization, the uniqueness conflict path, and unlink in unit,
+  component, and migrated-schema behavior tests.
+- [ ] Apply `20260816001400` to hosted Supabase through `AI/HOSTED_APPLY_RUNBOOK.md`;
+  until then the picker's server functions do not exist on hosted.
+
 Checked Phase 1C items distinguish implementation/configuration/release milestones from connectivity. Phase 1C is not Connected until the complete live draft-PR/CI journey has exact provider evidence.
 
 ## Phase 1D autonomous-loop decision controls (execution-inert)
