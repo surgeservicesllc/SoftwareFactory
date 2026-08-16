@@ -390,14 +390,17 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
 
   /**
    * The diagnosis surface: recent sessions with status and timing, never the
-   * sealed code. Returns [] when the projection does not exist yet, so a
-   * worker against an older database logs nothing rather than failing.
+   * sealed code. Null means the projection itself is unavailable — a database
+   * that predates it — which is a different fact from "no sessions exist",
+   * and the log must be able to say which.
    */
-  inspectSessions = async (limit = 20): Promise<Array<Record<string, unknown>>> => {
+  inspectSessions = async (
+    limit = 20,
+  ): Promise<Array<Record<string, unknown>> | null> => {
     const { data, error } = await this.client.rpc("inspect_ai_auth_sessions", {
       p_limit: limit,
     });
-    if (error || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) return null;
     return data as Array<Record<string, unknown>>;
   };
 }

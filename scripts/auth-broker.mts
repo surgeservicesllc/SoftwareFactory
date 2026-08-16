@@ -55,7 +55,12 @@ async function main() {
   // The queue as this run actually sees it — status and timing only, so a
   // disagreement between a spinner and a worker stops being an argument.
   const inspected = await store.inspectSessions(10);
-  if (inspected.length === 0) {
+  if (inspected === null) {
+    process.stdout.write(
+      "Session projection unavailable — this database predates inspect_ai_auth_sessions "
+      + "(the newest migrations have not been applied here).\n",
+    );
+  } else if (inspected.length === 0) {
     process.stdout.write("Session table: empty (no sign-in has ever reached the database).\n");
   } else {
     for (const row of inspected) {
