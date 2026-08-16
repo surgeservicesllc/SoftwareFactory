@@ -536,6 +536,38 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(bot.rows[0].ai_account_id).toBeNull();
   });
 
+  it("seals a credential as large as providers actually mint them", async () => {
+    // A Codex credential is the CLI's whole auth file and seals past the old
+    // 8192-character cap — the very last step of a fully-approved sign-in
+    // was refused by the schema. Live failure, 2026-08-16 18:44Z.
+    const accountId = await createAccount("Codex big envelope", "codex_big");
+    const sessionId = await openSession(accountId);
+    await db.query("select * from public.claim_ai_auth_session('big-worker')");
+    await db.query(
+      "select public.report_ai_auth_login_url($1::uuid, 'https://auth.openai.com/codex/device')",
+      [sessionId],
+    );
+    await assumeRole(db, ownerId);
+    await db.query(
+      "select public.attach_ai_auth_relay_code($1::uuid, $2::uuid, $3)",
+      [organizationId, sessionId, relayEnvelope],
+    );
+    await resetRole(db);
+
+    const bigEnvelope = `v1.${"QUJD".repeat(60)}.${"REVG".repeat(60)}.${"A".repeat(14_000)}=`;
+    expect(bigEnvelope.length).toBeGreaterThan(8_192);
+    const completed = await db.query(
+      "select * from public.complete_ai_auth_session($1::uuid, $2)",
+      [sessionId, bigEnvelope],
+    );
+    expect(completed.rows).toHaveLength(1);
+    const stored = await db.query<{ length: number }>(
+      "select char_length(sealed_envelope) as length from public.provider_credentials where organization_id = $1 and purpose = 'codex_big'",
+      [organizationId],
+    );
+    expect(stored.rows[0].length).toBe(bigEnvelope.length);
+  });
+
   it("cancel discards a never-connected account, and only that", async () => {
     // A pending account exists only because Connect provisioned it; the
     // owner's rule is that cancel stores nothing.

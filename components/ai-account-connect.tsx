@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink, Loader2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { parseDeviceLogin } from "@/lib/ai-accounts/device-login";
@@ -129,6 +129,7 @@ export function AiAccountConnect({
   const [phase, setPhase] = useState<Phase>("starting");
   const [session, setSession] = useState<SessionView | null>(null);
   const [code, setCode] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
   const [notice, setNotice] = useState("");
   const [failureDetail, setFailureDetail] = useState("");
   const [stalled, setStalled] = useState(false);
@@ -460,12 +461,34 @@ export function AiAccountConnect({
       {waitingForCode && deviceCode ? (
         <div className="mt-3">
           <p className="text-xs text-[var(--text-muted)]">Enter this one-time code:</p>
-          <p
-            className="mt-1 inline-block rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-2 font-mono text-xl font-semibold tracking-widest text-[var(--text)]"
-            aria-label={`One-time code ${deviceCode}`}
-          >
-            {deviceCode}
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p
+              className="inline-block rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-2 font-mono text-xl font-semibold tracking-widest text-[var(--text)]"
+              aria-label={`One-time code ${deviceCode}`}
+            >
+              {deviceCode}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(deviceCode).then(
+                  () => {
+                    setCodeCopied(true);
+                    window.setTimeout(() => setCodeCopied(false), 2_000);
+                  },
+                  () => undefined,
+                );
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              {codeCopied ? (
+                <Check className="size-3.5" aria-hidden="true" />
+              ) : (
+                <Copy className="size-3.5" aria-hidden="true" />
+              )}
+              {codeCopied ? "Copied" : "Copy"}
+            </button>
+          </div>
           <p className="mt-2 max-w-sm text-xs text-[var(--text-muted)]">
             First time? {providerLabel} may ask you to enable device code
             authorization — turn it on under ChatGPT Settings → Security,

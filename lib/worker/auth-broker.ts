@@ -390,7 +390,14 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
       p_session_id: sessionId,
       p_sealed_envelope: sealedEnvelope,
     });
-    if (error) throw new Error("Completing the sign-in failed.");
+    if (error) {
+      // The code (never the message) names the failure class — a schema
+      // refusal reads 23514, a state refusal 42501 — without carrying
+      // anything the database said about the credential.
+      throw new Error(
+        `Completing the sign-in failed (${(error as { code?: string }).code ?? "unknown"}).`,
+      );
+    }
   };
 
   fail = async (sessionId: string, reason: string): Promise<void> => {
