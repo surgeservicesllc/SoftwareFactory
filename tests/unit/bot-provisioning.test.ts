@@ -14,7 +14,7 @@ function fakeClient(options: {
   existingError?: unknown;
   registered?: { data: unknown; error: { message?: string } | null };
 }) {
-  const rpc = vi.fn(() => ({
+  const rpc = vi.fn((..._args: unknown[]) => ({
     single: async () => options.registered ?? { data: { id: "new-bot" }, error: null },
   }));
   const client = {
@@ -41,7 +41,7 @@ describe("ensureProviderBot", () => {
     expect(result).toEqual({ outcome: "created", botId: "new-bot" });
     // Named for the provider, on its first suggested model, referencing the
     // same variable the credential fills — so the vault bridge reads it ready.
-    const args = rpc.mock.calls[0]![1] as Record<string, unknown>;
+    const args = rpc.mock.calls[0]![1] as unknown as Record<string, unknown>;
     expect(args).toMatchObject({
       p_organization_id: organizationId,
       p_name: "Claude",

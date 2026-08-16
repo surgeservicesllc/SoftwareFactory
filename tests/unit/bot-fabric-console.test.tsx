@@ -92,6 +92,21 @@ describe("BotFabricConsole", () => {
     );
   });
 
+  it("leads an empty fleet with a one-click sign-in, not a form", async () => {
+    stubFetch({ status: 200, body: { ...fabricPayload, bots: [], assignments: [] } });
+
+    render(<BotFabricConsole />);
+
+    // The front door is the genuinely one-click path (OpenRouter OAuth, which
+    // fronts Claude/GPT/Gemini and auto-provisions a ready bot on return), a
+    // real anchor to the route handler that 302s off-origin.
+    const signIn = await screen.findByRole("link", { name: /sign in and add my first bot/i });
+    expect(signIn).toHaveAttribute("href", "/api/bots/connect/oauth/start");
+    expect(screen.getByText(/connect a bot in one click/i)).toBeInTheDocument();
+    // The manual path stays available, one step down.
+    expect(screen.getByRole("button", { name: /add one manually/i })).toBeInTheDocument();
+  });
+
   it("states that no worker is connected alongside the fleet", async () => {
     stubFetch({ status: 200, body: fabricPayload });
 

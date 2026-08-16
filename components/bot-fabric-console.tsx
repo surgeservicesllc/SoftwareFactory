@@ -311,15 +311,7 @@ function FleetBoard({
   const bench = fabric.bots.filter((bot) => !assignmentByBotId.has(bot.id));
 
   if (!fabric.bots.length) {
-    return (
-      <EmptyPrompt
-        icon={Bot}
-        title="No bots registered yet"
-        description="Register Claude, Codex, Gemini, Grok, or any OpenAI-compatible endpoint. It takes one screen."
-        actionLabel="Add your first bot"
-        onAction={() => onOpenTab("bots")}
-      />
-    );
+    return <FirstConnectPrompt onAddManually={() => onOpenTab("bots")} />;
   }
   if (!fabric.roles.length) {
     return (
@@ -1995,6 +1987,49 @@ function EmptyPrompt({
             <ArrowRight className="size-4" aria-hidden="true" />
           </button>
         )}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The front door, shaped like signing into Claude or Codex.
+ *
+ * The old empty state sent a person to a provider-selection screen and a form.
+ * This leads with the one action that is genuinely one click — OpenRouter's
+ * OAuth, the only third-party sign-in among these providers, which fronts
+ * Claude, GPT and Gemini behind a single credential. Paired with the connect
+ * flow's auto-provisioning, coming back from that sign-in lands a ready bot in
+ * the fleet with nothing else to fill in. Choosing a specific account by hand
+ * stays available, one step down, for the people who want it.
+ */
+function FirstConnectPrompt({ onAddManually }: { onAddManually: () => void }) {
+  return (
+    <Card className="grid min-h-64 place-items-center p-6 text-center">
+      <div className="max-w-md">
+        <Sparkles className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
+        <h2 className="mt-4 text-base font-semibold text-white">Connect a bot in one click</h2>
+        <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+          Sign in once and your first bot is ready — Claude, GPT and Gemini through a single
+          sign-in. No key, no terminal, no variable name.
+        </p>
+        {/* A real anchor, not next/link: this route handler issues a 302 to
+            another origin, which a client-side navigation cannot follow. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/api/bots/connect/oauth/start" className="btn btn-primary mt-4 justify-center">
+          <KeyRound className="size-4" aria-hidden="true" />
+          Sign in and add my first bot
+        </a>
+        <p className="mt-4 text-xs text-[var(--text-faint)]">
+          Prefer a specific account, or your own key?{" "}
+          <button
+            type="button"
+            onClick={onAddManually}
+            className="underline underline-offset-2 hover:text-[var(--text)]"
+          >
+            Add one manually
+          </button>
+        </p>
       </div>
     </Card>
   );
