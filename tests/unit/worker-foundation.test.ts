@@ -19,7 +19,7 @@ import {
 } from "@/lib/worker/env";
 import { PolicyScanError, scanChangedFiles } from "@/lib/worker/policy-scan";
 import { ProcessExecutionError, runProcess } from "@/lib/worker/process";
-import { hasLikelySecret, redactText } from "@/lib/worker/redact";
+import { hasLikelySecret, redactText, safeErrorMessage } from "@/lib/worker/redact";
 import { workerJobSchema, type WorkerJob } from "@/lib/worker/types";
 import { dockerContainerArguments, PINNED_VALIDATION_IMAGE } from "@/lib/worker/validation";
 import { branchForJob, type PreparedWorkspace } from "@/lib/worker/workspace";
@@ -143,6 +143,22 @@ describe("worker redaction", () => {
     expect(result).not.toContain("super-secret-value");
     expect(result).toContain("[REDACTED]");
     expect(hasLikelySecret(`GITHUB_TOKEN=${token}`)).toBe(true);
+  });
+
+  it("surfaces the fields of a non-Error failure object instead of [object Object]", () => {
+    // A PostgREST failure is a plain object; String(object) muted two live
+    // run failures on 2026-08-16 as "[object Object]".
+    expect(safeErrorMessage({
+      code: "P0001",
+      details: "lease token mismatch",
+      hint: null,
+      message: "The run is not held by this worker.",
+    })).toBe("The run is not held by this worker. — lease token mismatch (P0001)");
+    expect(safeErrorMessage({ code: "PGRST202" })).toBe('{"code":"PGRST202"} (PGRST202)');
+    expect(safeErrorMessage(new Error("plain error"))).toBe("plain error");
+    expect(safeErrorMessage("just text")).toBe("just text");
+    expect(safeErrorMessage(null)).toBe("");
+    expect(safeErrorMessage({ message: `leaked ghp_${"B".repeat(30)}` })).toContain("[REDACTED]");
   });
 });
 

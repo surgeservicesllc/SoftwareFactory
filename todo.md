@@ -138,6 +138,24 @@ real cause (invalid vs expired vs different-browser-session); lifetime
 installed-but-empty: click Connect GitHub again — GitHub re-issues the
 callback for installation 153479019 and persist adopts it.
 
+**FIRST LIVE CANARY BLOCKED BY MUTE FAILURES (20:05Z, in progress):** the
+owner queued the first real command (c618be8e, YELLOW: full site audit →
+draft PR with docs/AUDIT_2026-08-16.md). The worker claimed it twice
+(runs 31969101724 19:57Z and 31969473610 20:04Z) and both attempts died
+~25s after "ready" with `Run failure failed: [object Object]` — a double
+blindfold: the run execution failed (cause unknown), then recording that
+failure via complete_phase1c_run ALSO errored, and safeErrorMessage
+rendered the plain PostgREST error object with String() as
+"[object Object]", masking both. complete_phase1c_run's signature matches
+the code (20260813001300, hosted), so the RPC error is a raised exception
+inside the function — invisible until now. Fix shipped: safeErrorMessage
+surfaces message/details/hint/code of plain objects (JSON fallback,
+redaction preserved); the worker prints the original failure to the
+process log BEFORE attempting to record it; a recording failure now
+throws a combined message naming both errors. Next: owner re-queues the
+audit (idempotency may dedupe identical text — vary the wording), read
+the REAL error from the next worker run's log, fix the true cause.
+
 **RESOLVED — GITHUB CONNECTED LIVE (owner screenshots 19:47Z):** banner
 "GitHub installation connected with 1 selected repository."; account
 surgeservicesllc Connected; fresh installation #154236235, repository
