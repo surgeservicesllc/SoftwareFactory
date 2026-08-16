@@ -75,6 +75,67 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
+### Owner goal — production Magic Link sign-in fix (2026-08-16)
+
+**Symptom:** magic-link emails arrive and the link reaches the app, but the
+browser lands on `/auth/sign-in?error=callback_failed` ("That sign-in link
+could not be verified").
+
+**Root cause (measured, not guessed):** `@supabase/ssr` 0.12.4 defaults both
+clients to `flowType: "pkce"`. The magic-link request stores a PKCE code
+-verifier **cookie in the browser that requested the link**; GoTrue's
+`{{ .ConfirmationURL }}` link redirects back to `/auth/callback?code=…`, and
+`exchangeCodeForSession(code)` requires that verifier cookie. Mail apps
+(Gmail/Outlook in-app browsers) open links in a **different browser context**
+that never had the cookie — and Safari ITP can drop it even same-device,
+since it is set on a fetch response. The old callback supported ONLY the
+PKCE lane, so every cross-context click failed. Not an expiry problem.
+
+**Fix (code, merged with this entry):** `app/auth/callback/route.ts` now has
+two lanes: a new **`?token_hash=&type=` lane** verified server-side with
+`supabase.auth.verifyOtp({ type, token_hash })` — browser-context-free, the
+documented SSR emailed-link pattern — plus the existing `?code=` PKCE lane,
+preserved unchanged for OAuth returns, signup confirmations, and same
+-browser clicks. Type allowlist (`email/magiclink/signup/invite/recovery/
+email_change`), token-hash length bounds, `next` still normalized through
+`normalizeReturnPath`, and bounded server-side failure logging (lane +
+error name/message/code/status — never a token, hash, or code value).
+Password login, sign-up, sessions, sign-out: untouched.
+
+**Supabase dashboard change REQUIRED (owner, ~1 minute):**
+Dashboard → Authentication → Email Templates → **Magic Link** — replace the
+`{{ .ConfirmationURL }}` link with:
+`<p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email">Sign in to The Agoras</a></p>`
+(`{{ .RedirectTo }}` resolves to the app's allowlisted
+`https://www.theagoras.com/auth/callback`; if that variable is unavailable,
+use `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email`.)
+Optionally add `<p>Or use this one-time code: {{ .Token }}</p>` as a
+scanner-proof fallback. Until the template changes, behavior is exactly the
+status quo (PKCE lane, same-browser only) — the code change cannot regress
+it.
+
+**Tests performed:** new `auth-callback-route.test.ts` 7/7 (token-hash lane
+verifies and redirects clean of secret material; off-site `next` refused;
+unsupported type refused before any provider call; expired/used token lands
+on the retryable notice with shape-only logging; PKCE lane preserved;
+neither-param failure; no-user-after-verify refusal). Full gate rerun:
+eslint 0 errors, tsc clean, **full vitest 2748/0**, production build
+compiled. The local-stack e2e (`auth-lifecycle`, `journey`) still exercises
+the preserved `?code=` lane.
+
+**Production verification steps (after the template change):**
+1. theagoras.com/auth/sign-in → "Email me a sign-in link instead".
+2. Open the email **in the Gmail app** and tap the link there (the exact
+   context that used to fail) → should land signed in.
+3. Tap the same link again → the retryable "could not be verified" notice
+   (used token), not a dead end.
+4. Password sign-in and sign-out unchanged.
+
+**Remaining blockers:** the template edit is dashboard-only (owner); mail
+-scanner link prefetch remains a theoretical consumer of one-time links —
+the optional `{{ .Token }}` line in the template is the mitigation, and a
+code-entry box is a possible future enhancement.
+
 ### Master clean-room audit (2026-08-16, iteration 24 — FINAL GATE)
 
 Fresh audit on merged `main` (`69a0156`), assuming prior claims may be wrong;
