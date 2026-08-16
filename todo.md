@@ -139,7 +139,8 @@ simplify/automate → test → record → repeat.
   -failure isolation, refresh-to-ready); `SetupSteps` grid adapts to 4 steps;
   `live-dashboard-metrics` suite still green. tsc + lint clean.
 
-**Iteration 2 — shipped (PR #TBD):** Bot Manager goal box opens simple.
+**Iteration 2 — shipped (PR #125, squash `fecd824`, CI green):** Bot Manager
+goal box opens simple.
 - Journey walk confirmed the goal box exists and is genuinely plain-English
   ("What do you want done?", example chips, project auto-selected to the first
   connected one) — the Dashboard CTA is not a dead end. The friction: it
@@ -161,7 +162,8 @@ simplify/automate → test → record → repeat.
   simple-view submission carries the safe defaults, closed-fold summary keeps
   non-default choices visible. tsc + lint clean.
 
-**Iteration 3 — shipped (PR #TBD):** unified "Needs Your Attention" area.
+**Iteration 3 — shipped (PR #126, squash `0126825`, CI green):** unified
+"Needs Your Attention" area.
 - `NeedsYourAttention` on the Dashboard (above the setup guide) lists ONLY
   decisions the owner alone can make, each as what happened → why it matters →
   one recommended-action button to the exact screen. (criteria 4, 17, 18, 22)
@@ -181,12 +183,28 @@ simplify/automate → test → record → repeat.
   excluded) → operations, one failed source doesn't suppress the others).
   tsc + lint clean.
 
-**Open next (prioritized):** honest human-readable run progress labels +
-surfacing the draft-PR link — criterion 20 (no invented phases: map only real
-recorded states); Add-Project wizard with auto-detected defaults — criteria
-5/6; hide remaining technical IDs behind advanced views — criteria 8/21
-(composer done); error UX with a next-action button — criteria 18/19; full
-E2E of the critical journey — criterion 30.
+**Iteration 4 — shipped (PR #TBD):** honest plain-language run progress.
+- `run_status` records exactly five states (`queued/running/succeeded/failed/
+  cancelled`, migration `20260812000100`), so the mapping is complete and
+  one-to-one with what is stored: "Waiting for a worker" / "A worker is on it"
+  / "Finished" / "Failed — needs a look" / "Stopped". `runStatusLabel` NEVER
+  invents a phase ("planning", "reviewing") the run does not record; an
+  unknown status falls back to the raw word. (criterion 20, truthfully)
+- The draft-PR link — the run's actual deliverable — is promoted from the
+  bottom of the evidence drawer to a primary "Review draft PR #N" action in
+  the run-detail header. (criteria 20, 27)
+- The recorded enum stays one glance away: a "Recorded status" fact row in the
+  detail keeps the technical vocabulary available. (criterion 21)
+- Tests: 4/4 in `runs-console.test.tsx` (five-state mapping one-to-one,
+  unknown-status verbatim fallback, list shows "Finished" and never the raw
+  enum, detail promotes the PR link and keeps the recorded enum). tsc + lint
+  clean.
+
+**Open next (prioritized):** Add-Project wizard with auto-detected defaults —
+criteria 5/6; hide remaining technical IDs behind advanced views — criteria
+8/21 (composer + runs done); error UX with a next-action button — criteria
+18/19; consolidate duplicate/obsolete screens — criterion 28; full E2E of the
+critical journey — criterion 30.
 
 ### External Blockers (owner-only)
 

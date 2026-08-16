@@ -81,6 +81,32 @@ function statusTone(status: string) {
   return "neutral";
 }
 
+/**
+ * Plain-language names for the five states a run actually records
+ * (`public.run_status`: queued, running, succeeded, failed, cancelled).
+ *
+ * The mapping is one-to-one with what is stored — it never invents a phase
+ * ("planning", "reviewing") the run does not carry, and an unrecognized status
+ * falls back to the raw word rather than a guess. The recorded technical
+ * status stays visible in the run detail for anyone who wants the enum.
+ */
+export function runStatusLabel(status: string) {
+  switch (status) {
+    case "queued":
+      return "Waiting for a worker";
+    case "running":
+      return "A worker is on it";
+    case "succeeded":
+      return "Finished";
+    case "failed":
+      return "Failed — needs a look";
+    case "cancelled":
+      return "Stopped";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}
+
 type ProjectGroup = { id: string; name: string; runs: Run[] };
 
 // The portfolio view of the same list: runs grouped under the project that
@@ -206,7 +232,7 @@ export function RunsConsole() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
-                        <StatusBadge tone={statusTone(run.status)}>{run.status.replace(/_/g, " ")}</StatusBadge>
+                        <StatusBadge tone={statusTone(run.status)}>{runStatusLabel(run.status)}</StatusBadge>
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
                           View run
@@ -244,7 +270,19 @@ export function RunsConsole() {
                   <p className="mt-1 text-sm text-muted">{run.command?.prompt ?? run.summary ?? "No bounded summary has been recorded yet."}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <StatusBadge tone={statusTone(run.status)}>{run.status.replace(/_/g, " ")}</StatusBadge>
+                  <StatusBadge tone={statusTone(run.status)}>{runStatusLabel(run.status)}</StatusBadge>
+                  {run.pullRequest?.url ? (
+                    // The deliverable, not buried in an evidence list: a
+                    // finished run's next step is reviewing the pull request.
+                    <a
+                      href={run.pullRequest.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-primary btn-sm"
+                    >
+                      Review {run.pullRequest.draft ? "draft " : ""}PR #{run.pullRequest.number}
+                    </a>
+                  ) : null}
                   {canCancel ? (
                     <button
                       type="button"
@@ -291,6 +329,9 @@ export function RunsConsole() {
                 { label: "Branch", value: run.headBranch ?? run.branch ?? "—" },
                 { label: "Attempt", value: run.attempt !== null && run.attempt !== undefined ? `${run.attempt}${run.maxAttempts ? ` of ${run.maxAttempts}` : ""}` : "—" },
                 { label: "Duration", value: formatDuration(run.durationMs) },
+                // The plain-language badge above is a translation; the enum the
+                // database actually recorded stays one glance away.
+                { label: "Recorded status", value: run.status },
               ]} />
 
               <RunRoutingEvidence run={run} />
