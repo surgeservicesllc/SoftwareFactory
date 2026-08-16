@@ -5,6 +5,10 @@ import path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 
+import {
+  composeDeviceLoginUrl,
+  extractDeviceUserCode,
+} from "@/lib/ai-accounts/device-login";
 import { relayCodePurpose } from "@/lib/ai-accounts/purposes";
 import { openSecret, sealSecret } from "@/lib/security/secret-box-core";
 
@@ -67,6 +71,13 @@ export type LoginCli = Readonly<{
   waitForLoginUrl: (timeoutMs: number) => Promise<string>;
   submitCode: (code: string) => Promise<void>;
   waitForToken: (timeoutMs: number) => Promise<string>;
+  /**
+   * Whether the login already finished without any relayed code — a
+   * device-code flow completes on the provider's side once the person
+   * approves, so there is nothing to paste back. Optional: flows that need
+   * the relay simply do not implement it.
+   */
+  pollCompleted?: () => Promise<boolean>;
   /** The display identity the CLI recorded for this login, if it did. */
   readIdentity?: () => Promise<string | null>;
   dispose: () => Promise<void>;
@@ -142,22 +153,31 @@ export async function runAuthBrokerOnce(
 
     const relayDeadline = now() + timeouts.relayCodeMs;
     let sealedRelay: string | null = null;
+    let completedWithoutRelay = false;
     while (now() < relayDeadline) {
+      // A device-code login finishes on the provider's side the moment the
+      // person approves; when the CLI says so, there is nothing to relay.
+      if (cli.pollCompleted && (await cli.pollCompleted())) {
+        completedWithoutRelay = true;
+        break;
+      }
       sealedRelay = await store.readRelayCode(session.sessionId);
       if (sealedRelay) break;
       await sleep(timeouts.relayPollMs);
     }
-    if (!sealedRelay) {
-      await store.fail(
-        session.sessionId,
-        "Nobody finished the provider sign-in before the worker's wait ran out.",
-      );
-      return "failed";
-    }
+    if (!completedWithoutRelay) {
+      if (!sealedRelay) {
+        await store.fail(
+          session.sessionId,
+          "Nobody finished the provider sign-in before the worker's wait ran out.",
+        );
+        return "failed";
+      }
 
-    // Unsealed only here, written straight into the CLI, never logged.
-    const code = dependencies.openRelayCode(session, sealedRelay);
-    await cli.submitCode(code);
+      // Unsealed only here, written straight into the CLI, never logged.
+      const code = dependencies.openRelayCode(session, sealedRelay);
+      await cli.submitCode(code);
+    }
     await store.markVerifying(session.sessionId);
 
     const token = await cli.waitForToken(timeouts.tokenMs);
@@ -654,13 +674,17 @@ export async function startCodexLogin(
     path.join(tmpdir(), `sf-codex-${session.accountId.slice(0, 8)}-`),
   );
 
-  // The pty scaffold is deliberately duplicated from startClaudeSetupToken
-  // rather than shared: the Claude driver is proven live and stays untouched.
+  // Device-code login: the CLI prints a verification URL and a one-time
+  // code, the person types the code on the provider's own page, and the CLI
+  // finishes by itself. The earlier localhost-callback relay demanded
+  // copying a dead page's address — hostile on a tablet, where the address
+  // bar shows only "localhost". The pty scaffold is deliberately duplicated
+  // from startClaudeSetupToken: the Claude driver is proven live and frozen.
   const env = loginEnvironment(configDir);
   env.CODEX_HOME = configDir;
   const child = spawn(
     "script",
-    ["-qec", "stty cols 500 rows 50 2>/dev/null; codex login", "/dev/null"],
+    ["-qec", "stty cols 500 rows 50 2>/dev/null; codex login --device-auth", "/dev/null"],
     { env, stdio: ["pipe", "pipe", "pipe"] },
   );
 
@@ -711,46 +735,39 @@ export async function startCodexLogin(
     });
   }
 
-  let capturedLoginUrl = "";
+  const authFile = path.join(configDir, "auth.json");
+  const authFileReady = async (): Promise<boolean> => {
+    try {
+      return (await readFile(authFile, "utf8")).trim().length > 0;
+    } catch {
+      return false;
+    }
+  };
 
   return {
     waitForLoginUrl: async (timeoutMs) => {
-      capturedLoginUrl = await waitForMatch(extractLoginUrl, timeoutMs, "the login URL");
-      return capturedLoginUrl;
+      // Both halves must be on screen before the browser is told anything:
+      // the page to open and the code to type there. They ride as one URL;
+      // the code lives in the fragment, which never travels to the server.
+      const composed = await waitForMatch((text) => {
+        const url = extractLoginUrl(text);
+        if (!url) return null;
+        const userCode = extractDeviceUserCode(stripAnsi(text));
+        return userCode ? composeDeviceLoginUrl(url, userCode) : null;
+      }, timeoutMs, "the device sign-in");
+      return composed;
     },
-    submitCode: async (pasted) => {
-      const query = extractCodexCallback(pasted);
-      if (!query) {
-        throw new Error(
-          "The pasted text is not the sign-in page's final address. Copy the "
-          + "full address of the page that could not load and paste that.",
-        );
-      }
-      const port = redirectPortFromLoginUrl(capturedLoginUrl);
-      // Replayed against the CLI's own listener; the CLI holds the PKCE
-      // verifier and finishes the token exchange itself.
-      const http = await import("node:http");
-      await new Promise<void>((resolveReplay, rejectReplay) => {
-        const request = http.get(
-          { host: "127.0.0.1", port, path: `/auth/callback?${query}` },
-          (response) => {
-            response.resume();
-            response.once("end", () => resolveReplay());
-          },
-        );
-        request.once("error", () => rejectReplay(new Error(
-          "The sign-in could not be completed — the login had already ended. Try again.",
-        )));
-        request.setTimeout(15_000, () => {
-          request.destroy();
-          rejectReplay(new Error("The sign-in relay timed out. Try again."));
-        });
-      });
+    submitCode: async () => {
+      // Nothing is ever pasted back in a device flow; a code arriving here
+      // means the person was shown a paste box they should not have seen.
+      throw new Error(
+        "This sign-in completes on the provider's page — nothing needs to be pasted.",
+      );
     },
+    pollCompleted: authFileReady,
     waitForToken: async (timeoutMs) => {
       // The credential is the auth file the CLI writes, not anything printed.
       const deadline = Date.now() + timeoutMs;
-      const authFile = path.join(configDir, "auth.json");
       let exitNoticedAt = 0;
       for (;;) {
         try {

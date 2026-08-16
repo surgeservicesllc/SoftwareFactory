@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -178,8 +178,11 @@ describe("BotManagerHome", () => {
     // account name editable right there.
     expect(await screen.findByText(/claude connected/i, undefined, { timeout: 8000 }))
       .toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /rename claude account 1/i }));
-    const input = screen.getByLabelText(/new name for claude account 1/i);
+    // The accounts panel behind the modal offers its own pencil; the one
+    // under test is the modal's.
+    const dialog = within(screen.getByRole("dialog"));
+    await user.click(dialog.getByRole("button", { name: /rename claude account 1/i }));
+    const input = dialog.getByLabelText(/new name for claude account 1/i);
     await user.clear(input);
     await user.type(input, "My Production Claude");
     await user.click(screen.getByRole("button", { name: /save name/i }));
