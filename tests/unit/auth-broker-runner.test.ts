@@ -11,9 +11,11 @@ const { openSecret, sealSecret } = await import("@/lib/security/secret-box-core"
 const {
   codeSubmissionKeystrokes,
   credentialShapeProblem,
+  extractCodexCallback,
   extractLoginUrl,
   extractOauthToken,
   productionAuthBrokerDependencies,
+  redirectPortFromLoginUrl,
   runAuthBrokerOnce,
   stripAnsi,
   verifyStoredAccounts,
@@ -315,10 +317,44 @@ describe("the verification sweep", () => {
 });
 
 describe("productionAuthBrokerDependencies", () => {
-  it("refuses to start a login for a provider the worker cannot drive", async () => {
+  it("drives a Codex login instead of refusing it", async () => {
+    // The localhost-callback limitation is solved by the address relay: the
+    // worker replays the pasted callback against its own listener. Here we
+    // only prove the driver starts and exposes the login surface.
     const dependencies = productionAuthBrokerDependencies(makeStore());
-    await expect(
-      dependencies.startLogin({ ...session, provider: "openai", purpose: "codex" }),
-    ).rejects.toThrow(/Only Claude accounts/);
+    const cli = await dependencies.startLogin({
+      ...session, provider: "openai", purpose: "codex",
+    });
+    expect(typeof cli.waitForLoginUrl).toBe("function");
+    expect(typeof cli.submitCode).toBe("function");
+    expect(typeof cli.waitForToken).toBe("function");
+    await cli.dispose();
+  });
+});
+
+describe("the Codex callback relay", () => {
+  it("recovers the query from a pasted dead-localhost address", () => {
+    expect(extractCodexCallback(
+      "  http://localhost:1455/auth/callback?code=ac_123&state=xyz  ",
+    )).toBe("code=ac_123&state=xyz");
+    expect(extractCodexCallback(
+      "localhost:1455/auth/callback?code=ac_123&state=xyz#fragment",
+    )).toBe("code=ac_123&state=xyz");
+    expect(extractCodexCallback("code=ac_123&state=xyz")).toBe("code=ac_123&state=xyz");
+  });
+
+  it("refuses pastes that carry no code to replay", () => {
+    expect(extractCodexCallback("http://localhost:1455/auth/callback")).toBeNull();
+    expect(extractCodexCallback("just some text")).toBeNull();
+    expect(extractCodexCallback("state=xyz&decode=1")).toBeNull();
+  });
+
+  it("reads the callback port from the login URL's redirect_uri", () => {
+    expect(redirectPortFromLoginUrl(
+      "https://auth.openai.com/oauth/authorize?client_id=x&redirect_uri="
+      + encodeURIComponent("http://localhost:2481/auth/callback"),
+    )).toBe(2481);
+    expect(redirectPortFromLoginUrl("https://auth.openai.com/oauth/authorize?client_id=x"))
+      .toBe(1455);
   });
 });

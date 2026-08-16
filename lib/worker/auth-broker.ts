@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -569,6 +569,174 @@ export async function startClaudeSetupToken(
   };
 }
 
+/**
+ * The Codex login's callback, recovered from what the person pastes. The CLI
+ * listens on localhost and the person's browser ends on a dead localhost page
+ * whose address bar still carries `code` and `state` — pasting that address
+ * lets the worker replay it against its own listener. Returns the query
+ * string, or null when the paste holds no `code=` to replay.
+ */
+export function extractCodexCallback(pasted: string): string | null {
+  let text = pasted.trim();
+  const fragment = text.indexOf("#");
+  if (fragment >= 0) text = text.slice(0, fragment);
+  const question = text.indexOf("?");
+  if (question >= 0) text = text.slice(question + 1);
+  if (!/(^|&)code=[^&]+/.test(text)) return null;
+  return text;
+}
+
+/**
+ * The port the Codex CLI's callback server chose, read from the login URL's
+ * own redirect_uri. Falls back to the CLI's long-standing default.
+ */
+export function redirectPortFromLoginUrl(loginUrl: string): number {
+  const match = /[?&]redirect_uri=([^&]+)/.exec(loginUrl);
+  if (match) {
+    const decoded = decodeURIComponent(match[1]);
+    const port = /^https?:\/\/[^/]*:(\d{2,5})/.exec(decoded);
+    if (port) return Number(port[1]);
+  }
+  return 1455;
+}
+
+export async function startCodexLogin(
+  session: ClaimedAuthSession,
+): Promise<LoginCli> {
+  // Isolated per account, same as the Claude driver. CODEX_HOME is where the
+  // CLI writes auth.json — the credential this login exists to mint.
+  const configDir = await mkdtemp(
+    path.join(tmpdir(), `sf-codex-${session.accountId.slice(0, 8)}-`),
+  );
+
+  // The pty scaffold is deliberately duplicated from startClaudeSetupToken
+  // rather than shared: the Claude driver is proven live and stays untouched.
+  const env = loginEnvironment(configDir);
+  env.CODEX_HOME = configDir;
+  const child = spawn(
+    "script",
+    ["-qec", "stty cols 500 rows 50 2>/dev/null; codex login", "/dev/null"],
+    { env, stdio: ["pipe", "pipe", "pipe"] },
+  );
+
+  let output = "";
+  const listeners: Array<() => void> = [];
+  const onChunk = (chunk: Buffer) => {
+    output = (output + chunk.toString("utf8")).slice(-65_536);
+    for (const listener of listeners) listener();
+  };
+  child.stdout.on("data", onChunk);
+  child.stderr.on("data", onChunk);
+
+  let exited = false;
+  child.once("exit", () => {
+    exited = true;
+    for (const listener of listeners) listener();
+  });
+
+  function waitForMatch<T>(
+    extract: (text: string) => T | null,
+    timeoutMs: number,
+    what: string,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const check = () => {
+        const found = extract(output);
+        if (found !== null) {
+          cleanup();
+          resolve(found);
+          return;
+        }
+        if (exited) {
+          cleanup();
+          reject(new Error(`The provider login ended before ${what} appeared.`));
+        }
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out waiting for ${what} from the provider login.`));
+      }, timeoutMs);
+      const cleanup = () => {
+        clearTimeout(timer);
+        const index = listeners.indexOf(check);
+        if (index >= 0) listeners.splice(index, 1);
+      };
+      listeners.push(check);
+      check();
+    });
+  }
+
+  let capturedLoginUrl = "";
+
+  return {
+    waitForLoginUrl: async (timeoutMs) => {
+      capturedLoginUrl = await waitForMatch(extractLoginUrl, timeoutMs, "the login URL");
+      return capturedLoginUrl;
+    },
+    submitCode: async (pasted) => {
+      const query = extractCodexCallback(pasted);
+      if (!query) {
+        throw new Error(
+          "The pasted text is not the sign-in page's final address. Copy the "
+          + "full address of the page that could not load and paste that.",
+        );
+      }
+      const port = redirectPortFromLoginUrl(capturedLoginUrl);
+      // Replayed against the CLI's own listener; the CLI holds the PKCE
+      // verifier and finishes the token exchange itself.
+      const http = await import("node:http");
+      await new Promise<void>((resolveReplay, rejectReplay) => {
+        const request = http.get(
+          { host: "127.0.0.1", port, path: `/auth/callback?${query}` },
+          (response) => {
+            response.resume();
+            response.once("end", () => resolveReplay());
+          },
+        );
+        request.once("error", () => rejectReplay(new Error(
+          "The sign-in could not be completed — the login had already ended. Try again.",
+        )));
+        request.setTimeout(15_000, () => {
+          request.destroy();
+          rejectReplay(new Error("The sign-in relay timed out. Try again."));
+        });
+      });
+    },
+    waitForToken: async (timeoutMs) => {
+      // The credential is the auth file the CLI writes, not anything printed.
+      const deadline = Date.now() + timeoutMs;
+      const authFile = path.join(configDir, "auth.json");
+      let exitNoticedAt = 0;
+      for (;;) {
+        try {
+          const contents = await readFile(authFile, "utf8");
+          if (contents.trim().length > 0) return contents;
+        } catch {
+          // Not written yet.
+        }
+        if (exited) {
+          // A quit CLI gets a short grace for the final file flush, then the
+          // session fails now rather than at the window's end.
+          if (exitNoticedAt === 0) exitNoticedAt = Date.now();
+          else if (Date.now() - exitNoticedAt > 5_000) {
+            throw new Error("The provider login ended before the credential appeared.");
+          }
+        }
+        if (Date.now() >= deadline) {
+          throw new Error("Timed out waiting for the credential from the provider login.");
+        }
+        await new Promise((resolvePoll) => setTimeout(resolvePoll, 500));
+      }
+    },
+    dispose: async () => {
+      child.stdout.removeListener("data", onChunk);
+      child.stderr.removeListener("data", onChunk);
+      if (!exited) child.kill("SIGTERM");
+      await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
+    },
+  };
+}
+
 /** The production dependency wiring, shared by the script entry point. */
 export function productionAuthBrokerDependencies(
   store: AuthBrokerStore,
@@ -576,12 +744,8 @@ export function productionAuthBrokerDependencies(
   return {
     store,
     startLogin: async (session) => {
-      if (session.provider !== "anthropic") {
-        // Honest refusal instead of a hang: the Codex CLI's login is a
-        // localhost callback, which no headless relay can complete today.
-        throw new Error(
-          "Only Claude accounts can be signed in by the worker so far.",
-        );
+      if (session.provider === "openai") {
+        return startCodexLogin(session);
       }
       return startClaudeSetupToken(session);
     },

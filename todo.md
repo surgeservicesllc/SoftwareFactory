@@ -166,7 +166,7 @@ Worker
 
 Claude/Codex Authentication
 - VERIFIED Claude: headless setup-token drivable (probe); broker relays code in-page
-- VERIFIED Codex: localhost-callback limitation recorded; refused honestly by worker; command path lives in diagnostics only
+- BUILT Codex callback-address relay (2026-08-16 17:23Z): the worker drives `codex login` under a pty, reports the auth URL, and replays the pasted dead-localhost callback address against the CLI's own listener (the CLI holds the PKCE verifier and finishes the exchange); the credential sealed is the auth file the CLI writes, matching the existing shape check. UI paste step carries Codex-specific copy ("copy the page's full address"). CLI pinned @openai/codex@0.147.0 in the worker. AWAITING first live Codex click-through (REAL PROVIDER AUTH REQUIRED)
 - BLOCKED real end-to-end provider sign-in — REAL PROVIDER AUTH REQUIRED (owner go-live steps + a human at claude.ai)
 
 Multi-Account Isolation
