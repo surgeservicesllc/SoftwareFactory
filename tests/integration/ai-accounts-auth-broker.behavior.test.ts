@@ -536,6 +536,37 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(bot.rows[0].ai_account_id).toBeNull();
   });
 
+  it("completes a device-flow sign-in that never pastes a code", async () => {
+    // The device flow's exact state walk: claim → URL → the person approves
+    // on the provider's page — no relay code ever attaches, so the session
+    // goes awaiting_user → verifying → connected on the worker's word alone.
+    const accountId = await createAccount("Codex device flow", "codex_dev");
+    const sessionId = await openSession(accountId);
+    await db.query("select * from public.claim_ai_auth_session('device-worker')");
+    await db.query(
+      "select public.report_ai_auth_login_url($1::uuid, 'https://auth.openai.com/codex/device#sf-device-code=ABCD-EFGHI')",
+      [sessionId],
+    );
+    expect(await sessionStatus(sessionId)).toBe("awaiting_user");
+
+    const verifying = await db.query<{ mark_ai_auth_session_verifying: boolean }>(
+      "select public.mark_ai_auth_session_verifying($1::uuid)",
+      [sessionId],
+    );
+    expect(verifying.rows[0].mark_ai_auth_session_verifying).toBe(true);
+
+    const completed = await db.query(
+      "select * from public.complete_ai_auth_session($1::uuid, $2)",
+      [sessionId, envelope],
+    );
+    expect(completed.rows).toHaveLength(1);
+    expect(await sessionStatus(sessionId)).toBe("connected");
+    const account = await db.query<{ status: string }>(
+      "select status from public.ai_accounts where id = $1", [accountId],
+    );
+    expect(account.rows[0].status).toBe("connected");
+  });
+
   it("seals a credential as large as providers actually mint them", async () => {
     // A Codex credential is the CLI's whole auth file and seals past the old
     // 8192-character cap — the very last step of a fully-approved sign-in
