@@ -14,8 +14,16 @@ finds zero actionable defects.
   workflow_dispatch is deliberately absent from the secret-bearing workflow —
   do NOT add it. If the npm retry fails again, next step is pinning the
   container npm behavior; the failure will now record durably.
-- [ ] Full gates on current main: vitest (running), eslint, tsc, production
-  build, Playwright E2E + axe. Fix all failures.
+- [x] Full gates on current main (01ae6a8 lineage): vitest 2843/0 (+2 new),
+  eslint 0 errors, tsc clean, production build exit 0, Playwright full run
+  exit 0 (6 skipped by design) incl. axe on ~20 routes × 3 viewports and
+  the zero-browser-errors console spec.
+- [x] Checks truthfulness: the Projects page counted a cancelled worker
+  beat as "1 check is failing on the main branch" (owner screenshot
+  20:50Z-era) while every real check was green. Only conclusions carrying
+  failure evidence (failure, timed_out, action_required, startup_failure)
+  now count as failing in the warning and the summary chip; cancelled runs
+  still render their literal conclusion in detail rows.
 - [x] TODO/FIXME/HACK sweep: zero real instances (2 matches are detection
   regexes in sensitive-data.ts / redact.ts).
 - [x] Mock/placeholder sweep: Demo Data labelling is centralized in ui.tsx per
