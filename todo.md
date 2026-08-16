@@ -86,11 +86,24 @@ finds zero actionable defects.
 - Hosted: migration 20260816001300 applied via surgical run 31972616619
   (success); replan_phase1c_run live in production
 
-**Remaining actionable item — owner-only:** queue one command from
-/solutions/bot-manager (authenticated session required; service_role
-cannot submit by design). Everything the run needs is now live: re-plan
-survives merges, failures record legibly, npm bootstrap retries, manual
-dispatch available as backup. The deliverable is a draft PR.
+**Remaining item — precisely why it is owner-blocked, with evidence:**
+the live canary needs one command queued from /solutions/bot-manager.
+`submit_command` grants execute to `authenticated` only; service_role is
+refused (ACL verified in the grants suite). No agent in this loop holds
+an authenticated user JWT: sign-up requires e-mail confirmation to an
+inbox no agent has (and the project's built-in sender is rate-limited),
+and minting a bypass (a service-role submit path) would weaken the
+tenant-security boundary — forbidden by this goal's own fix rules. This
+is exactly the "blocked by unavailable external credentials/access"
+category; it is documented, not marked complete.
+
+**De-risking evidence for the last untested link (21:32Z):** cold-cache
+`npm install next@16.3.0 --ignore-scripts` with npm 10.9.7 / node
+22.22.2 on a plain filesystem extracts the full docs tree cleanly —
+the TAR_ENTRY_ERROR is specific to the worker's container/bind-mount
+environment, which is what the clean-retry fix (#168) targets. If the
+live retry still fails, the next lever is pinning npm inside the
+container step; the failure will record legibly either way.
 
 Completed defect chain for this goal: #167 (mute failures), #168
 (bootstrap retry + truncation cap), #170 (cancelled ≠ failing), #171
