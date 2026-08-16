@@ -73,8 +73,11 @@ export function AiAccountsPanel({
     try {
       const response = await fetch(`/api/ai-accounts/${account.id}/remove`, { method: "POST" });
       if (!response.ok) {
-        const body = (await response.json()) as { error?: { message?: string } };
-        setNotice(body.error?.message ?? "The account could not be removed.");
+        const body = (await response.json()) as {
+          error?: { message?: string; detail?: string };
+        };
+        const detail = body.error?.detail ? ` (${body.error.detail})` : "";
+        setNotice((body.error?.message ?? "The account could not be removed.") + detail);
         return;
       }
       await load();

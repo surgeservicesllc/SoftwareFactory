@@ -52,6 +52,8 @@ export type AiAccountConnectProps = {
 const POLL_MS = 3_000;
 /** After this long with no worker claim, say so and offer a way out. */
 const WORKER_STALL_MS = 75_000;
+/** Verification is seconds of work; minutes of it means something died. */
+const VERIFY_STALL_MS = 150_000;
 
 type Phase =
   | "starting"
@@ -129,8 +131,12 @@ export function AiAccountConnect({
   const [notice, setNotice] = useState("");
   const [failureDetail, setFailureDetail] = useState("");
   const [stalled, setStalled] = useState(false);
+  const [verifyStalled, setVerifyStalled] = useState(false);
   // Set when start() runs; 0 only before the first attempt.
   const startedAtRef = useRef(0);
+  // Set when verification begins; a verification that outlives its window
+  // is reported rather than spun on.
+  const verifyingSinceRef = useRef(0);
   const pollRef = useRef<number | null>(null);
   const doneRef = useRef(false);
 
@@ -165,6 +171,8 @@ export function AiAccountConnect({
           break;
         case "authenticated":
         case "verifying":
+          if (verifyingSinceRef.current === 0) verifyingSinceRef.current = Date.now();
+          setVerifyStalled(Date.now() - verifyingSinceRef.current > VERIFY_STALL_MS);
           setPhase("finishing");
           break;
         case "connected":
@@ -198,6 +206,8 @@ export function AiAccountConnect({
   const start = useCallback(async () => {
     doneRef.current = false;
     startedAtRef.current = Date.now();
+    verifyingSinceRef.current = 0;
+    setVerifyStalled(false);
     setPhase("starting");
     setNotice("");
     setFailureDetail("");
@@ -343,6 +353,46 @@ export function AiAccountConnect({
             </button>
           </details>
         ) : null}
+      </div>
+    );
+  }
+
+  // A verification that outlives its window means the service driving it
+  // died mid-flight. Spinning would be a lie; say so, and offer the honest
+  // restart — a fresh session, since this one cannot finish.
+  if (verifyStalled && phase === "finishing") {
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+        <h3 className="text-lg font-semibold text-[var(--text)]">
+          Verification didn&apos;t finish
+        </h3>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Your {providerLabel} sign-in went through, but the final check stopped
+          responding. Nothing was changed — trying again starts a fresh sign-in.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              verifyingSinceRef.current = 0;
+              setVerifyStalled(false);
+              void (async () => {
+                const sessionId = session?.id;
+                if (sessionId) {
+                  await fetch(`/api/ai-accounts/sessions/${sessionId}/cancel`, { method: "POST" })
+                    .catch(() => undefined);
+                }
+                await start();
+              })();
+            }}
+            className="btn btn-primary"
+          >
+            Try Again
+          </button>
+          <button type="button" onClick={() => void cancel()} className="btn btn-secondary">
+            Close
+          </button>
+        </div>
       </div>
     );
   }

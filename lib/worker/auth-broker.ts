@@ -144,8 +144,17 @@ export async function runAuthBrokerOnce(
     return "connected";
   } catch (error) {
     const message = error instanceof Error ? error.message : "The sign-in failed.";
+    // Named in the run log, because a swallowed failure here is exactly how a
+    // session gets stuck mid-state with nobody able to say why. The message
+    // is ours or the store's — never raw CLI output.
+    process.stdout.write(`Session ${session.sessionId.slice(0, 8)}… failed: ${message}\n`);
     // The store sanitizes again server-side; this is belt and braces.
-    await store.fail(session.sessionId, message.slice(0, 400)).catch(() => undefined);
+    await store.fail(session.sessionId, message.slice(0, 400)).catch((failError) => {
+      const failMessage = failError instanceof Error ? failError.message : "unknown";
+      process.stdout.write(
+        `Session ${session.sessionId.slice(0, 8)}… could not even be marked failed: ${failMessage}\n`,
+      );
+    });
     return "failed";
   } finally {
     await cli?.dispose().catch(() => undefined);
@@ -381,14 +390,17 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
 
   /**
    * The diagnosis surface: recent sessions with status and timing, never the
-   * sealed code. Returns [] when the projection does not exist yet, so a
-   * worker against an older database logs nothing rather than failing.
+   * sealed code. Null means the projection itself is unavailable — a database
+   * that predates it — which is a different fact from "no sessions exist",
+   * and the log must be able to say which.
    */
-  inspectSessions = async (limit = 20): Promise<Array<Record<string, unknown>>> => {
+  inspectSessions = async (
+    limit = 20,
+  ): Promise<Array<Record<string, unknown>> | null> => {
     const { data, error } = await this.client.rpc("inspect_ai_auth_sessions", {
       p_limit: limit,
     });
-    if (error || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) return null;
     return data as Array<Record<string, unknown>>;
   };
 }
@@ -417,6 +429,26 @@ export function extractLoginUrl(output: string): string | null {
 export function extractOauthToken(output: string): string | null {
   const match = /sk-ant-[A-Za-z0-9_-]{24,}/.exec(stripAnsi(output));
   return match ? match[0] : null;
+}
+
+export type Keystroke = Readonly<{ settleMs: number; chunk: string }>;
+
+/**
+ * How a confirmation code is typed into the CLI's paste prompt. The prompt
+ * reads raw keypresses, and raw-mode Enter is a carriage return arriving as
+ * its own keystroke — a newline glued onto the pasted text fills the field
+ * and never submits it, which strands the login at "verifying" until the
+ * token wait expires. So: the code settles first, then Enter alone, then one
+ * more Enter in case the first was swallowed as part of a paste burst. The
+ * extra press is harmless everywhere it can land — a busy exchange ignores
+ * it, and a finished one has already printed the token we are matching.
+ */
+export function codeSubmissionKeystrokes(code: string): readonly Keystroke[] {
+  return [
+    { settleMs: 0, chunk: code.trim() },
+    { settleMs: 400, chunk: "\r" },
+    { settleMs: 1_500, chunk: "\r" },
+  ];
 }
 
 /**
@@ -506,7 +538,13 @@ export async function startClaudeSetupToken(
     submitCode: async (code) => {
       // After the code goes in, earlier output — which contains the URL, and
       // matches the URL extractor but never the token one — stays harmless.
-      child.stdin.write(`${code}\n`);
+      for (const stroke of codeSubmissionKeystrokes(code)) {
+        if (stroke.settleMs > 0) {
+          await new Promise((resolveSettle) => setTimeout(resolveSettle, stroke.settleMs));
+        }
+        if (exited) return;
+        child.stdin.write(stroke.chunk);
+      }
     },
     waitForToken: (timeoutMs) => waitForMatch(extractOauthToken, timeoutMs, "the credential"),
     dispose: async () => {

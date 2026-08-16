@@ -6,11 +6,15 @@ name: Apply hosted migrations
 # listed before and after so the run's log is its own evidence.
 #
 # Owner-triggered only, and it refuses to run without the typed confirmation,
-# because this writes DDL to production. Secrets required (Settings →
-# Secrets and variables → Actions):
-#   SUPABASE_ACCESS_TOKEN  — a fresh personal access token
+# because this writes DDL to production. Secrets (Settings → Secrets and
+# variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — a personal access token (looks like sbp_0102…)
 #   SUPABASE_DB_PASSWORD   — the project database password
-# Never paste either into a chat, an issue, or a commit.
+# Either one alone is enough: a valid token uses the linked project flow; a
+# missing or malformed token falls back to a direct database connection
+# through the IPv4 pooler using only the password (the project's direct DB
+# hostname is IPv6-only, which GitHub-hosted runners cannot reach).
+# Never paste either secret into a chat, an issue, or a commit.
 
 on:
   workflow_dispatch:
@@ -43,22 +47,73 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Link the production project
+      - name: Choose the connection
+        # Decides MODE=token (valid sbp_ token, linked flow) or MODE=dburl
+        # (password-only, through the IPv4 session pooler). The URL-encoded
+        # password and the full URL are masked explicitly: only the raw
+        # secret value is masked automatically, and this repository is
+        # public.
+        run: |
+          if [[ "$SUPABASE_ACCESS_TOKEN" =~ ^sbp_[A-Za-z0-9]{16,}$ ]]; then
+            echo "MODE=token" >> "$GITHUB_ENV"
+            echo "Using the personal access token (linked project flow)."
+          elif [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is missing or not shaped like a personal access token (they look like sbp_0102...1920; generate one at supabase.com -> Account -> Access Tokens)."
+            echo "Falling back to the direct database connection using SUPABASE_DB_PASSWORD only."
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            FOUND=""
+            for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+              URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+              echo "::add-mask::$URL"
+              if npx --yes supabase@2 migration list --db-url "$URL" >/dev/null 2>&1; then
+                echo "Reached the database through ${HOST}."
+                echo "MODE=dburl" >> "$GITHUB_ENV"
+                echo "DB_URL=$URL" >> "$GITHUB_ENV"
+                FOUND="yes"
+                break
+              fi
+            done
+            if [ -z "$FOUND" ]; then
+              echo "::error::Could not reach the database through the pooler (tried aws-0/aws-1 us-west-2). Either SUPABASE_DB_PASSWORD is wrong, or the project lives elsewhere — set a valid SUPABASE_ACCESS_TOKEN (sbp_...) to use the linked flow instead."
+              exit 1
+            fi
+          else
+            echo "::error::Neither a valid SUPABASE_ACCESS_TOKEN (sbp_...) nor SUPABASE_DB_PASSWORD is set. Add at least the database password as an Actions secret."
+            exit 1
+          fi
+
+      - name: Link the production project (token mode only)
+        if: ${{ env.MODE == 'token' }}
         run: npx --yes supabase@2 link --project-ref "$PROJECT_REF"
 
       - name: List the remote ledger before touching anything
-        run: npx supabase migration list --linked
+        run: |
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration list --linked
+          else
+            npx supabase migration list --db-url "$DB_URL"
+          fi
 
       - name: Repair the renamed graph-engineering ledger row (idempotent)
         # If the remote still records 20260814002000, move that history to the
         # file's current name 20260814000100. If it was already repaired, both
         # greps miss and this step is a no-op — never a failure.
         run: |
-          LIST=$(npx supabase migration list --linked)
+          if [ "$MODE" = "token" ]; then
+            LIST=$(npx supabase migration list --linked)
+          else
+            LIST=$(npx supabase migration list --db-url "$DB_URL")
+          fi
           if echo "$LIST" | grep -q "20260814002000"; then
             echo "Repairing: 20260814002000 -> 20260814000100 (history only, no DDL)"
-            npx supabase migration repair --status reverted 20260814002000
-            npx supabase migration repair --status applied 20260814000100
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status reverted 20260814002000
+              npx supabase migration repair --status applied 20260814000100
+            else
+              npx supabase migration repair --status reverted 20260814002000 --db-url "$DB_URL"
+              npx supabase migration repair --status applied 20260814000100 --db-url "$DB_URL"
+            fi
           else
             echo "No 20260814002000 row found; repair not needed."
           fi
@@ -66,7 +121,17 @@ jobs:
       - name: Push the outstanding migrations
         # The pipe answers the CLI's confirmation prompt when it asks one;
         # in a non-interactive shell it is simply unread.
-        run: echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
+        run: |
+          if [ "$MODE" = "token" ]; then
+            echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
+          else
+            echo "Y" | npx supabase db push --db-url "$DB_URL"
+          fi
 
       - name: List the remote ledger after — the run's own evidence
-        run: npx supabase migration list --linked
+        run: |
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration list --linked
+          else
+            npx supabase migration list --db-url "$DB_URL"
+          fi
