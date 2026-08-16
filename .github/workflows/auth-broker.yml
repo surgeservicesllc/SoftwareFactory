@@ -28,7 +28,10 @@ concurrency:
 jobs:
   broker:
     name: Drive pending AI-account sign-ins
-    if: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_ENABLED == 'true' }}
+    # Default ON: the owner demanded the in-browser sign-in work without
+    # further switches. Set the repository variable
+    # SOFTWAREFACTORY_AUTH_BROKER_DISABLED=true to switch the worker off.
+    if: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED != 'true' }}
     runs-on: ubuntu-latest
     # Session TTL is fifteen minutes and the script's own deadline is
     # twenty-five; this is the hard stop above both.

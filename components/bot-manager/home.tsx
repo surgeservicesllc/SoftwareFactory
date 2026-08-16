@@ -351,11 +351,7 @@ export function BotManagerHome() {
     <div className="space-y-6">
       {dialog}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[var(--text-muted)]">
-          Build your AI engineering team. Connect your AI accounts, create specialized
-          bots, and put them to work.
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {canManage ? (
           <div className="flex gap-2">
             <button

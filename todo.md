@@ -89,6 +89,21 @@ CLI/diagnostic surfaces survive only under Developer Diagnostics (§35).
 
 **Checklist (status vocabulary: TODO / IN PROGRESS / BLOCKED / VERIFIED):**
 
+**MAJOR HOSTED FINDING (2026-08-16 16:00Z, production evidence):** the owner's
+live screenshot shows the Connecting Claude modal in progress phase — which
+only renders after POST /api/ai-accounts/connect returns a sessionId — so
+`create_ai_account`/`open_ai_auth_session` EXIST on hosted: **the Supabase
+GitHub integration applies migrations on merge to main.** The runbook's
+measured position (65 rows @ 20260814002300) is stale; the manual apply
+workflow is moot for schema. The pinned HOSTED_LEDGER_ENDS_AT stays until an
+owner SQL re-measure confirms the new position (inference ≠ measurement).
+Remaining gap to a working sign-in is ONLY the worker: auth-broker.yml now
+default-ON (disable via SOFTWAREFACTORY_AUTH_BROKER_DISABLED=true); still
+required in Actions secrets: SOFTWAREFACTORY_CREDENTIAL_KEY (must equal the
+Vercel value so seals interoperate). UI: the stuck-at-step-1 spinner now
+becomes a calm blocked state after the 75s stall window (what happened,
+nothing changed, Try Again / Close).
+
 **Hosted apply status (2026-08-16 15:45Z):** owner authorized the apply and
 pasted a Supabase access token + DB password INTO CHAT — both treated as
 compromised on arrival (standing rule) and NOT used; owner told to rotate
