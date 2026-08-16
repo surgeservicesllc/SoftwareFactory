@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Loader2, Unplug } from "lucide-react";
+import { KeyRound, Loader2, Trash2, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
@@ -45,8 +45,9 @@ export function AiAccountsPanel({
 }) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [reconnecting, setReconnecting] = useState<AccountView | null>(null);
-  // Disconnect asks in place: first click arms, second click acts.
+  // Disconnect and Remove ask in place: first click arms, second click acts.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
@@ -65,6 +66,26 @@ export function AiAccountsPanel({
     const kickoff = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(kickoff);
   }, [load]);
+
+  const remove = useCallback(async (account: AccountView) => {
+    setBusyId(account.id);
+    setNotice("");
+    try {
+      const response = await fetch(`/api/ai-accounts/${account.id}/remove`, { method: "POST" });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setNotice(body.error?.message ?? "The account could not be removed.");
+        return;
+      }
+      await load();
+      await onChanged();
+    } catch {
+      setNotice("The account could not be removed.");
+    } finally {
+      setBusyId(null);
+      setRemovingId(null);
+    }
+  }, [load, onChanged]);
 
   const disconnect = useCallback(async (account: AccountView) => {
     setBusyId(account.id);
@@ -177,7 +198,10 @@ export function AiAccountsPanel({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => setConfirmingId(account.id)}
+                        onClick={() => {
+                          setRemovingId(null);
+                          setConfirmingId(account.id);
+                        }}
                         className="btn btn-secondary btn-sm"
                       >
                         <Unplug className="size-3.5" aria-hidden="true" />
@@ -185,6 +209,33 @@ export function AiAccountsPanel({
                       </button>
                     )
                   ) : null}
+                  {removingId === account.id ? (
+                    <button
+                      type="button"
+                      onClick={() => void remove(account)}
+                      disabled={busyId === account.id}
+                      className="btn btn-danger btn-sm"
+                    >
+                      {busyId === account.id ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Trash2 className="size-3.5" aria-hidden="true" />
+                      )}
+                      Delete this account — confirm
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingId(null);
+                        setRemovingId(account.id);
+                      }}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden="true" />
+                      Remove
+                    </button>
+                  )}
                 </div>
               ) : null}
             </li>
