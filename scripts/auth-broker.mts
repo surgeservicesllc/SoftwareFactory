@@ -52,6 +52,24 @@ async function main() {
     process.stdout.write(`Marked ${expired} stale sign-in session(s) expired.\n`);
   }
 
+  // The queue as this run actually sees it — status and timing only, so a
+  // disagreement between a spinner and a worker stops being an argument.
+  const inspected = await store.inspectSessions(10);
+  if (inspected.length === 0) {
+    process.stdout.write("Session table: empty (no sign-in has ever reached the database).\n");
+  } else {
+    for (const row of inspected) {
+      process.stdout.write(
+        `Session ${String(row.inspected_session_id).slice(0, 8)}…`
+        + ` provider=${row.inspected_provider}`
+        + ` status=${row.inspected_status}`
+        + ` worker=${row.inspected_worker_id ?? "-"}`
+        + ` created=${row.inspected_created_at}`
+        + ` expires=${row.inspected_expires_at}\n`,
+      );
+    }
+  }
+
   // The verification sweep: every connected account's claim re-tested against
   // the vault (row exists, seal opens, shape matches). Shape-level only — a
   // pass never asserts the provider still honors the token.

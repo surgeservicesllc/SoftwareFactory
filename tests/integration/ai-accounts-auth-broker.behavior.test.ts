@@ -377,6 +377,22 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     )).rejects.toThrow(/foreign key/i);
   });
 
+  it("describes recent sessions for the worker's log without the sealed code", async () => {
+    const inspected = await db.query<Record<string, unknown>>(
+      "select * from public.inspect_ai_auth_sessions(50)",
+    );
+    // The suites above created many sessions; the projection sees them.
+    expect(inspected.rows.length).toBeGreaterThanOrEqual(3);
+    const columns = Object.keys(inspected.rows[0]);
+    expect(columns).toContain("inspected_status");
+    expect(columns.join(",")).not.toMatch(/relay|sealed|login_url/);
+    // Browser roles are denied outright.
+    await assumeRole(db, ownerId);
+    await expect(db.query("select * from public.inspect_ai_auth_sessions(5)"))
+      .rejects.toThrow(/permission denied/);
+    await resetRole(db);
+  });
+
   it("finds the open session an account already has, so a refresh resumes it", async () => {
     const accountId = await createAccount("Claude account 9", "claude_9");
     const sessionId = await openSession(accountId);

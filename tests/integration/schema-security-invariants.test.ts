@@ -252,6 +252,9 @@ describe("SECURITY DEFINER functions", () => {
       "finish_phase1c_worker",
       "heartbeat_phase1c_run",
       "heartbeat_phase1c_worker",
+      // Read-only session-state projection for the worker's log — status and
+      // timing, never the sealed relay code.
+      "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
       // The verification sweep's two hands: enumerate connected subscription
       // accounts, and record a shape-level pass. Demotion is the function

@@ -378,6 +378,19 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
     if (error) throw new Error("Recording the demotion failed.");
     return data === true;
   };
+
+  /**
+   * The diagnosis surface: recent sessions with status and timing, never the
+   * sealed code. Returns [] when the projection does not exist yet, so a
+   * worker against an older database logs nothing rather than failing.
+   */
+  inspectSessions = async (limit = 20): Promise<Array<Record<string, unknown>>> => {
+    const { data, error } = await this.client.rpc("inspect_ai_auth_sessions", {
+      p_limit: limit,
+    });
+    if (error || !Array.isArray(data)) return [];
+    return data as Array<Record<string, unknown>>;
+  };
 }
 
 // ---------------------------------------------------------------------------
