@@ -1,5 +1,49 @@
 # SoftwareFactory — shared working status
 
+## PRODUCTION-READINESS AUDIT LOOP (2026-08-16 20:25Z, active goal)
+
+Owner goal: autonomously test/audit/fix/verify EVERY feature until
+production-ready; todo.md is the source of truth; loop until a full sweep
+finds zero actionable defects.
+
+### Audit backlog (loop working set)
+
+- [ ] **P0 — live canary journey**: Audit Round 2 run `8b5fdd2c` reaped after
+  attempt 1 (mute-failure round); one attempt left; next throttled cron beat
+  claims it carrying the bootstrap-retry + truncation fixes (f0f38eb).
+  workflow_dispatch is deliberately absent from the secret-bearing workflow —
+  do NOT add it. If the npm retry fails again, next step is pinning the
+  container npm behavior; the failure will now record durably.
+- [ ] Full gates on current main: vitest (running), eslint, tsc, production
+  build, Playwright E2E + axe. Fix all failures.
+- [x] TODO/FIXME/HACK sweep: zero real instances (2 matches are detection
+  regexes in sensitive-data.ts / redact.ts).
+- [x] Mock/placeholder sweep: Demo Data labelling is centralized in ui.tsx per
+  AGENTS.md; marketing fallback is labelled. `otherProviders` chips in
+  connections-console are static but truthful — Anthropic/Vercel "Not
+  Connected" (true), Supabase "Connected" renders only in the ready state,
+  which itself requires a successful Supabase read (evidence-based in
+  context). No change needed.
+- [ ] Env docs: `SOFTWAREFACTORY_CREDENTIAL_KEY` (vault key) is used by the
+  worker but absent from `.env.example` — add a documented server-only entry.
+  (Other absents are platform-provided: NODE_ENV, PATH, VERCEL_*.)
+- [x] Route inventory: 29 pages (6 marketing, 19 portal, 3 auth, offline),
+  95 API routes. Every sidebar nav link resolves to a real page; every
+  static href in app/components resolves. Journey-verify portal pages via
+  Playwright (pages/journey/console specs) + owner live proofs
+  (connections/projects/bot-manager proven live today).
+- [x] API auth sweep: 19 routes with no direct auth import all delegate to
+  shared authenticated handlers (tenant-list/tenant-detail
+  requireActiveOrganization; github route prepareGitHubRepositoryRequest →
+  requireGitHubUser; operations route context). No unauthenticated data
+  route found. Webhooks use signature verification by design.
+- [ ] Accessibility/responsive: Playwright axe suite exists — run it; spot
+  gaps for new UI (workspace switcher, device-code branch).
+- [ ] Secrets: tracked-file scan before each merge (standing); no findings.
+
+Completed defect chain for this goal so far: #167 (mute failures), #168
+(bootstrap retry + truncation cap). Older completed goals below.
+
 Last updated: 2026-08-15 (Phase 2C resource gates). **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
