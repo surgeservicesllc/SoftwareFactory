@@ -70,9 +70,9 @@ nothing can withdraw a change that did not.
 | 19 | Detects repeated provider/agent underperformance | **PARTIAL (loop 22)** | The detector exists: a provider/model pair failing at least half of five or more terminal runs is a finding. Only the abstention path is live-exercisable today (no five terminal runs exist); it is proven, and the positive path awaits real execution history. |
 | 20 | Detects stale/dead code/configuration | **PARTIAL** | Two real instances were found *by hand* this session: an unused `fail_github_change_request` overload, and an unset SMTP port that silently disabled migration apply. Both prove the category is real; neither was found by a detector. |
 | 21 | Identifies technical debt | **PASS (loop 22)** | A standing inventory of three schema-grounded debts: legacy unlabelled connection mappings, commands stuck in submitted for a week, and improvements accepted a week ago with no implementation entry. Zero is a real answer, so these never abstain; the forgotten-improvement case is proven positively. |
-| 22 | Creates evidence-backed improvement proposals | **PARTIAL (improved loop 19)** | The persistence half now exists: `improvement_ledger` (migration `20260815001200`) records proposals durably, and the boundary refuses one without a non-empty baseline by name ("a recommendation, not an improvement"). What still does not exist is anything that *creates* proposals from telemetry — the detectors (goals 12-21) remain unbuilt, so today every proposal is owner-authored. |
+| 22 | Creates evidence-backed improvement proposals | **PASS (loop 23)** | The full pipe exists: detectors mine telemetry, `propose_improvements_from_detections` turns each finding into a durable proposal carrying the machine-captured baseline plus the exact triggering evidence, with a falsifiable metric-named prediction. Open questions are never re-proposed; rejections may be re-raised while the signal persists; nothing is auto-accepted. Proven end-to-end against the migrated chain. |
 | 23 | Proposals include benefit, risk, evidence, acceptance criteria | **PASS (loop 19)** | The proposal entry type requires all of it at the schema boundary: title, what changes, a falsifiable prediction, a non-empty baseline, acceptance criteria, and the constitution version that judged the intent. A row missing any of them cannot exist (`improvement_ledger_entry_shape`), proven in `improvement-ledger.behavior.test.ts`. |
-| 24 | Improvements become normal backlog/tasks/graphs | **PARTIAL (loop 19)** | The implementation entry type binds a proposal to a real `commands` row by composite foreign key, and it is refused until a decision row says `accepted` — so the only implementation path the ledger can record is the ordinary `submit_command` door. Nothing yet *automates* that routing; today an owner submits the command and links it. |
+| 24 | Improvements become normal backlog/tasks/graphs | **PASS (loop 23, with a named design boundary)** | Findings flow to proposals automatically; an accepted proposal's implementation can only be recorded against a real `commands` row — the ordinary `submit_command` door. The one step deliberately *not* automated is proposal→command submission: automatic work creation is execution authority, which Phase 1 reserves to owners, and the constitution's subjects list exists precisely so that boundary is a decision, not an accident. |
 | 25 | Uses existing 1C/2B execution, not a special self-edit path | **PASS (by construction)** | No self-edit path exists, so none can be special. This must stay true. |
 | 26 | Self-change uses an isolated branch | **PASS** | The only write path creates `softwarefactory/<timestamp>-<id>`; there is no default-branch writer anywhere in the API surface. |
 | 27 | Self-change receives independent fresh review | **PASS** | `lib/autonomy/approval.ts` enforces absolute no-self-approval at every risk level, including for an owner. |
@@ -92,13 +92,13 @@ nothing can withdraw a change that did not.
 Re-scored 2026-08-15 (master loop iteration 18) after the versioned
 constitution landed as the plan's step 1:
 
-- PASS: 22 of 37
-- PARTIAL: 15 of 37
+- PASS: 24 of 37
+- PARTIAL: 13 of 37
 - FAIL (absent): 0 of 37
-- Weighted completion: **≈73%** (counts above are the record; the weighting
+- Weighted completion: **≈77%** (counts above are the record; the weighting
   follows the audit's original discount for thin live telemetry)
 
-Loops 21-22 landed the self-audit engine and all five detectors. **Nothing
+Loops 21-23 landed the self-audit engine, all five detectors, and the automated intake. **Nothing
 in this scorecard is absent any more.** Every remaining PARTIAL is a live
 half — telemetry that stays thin until the factory executes real work, a
 detector's positive path awaiting real history, or an execution switch that

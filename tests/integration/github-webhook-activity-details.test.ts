@@ -46,7 +46,7 @@ async function applyFullMigrationChain(db: PGlite) {
     .filter((file) => /^\d+.*\.sql$/.test(file))
     .sort();
   expect(migrationFiles.at(-1)).toBe(
-    "20260815001500_factory_detectors.sql",
+    "20260815001600_detector_intake.sql",
   );
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));

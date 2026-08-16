@@ -477,4 +477,60 @@ describe("the improvement ledger", () => {
     }
     await db.exec("reset role");
   });
+
+  it("turns findings into owner-decidable proposals, without flooding or deciding", async () => {
+    await asRole("authenticated", ownerId);
+    const first = await db.query<{ detector: string; subject: string; proposal_id: string }>(
+      "select * from public.propose_improvements_from_detections($1::uuid)",
+      [projectId],
+    );
+    // Every current finding became exactly one proposal: the recurring
+    // fingerprint, the flaky unit suite, and the forgotten improvement.
+    expect(first.rows.map((row) => row.detector).sort()).toEqual([
+      "flaky_tests", "recurring_failure", "tech_debt",
+    ]);
+
+    // Machine-authored, owner-decided: the proposals exist, carry the real
+    // captured baseline plus the triggering detection, and no decision entry
+    // was created for any of them.
+    const created = await db.query<{ baseline: { metrics: unknown; detection: { detector: string } } }>(
+      `select baseline from public.improvement_ledger
+       where entry_type = 'proposal' and title like 'Detected:%'`,
+    );
+    expect(created.rows).toHaveLength(3);
+    for (const row of created.rows) {
+      expect(row.baseline.metrics).toBeTruthy();
+      expect(row.baseline.detection.detector).toBeTruthy();
+    }
+    const decisions = await db.query(
+      `select 1 from public.improvement_ledger decision
+       join public.improvement_ledger proposal on proposal.id = decision.proposal_id
+       where decision.entry_type = 'decision' and proposal.title like 'Detected:%'`,
+    );
+    expect(decisions.rows).toHaveLength(0);
+
+    // A second run proposes nothing: every finding already has an open
+    // proposal, and re-proposing an open question would flood the ledger.
+    const second = await db.query(
+      "select * from public.propose_improvements_from_detections($1::uuid)",
+      [projectId],
+    );
+    expect(second.rows).toHaveLength(0);
+
+    // A rejected proposal may be re-raised while the signal persists.
+    const flaky = await db.query<{ id: string }>(
+      `select id from public.improvement_ledger
+       where entry_type = 'proposal' and title like 'Detected: flaky_tests%'`,
+    );
+    await db.query(
+      "select public.record_improvement_decision($1::uuid, 'rejected', 'Not worth stabilising this week.')",
+      [flaky.rows[0]!.id],
+    );
+    const third = await db.query<{ detector: string }>(
+      "select * from public.propose_improvements_from_detections($1::uuid)",
+      [projectId],
+    );
+    expect(third.rows.map((row) => row.detector)).toEqual(["flaky_tests"]);
+    await db.exec("reset role");
+  });
 });
