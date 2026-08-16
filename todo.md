@@ -8,15 +8,17 @@ finds zero actionable defects.
 
 ### Audit backlog (loop working set)
 
-- [ ] **P0 — live canary journey**: Audit Round 2 run `8b5fdd2c` reaped after
-  attempt 1 (mute-failure round); one attempt left, claimed with the
-  bootstrap-retry + truncation fixes aboard. **Owner order 2026-08-16
-  ~20:45Z: manual dispatch is ENABLED on codex-worker.yml** (supersedes the
-  earlier intentional absence) — added `workflow_dispatch: {}` with a
-  job-level main-only ref guard so a manual dispatch cannot execute a
-  non-main ref's job with the workflow's secrets; contract test updated to
-  pin the guard. If the npm retry fails again, next step is pinning the
-  container npm behavior; the failure now records durably.
+- [ ] **P0 — live canary journey**: Audit Round 2 run `8b5fdd2c` claimed via
+  the FIRST manual dispatch (owner-ordered workflow_dispatch, main-guarded,
+  PR #171) and failed `stale_base_sha` — correctly: five fix merges moved
+  main after it was planned. Recording worked perfectly (truncation fix
+  proven live). ROOT FIX (ADR-075): never-started runs now re-plan to the
+  observed head — `replan_phase1c_run` (migration 20260816001300,
+  service_role, lease-held + head_sha-null guard), WorkspaceError carries
+  the observed SHA, worker re-plans once and retries, `replanned_base`
+  event names both SHAs. Post-execution staleness still fails closed.
+  REMAINING: apply 001300 hosted (surgical scope now covers it), owner
+  queues the audit once more; npm bootstrap retry still untested live.
 - [x] Full gates on current main (01ae6a8 lineage): vitest 2843/0 (+2 new),
   eslint 0 errors, tsc clean, production build exit 0, Playwright full run
   exit 0 (6 skipped by design) incl. axe on ~20 routes × 3 viewports and
