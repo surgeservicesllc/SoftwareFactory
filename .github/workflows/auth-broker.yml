@@ -33,9 +33,14 @@ jobs:
     # SOFTWAREFACTORY_AUTH_BROKER_DISABLED=true to switch the worker off.
     if: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED != 'true' }}
     runs-on: ubuntu-latest
-    # Session TTL is fifteen minutes and the script's own deadline is
-    # twenty-five; this is the hard stop above both.
-    timeout-minutes: 30
+    # Near the six-hour hosted-runner maximum: GitHub throttles cron beats
+    # on this repository to near-zero (measured 2026-08-16: nothing between
+    # 17:59 and 18:40), so short windows leave Connect clicks with no worker.
+    # One long window is the coverage; the staleness self-check inside the
+    # script hands over within minutes of a merge, and the script's own
+    # deadline below leaves room to finish an in-flight login before this
+    # hard stop.
+    timeout-minutes: 355
     env:
       CI: true
       NEXT_TELEMETRY_DISABLED: 1
@@ -67,12 +72,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           SOFTWAREFACTORY_CREDENTIAL_KEY: ${{ secrets.SOFTWAREFACTORY_CREDENTIAL_KEY }}
-          # The full 25-minute linger is the coverage model that works: a
-          # short claim window was tried (2026-08-16) and the gaps between
-          # GitHub's throttled cron beats left Connect clicks with no worker
-          # at all. Staleness is handled inside the worker instead: it
-          # compares main against its own checkout every sweep and exits
-          # when a newer release exists, so the concurrency queue hands over
-          # within minutes of a merge without ever cancelling a live login.
+          # A long linger is the coverage model: GitHub throttles this
+          # repository's cron to near-zero, so the worker stays for almost
+          # the whole six-hour runner budget. Staleness is handled inside:
+          # the worker compares main against its own checkout every sweep
+          # and exits when a newer release exists, so the concurrency queue
+          # hands over within minutes of a merge without ever cancelling a
+          # live login.
+          SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS: "20700000"
           SOFTWAREFACTORY_WORKER_RELEASE_SHA: ${{ github.sha }}
         run: npx tsx scripts/auth-broker.mts

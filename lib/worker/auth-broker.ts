@@ -61,7 +61,14 @@ export type AuthBrokerStore = Readonly<{
    * because identity is decoration on a completed sign-in, never a gate.
    */
   setProviderIdentity?: (accountId: string, identity: string) => Promise<boolean>;
+  /**
+   * The session's current status, so a worker mid-drive can notice a cancel
+   * and stop. Optional; null means unknown, which reads as "keep going".
+   */
+  readSessionStatus?: (sessionId: string) => Promise<string | null>;
 }>;
+
+const TERMINAL_SESSION_STATUSES = new Set(["revoked", "expired", "failed", "connected"]);
 
 /**
  * One login attempt as the runner sees it: started once, watched for a URL
@@ -155,6 +162,18 @@ export async function runAuthBrokerOnce(
     let sealedRelay: string | null = null;
     let completedWithoutRelay = false;
     while (now() < relayDeadline) {
+      // A cancelled or superseded session is not worth driving: a blind
+      // worker waiting out the full window on a dead session starves every
+      // click queued behind it. Unknown status reads as "keep going".
+      if (store.readSessionStatus) {
+        const status = await store.readSessionStatus(session.sessionId).catch(() => null);
+        if (status !== null && TERMINAL_SESSION_STATUSES.has(status)) {
+          process.stdout.write(
+            `Session ${session.sessionId.slice(0, 8)}… became ${status} mid-drive; abandoning.\n`,
+          );
+          return "failed";
+        }
+      }
       // A device-code login finishes on the provider's side the moment the
       // person approves; when the CLI says so, there is nothing to relay.
       if (cli.pollCompleted && (await cli.pollCompleted())) {
@@ -443,6 +462,16 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
     });
     if (error) throw new Error("Recording the demotion failed.");
     return data === true;
+  };
+
+  readSessionStatus = async (sessionId: string): Promise<string | null> => {
+    const { data, error } = await this.client.rpc("read_ai_auth_session_status", {
+      p_session_id: sessionId,
+    });
+    // Unknown reads as "keep going" — a database that predates the function
+    // must not make the worker abandon live logins.
+    if (error) return null;
+    return typeof data === "string" ? data : null;
   };
 
   setProviderIdentity = async (accountId: string, identity: string): Promise<boolean> => {
