@@ -14,11 +14,14 @@ on `softwarefactory-tan.vercel.app`): the launch and callback legs now
 verification failures name their real cause, the state lifetime is 30
 minutes, and the Connections console strips its one-shot notice query
 parameters after reading them (ADR-074; the host-skew entry in
-`todo.md` has the full defect story). The browser callback remains the
-only path that creates
-`connections` rows; if GitHub shows an installation but the page shows
-"Connect GitHub to begin", clicking Connect GitHub again re-runs the
-callback for the existing installation and adopts it.
+`todo.md` has the full defect story). Outcome, owner-verified 19:47Z:
+GitHub is Connected live on a fresh installation `#154236235` scoped to
+exactly `surgeservicesllc/SoftwareFactory`, bound to the owner's live
+workspace. The old installations from the 2026-08-13 setup were bound to
+a workspace the owner's login cannot reach (single-membership login, no
+Workspace card); recovery was uninstall + fresh Connect, not adoption.
+A Workspace switcher card now renders on Connections whenever a login
+belongs to several workspaces (PR #165).
 
 ## Active goal: BotBuild — AI accounts + automatic auth broker (2026-08-16)
 

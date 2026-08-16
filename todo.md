@@ -138,6 +138,23 @@ real cause (invalid vs expired vs different-browser-session); lifetime
 installed-but-empty: click Connect GitHub again — GitHub re-issues the
 callback for installation 153479019 and persist adopts it.
 
+**RESOLVED — GITHUB CONNECTED LIVE (owner screenshots 19:47Z):** banner
+"GitHub installation connected with 1 selected repository."; account
+surgeservicesllc Connected; fresh installation #154236235, repository
+access Selected → surgeservicesllc/SoftwareFactory (main); Codex worker
+chip Worker Connected. Path taken: the post-#165 reload showed NO
+Workspace card — the owner's login holds exactly one workspace, so the
+old installations (primary 153445938 and candidate 153479019, both from
+the 2026-08-13 setup) were bound to a workspace this login cannot reach.
+Recovery: owner uninstalled the primary GitHub App ("Surge
+SoftwareFactory") and clicked Connect GitHub — a genuinely fresh install,
+scoped to only the SoftwareFactory repository, bound cleanly to the live
+workspace. Residue: the candidate App "Surge SoftwareFactory Next"
+remains installed on GitHub with its stale phantom-workspace binding —
+inert; optional cleanup is uninstalling it on GitHub. The prior
+Phase 1B identifiers (installation 153479019, connection 85591f43,
+project b1f23696) are historical, not the live path.
+
 **Round 2 (owner screenshot 21:31Z, after #164 deployed):** the host fix
 is verified live — the probe shows theagoras.com hopping to the configured
 callback host (softwarefactory-tan.vercel.app) and the owner's retry got
