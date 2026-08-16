@@ -115,6 +115,22 @@ worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
 owner's live click-through of Remove and a fresh Connect (real provider
 auth — cannot be exercised by an agent).
 
+**BOTH PROVIDERS LIVE E2E — THE PRODUCT PROMISE HOLDS (2026-08-16 19:07Z):**
+owner screenshot: 4 Connected accounts — three Claude (Blackstone, NWV,
+Bubaly; connected live ×3 today, all re-verified 19:03:10 by the restored
+sweep, proving the 42501 vault-read fix) and **Codex Daniel, "Signed in as
+daniel.hughen@gmail.com", verified 19:06:41 — the first live Codex
+connection**, completed through the device-code flow (code displayed with
+Copy, OpenAI approval, credential sealed under the raised envelope cap,
+awaiting_user→verifying transition). The full defect chain that stood
+between "worked once" and "works": Enter-as-keystroke (#143), stale-code
+fail-fast (#144), coverage linger + release-SHA handover (#151/#158/#161),
+sweep non-fatality (#156), cancel-discards-pending (#157),
+cancellation-noticing (#158), vault-read grants (#159), envelope cap
+(#160), device-flow state gap (#162). Multi-account, multi-provider,
+rename, identity, Remove, cancel-cleanup: all owner-verified in
+production.
+
 **CLAUDE E2E VERIFIED LIVE ×2, PATH FROZEN BY OWNER (2026-08-16 ~18:00Z):**
 the owner confirmed "Claude connected, it is working perfectly" after the
 coverage fix — the second live end-to-end connection (first: 17:18Z). The
