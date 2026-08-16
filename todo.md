@@ -294,10 +294,84 @@ journey is E2E tested.
   real GitHub App and a live command need the owner's accounts — exactly
   what the production canary proves. (criterion 30, to the honest limit)
 
-**Open next:** final frictionless report (steps/clicks before vs after,
-automations added, friction removed, mobile result, security/RLS, remaining
-owner actions) — then hold the loop for owner-side live proofs (canary,
-GitHub connect from iPhone).
+### FRICTIONLESS COMPLETION REPORT (2026-08-16, loop iterations 1–9)
+
+**FRICTIONLESS COMPLETION: ~87%** — 26 of the goal's 30 completion criteria
+MET at the code-and-test level; 4 PARTIAL, each for an honest, named reason;
+everything beyond ~87% requires either the owner's real accounts (live
+proofs) or is a frozen-policy boundary this goal forbids weakening.
+
+**E2E JOURNEY RESULT:** PASS to the external-account boundary.
+`tests/e2e/journey.spec.ts` proves the signed-out scaffolding every CI run at
+three viewports (each step exists, names its gate, offers the next action),
+and the signed-in walk (sign-up → confirmation email → onboarding → live
+4-step guide → honestly gated goal box) against a real local Supabase stack.
+Beyond that boundary — real GitHub App connect and a live command — is
+exactly what the production canary proves, and is owner-blocked.
+
+**STEPS BEFORE → AFTER** (measured from the merged diffs):
+- Bot connect (#121): ~6 owner steps (pick provider, obtain key, paste or
+  name an env var, then hand-build a bot: name/model/credential ref) → **1
+  click + provider approval**, ready bot auto-provisioned on return.
+- First-run orientation (#124): no path (metrics + 16 nav items) → **4-step
+  live checklist** that completes and collapses to one CTA.
+- Goal submission (#125): 6 decisions (sentence, project, work type,
+  acceptance criteria, dependencies, risk) → **2** (sentence, project) with
+  safe defaults behind an Advanced fold.
+- Add project (#128): 4 fields + an account picker → **repo pick + confirm**
+  (name and branch inferred; picker only when ≥2 accounts).
+- Finding owner decisions (#126): hunt across consoles/logs → **one
+  attention area** listing only genuine decisions, each with one button.
+- Understanding a run (#127): raw enums + PR link buried in evidence →
+  **plain language** + "Review draft PR #N" leading the detail.
+- Recovering from a failed sign-in (#129): dead-end text → **retry button
+  in place**.
+- GitHub connect on iPhone/iPad (#123): broken (fetch-set cookie dropped by
+  ITP) → **works** via top-level navigation.
+
+**OWNER INTERVENTIONS REMOVED:** naming credential env vars; hand-building
+the first bot; re-typing repo name/branch GitHub already knows; choosing a
+risk tier for routine work; scanning logs for RED approvals; re-starting
+failed sign-ins from scratch.
+
+**AUTOMATIONS ADDED:** auto-provisioned default bot on provider connect;
+live setup-status detection on the dashboard; inferred project defaults;
+attention aggregation across four decision sources; automatic idempotency
+-key reuse on ambiguous submission failures (pre-existing, now surfaced);
+connect-outcome auto-clear from URLs so refreshes never repeat actions.
+
+**FRICTION REMOVED:** 9 iterations, PRs #121, #123–#129 — all merged with
+green CI (lint/typecheck/test/build + browser/a11y at three widths).
+
+**MOBILE RESULT:** iOS/iPadOS GitHub connect fixed (#123); three
+owner-authored-text overflow risks fixed (attention items, goal prompts,
+task titles); touch targets ≥36px from the design system; no hover-only
+controls; journey e2e green on desktop/tablet/mobile projects. Live iPhone
+round-trip: owner-pending.
+
+**SECURITY/RLS:** zero safety-surface changes across all nine iterations.
+No schema change, no new privileged path, no RLS/FORCE-RLS touch, no
+GREEN/YELLOW/RED widening, zero-token design intact; every server-side
+validation (risk, policy, binding, same-origin, owner-auth) unchanged. The
+two new API routes this session (`/api/github/install/launch`, from #123's
+predecessor line, and `/api/bots/connect/provision`, #121) both REQUIRE
+owner/admin authentication and only reach screens/actions that already
+existed.
+
+**PARTIAL (4), honestly:** guided connect flows for Vercel/Supabase (their
+adapters truthfully read Not Connected — future phase); goal-text → graph
+-vs-single-worker auto-decision (orchestrator plans per command type; the
+graph engine remains an explicit console); live worker auto-selection proof
+(code+tests done, needs the canary and a second worker); production
+protect/rollback/repair execution (control plane complete, execution
+deliberately blocked pending owner enablement — a safety boundary, not a
+gap).
+
+**REMAINING OWNER ACTIONS (path to 100%):** run the production canary (app
+sign-in page → "Email me a sign-in link instead" → click promptly on the
+same device → Bot Manager → queue the canary sentence); one live GitHub
+connect from an iPhone; hosted-ledger position check; second
+repository/account; the Phase 2A paid-adapter decision.
 
 ### External Blockers (owner-only)
 
