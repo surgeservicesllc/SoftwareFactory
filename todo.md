@@ -121,10 +121,17 @@ real worker status; everything wired end-to-end.
   disconnect, cross-org bot FK refusal, needs_reauth). Guard updates: RLS
   count 109→111, tail pins ×11, publicTables +2, runbook 83→84/19→20 |
   PASS — broker suite 10/10; runbook+grants+pin guards green | 2026-08-16
-- [ ] P0 | BotBuild | Broker API: POST /api/ai-accounts/connect, GET
-  /api/ai-accounts, session status read, relay-code POST (web-UI paste, not
-  terminal), cancel; owner-auth + same-origin + rate limit + audit events |
-  route tests | migration
+- [x] P0 | BotBuild | Broker API: POST /api/ai-accounts/connect (plans
+  reuse-vs-create against the three purpose slots per provider, opens the
+  broker session), GET /api/ai-accounts (identity + lifecycle, no secrets),
+  GET sessions/[id] (polling projection; sealed code structurally absent),
+  POST sessions/[id]/code (pastes into the WEB APP; sealed via sealSecret
+  bound to `ai_auth_relay:<sessionId>` before storage), POST
+  sessions/[id]/cancel, POST [accountId]/disconnect. Owner/admin checks +
+  same-origin asserts; audit events come from the definer functions
+  themselves. `cancel_ai_auth_session` added to the (unmerged) migration —
+  cancel ends the session, touches neither account nor credential |
+  PASS — 18 route tests + broker suite 11/11; tsc + eslint clean | 2026-08-16
 - [ ] P0 | BotBuild | Worker auth runner: dispatched job claims session
   (service-role RPC), runs provider CLI login with per-account isolated
   config dir (CLAUDE_CONFIG_DIR per account uuid), captures login URL →
