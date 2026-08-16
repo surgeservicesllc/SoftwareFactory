@@ -48,7 +48,9 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
           {commands.map((command) => (
             <li key={command.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <p className="font-medium text-foreground">{command.prompt}</p>
+                {/* The prompt is owner-typed (a pasted URL is common); an
+                    unbroken token must wrap rather than scroll the phone. */}
+                <p className="break-words font-medium text-foreground">{command.prompt}</p>
                 <p className="mt-0.5 text-sm text-faint">
                   {command.project?.name ?? "No project"} · saved {formatDateTime(command.submittedAt)}
                 </p>

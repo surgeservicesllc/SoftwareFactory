@@ -219,7 +219,9 @@ export function RunsConsole() {
                   {group.runs.map((run) => (
                     <li key={run.id} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0">
-                        <p className="font-medium text-foreground">{run.task?.title ?? "Untitled work"}</p>
+                        {/* Task titles derive from owner-typed prompts; an
+                            unbroken token must wrap, not scroll the phone. */}
+                        <p className="break-words font-medium text-foreground">{run.task?.title ?? "Untitled work"}</p>
                         <p className="mt-0.5 text-sm text-muted">
                           {run.agent?.name ?? "Unassigned"} · {formatDateTime(run.startedAt ?? run.createdAt)}
                         </p>

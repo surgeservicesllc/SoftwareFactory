@@ -175,8 +175,10 @@ export function NeedsYourAttention({ authenticated }: { authenticated: boolean }
               className="flex flex-col gap-3 rounded-lg border border-line p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="font-medium text-foreground">{item.what}</p>
-                <p className="mt-1 text-sm text-muted">{item.why}</p>
+                {/* Incident titles and connection names are arbitrary text; an
+                    unbroken token must wrap rather than scroll the phone. */}
+                <p className="break-words font-medium text-foreground">{item.what}</p>
+                <p className="mt-1 break-words text-sm text-muted">{item.why}</p>
               </div>
               <Link
                 href={item.href}

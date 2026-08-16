@@ -220,7 +220,7 @@ measured, then trimmed.
   single-account-hides-picker (and asserts the pre-filled name) and
   two-accounts-show-picker. tsc + lint clean.
 
-**Iteration 6 — shipped (PR #TBD):** error-UX audit; the one real dead end fixed.
+**Iteration 6 — shipped (PR #129):** error-UX audit; the one real dead end fixed.
 - Honest audit of every inline error site (19 `setMessage(error…)` call sites
   swept): most already carry their next action — the activity console has a
   full error card with Retry, commands/runs/backlog ride `TenantListShell`'s
@@ -238,10 +238,30 @@ measured, then trimmed.
 - Tests: bot-fabric-console 9/9 — new case lands on `?connect=failed` and
   asserts the notice carries the retry link. tsc + lint clean.
 
-**Open next (prioritized):** mobile pass over the core owner actions —
-criterion 26; consolidate duplicate/obsolete screens — criterion 28; hide
-remaining technical IDs behind advanced views — criteria 8/21 (composer +
-runs + projects done); full E2E of the critical journey — criterion 30.
+**Iteration 7 — shipped (PR #129, with iteration 6):** functional mobile pass.
+- Audit scope: the five core owner surfaces (Dashboard guide + attention area,
+  goal box, Connections, Add-Project, Runs list/detail), looking for touch
+  targets, hover-only controls, overflow risks, and drawer usability at phone
+  widths — beyond the e2e suite's existing three-width heading/viewport/axe
+  proof. (criterion 26)
+- Sound as found: buttons sit on `min-h-10`/`min-h-9` from the design system;
+  no hover-only controls (hover styles only decorate tappable elements); the
+  run detail is an inline card, not a fixed drawer, so it flows at 375px; repo
+  names truncate; SHAs are shortened; the runs branch line truncates; the
+  composer's chips/risk grid wrap and stack.
+- Three real overflow risks fixed — all owner-authored text rendered without
+  `break-words` inside `min-w-0` containers, where one pasted URL or long
+  token would horizontally scroll a phone: attention-item what/why lines
+  (`needs-your-attention.tsx`), the goal prompt in the commands list
+  (`commands-console.tsx`), and the task title in the runs list
+  (`runs-console.tsx`). Class-level fixes; behavior unchanged; 20/20 across
+  the three affected suites, tsc + lint clean.
+
+**Open next (prioritized):** consolidate duplicate/obsolete screens —
+criterion 28; hide remaining technical IDs behind advanced views — criteria
+8/21 (composer + runs + projects done); full E2E of the critical journey —
+criterion 30; then the final frictionless report (steps/clicks before vs
+after, automations added, remaining owner actions).
 
 ### External Blockers (owner-only)
 
