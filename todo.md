@@ -90,7 +90,8 @@ browser (the exact screen in the owner's mock); the credential travels once,
 sealed, through `/api/bots/connect/claim`. The button drives that flow and
 finishes it automatically.
 
-**Iteration 1 — shipped (PR #TBD):**
+**Iteration 1 — shipped (PR #133, squash `ce66247`, CI green, production
+deploy completed 13:09Z, /solutions/bot-manager 200):**
 - The gap that made "connected" ≠ "ready" for subscriptions: providers
   status keyed readiness off the API-key ref only, and provisioning wired
   bots to `ANTHROPIC_API_KEY` — a claimed subscription credential
@@ -119,10 +120,21 @@ finishes it automatically.
   4/4 (incl. the catalog↔server-constant pin and the never-probe rule),
   console 10/10 incl. a full button→command→check→Ready walk. tsc clean,
   eslint 0 errors, adjacent suites 37/37.
-- **Open next:** live round-trip with the owner (run the command, watch the
-  bot appear Ready in production); true multi-ACCOUNT vault slots (distinct
-  purposes per account) — iteration 2; surfacing the Claude tile when the
-  fleet is non-empty — iteration 2.
+- **Iteration 2 — Codex parity (PR #TBD):** the owner asked for "the same
+  for codex", and the plumbing was already symmetric (`codex` purpose,
+  `codex login` plan in connect.mts, `SOFTWAREFACTORY_CODEX_AUTH_JSON`
+  overlay, catalog subscription ref on openai). `ClaudeQuickConnect`
+  generalized to `SubscriptionQuickConnect(providerId, purpose)` — accent
+  and copy derived from the catalog, per-accent text color for contrast —
+  and the front door now shows BOTH branded buttons (Claude terracotta,
+  Codex mint) side by side, each ending in "<label> is connected — your
+  <label> bot is Ready for assignments" with "Add another" for many bots.
+  Console suite 11/11 incl. a full Codex walk (button → `connect.mts codex`
+  command → check → provision {provider:"openai",credential:"subscription"}
+  → Ready). tsc + lint clean.
+- **Open next:** live round-trips with the owner (Claude and Codex commands,
+  bots appear Ready in production); true multi-ACCOUNT vault slots —
+  iteration 3; subscription tiles on non-empty fleets — iteration 3.
 
 ### Owner goal — production Magic Link sign-in fix (2026-08-16)
 
