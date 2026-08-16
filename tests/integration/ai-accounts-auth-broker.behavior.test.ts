@@ -377,6 +377,32 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     )).rejects.toThrow(/foreign key/i);
   });
 
+  it("finds the open session an account already has, so a refresh resumes it", async () => {
+    const accountId = await createAccount("Claude account 9", "claude_9");
+    const sessionId = await openSession(accountId);
+
+    await assumeRole(db, ownerId);
+    const found = await db.query<{ open_session_id: string; open_status: string }>(
+      "select * from public.find_open_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, accountId],
+    );
+    expect(found.rows[0]).toMatchObject({ open_session_id: sessionId, open_status: "pending" });
+    await resetRole(db);
+
+    // Once terminal, there is nothing to resume.
+    await db.query(
+      "select public.fail_ai_auth_session($1::uuid, 'ended for the resume test')",
+      [sessionId],
+    );
+    await assumeRole(db, ownerId);
+    const after = await db.query(
+      "select * from public.find_open_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, accountId],
+    );
+    expect(after.rows).toHaveLength(0);
+    await resetRole(db);
+  });
+
   it("cancels an in-flight sign-in without touching the account or its credential", async () => {
     const accountId = await createAccount("Claude account 8", "claude_8");
     const sessionId = await openSession(accountId);

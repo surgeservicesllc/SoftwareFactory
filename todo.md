@@ -75,6 +75,80 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
+### Owner goal — BotBuildv2: FULL Bot Manager redesign (opened 2026-08-16 15:30Z, supersedes the v1 UX work below)
+
+Spec: uploads/bbe1c92d-BotBuildv2.txt. Product promise: "Connect Claude or
+Codex as easily as signing into any modern SaaS application. Then create as
+many specialized bots as needed." Journey: Bot Manager → Add AI Account →
+Claude/Codex → Sign In → provider login → Connected → Create Bot. The v1
+broker BACKEND (accounts, sessions, worker runner, unbounded slots — merged
+#136/#138) is exactly the spec's §7 architecture and stays; the v1 UI
+(quick-connect command tiles, check-now, OpenRouter CTA, worker banner,
+Fleet/Bots/Roles zero tabs, auto-degrade-to-command) is what gets REBUILT.
+CLI/diagnostic surfaces survive only under Developer Diagnostics (§35).
+
+**Checklist (status vocabulary: TODO / IN PROGRESS / BLOCKED / VERIFIED):**
+
+**Hosted apply status (2026-08-16 15:45Z):** owner authorized the apply and
+pasted a Supabase access token + DB password INTO CHAT — both treated as
+compromised on arrival (standing rule) and NOT used; owner told to rotate
+both. Direct CLI apply from the agent container is additionally blocked by
+the auto-mode classifier (RED against production — correct guard). Shipped
+instead: `.github/workflows/apply-hosted-migrations.yml` — owner adds FRESH
+SUPABASE_ACCESS_TOKEN + SUPABASE_DB_PASSWORD as Actions secrets, runs the
+workflow with confirmation "apply"; it lists the ledger, repairs the renamed
+row idempotently, pushes all outstanding migrations, and lists again as
+evidence.
+
+Architecture
+- VERIFIED §7 auth architecture (browser→SF→session→broker→CLI→provider→detect→update): merged as #136/#138; acceptance journey test walks it end to end
+- VERIFIED §19 domain model (account→profile→worker→bot→role): ai_accounts + bots.ai_account_id + per-account CLAUDE_CONFIG_DIR in worker; credentials never on bot records
+- TODO §22 realtime channel for auth sessions (current: 3s bounded polling — acceptable interim, no manual refresh/check-now; note as limitation)
+
+Worker
+- VERIFIED worker auth runner + heartbeat on sessions (#136); gated workflow default-OFF
+- BLOCKED §8 live worker green-dot state — REAL WORKER REQUIRED (owner: hosted migrations + SOFTWAREFACTORY_CREDENTIAL_KEY secret + SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true)
+- TODO §8 calm reconnecting presentation replacing "Worker Stale"/"Worker Not Connected" in normal UX
+
+Claude/Codex Authentication
+- VERIFIED Claude: headless setup-token drivable (probe); broker relays code in-page
+- VERIFIED Codex: localhost-callback limitation recorded; refused honestly by worker; command path lives in diagnostics only
+- BLOCKED real end-to-end provider sign-in — REAL PROVIDER AUTH REQUIRED (owner go-live steps + a human at claude.ai)
+
+Multi-Account Isolation
+- VERIFIED unbounded accounts/slots; per-purpose seal binding proven (journey test: slot 2 envelope refuses slot 1 purpose); per-account worker config dirs
+- BLOCKED §14 live two-account concurrent proof — REAL PROVIDER AUTH REQUIRED
+
+Database
+- VERIFIED ai_accounts/ai_auth_sessions/RLS/audit (#136), verification RPCs (#138)
+- IN PROGRESS §25/§26 session resume: find_open_ai_auth_session migration + connect-route resume instead of supersede-on-refresh
+
+Account Management
+- VERIFIED panel: lifecycle chips, Reconnect, consequence-naming Disconnect (#136)
+- TODO §27 Manage menu (Rename, Test Connection, View Bots) + §15 grouped accounts view with per-account bot counts
+
+Bot Creation
+- TODO §16 Create Bot wizard (provider→account→name/role→access→autonomy)
+
+Bot Fleet / Details
+- TODO §17 Your AI Team cards (role · provider · account · status) + filters; §18 details view
+
+UI/UX (§2-§6, §10-§11, §30-§32, §34)
+- IN PROGRESS new Bot Manager home: header+subtitle, +Add AI Account / +Create Bot, summary cards, §3 empty state (Claude/Codex cards, Advanced collapsed), §4 modal, §5/§6 connect screens, §10 progress checklist states, §11 success screen
+- IN PROGRESS remove from normal UX: command cards, copy buttons, check-now, Start again/manual-command buttons, OpenRouter CTA, worker banner, zero tabs, control-plane language → Developer Diagnostics section (§35)
+
+Security (§29)
+- VERIFIED no passwords/no tokens client-side/sealed vault/audit/rate-shape checks (v1, tested)
+
+Recovery (§23-§26)
+- IN PROGRESS resume-on-refresh, duplicate-click protection (server already supersedes; client must resume)
+- TODO calm error rewording per §23; §24 matrix noted per-item
+
+Testing / Evidence (§36-§37, §43-§44)
+- TODO docs/verification/bot-manager.md evidence ledger
+- TODO Playwright screenshot pass over the new surfaces; visual review
+- BLOCKED §38-§40 functional acceptance (real Claude/Codex journeys) — REAL PROVIDER AUTH REQUIRED
+
 ### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
 
 **LIVE DEFECT (owner report + screenshot, 2026-08-16 15:22Z) — FIXED SAME

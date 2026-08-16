@@ -1,11 +1,18 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-test("presents the bot fabric without claiming a connected worker", async ({ page }) => {
+test("keeps worker state honest but out of the primary experience", async ({ page }) => {
   const response = await page.goto("/solutions/bot-manager", { waitUntil: "domcontentloaded" });
 
   expect(response?.ok(), `bot manager returned ${response?.status()}`).toBe(true);
   await expect(page.locator("h1")).toContainText(/bot manager/i);
+
+  // The v2 rule: no worker banner on the primary surface. The honest state
+  // still exists — inside Developer Diagnostics, opened deliberately.
+  await expect(
+    page.getByText(/Worker (?:Not Connected|status requires sign-in)/i).first(),
+  ).toBeHidden();
+  await page.getByText("Developer Diagnostics").click();
   await expect(
     page.getByText(/Worker (?:Not Connected|status requires sign-in)/i).first(),
   ).toBeVisible();

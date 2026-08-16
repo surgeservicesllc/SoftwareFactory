@@ -176,7 +176,7 @@ describe("BotFabricConsole", () => {
     // runs Claude's real login and the page updates itself.
     await user.click(await screen.findByRole("button", { name: /^claude$/i }));
 
-    const continueLink = await screen.findByRole("link", { name: /continue to claude sign-in/i });
+    const continueLink = await screen.findByRole("link", { name: /open claude sign-in/i });
     expect(continueLink).toHaveAttribute("href", "https://claude.com/cai/oauth/authorize?code=true");
     expect(screen.queryByText(/scripts\/connect\.mts/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /check now/i })).not.toBeInTheDocument();

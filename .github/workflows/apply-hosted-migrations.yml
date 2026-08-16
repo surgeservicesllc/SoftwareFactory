@@ -1,0 +1,72 @@
+name: Apply hosted migrations
+
+# The runbook (AI/HOSTED_APPLY_RUNBOOK.md), executable: repairs the one
+# renamed ledger row, then pushes every outstanding migration to the hosted
+# Supabase project — exactly the steps the owner would type, with the ledger
+# listed before and after so the run's log is its own evidence.
+#
+# Owner-triggered only, and it refuses to run without the typed confirmation,
+# because this writes DDL to production. Secrets required (Settings →
+# Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — a fresh personal access token
+#   SUPABASE_DB_PASSWORD   — the project database password
+# Never paste either into a chat, an issue, or a commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply" to run against the production project'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Repair ledger and push migrations
+    if: ${{ inputs.confirm == 'apply' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+    steps:
+      - name: Check out the migrations
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Link the production project
+        run: npx --yes supabase@2 link --project-ref "$PROJECT_REF"
+
+      - name: List the remote ledger before touching anything
+        run: npx supabase migration list --linked
+
+      - name: Repair the renamed graph-engineering ledger row (idempotent)
+        # If the remote still records 20260814002000, move that history to the
+        # file's current name 20260814000100. If it was already repaired, both
+        # greps miss and this step is a no-op — never a failure.
+        run: |
+          LIST=$(npx supabase migration list --linked)
+          if echo "$LIST" | grep -q "20260814002000"; then
+            echo "Repairing: 20260814002000 -> 20260814000100 (history only, no DDL)"
+            npx supabase migration repair --status reverted 20260814002000
+            npx supabase migration repair --status applied 20260814000100
+          else
+            echo "No 20260814002000 row found; repair not needed."
+          fi
+
+      - name: Push the outstanding migrations
+        # The pipe answers the CLI's confirmation prompt when it asks one;
+        # in a non-interactive shell it is simply unread.
+        run: echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
+
+      - name: List the remote ledger after — the run's own evidence
+        run: npx supabase migration list --linked
