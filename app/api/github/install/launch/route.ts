@@ -66,6 +66,27 @@ export async function GET(request: Request) {
     }
 
     const configuration = getGitHubAppConfigurationForSlot(parsed.data.appSlot);
+    // One production deployment answers on several hostnames (the canonical
+    // domain and platform aliases), but GitHub returns the browser only to the
+    // host in the App's registered callback URL — and cookies are host-scoped.
+    // A launch from any other alias would set the state cookie where the
+    // callback can never read it, which is exactly the `github_state_invalid`
+    // failure seen live on 2026-08-16. Re-enter this launcher on the callback
+    // host first, so the cookie, the sign-in session check, and GitHub's
+    // return all happen on one host.
+    const callbackTarget = new URL(configuration.callbackUrl);
+    if (url.host !== callbackTarget.host) {
+      const relaunch = new URL(`${url.pathname}${url.search}`, callbackTarget.origin);
+      return new Response(null, {
+        headers: {
+          "Cache-Control": "private, no-store, max-age=0",
+          Location: relaunch.toString(),
+          Pragma: "no-cache",
+          "Referrer-Policy": "no-referrer",
+        },
+        status: 303,
+      });
+    }
     const { activeOrganization, supabase, user } = await requireGitHubUser();
     requireMatchingActiveOrganization(activeOrganization.id, parsed.data.organizationId);
     await requireOrganizationManager(supabase, user.id, parsed.data.organizationId);

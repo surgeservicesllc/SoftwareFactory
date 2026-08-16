@@ -115,6 +115,29 @@ worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
 owner's live click-through of Remove and a fresh Connect (real provider
 auth — cannot be exercised by an agent).
 
+**GITHUB INSTALL HOST-SKEW FIXED + BOTH PROVIDER PATHS FROZEN (2026-08-16
+~21:30Z, goal):** owner goal "(1) lock down both the Claude and Codex
+connections. (2) GitHub connection is not returning back data." Part 1:
+the Codex device-auth path (worker driver, device-login fragment contract,
+device UI branch, migrations 000800–001200) joined the ADR-072 freeze —
+policies/PROTECTED_RESOURCES.md extended, ADR-073 recorded. Part 2 root
+causes (owner screenshot on softwarefactory-tan.vercel.app): the install
+state cookie and Supabase session are host-scoped while the deployment
+answers on multiple hostnames, so a launch on one host and a callback on
+another could never validate (`github_state_invalid` with a VALID
+signature — the "expired or does not match this session" branch); the
+failure notice lives in query params nothing cleared, so one stale failure
+re-rendered forever; 10-minute state lifetime too short for a real org
+install; and the browser callback is the ONLY connections-row-creating
+path (webhooks just update known installations), so a dead callback =
+GitHub installed, database empty, page truthfully "Connect GitHub to
+begin". Fixes (ADR-074): launch + callback 303-converge on the configured
+callback host before any cookie/session work; verify failures name their
+real cause (invalid vs expired vs different-browser-session); lifetime
+30 min; console strips one-shot github params after reading. Recovery for
+installed-but-empty: click Connect GitHub again — GitHub re-issues the
+callback for installation 153479019 and persist adopts it.
+
 **BOTH PROVIDERS LIVE E2E — THE PRODUCT PROMISE HOLDS (2026-08-16 19:07Z):**
 owner screenshot: 4 Connected accounts — three Claude (Blackstone, NWV,
 Bubaly; connected live ×3 today, all re-verified 19:03:10 by the restored
