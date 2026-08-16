@@ -83,8 +83,9 @@ squash-merged as `859ceed` with both real CI checks green on head `8d08307`
 (Lint/typecheck/test/build job 95180034616 success 14:45:37Z; Browser/a11y
 job 95180034594 success 14:43:26Z; full local gate: vitest 2804/0, tsc
 clean, eslint 0 errors, production build exit 0). Vercel production deploy
-of `859ceed`: verification in progress (status API pending at 14:47:34Z) —
-result recorded below when confirmed. Go-live remains gated on three owner
+of `859ceed`: **VERIFIED — status API `success`, "Deployment has
+completed", 14:49:27Z**; live `/solutions/bot-manager` re-checked 200
+after the deploy. Go-live remains gated on three owner
 actions (migration apply per runbook; Actions secret
 SOFTWAREFACTORY_CREDENTIAL_KEY; repo var
 SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true) — documented in
