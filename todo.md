@@ -23,11 +23,11 @@ priority queue, and evidence for items closed by the loop.
 
 ### Current Certification
 
-- Overall: **~75% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed (PR #27 + Phase 2E rework) · 2C portfolio 94%, agent-complete · 2D ~81% (all structural rows closed; remaining gaps are live halves) · 2E 92% · 2A partial · 3 not started)
-- Last audit: 2026-08-15, this loop
-- Current loop: master iteration 23
-- Current blocker: live-proof items need owner's browser/dashboard (see External Blockers)
-- Next action: correct stale AI memory (worker is LIVE), then work P0 queue top-down
+- Overall: **~76% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed · 2C 94% agent-complete · 2D ~81% · 2E 92% · 2A partial · 3 ~77% ordered-plan complete) **+ frictionless owner-experience goal at ~87%** (its own report below)
+- Last audit: **2026-08-16, master iteration 24 — clean-room, see "Master clean-room audit" below**
+- Current loop: master iteration 24 (final gate)
+- Current blocker: every unblocked agent-actionable item is exhausted; remainder is owner-only (see External Blockers) plus the Vercel deploy-quota wait
+- Next action: owner live proofs (canary first — it unlocks the most)
 
 ### P0 Critical
 
@@ -74,6 +74,43 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
+
+### Master clean-room audit (2026-08-16, iteration 24 — FINAL GATE)
+
+Fresh audit on merged `main` (`69a0156`), assuming prior claims may be wrong;
+every number below re-measured this iteration, not carried forward.
+
+- **Local gate: PASS** — eslint 0 errors (14 warnings), `tsc --noEmit` clean,
+  **full vitest 2741 passed / 0 failed** (234 files, 2 skipped by design),
+  production build compiled successfully.
+- **Migrations: PASS** — 83 local migrations, tail `20260815001600_detector_
+  intake.sql`, exactly as documented. Hosted position remains the owner-only
+  SQL check (External Blocker 2); no ledger row was ever inserted manually.
+- **Live production: PASS** — 22/22 routes return 200 on the production
+  origin (re-run this iteration). Deployment caveat, honestly: Vercel's
+  free-tier daily quota exhausted mid-day; production currently serves main
+  **through `0126825` (#126)** — frictionless iterations 4–9 are merged and
+  CI-green but reach production on the next deploy after the quota resets
+  (~24 h), an owner Redeploy, or a plan upgrade. Nothing is lost; main is
+  the source of truth.
+- **Zero-token: PASS** — subscription-authenticated worker (Actions evidence
+  run `31894356952`, logs quote subscription mode; freshness limited to that
+  run — no newer run exists because no command has been queued);
+  `SOFTWAREFACTORY_OPENAI_API_KEY` permanently absent; constitution pins
+  `NO_PAID_TOKEN_DEPENDENCY`; no funded key in any workflow.
+- **Security/RLS: PASS at gate level** — schema-security-invariants, RLS
+  count, service-role grant pins, RPC contract, and migration-chain suites
+  all green in the full run above; no security control weakened anywhere in
+  this session's 16 merged PRs (#114–#129 master + frictionless).
+- **Regressions: none found** — the full suite passed with zero reopened
+  failures; the frictionless iterations changed presentation/tests only.
+- **P0/P1 unblocked: NONE** — every remaining P0/P1 row is owner-only
+  (canary, hosted-ledger position, second repository, 2A decision) or
+  blocked by one of those.
+- **Honest completion statement:** agent-actionable work is exhausted
+  (master loops 1–24, PRs #98–#129). "100%" strictly requires the four
+  owner actions plus the live execution history only real factory operation
+  produces. The certification percentages above are measured, not inflated.
 
 ### Owner goal — frictionless bot connection (closed 2026-08-16)
 
