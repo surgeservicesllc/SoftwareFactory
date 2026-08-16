@@ -27,11 +27,18 @@ export default function BotManagerPage() {
       <BotManagerHome />
 
       {/*
+        The goal box stays on the primary surface: "what do you want done?"
+        is plain language, and giving a bot its task is the whole point.
+      */}
+      <div className="mt-6">
+        <BotManagerWorkspace />
+      </div>
+
+      {/*
         Everything technical lives here and only here: the command-based
-        connect flows, the run workspace, worker state, and control-plane
-        detail. Deliberately closed by default — a person connecting Claude
-        should never need to interpret this, and a person who does need it
-        knows to open it.
+        connect flows, worker state, and control-plane detail. Deliberately
+        closed by default — a person connecting Claude should never need to
+        interpret this, and a person who does need it knows to open it.
       */}
       <details id="developer-diagnostics" className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-[var(--text-muted)]">
@@ -49,11 +56,9 @@ export default function BotManagerPage() {
           <BotFabricConsole />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <BotManagerWorkspace />
+            <GraphExecutionSummary templateKey="code_review" />
 
             <div className="space-y-4">
-              <GraphExecutionSummary templateKey="code_review" />
-
               <Card className="h-fit p-5">
                 <SectionTitle title="What happens next" />
                 <ol className="mt-4 space-y-4">

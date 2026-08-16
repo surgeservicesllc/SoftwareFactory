@@ -89,6 +89,17 @@ CLI/diagnostic surfaces survive only under Developer Diagnostics (§35).
 
 **Checklist (status vocabulary: TODO / IN PROGRESS / BLOCKED / VERIFIED):**
 
+**Hosted apply status (2026-08-16 15:45Z):** owner authorized the apply and
+pasted a Supabase access token + DB password INTO CHAT — both treated as
+compromised on arrival (standing rule) and NOT used; owner told to rotate
+both. Direct CLI apply from the agent container is additionally blocked by
+the auto-mode classifier (RED against production — correct guard). Shipped
+instead: `.github/workflows/apply-hosted-migrations.yml` — owner adds FRESH
+SUPABASE_ACCESS_TOKEN + SUPABASE_DB_PASSWORD as Actions secrets, runs the
+workflow with confirmation "apply"; it lists the ledger, repairs the renamed
+row idempotently, pushes all outstanding migrations, and lists again as
+evidence.
+
 Architecture
 - VERIFIED §7 auth architecture (browser→SF→session→broker→CLI→provider→detect→update): merged as #136/#138; acceptance journey test walks it end to end
 - VERIFIED §19 domain model (account→profile→worker→bot→role): ai_accounts + bots.ai_account_id + per-account CLAUDE_CONFIG_DIR in worker; credentials never on bot records

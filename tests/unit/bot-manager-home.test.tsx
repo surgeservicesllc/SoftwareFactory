@@ -53,6 +53,21 @@ afterEach(() => {
 });
 
 describe("BotManagerHome", () => {
+  it("gates a signed-out visitor instead of showing a disabled empty state", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => (
+      { ok: false, status: 401, json: async () => ({}) } as unknown as Response
+    )));
+
+    render(<BotManagerHome />);
+
+    expect(await screen.findByRole("heading", { name: /sign in to manage your bots/i }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^sign in$/i })).toHaveAttribute(
+      "href", "/auth/sign-in?next=%2Fsolutions%2Fbot-manager",
+    );
+    expect(screen.queryByText(/build your ai team/i)).not.toBeInTheDocument();
+  });
+
   it("greets an empty organization with Build your AI team — and zero terminal anywhere", async () => {
     stub({});
 

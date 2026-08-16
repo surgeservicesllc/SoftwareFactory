@@ -75,6 +75,8 @@ export function BotManagerHome() {
   const [bots, setBots] = useState<BotView[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
   const [canManage, setCanManage] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [stage, setStage] = useState<ConnectStage>({ kind: "closed" });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [creatingBot, setCreatingBot] = useState(false);
@@ -92,8 +94,14 @@ export function BotManagerHome() {
         };
         setAccounts(body.accounts ?? []);
         setCanManage(Boolean(body.canManage));
+        setSignedOut(false);
       } else {
         setAccounts([]);
+        // A signed-out visitor gets the gate, never a disabled empty state
+        // pretending they could click; any other failure is named rather
+        // than dressed up as an empty organization.
+        setSignedOut(accountsResponse.status === 401);
+        setUnavailable(accountsResponse.status !== 401);
       }
       if (fabricResponse.ok) {
         const body = (await fabricResponse.json()) as FabricPayload;
@@ -311,6 +319,33 @@ export function BotManagerHome() {
 
   const loading = accounts === null;
   const empty = !loading && (accounts?.length ?? 0) === 0 && bots.length === 0;
+
+  if (signedOut || unavailable) {
+    return (
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-6 py-12 text-center">
+        <h2 className="text-xl font-semibold text-[var(--text)]">
+          {signedOut ? "Sign in to manage your bots" : "The bot fabric is unavailable"}
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-muted)]">
+          {signedOut
+            ? "Your AI accounts and bots are waiting behind your sign-in."
+            : "The service could not be reached. Nothing was changed."}
+        </p>
+        {signedOut ? (
+          <a
+            href="/auth/sign-in?next=%2Fsolutions%2Fbot-manager"
+            className="btn btn-primary mt-4 inline-block"
+          >
+            Sign in
+          </a>
+        ) : (
+          <button type="button" onClick={() => void load()} className="btn btn-primary mt-4">
+            Try Again
+          </button>
+        )}
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-6">
