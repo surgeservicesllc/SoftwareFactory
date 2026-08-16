@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 32**, listed in the measured section below. The repository total is 96 migration
+**The current total is 33**, listed in the measured section below. The repository total is 97 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
 outstanding. (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
@@ -322,6 +322,7 @@ so it cannot pass without having applied every row below).
 | `20260816000300_resume_ai_auth_session` | `find_open_ai_auth_session`: the open session an account already has, so a page refresh resumes the sign-in instead of superseding it (authenticated, member-checked, projection excludes the sealed code) | `ai-accounts-auth-broker.behavior` |
 | `20260816000400_inspect_ai_auth_sessions` | `inspect_ai_auth_sessions`: bounded read-only session-state projection for the worker's log (status/timing/linkage, never the sealed code) — the diagnosis surface after two live runs and a watching owner disagreed about whether sessions existed | `ai-accounts-auth-broker.behavior` |
 | `20260816000500_remove_ai_account` | `remove_ai_account`: stronger than disconnect — deletes the account, its credential, and its sessions; bots detach (never deleted) and read "no account attached" | `ai-accounts-auth-broker.behavior` |
+| `20260816001400_project_repository_picker` | `set_project_github_repository` + `unlink_project_github_repository`: owner/admin choice of which GitHub repository an existing project connects to. Same advisory locks as handoff and the change-reservation trigger; one non-archived project per repository with the conflicting project named in the refusal; blocks while a change reservation is pending; immutable `connection.changed` activity evidence; grants to `authenticated` only | `project-repository-picker.behavior` |
 
 What they do **not** do:
 

@@ -2,6 +2,18 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-16 — project repository picker:** implemented and locally certified:
+migration `20260816001400` (two definer functions, no table/grant/RLS changes),
+`PUT`/`DELETE /api/projects/[projectId]/repository`, and the Connections console picker.
+Evidence: `tests/integration/project-repository-picker.behavior.test.ts` (8 tests against
+the full migrated chain: function ACLs, member refusal, link/relink/unlink evidence, the
+named uniqueness refusal, the pending-reservation freeze, the archived-project refusal),
+`tests/unit/project-repository-route.test.ts` (11 tests: same-origin, role, body, RPC
+wiring, verbatim 55000 refusals, 23505 race mapping), and six new Connections console
+component tests (picker render, link, unlink, uniqueness message, load-failure state,
+no-installation state, zero-repository state). Local evidence only; the migration is
+unhosted and no hosted claim is made.
+
 **Addendum, 2026-08-16 — BotBuild (AI accounts + auth broker):** the P0 layer is
 implemented and locally certified: migration `20260816000100` (two RLS+FORCE
 tables with zero direct table access, 16 definer functions, `bots.ai_account_id`),

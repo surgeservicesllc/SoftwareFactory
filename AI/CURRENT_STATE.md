@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-16 (project repository picker):** migration
+`20260816001400_project_repository_picker` adds `set_project_github_repository` and
+`unlink_project_github_repository` — owner/admin choice of which GitHub repository an
+existing project connects to, with change and unlink. Both take the same advisory locks as
+`handoff_github_project_connection` and the change-reservation trigger, enforce one
+non-archived project per repository (naming the conflicting project in the refusal), block
+while a change reservation is pending, and append immutable `connection.changed` activity
+evidence. `PUT`/`DELETE /api/projects/[projectId]/repository` exposes them behind
+same-origin plus owner/admin checks, and the Connections console gains a per-project
+repository picker with truthful no-installation / zero-repository / load-failure states.
+`connect_github_project` (creation-time binding) is untouched; no RLS, grant matrix,
+or execution-authority change. The migration is **unhosted** — the runbook's outstanding
+set is now 33 ending at `20260816001400`. Verified locally by
+`tests/integration/project-repository-picker.behavior.test.ts`,
+`tests/unit/project-repository-route.test.ts`, and the extended Connections console suite.
+
 **Addendum, 2026-08-16 (BotBuild):** migration `20260816000100_ai_accounts_auth_broker`
 adds `ai_accounts` (provider sign-ins as first-class identities; no secrets — only the
 vault purpose linkage), `ai_auth_sessions` (the broker state machine a worker drives
