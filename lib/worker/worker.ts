@@ -196,7 +196,40 @@ export class SoftwareFactoryWorker {
       await event({ kind: "workspace_preparing", message: "Preparing an isolated Git workspace." });
       await assertExecutionActive();
       let installationToken = await this.dependencies.tokenProvider.createToken(job, controller.signal);
-      const workspace = await this.dependencies.workspace.prepare(job, installationToken.token, controller.signal);
+      let workspace: PreparedWorkspace;
+      try {
+        workspace = await this.dependencies.workspace.prepare(job, installationToken.token, controller.signal);
+      } catch (prepareError) {
+        // On a continuously merging repository the planned base is often
+        // already historical by the first claim (three live owner commands
+        // died stale_base_sha on 2026-08-16 without executing). While nothing
+        // was ever built on the old base — no recovery evidence here, no
+        // commit recorded in the database, no remote factory branch (the
+        // workspace refuses those separately) — moving the plan to the
+        // observed head is the honest reading of "run this against the
+        // repository". The database guard re-checks the lease and the
+        // no-commit condition before the plan moves.
+        const observedSha = prepareError instanceof WorkspaceError
+          && prepareError.code === "stale_base_sha"
+          && !job.recovery
+          && typeof prepareError.observedBaseSha === "string"
+          && /^[0-9a-f]{40}$/.test(prepareError.observedBaseSha)
+          ? prepareError.observedBaseSha
+          : null;
+        if (!observedSha) throw prepareError;
+        const replanned = await this.dependencies.store.replan(job, this.workerId, observedSha);
+        if (!replanned) throw prepareError;
+        await event({
+          kind: "replanned_base",
+          message: "The base branch moved before execution started; the run was re-planned to the current head.",
+          details: { fromSha: job.repository.baseSha, toSha: observedSha },
+        });
+        job = {
+          ...job,
+          repository: { ...job.repository, baseSha: observedSha },
+        };
+        workspace = await this.dependencies.workspace.prepare(job, installationToken.token, controller.signal);
+      }
       preparedWorkspace = workspace;
       await this.dependencies.store.artifact(job, this.workerId, {
         type: "branch",

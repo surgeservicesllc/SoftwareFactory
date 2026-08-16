@@ -107,6 +107,7 @@ export type WorkerJob = z.infer<typeof workerJobSchema>;
 export type WorkerEventKind =
   | "claimed"
   | "workspace_preparing"
+  | "replanned_base"
   | "workspace_ready"
   | "agent_started"
   | "agent_event"
@@ -196,6 +197,13 @@ export interface WorkerStore {
     },
   ): Promise<void>;
   cancel(job: WorkerJob, workerId: string, reason: string, usage?: WorkerUsage): Promise<void>;
+  /**
+   * Moves a never-started run's planned base to the observed live head. The
+   * database refuses unless the caller still holds the lease and the run has
+   * no commit, so pushed work can never be orphaned by a re-plan. Returns
+   * whether the plan actually moved.
+   */
+  replan(job: WorkerJob, workerId: string, baseSha: string): Promise<boolean>;
 }
 
 export interface InstallationTokenProvider {

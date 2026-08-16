@@ -279,6 +279,10 @@ describe("SECURITY DEFINER functions", () => {
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
+      // Moves a never-started run's planned base to the observed live head.
+      // Lease-guarded and refused once any commit exists, so pushed work can
+      // never be orphaned by a re-plan.
+      "replan_phase1c_run",
       "report_ai_auth_login_url",
       "resolve_provider_connect_session",
       // Which provider account signed in — display data on a completed
