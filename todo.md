@@ -175,11 +175,23 @@ real worker status; everything wired end-to-end.
   Actions secrets SOFTWAREFACTORY_CREDENTIAL_KEY + repo var
   SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true, then a real click-through) |
   2026-08-16
-- [ ] P0 | BotBuild | Auto-completing UI: connect wizard (provider cards →
-  confirmation → progress modal with real states → Connected card), session
-  status via bounded polling of the session endpoint (no 1s polling; no
-  check-now button — the state flips itself), popup-blocked fallback link |
-  console tests | broker API
+- [x] P0 | BotBuild | Auto-completing UI: `components/ai-account-connect.tsx`
+  — every rendered state read from the broker session (3s bounded polling),
+  never assumed: waiting-for-worker (honest schedule note + 75s stall
+  detection offering the manual path), worker-initializing, awaiting_user
+  (real login URL as "Continue to {label} sign-in" opened in a new tab +
+  paste-the-code field posting to the relay endpoint), finishing/verifying,
+  Connected, failed (sanitized reason + Start again + fallback + Close),
+  cancel posts the cancel endpoint. NO check-now button, NO command shown
+  on the primary path. Console integration: Claude button broker-first
+  ("Connect another account" too); Codex keeps the command flow (its login
+  is a localhost callback the worker cannot drive); on connected the
+  console maps the account's credentialPurpose (now in GET /api/ai-accounts)
+  to the provision slot and finishes with a Ready bot. Fallback preserved:
+  broker-can't-start → "Use the manual command instead" → old flow intact |
+  PASS — console suite 12/12 incl. full broker walk (no command, no
+  check-now, code pasted in-page, Ready + both uncapped follow-ups) and
+  fallback walk; tsc + eslint clean | 2026-08-16
 - [ ] P1 | BotBuild | Bot Manager redesign: header counts (Worker/Accounts/
   Bots/Roles), empty state per spec (Claude + Codex cards primary, Advanced
   below, OpenRouter demoted), AI Accounts management section (Manage/

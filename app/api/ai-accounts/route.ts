@@ -27,6 +27,9 @@ export async function GET() {
         authMethod: row.auth_method,
         displayName: row.display_name,
         status: row.status,
+        // A name, not a secret: which vault slot the account's credential
+        // lives under, so the console can wire a bot to the right variable.
+        credentialPurpose: row.credential_purpose,
         lastVerifiedAt: row.last_verified_at,
         lastError: row.last_error,
         createdAt: row.created_at,
