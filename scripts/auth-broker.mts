@@ -6,6 +6,7 @@ import {
   SupabaseAuthBrokerStore,
   verifyStoredAccounts,
 } from "@/lib/worker/auth-broker";
+import { captureUsageForAccounts, SupabaseUsageRecorder } from "@/lib/worker/usage-probe";
 
 /**
  * The auth-broker worker entry point.
@@ -122,6 +123,30 @@ async function main() {
     );
   }
 
+  // The usage sweep: ask each connected account's provider how much of its
+  // subscription windows are used, and record the answer (or the named
+  // failure) as append-only evidence for the Bot Manager. Like verification,
+  // never fatal — and resilient to a hosted database that predates the usage
+  // migration, which reads as a recorder error, not a crash.
+  const usageRecorder = SupabaseUsageRecorder.create({
+    url: env.NEXT_PUBLIC_SUPABASE_URL,
+    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+  });
+  const captureUsage = async () => {
+    const usage = await captureUsageForAccounts(store, usageRecorder).catch((error) => {
+      const message = error instanceof Error ? error.message : "unexpected error";
+      process.stdout.write(`Usage sweep skipped: ${message}\n`);
+      return { measured: 0, unavailable: 0, unsupported: 0, errors: 0 };
+    });
+    if (usage.measured + usage.unavailable + usage.unsupported + usage.errors > 0) {
+      process.stdout.write(
+        `Usage sweep: ${usage.measured} measured, ${usage.unavailable} unavailable, `
+        + `${usage.unsupported} unsupported, ${usage.errors} record error(s).\n`,
+      );
+    }
+  };
+  await captureUsage();
+
   const deadline = Date.now() + env.SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS;
   const dependencies = productionAuthBrokerDependencies(store);
 
@@ -130,6 +155,10 @@ async function main() {
   // whole window stays covered; the workflow timeout is the hard stop.
   const IDLE_POLL_MS = 10_000;
   const SWEEP_EVERY_TICKS = 30;
+  // Usage refresh cadence while lingering: every ~30 minutes of idle time,
+  // so a long worker window keeps the Bot Manager's numbers current without
+  // hammering the provider's usage endpoint.
+  const USAGE_EVERY_TICKS = 180;
 
   let handled = 0;
   let idleTicks = 0;
@@ -152,6 +181,9 @@ async function main() {
         announcedIdle = true;
       }
       idleTicks += 1;
+      if (idleTicks % USAGE_EVERY_TICKS === 0) {
+        await captureUsage();
+      }
       if (idleTicks % SWEEP_EVERY_TICKS === 0) {
         await store.expireStale();
         if (await newerReleaseExists(
@@ -171,6 +203,9 @@ async function main() {
     handled += 1;
     announcedIdle = false;
     process.stdout.write(`Sign-in session ${outcome}.\n`);
+    // A finished sign-in may have connected a new account; capture its usage
+    // now rather than waiting out the idle cadence.
+    if (outcome === "connected") await captureUsage();
   }
 }
 

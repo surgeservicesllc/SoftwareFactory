@@ -52,6 +52,11 @@ const GITHUB_INGRESS_TABLES = [
  * "protected and never wired up" is intent, and intent has to be written down.
  */
 const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze({
+  ai_account_usage_observations:
+    "Append-only usage evidence per AI account. Reads go through the "
+    + "list_ai_account_usage member projection and the only writer is the "
+    + "worker's record_ai_account_usage definer function; a policy would open "
+    + "a second, silent path around both.",
   ai_accounts:
     "AI-account identities. No secret column, but every read goes through the "
     + "list_ai_accounts projection and every mutation through a definer function "
@@ -275,6 +280,10 @@ describe("SECURITY DEFINER functions", () => {
       "read_ai_auth_session_status",
       "read_provider_credential",
       "reconcile_github_repository_grants",
+      // The usage sweep's one write: append a provider-usage observation for
+      // an account the worker just probed. Insert-only into an append-only
+      // table; the definer function revalidates the account/organization pair.
+      "record_ai_account_usage",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",

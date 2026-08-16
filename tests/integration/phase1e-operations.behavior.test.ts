@@ -186,7 +186,7 @@ describe("Phase 1E production operations behavior", () => {
     // the two AI-account auth-broker tables.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(111);
+    expect(rlsRows).toHaveLength(112);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

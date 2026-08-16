@@ -4,6 +4,10 @@ import { Check, KeyRound, Loader2, Pencil, Trash2, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
+import {
+  AccountUsage,
+  type AccountUsageView,
+} from "@/components/bot-manager/account-usage";
 import { cn } from "@/lib/cn";
 
 /**
@@ -22,11 +26,13 @@ type AccountView = {
   id: string;
   provider: string;
   providerLabel: string;
+  authMethod: string;
   displayName: string;
   providerIdentity: string | null;
   status: string;
   lastVerifiedAt: string | null;
   lastError: string | null;
+  createdAt: string | null;
 };
 
 const STATUS_LABELS: Readonly<Record<string, { label: string; tone: string }>> = Object.freeze({
@@ -45,6 +51,7 @@ export function AiAccountsPanel({
   onChanged: () => Promise<void> | void;
 }) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
+  const [usageByAccount, setUsageByAccount] = useState<Record<string, AccountUsageView>>({});
   const [reconnecting, setReconnecting] = useState<AccountView | null>(null);
   // Disconnect and Remove ask in place: first click arms, second click acts.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -64,11 +71,33 @@ export function AiAccountsPanel({
     } catch {
       // The panel is additive; a failed read leaves it hidden rather than red.
     }
+    // Usage is separate evidence with its own lifecycle: a failed usage read
+    // leaves the accounts intact and each row saying "no usage recorded yet",
+    // never an error page.
+    try {
+      const usageResponse = await fetch("/api/ai-accounts/usage", { cache: "no-store" });
+      if (!usageResponse.ok) return;
+      const usageBody = (await usageResponse.json()) as { usage?: AccountUsageView[] };
+      setUsageByAccount(Object.fromEntries(
+        (usageBody.usage ?? []).map((entry) => [entry.accountId, entry]),
+      ));
+    } catch {
+      // Same rule: absence of usage evidence is not an outage.
+    }
   }, []);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(kickoff);
+    // The worker records fresh usage on its own cadence; the panel re-reads it
+    // so the page stays current without anyone clicking. Paused while the tab
+    // is hidden — polling a background tab is spend without an audience.
+    const refresh = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 60_000);
+    return () => {
+      window.clearTimeout(kickoff);
+      window.clearInterval(refresh);
+    };
   }, [load]);
 
   const rename = useCallback(async (account: AccountView) => {
@@ -249,6 +278,17 @@ export function AiAccountsPanel({
                     : "Never verified"}
                   {account.lastError ? ` — ${account.lastError}` : ""}
                 </p>
+                <p className="mt-0.5 text-xs text-[var(--text-faint)]">
+                  {account.providerLabel}
+                  {" · "}
+                  {account.authMethod === "api_key" ? "API key" : "Subscription"}
+                  {account.createdAt
+                    ? ` · Added ${new Date(account.createdAt).toLocaleDateString()}`
+                    : ""}
+                </p>
+                {account.status === "connected" || account.status === "needs_reauth" ? (
+                  <AccountUsage usage={usageByAccount[account.id]} />
+                ) : null}
               </div>
               <span
                 className={cn(
