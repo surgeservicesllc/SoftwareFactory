@@ -184,23 +184,26 @@ export function ConnectionsConsole() {
     }
   }
 
-  async function connectGithub(appSlot: "candidate" | "primary" = "primary") {
+  function connectGithub(appSlot: "candidate" | "primary" = "primary") {
     if (!organization) return;
     setPending("connect");
     setMessage("");
-    try {
-      const response = await fetch("/api/github/install/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/solutions/connections" }),
-      });
-      const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
-      if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
-      window.location.assign(body.authorizationUrl);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "GitHub authorization failed.");
-      setPending(null);
-    }
+    // A single top-level navigation to the launcher, which sets the anti-forgery
+    // state cookie on its own redirect response and forwards the browser to
+    // GitHub. This deliberately does not POST-then-redirect: a cookie set on a
+    // background fetch response is dropped by Safari's tracking prevention on
+    // iOS/iPadOS, which broke the return leg only on those devices.
+    const params = new URLSearchParams({
+      appSlot,
+      organizationId: organization.id,
+      returnTo: "/solutions/connections",
+    });
+    // A full-page navigation, not router.push: the target is a route handler
+    // that sets a cookie and 303s to github.com. A client-side navigation would
+    // fetch it as RSC and follow neither the Set-Cookie nor the off-origin
+    // redirect.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`/api/github/install/launch?${params.toString()}`);
   }
 
   async function handoffProject(
