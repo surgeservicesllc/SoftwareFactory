@@ -25,9 +25,13 @@ export function redactText(
     /(^|\n)(\s*(?:export\s+)?[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY)[A-Z0-9_]*\s*=\s*)[^\r\n]+/gi,
     "$1$2[REDACTED]",
   );
-  return text.length <= maximumLength
-    ? text
-    : `${text.slice(0, maximumLength)}\n[TRUNCATED]`;
+  // The marker counts toward the cap. Appending it beyond maximumLength made
+  // every long failure message 12 characters too big for the database's
+  // blocked-reason constraint, so recording a real failure itself failed
+  // (23514, live 2026-08-16) and the failure evidence was lost.
+  if (text.length <= maximumLength) return text;
+  const marker = "\n[TRUNCATED]";
+  return `${text.slice(0, Math.max(0, maximumLength - marker.length))}${marker}`;
 }
 
 /**
