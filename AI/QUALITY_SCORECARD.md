@@ -3,7 +3,7 @@
 Last reviewed: 2026-08-13
 
 **Addendum, 2026-08-16 — per-account usage evidence (ADR-076):** migration
-`20260816001400` (append-only usage observations, worker-only write, member
+`20260816001500` (append-only usage observations, worker-only write, member
 latest-per-account read), `lib/worker/usage-probe.ts` with the auth-broker
 capture hook, `GET /api/ai-accounts/usage`, and the Bot Manager usage rows are
 implemented and locally certified: the new behavior suite

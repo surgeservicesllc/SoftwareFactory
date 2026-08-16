@@ -6,7 +6,7 @@ Last updated: 2026-08-16
 
 The owner asked for each connected bot's usage (session % and weekly %) on
 `/solutions/bot-manager`, fully automated. Landed as ADR-076: evidence table
-`ai_account_usage_observations` (migration `20260816001400`, **unhosted** —
+`ai_account_usage_observations` (migration `20260816001500`, **unhosted** —
 apply it with the runbook before expecting live rows), probe module
 `lib/worker/usage-probe.ts`, a bounded capture hook in
 `scripts/auth-broker.mts` (frozen file, touched under the owner's explicit

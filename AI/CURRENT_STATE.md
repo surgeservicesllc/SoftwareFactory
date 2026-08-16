@@ -3,7 +3,7 @@
 Last reviewed: 2026-08-13
 
 **Addendum, 2026-08-16 (per-account usage evidence):** migration
-`20260816001400_ai_account_usage_observations` adds append-only provider-usage
+`20260816001500_ai_account_usage_observations` adds append-only provider-usage
 evidence per AI account (RLS+FORCE, zero direct table access, worker-only
 `record_ai_account_usage`, member-only `list_ai_account_usage`). The
 auth-broker worker now captures usage automatically — startup, ~5-minute idle
@@ -16,7 +16,7 @@ times, a named failure, or "no usage recorded yet") via
 `GET /api/ai-accounts/usage`, refreshing every 30 s while visible; a hosted
 database that predates the migration reads as an empty list, not an outage.
 Local and CI evidence only until the migration is hosted — the runbook's
-outstanding set now ends at `20260816001400`. The frozen connect path's login
+outstanding set now ends at `20260816001500`. The frozen connect path's login
 semantics are untouched (ADR-076); no execution authority changes.
 
 **Addendum, 2026-08-16 (BotBuild):** migration `20260816000100_ai_accounts_auth_broker`

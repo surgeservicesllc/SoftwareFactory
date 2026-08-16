@@ -5,7 +5,7 @@ Rebased 2026-08-16 on an owner-measured hosted position (see the section directl
 
 **The current total is 33**, listed in the measured section below. The repository total is 97 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest: `20260816001400_ai_account_usage_observations` — the Bot Manager's usage
+outstanding. (Newest: `20260816001500_ai_account_usage_observations` — the Bot Manager's usage
 evidence, ADR-076; until it is applied, production records no usage observations and the panel
 truthfully says "no usage recorded yet".) (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
