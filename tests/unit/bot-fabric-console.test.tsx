@@ -233,12 +233,15 @@ describe("BotFabricConsole", () => {
     render(<BotFabricConsole />);
 
     await user.click(await screen.findByRole("button", { name: /^claude$/i }));
-    // The broker says honestly that it could not start, and offers the
-    // operator-machine path rather than a dead end.
-    expect(await screen.findByText(/did not finish/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /use the manual command instead/i }));
 
+    // The broker backend is unavailable, so the command flow starts BY
+    // ITSELF: one click on Claude still reaches a working sign-in, with no
+    // error tile and no second click. "Could not be started" must never be
+    // the owner's problem to route around.
     expect(await screen.findByText(/scripts\/connect\.mts claude/)).toBeInTheDocument();
+    expect(screen.queryByText(/did not finish/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /use the manual command instead/i }))
+      .not.toBeInTheDocument();
   });
 
   it("connects Codex the same way: its own sign-in, then a Ready bot", async () => {

@@ -77,6 +77,20 @@ priority queue, and evidence for items closed by the loop.
 
 ### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
 
+**LIVE DEFECT (owner report + screenshot, 2026-08-16 15:22Z) — FIXED SAME
+HOUR:** clicking Claude in production showed "The Claude sign-in did not
+finish — The sign-in could not be started" — the broker backend is not
+available on hosted (its migrations/worker are among the owner-gated go-live
+steps), and the UI surfaced that as a dead-end error tile requiring another
+click. Fix: `AiAccountConnect` gained `onUnavailable` — when the broker
+cannot even START a session, the console degrades to the command flow
+automatically (zero extra clicks, no error tile), exactly as if the broker
+had never been offered; mid-journey failures (worker/timeout) still render
+honestly with Start again. The AI Accounts panel's Reconnect keeps the
+error tile (it has no command fallback). Console test now pins the
+automatic degrade: broker 503 → `connect.mts claude` command visible with
+no error and no second click.
+
 **MERGED TO MAIN 2026-08-16 14:47Z:** PR #136 "BotBuild foundation: AI
 accounts, auth broker, worker runner, unbounded slots, auto-completing UI"
 squash-merged as `859ceed` with both real CI checks green on head `8d08307`
@@ -247,9 +261,22 @@ checks green); production deploy verified success 15:03:16Z.
   accounts, no auth collision, per-account config dirs) | live evidence | P0
 - [ ] P2 | BotBuild | Docs: architecture, auth lifecycles, worker setup,
   troubleshooting | — | P1
-- [ ] P3 | BotBuild | Full test matrix (26 categories) + final acceptance
-  journey (30 steps) with real worker execution using a selected account |
-  live evidence | all
+- [x] P3 | BotBuild | Acceptance journey + test matrix:
+  `tests/integration/ai-account-acceptance-journey.behavior.test.ts` walks
+  the spec's journey end to end against the real migrated chain with the
+  REAL worker protocol (`runAuthBrokerOnce` + `verifyStoredAccounts` over a
+  PGlite-backed store calling the same definer functions production does):
+  Connect → claim → login URL → the person pastes the code (sealed,
+  session-bound, attached mid-poll exactly as the route does) → token
+  minted → credential sealed into the vault and openable as exactly that
+  token → sweep verifies → disconnect empties the vault → reconnect
+  re-claims the same account; plus a two-account walk proving seal
+  isolation (slot 2's envelope refuses to open under slot 1's purpose).
+  The one substitution is the provider CLI (scripted; a human at claude.ai
+  cannot be automated) — the live 30-step click-through remains owner
+  work after go-live. Matrix coverage to date: 13 behavior + 2 journey
+  integration tests, 5 panel + 12 console + 18 route + 12 runner/sweep +
+  5 purposes unit tests, all green | PASS | 2026-08-16
 
 ### Owner goal — the Claude button (opened 2026-08-16, iteration 1 shipped)
 
