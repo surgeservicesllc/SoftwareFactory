@@ -35,7 +35,6 @@ interface LoginPlan {
 function clean(text: string): string {
   // Written as an explicit escape rather than a literal escape byte, which is
   // invisible in a diff. \u001B is the same character, spelled visibly.
-  // eslint-disable-next-line no-control-regex
   return text.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trim();
 }
 

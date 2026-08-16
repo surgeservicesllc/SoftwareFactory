@@ -24,7 +24,7 @@ import type { CapacityGrant } from "@/lib/graph/runner";
 function parallelGraph(nodeCount: number) {
   const result = compileGraph({
     goal: "Independent work that could all start at once.",
-    nodes: Array.from({ length: nodeCount }, (unused, index) =>
+    nodes: Array.from({ length: nodeCount }, (_unused, index) =>
       defineNode({
         nodeId: `node-${index}`,
         job: `Job ${index}`,

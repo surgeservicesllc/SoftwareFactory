@@ -203,7 +203,7 @@ describe("B. a wide audit fans out, verifies, and reduces", () => {
       graph,
       { ...DEFAULT_GRAPH_BUDGET, maxNodes: 100, maxConcurrentNodes: INSPECTORS },
       {
-        executeNode: async (target) => {
+        executeNode: async (_target) => {
           inFlight += 1;
           widestBatch = Math.max(widestBatch, inFlight);
           await Promise.resolve();

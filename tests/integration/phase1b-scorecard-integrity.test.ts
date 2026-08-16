@@ -79,7 +79,7 @@ describe("Phase 1B scorecard integrity", () => {
   it("covers all twenty items exactly once", async () => {
     const rows = itemRows(await scorecard());
     expect(rows.map((row) => row.id)).toEqual(
-      Array.from({ length: 20 }, (unused, index) => index + 1),
+      Array.from({ length: 20 }, (_unused, index) => index + 1),
     );
   });
 
