@@ -119,7 +119,8 @@ simplify/automate → test → record → repeat.
   to the actual goal (Bot Manager / a plain-English goal). It ignored worker
   readiness. (criteria 1, 9, 10)
 
-**Iteration 1 — shipped (PR #TBD):** dedicated `GettingStarted` dashboard guide.
+**Iteration 1 — shipped (PR #124, squash `14f96a6`, CI green):** dedicated
+`GettingStarted` dashboard guide.
 - Four-step, completable journey that matches the real path: **Connect GitHub →
   Add a project → Check your AI worker → Give your Factory a goal**, each step's
   `done` read from live sources (`/api/projects`, `/api/github/connections`,
@@ -138,12 +139,34 @@ simplify/automate → test → record → repeat.
   -failure isolation, refresh-to-ready); `SetupSteps` grid adapts to 4 steps;
   `live-dashboard-metrics` suite still green. tsc + lint clean.
 
+**Iteration 2 — shipped (PR #TBD):** Bot Manager goal box opens simple.
+- Journey walk confirmed the goal box exists and is genuinely plain-English
+  ("What do you want done?", example chips, project auto-selected to the first
+  connected one) — the Dashboard CTA is not a dead end. The friction: it
+  confronted every owner with Work type, Acceptance criteria, Depends-on, and
+  the GREEN/YELLOW/RED risk picker on every visit. (criteria 8, 21, 29)
+- `CommandComposer` now defaults to goal + project + Queue; the four technical
+  controls live behind an "Advanced options" disclosure (aria-expanded,
+  conditionally rendered so axe and tests see the true surface). Safe defaults
+  unchanged: work type "other", GREEN, no deps, server-derived acceptance
+  criteria — the server still re-checks risk/policy on every submission, so
+  nothing here widens autonomy.
+- Non-default advanced choices stay visible when the fold is closed (a summary
+  line, e.g. "Security work · YELLOW risk requested") — hidden-but-active
+  settings are how owners get surprised. RED warning still renders whenever
+  RED is selected (it lives in the always-visible status area).
+- Tests: 6/6 in `command-composer.test.tsx` — the three existing behavior cases
+  (connected-projects-only, idempotency-key reuse, sorted dependencies) now
+  open the disclosure first, plus three new: simple-view hides advanced fields,
+  simple-view submission carries the safe defaults, closed-fold summary keeps
+  non-default choices visible. tsc + lint clean.
+
 **Open next (prioritized):** unified "Needs Your Attention" area (RED approvals /
 auth / failed recovery) — criteria 4/22; Add-Project wizard with auto-detected
 defaults — criteria 5/6; Simple vs Advanced mode to hide technical IDs —
-criteria 8/21; plain-English goal box wired to command/graph orchestration —
-criteria 10/11/12; error UX with a next-action button — criteria 18/19; full
-E2E of the critical journey — criterion 30.
+criteria 8/21 (composer done; IDs elsewhere remain); error UX with a
+next-action button — criteria 18/19; human-readable run progress states —
+criterion 20; full E2E of the critical journey — criterion 30.
 
 ### External Blockers (owner-only)
 
