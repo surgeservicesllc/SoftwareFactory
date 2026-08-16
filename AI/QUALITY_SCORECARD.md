@@ -9,13 +9,16 @@ the `/api/ai-accounts` broker API, the worker auth runner + gated Actions
 workflow, the auto-completing connect UI (no command, no check-now on the
 primary path), unbounded account/bot slots (configured capacity only), and the
 AI Accounts management panel (reconnect/disconnect). Full local gate on head
-`1cab6f5`: vitest 2804/0, tsc clean, eslint 0 errors. Honest limits: the broker
-is **Not Connected** live — the migration is unhosted, the workflow variable
-`SOFTWAREFACTORY_AUTH_BROKER_ENABLED` is unset (default OFF), and
-`SOFTWAREFACTORY_CREDENTIAL_KEY` is not in Actions secrets; Codex broker
-sign-in is refused by design (localhost-callback login); the verification
-loop and per-bot runtime/log tracking beyond assignments remain open (todo.md
-P1–P3). No live claim is made for any of it.
+`1cab6f5`: vitest 2804/0, tsc clean, eslint 0 errors. **Superseded live
+(2026-08-16):** the broker is LIVE in production for both providers — three
+Claude accounts and one Codex account are Connected with identity capture and
+periodic verification, owner-verified by screenshot at 19:07Z — and both
+paths are owner-frozen (ADR-072/ADR-073). The freshest full local gate is on
+merged head `aeabc95` (GitHub install host-convergence + freeze extension):
+vitest 2839 passed / 2 skipped / 0 failed, tsc clean, eslint 0 errors
+(10 pre-existing warnings in untouched files), production build exit 0.
+Still open from this addendum: the verification loop UI and per-bot
+runtime/log tracking beyond assignments (todo.md P1–P3).
 
 Decision: **Phase 1C is re-architected to zero-token subscription-authenticated Codex execution, the credential is configured, and the worker is LIVE — scheduled Actions runs pass preflight in subscription mode and poll for work every ~5 minutes (run `31894356952`, 2026-08-15). No live canary exists yet because no command is queued; that is one owner action, not an engineering gap. Superseded text follows for history: ** The paid-API dependency is removed from the execution path: `OPENAI_API_KEY` is no longer a worker configuration field, `new Codex()` is constructed without an api key, preflight makes no `api.openai.com` request in subscription mode, and no workflow step receives a paid key. The billed mode must name itself and can never be reached by fallback. The schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
 
