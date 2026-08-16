@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-16 — BotBuild (AI accounts + auth broker):** the P0 layer is
+implemented and locally certified: migration `20260816000100` (two RLS+FORCE
+tables with zero direct table access, 16 definer functions, `bots.ai_account_id`),
+the `/api/ai-accounts` broker API, the worker auth runner + gated Actions
+workflow, the auto-completing connect UI (no command, no check-now on the
+primary path), unbounded account/bot slots (configured capacity only), and the
+AI Accounts management panel (reconnect/disconnect). Full local gate on head
+`1cab6f5`: vitest 2804/0, tsc clean, eslint 0 errors. Honest limits: the broker
+is **Not Connected** live — the migration is unhosted, the workflow variable
+`SOFTWAREFACTORY_AUTH_BROKER_ENABLED` is unset (default OFF), and
+`SOFTWAREFACTORY_CREDENTIAL_KEY` is not in Actions secrets; Codex broker
+sign-in is refused by design (localhost-callback login); the verification
+loop and per-bot runtime/log tracking beyond assignments remain open (todo.md
+P1–P3). No live claim is made for any of it.
+
 Decision: **Phase 1C is re-architected to zero-token subscription-authenticated Codex execution, the credential is configured, and the worker is LIVE — scheduled Actions runs pass preflight in subscription mode and poll for work every ~5 minutes (run `31894356952`, 2026-08-15). No live canary exists yet because no command is queued; that is one owner action, not an engineering gap. Superseded text follows for history: ** The paid-API dependency is removed from the execution path: `OPENAI_API_KEY` is no longer a worker configuration field, `new Codex()` is constructed without an api key, preflight makes no `api.openai.com` request in subscription mode, and no workflow step receives a paid key. The billed mode must name itself and can never be reached by fallback. The schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
 
 Reason: exact project `qpuofpmagrmyamahqwxw` is reconciled and current through forward migration `130014`; linked lint and focused catalog/runtime/ACL checks pass. Local `130015` restores the assignment/run model constraint bound from 120 to the original 128-character provider catalogue/API contract, adds four no-secret constraints for catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded routing evidence, and closes authenticated raw routing-decision/event reads while retaining tenant-scoped model-catalogue reads, but is unhosted pending fresh exact RED approval. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; it passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Live command `0c4d0ca8-1867-4d00-80cf-476401491a17` produced durable run `f4594556-6f72-4763-a480-6993939e3651` and worker Actions run `31746057998`; a real claim, heartbeat, and provider thread occurred, then provider startup failed before changed files, commit, branch, PR, validation, or exact-head CI. Diagnostic `31748582858` identified exhausted project credits without a claim. The failed run is now stale against the verified baseline and must not be retried. The user-pasted OpenAI key is treated as compromised and its GitHub Actions secret is deleted; the other six protected secrets remain. A successful live draft-PR journey requires credits or a fresh funded replacement key, a passing provider-only diagnostic, and a new current-base command.
