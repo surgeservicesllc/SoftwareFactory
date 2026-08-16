@@ -466,6 +466,11 @@ export function AiAccountConnect({
           >
             {deviceCode}
           </p>
+          <p className="mt-2 max-w-sm text-xs text-[var(--text-muted)]">
+            First time? {providerLabel} may ask you to enable device code
+            authorization — turn it on under ChatGPT Settings → Security,
+            then Cancel here and connect again.
+          </p>
         </div>
       ) : null}
 
