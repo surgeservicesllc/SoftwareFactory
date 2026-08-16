@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronDown, Plus, Sparkles, X } from "lucide-react";
+import { Bot, Check, ChevronDown, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
@@ -81,6 +81,10 @@ export function BotManagerHome() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [creatingBot, setCreatingBot] = useState(false);
   const [botNotice, setBotNotice] = useState("");
+  // Renaming a bot edits in place; a Ready bot stays Ready through it.
+  const [renamingBotId, setRenamingBotId] = useState<string | null>(null);
+  const [renameBotName, setRenameBotName] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -129,6 +133,34 @@ export function BotManagerHome() {
     () => (accounts ?? []).filter((account) => account.status === "connected"),
     [accounts],
   );
+
+  const renameBot = useCallback(async (bot: BotView) => {
+    const name = renameBotName.trim();
+    if (name.length === 0 || name === bot.name) {
+      setRenamingBotId(null);
+      return;
+    }
+    setRenameBusy(true);
+    setBotNotice("");
+    try {
+      const response = await fetch(`/api/bots/${bot.id}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setBotNotice(body.error?.message ?? "The bot could not be renamed.");
+        return;
+      }
+      setRenamingBotId(null);
+      await load();
+    } catch {
+      setBotNotice("The bot could not be renamed.");
+    } finally {
+      setRenameBusy(false);
+    }
+  }, [renameBotName, load]);
 
   const provisionBot = useCallback(async (providerId: string) => {
     setCreatingBot(true);
@@ -489,7 +521,59 @@ export function BotManagerHome() {
                     />
                     <Bot className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[var(--text)]">{bot.name}</p>
+                      {renamingBotId === bot.id ? (
+                        <form
+                          className="flex items-center gap-2"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void renameBot(bot);
+                          }}
+                        >
+                          <label className="sr-only" htmlFor={`rename-bot-${bot.id}`}>
+                            New name for {bot.name}
+                          </label>
+                          <input
+                            id={`rename-bot-${bot.id}`}
+                            value={renameBotName}
+                            onChange={(event) => setRenameBotName(event.target.value)}
+                            maxLength={80}
+                            autoFocus
+                            className="w-44 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
+                          />
+                          <button type="submit" disabled={renameBusy} className="btn btn-primary btn-sm">
+                            {renameBusy ? (
+                              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Check className="size-3.5" aria-hidden="true" />
+                            )}
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRenamingBotId(null)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Cancel
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="flex items-center gap-1.5 truncate text-sm font-medium text-[var(--text)]">
+                          {bot.name}
+                          {canManage ? (
+                            <button
+                              type="button"
+                              aria-label={`Rename ${bot.name}`}
+                              onClick={() => {
+                                setRenameBotName(bot.name);
+                                setRenamingBotId(bot.id);
+                              }}
+                              className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                            >
+                              <Pencil className="size-3.5" aria-hidden="true" />
+                            </button>
+                          ) : null}
+                        </p>
+                      )}
                       <p className="text-xs text-[var(--text-muted)]">
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>

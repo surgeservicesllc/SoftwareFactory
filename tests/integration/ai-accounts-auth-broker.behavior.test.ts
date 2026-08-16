@@ -529,6 +529,43 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(bot.rows[0].ai_account_id).toBeNull();
   });
 
+  it("renames a bot without touching its readiness, under the same constraints", async () => {
+    await db.query(`
+      insert into public.bots (organization_id, name, provider, model, created_by, readiness)
+      values ($1, 'Rename-test bot', 'anthropic', 'claude-opus-5', $2, 'ready'),
+             ($1, 'Rename-test sibling', 'anthropic', 'claude-opus-5', $2, 'ready')
+    `, [organizationId, ownerId]);
+    const botId = (await db.query<{ id: string }>(
+      "select id from public.bots where name = 'Rename-test bot'",
+    )).rows[0].id;
+
+    await assumeRole(db, ownerId);
+    const renamed = await db.query<{ rename_bot: boolean }>(
+      "select public.rename_bot($1::uuid, $2::uuid, $3)",
+      [organizationId, botId, "  Deploy Reviewer  "],
+    );
+    expect(renamed.rows[0].rename_bot).toBe(true);
+
+    await expect(db.query(
+      "select public.rename_bot($1::uuid, $2::uuid, $3)",
+      [organizationId, botId, "Rename-test sibling"],
+    )).rejects.toThrow(/already uses that name/);
+
+    await expect(db.query(
+      "select public.rename_bot($1::uuid, $2::uuid, $3)",
+      [organizationId, botId, "sk-ant-oat01-ABCdef0123456789_-ABCdef0123456789"],
+    )).rejects.toThrow(/looks like it contains a credential/);
+    await resetRole(db);
+
+    // The label changed; readiness — which a rename proves nothing about —
+    // did not. This is the difference from update_bot, which resets it.
+    const bot = await db.query<{ name: string; readiness: string }>(
+      "select name, readiness from public.bots where id = $1", [botId],
+    );
+    expect(bot.rows[0].name).toBe("Deploy Reviewer");
+    expect(bot.rows[0].readiness).toBe("ready");
+  });
+
   it("renames an account under the create-path constraints, and identity stays worker-reported", async () => {
     const accountId = await createAccount("Rename target", "claude_rn1");
     const siblingId = await createAccount("Rename sibling", "claude_rn2");
