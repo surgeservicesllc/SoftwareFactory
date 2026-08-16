@@ -9,11 +9,13 @@ process.env.SOFTWAREFACTORY_CREDENTIAL_KEY = randomBytes(32).toString("base64");
 const { relayCodePurpose } = await import("@/lib/ai-accounts/purposes");
 const { openSecret, sealSecret } = await import("@/lib/security/secret-box-core");
 const {
+  credentialShapeProblem,
   extractLoginUrl,
   extractOauthToken,
   productionAuthBrokerDependencies,
   runAuthBrokerOnce,
   stripAnsi,
+  verifyStoredAccounts,
 } = await import("@/lib/worker/auth-broker");
 
 type StoreShape = Parameters<typeof runAuthBrokerOnce>[1]["store"];
@@ -35,6 +37,10 @@ function makeStore(overrides: Partial<StoreShape> = {}): StoreShape {
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => undefined),
     expireStale: vi.fn(async () => 0),
+    listAccountsForVerification: vi.fn(async () => []),
+    readStoredCredential: vi.fn(async () => null),
+    markAccountVerified: vi.fn(async () => true),
+    markAccountNeedsReauth: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -201,6 +207,75 @@ describe("terminal output parsing", () => {
 
   it("strips CSI and OSC sequences", () => {
     expect(stripAnsi("]0;titleplain [31mred[0m")).toBe("plain red");
+  });
+});
+
+describe("the verification sweep", () => {
+  const account = {
+    organizationId: session.organizationId,
+    accountId: session.accountId,
+    provider: "anthropic",
+    purpose: "claude",
+  };
+
+  it("refreshes a connected account whose sealed credential opens and looks right", async () => {
+    const sealed = sealSecret("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz123456", {
+      organizationId: account.organizationId, purpose: account.purpose,
+    });
+    const store = makeStore({
+      listAccountsForVerification: vi.fn(async () => [account]),
+      readStoredCredential: vi.fn(async () => sealed),
+    });
+
+    const result = await verifyStoredAccounts(store);
+
+    expect(result).toEqual({ verified: 1, demoted: 0 });
+    expect(store.markAccountVerified).toHaveBeenCalledWith(
+      account.organizationId, account.accountId,
+    );
+    expect(store.markAccountNeedsReauth).not.toHaveBeenCalled();
+  });
+
+  it("demotes with a named reason when the credential is missing, unopenable, or the wrong shape", async () => {
+    const wrongShape = sealSecret("not-a-subscription-token", {
+      organizationId: account.organizationId, purpose: account.purpose,
+    });
+    const sealedElsewhere = sealSecret("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz123456", {
+      organizationId: account.organizationId, purpose: "codex",
+    });
+    const store = makeStore({
+      listAccountsForVerification: vi.fn(async () => [
+        account,
+        { ...account, accountId: "acc-missing", purpose: "claude_2" },
+        { ...account, accountId: "acc-unopenable", purpose: "claude" },
+      ]),
+    });
+    // Three accounts, three failure kinds: wrong shape, missing, unopenable
+    // (sealed under a different purpose, so the open fails authentically).
+    vi.mocked(store.readStoredCredential)
+      .mockResolvedValueOnce(wrongShape)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(sealedElsewhere);
+
+    const result = await verifyStoredAccounts(store);
+
+    expect(result).toEqual({ verified: 0, demoted: 3 });
+    const reasons = vi.mocked(store.markAccountNeedsReauth).mock.calls.map((call) => call[2]);
+    expect(reasons[0]).toMatch(/not shaped like a subscription token/);
+    expect(reasons[1]).toMatch(/no stored credential exists/);
+    expect(reasons[2]).toMatch(/cannot be opened/);
+    expect(store.markAccountVerified).not.toHaveBeenCalled();
+  });
+
+  it("knows each provider's credential shape, and passes unknown providers", () => {
+    expect(credentialShapeProblem(
+      "anthropic", "sk-ant-oat01-abcdefghijklmnopqrstuvwxyz123456",
+    )).toBeNull();
+    expect(credentialShapeProblem("anthropic", "sk-proj-not-a-claude-token-at-all-here"))
+      .toMatch(/not shaped like/);
+    expect(credentialShapeProblem("openai", JSON.stringify({ tokens: {} }))).toBeNull();
+    expect(credentialShapeProblem("openai", "just text")).toMatch(/auth file/);
+    expect(credentialShapeProblem("google", "anything")).toBeNull();
   });
 });
 

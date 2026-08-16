@@ -224,8 +224,25 @@ real worker status; everything wired end-to-end.
   only. Server-side `mark_ai_account_needs_reauth` exists for the
   verification loop (still open) | PASS — 5 panel tests + console 12/12;
   tsc + eslint clean | 2026-08-16
-- [ ] P1 | BotBuild | Verification loop: real usability check per account,
-  expiry detection, honest statuses | tests | P0
+- [x] P1 | BotBuild | Verification loop: migration `20260816000200` adds
+  `list_ai_accounts_for_verification` (connected subscription accounts
+  only — needs_reauth is repaired by a person, not a sweep) +
+  `mark_ai_account_verified` (a routine pass is a timestamp, not an
+  event; refuses non-connected accounts). Worker sweep
+  (`verifyStoredAccounts`) runs on every auth-broker start: vault row
+  exists → seal opens under the current key → provider shape matches
+  (sk-ant-… for Claude, JSON auth file for Codex; unknown providers
+  pass); each failure demotes via `mark_ai_account_needs_reauth` with a
+  named, actionable reason. HONEST LIMIT (documented in the migration
+  and `AI/AI_ACCOUNTS_BROKER.md`): shape-level only — a pass never
+  asserts the provider still honors the token; that verdict comes from
+  real use. Guards: tail pins ×11 → 000200, runbook 85/21, invariants
+  +2 service-role functions | PASS — sweep unit tests (pass/3 failure
+  kinds/shape table) + behavior 13/13 incl. enumeration scope, refused
+  pass, browser-role denial; tsc + eslint clean | 2026-08-16
+
+**#137 merged 2026-08-16 15:02Z** as `3f7a081` (docs + evidence; both CI
+checks green); production deploy verified success 15:03:16Z.
 - [ ] P2 | BotBuild | Multi-account worker isolation live proof (two Claude
   accounts, no auth collision, per-account config dirs) | live evidence | P0
 - [ ] P2 | BotBuild | Docs: architecture, auth lifecycles, worker setup,
