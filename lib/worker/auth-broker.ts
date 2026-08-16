@@ -411,7 +411,14 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
       p_organization_id: organizationId,
       p_purpose: purpose,
     });
-    if (error) throw new Error("Reading the stored credential failed.");
+    if (error) {
+      // The code (never the message) names the failure class in the run log
+      // — a signature drifted on hosted reads PGRST202, a refusal 42501 —
+      // without carrying anything the database said.
+      throw new Error(
+        `Reading the stored credential failed (${(error as { code?: string }).code ?? "unknown"}).`,
+      );
+    }
     return typeof data === "string" && data.length > 0 ? data : null;
   };
 
