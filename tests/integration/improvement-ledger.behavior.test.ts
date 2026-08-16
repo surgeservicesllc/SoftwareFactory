@@ -404,4 +404,77 @@ describe("the improvement ledger", () => {
     ).rejects.toThrow(/authentication is required|permission denied/);
     await db.exec("reset role");
   });
+
+  it("detects real signals and abstains by name below its evidence floors", async () => {
+    // Seed the synthetic evidence the detectors mine. The suite's earlier
+    // regression test left one open incident; give it a recurring fingerprint
+    // history, add a flaky unit-test window and a thin integration sample,
+    // and age an accepted-but-never-implemented improvement past a week.
+    await db.exec("reset role");
+    await db.query(
+      `update public.incidents set fingerprint = 'uptime:health-endpoint', occurrence_count = 4
+       where organization_id = $1`,
+      [organizationId],
+    );
+    await db.query(
+      `insert into public.test_runs (organization_id, project_id, kind, status, total_count, passed_count, failed_count)
+       values ($1, $2, 'unit', 'passed', 10, 10, 0),
+              ($1, $2, 'unit', 'passed', 10, 10, 0),
+              ($1, $2, 'unit', 'failed', 10, 9, 1),
+              ($1, $2, 'unit', 'passed', 10, 10, 0),
+              ($1, $2, 'integration', 'passed', 5, 5, 0)`,
+      [organizationId, projectId],
+    );
+    const agedProposal = "60000000-0000-4000-8000-0000000003e1";
+    await db.query(
+      `insert into public.improvement_ledger (
+         id, organization_id, project_id, entry_type, proposal_id, title, proposal,
+         prediction, baseline, acceptance_criteria, constitution_version, created_by, created_at
+       ) values (
+         $1, $2, $3, 'proposal', $1, 'An old accepted idea', 'It was accepted and then nothing happened.',
+         'It would have helped, allegedly.', '{"metrics": {"incidentsOpen": 1}}', '["done"]',
+         'factory-constitution-v1', $4, now() - interval '9 days'
+       )`,
+      [agedProposal, organizationId, projectId, ownerId],
+    );
+    await db.query(
+      `insert into public.improvement_ledger (
+         organization_id, project_id, entry_type, proposal_id, decision, reason, created_by, created_at
+       ) values ($1, $2, 'decision', $3, 'accepted', 'Approved and then forgotten.', $4, now() - interval '8 days')`,
+      [organizationId, projectId, agedProposal, ownerId],
+    );
+
+    await asRole("authenticated", ownerId);
+    const detected = await db.query<{ report: {
+      policyVersion: string;
+      findings: { detector: string; subject: string; evidence: Record<string, unknown> }[];
+      abstentions: { detector: string; reason: string }[];
+    } }>(
+      "select public.detect_factory_improvements($1::uuid) as report",
+      [projectId],
+    );
+    const report = detected.rows[0]!.report;
+    expect(report.policyVersion).toBe("factory-detectors-v1");
+
+    const byDetector = new Map(report.findings.map((entry) => [entry.detector + ":" + entry.subject, entry]));
+    // The recurring fingerprint is found with its dedupe counter as evidence.
+    expect(byDetector.get("recurring_failure:uptime:health-endpoint")?.evidence).toMatchObject({
+      occurrences: 4,
+    });
+    // The flaky unit suite is found; the two-run integration sample abstains.
+    expect(byDetector.get("flaky_tests:unit")?.evidence).toMatchObject({ failed: 1, passed: 3 });
+    expect(report.findings.filter((entry) => entry.subject === "integration")).toHaveLength(0);
+    expect(report.abstentions.some(
+      (entry) => entry.detector === "flaky_tests" && entry.reason.includes("integration"),
+    )).toBe(true);
+    // The forgotten improvement shows up as inventory debt.
+    expect(byDetector.get("tech_debt:improvements_accepted_unimplemented")?.evidence).toMatchObject({
+      count: 1,
+    });
+    // Streams with no evidence abstain by name instead of reporting cleanly.
+    for (const detector of ["unnecessary_ai_node", "provider_underperformance"]) {
+      expect(report.abstentions.some((entry) => entry.detector === detector)).toBe(true);
+    }
+    await db.exec("reset role");
+  });
 });
