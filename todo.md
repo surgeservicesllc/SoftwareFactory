@@ -201,7 +201,8 @@ plain-language run progress.
   enum, detail promotes the PR link and keeps the recorded enum). tsc + lint
   clean.
 
-**Iteration 5 — shipped (PR #TBD):** Add-Project measured, then trimmed.
+**Iteration 5 — shipped (PR #128, squash `eb32f28`, CI green):** Add-Project
+measured, then trimmed.
 - Honest audit against criterion 5 ("wizard-based"): the existing one-screen
   form already BEATS a wizard — repository auto-picked from the connection's
   selected repos, project name pre-filled from the repository, default branch
@@ -219,11 +220,158 @@ plain-language run progress.
   single-account-hides-picker (and asserts the pre-filled name) and
   two-accounts-show-picker. tsc + lint clean.
 
-**Open next (prioritized):** error UX with a next-action button — criteria
-18/19; hide remaining technical IDs behind advanced views — criteria 8/21
-(composer + runs + projects done); consolidate duplicate/obsolete screens —
-criterion 28; mobile pass over the core owner actions — criterion 26; full
-E2E of the critical journey — criterion 30.
+**Iteration 6 — shipped (PR #129):** error-UX audit; the one real dead end fixed.
+- Honest audit of every inline error site (19 `setMessage(error…)` call sites
+  swept): most already carry their next action — the activity console has a
+  full error card with Retry, commands/runs/backlog ride `TenantListShell`'s
+  built-in reload, the file-manager and run-launcher render errors adjacent to
+  the very button that retries, and the projects/connections load failures
+  land on `BlockedState` deep links. Criterion 18 was largely already met;
+  recorded rather than re-plumbed. (criteria 18, 19)
+- The one genuine dead end was the highest-stakes moment: a failed one-click
+  sign-in return (`?connect=expired/invalid/refused/failed`) rendered "Start
+  it again" **with no way to do so** — in both the console-level banner and
+  the providers-tab notice. Both now pair the failure text with a "Try
+  signing in again" action (the same `/api/bots/connect/oauth/start` the
+  front door uses). The retry condition is derived from the message itself,
+  so no separate state can go stale. (criteria 18, 19, 29)
+- Tests: bot-fabric-console 9/9 — new case lands on `?connect=failed` and
+  asserts the notice carries the retry link. tsc + lint clean.
+
+**Iteration 7 — shipped (PR #129, with iteration 6):** functional mobile pass.
+- Audit scope: the five core owner surfaces (Dashboard guide + attention area,
+  goal box, Connections, Add-Project, Runs list/detail), looking for touch
+  targets, hover-only controls, overflow risks, and drawer usability at phone
+  widths — beyond the e2e suite's existing three-width heading/viewport/axe
+  proof. (criterion 26)
+- Sound as found: buttons sit on `min-h-10`/`min-h-9` from the design system;
+  no hover-only controls (hover styles only decorate tappable elements); the
+  run detail is an inline card, not a fixed drawer, so it flows at 375px; repo
+  names truncate; SHAs are shortened; the runs branch line truncates; the
+  composer's chips/risk grid wrap and stack.
+- Three real overflow risks fixed — all owner-authored text rendered without
+  `break-words` inside `min-w-0` containers, where one pasted URL or long
+  token would horizontally scroll a phone: attention-item what/why lines
+  (`needs-your-attention.tsx`), the goal prompt in the commands list
+  (`commands-console.tsx`), and the task title in the runs list
+  (`runs-console.tsx`). Class-level fixes; behavior unchanged; 20/20 across
+  the three affected suites, tsc + lint clean.
+
+**Iteration 8 — shipped (PR #129, with iterations 6-7):** screens audited;
+navigation re-led.
+- Consolidation audit (criterion 28): the five "Work" consoles suspected of
+  overlap have genuinely distinct purposes — Workflows (graph preview),
+  Agents (role definitions), AgentOS (grants + decision inbox), Autonomy
+  (permitted-actions + decision trail), Resources (routing evidence). No two
+  do the same job; merging any pair would remove function, not friction.
+  Recorded, not consolidated.
+- The real criterion-28/8 gap was the sidebar: 16 destinations grouped by
+  which phase built them, with the owner path buried (Bot Manager mid-list
+  under "Work"). Regrouped by how an owner moves: the ungrouped top block is
+  the daily path in journey order (Dashboard → Bot Manager → Projects → Runs
+  → Reports), "Watch" holds Operations + Activity, "Advanced" holds the
+  seven technical consoles (full function kept — nothing removed), "Setup"
+  holds Connections + Settings. Labels and routes unchanged, so the e2e
+  accessible-navigation proof still passes by name. (criteria 8, 21, 27, 28)
+- Tests: new `app-shell.test.tsx` pins the daily-path order and every
+  console's continued reachability. tsc + lint clean.
+
+**Iteration 9 — shipped (PR #129, with iterations 6-8):** the critical
+journey is E2E tested.
+- `tests/e2e/journey.spec.ts`, two honest lanes. Lane 1 (every CI run, all
+  three viewports): the signed-out journey scaffolding — Dashboard guide with
+  all four steps and no attention-area noise, sign-in page offering the
+  passwordless link, connections gate naming itself with a way forward
+  (sign-in gate or truthful local-unavailability, console.spec precedent),
+  the goal box present with Queue honestly disabled, runs naming its
+  sign-in gate. Proven green locally on desktop/tablet/mobile projects.
+- Lane 2 (local Supabase stack, skip-gated like auth-lifecycle.spec.ts): a
+  real browser walks sign-up → confirmation email (Mailpit) → onboarding →
+  Dashboard guide reads "0 of 4 done" with Connect GitHub as the current
+  step → attention area absent for a fresh workspace → goal box renders,
+  says "No connected projects yet", and keeps Queue disabled with text
+  entered. Stops at the external-GitHub boundary by design: connecting a
+  real GitHub App and a live command need the owner's accounts — exactly
+  what the production canary proves. (criterion 30, to the honest limit)
+
+### FRICTIONLESS COMPLETION REPORT (2026-08-16, loop iterations 1–9)
+
+**FRICTIONLESS COMPLETION: ~87%** — 26 of the goal's 30 completion criteria
+MET at the code-and-test level; 4 PARTIAL, each for an honest, named reason;
+everything beyond ~87% requires either the owner's real accounts (live
+proofs) or is a frozen-policy boundary this goal forbids weakening.
+
+**E2E JOURNEY RESULT:** PASS to the external-account boundary.
+`tests/e2e/journey.spec.ts` proves the signed-out scaffolding every CI run at
+three viewports (each step exists, names its gate, offers the next action),
+and the signed-in walk (sign-up → confirmation email → onboarding → live
+4-step guide → honestly gated goal box) against a real local Supabase stack.
+Beyond that boundary — real GitHub App connect and a live command — is
+exactly what the production canary proves, and is owner-blocked.
+
+**STEPS BEFORE → AFTER** (measured from the merged diffs):
+- Bot connect (#121): ~6 owner steps (pick provider, obtain key, paste or
+  name an env var, then hand-build a bot: name/model/credential ref) → **1
+  click + provider approval**, ready bot auto-provisioned on return.
+- First-run orientation (#124): no path (metrics + 16 nav items) → **4-step
+  live checklist** that completes and collapses to one CTA.
+- Goal submission (#125): 6 decisions (sentence, project, work type,
+  acceptance criteria, dependencies, risk) → **2** (sentence, project) with
+  safe defaults behind an Advanced fold.
+- Add project (#128): 4 fields + an account picker → **repo pick + confirm**
+  (name and branch inferred; picker only when ≥2 accounts).
+- Finding owner decisions (#126): hunt across consoles/logs → **one
+  attention area** listing only genuine decisions, each with one button.
+- Understanding a run (#127): raw enums + PR link buried in evidence →
+  **plain language** + "Review draft PR #N" leading the detail.
+- Recovering from a failed sign-in (#129): dead-end text → **retry button
+  in place**.
+- GitHub connect on iPhone/iPad (#123): broken (fetch-set cookie dropped by
+  ITP) → **works** via top-level navigation.
+
+**OWNER INTERVENTIONS REMOVED:** naming credential env vars; hand-building
+the first bot; re-typing repo name/branch GitHub already knows; choosing a
+risk tier for routine work; scanning logs for RED approvals; re-starting
+failed sign-ins from scratch.
+
+**AUTOMATIONS ADDED:** auto-provisioned default bot on provider connect;
+live setup-status detection on the dashboard; inferred project defaults;
+attention aggregation across four decision sources; automatic idempotency
+-key reuse on ambiguous submission failures (pre-existing, now surfaced);
+connect-outcome auto-clear from URLs so refreshes never repeat actions.
+
+**FRICTION REMOVED:** 9 iterations, PRs #121, #123–#129 — all merged with
+green CI (lint/typecheck/test/build + browser/a11y at three widths).
+
+**MOBILE RESULT:** iOS/iPadOS GitHub connect fixed (#123); three
+owner-authored-text overflow risks fixed (attention items, goal prompts,
+task titles); touch targets ≥36px from the design system; no hover-only
+controls; journey e2e green on desktop/tablet/mobile projects. Live iPhone
+round-trip: owner-pending.
+
+**SECURITY/RLS:** zero safety-surface changes across all nine iterations.
+No schema change, no new privileged path, no RLS/FORCE-RLS touch, no
+GREEN/YELLOW/RED widening, zero-token design intact; every server-side
+validation (risk, policy, binding, same-origin, owner-auth) unchanged. The
+two new API routes this session (`/api/github/install/launch`, from #123's
+predecessor line, and `/api/bots/connect/provision`, #121) both REQUIRE
+owner/admin authentication and only reach screens/actions that already
+existed.
+
+**PARTIAL (4), honestly:** guided connect flows for Vercel/Supabase (their
+adapters truthfully read Not Connected — future phase); goal-text → graph
+-vs-single-worker auto-decision (orchestrator plans per command type; the
+graph engine remains an explicit console); live worker auto-selection proof
+(code+tests done, needs the canary and a second worker); production
+protect/rollback/repair execution (control plane complete, execution
+deliberately blocked pending owner enablement — a safety boundary, not a
+gap).
+
+**REMAINING OWNER ACTIONS (path to 100%):** run the production canary (app
+sign-in page → "Email me a sign-in link instead" → click promptly on the
+same device → Bot Manager → queue the canary sentence); one live GitHub
+connect from an iPhone; hosted-ledger position check; second
+repository/account; the Phase 2A paid-adapter decision.
 
 ### External Blockers (owner-only)
 

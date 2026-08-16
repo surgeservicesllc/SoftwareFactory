@@ -284,12 +284,21 @@ export function BotFabricConsole() {
       </div>
 
       {message ? (
-        <p
-          className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-xs text-[var(--warning)]"
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3"
           aria-live="polite"
         >
-          {message}
-        </p>
+          <p className="text-xs text-[var(--warning)]">{message}</p>
+          {FAILED_CONNECT_MESSAGES.has(message) ? (
+            // "Start it again" is only honest advice when the button to do so
+            // is right there — the same one-click sign-in the front door uses.
+            // A real anchor, not next/link: the route handler 302s off-origin.
+            // eslint-disable-next-line @next/next/no-html-link-for-pages
+            <a href="/api/bots/connect/oauth/start" className="btn btn-secondary btn-sm shrink-0">
+              Try signing in again
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       {!fabric.canManage ? (
@@ -758,6 +767,18 @@ const CONNECT_OUTCOMES: Readonly<Record<string, string>> = Object.freeze({
   failed: "The sign-in could not be completed. Nothing was connected.",
 });
 
+/**
+ * The failed-connect notices tell the person to start again; these are the
+ * messages that must therefore carry the button that does. Derived from the
+ * message text itself so no separate state can go stale.
+ */
+const FAILED_CONNECT_MESSAGES: ReadonlySet<string> = new Set([
+  CONNECT_OUTCOMES.expired,
+  CONNECT_OUTCOMES.invalid,
+  CONNECT_OUTCOMES.refused,
+  CONNECT_OUTCOMES.failed,
+]);
+
 function useProviderSetup() {
   const [providers, setProviders] = useState<ProviderSetup[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -1224,17 +1245,31 @@ function BotDirectory({
         </div>
 
         {connectOutcome ? (
-          <p
+          <div
             className={cn(
-              "mt-4 rounded-lg border px-4 py-3 text-xs",
+              "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3",
               connectOutcome === "connected"
-                ? "border-[var(--success-border)] bg-[var(--success-surface)] text-[var(--text)]"
-                : "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
+                ? "border-[var(--success-border)] bg-[var(--success-surface)]"
+                : "border-[var(--warning-border)] bg-[var(--warning-surface)]",
             )}
             aria-live="polite"
           >
-            {CONNECT_OUTCOMES[connectOutcome] ?? CONNECT_OUTCOMES.failed}
-          </p>
+            <p
+              className={cn(
+                "text-xs",
+                connectOutcome === "connected" ? "text-[var(--text)]" : "text-[var(--warning)]",
+              )}
+            >
+              {CONNECT_OUTCOMES[connectOutcome] ?? CONNECT_OUTCOMES.failed}
+            </p>
+            {connectOutcome !== "connected" ? (
+              // A real anchor, not next/link: the route handler 302s off-origin.
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
+              <a href="/api/bots/connect/oauth/start" className="btn btn-secondary btn-sm shrink-0">
+                Try signing in again
+              </a>
+            ) : null}
+          </div>
         ) : null}
 
         <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">

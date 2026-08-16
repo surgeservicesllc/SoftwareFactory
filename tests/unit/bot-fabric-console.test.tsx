@@ -117,6 +117,22 @@ describe("BotFabricConsole", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("pairs a failed sign-in return with the button that starts it again", async () => {
+    // Land as the OAuth callback does on failure: ?connect=failed.
+    window.history.replaceState(null, "", "/solutions/bot-manager?connect=failed");
+    stubFetch({ status: 200, body: fabricPayload });
+
+    render(<BotFabricConsole />);
+
+    // The notice says nothing was connected — and carries the retry, because
+    // "start it again" without a button is a dead end.
+    expect(await screen.findByText(/could not be completed/i)).toBeInTheDocument();
+    const retry = screen.getByRole("link", { name: /try signing in again/i });
+    expect(retry).toHaveAttribute("href", "/api/bots/connect/oauth/start");
+
+    window.history.replaceState(null, "", "/");
+  });
+
   it("leads an empty fleet with a one-click sign-in, not a form", async () => {
     stubFetch({ status: 200, body: { ...fabricPayload, bots: [], assignments: [] } });
 
