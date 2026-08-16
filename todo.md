@@ -201,7 +201,8 @@ plain-language run progress.
   enum, detail promotes the PR link and keeps the recorded enum). tsc + lint
   clean.
 
-**Iteration 5 — shipped (PR #TBD):** Add-Project measured, then trimmed.
+**Iteration 5 — shipped (PR #128, squash `eb32f28`, CI green):** Add-Project
+measured, then trimmed.
 - Honest audit against criterion 5 ("wizard-based"): the existing one-screen
   form already BEATS a wizard — repository auto-picked from the connection's
   selected repos, project name pre-filled from the repository, default branch
@@ -219,11 +220,28 @@ plain-language run progress.
   single-account-hides-picker (and asserts the pre-filled name) and
   two-accounts-show-picker. tsc + lint clean.
 
-**Open next (prioritized):** error UX with a next-action button — criteria
-18/19; hide remaining technical IDs behind advanced views — criteria 8/21
-(composer + runs + projects done); consolidate duplicate/obsolete screens —
-criterion 28; mobile pass over the core owner actions — criterion 26; full
-E2E of the critical journey — criterion 30.
+**Iteration 6 — shipped (PR #TBD):** error-UX audit; the one real dead end fixed.
+- Honest audit of every inline error site (19 `setMessage(error…)` call sites
+  swept): most already carry their next action — the activity console has a
+  full error card with Retry, commands/runs/backlog ride `TenantListShell`'s
+  built-in reload, the file-manager and run-launcher render errors adjacent to
+  the very button that retries, and the projects/connections load failures
+  land on `BlockedState` deep links. Criterion 18 was largely already met;
+  recorded rather than re-plumbed. (criteria 18, 19)
+- The one genuine dead end was the highest-stakes moment: a failed one-click
+  sign-in return (`?connect=expired/invalid/refused/failed`) rendered "Start
+  it again" **with no way to do so** — in both the console-level banner and
+  the providers-tab notice. Both now pair the failure text with a "Try
+  signing in again" action (the same `/api/bots/connect/oauth/start` the
+  front door uses). The retry condition is derived from the message itself,
+  so no separate state can go stale. (criteria 18, 19, 29)
+- Tests: bot-fabric-console 9/9 — new case lands on `?connect=failed` and
+  asserts the notice carries the retry link. tsc + lint clean.
+
+**Open next (prioritized):** mobile pass over the core owner actions —
+criterion 26; consolidate duplicate/obsolete screens — criterion 28; hide
+remaining technical IDs behind advanced views — criteria 8/21 (composer +
+runs + projects done); full E2E of the critical journey — criterion 30.
 
 ### External Blockers (owner-only)
 
