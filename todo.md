@@ -276,10 +276,28 @@ navigation re-led.
 - Tests: new `app-shell.test.tsx` pins the daily-path order and every
   console's continued reachability. tsc + lint clean.
 
-**Open next (prioritized):** full E2E of the critical journey — criterion 30;
-then the final frictionless report (steps/clicks before vs after, automations
-added, friction removed, mobile result, security/RLS, remaining owner
-actions).
+**Iteration 9 — shipped (PR #129, with iterations 6-8):** the critical
+journey is E2E tested.
+- `tests/e2e/journey.spec.ts`, two honest lanes. Lane 1 (every CI run, all
+  three viewports): the signed-out journey scaffolding — Dashboard guide with
+  all four steps and no attention-area noise, sign-in page offering the
+  passwordless link, connections gate naming itself with a way forward
+  (sign-in gate or truthful local-unavailability, console.spec precedent),
+  the goal box present with Queue honestly disabled, runs naming its
+  sign-in gate. Proven green locally on desktop/tablet/mobile projects.
+- Lane 2 (local Supabase stack, skip-gated like auth-lifecycle.spec.ts): a
+  real browser walks sign-up → confirmation email (Mailpit) → onboarding →
+  Dashboard guide reads "0 of 4 done" with Connect GitHub as the current
+  step → attention area absent for a fresh workspace → goal box renders,
+  says "No connected projects yet", and keeps Queue disabled with text
+  entered. Stops at the external-GitHub boundary by design: connecting a
+  real GitHub App and a live command need the owner's accounts — exactly
+  what the production canary proves. (criterion 30, to the honest limit)
+
+**Open next:** final frictionless report (steps/clicks before vs after,
+automations added, friction removed, mobile result, security/RLS, remaining
+owner actions) — then hold the loop for owner-side live proofs (canary,
+GitHub connect from iPhone).
 
 ### External Blockers (owner-only)
 
