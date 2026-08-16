@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "claude/universal-bot-interface-0caeda": false
+    }
+  },
+  "ignoreCommand": "bash -c 'test \"$VERCEL_GIT_COMMIT_REF\" != \"main\" '"
 }
