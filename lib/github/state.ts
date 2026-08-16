@@ -8,6 +8,41 @@ const STATE_LIFETIME_SECONDS = 10 * 60;
 
 export const GITHUB_INSTALL_STATE_COOKIE = "softwarefactory_github_install_state";
 
+export type GitHubInstallStateCookieOptions = {
+  httpOnly: true;
+  maxAge: number;
+  path: "/";
+  sameSite: "lax";
+  secure: boolean;
+};
+
+/**
+ * Attributes for the short-lived double-submit cookie that binds a GitHub App
+ * installation callback to the browser that started it.
+ *
+ * `path: "/"` is deliberate. The cookie is set on the redirect that leaves for
+ * GitHub and read back on the top-level return to `/api/github/install/callback`;
+ * scoping it to a sub-path only narrows where the browser will replay it and,
+ * worse, makes a default-path deletion silently miss it. A root path keeps set,
+ * read, and delete describing the same cookie on every browser.
+ *
+ * `sameSite: "lax"` is exactly right for an OAuth-style return: the cookie is
+ * withheld from cross-site subrequests but sent on the top-level GET navigation
+ * GitHub redirects the browser through. The reliability fix for iOS/iPadOS is
+ * not a looser SameSite — it is setting this cookie on a navigation response
+ * rather than a background `fetch()` response, which Safari's tracking
+ * prevention is entitled to drop.
+ */
+export function githubInstallStateCookieOptions(): GitHubInstallStateCookieOptions {
+  return {
+    httpOnly: true,
+    maxAge: STATE_LIFETIME_SECONDS,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  };
+}
+
 export type GitHubInstallState = {
   appId: number;
   appSlot: GitHubAppSlot;
@@ -50,6 +85,18 @@ export function normalizeReturnTo(value: string | null | undefined) {
     throw new GitHubStateError("The return path is not allowed for GitHub setup.");
   }
   return `${parsed.pathname}${parsed.search}`;
+}
+
+/**
+ * The GitHub App installation URL the browser is redirected to, carrying the
+ * signed state token GitHub echoes back to the callback.
+ */
+export function buildGitHubInstallAuthorizationUrl(appSlug: string, stateToken: string): string {
+  const url = new URL(
+    `https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new`,
+  );
+  url.searchParams.set("state", stateToken);
+  return url.toString();
 }
 
 export function createGitHubInstallState(

@@ -22,8 +22,30 @@ function organizationResponse() {
   return jsonResponse({ activeOrganizationId: organization.id, organizations: [organization] });
 }
 
+// jsdom's `window.location.assign` is a non-configurable no-op, so it cannot be
+// spied on directly. Replace `window.location` with a proxy that forwards every
+// read to the real location but captures `assign`, which is how the connect
+// action now leaves for the installation launcher.
+const realLocation = window.location;
+function stubNavigation() {
+  const assign = vi.fn();
+  const stand_in = {
+    assign,
+    href: realLocation.href,
+    origin: realLocation.origin,
+    pathname: realLocation.pathname,
+    search: "",
+  } as unknown as Location;
+  delete (window as { location?: Location }).location;
+  (window as { location: Location }).location = stand_in;
+  return assign;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  delete (window as { location?: Location }).location;
+  (window as { location: Location }).location = realLocation;
   window.history.replaceState(null, "", "/");
 });
 
@@ -155,31 +177,42 @@ describe("ConnectionsConsole", () => {
     expect(within(connectionCard!).queryByText("Not Connected")).not.toBeInTheDocument();
   });
 
-  it("keeps the connect action visibly pending while authorization starts", async () => {
-    const pendingResponse = new Promise<Response>(() => undefined);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("starts authorization as a top-level navigation to the launcher, not a fetch", async () => {
+    // The launcher sets the anti-forgery cookie on its own redirect response.
+    // A background fetch would set it on an XHR response, which Safari on
+    // iOS/iPadOS is entitled to drop — the exact cause of the mobile-only
+    // failure this navigation replaces.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/organizations") return organizationResponse();
       if (String(input) === "/api/github/connections") return jsonResponse({ connections: [] });
-      if (String(input) === "/api/github/install/start" && !init?.method) {
-        return jsonResponse({ apps: [] });
-      }
+      if (String(input) === "/api/github/install/start") return jsonResponse({ apps: [] });
       if (String(input) === "/api/projects") return jsonResponse({ projects: [] });
-      return pendingResponse;
+      return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
+    const assign = stubNavigation();
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
     const connect = await screen.findByRole("button", { name: /Connect GitHub/ });
     await user.click(connect);
 
+    // The button reflects the pending navigation, and no POST to /start is made.
     await waitFor(() => expect(connect).toBeDisabled());
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/github/install/start", expect.objectContaining({ method: "POST" }));
+    expect(assign).toHaveBeenCalledTimes(1);
+    const target = new URL(String(assign.mock.calls[0]![0]), "https://factory.test");
+    expect(target.pathname).toBe("/api/github/install/launch");
+    expect(target.searchParams.get("appSlot")).toBe("primary");
+    expect(target.searchParams.get("organizationId")).toBe(organization.id);
+    expect(target.searchParams.get("returnTo")).toBe("/solutions/connections");
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/github/install/start",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("offers only the server-configured candidate App as the replacement target", async () => {
-    const pendingResponse = new Promise<Response>(() => undefined);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/organizations") return organizationResponse();
       if (String(input) === "/api/github/connections") {
         return jsonResponse({
@@ -202,7 +235,7 @@ describe("ConnectionsConsole", () => {
           }],
         });
       }
-      if (String(input) === "/api/github/install/start" && !init?.method) {
+      if (String(input) === "/api/github/install/start") {
         return jsonResponse({
           apps: [
             { appId: 4573846, appSlug: "software-factory", slot: "primary" },
@@ -211,9 +244,10 @@ describe("ConnectionsConsole", () => {
         });
       }
       if (String(input) === "/api/projects") return jsonResponse({ projects: [] });
-      return pendingResponse;
+      return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
+    const assign = stubNavigation();
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
@@ -222,15 +256,11 @@ describe("ConnectionsConsole", () => {
     });
     await user.click(install);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(
-      "/api/github/install/start",
-      expect.objectContaining({ method: "POST" }),
-    ));
-    const request = fetchMock.mock.calls.at(-1)?.[1] as RequestInit;
-    expect(JSON.parse(String(request.body))).toMatchObject({
-      appSlot: "candidate",
-      organizationId: organization.id,
-    });
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    const target = new URL(String(assign.mock.calls[0]![0]), "https://factory.test");
+    expect(target.pathname).toBe("/api/github/install/launch");
+    expect(target.searchParams.get("appSlot")).toBe("candidate");
+    expect(target.searchParams.get("organizationId")).toBe(organization.id);
   });
 
   it("requires explicit RED evidence before handing an existing project to the candidate", async () => {

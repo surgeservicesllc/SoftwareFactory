@@ -17,7 +17,11 @@ import {
   getGitHubAppConfigurationForSlot,
   type GitHubAppConfiguration,
 } from "@/lib/github/config";
-import { githubRouteErrorResponse } from "@/lib/github/errors";
+import {
+  githubConnectionsErrorRedirect,
+  githubRouteErrorResponse,
+  safeGitHubClientError,
+} from "@/lib/github/errors";
 import {
   GITHUB_INSTALL_STATE_COOKIE,
   GitHubStateError,
@@ -34,9 +38,6 @@ const callbackSchema = z.object({
   installationId: z.coerce.number().int().positive(),
   state: z.string().min(32).max(4096),
 });
-
-const CALLBACK_ERROR_CODE = /^[a-z][a-z0-9_]{0,62}$/;
-const CALLBACK_ERROR_MESSAGE_LIMIT = 240;
 
 function acceptsJson(request: Request) {
   return request.headers.get("accept")?.toLowerCase().includes("application/json") ?? false;
@@ -55,30 +56,9 @@ function callbackRedirect(url: URL) {
 }
 
 async function callbackErrorResponse(request: Request, error: unknown) {
-  const apiResponse = githubRouteErrorResponse(error);
-  if (acceptsJson(request)) return apiResponse;
-
-  let code = "github_callback_failed";
-  let message = "GitHub authorization could not be completed safely.";
-  try {
-    const body = await apiResponse.clone().json() as {
-      error?: { code?: unknown; message?: unknown };
-    };
-    if (typeof body.error?.code === "string" && CALLBACK_ERROR_CODE.test(body.error.code)) {
-      code = body.error.code;
-    }
-    if (typeof body.error?.message === "string" && body.error.message.trim()) {
-      message = body.error.message.trim().slice(0, CALLBACK_ERROR_MESSAGE_LIMIT);
-    }
-  } catch {
-    // The redirect always falls back to a fixed, client-safe failure notice.
-  }
-
-  const redirect = new URL("/solutions/connections", request.url);
-  redirect.searchParams.set("github", "error");
-  redirect.searchParams.set("githubError", code);
-  redirect.searchParams.set("githubMessage", message);
-  return callbackRedirect(redirect);
+  if (acceptsJson(request)) return githubRouteErrorResponse(error);
+  const { code, message } = await safeGitHubClientError(error);
+  return githubConnectionsErrorRedirect(request.url, code, message);
 }
 
 export async function GET(request: Request) {
