@@ -404,6 +404,45 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(account.rows[0].status).toBe("pending");
   });
 
+  it("supports high-numbered slots and enumerates stored purposes for the overlay", async () => {
+    // No hard-coded maximum: slot 47 is as valid as slot 2, straight through
+    // the schema's purpose pattern.
+    const accountId = await createAccount("Claude account 47", "claude_47");
+    const sessionId = await openSession(accountId);
+    await db.query("select * from public.claim_ai_auth_session('slot-worker')");
+    await db.query(
+      "select public.report_ai_auth_login_url($1::uuid, 'https://claude.ai/login')",
+      [sessionId],
+    );
+    await assumeRole(db, ownerId);
+    await db.query(
+      "select public.attach_ai_auth_relay_code($1::uuid, $2::uuid, $3)",
+      [organizationId, sessionId, relayEnvelope],
+    );
+    await resetRole(db);
+    await db.query(
+      "select * from public.complete_ai_auth_session($1::uuid, $2)",
+      [sessionId, envelope],
+    );
+
+    // The overlay bridge discovers the slot by enumeration — names only.
+    const purposes = await db.query<{ list_provider_credential_purposes: string }>(
+      "select public.list_provider_credential_purposes($1::uuid)",
+      [organizationId],
+    );
+    const names = purposes.rows.map((row) => row.list_provider_credential_purposes);
+    expect(names).toContain("claude_47");
+    expect(names).toContain("claude");
+
+    // And the enumeration is names only — no browser role may call it.
+    await assumeRole(db, ownerId);
+    await expect(db.query(
+      "select public.list_provider_credential_purposes($1::uuid)",
+      [organizationId],
+    )).rejects.toThrow(/permission denied/);
+    await resetRole(db);
+  });
+
   it("demotes an account to needs_reauth when its credential stops working", async () => {
     const accountId = await createAccount("Claude account 7", "claude_7");
     const marked = await db.query<{ mark_ai_account_needs_reauth: boolean }>(

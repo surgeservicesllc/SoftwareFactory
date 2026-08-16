@@ -13,7 +13,12 @@ vi.mock("@/lib/supabase/tenant", async () => {
 });
 
 const loadStoredCredentialOverlay = vi.fn(async () => ({}) as Record<string, string>);
-vi.mock("@/lib/providers/stored-credentials", () => ({ loadStoredCredentialOverlay }));
+vi.mock("@/lib/providers/stored-credentials", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/providers/stored-credentials")>(
+    "@/lib/providers/stored-credentials",
+  );
+  return { ...actual, loadStoredCredentialOverlay };
+});
 
 const probeProviderCredential = vi.fn(async () => ({
   verdict: "verified" as const,
@@ -96,10 +101,25 @@ describe("GET /api/bots/providers", () => {
       (provider) => provider.id === "anthropic",
     )! as ProviderStatus & { subscriptionSlots?: boolean[] };
 
-    expect(anthropic.subscriptionSlots).toEqual([false, true, false]);
+    // The array is as long as the highest slot present — never a fixed three.
+    expect(anthropic.subscriptionSlots).toEqual([false, true]);
     // Any signed-in slot counts as connected.
     expect(anthropic.subscriptionReady).toBe(true);
     expect(anthropic.credentialReady).toBe(true);
+  });
+
+  it("reports a high-numbered slot rather than capping the account count", async () => {
+    loadStoredCredentialOverlay.mockResolvedValue({
+      SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_5: "fifth-account-token",
+    });
+
+    const anthropic = (await providerStatuses()).find(
+      (provider) => provider.id === "anthropic",
+    )! as ProviderStatus & { subscriptionSlots?: boolean[] };
+
+    expect(anthropic.subscriptionSlots).toHaveLength(5);
+    expect(anthropic.subscriptionSlots?.[4]).toBe(true);
+    expect(anthropic.subscriptionReady).toBe(true);
   });
 
   it("reports not configured when neither key nor subscription exists", async () => {

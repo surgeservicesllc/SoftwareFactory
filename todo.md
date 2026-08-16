@@ -111,6 +111,25 @@ real worker status; everything wired end-to-end.
   must strip ANSI and join wrapped lines before matching.**
 
 **Task breakdown (loop step 3):**
+- [x] P0 | BotBuild | **No hard-coded account/bot maximums** (owner goal
+  update 2026-08-16): slots unbounded everywhere — `purposeForSlot`/
+  `slotIndexForPurpose` generate `claude_N`/`codex_N` for any N (vault regex
+  already admits them); `planConnect` fills the lowest free slot and says
+  "full" only at configured capacity (`SOFTWAREFACTORY_MAX_AI_ACCOUNTS_PER_
+  PROVIDER`, default 100 — platform capacity, not a product cap); connect
+  route + `connect.mts` accept any slot purpose (enum removed); provision
+  route resolves `subscription_N` for any N; providers route reports
+  discovered-length `subscriptionSlots`; overlay bridge enumerates stored
+  purposes via new service-role `list_provider_credential_purposes` (names
+  only; falls back to the pre-slot static list against a not-yet-migrated
+  hosted DB); console cap removed ("Connect another account" always
+  offered). Each bot already carries a unique uuid, per-bot readiness,
+  and per-bot assignments; per-bot queue/runtime/logs/history tracking
+  beyond assignments remains project-scoped (agent_runs) — gap recorded
+  in P1 redesign row | PASS — 89 unit tests across 8 suites + 20
+  integration (incl. claude_47 end-to-end walk + enumeration privacy);
+  tsc clean; eslint 0 errors | 2026-08-16
+
 - [x] P0 | BotBuild | `ai_accounts` + `ai_auth_sessions` migration: account
   entity (org, provider, auth_method, display_name, status, credential
   purpose linkage, verification timestamps, last_error, metadata, revoked_at),

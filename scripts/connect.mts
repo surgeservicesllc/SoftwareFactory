@@ -113,18 +113,17 @@ function runLogin(plan: LoginPlan): Promise<string> {
 
 /**
  * Account slots: `claude_2` runs the same login as `claude` but stores under
- * its own purpose, so a second subscription account can be signed in
- * alongside the first. Bounded to the slots the console offers.
+ * its own purpose, so further subscription accounts can be signed in
+ * alongside the first — without limit. The number is only a name; the server
+ * binds the seal to the exact purpose, so a token posted for one slot can
+ * never be opened as another.
  */
-const PURPOSE_ALLOWLIST = new Set([
-  "claude", "claude_2", "claude_3",
-  "codex", "codex_2", "codex_3",
-]);
+const PURPOSE_PATTERN = /^(claude|codex)(?:_([2-9]|[1-9][0-9]{1,3}))?$/;
 
 function planFor(purposeValue: string): LoginPlan | null {
-  if (!PURPOSE_ALLOWLIST.has(purposeValue)) return null;
-  const base = purposeValue.split("_")[0] as Purpose;
-  return PLANS[base] ?? null;
+  const match = PURPOSE_PATTERN.exec(purposeValue);
+  if (!match) return null;
+  return PLANS[match[1] as Purpose] ?? null;
 }
 
 async function main() {

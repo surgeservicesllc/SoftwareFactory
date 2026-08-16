@@ -2246,16 +2246,16 @@ function SubscriptionQuickConnect({
             <Plus className="size-3.5" aria-hidden="true" />
             Add another {provider.label} bot
           </button>
-          {connectedSlots < 3 ? (
-            <button
-              type="button"
-              onClick={() => void start(connectedSlots)}
-              className="btn btn-secondary btn-sm"
-            >
-              <KeyRound className="size-3.5" aria-hidden="true" />
-              Connect another {provider.label} account
-            </button>
-          ) : null}
+          {/* Never capped: accounts are unbounded by requirement, limited
+              only by configured platform capacity, which the server enforces. */}
+          <button
+            type="button"
+            onClick={() => void start(connectedSlots)}
+            className="btn btn-secondary btn-sm"
+          >
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Connect another {provider.label} account
+          </button>
         </div>
         {connectedSlots > 1 ? (
           <p className="mt-2 text-xs text-[var(--text-muted)]">

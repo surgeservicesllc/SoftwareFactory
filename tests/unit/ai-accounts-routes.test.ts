@@ -104,13 +104,34 @@ describe("planConnect", () => {
     expect(plan).toEqual({ kind: "reuse", accountId: "aa" });
   });
 
-  it("reports full when all three slots hold connected accounts", () => {
+  it("keeps creating past three — accounts have no hard-coded maximum", () => {
     const plan = planConnect("anthropic", [
       accountRow({ account_id: "a1", credential_purpose: "claude" }),
       accountRow({ account_id: "a2", credential_purpose: "claude_2", display_name: "Claude account 2" }),
       accountRow({ account_id: "a3", credential_purpose: "claude_3", display_name: "Claude account 3" }),
     ]);
-    expect(plan).toEqual({ kind: "full" });
+    expect(plan).toEqual({
+      kind: "create", displayName: "Claude account 4", purpose: "claude_4",
+    });
+  });
+
+  it("fills a gap left by an earlier slot before extending the range", () => {
+    const plan = planConnect("anthropic", [
+      accountRow({ account_id: "a1", credential_purpose: "claude" }),
+      accountRow({ account_id: "a3", credential_purpose: "claude_3", display_name: "Claude account 3" }),
+    ]);
+    expect(plan).toEqual({
+      kind: "create", displayName: "Claude account 2", purpose: "claude_2",
+    });
+  });
+
+  it("reports full only at the configured capacity ceiling", () => {
+    const accounts = [
+      accountRow({ account_id: "a1", credential_purpose: "claude" }),
+      accountRow({ account_id: "a2", credential_purpose: "claude_2", display_name: "Claude account 2" }),
+    ];
+    expect(planConnect("anthropic", accounts, undefined, 2)).toEqual({ kind: "full" });
+    expect(planConnect("anthropic", accounts, undefined, 3)).toMatchObject({ kind: "create" });
   });
 
   it("treats an explicitly named account as the reconnect it is", () => {
@@ -162,7 +183,32 @@ describe("POST /api/ai-accounts/connect", () => {
     expect(rpc).not.toHaveBeenCalledWith("create_ai_account", expect.anything());
   });
 
-  it("refuses when every slot is connected", async () => {
+  it("refuses only at the configured capacity, never at a built-in count", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_MAX_AI_ACCOUNTS_PER_PROVIDER", "3");
+    try {
+      rpc.mockImplementation(async (fn: string) => {
+        if (fn === "list_ai_accounts") {
+          return {
+            data: [
+              accountRow({ account_id: "a1", credential_purpose: "claude" }),
+              accountRow({ account_id: "a2", credential_purpose: "claude_2" }),
+              accountRow({ account_id: "a3", credential_purpose: "claude_3" }),
+            ],
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const response = await connect(post("/api/ai-accounts/connect", { provider: "anthropic" }));
+
+      expect(response.status).toBe(409);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("creates a fourth account when capacity allows — no hard-coded maximum", async () => {
     rpc.mockImplementation(async (fn: string) => {
       if (fn === "list_ai_accounts") {
         return {
@@ -174,12 +220,18 @@ describe("POST /api/ai-accounts/connect", () => {
           error: null,
         };
       }
+      if (fn === "create_ai_account") return { data: accountId, error: null };
+      if (fn === "open_ai_auth_session") return { data: sessionId, error: null };
       return { data: null, error: null };
     });
 
     const response = await connect(post("/api/ai-accounts/connect", { provider: "anthropic" }));
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("create_ai_account", expect.objectContaining({
+      p_credential_purpose: "claude_4",
+      p_display_name: "Claude account 4",
+    }));
   });
 
   it("refuses a provider without broker sign-in", async () => {

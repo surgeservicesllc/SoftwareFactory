@@ -28,12 +28,17 @@ export const runtime = "nodejs";
 const requestSchema = z.object({
   provider: z.string().min(1).max(40).refine(isBotProviderId, "Unknown provider."),
   /**
-   * Which of the provider's two credential variables the bot should
-   * reference: the pasted/OAuth API key ("default") or the signed-in
-   * subscription credential ("subscription"). Resolved against the catalog
-   * here so an arbitrary variable name can never arrive from the browser.
+   * Which of the provider's credential variables the bot should reference:
+   * the pasted/OAuth API key ("default"), the signed-in subscription
+   * credential ("subscription"), or any numbered account slot
+   * ("subscription_2", "subscription_47", …) — slots are unbounded by
+   * requirement. Resolved against the catalog plus a numeric suffix here, so
+   * an arbitrary variable name can never arrive from the browser.
    */
-  credential: z.enum(["default", "subscription", "subscription_2", "subscription_3"]).default("default"),
+  credential: z.string().regex(
+    /^(default|subscription(?:_(?:[2-9]|[1-9][0-9]{1,3}))?)$/,
+    "Unknown credential choice.",
+  ).default("default"),
   /** Create a further numbered bot even when one already exists. */
   additional: z.boolean().default(false),
 }).strict();
@@ -63,14 +68,11 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    // "subscription" is account slot 1 (the base variable); "subscription_2"
-    // and "subscription_3" are the suffixed slot variables. The browser only
-    // ever names an enum value — the variable itself comes from the catalog.
-    const slotSuffix = parsed.data.credential === "subscription_2"
-      ? "_2"
-      : parsed.data.credential === "subscription_3"
-        ? "_3"
-        : "";
+    // "subscription" is account slot 1 (the base variable); "subscription_N"
+    // is the suffixed slot variable, for any N. The browser only ever names a
+    // pattern-checked choice — the variable itself comes from the catalog.
+    const slotMatch = /^subscription_(\d+)$/.exec(parsed.data.credential);
+    const slotSuffix = slotMatch ? `_${slotMatch[1]}` : "";
     const options: ProvisionOptions = wantsSubscription
       ? {
           additional: parsed.data.additional,

@@ -897,6 +897,35 @@ revoke all on function public.expire_ai_auth_sessions()
   from public, anon, authenticated;
 grant execute on function public.expire_ai_auth_sessions() to service_role;
 
+-- Which purposes hold a credential, names only, for the overlay bridge.
+--
+-- Accounts are unbounded — `claude_17` is as valid a purpose as `claude` —
+-- so the server can no longer iterate a fixed list to build its credential
+-- overlay. This returns the purposes that exist and nothing else: no
+-- ciphertext, no timestamps, just names the caller then reads one by one
+-- through `read_provider_credential`.
+create or replace function public.list_provider_credential_purposes(
+  p_organization_id uuid
+)
+returns setof text
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog
+as $function$
+begin
+  return query
+  select c.purpose
+  from public.provider_credentials c
+  where c.organization_id = p_organization_id
+  order by c.purpose;
+end;
+$function$;
+
+revoke all on function public.list_provider_credential_purposes(uuid)
+  from public, anon, authenticated;
+grant execute on function public.list_provider_credential_purposes(uuid) to service_role;
+
 -- Reauth demotion, driven by the verification loop when a stored credential
 -- stops working. Service-role because the prober is the server, not a person.
 create or replace function public.mark_ai_account_needs_reauth(

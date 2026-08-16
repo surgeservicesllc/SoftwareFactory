@@ -1,7 +1,8 @@
 import "server-only";
 
 import {
-  BROKER_PROVIDERS,
+  maxAiAccountsPerProvider,
+  purposeForSlot,
   type BrokerProviderId,
 } from "@/lib/ai-accounts/purposes";
 import { findBotProvider } from "@/lib/bots/catalog";
@@ -66,13 +67,15 @@ export type ConnectPlan =
  * An explicitly named account is always a reuse — that is the reconnect
  * button. Otherwise: prefer an existing account that is not connected
  * (pending, needs_reauth, disconnected — reconnecting it is what the person
- * wants), then a free purpose slot for a new account, and only when all
- * three slots hold connected accounts is the answer "full".
+ * wants), then the lowest free slot for a new account. Slots are unbounded;
+ * "full" happens only at the configured capacity ceiling, never at a
+ * hard-coded count.
  */
 export function planConnect(
   providerId: BrokerProviderId,
   accounts: readonly AiAccountRow[],
   requestedAccountId?: string,
+  capacity: number = maxAiAccountsPerProvider(),
 ): ConnectPlan {
   if (requestedAccountId) return { kind: "reuse", accountId: requestedAccountId };
 
@@ -84,14 +87,15 @@ export function planConnect(
   );
   if (reusable) return { kind: "reuse", accountId: reusable.account_id };
 
-  const purposes = BROKER_PROVIDERS[providerId].purposes;
+  if (providerAccounts.length >= capacity) return { kind: "full" };
+
   const taken = new Set(providerAccounts.map((account) => account.credential_purpose));
-  const freeIndex = purposes.findIndex((purpose) => !taken.has(purpose));
-  if (freeIndex === -1) return { kind: "full" };
+  let freeIndex = 0;
+  while (taken.has(purposeForSlot(providerId, freeIndex))) freeIndex += 1;
 
   return {
     kind: "create",
     displayName: accountDisplayName(providerId, freeIndex),
-    purpose: purposes[freeIndex],
+    purpose: purposeForSlot(providerId, freeIndex),
   };
 }
