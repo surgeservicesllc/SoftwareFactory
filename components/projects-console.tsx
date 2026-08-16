@@ -235,21 +235,26 @@ export function ProjectsConsole() {
           />
 
           <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="project-connection" className="field-label">GitHub account</label>
-              <select
-                id="project-connection"
-                value={activeConnectionId}
-                onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
-                className="input"
-              >
-                {connectedConnections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.account?.login ?? connection.name ?? "GitHub"}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* One connected account is the common case, and a picker with a
+                single option is a dead control. The repository list below
+                already names the owner (owner/repo), so nothing is lost. */}
+            {connectedConnections.length > 1 ? (
+              <div>
+                <label htmlFor="project-connection" className="field-label">GitHub account</label>
+                <select
+                  id="project-connection"
+                  value={activeConnectionId}
+                  onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
+                  className="input"
+                >
+                  {connectedConnections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                      {connection.account?.login ?? connection.name ?? "GitHub"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <div>
               <label htmlFor="project-repository" className="field-label">Repository</label>
