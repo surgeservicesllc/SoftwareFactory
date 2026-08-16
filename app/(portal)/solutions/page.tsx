@@ -1,6 +1,7 @@
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
+import { GettingStarted } from "@/components/getting-started";
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
 import { RecentActivityCard } from "@/components/recent-activity-card";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
@@ -35,6 +36,10 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="What is connected, what it can see, and what it is allowed to do."
       />
+
+      <div className="mb-8">
+        <GettingStarted authenticated={authenticated} />
+      </div>
 
       <LiveDashboardMetrics authenticated={authenticated} />
 

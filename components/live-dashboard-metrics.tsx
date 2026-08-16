@@ -3,7 +3,7 @@
 import { FolderGit2, GitPullRequestArrow, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { MetricCard, SetupSteps, StatusBadge, type SetupStep } from "@/components/ui";
+import { MetricCard, StatusBadge } from "@/components/ui";
 import { isBrowserSupabaseConfigured } from "@/lib/supabase/browser-config";
 
 type Project = { id: string; githubRepository: string | null; defaultBranch: string; connectionId: string | null; connectionStatus: "connected" | "not_connected" };
@@ -95,57 +95,8 @@ export function LiveDashboardMetrics({ authenticated }: { authenticated: boolean
     [githubConnected, state],
   );
 
-  /*
-   * Setup progress is derived conservatively from the single /api/projects
-   * read the metrics already need. A retained project does not prove a live
-   * GitHub connection; only a currently connected project advances the path.
-   */
-  const steps = useMemo<SetupStep[]>(() => {
-    const projectLinked = githubConnected;
-    return [
-      {
-        title: "Connect GitHub",
-        description: "Authorize the GitHub App and pick which repositories SoftwareFactory may read.",
-        href: "/solutions/connections",
-        action: "Connect",
-        done: githubConnected,
-      },
-      {
-        title: "Add a project",
-        description: "Link one of those repositories so its branches, commits, and pull requests appear here.",
-        href: "/solutions/projects",
-        action: "Add project",
-        done: projectLinked,
-      },
-      {
-        title: "Open your files",
-        description: "Browse the repository, edit a file, and send the change out as a draft pull request.",
-        href: "/solutions/files",
-        action: "Browse files",
-        done: false,
-      },
-    ];
-  }, [githubConnected]);
-
-  const currentStep = steps.findIndex((step) => !step.done);
-  const allSetUp = connectedCount > 0 && state === "ready";
-
   return (
     <div className="space-y-8">
-      <section aria-labelledby="setup-title">
-        <div className="mb-3">
-          <h2 id="setup-title" className="text-lg font-semibold text-foreground">
-            {allSetUp ? "Your setup" : "Get started in three steps"}
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            {allSetUp
-              ? "Everything below is connected. Jump back into any step to make a change."
-              : "Nothing here runs on its own. You connect a repository, and SoftwareFactory shows you what is in it."}
-          </p>
-        </div>
-        <SetupSteps steps={steps} current={currentStep === -1 ? steps.length - 1 : currentStep} />
-      </section>
-
       <section aria-labelledby="live-metrics-title">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
