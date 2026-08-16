@@ -431,6 +431,26 @@ export function extractOauthToken(output: string): string | null {
   return match ? match[0] : null;
 }
 
+export type Keystroke = Readonly<{ settleMs: number; chunk: string }>;
+
+/**
+ * How a confirmation code is typed into the CLI's paste prompt. The prompt
+ * reads raw keypresses, and raw-mode Enter is a carriage return arriving as
+ * its own keystroke — a newline glued onto the pasted text fills the field
+ * and never submits it, which strands the login at "verifying" until the
+ * token wait expires. So: the code settles first, then Enter alone, then one
+ * more Enter in case the first was swallowed as part of a paste burst. The
+ * extra press is harmless everywhere it can land — a busy exchange ignores
+ * it, and a finished one has already printed the token we are matching.
+ */
+export function codeSubmissionKeystrokes(code: string): readonly Keystroke[] {
+  return [
+    { settleMs: 0, chunk: code.trim() },
+    { settleMs: 400, chunk: "\r" },
+    { settleMs: 1_500, chunk: "\r" },
+  ];
+}
+
 /**
  * Environment for the login CLI: built, not inherited. This container may
  * itself be signed in to a Claude account — the development container is —
@@ -518,7 +538,13 @@ export async function startClaudeSetupToken(
     submitCode: async (code) => {
       // After the code goes in, earlier output — which contains the URL, and
       // matches the URL extractor but never the token one — stays harmless.
-      child.stdin.write(`${code}\n`);
+      for (const stroke of codeSubmissionKeystrokes(code)) {
+        if (stroke.settleMs > 0) {
+          await new Promise((resolveSettle) => setTimeout(resolveSettle, stroke.settleMs));
+        }
+        if (exited) return;
+        child.stdin.write(stroke.chunk);
+      }
     },
     waitForToken: (timeoutMs) => waitForMatch(extractOauthToken, timeoutMs, "the credential"),
     dispose: async () => {

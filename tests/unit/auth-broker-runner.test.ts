@@ -9,6 +9,7 @@ process.env.SOFTWAREFACTORY_CREDENTIAL_KEY = randomBytes(32).toString("base64");
 const { relayCodePurpose } = await import("@/lib/ai-accounts/purposes");
 const { openSecret, sealSecret } = await import("@/lib/security/secret-box-core");
 const {
+  codeSubmissionKeystrokes,
   credentialShapeProblem,
   extractLoginUrl,
   extractOauthToken,
@@ -203,6 +204,19 @@ describe("terminal output parsing", () => {
       "sk-ant-oat01-ABCdef0123456789_-ABCdef0123456789",
     );
     expect(extractOauthToken("sk-ant-short")).toBeNull();
+  });
+
+  it("types the code and presses Enter as its own keystroke, twice", () => {
+    // A raw-mode prompt only registers Enter as a lone carriage return; a
+    // newline glued to the pasted code fills the field without submitting it.
+    const strokes = codeSubmissionKeystrokes("  ac_code#state  ");
+    expect(strokes[0]).toEqual({ settleMs: 0, chunk: "ac_code#state" });
+    const enters = strokes.slice(1);
+    expect(enters.length).toBeGreaterThanOrEqual(2);
+    for (const stroke of enters) {
+      expect(stroke.chunk).toBe("\r");
+      expect(stroke.settleMs).toBeGreaterThan(0);
+    }
   });
 
   it("strips CSI and OSC sequences", () => {
