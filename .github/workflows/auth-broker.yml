@@ -11,6 +11,14 @@ on:
   repository_dispatch:
     types:
       - softwarefactory_auth_broker
+  push:
+    # Every merge to main queues a successor worker. The staleness self-check
+    # makes the running worker step aside when main moves — and stepping
+    # aside with nothing queued is a coverage gap, which is exactly what a
+    # Connect click found on 2026-08-16 18:55Z. The push trigger closes it:
+    # the handover always has a successor carrying the merged code.
+    branches:
+      - main
   schedule:
     # Fallback pickup for sessions whose dispatch failed. GitHub throttles
     # scheduled runs on quiet repositories; the dispatch from Connect is the
