@@ -30,7 +30,37 @@ const environmentSchema = z.object({
   /** Overall wall-clock budget; the workflow timeout is the hard stop. */
   SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS: z.coerce.number().int()
     .min(60_000).max(40 * 60_000).default(25 * 60_000),
+  /**
+   * The commit this worker was released from. When set, the idle loop
+   * compares it against the repository's current default branch and exits
+   * on a mismatch, so a merge reaches the queue without cancelling anyone.
+   */
+  SOFTWAREFACTORY_WORKER_RELEASE_SHA: z.string().trim().length(40).optional(),
+  GITHUB_REPOSITORY: z.string().trim().min(3).optional(),
 }).passthrough();
+
+/**
+ * Whether a newer worker release exists on the default branch. Best-effort:
+ * any network or API problem reads as "not stale", because coverage matters
+ * more than promptness — the workflow timeout still bounds the run.
+ */
+async function newerReleaseExists(
+  repository: string | undefined,
+  releaseSha: string | undefined,
+): Promise<boolean> {
+  if (!repository || !releaseSha) return false;
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${repository}/commits/main`,
+      { headers: { accept: "application/vnd.github.sha" } },
+    );
+    if (!response.ok) return false;
+    const current = (await response.text()).trim();
+    return current.length === 40 && current !== releaseSha;
+  } catch {
+    return false;
+  }
+}
 
 async function main() {
   const parsed = environmentSchema.safeParse(process.env);
@@ -117,6 +147,14 @@ async function main() {
       idleTicks += 1;
       if (idleTicks % SWEEP_EVERY_TICKS === 0) {
         await store.expireStale();
+        if (await newerReleaseExists(
+          env.GITHUB_REPOSITORY, env.SOFTWAREFACTORY_WORKER_RELEASE_SHA,
+        )) {
+          process.stdout.write(
+            "A newer worker release exists on main; exiting so the queue hands over.\n",
+          );
+          break;
+        }
       }
       await new Promise((resolveSleep) => setTimeout(
         resolveSleep, Math.min(IDLE_POLL_MS, Math.max(0, deadline - Date.now())),

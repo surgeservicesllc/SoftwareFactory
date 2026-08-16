@@ -115,6 +115,16 @@ worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
 owner's live click-through of Remove and a fresh Connect (real provider
 auth — cannot be exercised by an agent).
 
+**COVERAGE REGRESSION FIXED (2026-08-16 17:47Z):** the owner's "Claude is
+now not connecting" was a coverage gap, not a code change — the Claude
+sign-in code is byte-identical to what connected them at 17:18. The 4.5-min
+claim window (#145) left multi-minute holes between GitHub's throttled cron
+beats (measured: no worker 17:33:00-17:39:37). Restored the 25-minute
+linger — the configuration that worked — and replaced the short deadline
+with a staleness self-check: every sweep the idle worker compares main
+against its own release SHA and exits on mismatch, so a merge still reaches
+the queue within ~5 minutes without ever cancelling a live login.
+
 **CODEX ERROR TRIAGED (2026-08-16 17:42Z):** the owner's "Only Claude
 accounts…" failure came from a pre-#146 worker — the string no longer exists
 in code, and the first Codex-capable worker run (31961503881, 17:28-17:33)
