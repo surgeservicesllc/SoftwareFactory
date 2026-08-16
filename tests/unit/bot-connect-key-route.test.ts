@@ -78,6 +78,39 @@ describe("verify before store", () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
+  it("provisions a ready default bot through the tenant client after storing", async () => {
+    // A tenant client that reports no existing bot for the provider and accepts
+    // the register_bot insert: the connect response should say a bot is waiting.
+    const register = vi.fn(() => ({ single: async () => ({ data: { id: "auto-bot" }, error: null }) }));
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: {
+        from: () => ({
+          select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+        }),
+        rpc: register,
+      },
+    });
+
+    const response = await POST(post({ provider: "anthropic", key }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ connected: true, botProvisioned: true });
+    expect(register).toHaveBeenCalledWith("register_bot", expect.objectContaining({
+      p_provider: "anthropic",
+      p_credential_ref: "ANTHROPIC_API_KEY",
+    }));
+  });
+
+  it("still connects cleanly when a default bot is not auto-created", async () => {
+    // The default client mock ({}) cannot provision; the connection must still
+    // succeed, just without the bot-waiting note.
+    const response = await POST(post({ provider: "anthropic", key }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ connected: true, botProvisioned: false });
+  });
+
   it("refuses a rejected key without storing it", async () => {
     probeProviderCredential.mockResolvedValue({
       verdict: "rejected", reason: "The provider rejected this key.", live: true,

@@ -1,7 +1,8 @@
 import "server-only";
 
 import { findBotProvider } from "@/lib/bots/catalog";
-import { isCredentialPresent } from "@/lib/bots/credentials";
+import { isCredentialPresent, normalizeCredentialRef } from "@/lib/bots/credentials";
+import { loadStoredCredentialOverlay } from "@/lib/providers/stored-credentials";
 import {
   evaluateBotReadiness,
   isBotReadiness,
@@ -121,9 +122,26 @@ function toAssignmentStatus(value: string): SerializedAssignment["status"] {
   return value === "active" || value === "paused" ? value : "released";
 }
 
-export function serializeBot(row: BotRow): SerializedBot {
+/**
+ * Whether a bot's referenced credential is available to a worker right now,
+ * counting both server environment variables and credentials a person signed
+ * in or pasted into the console (which live in the vault, not the environment).
+ *
+ * A bot connected through the one-click sign-in must read exactly as ready as
+ * one whose key was set by hand — otherwise "connected" and "ready" disagree,
+ * which is the specific confusion the sign-in flow exists to remove. Reusing
+ * the overlay rather than a presence-only check is deliberate: it counts a
+ * credential ready only if it can actually be opened, which is precisely the
+ * condition under which a worker could use it.
+ */
+export type CredentialPresence = (credentialRef: string | null) => boolean;
+
+export function serializeBot(
+  row: BotRow,
+  isPresent: CredentialPresence = isCredentialPresent,
+): SerializedBot {
   const provider = findBotProvider(row.provider);
-  const credentialPresent = isCredentialPresent(row.credential_ref);
+  const credentialPresent = isPresent(row.credential_ref);
   const current = evaluateBotReadiness({
     provider: row.provider,
     model: row.model,
@@ -210,13 +228,41 @@ async function readTable<Row>(
   return (data ?? []) as Row[];
 }
 
+/**
+ * Builds the credential-presence test for one organization: a reference is
+ * present if the server environment holds it, or if a signed-in / pasted
+ * credential for that same variable exists in the vault. Stored credentials
+ * are opened here through the same overlay the provider-status route uses, so
+ * the fleet and the providers tab can never disagree about a connection.
+ */
+async function credentialPresenceForOrganization(
+  organizationId: string,
+): Promise<CredentialPresence> {
+  const overlay = await loadStoredCredentialOverlay(organizationId);
+  const storedRefs = new Set(Object.keys(overlay));
+
+  return (credentialRef: string | null) => {
+    if (!credentialRef) return false;
+    if (isCredentialPresent(credentialRef)) return true;
+    let normalized: string | null = null;
+    try {
+      normalized = normalizeCredentialRef(credentialRef);
+    } catch {
+      return false;
+    }
+    return normalized !== null && storedRefs.has(normalized);
+  };
+}
+
 export async function loadBotFabric(
   client: unknown,
   organizationId: string,
 ): Promise<BotFabricSnapshot> {
   const supabase = client as SupabaseLikeClient;
 
-  const [bots, roles, assignments, projects] = await Promise.all([
+  const [isPresent, [bots, roles, assignments, projects]] = await Promise.all([
+    credentialPresenceForOrganization(organizationId),
+    Promise.all([
     readTable<BotRow>(
       supabase,
       "bots",
@@ -249,10 +295,11 @@ export async function loadBotFabric(
       "name",
       200,
     ),
+    ]),
   ]);
 
   return {
-    bots: bots.map(serializeBot),
+    bots: bots.map((row) => serializeBot(row, isPresent)),
     roles: roles.map(serializeBotRole),
     assignments: assignments
       .map(serializeAssignment)

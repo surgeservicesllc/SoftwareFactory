@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { probeProviderCredential } from "@/lib/bots/provider-probe";
+import { ensureProviderBot } from "@/lib/bots/provisioning";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
 import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { activeOrganization } = await requireActiveOrganization();
+    const { activeOrganization, client: tenantClient } = await requireActiveOrganization();
     if (activeOrganization.role !== "owner" && activeOrganization.role !== "admin") {
       return jsonNoStore(
         { error: { code: "forbidden", message: "Only an owner or admin can connect a provider." } },
@@ -128,10 +129,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // The credential is stored; the connection has succeeded. Now make it
+    // useful without a second step: if this organization has no bot for the
+    // provider yet, create a ready default one. This never fails the
+    // connection — a provisioning problem leaves the person exactly where the
+    // old flow did, with a stored key and a bot to add by hand.
+    const provisioned = await ensureProviderBot(tenantClient, activeOrganization.id, parsed.data.provider);
+
     return jsonNoStore({
       connected: true,
       verdict: probe.verdict,
-      message: "Connected and verified.",
+      botProvisioned: provisioned.outcome === "created",
+      message:
+        provisioned.outcome === "created"
+          ? "Connected and verified. A ready bot is waiting in your fleet."
+          : "Connected and verified.",
     });
   } catch (error) {
     // Never surface the failure: it can carry the key in a request context.

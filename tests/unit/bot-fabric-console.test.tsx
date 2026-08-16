@@ -92,6 +92,46 @@ describe("BotFabricConsole", () => {
     );
   });
 
+  it("finishes a one-click sign-in by provisioning a bot and saying so", async () => {
+    // Land as the OAuth callback does: back on the console with ?connect=connected.
+    window.history.replaceState(null, "", "/solutions/bot-manager?connect=connected");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/bots/connect/provision") {
+        return { ok: true, status: 200, json: async () => ({ provisioned: true, outcome: "created" }) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    }));
+
+    render(<BotFabricConsole />);
+
+    // The console provisions as the authenticated owner — the callback could
+    // not — and reports that a bot is waiting.
+    expect(await screen.findByText(/a ready bot is waiting in your fleet/i)).toBeInTheDocument();
+    expect(calls).toContain("POST /api/bots/connect/provision");
+    // The outcome is cleared from the URL so a refresh does not repeat it.
+    expect(window.location.search).toBe("");
+
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("leads an empty fleet with a one-click sign-in, not a form", async () => {
+    stubFetch({ status: 200, body: { ...fabricPayload, bots: [], assignments: [] } });
+
+    render(<BotFabricConsole />);
+
+    // The front door is the genuinely one-click path (OpenRouter OAuth, which
+    // fronts Claude/GPT/Gemini and auto-provisions a ready bot on return), a
+    // real anchor to the route handler that 302s off-origin.
+    const signIn = await screen.findByRole("link", { name: /sign in and add my first bot/i });
+    expect(signIn).toHaveAttribute("href", "/api/bots/connect/oauth/start");
+    expect(screen.getByText(/connect a bot in one click/i)).toBeInTheDocument();
+    // The manual path stays available, one step down.
+    expect(screen.getByRole("button", { name: /add one manually/i })).toBeInTheDocument();
+  });
+
   it("states that no worker is connected alongside the fleet", async () => {
     stubFetch({ status: 200, body: fabricPayload });
 
