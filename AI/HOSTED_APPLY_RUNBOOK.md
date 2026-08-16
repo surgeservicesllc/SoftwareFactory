@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, listed in the measured section below. The repository total is 83 migration
+**The current total is 20**, listed in the measured section below. The repository total is 84 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
 outstanding. (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
@@ -31,13 +31,13 @@ stated position, and fails when they drift.)
 > supabase migration repair --status reverted 20260814002000
 > supabase migration repair --status applied  20260814000100
 > supabase migration list        # re-list; the comparison error should be gone
-> supabase db push               # applies the 19 outstanding below, in order
+> supabase db push               # applies the 20 outstanding below, in order
 > ```
 >
 > If `migration list` shows anything other than the predicted state, stop and re-derive —
 > do not force the repair.
 >
-> ### The 19 outstanding, in apply order
+> ### The 20 outstanding, in apply order
 >
 > `20260814002400_connection_registry_multi_account` · `20260814002500_provider_credential_vault`
 > · `20260814002600_store_provider_credential` · `20260815000100`–`20260815000600` (Phase 2E
@@ -46,7 +46,7 @@ stated position, and fails when they drift.)
 > `20260815001000_cross_project_dependencies` · `20260815001100_connection_routing_decisions` ·
 > `20260815001200_improvement_ledger` · `20260815001300_improvement_measurement` ·
 > `20260815001400_factory_self_audit` · `20260815001500_factory_detectors` ·
-> `20260815001600_detector_intake`
+> `20260815001600_detector_intake` · `20260816000100_ai_accounts_auth_broker`
 >
 > Each is described, with its verifying suite, in the per-section tables below. None grants
 > execution authority or new `service_role` table privileges. **Before pushing**, note the 2E
@@ -294,6 +294,7 @@ so it cannot pass without having applied every row below).
 | `20260815001400_factory_self_audit` | `audit_factory_health`: eight telemetry domains read as evidence, each scored by a stated rule or reported unmeasured with a reason; overall score over measured domains only, with confidence and abstention | `improvement-ledger.behavior` |
 | `20260815001500_factory_detectors` | `detect_factory_improvements`: five detectors with stated evidence floors — recurring fingerprints, flaky test kinds, sub-second model nodes, failing provider pairs, and a debt inventory — abstaining by name below their floors | `improvement-ledger.behavior` |
 | `20260815001600_detector_intake` | `propose_improvements_from_detections`: findings become owner-decidable ledger proposals with machine-captured baselines and metric-named predictions; open questions are never re-proposed, rejections may be re-raised, and nothing is auto-accepted | `improvement-ledger.behavior` |
+| `20260816000100_ai_accounts_auth_broker` | `ai_accounts` (provider sign-ins as first-class identities, no secrets stored) + `ai_auth_sessions` (the broker state machine a worker drives through the provider's real login: pending→initializing→awaiting_user→authenticated→verifying→connected, with failed/expired/revoked terminals) + nullable `bots.ai_account_id`; RLS+FORCE with no direct table access for any role, definer-function transitions, activity events throughout | `ai-accounts-auth-broker.behavior` |
 
 What they do **not** do:
 

@@ -1,7 +1,10 @@
 import { BOT_PROVIDERS } from "@/lib/bots/catalog";
 import { isCredentialPresent } from "@/lib/bots/credentials";
 import { probeProviderCredential, type ProbeResult } from "@/lib/bots/provider-probe";
-import { loadStoredCredentialOverlay } from "@/lib/providers/stored-credentials";
+import {
+  loadStoredCredentialOverlay,
+  subscriptionSlotReadiness,
+} from "@/lib/providers/stored-credentials";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore } from "@/lib/server/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -88,12 +91,11 @@ export async function GET(request: Request) {
         // model-list endpoints authenticate API keys, not subscription
         // tokens, and a guaranteed 401 would read as "your sign-in is bad".
         const subscriptionRef = provider.subscriptionCredentialRef;
-        // Slot 1 is the base ref; slots 2 and 3 are the same variable
-        // suffixed, mirroring the account-slot purposes in the vault overlay.
+        // Slot 1 is the base ref; slot N is the same variable suffixed `_N`,
+        // mirroring the account-slot purposes in the vault overlay. The array
+        // length is discovered from what exists — accounts are unbounded.
         const subscriptionSlots = subscriptionRef
-          ? [subscriptionRef, `${subscriptionRef}_2`, `${subscriptionRef}_3`].map(
-              (slotRef) => Boolean(stored[slotRef] || isCredentialPresent(slotRef)),
-            )
+          ? subscriptionSlotReadiness(subscriptionRef, stored)
           : [];
         const subscriptionReady = subscriptionSlots.some(Boolean);
         const credentialReady = keyReady || subscriptionReady;
@@ -120,7 +122,7 @@ export async function GET(request: Request) {
           subscriptionCredentialRef: provider.subscriptionCredentialRef,
           /** True when a signed-in subscription credential is stored or set. */
           subscriptionReady,
-          /** Per-account-slot readiness: [slot 1, slot 2, slot 3]. */
+          /** Per-account-slot readiness, unbounded: index n is slot n+1. */
           subscriptionSlots,
           /** `verified` is the only verdict that means the bot could run. */
           probeVerdict: probe?.verdict ?? (credentialReady ? "not_probed" : "not_configured"),

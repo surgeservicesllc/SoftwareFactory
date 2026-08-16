@@ -2,6 +2,25 @@
 
 Last updated: 2026-08-16
 
+## Active goal: BotBuild — AI accounts + automatic auth broker (2026-08-16)
+
+The owner's active goal (spec recorded in `todo.md` → "Owner goal — BotBuild")
+replaces the copy-a-command connect flow with a fully in-browser one: Add AI
+Account → Connect → the provider's real login → automatic detection →
+Connected. The foundation landed in `20260816000100_ai_accounts_auth_broker`
+(see ADR-071): `ai_accounts` identities, the `ai_auth_sessions` broker state
+machine (worker-driven, definer-function-only, sealed relay code, audit
+events on every transition), and nullable `bots.ai_account_id`. The
+verifying suite is `tests/integration/ai-accounts-auth-broker.behavior.test.ts`.
+Still open, in order: broker API routes, the worker auth runner (GitHub
+Actions job that runs the provider CLI login against a claimed session —
+including a live probe of headless `claude setup-token`; Codex's
+localhost-callback login is a known risk recorded in `todo.md`), the
+auto-completing UI, the Bot Manager redesign, disconnect/reauth surfaces,
+and the verification loop. The subscription connect-command flow (PRs
+#133/#134/#135) keeps working during the transition; do not remove it until
+the broker path is live end to end.
+
 ## Read this first: master clean-room audit + frictionless goal (2026-08-16)
 
 The authoritative current state is `todo.md` → "Master clean-room audit

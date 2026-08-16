@@ -75,6 +75,151 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
+### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
+
+Full spec: uploads/cda1f8a5-BotBuild.txt. Mission: no terminal in normal
+onboarding — Add AI Account → pick Claude/Codex → Connect → provider's real
+sign-in → automatic detection → Connected → create/assign bots. AI Account
+becomes a first-class entity distinct from bots; multiple isolated accounts;
+real worker status; everything wired end-to-end.
+
+**Inspection findings (loop step 1-2, 2026-08-16):**
+- `provider_connect_sessions` + sealed `provider_credentials` (migration
+  `20260814002500`) already model the claim half: digest-coded sessions,
+  purpose-bound seals, one-credential-per-purpose. `ai_auth_sessions` extends
+  this with the broker state machine rather than replacing it.
+- The worker is an ephemeral Actions job (cron */5 + repository_dispatch,
+  70-minute ceiling) — long enough to host a full auth relay session; a
+  dispatched `ai-account-auth` job is the broker's execution vehicle.
+- `bots` has no account linkage — needs nullable `ai_account_id` (legacy-safe;
+  old bots show "AI account required" per the spec's migration rule).
+- Worker status exists as heartbeat evidence (`get_phase1c_worker_status`);
+  "Worker Stale" reflects GitHub cron throttling (~hourly effective), so the
+  spec's worker-status work is presentation + registration, not new telemetry.
+- **Technical risk (must live-probe before promising)**: Claude's
+  `setup-token` is a paste-back device flow — relayable through the web UI
+  (user pastes the provider code into Software Factory, never a terminal).
+  Codex's ChatGPT login opens a **localhost callback** the user's browser
+  cannot reach on a headless worker; unless Codex exposes a headless/device
+  mode, Codex account-connect keeps the operator-machine path under Advanced
+  while Claude gets the full broker flow. **Probe result (2026-08-16, this
+  container, claude CLI 2.1.233): PASS — headless `claude setup-token` under
+  `script -qec` (fake TTY) with an isolated `CLAUDE_CONFIG_DIR` prints the
+  OAuth authorize URL (`https://claude.com/cai/oauth/authorize?code=true&…`)
+  with no browser and no real TTY; the flow then waits for a pasted code.
+  Implementation note: the pty wraps output at 80 columns, so URL capture
+  must strip ANSI and join wrapped lines before matching.**
+
+**Task breakdown (loop step 3):**
+- [x] P0 | BotBuild | **No hard-coded account/bot maximums** (owner goal
+  update 2026-08-16): slots unbounded everywhere — `purposeForSlot`/
+  `slotIndexForPurpose` generate `claude_N`/`codex_N` for any N (vault regex
+  already admits them); `planConnect` fills the lowest free slot and says
+  "full" only at configured capacity (`SOFTWAREFACTORY_MAX_AI_ACCOUNTS_PER_
+  PROVIDER`, default 100 — platform capacity, not a product cap); connect
+  route + `connect.mts` accept any slot purpose (enum removed); provision
+  route resolves `subscription_N` for any N; providers route reports
+  discovered-length `subscriptionSlots`; overlay bridge enumerates stored
+  purposes via new service-role `list_provider_credential_purposes` (names
+  only; falls back to the pre-slot static list against a not-yet-migrated
+  hosted DB); console cap removed ("Connect another account" always
+  offered). Each bot already carries a unique uuid, per-bot readiness,
+  and per-bot assignments; per-bot queue/runtime/logs/history tracking
+  beyond assignments remains project-scoped (agent_runs) — gap recorded
+  in P1 redesign row | PASS — 89 unit tests across 8 suites + 20
+  integration (incl. claude_47 end-to-end walk + enumeration privacy);
+  tsc clean; eslint 0 errors | 2026-08-16
+
+- [x] P0 | BotBuild | `ai_accounts` + `ai_auth_sessions` migration: account
+  entity (org, provider, auth_method, display_name, status, credential
+  purpose linkage, verification timestamps, last_error, metadata, revoked_at),
+  broker sessions (pending→initializing→awaiting_user→authenticated→
+  verifying→connected/failed/expired/revoked, login_url, sealed relay code,
+  worker claim + heartbeat, TTL ceiling 30 min), `bots.ai_account_id`
+  nullable composite-FK; RLS+FORCE with zero direct table access, 13 definer
+  functions (owner-side: create/open/attach-relay/disconnect + 2 read
+  projections; worker-side: claim/report-url/read-relay/verifying/complete/
+  fail/expire/needs-reauth), activity events on every transition. Delivered
+  `20260816000100_ai_accounts_auth_broker.sql` + 10-test behavior suite
+  (happy path, relay-code secrecy, manager auth, supersession, slot
+  uniqueness, expiry, secret-shaped failure sanitizing, credential-deleting
+  disconnect, cross-org bot FK refusal, needs_reauth). Guard updates: RLS
+  count 109→111, tail pins ×11, publicTables +2, runbook 83→84/19→20 |
+  PASS — broker suite 10/10; runbook+grants+pin guards green | 2026-08-16
+- [x] P0 | BotBuild | Broker API: POST /api/ai-accounts/connect (plans
+  reuse-vs-create against the three purpose slots per provider, opens the
+  broker session), GET /api/ai-accounts (identity + lifecycle, no secrets),
+  GET sessions/[id] (polling projection; sealed code structurally absent),
+  POST sessions/[id]/code (pastes into the WEB APP; sealed via sealSecret
+  bound to `ai_auth_relay:<sessionId>` before storage), POST
+  sessions/[id]/cancel, POST [accountId]/disconnect. Owner/admin checks +
+  same-origin asserts; audit events come from the definer functions
+  themselves. `cancel_ai_auth_session` added to the (unmerged) migration —
+  cancel ends the session, touches neither account nor credential |
+  PASS — 18 route tests + broker suite 11/11; tsc + eslint clean | 2026-08-16
+- [x] P0 | BotBuild | Worker auth runner: `lib/worker/auth-broker.ts`
+  (DI-tested protocol: claim → start CLI → URL → awaiting_user → poll sealed
+  relay code → unseal only into CLI stdin → verifying → token → seal under
+  account purpose → connected; failure/timeout/supersession paths),
+  `scripts/auth-broker.mts` (env-gated entry, expire sweep, deadline loop),
+  `.github/workflows/auth-broker.yml` (repository_dispatch
+  `softwarefactory_auth_broker` + cron + manual; gated on repo var
+  `SOFTWAREFACTORY_AUTH_BROKER_ENABLED`; claude CLI pinned 2.1.233),
+  `wakeAuthBrokerWorker` best-effort dispatch on Connect. Headless probe
+  PASS (recorded above); `server-only` split into `lib/security/
+  secret-box-core` + `lib/ai-accounts/purposes` so the worker seals/opens
+  under plain Node — guarded re-exports keep app imports unchanged. Codex
+  refused honestly ("Only Claude accounts…") pending localhost-callback
+  work | PASS — 9 runner tests + 18 route tests; script boots under tsx and
+  refuses with named env vars; NOT live-tested end-to-end (needs owner:
+  Actions secrets SOFTWAREFACTORY_CREDENTIAL_KEY + repo var
+  SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true, then a real click-through) |
+  2026-08-16
+- [x] P0 | BotBuild | Auto-completing UI: `components/ai-account-connect.tsx`
+  — every rendered state read from the broker session (3s bounded polling),
+  never assumed: waiting-for-worker (honest schedule note + 75s stall
+  detection offering the manual path), worker-initializing, awaiting_user
+  (real login URL as "Continue to {label} sign-in" opened in a new tab +
+  paste-the-code field posting to the relay endpoint), finishing/verifying,
+  Connected, failed (sanitized reason + Start again + fallback + Close),
+  cancel posts the cancel endpoint. NO check-now button, NO command shown
+  on the primary path. Console integration: Claude button broker-first
+  ("Connect another account" too); Codex keeps the command flow (its login
+  is a localhost callback the worker cannot drive); on connected the
+  console maps the account's credentialPurpose (now in GET /api/ai-accounts)
+  to the provision slot and finishes with a Ready bot. Fallback preserved:
+  broker-can't-start → "Use the manual command instead" → old flow intact |
+  PASS — console suite 12/12 incl. full broker walk (no command, no
+  check-now, code pasted in-page, Ready + both uncapped follow-ups) and
+  fallback walk; tsc + eslint clean | 2026-08-16
+- [ ] P1 | BotBuild | Bot Manager redesign: header counts (Worker/Accounts/
+  Bots/Roles), empty state per spec (Claude + Codex cards primary, Advanced
+  below, OpenRouter demoted), AI Accounts management section (Manage/
+  Reauthenticate/Disconnect), Create Bot with AI Account selector
+  (ai_account_id), worker-required state | e2e + component tests | P0 rows
+- [x] P1 | BotBuild | Disconnect/reauth lifecycle (UI + API):
+  `components/ai-accounts-panel.tsx` — org-wide AI Accounts section in the
+  Bot Manager listing every account with its honest lifecycle chip
+  (Connected / Needs sign-in again / Not signed in yet / Disconnected /
+  Revoked), last-verified time, sanitized last error; Disconnect is
+  two-step in place and its confirm names the consequence ("Remove its
+  credential — confirm") → POST [id]/disconnect (vault row deleted,
+  sessions revoked, account kept for Reconnect); Reconnect runs the same
+  auto-completing broker flow against exactly that account
+  (`AiAccountConnect` gained `accountId`); read-only members see status
+  only. Server-side `mark_ai_account_needs_reauth` exists for the
+  verification loop (still open) | PASS — 5 panel tests + console 12/12;
+  tsc + eslint clean | 2026-08-16
+- [ ] P1 | BotBuild | Verification loop: real usability check per account,
+  expiry detection, honest statuses | tests | P0
+- [ ] P2 | BotBuild | Multi-account worker isolation live proof (two Claude
+  accounts, no auth collision, per-account config dirs) | live evidence | P0
+- [ ] P2 | BotBuild | Docs: architecture, auth lifecycles, worker setup,
+  troubleshooting | — | P1
+- [ ] P3 | BotBuild | Full test matrix (26 categories) + final acceptance
+  journey (30 steps) with real worker execution using a selected account |
+  live evidence | all
+
 ### Owner goal — the Claude button (opened 2026-08-16, iteration 1 shipped)
 
 Owner directive: a Claude button in Bot Manager; click → Claude sign-in; once
@@ -133,7 +278,7 @@ production deploy completed 13:22Z):** the owner asked for "the same
   Console suite 11/11 incl. a full Codex walk (button → `connect.mts codex`
   command → check → provision {provider:"openai",credential:"subscription"}
   → Ready). tsc + lint clean.
-- **Iteration 3 — multi-account slots (PR #TBD):** the vault audit settled
+- **Iteration 3 — multi-account slots (PR #135, merged 2ef50e4):** the vault audit settled
   it — `purpose` is pattern-checked (`^[a-z][a-z0-9_]{1,62}$`), not
   enum-constrained, so account slots need NO migration. Purposes
   `claude_2/claude_3/codex_2/codex_3` (bounded) added to the connect route

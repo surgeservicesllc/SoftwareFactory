@@ -11,9 +11,12 @@ vi.mock("@/lib/github/service-role", () => ({
   createSupabaseGitHubWebhookClient: () => ({ rpc }),
 }));
 
-const { loadStoredCredentialOverlay, withStoredCredentials } = await import(
-  "@/lib/providers/stored-credentials"
-);
+const {
+  loadStoredCredentialOverlay,
+  overlayKeyForPurpose,
+  subscriptionSlotReadiness,
+  withStoredCredentials,
+} = await import("@/lib/providers/stored-credentials");
 const { sealSecret } = await import("@/lib/server/secret-box");
 const { resolveClaudeAuth } = await import("@/lib/providers/claude-auth");
 
@@ -84,6 +87,70 @@ describe("reading the vault", () => {
 
     expect(await loadStoredCredentialOverlay(organizationId)).toEqual({});
     expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("unbounded account slots", () => {
+  it("fills the suffixed variable for any slot the vault enumerates", async () => {
+    // Slot 47 exists the moment someone signs it in. No list in this module
+    // names it — the vault enumeration discovers it.
+    const sealed = sealSecret(oauthToken, { organizationId, purpose: "claude_47" });
+    rpc.mockImplementation(async (name: string, args: Record<string, string>) => {
+      if (name === "list_provider_credential_purposes") {
+        return { data: ["claude_47"], error: null };
+      }
+      return args.p_purpose === "claude_47"
+        ? { data: sealed, error: null }
+        : { data: null, error: null };
+    });
+
+    const overlay = await loadStoredCredentialOverlay(organizationId);
+
+    expect(overlay[`${OAUTH_KEY}_47`]).toBe(oauthToken);
+  });
+
+  it("keeps working against a database that predates the enumeration", async () => {
+    // The hosted database gains list_provider_credential_purposes only when
+    // the owner applies the migration. Until then the bridge probes the
+    // pre-slot purposes one by one, exactly as before.
+    const sealed = sealSecret(oauthToken, { organizationId, purpose: "claude" });
+    rpc.mockImplementation(async (name: string, args: Record<string, string>) => {
+      if (name === "list_provider_credential_purposes") {
+        return { data: null, error: { message: "function does not exist" } };
+      }
+      return args.p_purpose === "claude"
+        ? { data: sealed, error: null }
+        : { data: null, error: null };
+    });
+
+    const overlay = await loadStoredCredentialOverlay(organizationId);
+
+    expect(overlay[OAUTH_KEY]).toBe(oauthToken);
+  });
+
+  it("maps purposes to variables without any ceiling, and refuses strangers", () => {
+    expect(overlayKeyForPurpose("claude")).toBe(OAUTH_KEY);
+    expect(overlayKeyForPurpose("claude_2")).toBe(`${OAUTH_KEY}_2`);
+    expect(overlayKeyForPurpose("claude_9999")).toBe(`${OAUTH_KEY}_9999`);
+    expect(overlayKeyForPurpose("codex_47")).toBe("SOFTWAREFACTORY_CODEX_AUTH_JSON_47");
+    expect(overlayKeyForPurpose("openrouter")).toBe("OPENROUTER_API_KEY");
+    // Not slots: slot 1 is the bare purpose, and unknown families are skipped.
+    expect(overlayKeyForPurpose("claude_1")).toBeNull();
+    expect(overlayKeyForPurpose("gemini_2")).toBeNull();
+    expect(overlayKeyForPurpose("ai_auth_relay:x")).toBeNull();
+  });
+
+  it("reports slot readiness as long as the highest slot present", () => {
+    const slots = subscriptionSlotReadiness(OAUTH_KEY, {
+      [`${OAUTH_KEY}_4`]: "token-four",
+    }, {});
+    // Four entries because slot 4 exists — never a fixed three.
+    expect(slots).toEqual([false, false, false, true]);
+
+    expect(subscriptionSlotReadiness(OAUTH_KEY, { [OAUTH_KEY]: "one" }, {})).toEqual([true]);
+    // The environment counts too: an operator-set slot variable is a slot.
+    expect(subscriptionSlotReadiness(OAUTH_KEY, {}, { [`${OAUTH_KEY}_2`]: "two" }))
+      .toEqual([false, true]);
   });
 });
 

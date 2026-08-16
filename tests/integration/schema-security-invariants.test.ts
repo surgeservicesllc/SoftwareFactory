@@ -52,6 +52,14 @@ const GITHUB_INGRESS_TABLES = [
  * "protected and never wired up" is intent, and intent has to be written down.
  */
 const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze({
+  ai_accounts:
+    "AI-account identities. No secret column, but every read goes through the "
+    + "list_ai_accounts projection and every mutation through a definer function "
+    + "that writes an activity event; a policy would open a second, silent path.",
+  ai_auth_sessions:
+    "Broker sign-in sessions. The sealed relay code must be impossible to read "
+    + "rather than merely restricted — only the worker's definer function returns "
+    + "it, and the browser's projection cannot name the column.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",
@@ -220,6 +228,12 @@ describe("SECURITY DEFINER functions", () => {
     expect(result.rows.map((row) => row.proname)).toEqual([
       "agentos_record_trigger_delivery",
       "append_phase1c_run_event",
+      // The auth-broker worker's eight capabilities: drive a sign-in session
+      // through the provider's real login. `read_ai_auth_relay_code` returns
+      // a sealed envelope useless without SOFTWAREFACTORY_CREDENTIAL_KEY, and
+      // `complete_` accepts only an already-sealed credential — plaintext
+      // never crosses this boundary in either direction.
+      "claim_ai_auth_session",
       "claim_phase1c_run",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
@@ -227,23 +241,34 @@ describe("SECURITY DEFINER functions", () => {
       // SOFTWAREFACTORY_CREDENTIAL_KEY, which is deliberately not in the
       // database. The server has no other privileged identity to call them with.
       "claim_provider_connect_session",
+      "complete_ai_auth_session",
       "complete_github_change_request",
       "complete_phase1c_run",
       "disconnect_github_connection",
+      "expire_ai_auth_sessions",
+      "fail_ai_auth_session",
       "fail_github_change_request",
       "fail_github_change_request_with_evidence",
       "finish_phase1c_worker",
       "heartbeat_phase1c_run",
       "heartbeat_phase1c_worker",
       "jsonb_has_sensitive_keys",
+      // Purpose names only — the unbounded-accounts overlay has to discover
+      // which slots exist before reading them; ciphertext still comes one
+      // purpose at a time through read_provider_credential.
+      "list_provider_credential_purposes",
+      "mark_ai_account_needs_reauth",
+      "mark_ai_auth_session_verifying",
       "mark_github_connection_lost",
       "process_github_webhook_delivery",
+      "read_ai_auth_relay_code",
       "read_provider_credential",
       "reconcile_github_repository_grants",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
+      "report_ai_auth_login_url",
       "resolve_provider_connect_session",
       // Stores a credential obtained through an OAuth callback. Server-only:
       // a browser must never write that table directly, or the seal would be

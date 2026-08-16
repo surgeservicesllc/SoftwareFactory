@@ -23,6 +23,8 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AiAccountConnect } from "@/components/ai-account-connect";
+import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { Card, StatusBadge } from "@/components/ui";
 import {
   BOT_PROVIDERS,
@@ -257,6 +259,10 @@ export function BotFabricConsole() {
   return (
     <div className="space-y-5">
       <ExecutorNotice detail={fabric.executor.detail} />
+
+      {/* Accounts are org-wide identities above the fleet; the panel renders
+          nothing until at least one exists. */}
+      <AiAccountsPanel canManage={fabric.canManage} onChanged={load} />
 
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Bot fabric sections">
         {tabs.map((entry) => (
@@ -2120,6 +2126,11 @@ function SubscriptionQuickConnect({
   const [phase, setPhase] = useState<
     "idle" | "starting" | "running" | "provisioning" | "ready" | "failed"
   >("idle");
+  // The broker path: a worker runs the provider's real login and this page
+  // auto-completes. Primary for Claude; Codex's login is a localhost callback
+  // the worker cannot drive yet, so Codex keeps the command flow.
+  const [brokerActive, setBrokerActive] = useState(false);
+  const brokerFirst = providerId === "anthropic";
   const [command, setCommand] = useState("");
   const [detail, setDetail] = useState("");
   const [readyBots, setReadyBots] = useState(0);
@@ -2225,6 +2236,42 @@ function SubscriptionQuickConnect({
     }
   }, [finishIfSignedIn, purpose, stopPolling]);
 
+  // Which provision slot an account's credential occupies: the bare purpose
+  // is slot 0, `…_N` is slot N-1. Names only — this never sees a credential.
+  const slotForAccount = useCallback(async (accountId: string): Promise<number> => {
+    try {
+      const response = await fetch("/api/ai-accounts", { cache: "no-store" });
+      if (!response.ok) return 0;
+      const body = (await response.json()) as {
+        accounts?: { id: string; credentialPurpose?: string }[];
+      };
+      const purposeName = body.accounts?.find((entry) => entry.id === accountId)?.credentialPurpose;
+      const match = purposeName ? /_(\d+)$/.exec(purposeName) : null;
+      return match ? Number(match[1]) - 1 : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  if (brokerActive) {
+    return (
+      <AiAccountConnect
+        providerId={providerId}
+        providerLabel={provider.label}
+        onConnected={async (accountId) => {
+          slotRef.current = await slotForAccount(accountId);
+          setBrokerActive(false);
+          await provision(false);
+        }}
+        onFallback={() => {
+          setBrokerActive(false);
+          void start(connectedSlots);
+        }}
+        onClose={() => setBrokerActive(false)}
+      />
+    );
+  }
+
   if (phase === "ready") {
     return (
       <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4 text-left">
@@ -2246,16 +2293,19 @@ function SubscriptionQuickConnect({
             <Plus className="size-3.5" aria-hidden="true" />
             Add another {provider.label} bot
           </button>
-          {connectedSlots < 3 ? (
-            <button
-              type="button"
-              onClick={() => void start(connectedSlots)}
-              className="btn btn-secondary btn-sm"
-            >
-              <KeyRound className="size-3.5" aria-hidden="true" />
-              Connect another {provider.label} account
-            </button>
-          ) : null}
+          {/* Never capped: accounts are unbounded by requirement, limited
+              only by configured platform capacity, which the server enforces. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (brokerFirst) setBrokerActive(true);
+              else void start(connectedSlots);
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Connect another {provider.label} account
+          </button>
         </div>
         {connectedSlots > 1 ? (
           <p className="mt-2 text-xs text-[var(--text-muted)]">
@@ -2302,7 +2352,10 @@ function SubscriptionQuickConnect({
     <div className="text-left">
       <button
         type="button"
-        onClick={() => void start()}
+        onClick={() => {
+          if (brokerFirst) setBrokerActive(true);
+          else void start();
+        }}
         disabled={phase === "starting"}
         style={{ backgroundColor: provider.accent, borderColor: provider.accent }}
         className={cn(

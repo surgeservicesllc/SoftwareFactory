@@ -1,0 +1,66 @@
+name: AI account auth broker
+
+# Claims pending AI-account sign-in sessions and drives the provider's real
+# login for each: run the CLI headlessly, report its login URL for the
+# console to open, wait for the person's relayed confirmation code, then seal
+# the minted credential into the vault. The worker holds no provider account
+# of its own and starts none — every session it touches was opened by an
+# owner clicking Connect.
+
+on:
+  repository_dispatch:
+    types:
+      - softwarefactory_auth_broker
+  schedule:
+    # Fallback pickup for sessions whose dispatch failed. GitHub throttles
+    # scheduled runs on quiet repositories; the dispatch from Connect is the
+    # path that makes the worker prompt.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auth-broker
+  cancel-in-progress: false
+
+jobs:
+  broker:
+    name: Drive pending AI-account sign-ins
+    if: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    # Session TTL is fifteen minutes and the script's own deadline is
+    # twenty-five; this is the hard stop above both.
+    timeout-minutes: 30
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+      SOFTWAREFACTORY_WORKER_ID: auth-broker-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out the reviewed worker release
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        # actions/setup-node v4 (reviewed immutable commit)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked worker runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install the provider login CLI
+        # The version the headless URL-capture flow was probed against.
+        run: npm install -g @anthropic-ai/claude-code@2.1.233
+
+      - name: Drive pending sign-ins
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+          SOFTWAREFACTORY_CREDENTIAL_KEY: ${{ secrets.SOFTWAREFACTORY_CREDENTIAL_KEY }}
+        run: npx tsx scripts/auth-broker.mts

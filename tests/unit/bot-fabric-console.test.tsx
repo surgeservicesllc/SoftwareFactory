@@ -133,23 +133,34 @@ describe("BotFabricConsole", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("connects Claude end to end from the button: command, sign-in, ready bot", async () => {
-    const calls: string[] = [];
+  it("connects Claude with no command and no check-now: the broker drives the real login", async () => {
+    let codePosted = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      calls.push(`${init?.method ?? "GET"} ${url}`);
-      if (url === "/api/bots/connect" && init?.method === "POST") {
+      if (url === "/api/ai-accounts/connect" && init?.method === "POST") {
         return { ok: true, status: 200, json: async () => ({
-          command: "npx -y tsx scripts/connect.mts claude --code abc --host https://factory.test",
-          expiresInSeconds: 600,
+          accountId: "acc-1", sessionId: "sess-1", expiresInSeconds: 900, workerWoken: true,
         }) };
       }
-      if (url === "/api/bots/providers") {
-        // First consulted before the command (not yet signed in), then after
-        // the person clicks check-now (signed in).
-        const signedIn = calls.filter((entry) => entry === "GET /api/bots/providers").length > 1;
+      if (url === "/api/ai-accounts/sessions/sess-1") {
+        return { ok: true, status: 200, json: async () => ({ session: {
+          id: "sess-1",
+          accountId: "acc-1",
+          status: codePosted ? "connected" : "awaiting_user",
+          loginUrl: "https://claude.com/cai/oauth/authorize?code=true",
+          failureReason: null,
+          heartbeatAt: "2026-08-16T14:00:00.000Z",
+          expiresAt: "2026-08-16T15:00:00.000Z",
+          updatedAt: "2026-08-16T14:00:00.000Z",
+        } }) };
+      }
+      if (url === "/api/ai-accounts/sessions/sess-1/code" && init?.method === "POST") {
+        codePosted = true;
+        return { ok: true, status: 200, json: async () => ({ accepted: true }) };
+      }
+      if (url === "/api/ai-accounts") {
         return { ok: true, status: 200, json: async () => ({
-          providers: [{ id: "anthropic", subscriptionReady: signedIn }],
+          accounts: [{ id: "acc-1", credentialPurpose: "claude" }],
         }) };
       }
       if (url === "/api/bots/connect/provision") {
@@ -161,25 +172,73 @@ describe("BotFabricConsole", () => {
 
     render(<BotFabricConsole />);
 
-    // The branded front door.
+    // The branded front door — and from here, nothing to copy: the worker
+    // runs Claude's real login and the page updates itself.
     await user.click(await screen.findByRole("button", { name: /^claude$/i }));
-    // Claude's own login runs from one pre-filled command; the console shows
-    // it and watches for completion.
-    expect(await screen.findByText(/scripts\/connect\.mts claude/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /i have signed in/i }));
 
-    // Once the sign-in lands, the bot is provisioned against the subscription
-    // credential and announced Ready — no further steps.
-    expect(await screen.findByText(/ready for assignments/i)).toBeInTheDocument();
+    const continueLink = await screen.findByRole("link", { name: /continue to claude sign-in/i });
+    expect(continueLink).toHaveAttribute("href", "https://claude.com/cai/oauth/authorize?code=true");
+    expect(screen.queryByText(/scripts\/connect\.mts/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /check now/i })).not.toBeInTheDocument();
+
+    // The provider showed a confirmation code; it is pasted HERE, never into
+    // a terminal.
+    await user.type(
+      screen.getByPlaceholderText(/paste the confirmation code/i), "AC-123-XYZ",
+    );
+    await user.click(screen.getByRole("button", { name: /finish connecting/i }));
+
+    // The next poll reads connected from the database and the bot is
+    // provisioned against the account's slot — no further clicks.
+    expect(
+      await screen.findByText(/ready for assignments/i, {}, { timeout: 9_000 }),
+    ).toBeInTheDocument();
     const provisionBody = vi.mocked(fetch).mock.calls
-      .filter(([input]) => String(input) === "/api/bots/connect/provision")
+      .filter(([request]) => String(request) === "/api/bots/connect/provision")
       .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
     expect(provisionBody[0]).toMatchObject({ provider: "anthropic", credential: "subscription" });
+    const codeBody = vi.mocked(fetch).mock.calls
+      .filter(([request]) => String(request) === "/api/ai-accounts/sessions/sess-1/code")
+      .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    expect(codeBody[0]).toEqual({ code: "AC-123-XYZ" });
 
-    // Many Claude bots: the follow-up action repeats the finish — and a
-    // second account can be signed in alongside the first.
+    // Many Claude bots, many Claude accounts — both follow-ups, never capped.
     expect(screen.getByRole("button", { name: /add another claude bot/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /connect another claude account/i })).toBeInTheDocument();
+  }, 15_000);
+
+  it("falls back to the manual command when the broker sign-in cannot start", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ai-accounts/connect" && init?.method === "POST") {
+        return { ok: false, status: 503, json: async () => ({
+          error: { code: "credential_store_not_configured", message: "The credential store is not set up." },
+        }) };
+      }
+      if (url === "/api/bots/connect" && init?.method === "POST") {
+        return { ok: true, status: 200, json: async () => ({
+          command: "npx -y tsx scripts/connect.mts claude --code abc --host https://factory.test",
+          expiresInSeconds: 600,
+        }) };
+      }
+      if (url === "/api/bots/providers") {
+        return { ok: true, status: 200, json: async () => ({
+          providers: [{ id: "anthropic", subscriptionReady: false }],
+        }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ...fabricPayload, bots: [], assignments: [] }) };
+    }));
+    const user = userEvent.setup();
+
+    render(<BotFabricConsole />);
+
+    await user.click(await screen.findByRole("button", { name: /^claude$/i }));
+    // The broker says honestly that it could not start, and offers the
+    // operator-machine path rather than a dead end.
+    expect(await screen.findByText(/did not finish/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /use the manual command instead/i }));
+
+    expect(await screen.findByText(/scripts\/connect\.mts claude/)).toBeInTheDocument();
   });
 
   it("connects Codex the same way: its own sign-in, then a Ready bot", async () => {

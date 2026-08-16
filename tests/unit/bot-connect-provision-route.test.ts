@@ -79,6 +79,23 @@ describe("POST /api/bots/connect/provision", () => {
     });
   });
 
+  it("resolves any slot number — accounts are unbounded by requirement", async () => {
+    const response = await POST(post({ provider: "anthropic", credential: "subscription_47" }));
+
+    expect(response.status).toBe(200);
+    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "anthropic", {
+      additional: false,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_47",
+    });
+  });
+
+  it("still refuses a credential string that is not a slot", async () => {
+    const response = await POST(post({ provider: "anthropic", credential: "subscription_1x" }));
+
+    expect(response.status).toBe(400);
+    expect(ensureProviderBot).not.toHaveBeenCalled();
+  });
+
   it("passes the additional flag through so many bots can be connected", async () => {
     const response = await POST(post({
       provider: "anthropic", credential: "subscription", additional: true,
