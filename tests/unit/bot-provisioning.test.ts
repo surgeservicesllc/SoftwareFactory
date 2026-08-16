@@ -61,6 +61,34 @@ describe("ensureProviderBot", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("references the supplied credential when the connect flow knows better than the default", async () => {
+    const { client, rpc } = fakeClient({ existing: [] });
+
+    await ensureProviderBot(client, organizationId, "anthropic", {
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+
+    expect(rpc.mock.calls[0]![1] as unknown as Record<string, unknown>).toMatchObject({
+      p_credential_ref: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+  });
+
+  it("adds a numbered further bot when asked, so many can be connected at once", async () => {
+    const { client, rpc } = fakeClient({
+      existing: [{ id: "bot-1", provider: "anthropic" }, { id: "bot-2", provider: "anthropic" }],
+    });
+
+    const result = await ensureProviderBot(client, organizationId, "anthropic", {
+      additional: true,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+
+    expect(result).toEqual({ outcome: "created", botId: "new-bot" });
+    expect(rpc.mock.calls[0]![1] as unknown as Record<string, unknown>).toMatchObject({
+      p_name: "Claude 3",
+    });
+  });
+
   it("skips a provider that needs an endpoint rather than creating a broken bot", async () => {
     const { client, rpc } = fakeClient({ existing: [] });
 

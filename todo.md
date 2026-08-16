@@ -75,6 +75,55 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
+### Owner goal — the Claude button (opened 2026-08-16, iteration 1 shipped)
+
+Owner directive: a Claude button in Bot Manager; click → Claude sign-in; once
+logged in the Claude bot is Ready for assignments; many Claude bots
+simultaneously; linked to everything already built.
+
+**Honest design constraint (documented in code since the connect flow was
+built):** Anthropic offers no third-party OAuth. A browser-redirect "Sign in
+with Claude" would require impersonating Claude Code's private OAuth client.
+The supported sign-in IS Claude's own: one pre-filled command runs
+`claude setup-token`, which opens claude.ai's real login in the operator's
+browser (the exact screen in the owner's mock); the credential travels once,
+sealed, through `/api/bots/connect/claim`. The button drives that flow and
+finishes it automatically.
+
+**Iteration 1 — shipped (PR #TBD):**
+- The gap that made "connected" ≠ "ready" for subscriptions: providers
+  status keyed readiness off the API-key ref only, and provisioning wired
+  bots to `ANTHROPIC_API_KEY` — a claimed subscription credential
+  (`SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN`) flipped nothing. Closed
+  end-to-end: catalog gains `subscriptionCredentialRef` (anthropic + openai;
+  literals because the catalog is browser-safe, pinned to the server
+  constants by test); `/api/bots/providers` reports `subscriptionReady`
+  (counted toward readiness, never probed — the model-list probe
+  authenticates keys, and a guaranteed 401 would misread as a bad sign-in);
+  `/api/bots/connect/provision` accepts `credential: "subscription"`
+  resolved server-side from the catalog (arbitrary refs can never arrive
+  from the browser) plus `additional: true`; `ensureProviderBot` takes the
+  ref override and numbers additional bots ("Claude 2", "Claude 3" — the
+  many-bots case) while keeping add-only and never-fails-the-connection.
+- **The Claude button** (`ClaudeQuickConnect`, in the empty-fleet front
+  door): branded tile → one pre-filled command with copy button → live
+  polling flips to "Claude is connected — your Claude bot is Ready for
+  assignments" the moment the claim lands, provisioning against the
+  subscription ref as the signed-in owner; "I have signed in — check now"
+  for the impatient; already-signed-in short-circuit makes the button
+  literally one click with no terminal; "Add another Claude bot" repeats
+  the finish for many bots. Readiness itself needed no change — the vault
+  overlay bridge (PR #121) already makes any bot referencing the claude key
+  read Ready.
+- Tests: bot-provisioning 8/8, provision-route 8/8, new bot-providers-route
+  4/4 (incl. the catalog↔server-constant pin and the never-probe rule),
+  console 10/10 incl. a full button→command→check→Ready walk. tsc clean,
+  eslint 0 errors, adjacent suites 37/37.
+- **Open next:** live round-trip with the owner (run the command, watch the
+  bot appear Ready in production); true multi-ACCOUNT vault slots (distinct
+  purposes per account) — iteration 2; surfacing the Claude tile when the
+  fleet is non-empty — iteration 2.
+
 ### Owner goal — production Magic Link sign-in fix (2026-08-16)
 
 **Symptom:** magic-link emails arrive and the link reaches the app, but the
