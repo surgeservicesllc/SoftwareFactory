@@ -51,6 +51,12 @@ export type AuthBrokerStore = Readonly<{
   markAccountNeedsReauth: (
     organizationId: string, accountId: string, reason: string,
   ) => Promise<boolean>;
+  /**
+   * Records which provider account signed in — an email address or workspace
+   * name, never a credential (the database refuses secret shapes). Optional
+   * because identity is decoration on a completed sign-in, never a gate.
+   */
+  setProviderIdentity?: (accountId: string, identity: string) => Promise<boolean>;
 }>;
 
 /**
@@ -61,6 +67,8 @@ export type LoginCli = Readonly<{
   waitForLoginUrl: (timeoutMs: number) => Promise<string>;
   submitCode: (code: string) => Promise<void>;
   waitForToken: (timeoutMs: number) => Promise<string>;
+  /** The display identity the CLI recorded for this login, if it did. */
+  readIdentity?: () => Promise<string | null>;
   dispose: () => Promise<void>;
 }>;
 
@@ -154,6 +162,15 @@ export async function runAuthBrokerOnce(
 
     const token = await cli.waitForToken(timeouts.tokenMs);
     await store.complete(session.sessionId, dependencies.sealCredential(session, token));
+
+    // Decoration, never a gate: the account connects whether or not the CLI
+    // recorded which provider identity signed in.
+    if (cli.readIdentity && store.setProviderIdentity) {
+      const identity = await cli.readIdentity().catch(() => null);
+      if (identity) {
+        await store.setProviderIdentity(session.accountId, identity).catch(() => false);
+      }
+    }
     return "connected";
   } catch (error) {
     const message = error instanceof Error ? error.message : "The sign-in failed.";
@@ -401,6 +418,17 @@ export class SupabaseAuthBrokerStore implements AuthBrokerStore {
     return data === true;
   };
 
+  setProviderIdentity = async (accountId: string, identity: string): Promise<boolean> => {
+    const { data, error } = await this.client.rpc("set_ai_account_provider_identity", {
+      p_ai_account_id: accountId,
+      p_identity: identity,
+    });
+    // Decoration on a completed sign-in: a database that predates the
+    // function, or a refused shape, is a false — never a thrown failure.
+    if (error) return false;
+    return data === true;
+  };
+
   /**
    * The diagnosis surface: recent sessions with status and timing, never the
    * sealed code. Null means the projection itself is unavailable — a database
@@ -560,6 +588,23 @@ export async function startClaudeSetupToken(
       }
     },
     waitForToken: (timeoutMs) => waitForMatch(extractOauthToken, timeoutMs, "the credential"),
+    readIdentity: async () => {
+      // The CLI records which account authenticated in its config file —
+      // display data, read before dispose removes the directory.
+      try {
+        const raw = JSON.parse(
+          await readFile(path.join(configDir, ".claude.json"), "utf8"),
+        ) as { oauthAccount?: { emailAddress?: unknown; organizationName?: unknown } };
+        const email = raw.oauthAccount?.emailAddress;
+        if (typeof email === "string" && email.includes("@")) return email;
+        const workspace = raw.oauthAccount?.organizationName;
+        return typeof workspace === "string" && workspace.trim().length > 0
+          ? workspace.trim()
+          : null;
+      } catch {
+        return null;
+      }
+    },
     dispose: async () => {
       child.stdout.removeListener("data", onChunk);
       child.stderr.removeListener("data", onChunk);
@@ -726,6 +771,27 @@ export async function startCodexLogin(
           throw new Error("Timed out waiting for the credential from the provider login.");
         }
         await new Promise((resolvePoll) => setTimeout(resolvePoll, 500));
+      }
+    },
+    readIdentity: async () => {
+      // The auth file's id_token carries the signed-in email; decoding the
+      // payload for display needs no verification and mints nothing.
+      try {
+        const raw = JSON.parse(
+          await readFile(path.join(configDir, "auth.json"), "utf8"),
+        ) as { tokens?: { id_token?: unknown } };
+        const idToken = raw.tokens?.id_token;
+        if (typeof idToken !== "string") return null;
+        const parts = idToken.split(".");
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(
+          Buffer.from(parts[1], "base64url").toString("utf8"),
+        ) as { email?: unknown };
+        return typeof payload.email === "string" && payload.email.includes("@")
+          ? payload.email
+          : null;
+      } catch {
+        return null;
       }
     },
     dispose: async () => {

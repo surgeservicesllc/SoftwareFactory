@@ -110,6 +110,36 @@ describe("AiAccountsPanel", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("shows who signed in, and renames the account in place", async () => {
+    const renameBodies: Array<Record<string, unknown>> = [];
+    stubAccounts(
+      [{ ...connectedAccount, providerIdentity: "owner@example.com" }],
+      (url, init) => {
+        if (url === "/api/ai-accounts/acc-1/rename") {
+          renameBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return { ok: true, status: 200, json: async () => ({ renamed: true }) } as unknown as Response;
+        }
+        return null;
+      },
+    );
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AiAccountsPanel canManage onChanged={onChanged} />);
+
+    // The provider identity reads as plain text next to the verification line.
+    expect(await screen.findByText(/Signed in as owner@example.com/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /rename claude account 1/i }));
+    const input = screen.getByLabelText(/new name for claude account 1/i);
+    await user.clear(input);
+    await user.type(input, "Production Claude");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(renameBodies).toEqual([{ name: "Production Claude" }]);
+    expect(onChanged).toHaveBeenCalled();
+  });
+
   it("reconnects a specific account through the broker flow", async () => {
     const connectBodies: Array<Record<string, unknown>> = [];
     stubAccounts([reauthAccount], (url, init) => {

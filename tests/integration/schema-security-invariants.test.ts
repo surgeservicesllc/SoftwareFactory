@@ -278,6 +278,9 @@ describe("SECURITY DEFINER functions", () => {
       "register_phase1c_worker",
       "report_ai_auth_login_url",
       "resolve_provider_connect_session",
+      // Which provider account signed in — display data on a completed
+      // sign-in, shape-checked against secrets, reported only by the worker.
+      "set_ai_account_provider_identity",
       // Stores a credential obtained through an OAuth callback. Server-only:
       // a browser must never write that table directly, or the seal would be
       // whatever the browser sent.

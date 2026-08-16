@@ -529,6 +529,63 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     expect(bot.rows[0].ai_account_id).toBeNull();
   });
 
+  it("renames an account under the create-path constraints, and identity stays worker-reported", async () => {
+    const accountId = await createAccount("Rename target", "claude_rn1");
+    const siblingId = await createAccount("Rename sibling", "claude_rn2");
+
+    // The worker records which provider account signed in — display data.
+    const identity = await db.query<{ set_ai_account_provider_identity: boolean }>(
+      "select public.set_ai_account_provider_identity($1::uuid, $2)",
+      [accountId, "owner@example.com"],
+    );
+    expect(identity.rows[0].set_ai_account_provider_identity).toBe(true);
+
+    // A credential-shaped identity is refused without an error: the sign-in
+    // it arrived from succeeded, and nothing secret may land on the row.
+    const refused = await db.query<{ set_ai_account_provider_identity: boolean }>(
+      "select public.set_ai_account_provider_identity($1::uuid, $2)",
+      [accountId, "sk-ant-oat01-ABCdef0123456789_-ABCdef0123456789"],
+    );
+    expect(refused.rows[0].set_ai_account_provider_identity).toBe(false);
+
+    await assumeRole(db, ownerId);
+    const renamed = await db.query<{ rename_ai_account: boolean }>(
+      "select public.rename_ai_account($1::uuid, $2::uuid, $3)",
+      [organizationId, accountId, "  Production Claude  "],
+    );
+    expect(renamed.rows[0].rename_ai_account).toBe(true);
+
+    await expect(db.query(
+      "select public.rename_ai_account($1::uuid, $2::uuid, $3)",
+      [organizationId, siblingId, "Production Claude"],
+    )).rejects.toThrow(/already uses that name/);
+
+    await expect(db.query(
+      "select public.rename_ai_account($1::uuid, $2::uuid, $3)",
+      [organizationId, accountId, "sk-ant-oat01-ABCdef0123456789_-ABCdef0123456789"],
+    )).rejects.toThrow(/looks like it contains a credential/);
+    await resetRole(db);
+
+    // A member cannot rename.
+    await assumeRole(db, memberId);
+    await expect(db.query(
+      "select public.rename_ai_account($1::uuid, $2::uuid, $3)",
+      [organizationId, accountId, "Member rename"],
+    )).rejects.toThrow(/owner or admin/);
+    await resetRole(db);
+
+    // The rename landed trimmed, the identity survived it, and the list
+    // projection carries both.
+    await assumeRole(db, ownerId);
+    const listed = await db.query<{ display_name: string; provider_identity: string | null }>(
+      "select display_name, provider_identity from public.list_ai_accounts($1::uuid) where account_id = $2::uuid",
+      [organizationId, accountId],
+    );
+    await resetRole(db);
+    expect(listed.rows[0].display_name).toBe("Production Claude");
+    expect(listed.rows[0].provider_identity).toBe("owner@example.com");
+  });
+
   it("demotes an account to needs_reauth when its credential stops working", async () => {
     const accountId = await createAccount("Claude account 7", "claude_7");
     const marked = await db.query<{ mark_ai_account_needs_reauth: boolean }>(

@@ -26,6 +26,7 @@ export async function GET() {
         providerLabel: findBotProvider(row.provider)?.label ?? row.provider,
         authMethod: row.auth_method,
         displayName: row.display_name,
+        providerIdentity: row.provider_identity ?? null,
         status: row.status,
         // A name, not a secret: which vault slot the account's credential
         // lives under, so the console can wire a bot to the right variable.
