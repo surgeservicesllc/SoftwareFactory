@@ -50,27 +50,41 @@ const superAdminGroup = {
 } as const;
 
 /**
- * Grouped by what you are trying to do. Every destination now reads live
- * tenant records, so there is no longer a "demo only" section to separate —
- * an empty page says it is empty rather than showing illustrative rows.
+ * Grouped by how an owner actually moves through the product, not by which
+ * phase built each console. The ungrouped block at the top is the daily path
+ * in journey order — see what's happening, give a goal, manage projects,
+ * follow the work, read the summary. "Watch" is production monitoring.
+ * "Advanced" holds the technical consoles: every one keeps its full function
+ * (nothing is removed for simplicity), but none of them is required to run
+ * the factory day to day, so they no longer crowd the primary path.
+ *
+ * Every destination reads live tenant records; an empty page says it is
+ * empty rather than showing illustrative rows.
  */
 const navigationGroups = [
   {
     heading: null,
     items: [
       { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
       { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
-      { label: "Files", href: "/solutions/files", icon: FileText },
+      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
     ],
   },
   {
-    heading: "Work",
+    heading: "Watch",
     items: [
-      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
-      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
+      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  {
+    heading: "Advanced",
+    items: [
+      { label: "Files", href: "/solutions/files", icon: FileText },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
@@ -78,10 +92,8 @@ const navigationGroups = [
     ],
   },
   {
-    heading: "Evidence & setup",
+    heading: "Setup",
     items: [
-      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
-      { label: "Activity", href: "/solutions/activity", icon: Activity },
       { label: "Connections", href: "/solutions/connections", icon: PlugZap },
       { label: "Settings", href: "/solutions/settings", icon: Settings },
     ],

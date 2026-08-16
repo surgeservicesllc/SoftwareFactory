@@ -257,11 +257,29 @@ measured, then trimmed.
   (`runs-console.tsx`). Class-level fixes; behavior unchanged; 20/20 across
   the three affected suites, tsc + lint clean.
 
-**Open next (prioritized):** consolidate duplicate/obsolete screens —
-criterion 28; hide remaining technical IDs behind advanced views — criteria
-8/21 (composer + runs + projects done); full E2E of the critical journey —
-criterion 30; then the final frictionless report (steps/clicks before vs
-after, automations added, remaining owner actions).
+**Iteration 8 — shipped (PR #129, with iterations 6-7):** screens audited;
+navigation re-led.
+- Consolidation audit (criterion 28): the five "Work" consoles suspected of
+  overlap have genuinely distinct purposes — Workflows (graph preview),
+  Agents (role definitions), AgentOS (grants + decision inbox), Autonomy
+  (permitted-actions + decision trail), Resources (routing evidence). No two
+  do the same job; merging any pair would remove function, not friction.
+  Recorded, not consolidated.
+- The real criterion-28/8 gap was the sidebar: 16 destinations grouped by
+  which phase built them, with the owner path buried (Bot Manager mid-list
+  under "Work"). Regrouped by how an owner moves: the ungrouped top block is
+  the daily path in journey order (Dashboard → Bot Manager → Projects → Runs
+  → Reports), "Watch" holds Operations + Activity, "Advanced" holds the
+  seven technical consoles (full function kept — nothing removed), "Setup"
+  holds Connections + Settings. Labels and routes unchanged, so the e2e
+  accessible-navigation proof still passes by name. (criteria 8, 21, 27, 28)
+- Tests: new `app-shell.test.tsx` pins the daily-path order and every
+  console's continued reachability. tsc + lint clean.
+
+**Open next (prioritized):** full E2E of the critical journey — criterion 30;
+then the final frictionless report (steps/clicks before vs after, automations
+added, friction removed, mobile result, security/RLS, remaining owner
+actions).
 
 ### External Blockers (owner-only)
 
