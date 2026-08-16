@@ -5,6 +5,7 @@ import {
   listAiAccounts,
   planConnect,
 } from "@/lib/ai-accounts/broker";
+import { wakeAuthBrokerWorker } from "@/lib/ai-accounts/dispatch";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
 import { isCredentialStoreConfigured } from "@/lib/server/secret-box";
@@ -114,10 +115,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Best-effort: a failed wake is not a failed connect — the workflow's
+    // schedule picks the session up, just later. The flag lets the console
+    // set expectations honestly.
+    const workerWoken = await wakeAuthBrokerWorker(client, activeOrganization.id);
+
     return jsonNoStore({
       accountId,
       sessionId: opened.data,
       expiresInSeconds: SESSION_TTL_SECONDS,
+      workerWoken,
     });
   } catch (error) {
     return botFabricErrorResponse(

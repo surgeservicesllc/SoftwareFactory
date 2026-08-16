@@ -1,42 +1,29 @@
 import "server-only";
 
+import {
+  BROKER_PROVIDERS,
+  type BrokerProviderId,
+} from "@/lib/ai-accounts/purposes";
 import { findBotProvider } from "@/lib/bots/catalog";
 
 /**
- * The account side of the auth broker: which providers offer broker sign-in,
- * which vault purposes their accounts may occupy, and how a Connect click
- * chooses between reusing an account and creating one.
- *
- * The purposes are deliberately the same six the connect-command flow uses.
- * A credential the broker seals under `claude_2` is immediately visible to
- * the existing readiness bridge and worker overlay — the two paths converge
- * on one vault row rather than growing parallel credential stores.
+ * The account side of the auth broker: how a Connect click chooses between
+ * reusing an account and creating one, and the account listing the routes
+ * share. The purpose vocabulary itself lives in `lib/ai-accounts/purposes.ts`
+ * so the worker — plain Node, no `server-only` — can share it.
  */
 
-export const BROKER_PROVIDERS = {
-  anthropic: { purposes: ["claude", "claude_2", "claude_3"] as const },
-  openai: { purposes: ["codex", "codex_2", "codex_3"] as const },
-} as const;
-
-export type BrokerProviderId = keyof typeof BROKER_PROVIDERS;
-
-export function isBrokerProviderId(value: string): value is BrokerProviderId {
-  return Object.hasOwn(BROKER_PROVIDERS, value);
-}
+export {
+  BROKER_PROVIDERS,
+  isBrokerProviderId,
+  relayCodePurpose,
+  type BrokerProviderId,
+} from "@/lib/ai-accounts/purposes";
 
 /** "Claude account 2" — the slot is visible in the name on purpose. */
 export function accountDisplayName(providerId: BrokerProviderId, slotIndex: number): string {
   const label = findBotProvider(providerId)?.label ?? providerId;
   return `${label} account ${slotIndex + 1}`;
-}
-
-/**
- * The seal context for a session's relayed confirmation code. Bound to the
- * session rather than the account so a code parked for one sign-in can never
- * be opened against another, even on the same account.
- */
-export function relayCodePurpose(sessionId: string): string {
-  return `ai_auth_relay:${sessionId}`;
 }
 
 export type AiAccountRow = {

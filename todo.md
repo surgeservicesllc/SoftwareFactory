@@ -102,7 +102,13 @@ real worker status; everything wired end-to-end.
   Codex's ChatGPT login opens a **localhost callback** the user's browser
   cannot reach on a headless worker; unless Codex exposes a headless/device
   mode, Codex account-connect keeps the operator-machine path under Advanced
-  while Claude gets the full broker flow. Record outcome of the probe here.
+  while Claude gets the full broker flow. **Probe result (2026-08-16, this
+  container, claude CLI 2.1.233): PASS — headless `claude setup-token` under
+  `script -qec` (fake TTY) with an isolated `CLAUDE_CONFIG_DIR` prints the
+  OAuth authorize URL (`https://claude.com/cai/oauth/authorize?code=true&…`)
+  with no browser and no real TTY; the flow then waits for a pasted code.
+  Implementation note: the pty wraps output at 80 columns, so URL capture
+  must strip ANSI and join wrapped lines before matching.**
 
 **Task breakdown (loop step 3):**
 - [x] P0 | BotBuild | `ai_accounts` + `ai_auth_sessions` migration: account
@@ -132,12 +138,24 @@ real worker status; everything wired end-to-end.
   themselves. `cancel_ai_auth_session` added to the (unmerged) migration —
   cancel ends the session, touches neither account nor credential |
   PASS — 18 route tests + broker suite 11/11; tsc + eslint clean | 2026-08-16
-- [ ] P0 | BotBuild | Worker auth runner: dispatched job claims session
-  (service-role RPC), runs provider CLI login with per-account isolated
-  config dir (CLAUDE_CONFIG_DIR per account uuid), captures login URL →
-  awaiting_user, consumes relayed code, seals credential under the account's
-  purpose, session → connected; failure/timeout states | workflow + runner
-  tests; live probe of headless `claude setup-token` | broker API
+- [x] P0 | BotBuild | Worker auth runner: `lib/worker/auth-broker.ts`
+  (DI-tested protocol: claim → start CLI → URL → awaiting_user → poll sealed
+  relay code → unseal only into CLI stdin → verifying → token → seal under
+  account purpose → connected; failure/timeout/supersession paths),
+  `scripts/auth-broker.mts` (env-gated entry, expire sweep, deadline loop),
+  `.github/workflows/auth-broker.yml` (repository_dispatch
+  `softwarefactory_auth_broker` + cron + manual; gated on repo var
+  `SOFTWAREFACTORY_AUTH_BROKER_ENABLED`; claude CLI pinned 2.1.233),
+  `wakeAuthBrokerWorker` best-effort dispatch on Connect. Headless probe
+  PASS (recorded above); `server-only` split into `lib/security/
+  secret-box-core` + `lib/ai-accounts/purposes` so the worker seals/opens
+  under plain Node — guarded re-exports keep app imports unchanged. Codex
+  refused honestly ("Only Claude accounts…") pending localhost-callback
+  work | PASS — 9 runner tests + 18 route tests; script boots under tsx and
+  refuses with named env vars; NOT live-tested end-to-end (needs owner:
+  Actions secrets SOFTWAREFACTORY_CREDENTIAL_KEY + repo var
+  SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true, then a real click-through) |
+  2026-08-16
 - [ ] P0 | BotBuild | Auto-completing UI: connect wizard (provider cards →
   confirmation → progress modal with real states → Connected card), session
   status via bounded polling of the session endpoint (no 1s polling; no
