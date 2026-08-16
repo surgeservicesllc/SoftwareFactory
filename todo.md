@@ -70,6 +70,10 @@ finds zero actionable defects.
 - [x] public/sw.js: documented refusal rules — never caches /api/
   responses or authenticated navigations, only content-hashed build
   assets + the offline shell — correct.
+- [x] Dead-code scan: `components/task-run-launcher.tsx` was the one
+  component imported by nothing (no page, no test) — a Phase 2A-era
+  launcher superseded by the Bot Manager composer; removed. All other
+  components are wired.
 
 ### Final regression (2026-08-16 21:20Z, merged tree f37c7e4)
 
