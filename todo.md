@@ -138,6 +138,23 @@ real cause (invalid vs expired vs different-browser-session); lifetime
 installed-but-empty: click Connect GitHub again — GitHub re-issues the
 callback for installation 153479019 and persist adopts it.
 
+**Round 2 (owner screenshot 21:31Z, after #164 deployed):** the host fix
+is verified live — the probe shows theagoras.com hopping to the configured
+callback host (softwarefactory-tan.vercel.app) and the owner's retry got
+PAST state validation, code exchange, and snapshot fetch, failing at the
+database's deliberate cross-tenant guard: "GitHub installation is already
+bound to another organization (github_callback_failed)" (42501 from
+sync_github_installation — NOT weakened). Meaning: the browser's active
+workspace is not the workspace that owns installation 153479019, which
+also explains the empty list (connections are workspace-scoped). The
+console offered no workspace context once one resolved — the wrong-
+workspace trap had no exit. Fix: a Workspace switcher card renders
+whenever the person belongs to more than one organization, naming the
+current one and switching via /api/organizations/active + reload; its
+copy explains both symptoms. Owner recovery: switch workspace on the
+Connections page — the existing connection and repositories appear; no
+reinstall needed.
+
 **BOTH PROVIDERS LIVE E2E — THE PRODUCT PROMISE HOLDS (2026-08-16 19:07Z):**
 owner screenshot: 4 Connected accounts — three Claude (Blackstone, NWV,
 Bubaly; connected live ×3 today, all re-verified 19:03:10 by the restored

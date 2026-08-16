@@ -397,4 +397,72 @@ describe("ConnectionsConsole", () => {
     expect(window.location.search).toBe("");
     expect(window.location.pathname).toBe("/connections");
   });
+
+  it("offers a workspace switcher out of the wrong-workspace trap", async () => {
+    // Connections are workspace-scoped, and the install callback refuses an
+    // installation bound to another organization (a deliberate cross-tenant
+    // guard). A person whose browser landed in the other workspace saw only an
+    // empty list and that refusal, with no way to change context — the live
+    // 2026-08-16 "not returning back data" report.
+    const otherOrganization = {
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Second Workspace",
+      role: "owner",
+      slug: "second-workspace",
+    };
+    let activeId = organization.id;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/organizations") {
+        return jsonResponse({
+          activeOrganizationId: activeId,
+          organizations: [organization, otherOrganization],
+        });
+      }
+      if (url === "/api/organizations/active") {
+        activeId = (JSON.parse(String(init?.body ?? "{}")) as { organizationId: string }).organizationId;
+        return jsonResponse({ ok: true });
+      }
+      if (url === "/api/github/connections") {
+        return jsonResponse({
+          connections: activeId === otherOrganization.id
+            ? [{
+              account: { login: "example-org", type: "Organization" },
+              id: "55555555-5555-4555-8555-555555555555",
+              installation: {
+                id: 456,
+                lastSyncedAt: "2026-08-12T20:00:00.000Z",
+                repositorySelection: "selected",
+                suspendedAt: null,
+              },
+              name: "example-org",
+              repositories: [],
+              status: "connected",
+              statusLabel: "Connected",
+              statusReason: null,
+            }]
+            : [],
+        });
+      }
+      if (url === "/api/github/install/start") return jsonResponse({ apps: [] });
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ConnectionsConsole />);
+
+    // Wrong workspace: the empty state renders, but so does the switcher.
+    expect(await screen.findByRole("heading", { name: "Connect GitHub to begin" })).toBeInTheDocument();
+    const switcher = screen.getByRole("group", { name: "Switch workspace" });
+    expect(within(switcher).getByRole("button", { name: /Example Engineering — current/ })).toBeDisabled();
+
+    // Switching reloads straight into the workspace that owns the connection.
+    await userEvent.click(within(switcher).getByRole("button", { name: "Second Workspace" }));
+    expect(await screen.findByRole("heading", { name: "example-org" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/organizations/active",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

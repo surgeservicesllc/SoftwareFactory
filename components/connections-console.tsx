@@ -456,6 +456,34 @@ export function ConnectionsConsole() {
         </p>
       ) : null}
 
+      {organizations.length > 1 ? (
+        <Card className="p-5">
+          <p className="label">Workspace</p>
+          <p className="mt-1 text-sm text-muted">
+            Connections belong to one workspace at a time. If a connection you expect is
+            missing here — or GitHub says the installation is bound to another
+            organization — switch to the workspace that owns it.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Switch workspace">
+            {organizations.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void selectOrganization(item.id)}
+                disabled={pending !== null || item.id === organization?.id}
+                className={item.id === organization?.id ? "btn btn-primary" : "btn btn-secondary"}
+              >
+                {pending === "onboarding" && item.id !== organization?.id
+                  ? <Loader2 className="size-4 animate-spin" />
+                  : null}
+                {item.name}
+                {item.id === organization?.id ? " — current" : ""}
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       {connections.length ? (
         connections.map((connection) => (
           <Card key={connection.id} className="overflow-hidden">
