@@ -85,6 +85,11 @@ export function BotManagerHome() {
   const [renamingBotId, setRenamingBotId] = useState<string | null>(null);
   const [renameBotName, setRenameBotName] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  // The success screen offers the rename before any next action, through the
+  // same endpoint the accounts panel uses.
+  const [successEditing, setSuccessEditing] = useState(false);
+  const [successName, setSuccessName] = useState("");
+  const [successRenameBusy, setSuccessRenameBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -133,6 +138,34 @@ export function BotManagerHome() {
     () => (accounts ?? []).filter((account) => account.status === "connected"),
     [accounts],
   );
+
+  const renameConnectedAccount = useCallback(async (accountId: string, currentName: string) => {
+    const name = successName.trim();
+    if (name.length === 0 || name === currentName) {
+      setSuccessEditing(false);
+      return;
+    }
+    setSuccessRenameBusy(true);
+    setBotNotice("");
+    try {
+      const response = await fetch(`/api/ai-accounts/${accountId}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setBotNotice(body.error?.message ?? "The account could not be renamed.");
+        return;
+      }
+      setSuccessEditing(false);
+      await load();
+    } catch {
+      setBotNotice("The account could not be renamed.");
+    } finally {
+      setSuccessRenameBusy(false);
+    }
+  }, [successName, load]);
 
   const renameBot = useCallback(async (bot: BotView) => {
     const name = renameBotName.trim();
@@ -288,6 +321,7 @@ export function BotManagerHome() {
         providerLabel={entry.name}
         onConnected={async (accountId) => {
           await load();
+          setSuccessEditing(false);
           setStage({ kind: "connected", providerId: stage.providerId, accountId });
         }}
         onFallback={() => setStage({ kind: "closed" })}
@@ -310,9 +344,66 @@ export function BotManagerHome() {
         </p>
         {account ? (
           <dl className="mx-auto mt-4 max-w-xs space-y-1 text-left text-sm">
-            <div className="flex justify-between">
+            <div className="flex items-center justify-between gap-2">
               <dt className="text-[var(--text-muted)]">Account</dt>
-              <dd className="font-medium text-[var(--text)]">{account.displayName}</dd>
+              <dd className="font-medium text-[var(--text)]">
+                {successEditing ? (
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void renameConnectedAccount(account.id, account.displayName);
+                    }}
+                  >
+                    <label className="sr-only" htmlFor="success-rename">
+                      New name for {account.displayName}
+                    </label>
+                    <input
+                      id="success-rename"
+                      value={successName}
+                      onChange={(event) => setSuccessName(event.target.value)}
+                      maxLength={80}
+                      autoFocus
+                      className="w-36 rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={successRenameBusy}
+                      aria-label="Save name"
+                      className="btn btn-primary btn-sm"
+                    >
+                      {successRenameBusy ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Check className="size-3.5" aria-hidden="true" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuccessEditing(false)}
+                      aria-label="Cancel rename"
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <X className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </form>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    {account.displayName}
+                    <button
+                      type="button"
+                      aria-label={`Rename ${account.displayName}`}
+                      onClick={() => {
+                        setSuccessName(account.displayName);
+                        setSuccessEditing(true);
+                      }}
+                      className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                    >
+                      <Pencil className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </span>
+                )}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-[var(--text-muted)]">Provider</dt>
