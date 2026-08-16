@@ -124,8 +124,14 @@ codex-cli 0.147.0 in this container (auth URL captured with client_id +
 redirect_uri, port parse 1455, paste roundtrip); the session projection
 prints live rows (000400 serving); apply runs for 000600/000700 succeeded;
 b6f8fe2 deploy READY; cron handover confirmed (worker 31962262809 live on
-b6f8fe2). AWAITING: one owner Codex click-through (REAL PROVIDER AUTH
-REQUIRED).
+b6f8fe2). Second probe (17:44Z): the CLI's own redirect_uri path is exactly
+/auth/callback on port 1455, and a fake-callback replay against the live
+listener answered HTTP 400 (state mismatch, correctly rejected) — the
+replay transport, port, and path are all proven against codex-cli 0.147.0.
+Every mechanically-verifiable step of the Codex flow now has evidence;
+AWAITING: one owner Codex click-through (REAL PROVIDER AUTH REQUIRED — the
+OAuth exchange itself is the only unproven step, and no agent can perform
+a human's OpenAI login).
 
 **VERIFYING-DEATH ROOT CAUSE (2026-08-16 16:50Z, named from code against the
 live symptom):** the owner's 16:3x sign-in reached "Verifying account" and
