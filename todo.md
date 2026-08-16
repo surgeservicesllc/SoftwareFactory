@@ -54,6 +54,23 @@ finds zero actionable defects.
   gaps for new UI (workspace switcher, device-code branch).
 - [ ] Secrets: tracked-file scan before each merge (standing); no findings.
 
+### Sweep 2 (2026-08-16 21:21Z, from the beginning)
+
+- [x] **eslint now 0 errors AND 0 warnings repository-wide** (was 10
+  warnings waved through as "pre-existing"): standard `^_` ignore
+  convention configured for @typescript-eslint/no-unused-vars (mock
+  signatures carry parameters for their types), two dead eslint-disable
+  directives removed (sw.js no-undef, connect.mts no-control-regex —
+  the `` escape never triggers the rule), three unused callback
+  params renamed to the convention. Touched suites 64/64.
+- [x] `npm audit`: **0 vulnerabilities**, production and dev trees.
+- [x] proxy.ts (middleware): Supabase auth refresh with graceful
+  fallback; static assets excluded; secure handlers fail closed in the
+  DAL — correct.
+- [x] public/sw.js: documented refusal rules — never caches /api/
+  responses or authenticated navigations, only content-hashed build
+  assets + the offline shell — correct.
+
 ### Final regression (2026-08-16 21:20Z, merged tree f37c7e4)
 
 - vitest: **2846 passed / 0 failed** (2 skipped by design), 243 files
