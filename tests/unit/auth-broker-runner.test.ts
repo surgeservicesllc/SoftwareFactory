@@ -129,6 +129,41 @@ describe("runAuthBrokerOnce", () => {
     expect(outcome).toBe("idle");
   });
 
+  it("completes a device-code login with nothing relayed at all", async () => {
+    // The person approves on the provider's page; the CLI notices and the
+    // session connects without any pasted code — submitCode never runs.
+    const store = makeStore({
+      readRelayCode: vi.fn(async () => null),
+    });
+    let polls = 0;
+    const submitCode = vi.fn();
+    const cli = {
+      ...makeCli(),
+      submitCode,
+      pollCompleted: vi.fn(async () => ++polls >= 2),
+      waitForToken: vi.fn(async () => JSON.stringify({ tokens: {} })),
+    };
+    const clock = virtualClock();
+
+    const outcome = await runAuthBrokerOnce("worker-1", {
+      store,
+      startLogin: async () => cli,
+      openRelayCode: vi.fn(),
+      sealCredential: (s, token) => sealSecret(token, {
+        organizationId: s.organizationId,
+        purpose: s.purpose,
+      }),
+      sleep: clock.sleep,
+      now: clock.now,
+    });
+
+    expect(outcome).toBe("connected");
+    expect(submitCode).not.toHaveBeenCalled();
+    expect(store.markVerifying).toHaveBeenCalledWith(session.sessionId);
+    expect(store.complete).toHaveBeenCalled();
+    expect(store.fail).not.toHaveBeenCalled();
+  });
+
   it("fails fast when a relay code predates this worker's login", async () => {
     // A code sealed before the claim belongs to a dead worker's login — no
     // fresh login can verify it, so the session fails immediately with a
