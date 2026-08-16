@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { isBotProviderId } from "@/lib/bots/catalog";
-import { ensureProviderBot } from "@/lib/bots/provisioning";
+import { findBotProvider, isBotProviderId } from "@/lib/bots/catalog";
+import { ensureProviderBot, type ProvisionOptions } from "@/lib/bots/provisioning";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -27,6 +27,15 @@ export const runtime = "nodejs";
 
 const requestSchema = z.object({
   provider: z.string().min(1).max(40).refine(isBotProviderId, "Unknown provider."),
+  /**
+   * Which of the provider's two credential variables the bot should
+   * reference: the pasted/OAuth API key ("default") or the signed-in
+   * subscription credential ("subscription"). Resolved against the catalog
+   * here so an arbitrary variable name can never arrive from the browser.
+   */
+  credential: z.enum(["default", "subscription"]).default("default"),
+  /** Create a further numbered bot even when one already exists. */
+  additional: z.boolean().default(false),
 }).strict();
 
 export async function POST(request: Request) {
@@ -41,6 +50,25 @@ export async function POST(request: Request) {
       );
     }
 
+    const provider = findBotProvider(parsed.data.provider);
+    if (parsed.data.credential === "subscription" && !provider?.subscriptionCredentialRef) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "invalid_request",
+            message: "This provider has no subscription sign-in.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+    const options: ProvisionOptions = parsed.data.credential === "subscription"
+      ? {
+          additional: parsed.data.additional,
+          credentialRef: provider?.subscriptionCredentialRef ?? null,
+        }
+      : { additional: parsed.data.additional };
+
     const { activeOrganization, client } = await requireActiveOrganization();
     if (activeOrganization.role !== "owner" && activeOrganization.role !== "admin") {
       return jsonNoStore(
@@ -49,7 +77,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await ensureProviderBot(client, activeOrganization.id, parsed.data.provider);
+    const result = await ensureProviderBot(
+      client,
+      activeOrganization.id,
+      parsed.data.provider,
+      options,
+    );
 
     return jsonNoStore({
       provisioned: result.outcome === "created",

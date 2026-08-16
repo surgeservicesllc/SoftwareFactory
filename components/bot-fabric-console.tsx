@@ -21,7 +21,7 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Card, StatusBadge } from "@/components/ui";
 import {
@@ -314,7 +314,13 @@ export function BotFabricConsole() {
         aria-labelledby={`bot-fabric-tab-${tab}`}
       >
         {tab === "fleet" ? (
-          <FleetBoard fabric={fabric} busyKey={busyKey} mutate={mutate} onOpenTab={setTab} />
+          <FleetBoard
+            fabric={fabric}
+            busyKey={busyKey}
+            mutate={mutate}
+            onOpenTab={setTab}
+            onFleetChanged={load}
+          />
         ) : null}
         {tab === "bots" ? <BotDirectory fabric={fabric} busyKey={busyKey} mutate={mutate} /> : null}
         {tab === "roles" ? <RoleWorkshop fabric={fabric} busyKey={busyKey} mutate={mutate} /> : null}
@@ -349,11 +355,13 @@ function FleetBoard({
   busyKey,
   mutate,
   onOpenTab,
+  onFleetChanged,
 }: {
   fabric: BotFabricResponse;
   busyKey: string | null;
   mutate: MutateFn;
   onOpenTab: (tab: Tab) => void;
+  onFleetChanged: () => Promise<void> | void;
 }) {
   const assignmentByBotId = useMemo(
     () => new Map(fabric.assignments.map((assignment) => [assignment.botId, assignment])),
@@ -362,7 +370,12 @@ function FleetBoard({
   const bench = fabric.bots.filter((bot) => !assignmentByBotId.has(bot.id));
 
   if (!fabric.bots.length) {
-    return <FirstConnectPrompt onAddManually={() => onOpenTab("bots")} />;
+    return (
+      <FirstConnectPrompt
+        onAddManually={() => onOpenTab("bots")}
+        onFleetChanged={onFleetChanged}
+      />
+    );
   }
   if (!fabric.roles.length) {
     return (
@@ -2070,33 +2083,237 @@ function EmptyPrompt({
 }
 
 /**
+ * The Claude button: sign in with a Claude subscription, end with a Ready bot.
+ *
+ * Anthropic has no third-party OAuth, so the sign-in itself belongs to
+ * Claude's own tool: this hands over one pre-filled command, the operator's
+ * browser opens claude.ai's real login, and the credential travels once —
+ * sealed — through the claim route. The console never sees a token; it
+ * watches for the stored credential to appear and then finishes the job as
+ * the signed-in owner: a Claude bot referencing the subscription credential,
+ * Ready for assignments. If the subscription is already connected, the
+ * button is literally one click — no terminal at all.
+ *
+ * "Add another Claude bot" repeats the finish for as many bots as wanted —
+ * all Ready, all reading the same signed-in subscription, each distinct in
+ * the fleet.
+ */
+function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }) {
+  const [phase, setPhase] = useState<
+    "idle" | "starting" | "running" | "provisioning" | "ready" | "failed"
+  >("idle");
+  const [command, setCommand] = useState("");
+  const [detail, setDetail] = useState("");
+  const [readyBots, setReadyBots] = useState(0);
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const isSignedIn = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/bots/providers", { cache: "no-store" });
+      if (!response.ok) return false;
+      const body = (await response.json()) as {
+        providers?: { id: string; subscriptionReady?: boolean }[];
+      };
+      return Boolean(
+        body.providers?.find((provider) => provider.id === "anthropic")?.subscriptionReady,
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const provision = useCallback(async (additional: boolean) => {
+    setPhase("provisioning");
+    try {
+      const response = await fetch("/api/bots/connect/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "anthropic", credential: "subscription", additional }),
+      });
+      const body = (await response.json()) as { outcome?: string };
+      if (!response.ok) throw new Error();
+      setReadyBots((count) => count + (body.outcome === "created" ? 1 : 0));
+      await onReady();
+      setPhase("ready");
+    } catch {
+      setDetail(
+        "You are signed in, but the bot could not be added automatically. "
+        + "The credential is stored — add a bot manually and it will read Ready.",
+      );
+      setPhase("failed");
+    }
+  }, [onReady]);
+
+  const finishIfSignedIn = useCallback(async (): Promise<boolean> => {
+    if (!(await isSignedIn())) return false;
+    stopPolling();
+    await provision(false);
+    return true;
+  }, [isSignedIn, provision, stopPolling]);
+
+  const start = useCallback(async () => {
+    setPhase("starting");
+    setDetail("");
+    // Already signed in from before? Then this is genuinely one click.
+    if (await finishIfSignedIn()) return;
+    try {
+      const response = await fetch("/api/bots/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "claude" }),
+      });
+      const body = (await response.json()) as {
+        command?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.command) {
+        throw new Error(body.error?.message ?? "The sign-in could not be started.");
+      }
+      setCommand(body.command);
+      setPhase("running");
+      // Watch for the sign-in to land, then finish without another click.
+      // The one-time code expires in ten minutes; polling stops with it.
+      pollRef.current = window.setInterval(() => void finishIfSignedIn(), 5000);
+      window.setTimeout(stopPolling, 10 * 60 * 1000);
+    } catch (error) {
+      setDetail(
+        error instanceof Error && error.message
+          ? error.message
+          : "The sign-in could not be started.",
+      );
+      setPhase("failed");
+    }
+  }, [finishIfSignedIn, stopPolling]);
+
+  if (phase === "ready") {
+    return (
+      <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4 text-left">
+        <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+          Claude is connected — your Claude bot is Ready for assignments.
+        </p>
+        {readyBots > 1 ? (
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {readyBots} Claude bots are connected and Ready.
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void provision(true)}
+          className="btn btn-secondary btn-sm mt-3"
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          Add another Claude bot
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === "running" || phase === "provisioning") {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
+        <p className="text-sm font-medium text-[var(--text)]">
+          Run this once — your browser opens Claude&apos;s own sign-in:
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 font-mono text-xs text-[var(--text)]">
+            {command}
+          </code>
+          <CopyButton value={command} />
+        </div>
+        <p className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]" aria-live="polite">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          {phase === "provisioning"
+            ? "Signed in — adding your Claude bot…"
+            : "Waiting for your sign-in to finish. This completes on its own."}
+        </p>
+        {phase === "running" ? (
+          <button
+            type="button"
+            onClick={() => void finishIfSignedIn()}
+            className="btn btn-secondary btn-sm mt-2"
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            I have signed in — check now
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-left">
+      <button
+        type="button"
+        onClick={() => void start()}
+        disabled={phase === "starting"}
+        className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#d9855b] bg-[#d9855b] px-5 py-4 text-lg font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+      >
+        {phase === "starting" ? (
+          <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Sparkles className="size-5" aria-hidden="true" />
+        )}
+        Claude
+      </button>
+      <p className="mt-2 text-center text-xs text-[var(--text-muted)]">
+        Sign in with your Claude subscription — bills nothing per token.
+      </p>
+      {phase === "failed" ? (
+        <p className="mt-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-3 py-2 text-xs text-[var(--warning)]" aria-live="polite">
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * The front door, shaped like signing into Claude or Codex.
  *
  * The old empty state sent a person to a provider-selection screen and a form.
- * This leads with the one action that is genuinely one click — OpenRouter's
- * OAuth, the only third-party sign-in among these providers, which fronts
- * Claude, GPT and Gemini behind a single credential. Paired with the connect
- * flow's auto-provisioning, coming back from that sign-in lands a ready bot in
- * the fleet with nothing else to fill in. Choosing a specific account by hand
+ * This leads with the Claude button — sign in with the subscription that
+ * bills nothing per token, end with a Ready bot — and keeps the one-click
+ * OpenRouter OAuth (fronting Claude, GPT and Gemini behind one credential,
+ * billed per token) right below it. Choosing a specific account by hand
  * stays available, one step down, for the people who want it.
  */
-function FirstConnectPrompt({ onAddManually }: { onAddManually: () => void }) {
+function FirstConnectPrompt({
+  onAddManually,
+  onFleetChanged,
+}: {
+  onAddManually: () => void;
+  onFleetChanged: () => Promise<void> | void;
+}) {
   return (
     <Card className="grid min-h-64 place-items-center p-6 text-center">
-      <div className="max-w-md">
+      <div className="w-full max-w-md">
         <Sparkles className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
         <h2 className="mt-4 text-base font-semibold text-white">Connect a bot in one click</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-          Sign in once and your first bot is ready — Claude, GPT and Gemini through a single
-          sign-in. No key, no terminal, no variable name.
+          Sign in once and your first bot is ready. No key, no variable name.
         </p>
+        <div className="mt-4">
+          <ClaudeQuickConnect onReady={onFleetChanged} />
+        </div>
         {/* A real anchor, not next/link: this route handler issues a 302 to
             another origin, which a client-side navigation cannot follow. */}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/api/bots/connect/oauth/start" className="btn btn-primary mt-4 justify-center">
+        <a href="/api/bots/connect/oauth/start" className="btn btn-secondary mt-4 justify-center">
           <KeyRound className="size-4" aria-hidden="true" />
           Sign in and add my first bot
         </a>
+        <p className="mt-1 text-xs text-[var(--text-faint)]">
+          OpenRouter — Claude, GPT and Gemini in one click, billed per token.
+        </p>
         <p className="mt-4 text-xs text-[var(--text-faint)]">
           Prefer a specific account, or your own key?{" "}
           <button

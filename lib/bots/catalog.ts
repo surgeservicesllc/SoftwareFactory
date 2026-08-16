@@ -40,6 +40,15 @@ export type BotProvider = {
    * provider can run without a credential (a self-hosted gateway, for example).
    */
   defaultCredentialRef: string | null;
+  /**
+   * The variable a signed-in *subscription* credential fills, where the
+   * provider's own login tool supports one (`claude setup-token`, `codex
+   * login`). Distinct from the API-key ref because the two bill differently.
+   * Literal strings, not imports: this catalog is shipped to the browser, and
+   * the server-side key constants live behind `server-only`. A unit test pins
+   * each value to its server constant so they cannot drift.
+   */
+  subscriptionCredentialRef: string | null;
   /** Whether a bot on this provider must carry its own endpoint. */
   requiresBaseUrl: boolean;
   docsUrl: string;
@@ -61,6 +70,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Long-horizon agentic work, deep code review, and planning.",
     suggestedModels: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5", "claude-fable-5"],
     defaultCredentialRef: "ANTHROPIC_API_KEY",
+    subscriptionCredentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
     requiresBaseUrl: false,
     docsUrl: "https://platform.claude.com/docs",
     apiKeyUrl: "https://platform.claude.com/settings/keys",
@@ -74,6 +84,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "General coding agents and the Codex family of code models.",
     suggestedModels: ["gpt-5.1-codex", "gpt-5.1", "gpt-5-mini", "o4-mini"],
     defaultCredentialRef: "OPENAI_API_KEY",
+    subscriptionCredentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
     requiresBaseUrl: false,
     docsUrl: "https://platform.openai.com/docs",
     apiKeyUrl: "https://platform.openai.com/api-keys",
@@ -87,6 +98,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Large-context reasoning and multimodal review.",
     suggestedModels: ["gemini-3-pro", "gemini-3-flash", "gemini-2.5-pro"],
     defaultCredentialRef: "GEMINI_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://ai.google.dev/gemini-api/docs",
     apiKeyUrl: "https://aistudio.google.com/apikey",
@@ -100,6 +112,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Fast general reasoning with an OpenAI-compatible surface.",
     suggestedModels: ["grok-4", "grok-4-fast", "grok-3"],
     defaultCredentialRef: "XAI_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://docs.x.ai",
     apiKeyUrl: "https://console.x.ai",
@@ -113,6 +126,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Efficient European models including Codestral for code.",
     suggestedModels: ["mistral-large-latest", "codestral-latest", "mistral-small-latest"],
     defaultCredentialRef: "MISTRAL_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://docs.mistral.ai",
     apiKeyUrl: "https://console.mistral.ai/api-keys",
@@ -126,6 +140,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Cost-efficient reasoning and code completion.",
     suggestedModels: ["deepseek-chat", "deepseek-reasoner"],
     defaultCredentialRef: "DEEPSEEK_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://api-docs.deepseek.com",
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
@@ -139,6 +154,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Low-latency inference for open-weight models.",
     suggestedModels: ["llama-3.3-70b-versatile", "qwen-2.5-coder-32b"],
     defaultCredentialRef: "GROQ_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://console.groq.com/docs",
     apiKeyUrl: "https://console.groq.com/keys",
@@ -152,6 +168,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "One reference that fans out to many upstream providers.",
     suggestedModels: ["openrouter/auto", "anthropic/claude-opus-5", "openai/gpt-5.1"],
     defaultCredentialRef: "OPENROUTER_API_KEY",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: false,
     docsUrl: "https://openrouter.ai/docs",
     apiKeyUrl: "https://openrouter.ai/settings/keys",
@@ -165,6 +182,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "An Ollama, vLLM, or similar gateway you expose over HTTPS.",
     suggestedModels: ["llama3.1:70b", "qwen2.5-coder:32b"],
     defaultCredentialRef: null,
+    subscriptionCredentialRef: null,
     requiresBaseUrl: true,
     docsUrl: "https://docs.vllm.ai",
     apiKeyUrl: null,
@@ -178,6 +196,7 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     summary: "Any other OpenAI-compatible API you can reach over HTTPS.",
     suggestedModels: [],
     defaultCredentialRef: "BOT_CREDENTIAL_CUSTOM",
+    subscriptionCredentialRef: null,
     requiresBaseUrl: true,
     docsUrl: "https://platform.openai.com/docs/api-reference",
     apiKeyUrl: null,

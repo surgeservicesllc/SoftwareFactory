@@ -79,12 +79,24 @@ export async function GET(request: Request) {
       BOT_PROVIDERS.map(async (provider) => {
         const ref = provider.defaultCredentialRef;
         const storedSecret = ref ? stored[ref] ?? null : null;
-        const credentialReady = Boolean(storedSecret) || isCredentialPresent(ref);
+        const keyReady = Boolean(storedSecret) || isCredentialPresent(ref);
 
-        // Only present credentials are probed. Probing an absent one is a
+        // A signed-in subscription credential (claude setup-token, codex
+        // login) fills a different variable from the API key and bills
+        // nothing per token. It counts toward readiness — a person who just
+        // signed in is connected — but it is never probed: the unbilled
+        // model-list endpoints authenticate API keys, not subscription
+        // tokens, and a guaranteed 401 would read as "your sign-in is bad".
+        const subscriptionRef = provider.subscriptionCredentialRef;
+        const subscriptionReady = Boolean(
+          subscriptionRef && (stored[subscriptionRef] || isCredentialPresent(subscriptionRef)),
+        );
+        const credentialReady = keyReady || subscriptionReady;
+
+        // Only present API keys are probed. Probing an absent one is a
         // guaranteed rejection that would read as "your key is bad" when the
         // truth is "you have not set one".
-        const probe = credentialReady
+        const probe = keyReady
           ? await resolveProbe(provider.id, ref, refresh, storedSecret)
           : null;
 
@@ -100,6 +112,9 @@ export async function GET(request: Request) {
           credentialRef: provider.defaultCredentialRef,
           credentialReady,
           credentialOptional: provider.defaultCredentialRef === null,
+          subscriptionCredentialRef: provider.subscriptionCredentialRef,
+          /** True when a signed-in subscription credential is stored or set. */
+          subscriptionReady,
           /** `verified` is the only verdict that means the bot could run. */
           probeVerdict: probe?.verdict ?? (credentialReady ? "not_probed" : "not_configured"),
           probeReason: probe?.reason ?? null,

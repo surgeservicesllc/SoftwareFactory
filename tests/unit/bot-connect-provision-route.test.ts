@@ -45,7 +45,40 @@ describe("POST /api/bots/connect/provision", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ provisioned: true, outcome: "created" });
-    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "openrouter");
+    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "openrouter", {
+      additional: false,
+    });
+  });
+
+  it("wires a subscription sign-in to the subscription credential, resolved server-side", async () => {
+    const response = await POST(post({ provider: "anthropic", credential: "subscription" }));
+
+    expect(response.status).toBe(200);
+    // The browser names an enum value; the variable comes from the catalog —
+    // an arbitrary credential ref can never arrive from the client.
+    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "anthropic", {
+      additional: false,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+  });
+
+  it("refuses a subscription request for a provider that has no subscription sign-in", async () => {
+    const response = await POST(post({ provider: "google", credential: "subscription" }));
+
+    expect(response.status).toBe(400);
+    expect(ensureProviderBot).not.toHaveBeenCalled();
+  });
+
+  it("passes the additional flag through so many bots can be connected", async () => {
+    const response = await POST(post({
+      provider: "anthropic", credential: "subscription", additional: true,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(ensureProviderBot).toHaveBeenCalledWith({}, organizationId, "anthropic", {
+      additional: true,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
   });
 
   it("reports provisioned:false without failing when a bot already exists", async () => {

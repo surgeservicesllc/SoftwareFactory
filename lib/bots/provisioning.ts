@@ -50,10 +50,28 @@ export type ProvisionOutcome =
   | { readonly outcome: "unsupported" }
   | { readonly outcome: "skipped"; readonly reason: string };
 
+export type ProvisionOptions = {
+  /**
+   * The credential variable the new bot should reference, when the connect
+   * flow knows better than the provider default — a signed-in subscription
+   * credential fills a different variable from a pasted API key. Callers
+   * validate the value against the catalog; this module wires it through.
+   */
+  readonly credentialRef?: string | null;
+  /**
+   * Create a further bot even though the organization already has one for
+   * this provider — the "many Claude bots, all ready" case. Named
+   * "<label> <n>" so each addition is distinct; the add-only and
+   * never-fails-the-connection rules still hold.
+   */
+  readonly additional?: boolean;
+};
+
 export async function ensureProviderBot(
   clientLike: unknown,
   organizationId: string,
   providerId: string,
+  options: ProvisionOptions = {},
 ): Promise<ProvisionOutcome> {
   const provider = findBotProvider(providerId);
   if (!provider) return { outcome: "unsupported" };
@@ -72,26 +90,31 @@ export async function ensureProviderBot(
   try {
     const client = clientLike as ProvisioningClient;
 
+    // Bounded but wide enough to number additional bots correctly; the
+    // single-bot path only asks whether any row exists at all.
     const existing = await client
       .from("bots")
       .select("id,provider")
       .eq("organization_id", organizationId)
       .eq("provider", providerId)
-      .limit(1);
+      .limit(50);
     if (existing.error) {
       return { outcome: "skipped", reason: "Existing bots could not be read." };
     }
-    if (((existing.data as ProviderBotRow[] | null) ?? []).length > 0) {
+    const existingCount = ((existing.data as ProviderBotRow[] | null) ?? []).length;
+    if (existingCount > 0 && !options.additional) {
       return { outcome: "exists" };
     }
 
     const { data, error } = await client
       .rpc("register_bot", {
         p_organization_id: organizationId,
-        p_name: provider.label,
+        p_name: existingCount > 0 ? `${provider.label} ${existingCount + 1}` : provider.label,
         p_provider: providerId,
         p_model: provider.suggestedModels[0] ?? provider.label,
-        p_credential_ref: provider.defaultCredentialRef,
+        p_credential_ref: options.credentialRef !== undefined
+          ? options.credentialRef
+          : provider.defaultCredentialRef,
         p_base_url: null,
         p_notes: "Created automatically when this provider was connected.",
       })

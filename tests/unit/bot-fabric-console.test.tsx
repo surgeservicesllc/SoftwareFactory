@@ -133,6 +133,53 @@ describe("BotFabricConsole", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("connects Claude end to end from the button: command, sign-in, ready bot", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/bots/connect" && init?.method === "POST") {
+        return { ok: true, status: 200, json: async () => ({
+          command: "npx -y tsx scripts/connect.mts claude --code abc --host https://factory.test",
+          expiresInSeconds: 600,
+        }) };
+      }
+      if (url === "/api/bots/providers") {
+        // First consulted before the command (not yet signed in), then after
+        // the person clicks check-now (signed in).
+        const signedIn = calls.filter((entry) => entry === "GET /api/bots/providers").length > 1;
+        return { ok: true, status: 200, json: async () => ({
+          providers: [{ id: "anthropic", subscriptionReady: signedIn }],
+        }) };
+      }
+      if (url === "/api/bots/connect/provision") {
+        return { ok: true, status: 200, json: async () => ({ provisioned: true, outcome: "created" }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ...fabricPayload, bots: [], assignments: [] }) };
+    }));
+    const user = userEvent.setup();
+
+    render(<BotFabricConsole />);
+
+    // The branded front door.
+    await user.click(await screen.findByRole("button", { name: /^claude$/i }));
+    // Claude's own login runs from one pre-filled command; the console shows
+    // it and watches for completion.
+    expect(await screen.findByText(/scripts\/connect\.mts claude/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /i have signed in/i }));
+
+    // Once the sign-in lands, the bot is provisioned against the subscription
+    // credential and announced Ready — no further steps.
+    expect(await screen.findByText(/ready for assignments/i)).toBeInTheDocument();
+    const provisionBody = vi.mocked(fetch).mock.calls
+      .filter(([input]) => String(input) === "/api/bots/connect/provision")
+      .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    expect(provisionBody[0]).toMatchObject({ provider: "anthropic", credential: "subscription" });
+
+    // Many Claude bots: the follow-up action repeats the finish.
+    expect(screen.getByRole("button", { name: /add another claude bot/i })).toBeInTheDocument();
+  });
+
   it("leads an empty fleet with a one-click sign-in, not a form", async () => {
     stubFetch({ status: 200, body: { ...fabricPayload, bots: [], assignments: [] } });
 
