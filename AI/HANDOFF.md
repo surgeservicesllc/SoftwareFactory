@@ -1,6 +1,26 @@
 # Handoff
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
+
+## Read this first: master clean-room audit + frictionless goal (2026-08-16)
+
+The authoritative current state is `todo.md` → "Master clean-room audit
+(2026-08-16, iteration 24 — FINAL GATE)" and the "FRICTIONLESS COMPLETION
+REPORT" above it. Summary: full local gate PASS on merged `main` `69a0156`
+(eslint 0 errors, tsc clean, vitest 2741/0, production build OK), 22/22 live
+production routes 200, zero-token PASS, no unblocked P0/P1 — everything
+remaining is owner-only (1C canary, hosted-ledger position, second
+repository, 2A decision). A nine-iteration frictionless owner-experience
+loop merged as PRs #121, #123–#129 (guided setup, one-click bot connect,
+simple goal box, attention area, plain-language runs, iOS GitHub-connect
+fix, owner-first navigation, journey e2e) with **zero safety-surface
+changes** — presentation and tests only. Deployment caveat: Vercel's
+free-tier daily quota exhausted mid-sequence; production serves main through
+`0126825` (#126) until the next deploy after quota reset, an owner Redeploy,
+or a plan upgrade. The worker's one-click sign-in flow for the owner is:
+production `/auth/sign-in` → "Email me a sign-in link instead" → click the
+link promptly on the same device (PKCE — raw `/auth/v1/otp` links do NOT
+sign into this app; the session travels in a fragment the app ignores).
 
 ## Mission and boundary
 
