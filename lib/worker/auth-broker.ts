@@ -109,6 +109,19 @@ export async function runAuthBrokerOnce(
 
   let cli: LoginCli | null = null;
   try {
+    // A relay code that exists before this worker has even opened a login
+    // belongs to a previous worker's login attempt — its OAuth exchange died
+    // with that worker, and no fresh login can verify it. Failing fast turns
+    // a two-minute mystery stall into an immediate, actionable message.
+    const staleCode = await store.readRelayCode(session.sessionId);
+    if (staleCode) {
+      await store.fail(
+        session.sessionId,
+        "The previous sign-in attempt went stale before it could be verified. Click Connect and sign in again.",
+      );
+      return "failed";
+    }
+
     cli = await dependencies.startLogin(session);
 
     const loginUrl = await cli.waitForLoginUrl(timeouts.loginUrlMs);
