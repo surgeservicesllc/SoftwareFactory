@@ -54,8 +54,27 @@ finds zero actionable defects.
   gaps for new UI (workspace switcher, device-code branch).
 - [ ] Secrets: tracked-file scan before each merge (standing); no findings.
 
-Completed defect chain for this goal so far: #167 (mute failures), #168
-(bootstrap retry + truncation cap). Older completed goals below.
+### Final regression (2026-08-16 21:20Z, merged tree f37c7e4)
+
+- vitest: **2846 passed / 0 failed** (2 skipped by design), 243 files
+- production build: exit 0
+- Playwright: exit 0 — full route sweep + axe × 3 viewports, journey,
+  console (zero browser errors), bot-manager, marketing, auth specs;
+  6 skipped by design
+- eslint 0 errors; tsc clean
+- Hosted: migration 20260816001300 applied via surgical run 31972616619
+  (success); replan_phase1c_run live in production
+
+**Remaining actionable item — owner-only:** queue one command from
+/solutions/bot-manager (authenticated session required; service_role
+cannot submit by design). Everything the run needs is now live: re-plan
+survives merges, failures record legibly, npm bootstrap retries, manual
+dispatch available as backup. The deliverable is a draft PR.
+
+Completed defect chain for this goal: #167 (mute failures), #168
+(bootstrap retry + truncation cap), #170 (cancelled ≠ failing), #171
+(owner-ordered manual dispatch, main-guarded), #172 (stale-base re-plan,
+ADR-075 + live-installation protection list). Older completed goals below.
 
 Last updated: 2026-08-15 (Phase 2C resource gates). **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
