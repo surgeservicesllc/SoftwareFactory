@@ -419,8 +419,15 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     await resetRole(db);
   });
 
-  it("cancels an in-flight sign-in without touching the account or its credential", async () => {
+  it("cancels a reconnect without touching the established account or its credential", async () => {
+    // An account that has ever connected predates the attempt being
+    // cancelled; only never-connected pending accounts are discarded (the
+    // owner's cancel-stores-nothing rule, covered by its own test below).
     const accountId = await createAccount("Claude account 8", "claude_8");
+    await db.query(
+      "update public.ai_accounts set status = 'needs_reauth' where id = $1",
+      [accountId],
+    );
     const sessionId = await openSession(accountId);
 
     await assumeRole(db, ownerId);
@@ -443,7 +450,7 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
       [accountId],
     );
     // The account is untouched: cancelling a sign-in is not disconnecting.
-    expect(account.rows[0].status).toBe("pending");
+    expect(account.rows[0].status).toBe("needs_reauth");
   });
 
   it("supports high-numbered slots and enumerates stored purposes for the overlay", async () => {
@@ -527,6 +534,46 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     );
     expect(bot.rows).toHaveLength(1);
     expect(bot.rows[0].ai_account_id).toBeNull();
+  });
+
+  it("cancel discards a never-connected account, and only that", async () => {
+    // A pending account exists only because Connect provisioned it; the
+    // owner's rule is that cancel stores nothing.
+    const freshId = await createAccount("Cancel discard target", "claude_cx1");
+    const freshSession = await openSession(freshId);
+    await assumeRole(db, ownerId);
+    const cancelled = await db.query<{ cancel_ai_auth_session: boolean }>(
+      "select public.cancel_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, freshSession],
+    );
+    expect(cancelled.rows[0].cancel_ai_auth_session).toBe(true);
+    await resetRole(db);
+    expect((await db.query(
+      "select 1 from public.ai_accounts where id = $1", [freshId],
+    )).rows).toHaveLength(0);
+    expect((await db.query(
+      "select 1 from public.ai_auth_sessions where id = $1", [freshSession],
+    )).rows).toHaveLength(0);
+
+    // An account that has ever connected is never cancel's to delete —
+    // cancelling a Reconnect attempt keeps the account whole.
+    const keptId = await createAccount("Cancel keep target", "claude_cx2");
+    await db.query(
+      "update public.ai_accounts set status = 'needs_reauth' where id = $1",
+      [keptId],
+    );
+    const keptSession = await openSession(keptId);
+    await assumeRole(db, ownerId);
+    await db.query(
+      "select public.cancel_ai_auth_session($1::uuid, $2::uuid)",
+      [organizationId, keptSession],
+    );
+    await resetRole(db);
+    const kept = await db.query<{ status: string }>(
+      "select status from public.ai_accounts where id = $1", [keptId],
+    );
+    expect(kept.rows).toHaveLength(1);
+    expect(kept.rows[0].status).toBe("needs_reauth");
   });
 
   it("renames a bot without touching its readiness, under the same constraints", async () => {
