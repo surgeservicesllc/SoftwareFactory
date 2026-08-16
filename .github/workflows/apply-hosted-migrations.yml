@@ -172,7 +172,11 @@ jobs:
           }
           repair 20260816000400
           repair 20260816000500
-          echo "Broker function migrations applied and recorded."
+          # Supabase's DDL event trigger reloads the PostgREST schema cache
+          # on its own; this explicit reload is insurance, so a browser that
+          # saw PGRST202 seconds ago cannot keep seeing it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Broker function migrations applied, recorded, and the API schema cache reloaded."
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;

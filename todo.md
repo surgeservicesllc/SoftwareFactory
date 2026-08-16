@@ -100,6 +100,21 @@ worker env). Broker schema confirmed live on hosted by production behavior;
 Supabase integration applies migrations on merge. Remaining to a completed
 live sign-in: the owner's click-through with the lingering worker up.
 
+**REMOVE FIXED LIVE + BOTH WORKER FIXES SHIPPED (2026-08-16 17:10Z):**
+Run `31960618697` (apply workflow, scope=broker-functions, password-only
+pooler fallback — the access-token secret is malformed, not `sbp_…`-shaped)
+applied `20260816000400`/`000500` to hosted via psql and recorded them:
+`remove_ai_account` is live, the PGRST202 root cause is gone (the user's
+error screenshots at 16:36/16:51/17:03 all predate the 17:07 apply). The
+same run reverted the stale remote-only ledger row `20260814000200` — the
+real blocker of every previous full push (the runbook's `20260814002000`
+derivation was wrong in detail; see the runbook's live-measured section).
+#143 (Enter-as-its-own-keystroke — the verifying death) and #144
+(stale relay codes fail fast on resumed sessions) both merged to main;
+worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
+owner's live click-through of Remove and a fresh Connect (real provider
+auth — cannot be exercised by an agent).
+
 **VERIFYING-DEATH ROOT CAUSE (2026-08-16 16:50Z, named from code against the
 live symptom):** the owner's 16:3x sign-in reached "Verifying account" and
 died there — the CLI's paste prompt reads raw keypresses, where Enter is a

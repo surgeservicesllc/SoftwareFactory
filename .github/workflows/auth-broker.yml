@@ -66,4 +66,15 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           SOFTWAREFACTORY_CREDENTIAL_KEY: ${{ secrets.SOFTWAREFACTORY_CREDENTIAL_KEY }}
+          # Stop claiming after 4.5 minutes — under the 5-minute cron — so
+          # workers hand over continuously and a freshly merged worker fix
+          # reaches the queue within one cron beat instead of waiting out a
+          # 25-minute linger. An in-flight sign-in still runs to completion
+          # past this deadline; the workflow timeout is the hard stop. (The
+          # concurrency group deliberately does NOT cancel the running
+          # worker: cancellation mid-login would kill a person's sign-in.
+          # Lived failure, 2026-08-16 17:01-17:17Z: two dispatches carrying
+          # the Enter-keystroke fix sat pending behind a stale 25-minute
+          # worker while every live sign-in kept dying on the old code.)
+          SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS: "270000"
         run: npx tsx scripts/auth-broker.mts

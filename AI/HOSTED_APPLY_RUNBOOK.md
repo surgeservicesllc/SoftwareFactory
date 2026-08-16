@@ -8,7 +8,29 @@ files; the hosted ledger's measured high-water mark is `20260814002300`, so ever
 outstanding. (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
 
-> ## Measured against hosted, 2026-08-16 — this section supersedes everything below
+> ## Measured live, 2026-08-16 17:07Z — the first full listing (supersedes every earlier measure)
+>
+> Workflow run `31960618697` (`apply-hosted-migrations.yml`, `scope=broker-functions`, password-only
+> pooler connection) printed the complete local-vs-remote ledger. The facts, correcting the earlier
+> count-only interpretation below:
+>
+> - The remote ledger matches local **exactly and contiguously through `20260814002300`** — 64 rows.
+> - The one remote-only row was **`20260814000200`** (the pre-split name of `000210`/`000220`/`000250`,
+>   all three of which remote records) — **not** `20260814002000`; `20260814000100` was already
+>   correctly recorded. The run reverted the stale `000200` row (history only, no DDL).
+> - The run then surgically applied and recorded **`20260816000400`** and **`20260816000500`**
+>   (both purely `create or replace function` + grants), because production Remove was failing
+>   with `PGRST202` on the missing `remove_ai_account`. These two rows now sit above the
+>   contiguous prefix with a gap — the position pin below stays at `20260814002300` and the
+>   outstanding count keeps counting them, with this note as the reconciliation.
+> - **DDL drift, unledgered:** production demonstrably runs schema from migrations that have no
+>   ledger rows — the credential vault (`20260814002400`–`002600`) and the broker
+>   (`20260816000100`–`000300`) all work live. Something applied their DDL without recording
+>   history. A future full `db push` would therefore replay non-idempotent DDL and fail;
+>   reconcile by probing each outstanding migration's objects and `migration repair --status
+>   applied` the ones already live, before any full push.
+>
+> ## Measured against hosted, 2026-08-16 (owner SQL, count-only — detail corrected above)
 >
 > The owner ran, in the production project's SQL Editor:
 > `select count(*), max(version) from supabase_migrations.schema_migrations;`
