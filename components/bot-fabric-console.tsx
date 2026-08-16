@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
+import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { Card, StatusBadge } from "@/components/ui";
 import {
   BOT_PROVIDERS,
@@ -258,6 +259,10 @@ export function BotFabricConsole() {
   return (
     <div className="space-y-5">
       <ExecutorNotice detail={fabric.executor.detail} />
+
+      {/* Accounts are org-wide identities above the fleet; the panel renders
+          nothing until at least one exists. */}
+      <AiAccountsPanel canManage={fabric.canManage} onChanged={load} />
 
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Bot fabric sections">
         {tabs.map((entry) => (

@@ -197,9 +197,19 @@ real worker status; everything wired end-to-end.
   below, OpenRouter demoted), AI Accounts management section (Manage/
   Reauthenticate/Disconnect), Create Bot with AI Account selector
   (ai_account_id), worker-required state | e2e + component tests | P0 rows
-- [ ] P1 | BotBuild | Disconnect/reauth lifecycle: confirm intent, stop new
-  work, revoke stored credential, update affected bots (never delete),
-  status transitions incl. Needs Reauthentication | tests | P0
+- [x] P1 | BotBuild | Disconnect/reauth lifecycle (UI + API):
+  `components/ai-accounts-panel.tsx` — org-wide AI Accounts section in the
+  Bot Manager listing every account with its honest lifecycle chip
+  (Connected / Needs sign-in again / Not signed in yet / Disconnected /
+  Revoked), last-verified time, sanitized last error; Disconnect is
+  two-step in place and its confirm names the consequence ("Remove its
+  credential — confirm") → POST [id]/disconnect (vault row deleted,
+  sessions revoked, account kept for Reconnect); Reconnect runs the same
+  auto-completing broker flow against exactly that account
+  (`AiAccountConnect` gained `accountId`); read-only members see status
+  only. Server-side `mark_ai_account_needs_reauth` exists for the
+  verification loop (still open) | PASS — 5 panel tests + console 12/12;
+  tsc + eslint clean | 2026-08-16
 - [ ] P1 | BotBuild | Verification loop: real usability check per account,
   expiry detection, honest statuses | tests | P0
 - [ ] P2 | BotBuild | Multi-account worker isolation live proof (two Claude

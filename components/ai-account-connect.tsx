@@ -30,6 +30,8 @@ type SessionView = {
 export type AiAccountConnectProps = {
   providerId: "anthropic" | "openai";
   providerLabel: string;
+  /** Reconnect this specific account instead of creating or reusing one. */
+  accountId?: string;
   /** Called when the account reaches connected, with its account id. */
   onConnected: (accountId: string) => Promise<void> | void;
   /** The person chose the manual command path instead. */
@@ -55,6 +57,7 @@ type Phase =
 export function AiAccountConnect({
   providerId,
   providerLabel,
+  accountId,
   onConnected,
   onFallback,
   onClose,
@@ -142,7 +145,9 @@ export function AiAccountConnect({
       const response = await fetch("/api/ai-accounts/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: providerId }),
+        body: JSON.stringify(
+          accountId ? { provider: providerId, accountId } : { provider: providerId },
+        ),
       });
       const body = (await response.json()) as {
         sessionId?: string;
@@ -165,7 +170,7 @@ export function AiAccountConnect({
       setNotice("The sign-in could not be started.");
       setPhase("failed");
     }
-  }, [providerId, readSession, stopPolling]);
+  }, [accountId, providerId, readSession, stopPolling]);
 
   useEffect(() => {
     // Deferred a tick so the effect body itself sets no state — the kick-off
@@ -241,7 +246,7 @@ export function AiAccountConnect({
           <button type="button" onClick={onFallback} className="btn btn-secondary btn-sm">
             Use the manual command instead
           </button>
-          <button type="button" onClick={() => void cancel()} className="btn btn-ghost btn-sm">
+          <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm">
             Close
           </button>
         </div>
@@ -298,7 +303,7 @@ export function AiAccountConnect({
           </button>
         </div>
         {notice ? <p className="mt-2 text-xs text-amber-600">{notice}</p> : null}
-        <button type="button" onClick={() => void cancel()} className="btn btn-ghost btn-sm mt-3">
+        <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm mt-3">
           Cancel
         </button>
       </div>
@@ -336,7 +341,7 @@ export function AiAccountConnect({
             Use the manual command instead
           </button>
         ) : null}
-        <button type="button" onClick={() => void cancel()} className="btn btn-ghost btn-sm">
+        <button type="button" onClick={() => void cancel()} className="btn btn-secondary btn-sm">
           Cancel
         </button>
       </div>
