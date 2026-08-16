@@ -2,6 +2,24 @@
 
 Last updated: 2026-08-16
 
+## Newest (2026-08-16 ~21:30Z): both provider paths frozen; GitHub install host-skew fixed
+
+Both AI-account connection paths are owner-frozen — Claude (ADR-072) and now
+Codex (ADR-073, after the first live Codex connection at 19:06:41Z). The
+operative file list is in `policies/PROTECTED_RESOURCES.md`; diagnosis stays
+allowed, fixes are owner proposals. Separately, the GitHub App install flow
+was failing across the deployment's hostname aliases (`github_state_invalid`
+on `softwarefactory-tan.vercel.app`): the launch and callback legs now
+303-converge on the configured callback host before touching cookies, state
+verification failures name their real cause, the state lifetime is 30
+minutes, and the Connections console strips its one-shot notice query
+parameters after reading them (ADR-074; the host-skew entry in
+`todo.md` has the full defect story). The browser callback remains the
+only path that creates
+`connections` rows; if GitHub shows an installation but the page shows
+"Connect GitHub to begin", clicking Connect GitHub again re-runs the
+callback for the existing installation and adopts it.
+
 ## Active goal: BotBuild — AI accounts + automatic auth broker (2026-08-16)
 
 The owner's active goal (spec recorded in `todo.md` → "Owner goal — BotBuild")

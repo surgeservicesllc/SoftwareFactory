@@ -4,7 +4,15 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import type { GitHubAppSlot } from "@/lib/github/config";
 
-const STATE_LIFETIME_SECONDS = 10 * 60;
+/**
+ * How long a minted install state (and its paired browser cookie) stays valid.
+ * Ten minutes proved too tight in production: an owner finishing a GitHub
+ * organization install on a tablet ran past it, and the callback rejected a
+ * signature-valid state as expired (live 2026-08-16, `github_state_invalid`).
+ * Thirty minutes still keeps the state short-lived, signed, user-bound, and
+ * browser-bound.
+ */
+const STATE_LIFETIME_SECONDS = 30 * 60;
 
 export const GITHUB_INSTALL_STATE_COOKIE = "softwarefactory_github_install_state";
 
@@ -196,14 +204,29 @@ export function verifyGitHubInstallState(
     || typeof candidate.returnTo !== "string"
     || typeof candidate.userId !== "string"
     || candidate.iat > nowSeconds + 30
-    || candidate.exp <= nowSeconds
     || candidate.exp - candidate.iat > STATE_LIFETIME_SECONDS
     || candidate.nonce.length < 32
-    || !expectedNonce
-    || !safeEqual(candidate.nonce, expectedNonce)
+  ) {
+    throw new GitHubStateError("GitHub installation state is invalid.");
+  }
+  // Distinct failure notices: all three verify with the same signed evidence,
+  // but each asks the person for a different next step, and the single blended
+  // message hid which one actually happened when a live install failed.
+  if (candidate.exp <= nowSeconds) {
+    throw new GitHubStateError(
+      "The GitHub installation link expired before it was finished. Start the connection again from the Connections page.",
+    );
+  }
+  if (!expectedNonce) {
+    throw new GitHubStateError(
+      "This browser session did not start the GitHub installation. Start the connection again from the Connections page, and finish it in the same browser.",
+    );
+  }
+  if (
+    !safeEqual(candidate.nonce, expectedNonce)
     || !safeEqual(candidate.userId, expectedUserId)
   ) {
-    throw new GitHubStateError("GitHub installation state is expired or does not match this session.");
+    throw new GitHubStateError("GitHub installation state does not match this session.");
   }
 
   return {

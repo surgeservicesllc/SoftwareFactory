@@ -391,5 +391,10 @@ describe("ConnectionsConsole", () => {
     expect(await screen.findByText(
       "GitHub installation was cancelled or is awaiting organization approval. (github_installation_cancelled)",
     )).toBeInTheDocument();
+    // The notice parameters are one-shot: they are stripped from the URL the
+    // moment they are read, so reloading (or bookmarking) the page cannot
+    // resurrect a stale success or failure banner over live data.
+    expect(window.location.search).toBe("");
+    expect(window.location.pathname).toBe("/connections");
   });
 });

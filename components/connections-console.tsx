@@ -137,6 +137,21 @@ export function ConnectionsConsole() {
 
   useEffect(() => {
     const callbackNotice = readGitHubCallbackNotice(window.location.search);
+    if (callbackNotice) {
+      // The callback notice rides in one-shot query parameters. Strip them as
+      // soon as they are read, or every later reload of the bookmarked URL
+      // resurrects a stale success or failure banner over live data — which is
+      // how a days-old github_state_invalid kept greeting the owner.
+      const cleaned = new URL(window.location.href);
+      for (const name of ["github", "githubError", "githubMessage", "connectionId", "repositories"]) {
+        cleaned.searchParams.delete(name);
+      }
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${cleaned.pathname}${cleaned.search}${cleaned.hash}`,
+      );
+    }
     const timer = window.setTimeout(() => {
       if (callbackNotice) setMessage(callbackNotice);
       void load();
