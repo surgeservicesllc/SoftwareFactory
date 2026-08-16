@@ -183,7 +183,8 @@ goal box opens simple.
   excluded) → operations, one failed source doesn't suppress the others).
   tsc + lint clean.
 
-**Iteration 4 — shipped (PR #TBD):** honest plain-language run progress.
+**Iteration 4 — shipped (PR #127, squash `bfee914`, CI green):** honest
+plain-language run progress.
 - `run_status` records exactly five states (`queued/running/succeeded/failed/
   cancelled`, migration `20260812000100`), so the mapping is complete and
   one-to-one with what is stored: "Waiting for a worker" / "A worker is on it"
@@ -200,11 +201,29 @@ goal box opens simple.
   enum, detail promotes the PR link and keeps the recorded enum). tsc + lint
   clean.
 
-**Open next (prioritized):** Add-Project wizard with auto-detected defaults —
-criteria 5/6; hide remaining technical IDs behind advanced views — criteria
-8/21 (composer + runs done); error UX with a next-action button — criteria
-18/19; consolidate duplicate/obsolete screens — criterion 28; full E2E of the
-critical journey — criterion 30.
+**Iteration 5 — shipped (PR #TBD):** Add-Project measured, then trimmed.
+- Honest audit against criterion 5 ("wizard-based"): the existing one-screen
+  form already BEATS a wizard — repository auto-picked from the connection's
+  selected repos, project name pre-filled from the repository, default branch
+  taken from GitHub metadata and never asked, description optional, and new
+  projects start with all automation off. Splitting that into wizard steps
+  would add clicks, not remove them. Criterion 5's intent (guided, minimal,
+  inferred) is satisfied by the form; recorded here rather than rebuilt as
+  ceremony. (criteria 5, 6, 7 — nothing asked twice)
+- The one real dead control: a "GitHub account" picker rendered even with
+  exactly one connected account (the common case — a select with one option).
+  It now appears only when there are two or more accounts to choose between;
+  the repository list already names the owner (`owner/repo`), so nothing is
+  lost. (criteria 8, 29)
+- Tests: projects-console 4/4 — the two existing GitHub-evidence cases, plus
+  single-account-hides-picker (and asserts the pre-filled name) and
+  two-accounts-show-picker. tsc + lint clean.
+
+**Open next (prioritized):** error UX with a next-action button — criteria
+18/19; hide remaining technical IDs behind advanced views — criteria 8/21
+(composer + runs + projects done); consolidate duplicate/obsolete screens —
+criterion 28; mobile pass over the core owner actions — criterion 26; full
+E2E of the critical journey — criterion 30.
 
 ### External Blockers (owner-only)
 

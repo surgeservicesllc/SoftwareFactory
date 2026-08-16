@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectsConsole } from "@/components/projects-console";
@@ -180,5 +180,67 @@ describe("ProjectsConsole GitHub evidence", () => {
     expect(await screen.findByText("Public")).toBeInTheDocument();
     expect(await screen.findByText("Author: Unknown · Mergeability: Unknown")).toBeInTheDocument();
     expect(screen.getByText("Status: queued · Conclusion: —")).toBeInTheDocument();
+  });
+});
+
+describe("ProjectsConsole add-project form", () => {
+  function connection(id: string, login: string, repositoryId: number) {
+    return {
+      account: { login, type: "Organization" },
+      id,
+      installation: { id: 456, lastSyncedAt: "2026-08-12T20:00:00.000Z", suspendedAt: null },
+      name: login,
+      repositories: [{
+        archived: false,
+        defaultBranch: "main",
+        disabled: false,
+        fullName: `${login}/application`,
+        htmlUrl: `https://github.com/${login}/application`,
+        id: repositoryId,
+        private: true,
+        selected: true,
+      }],
+      status: "connected",
+      statusLabel: "Connected",
+    };
+  }
+
+  it("does not show an account picker when only one account is connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "example-org", 789)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    // The repository choice (which already names the owner) is the only pick.
+    expect(await screen.findByLabelText("Repository")).toBeInTheDocument();
+    expect(screen.queryByLabelText("GitHub account")).not.toBeInTheDocument();
+    // The name is pre-filled from the repository, so adding is one confirmation.
+    await waitFor(() => expect(screen.getByLabelText("Name it")).toHaveValue("application"));
+  });
+
+  it("shows the account picker only once there are two accounts to choose from", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({
+          connections: [
+            connection(connectionId, "example-org", 789),
+            connection("33333333-3333-4333-8333-333333333333", "second-org", 790),
+          ],
+        });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByLabelText("GitHub account")).toBeInTheDocument();
   });
 });
