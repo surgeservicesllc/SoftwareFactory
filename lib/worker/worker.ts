@@ -610,15 +610,28 @@ export class SoftwareFactoryWorker {
       if (cancelled) {
         await this.dependencies.store.cancel(job, this.workerId, message, observedUsage);
       } else {
-        await this.dependencies.store.fail(job, this.workerId, {
-          code: failureCode(actualError),
-          message,
-          retryable: retryable(actualError),
-          providerRunReference: observedProviderRunReference,
-          usage: observedUsage,
-          checks: observedChecks,
-          changedFiles: observedChangedFiles,
-        });
+        // The truth must outlive its recording: when writing the failure to
+        // the database also fails, the process log is the only witness left.
+        // Two live attempts on 2026-08-16 died with both errors invisible.
+        console.error(
+          `Run ${job.runId} failed (${failureCode(actualError)}): ${message}`,
+        );
+        try {
+          await this.dependencies.store.fail(job, this.workerId, {
+            code: failureCode(actualError),
+            message,
+            retryable: retryable(actualError),
+            providerRunReference: observedProviderRunReference,
+            usage: observedUsage,
+            checks: observedChecks,
+            changedFiles: observedChangedFiles,
+          });
+        } catch (recordingError) {
+          throw new Error(
+            `Recording the run failure failed: ${safeErrorMessage(recordingError)}. `
+            + `Original failure (${failureCode(actualError)}): ${message}`,
+          );
+        }
       }
     } finally {
       clearTimeout(durationTimer);
