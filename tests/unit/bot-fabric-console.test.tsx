@@ -180,6 +180,45 @@ describe("BotFabricConsole", () => {
     expect(screen.getByRole("button", { name: /add another claude bot/i })).toBeInTheDocument();
   });
 
+  it("connects Codex the same way: its own sign-in, then a Ready bot", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/bots/connect" && init?.method === "POST") {
+        const purpose = (JSON.parse(String(init.body)) as { purpose: string }).purpose;
+        return { ok: true, status: 200, json: async () => ({
+          command: `npx -y tsx scripts/connect.mts ${purpose} --code abc --host https://factory.test`,
+          expiresInSeconds: 600,
+        }) };
+      }
+      if (url === "/api/bots/providers") {
+        const signedIn = calls.filter((entry) => entry === "GET /api/bots/providers").length > 1;
+        return { ok: true, status: 200, json: async () => ({
+          providers: [{ id: "openai", subscriptionReady: signedIn }],
+        }) };
+      }
+      if (url === "/api/bots/connect/provision") {
+        return { ok: true, status: 200, json: async () => ({ provisioned: true, outcome: "created" }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ...fabricPayload, bots: [], assignments: [] }) };
+    }));
+    const user = userEvent.setup();
+
+    render(<BotFabricConsole />);
+
+    await user.click(await screen.findByRole("button", { name: /codex \/ gpt/i }));
+    expect(await screen.findByText(/scripts\/connect\.mts codex/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /i have signed in/i }));
+
+    expect(await screen.findByText(/your codex \/ gpt bot is ready for assignments/i)).toBeInTheDocument();
+    const provisionBody = vi.mocked(fetch).mock.calls
+      .filter(([input]) => String(input) === "/api/bots/connect/provision")
+      .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
+    expect(provisionBody[0]).toMatchObject({ provider: "openai", credential: "subscription" });
+    expect(screen.getByRole("button", { name: /add another codex \/ gpt bot/i })).toBeInTheDocument();
+  });
+
   it("leads an empty fleet with a one-click sign-in, not a form", async () => {
     stubFetch({ status: 200, body: { ...fabricPayload, bots: [], assignments: [] } });
 

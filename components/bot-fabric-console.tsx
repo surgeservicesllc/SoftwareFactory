@@ -2083,22 +2083,40 @@ function EmptyPrompt({
 }
 
 /**
- * The Claude button: sign in with a Claude subscription, end with a Ready bot.
+ * A subscription sign-in button: click, sign in with the provider's own
+ * login, end with a Ready bot.
  *
- * Anthropic has no third-party OAuth, so the sign-in itself belongs to
- * Claude's own tool: this hands over one pre-filled command, the operator's
- * browser opens claude.ai's real login, and the credential travels once —
- * sealed — through the claim route. The console never sees a token; it
- * watches for the stored credential to appear and then finishes the job as
- * the signed-in owner: a Claude bot referencing the subscription credential,
+ * Anthropic and OpenAI have no third-party OAuth, so the sign-in itself
+ * belongs to each provider's own tool: this hands over one pre-filled
+ * command, the operator's browser opens the provider's real login
+ * (claude.ai for Claude; OpenAI's for Codex), and the credential travels
+ * once — sealed — through the claim route. The console never sees a token;
+ * it watches for the stored credential to appear and then finishes the job
+ * as the signed-in owner: a bot referencing the subscription credential,
  * Ready for assignments. If the subscription is already connected, the
  * button is literally one click — no terminal at all.
  *
- * "Add another Claude bot" repeats the finish for as many bots as wanted —
- * all Ready, all reading the same signed-in subscription, each distinct in
- * the fleet.
+ * "Add another bot" repeats the finish for as many bots as wanted — all
+ * Ready, all reading the same signed-in subscription, each distinct in the
+ * fleet.
  */
-function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }) {
+const QUICK_CONNECT_TEXT_CLASS: Readonly<Record<string, string>> = Object.freeze({
+  // Per-accent text color so both tiles clear contrast: Claude's terracotta
+  // carries white; Codex's mint needs dark text.
+  anthropic: "text-white",
+  openai: "text-[#0d1117]",
+});
+
+function SubscriptionQuickConnect({
+  providerId,
+  purpose,
+  onReady,
+}: {
+  providerId: "anthropic" | "openai";
+  purpose: "claude" | "codex";
+  onReady: () => Promise<void> | void;
+}) {
+  const provider = findBotProvider(providerId)!;
   const [phase, setPhase] = useState<
     "idle" | "starting" | "running" | "provisioning" | "ready" | "failed"
   >("idle");
@@ -2123,12 +2141,12 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
         providers?: { id: string; subscriptionReady?: boolean }[];
       };
       return Boolean(
-        body.providers?.find((provider) => provider.id === "anthropic")?.subscriptionReady,
+        body.providers?.find((entry) => entry.id === providerId)?.subscriptionReady,
       );
     } catch {
       return false;
     }
-  }, []);
+  }, [providerId]);
 
   const provision = useCallback(async (additional: boolean) => {
     setPhase("provisioning");
@@ -2136,7 +2154,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
       const response = await fetch("/api/bots/connect/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "anthropic", credential: "subscription", additional }),
+        body: JSON.stringify({ provider: providerId, credential: "subscription", additional }),
       });
       const body = (await response.json()) as { outcome?: string };
       if (!response.ok) throw new Error();
@@ -2150,7 +2168,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
       );
       setPhase("failed");
     }
-  }, [onReady]);
+  }, [onReady, providerId]);
 
   const finishIfSignedIn = useCallback(async (): Promise<boolean> => {
     if (!(await isSignedIn())) return false;
@@ -2168,7 +2186,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
       const response = await fetch("/api/bots/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ purpose: "claude" }),
+        body: JSON.stringify({ purpose }),
       });
       const body = (await response.json()) as {
         command?: string;
@@ -2191,18 +2209,18 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
       );
       setPhase("failed");
     }
-  }, [finishIfSignedIn, stopPolling]);
+  }, [finishIfSignedIn, purpose, stopPolling]);
 
   if (phase === "ready") {
     return (
       <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4 text-left">
         <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
           <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
-          Claude is connected — your Claude bot is Ready for assignments.
+          {provider.label} is connected — your {provider.label} bot is Ready for assignments.
         </p>
         {readyBots > 1 ? (
           <p className="mt-1 text-xs text-[var(--text-muted)]">
-            {readyBots} Claude bots are connected and Ready.
+            {readyBots} {provider.label} bots are connected and Ready.
           </p>
         ) : null}
         <button
@@ -2211,7 +2229,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
           className="btn btn-secondary btn-sm mt-3"
         >
           <Plus className="size-3.5" aria-hidden="true" />
-          Add another Claude bot
+          Add another {provider.label} bot
         </button>
       </div>
     );
@@ -2221,7 +2239,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
     return (
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
         <p className="text-sm font-medium text-[var(--text)]">
-          Run this once — your browser opens Claude&apos;s own sign-in:
+          Run this once — your browser opens {provider.vendor}&apos;s own sign-in:
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 font-mono text-xs text-[var(--text)]">
@@ -2232,7 +2250,7 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
         <p className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]" aria-live="polite">
           <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
           {phase === "provisioning"
-            ? "Signed in — adding your Claude bot…"
+            ? `Signed in — adding your ${provider.label} bot…`
             : "Waiting for your sign-in to finish. This completes on its own."}
         </p>
         {phase === "running" ? (
@@ -2255,17 +2273,21 @@ function ClaudeQuickConnect({ onReady }: { onReady: () => Promise<void> | void }
         type="button"
         onClick={() => void start()}
         disabled={phase === "starting"}
-        className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#d9855b] bg-[#d9855b] px-5 py-4 text-lg font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        style={{ backgroundColor: provider.accent, borderColor: provider.accent }}
+        className={cn(
+          "flex w-full items-center justify-center gap-3 rounded-xl border px-5 py-4 text-lg font-semibold transition-opacity hover:opacity-90 disabled:opacity-60",
+          QUICK_CONNECT_TEXT_CLASS[providerId] ?? "text-white",
+        )}
       >
         {phase === "starting" ? (
           <Loader2 className="size-5 animate-spin" aria-hidden="true" />
         ) : (
           <Sparkles className="size-5" aria-hidden="true" />
         )}
-        Claude
+        {provider.label}
       </button>
       <p className="mt-2 text-center text-xs text-[var(--text-muted)]">
-        Sign in with your Claude subscription — bills nothing per token.
+        Sign in with your {provider.label} subscription — bills nothing per token.
       </p>
       {phase === "failed" ? (
         <p className="mt-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-3 py-2 text-xs text-[var(--warning)]" aria-live="polite">
@@ -2301,8 +2323,9 @@ function FirstConnectPrompt({
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
           Sign in once and your first bot is ready. No key, no variable name.
         </p>
-        <div className="mt-4">
-          <ClaudeQuickConnect onReady={onFleetChanged} />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <SubscriptionQuickConnect providerId="anthropic" purpose="claude" onReady={onFleetChanged} />
+          <SubscriptionQuickConnect providerId="openai" purpose="codex" onReady={onFleetChanged} />
         </div>
         {/* A real anchor, not next/link: this route handler issues a 302 to
             another origin, which a client-side navigation cannot follow. */}
