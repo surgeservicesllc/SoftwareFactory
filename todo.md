@@ -75,6 +75,32 @@ priority queue, and evidence for items closed by the loop.
 - [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
 - [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
 
+### Owner goal — frictionless bot connection (closed 2026-08-16)
+
+Owner directive: "Make the bot connection MUCH EASIER … similar to logging into
+Claude or Codex, super easy and frictionless." Closed by PR #121 (squash
+`eec1d4c`, CI run `31917860824` green: lint/typecheck/test/build + browser/a11y).
+Four coupled changes, each with tests (bot suite 116/116):
+
+1. A signed-in or pasted credential now makes its bot read **Ready** — bot
+   readiness consults the same vault overlay the providers tab uses
+   (`serializeBot` presence predicate; env-only default preserved for existing
+   callers), so "connected" and "ready" can no longer disagree.
+2. Connecting a provider leaves a ready default bot (`ensureProviderBot`):
+   add-only (never duplicates, never edits a person's own bots), best-effort
+   (a provisioning failure can never fail the already-succeeded connection).
+3. The empty fleet leads with one primary action — "Sign in and add my first
+   bot" (OpenRouter OAuth, the only genuine one-click among the providers,
+   fronting Claude/GPT/Gemini) — with "Add one manually" kept one step down.
+4. `POST /api/bots/connect/provision` finishes the one-click return as the
+   authenticated owner. The service-role OAuth callback still cannot create a
+   bot; owner-authorized work stays owner-authenticated.
+
+Status: code merged and shipping with `main`. Live half **NOT TESTED** — no
+owner has run the production OAuth round-trip since the merge; the first real
+"sign in → ready bot waiting" pass will prove it (no agent can, it needs the
+owner's provider account in a browser).
+
 ### External Blockers (owner-only)
 
 1. **1C canary**: browser → `/solutions/bot-manager` → GREEN command ("Create a Phase 1C canary documentation file and produce a draft PR"). Worker claims within ~5 min. Verify: `factory/*` branch + draft PR appear.
