@@ -41,8 +41,17 @@ export async function POST(
       p_ai_account_id: accountId,
     });
     if (error) {
+      // The code (never the message) names the class of failure — a missing
+      // function on a not-yet-migrated database reads PGRST202, an
+      // authorization refusal reads 42501 — without leaking schema detail.
       return jsonNoStore(
-        { error: { code: "remove_failed", message: "The account could not be removed." } },
+        {
+          error: {
+            code: "remove_failed",
+            message: "The account could not be removed.",
+            detail: (error as { code?: string }).code ?? "unknown",
+          },
+        },
         { status: 403 },
       );
     }

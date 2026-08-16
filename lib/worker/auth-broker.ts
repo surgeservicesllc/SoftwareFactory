@@ -144,8 +144,17 @@ export async function runAuthBrokerOnce(
     return "connected";
   } catch (error) {
     const message = error instanceof Error ? error.message : "The sign-in failed.";
+    // Named in the run log, because a swallowed failure here is exactly how a
+    // session gets stuck mid-state with nobody able to say why. The message
+    // is ours or the store's — never raw CLI output.
+    process.stdout.write(`Session ${session.sessionId.slice(0, 8)}… failed: ${message}\n`);
     // The store sanitizes again server-side; this is belt and braces.
-    await store.fail(session.sessionId, message.slice(0, 400)).catch(() => undefined);
+    await store.fail(session.sessionId, message.slice(0, 400)).catch((failError) => {
+      const failMessage = failError instanceof Error ? failError.message : "unknown";
+      process.stdout.write(
+        `Session ${session.sessionId.slice(0, 8)}… could not even be marked failed: ${failMessage}\n`,
+      );
+    });
     return "failed";
   } finally {
     await cli?.dispose().catch(() => undefined);
