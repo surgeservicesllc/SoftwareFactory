@@ -431,7 +431,9 @@ export function AiAccountConnect({
       </h3>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
         {waitingForCode
-          ? "Complete sign-in in the secure browser window, then paste the confirmation code below."
+          ? providerId === "openai"
+            ? "Complete sign-in in the secure browser window. It will end on a page that cannot load — that is expected. Copy that page's full web address and paste it below."
+            : "Complete sign-in in the secure browser window, then paste the confirmation code below."
           : "This completes on its own — no steps to run."}
       </p>
 
@@ -458,7 +460,9 @@ export function AiAccountConnect({
             id={`relay-code-${providerId}`}
             value={code}
             onChange={(event) => setCode(event.target.value)}
-            placeholder="Paste the confirmation code here"
+            placeholder={providerId === "openai"
+              ? "Paste the final page's web address here"
+              : "Paste the confirmation code here"}
             autoComplete="off"
             spellCheck={false}
             className="w-72 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text)]"

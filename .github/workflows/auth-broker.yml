@@ -57,9 +57,10 @@ jobs:
       - name: Install the locked worker runtime
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Install the provider login CLI
-        # The version the headless URL-capture flow was probed against.
-        run: npm install -g @anthropic-ai/claude-code@2.1.233
+      - name: Install the provider login CLIs
+        # Claude: the version the headless URL-capture flow was probed
+        # against. Codex: pinned at adoption of the callback-address relay.
+        run: npm install -g @anthropic-ai/claude-code@2.1.233 @openai/codex@0.147.0
 
       - name: Drive pending sign-ins
         env:
