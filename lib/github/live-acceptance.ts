@@ -118,7 +118,12 @@ export const ADVERSE_SEQUENCE: readonly AdverseStep["action"][] = Object.freeze(
  * blunt on purpose: a warning in a document is not a control.
  */
 export const PROTECTED_INSTALLATION_IDS: readonly number[] = Object.freeze([
+  // 2026-08-13 originals — both uninstalled on 2026-08-16, kept as blunt
+  // protection against a stale record resurrecting them as targets.
   153445938, 153479019,
+  // The live production installation since 2026-08-16 19:47Z: the fresh
+  // primary-App install bound to the owner's real workspace.
+  154236235,
 ]);
 
 function check(
