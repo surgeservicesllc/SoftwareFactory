@@ -161,12 +161,32 @@ simplify/automate → test → record → repeat.
   simple-view submission carries the safe defaults, closed-fold summary keeps
   non-default choices visible. tsc + lint clean.
 
-**Open next (prioritized):** unified "Needs Your Attention" area (RED approvals /
-auth / failed recovery) — criteria 4/22; Add-Project wizard with auto-detected
-defaults — criteria 5/6; Simple vs Advanced mode to hide technical IDs —
-criteria 8/21 (composer done; IDs elsewhere remain); error UX with a
-next-action button — criteria 18/19; human-readable run progress states —
-criterion 20; full E2E of the critical journey — criterion 30.
+**Iteration 3 — shipped (PR #TBD):** unified "Needs Your Attention" area.
+- `NeedsYourAttention` on the Dashboard (above the setup guide) lists ONLY
+  decisions the owner alone can make, each as what happened → why it matters →
+  one recommended-action button to the exact screen. (criteria 4, 17, 18, 22)
+- Four decision sources, read independently and best-effort: owner-flagged
+  unresolved production incidents (`/api/operations/overview`), commands
+  awaiting owner approval (`/api/commands`, the RED path), GitHub connections
+  in error (`/api/github/connections`), and queued work with no connected
+  worker (`/api/worker/status` + commands). A failed source stays silent —
+  it can hide its own items but never suppress another source or invent an
+  item. Bounded to 6 items, incidents first.
+- Empty state renders NOTHING — no shell, no zero-count banner — so the area
+  never cries wolf and notifications surface only meaningful exceptions.
+- Tests: 7/7 in `needs-your-attention.test.tsx` (all-clear renders nothing,
+  signed-out fetches nothing, RED-awaiting-approval card → bot-manager,
+  suspended-connection card with reason → connections, queued-work-no-worker
+  card, unresolved-owner-flagged incident (resolved and auto-recovering ones
+  excluded) → operations, one failed source doesn't suppress the others).
+  tsc + lint clean.
+
+**Open next (prioritized):** honest human-readable run progress labels +
+surfacing the draft-PR link — criterion 20 (no invented phases: map only real
+recorded states); Add-Project wizard with auto-detected defaults — criteria
+5/6; hide remaining technical IDs behind advanced views — criteria 8/21
+(composer done); error UX with a next-action button — criteria 18/19; full
+E2E of the critical journey — criterion 30.
 
 ### External Blockers (owner-only)
 
