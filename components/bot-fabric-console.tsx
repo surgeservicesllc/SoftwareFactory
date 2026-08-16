@@ -137,6 +137,48 @@ export function BotFabricConsole() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // The one-click sign-in returns here by redirect, landing on the default
+  // tab. Its callback stores the credential but cannot create a bot — that is
+  // owner-authorized work and the callback runs as the service role. So the
+  // console finishes the job as the authenticated owner: provision the ready
+  // default bot, refresh, and say a bot is waiting. Keeping the promise the
+  // front door makes ("sign in and add my first bot") without the callback
+  // ever holding authority it should not.
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      const params = new URLSearchParams(window.location.search);
+      const outcome = params.get("connect");
+      if (!outcome) return;
+      params.delete("connect");
+      const query = params.toString();
+      window.history.replaceState(
+        null, "", `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+      if (outcome !== "connected") {
+        setMessage(CONNECT_OUTCOMES[outcome] ?? CONNECT_OUTCOMES.failed);
+        return;
+      }
+      let provisioned = false;
+      try {
+        const response = await fetch("/api/bots/connect/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "openrouter" }),
+        });
+        if (response.ok) provisioned = ((await response.json()) as { provisioned?: boolean }).provisioned ?? false;
+      } catch {
+        // Provisioning is best-effort; the credential is already connected.
+      }
+      await load();
+      setMessage(
+        provisioned
+          ? "Signed in. A ready bot is waiting in your fleet."
+          : "Signed in. The provider is connected and ready to use.",
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
   const mutate = useCallback(
     async (
       key: string,
