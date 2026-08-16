@@ -276,12 +276,19 @@ export type SetupStep = {
 };
 
 /**
- * The product's real path: connect GitHub, add a project, open its files.
- * Showing it as numbered steps means a new owner never has to guess.
+ * The product's real path: connect GitHub, add a project, check the AI worker,
+ * then give the Factory a goal. Showing it as numbered steps means a new owner
+ * never has to guess what to do next. The grid adapts to the number of steps so
+ * a three- or four-step journey each lays out evenly.
  */
 export function SetupSteps({ steps, current }: { steps: SetupStep[]; current: number }) {
   return (
-    <ol className="grid gap-3 md:grid-cols-3">
+    <ol
+      className={cn(
+        "grid gap-3",
+        steps.length >= 4 ? "sm:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3",
+      )}
+    >
       {steps.map((step, index) => {
         const isCurrent = index === current;
         return (

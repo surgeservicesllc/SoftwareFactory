@@ -101,6 +101,50 @@ owner has run the production OAuth round-trip since the merge; the first real
 "sign in → ready bot waiting" pass will prove it (no agent can, it needs the
 owner's provider account in a browser).
 
+### Owner goal — frictionless END-TO-END experience (in progress, opened 2026-08-16)
+
+Owner directive: make the ENTIRE owner journey frictionless — "Sign In →
+Connect → Add Project → Give Goal → Factory Plans → AI Team Works →
+Tests/Reviews → PR → Release → Validate → Report" — so a non-technical owner
+mainly answers "What do you want accomplished?" Preserve all RLS / GREEN-YELLOW
+-RED / zero-token safety. Run as a loop: walk journey → find friction →
+simplify/automate → test → record → repeat.
+
+**Journey audit — friction found (this loop):**
+- Dashboard was the signed-in landing page but gave a first-time owner **no
+  path**: metrics + safety facts, no "what to do next." (criteria 1, 27)
+- The only guide (inside `LiveDashboardMetrics`) was a 3-step "Connect → Add
+  project → **Open your files**" list whose last step was `done:false`
+  permanently, so it **never completed**, and it steered to file-browsing, not
+  to the actual goal (Bot Manager / a plain-English goal). It ignored worker
+  readiness. (criteria 1, 9, 10)
+
+**Iteration 1 — shipped (PR #TBD):** dedicated `GettingStarted` dashboard guide.
+- Four-step, completable journey that matches the real path: **Connect GitHub →
+  Add a project → Check your AI worker → Give your Factory a goal**, each step's
+  `done` read from live sources (`/api/projects`, `/api/github/connections`,
+  `/api/worker/status`, `/api/commands`) so it can never overclaim. (criteria 1,
+  3, 20)
+- Every incomplete step deep-links to the screen that finishes it — missing
+  config is one click from fixed. (criterion 19)
+- Once all four are done the checklist **collapses into a single CTA — "Give
+  your Factory a goal" → Bot Manager**, making Bot Manager the centerpiece.
+  (criteria 9, 10, 27)
+- Reads are independent/best-effort: a worker-status failure leaves that step
+  unchecked instead of erroring the guide. Removed the stale 3-step guide from
+  `LiveDashboardMetrics` (consolidation, criterion 28).
+- Tests: `getting-started.test.tsx` (7 cases — signed-out no-fetch, per-step
+  deep links, project→2-done, github-only→1-done, all-done ready CTA, worker
+  -failure isolation, refresh-to-ready); `SetupSteps` grid adapts to 4 steps;
+  `live-dashboard-metrics` suite still green. tsc + lint clean.
+
+**Open next (prioritized):** unified "Needs Your Attention" area (RED approvals /
+auth / failed recovery) — criteria 4/22; Add-Project wizard with auto-detected
+defaults — criteria 5/6; Simple vs Advanced mode to hide technical IDs —
+criteria 8/21; plain-English goal box wired to command/graph orchestration —
+criteria 10/11/12; error UX with a next-action button — criteria 18/19; full
+E2E of the critical journey — criterion 30.
+
 ### External Blockers (owner-only)
 
 1. **1C canary**: browser → `/solutions/bot-manager` → GREEN command ("Create a Phase 1C canary documentation file and produce a draft PR"). Worker claims within ~5 min. Verify: `factory/*` branch + draft PR appear.
