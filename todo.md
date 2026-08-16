@@ -89,6 +89,17 @@ CLI/diagnostic surfaces survive only under Developer Diagnostics (§35).
 
 **Checklist (status vocabulary: TODO / IN PROGRESS / BLOCKED / VERIFIED):**
 
+**GO-LIVE LEDGER (2026-08-16 16:40Z):** #141 `f580db3` (worker default-ON,
+honest stall UI) merged + deployed 16:13:23Z. #142 `de055c9` (lingering
+worker, session diagnostics, Remove account) merged 16:26 at owner
+instruction; its deploy completed after the owner upgraded Vercel to Pro
+(the free-tier 100/day cap had halted deploys 16:16-16:3x). Worker run
+31958640122 confirmed LIVE and LINGERING on the new script (step held open
+vs. previous 1-2s exits). All three Actions secrets present (masked in
+worker env). Broker schema confirmed live on hosted by production behavior;
+Supabase integration applies migrations on merge. Remaining to a completed
+live sign-in: the owner's click-through with the lingering worker up.
+
 **MAJOR HOSTED FINDING (2026-08-16 16:00Z, production evidence):** the owner's
 live screenshot shows the Connecting Claude modal in progress phase — which
 only renders after POST /api/ai-accounts/connect returns a sessionId — so
