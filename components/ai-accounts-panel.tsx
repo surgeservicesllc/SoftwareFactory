@@ -93,7 +93,7 @@ export function AiAccountsPanel({
     // is hidden — polling a background tab is spend without an audience.
     const refresh = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 60_000);
+    }, 30_000);
     return () => {
       window.clearTimeout(kickoff);
       window.clearInterval(refresh);

@@ -155,10 +155,11 @@ async function main() {
   // whole window stays covered; the workflow timeout is the hard stop.
   const IDLE_POLL_MS = 10_000;
   const SWEEP_EVERY_TICKS = 30;
-  // Usage refresh cadence while lingering: every ~30 minutes of idle time,
-  // so a long worker window keeps the Bot Manager's numbers current without
-  // hammering the provider's usage endpoint.
-  const USAGE_EVERY_TICKS = 180;
+  // Usage refresh cadence while lingering: every ~5 minutes of idle time,
+  // matching the session sweep. The usage endpoint is the same lightweight
+  // read the provider's own client polls, so freshness is cheap: a handful
+  // of accounts costs a few dozen requests an hour.
+  const USAGE_EVERY_TICKS = 30;
 
   let handled = 0;
   let idleTicks = 0;
