@@ -18,9 +18,11 @@ import {
   GitFork,
   GitPullRequestArrow,
   Loader2,
+  Pencil,
   Plus,
   PlugZap,
   RefreshCw,
+  X,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -145,6 +147,12 @@ export function ProjectsConsole() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [archivedCount, setArchivedCount] = useState<number | null>(null);
   const [page, setPage] = useState(0);
+  // Edit and archive are dialogs so the table row states exactly what will
+  // happen before it does; unarchive acts in place on the archived view.
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [archiving, setArchiving] = useState<Project | null>(null);
+  const [unarchivingId, setUnarchivingId] = useState("");
+  const [unarchiveError, setUnarchiveError] = useState("");
 
   const load = useCallback(async () => {
     setState("loading");
@@ -204,6 +212,25 @@ export function ProjectsConsole() {
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
+  }, [load]);
+
+  const unarchive = useCallback(async (projectId: string) => {
+    setUnarchivingId(projectId);
+    setUnarchiveError("");
+    try {
+      const response = await fetch("/api/portfolio/controls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unarchive", projectId }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be unarchived.");
+      await load();
+    } catch (error) {
+      setUnarchiveError(error instanceof Error ? error.message : "The project could not be unarchived.");
+    } finally {
+      setUnarchivingId("");
+    }
   }, [load]);
 
   const connectedConnections = useMemo(
@@ -298,13 +325,25 @@ export function ProjectsConsole() {
                   Every run, report, and activity record this project produced is kept.
                 </p>
               </div>
-              <Link href="/solutions/portfolio" className="btn btn-secondary btn-sm sm:shrink-0">
-                <Archive className="size-4" aria-hidden="true" />
-                Unarchive on Portfolio
-              </Link>
+              <button
+                type="button"
+                onClick={() => void unarchive(project.id)}
+                disabled={unarchivingId === project.id}
+                className="btn btn-secondary btn-sm sm:shrink-0"
+              >
+                {unarchivingId === project.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Archive className="size-4" aria-hidden="true" />
+                )}
+                Unarchive
+              </button>
             </div>
           </Card>
         ))}
+        {unarchiveError ? (
+          <p className="text-sm text-[var(--danger)]" aria-live="polite">{unarchiveError}</p>
+        ) : null}
         {!projects.length ? (
           <Card className="p-5 sm:p-6">
             <SectionTitle
@@ -343,6 +382,21 @@ export function ProjectsConsole() {
 
   return (
     <div className="space-y-4">
+      {editing ? (
+        <ProjectEditDialog
+          project={editing}
+          onClose={() => setEditing(null)}
+          onSaved={load}
+        />
+      ) : null}
+      {archiving ? (
+        <ProjectArchiveDialog
+          project={archiving}
+          onClose={() => setArchiving(null)}
+          onArchived={load}
+        />
+      ) : null}
+
       <ProjectTabs active="all" />
 
       {/* Every number here is counted from the two live reads above; there
@@ -442,10 +496,28 @@ export function ProjectsConsole() {
                         {project.updatedAt ? formatDate(project.updatedAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link href={`/solutions/portfolio/${project.id}`} className="btn btn-secondary btn-sm">
-                          Open
-                          <ArrowRight className="size-4" aria-hidden="true" />
-                        </Link>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(project)}
+                            aria-label={`Edit ${project.name}`}
+                            className="btn btn-secondary btn-sm size-8 px-0"
+                          >
+                            <Pencil className="size-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setArchiving(project)}
+                            aria-label={`Archive ${project.name}`}
+                            className="btn btn-secondary btn-sm size-8 px-0"
+                          >
+                            <Archive className="size-4" aria-hidden="true" />
+                          </button>
+                          <Link href={`/solutions/portfolio/${project.id}`} className="btn btn-secondary btn-sm">
+                            Open
+                            <ArrowRight className="size-4" aria-hidden="true" />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -659,6 +731,8 @@ export function ProjectInspector({
   const [data, setData] = useState<InspectorData>(emptyInspector);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [editingSelf, setEditingSelf] = useState(false);
+  const [archivingSelf, setArchivingSelf] = useState(false);
   const repository = connection?.repositories.find((item) => item.id === project.githubRepositoryId);
   const isConnected = project.connectionStatus === "connected"
     && connection?.status === "connected"
@@ -810,8 +884,31 @@ export function ProjectInspector({
               {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Refresh
             </button>
+            <button type="button" onClick={() => setEditingSelf(true)} className="btn btn-secondary btn-sm">
+              <Pencil className="size-4" aria-hidden="true" />
+              Edit
+            </button>
+            <button type="button" onClick={() => setArchivingSelf(true)} className="btn btn-secondary btn-sm">
+              <Archive className="size-4" aria-hidden="true" />
+              Archive
+            </button>
           </div>
         </div>
+
+        {editingSelf ? (
+          <ProjectEditDialog
+            project={project}
+            onClose={() => setEditingSelf(false)}
+            onSaved={onChanged}
+          />
+        ) : null}
+        {archivingSelf ? (
+          <ProjectArchiveDialog
+            project={project}
+            onClose={() => setArchivingSelf(false)}
+            onArchived={onChanged}
+          />
+        ) : null}
 
         <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Visibility" value={repository ? (repository.private ? "Private" : "Public") : "Unavailable"} />
@@ -940,6 +1037,185 @@ function ProjectTabs({ active }: { active: "all" | "archived" }) {
         </Link>
       ))}
     </nav>
+  );
+}
+
+function DialogShell({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      <div className="relative w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn btn-secondary btn-sm absolute right-4 top-4 size-9 px-0"
+          aria-label="Close"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Name and description, bounded exactly like the create form. */
+export function ProjectEditDialog({
+  project,
+  onClose,
+  onSaved,
+}: {
+  project: Project;
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be updated.");
+      onClose();
+      await onSaved();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "The project could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DialogShell label={`Edit ${project.name}`} onClose={onClose}>
+      <h2 className="text-lg font-semibold text-foreground">Edit project</h2>
+      <p className="mt-1 text-sm text-muted">
+        The repository link, history, and status stay exactly as they are.
+      </p>
+      <form onSubmit={save} className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="edit-project-name" className="field-label">Name</label>
+          <input
+            id="edit-project-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            minLength={1}
+            maxLength={160}
+            className="input"
+          />
+        </div>
+        <div>
+          <label htmlFor="edit-project-description" className="field-label">
+            Description <span className="font-normal text-faint">(optional)</span>
+          </label>
+          <input
+            id="edit-project-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={2000}
+            className="input"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || !name.trim()} className="btn btn-primary btn-sm">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
+            Save changes
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        {error ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
+      </form>
+    </DialogShell>
+  );
+}
+
+/**
+ * Archive is the delete that keeps history: the database requires a reason,
+ * and the dialog says what survives before anything happens.
+ */
+export function ProjectArchiveDialog({
+  project,
+  onClose,
+  onArchived,
+}: {
+  project: Project;
+  onClose: () => void;
+  onArchived: () => Promise<void> | void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function archive(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/portfolio/controls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive", projectId: project.id, reason: reason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be archived.");
+      onClose();
+      await onArchived();
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : "The project could not be archived.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DialogShell label={`Archive ${project.name}`} onClose={onClose}>
+      <h2 className="text-lg font-semibold text-foreground">Archive {project.name}</h2>
+      <p className="mt-1 text-sm text-muted">
+        Archiving stops new work. Every run, report, and activity record is kept, and you can
+        unarchive it from the Archived view at any time. Nothing is deleted.
+      </p>
+      <form onSubmit={archive} className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="archive-project-reason" className="field-label">Why archive it?</label>
+          <input
+            id="archive-project-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            required
+            minLength={1}
+            maxLength={500}
+            className="input"
+            placeholder="Superseded by the new repository"
+          />
+          <span className="field-hint">Recorded in the audit trail with the transition.</span>
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || !reason.trim()} className="btn btn-primary btn-sm">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
+            Archive project
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        {error ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
+      </form>
+    </DialogShell>
   );
 }
 

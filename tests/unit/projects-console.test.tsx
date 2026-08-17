@@ -366,15 +366,53 @@ describe("ProjectsConsole archived view", () => {
     const archivedCard = (await screen.findByText("Retired")).closest("section") as HTMLElement;
     // The badge on the card, distinct from the Archived tab above the list.
     expect(within(archivedCard).getByText("Archived")).toBeInTheDocument();
-    // Unarchiving is an owner control on the portfolio page, and the view
-    // says where instead of implying it happens here.
-    expect(screen.getByRole("link", { name: /unarchive on portfolio/i })).toHaveAttribute(
-      "href",
-      "/solutions/portfolio",
-    );
+    // Unarchive acts right here, through the owner-guarded control.
+    expect(within(archivedCard).getByRole("button", { name: "Unarchive" })).toBeInTheDocument();
     // No add form and no live GitHub inspector on the archived view.
     expect(screen.queryByText("Add a project")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/branches?"), expect.anything());
+  });
+
+  it("unarchives in place through the owner-guarded control", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    const controlPosts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/portfolio/controls" && init?.method === "POST") {
+        controlPosts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ result: [{ project_id: "44444444-4444-4444-8444-444444444444", status: "active" }] });
+      }
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [{
+          autonomousMode: false,
+          connectionId: null,
+          connectionStatus: "not_connected",
+          defaultBranch: "main",
+          description: null,
+          githubRepository: null,
+          githubRepositoryId: null,
+          healthStatus: "unknown",
+          id: "44444444-4444-4444-8444-444444444444",
+          maximumAutonomousRisk: "GREEN",
+          name: "Retired",
+          status: "archived",
+        }] });
+      }
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Unarchive" }));
+
+    await waitFor(() => expect(controlPosts).toHaveLength(1));
+    expect(controlPosts[0]).toEqual({
+      action: "unarchive",
+      projectId: "44444444-4444-4444-8444-444444444444",
+    });
   });
 
   it("says plainly when nothing is archived", async () => {
@@ -486,6 +524,63 @@ describe("ProjectsConsole dashboard view", () => {
     expect(await screen.findByText("50%")).toBeInTheDocument();
     expect(screen.getByText("of 2 finished")).toBeInTheDocument();
     expect(screen.getByText("No runs yet")).toBeInTheDocument();
+  });
+
+  it("edits a project through the dialog, bounded like the create form", async () => {
+    const patched: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === `/api/projects/${alphaId}` && init?.method === "PATCH") {
+        patched.push({ url, body: JSON.parse(String(init.body)) });
+        return jsonResponse({ project: { id: alphaId, name: "Alpha Prime", description: null, updatedAt: "2026-08-17T16:00:00.000Z" } });
+      }
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [dashboardProject(alphaId, "Alpha")] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Alpha" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Alpha" });
+    const nameInput = within(dialog).getByLabelText("Name");
+    fireEvent.change(nameInput, { target: { value: "Alpha Prime" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(patched).toHaveLength(1));
+    expect(patched[0].body).toEqual({ name: "Alpha Prime" });
+  });
+
+  it("archives through the reason-carrying dialog, promising what survives", async () => {
+    const controlPosts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/portfolio/controls" && init?.method === "POST") {
+        controlPosts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ result: [{ project_id: alphaId, status: "archived" }] });
+      }
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [dashboardProject(alphaId, "Alpha")] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Alpha" }));
+    const dialog = screen.getByRole("dialog", { name: "Archive Alpha" });
+    // The dialog states the survival promise before anything happens.
+    expect(within(dialog).getByText(/Nothing is deleted/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Why archive it?"), { target: { value: "Superseded" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /archive project/i }));
+
+    await waitFor(() => expect(controlPosts).toHaveLength(1));
+    expect(controlPosts[0]).toEqual({ action: "archive", projectId: alphaId, reason: "Superseded" });
   });
 
   it("shows the status breakdown and the live activity feed in the rail", async () => {

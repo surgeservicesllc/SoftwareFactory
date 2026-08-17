@@ -204,4 +204,55 @@ describe("BotManagerHome", () => {
     // No zero-state tab chrome on the primary surface.
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
+
+  it("removes a bot only after saying what is released and what is kept", async () => {
+    const user = userEvent.setup();
+    const deleted: string[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      extra: (url, init) => {
+        if (url === "/api/bots/bot-1" && init?.method === "DELETE") {
+          deleted.push(url);
+          return { ok: true, status: 200, json: async () => ({ retired: true }) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /remove claude builder 1/i }));
+    // Nothing is deleted by the first click — the row states the consequence.
+    expect(deleted).toEqual([]);
+    expect(screen.getByText(/assignments are released; every run and/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /remove bot/i }));
+    expect(deleted).toEqual(["/api/bots/bot-1"]);
+  });
+
+  it("keeps the bot when the person backs out of the removal", async () => {
+    const user = userEvent.setup();
+    const deleted: string[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      extra: (url, init) => {
+        if (init?.method === "DELETE") {
+          deleted.push(url);
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /remove claude builder 1/i }));
+    await user.click(screen.getByRole("button", { name: /keep it/i }));
+
+    expect(deleted).toEqual([]);
+    expect(screen.queryByText(/assignments are released/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Claude Builder 1")).toBeInTheDocument();
+  });
 });
