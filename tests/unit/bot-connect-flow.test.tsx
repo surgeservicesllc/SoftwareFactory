@@ -417,17 +417,37 @@ describe("one click is offered for every provider, not just OpenRouter", () => {
     return fetchMock;
   }
 
-  it("offers Claude in one click, ahead of the terminal route", async () => {
-    // The friction that mattered: clicking Claude used to lead to a command.
-    // OpenRouter serves Claude models and has a real third-party OAuth flow,
-    // so the fastest path to Claude is a single link.
+  it("leads Claude with Sign in with Google, which reaches Claude on Vertex", async () => {
+    // Anthropic's own OAuth is closed to third parties, but Claude runs on
+    // Vertex AI and Google OAuth is not. This is the standard login flow
+    // reaching the intended model through a door that is actually open.
     stubConnect(providerPayload(notConfigured));
     const user = await openPicker();
     await user.click(await screen.findByRole("button", { name: /claude/i }));
 
-    const oneClick = await screen.findByRole("link", { name: /sign in with openrouter/i });
-    expect(oneClick).toHaveAttribute("href", "/api/bots/connect/oauth/start");
-    expect(screen.getByText(/get claude in one click/i)).toBeInTheDocument();
+    const google = await screen.findByRole("link", { name: /sign in with google/i });
+    expect(google).toHaveAttribute("href", "/api/bots/connect/google/start");
+  });
+
+  it("still offers OpenRouter for Claude, as the second one-click route", async () => {
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    expect(await screen.findByRole("link", { name: /sign in with openrouter/i }))
+      .toHaveAttribute("href", "/api/bots/connect/oauth/start");
+    expect(screen.getByText(/through openrouter/i)).toBeInTheDocument();
+  });
+
+  it("does not offer Google sign-in for providers Vertex does not serve", async () => {
+    stubConnect(providerPayload({
+      ...notConfigured, id: "groq", label: "Groq", vendor: "Groq",
+      credentialRef: "GROQ_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /groq/i }));
+
+    expect(screen.queryByRole("link", { name: /sign in with google/i })).not.toBeInTheDocument();
   });
 
   it("keeps the zero-cost subscription route available as the alternative", async () => {

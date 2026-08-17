@@ -784,6 +784,9 @@ const CONNECT_OUTCOMES: Readonly<Record<string, string>> = Object.freeze({
   invalid: "That sign-in did not match the one you started. Nothing was connected.",
   refused: "The provider refused the sign-in. Nothing was connected.",
   failed: "The sign-in could not be completed. Nothing was connected.",
+  no_project:
+    "That Google account has no active Cloud project, so there is nothing for Vertex AI to bill "
+    + "or run against. Create one and sign in again.",
 });
 
 /**
@@ -889,6 +892,29 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
             + "prefer a key or OpenRouter above."}
       </p>
 
+      {provider.id === "anthropic" ? (
+        <div className="mt-3 rounded-lg border border-[var(--accent-border)] bg-[var(--surface)] p-3">
+          {/* Anthropic restricted its own OAuth to Claude Code and Claude.ai,
+              so "Sign in with Claude" cannot exist here. Claude runs on Vertex
+              AI though, and Google OAuth is open to third parties — so this is
+              the standard login flow reaching the intended model through a door
+              that is actually open. */}
+          <p className="text-sm font-medium text-[var(--text)]">
+            Sign in with Google
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+            Claude runs on Google Cloud&rsquo;s Vertex AI. One click, Google&rsquo;s own consent
+            screen, and Claude is connected — no key, no terminal. Billed through your Google
+            Cloud project.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/google/start" className="btn btn-primary btn-sm mt-3">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with Google
+          </a>
+        </div>
+      ) : null}
+
       {provider.id !== "openrouter" ? (
         <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
           {/* The frictionless route to this same model. OpenRouter serves
@@ -896,7 +922,9 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
               third-party OAuth flow — so clicking through it is genuinely one
               click, where the subscription path below needs a terminal. */}
           <p className="text-sm font-medium text-[var(--text)]">
-            Fastest: get {provider.label} in one click
+            {provider.id === "anthropic"
+              ? `Or get ${provider.label} through OpenRouter`
+              : `Fastest: get ${provider.label} in one click`}
           </p>
           <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
             Sign in to OpenRouter and {provider.label} works immediately — no terminal, no key.
