@@ -28,8 +28,9 @@ on:
           applies only the idempotent broker migrations
           (20260816000400 through 20260817000100) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
-          files, which is what the project detail page and the Runs page need —
-          the surgical paths for when the full push is blocked by ledger drift.
+          files, which is what the project detail page and the Runs page need;
+          "probe" changes nothing at all and just reports which objects already
+          exist, because the ledger has proven to understate the live schema.
         required: false
         default: all
         type: choice
@@ -37,6 +38,7 @@ on:
           - all
           - broker-functions
           - project-controls
+          - probe
 
 permissions:
   contents: read
@@ -202,6 +204,47 @@ jobs:
           # saw PGRST202 seconds ago cannot keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Broker function migrations applied, recorded, and the API schema cache reloaded."
+
+      - name: Report what the database already has (scope=probe)
+        # Read-only. Not a convenience: run 32068091179 proved the ledger
+        # understates production. It listed the whole 20260815 range as
+        # unapplied, and applying it found the enum labels and
+        # organizations.maximum_concurrent_runs already present — DDL that is
+        # live with no history row. Deciding what to apply from the ledger
+        # alone is therefore guessing, and this step is how that stops.
+        if: ${{ inputs.scope == 'probe' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select 'column' as kind, table_name || '.' || column_name as object
+              from information_schema.columns
+             where table_schema = 'public'
+               and (table_name, column_name) in (
+                 ('projects','engineering_priority'), ('projects','strategic_focus'),
+                 ('projects','engineering_paused'), ('projects','engineering_pause_reason'),
+                 ('projects','maximum_concurrent_runs'),
+                 ('organizations','maximum_concurrent_runs'),
+                 ('agent_runs','review_status'), ('agent_runs','review_note'))
+            union all
+            select 'table', c.relname from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+               and c.relname in ('scheduling_decisions','provider_capacity_limits')
+            union all
+            select 'function', p.proname from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in (
+                 'archive_project','unarchive_project','update_project_details',
+                 'set_project_engineering_priority','set_project_engineering_pause',
+                 'focus_portfolio_engineering','set_portfolio_capacity_limits',
+                 'update_agent_run_review','delete_agent_run')
+            order by 1, 2;"
 
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
