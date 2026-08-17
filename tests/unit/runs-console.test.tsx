@@ -95,4 +95,36 @@ describe("RunsConsole", () => {
     expect(screen.getByText("Recorded status")).toBeInTheDocument();
     expect(screen.getByText("succeeded")).toBeInTheDocument();
   });
+
+  it("clears every finished run through the reason-carrying confirm, and reports what was kept", async () => {
+    const clearPosts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/runs/clear-finished" && init?.method === "POST") {
+        clearPosts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ deletedCount: 3, keptForEvidence: 1, keptForActivity: 0 });
+      }
+      if (url === "/api/runs") return jsonResponse({ runs: [succeededRun] });
+      return jsonResponse({});
+    }));
+    const user = userEvent.setup();
+
+    render(<RunsConsole />);
+
+    await user.click(await screen.findByRole("button", { name: "Clear finished runs" }));
+    // The confirm states the consequence before anything happens; nothing has
+    // been posted yet, and the button holds until the reason is long enough.
+    expect(clearPosts).toEqual([]);
+    expect(screen.getByText(/queued and running work is untouched/i)).toBeInTheDocument();
+    const confirm = screen.getAllByRole("button", { name: "Clear finished runs" }).at(-1)!;
+    expect(confirm).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Why clear them?"), "Clearing history before the audit");
+    await user.click(confirm);
+
+    expect(clearPosts).toEqual([
+      { reason: "Clearing history before the audit", detachEvidence: false },
+    ]);
+    expect(await screen.findByText(/3 runs cleared\. 1 kept because their work produced/)).toBeInTheDocument();
+  });
 });

@@ -27,10 +27,13 @@
 --   leaving rows that read as held to anyone querying the table directly.
 
 alter table public.task_work_locks
-  add column heartbeat_at timestamptz not null default now(),
-  add column expires_at timestamptz not null default (now() + interval '15 minutes'),
-  add column expired_at timestamptz;
+  add column if not exists heartbeat_at timestamptz not null default now(),
+  add column if not exists expires_at timestamptz not null default (now() + interval '15 minutes'),
+  add column if not exists expired_at timestamptz;
 
+alter table public.task_work_locks
+  drop constraint if exists task_work_locks_expiry_after_acquisition,
+  drop constraint if exists task_work_locks_one_ending;
 alter table public.task_work_locks
   add constraint task_work_locks_expiry_after_acquisition
     check (expires_at > acquired_at),
@@ -47,7 +50,7 @@ comment on column public.task_work_locks.heartbeat_at is
 comment on column public.task_work_locks.expired_at is
   'Set by the sweep when a lease ran out without being released. Distinct from released_at: one is a worker finishing, the other is a worker vanishing.';
 
-create index task_work_locks_live_idx
+create index if not exists task_work_locks_live_idx
   on public.task_work_locks (project_id, expires_at)
   where released_at is null and expired_at is null;
 

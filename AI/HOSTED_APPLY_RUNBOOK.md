@@ -3,12 +3,14 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 38**, listed in the measured section below. The repository total is 102 migration
+**The current total is 39**, listed in the measured section below. The repository total is 103 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest: `20260817000100_project_edit_details` — the project name/description edit
-operation, ADR-078, one definer function; until it is applied, production's Edit-project dialog
-receives the database's function-missing refusal and changes nothing. Before it:
-`20260816001500_ai_account_usage_observations` — the Bot Manager's usage evidence, ADR-076.)
+outstanding. (Newest: `20260817000500_clear_all_finished_runs` — clear-all applied through the
+per-run `delete_agent_run` guards, one definer function. Before it, the 2026-08-17 run set:
+`000200` review/deletion activity types, `000300` run review + owner-only deletion, `000400`
+task work-lock leases, and `000100` project edit details — until the surgical apply runs,
+production's run edit/delete and clear-all controls receive the database's function-missing
+refusal and change nothing.)
 (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
 
