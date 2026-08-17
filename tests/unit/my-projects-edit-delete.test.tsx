@@ -194,6 +194,38 @@ describe("editing and archiving from My Projects", () => {
     expect(calls[0].body).toMatchObject({ name: "Storefront web" });
   });
 
+  it("sets one priority across every selected project, one call each", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    await renderList();
+
+    await user.click(screen.getByRole("checkbox", { name: /select all projects/i }));
+    await user.click(screen.getByRole("button", { name: /set priority/i }));
+    await user.selectOptions(screen.getByLabelText(/^priority$/i), "1");
+    await user.click(screen.getByRole("button", { name: /set p1 on 2/i }));
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls.map((call) => call.body.projectId).sort()).toEqual(["p1", "p2"]);
+    expect(calls.every((call) => call.body.action === "set_priority")).toBe(true);
+    expect(calls.every((call) => call.body.priority === 1)).toBe(true);
+  });
+
+  it("offers bulk priority but not bulk renaming", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    await renderList();
+
+    await user.click(screen.getByRole("checkbox", { name: /select all projects/i }));
+
+    // Priority exists to rank projects against each other, so a selection can
+    // share one. A name is identity — giving five projects the same one is not
+    // a feature — so editing stays per-project, and there is no bulk edit
+    // button offering otherwise.
+    expect(screen.getByRole("button", { name: /set priority/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /edit 2 projects/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /rename/i })).toBeNull();
+  });
+
   it("says archiving keeps everything, because deletion is not available at all", async () => {
     mockFetch();
     const user = userEvent.setup();
