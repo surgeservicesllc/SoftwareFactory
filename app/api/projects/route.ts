@@ -34,6 +34,7 @@ type ProjectRow = {
   health_status: string;
   autonomous_mode: boolean;
   maximum_autonomous_risk: string;
+  updated_at: string | null;
   project_connections?: Array<{ connection_id: string; github_repository_id: string | null; is_primary: boolean }> | null;
 };
 
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
     const base = client
       .from("projects")
       .select(
-        "id,name,description,status,github_repository,default_branch,health_status,autonomous_mode,maximum_autonomous_risk,project_connections(connection_id,github_repository_id,is_primary)",
+        "id,name,description,status,github_repository,default_branch,health_status,autonomous_mode,maximum_autonomous_risk,updated_at,project_connections(connection_id,github_repository_id,is_primary)",
       )
       .eq("organization_id", activeOrganization.id);
     const { data, error } = await (showArchived
@@ -176,6 +177,7 @@ export async function GET(request: Request) {
         healthStatus: project.health_status,
         autonomousMode: project.autonomous_mode,
         maximumAutonomousRisk: project.maximum_autonomous_risk,
+        updatedAt: project.updated_at,
         connectionId: primaryConnectionId,
         connectionStatus: connected ? "connected" : "not_connected",
         connectionStatusLabel: connected ? "Connected" : "Not Connected",

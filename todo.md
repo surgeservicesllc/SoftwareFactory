@@ -59,6 +59,22 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+- [x] All Projects dashboard (owner mockup, same day): /solutions/projects
+  is now the organize/overview posture — stat cards (total / active% /
+  authorized repositories / connected, all counted from the live reads,
+  no trend deltas: no historical snapshots exist), tabs (All Projects |
+  My Projects | Archived; Starred/Shared absent, no model), a projects
+  table (repository+branch, status badges, last run + success rate from
+  /api/runs where only succeeded/failed carry a verdict, updated_at now
+  exposed by GET /api/projects, Open → /solutions/portfolio/{id}),
+  10/page pagination with truthful "Showing X to Y of N", right rail
+  (projects-by-status incl. archived count via the opt-in read + recent
+  activity from /api/activity?limit=8, best-effort with named absence).
+  Page header follows the mock ("All Projects", Import Repository / New
+  Project); add-project form still anchored below the table. The
+  inspector-evidence unit tests moved to MyProjectsConsole, where the
+  inspector now lives inline; 3 new dashboard tests. pages.spec heading
+  pin → "All Projects".
 - [x] My Projects (owner mockup, same day): /solutions/myprojects renders
   every project as a chevron-collapsible row (first open by default)
   expanding into the SAME ProjectInspector the Projects page uses (now

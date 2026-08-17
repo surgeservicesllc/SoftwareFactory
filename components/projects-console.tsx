@@ -1,12 +1,17 @@
 "use client";
 
 import {
+  Activity,
   AlertTriangle,
   Archive,
+  ArrowRight,
   Bot,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDotDashed,
   ExternalLink,
+  FolderKanban,
   FolderTree,
   GitBranch,
   GitCommitHorizontal,
@@ -14,6 +19,7 @@ import {
   GitPullRequestArrow,
   Loader2,
   Plus,
+  PlugZap,
   RefreshCw,
   XCircle,
 } from "lucide-react";
@@ -60,8 +66,23 @@ export type Project = {
   healthStatus: string;
   autonomousMode: boolean;
   maximumAutonomousRisk: string;
+  updatedAt?: string | null;
   connectionId: string | null;
   connectionStatus: "connected" | "not_connected";
+};
+
+/** The slice of a run this page needs: whose it is, how it ended, and when. */
+type RunSummary = {
+  id: string;
+  status: string;
+  createdAt: string;
+  project: { id: string; name: string } | null;
+};
+
+type ActivityItem = {
+  id: string;
+  description: string;
+  occurredAt: string;
 };
 
 type Branch = { name: string; sha: string; protected: boolean };
@@ -116,6 +137,14 @@ export function ProjectsConsole() {
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  // Dashboard evidence, all best-effort: runs feed the Last-run and
+  // Success-rate columns, activity feeds the rail, and the archived count
+  // completes the by-status breakdown. Any of them failing degrades its own
+  // surface to an honest absence rather than blocking the page.
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[] | null>(null);
+  const [archivedCount, setArchivedCount] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -138,6 +167,33 @@ export function ProjectsConsole() {
       if (!connectionsResponse.ok) throw new Error(connectionsBody.error?.message ?? "GitHub connections could not be loaded.");
       setProjects(projectsBody.projects ?? []);
       setConnections(connectionsBody.connections ?? []);
+      setPage(0);
+
+      if (!showArchived) {
+        const [runsResult, activityResult, archivedResult] = await Promise.allSettled([
+          fetch("/api/runs", { cache: "no-store" }),
+          fetch("/api/activity?limit=8", { cache: "no-store" }),
+          fetch("/api/projects?status=archived", { cache: "no-store" }),
+        ]);
+        if (runsResult.status === "fulfilled" && runsResult.value.ok) {
+          const body = (await runsResult.value.json().catch(() => ({}))) as { runs?: RunSummary[] };
+          setRuns(body.runs ?? []);
+        } else {
+          setRuns([]);
+        }
+        if (activityResult.status === "fulfilled" && activityResult.value.ok) {
+          const body = (await activityResult.value.json().catch(() => ({}))) as { events?: ActivityItem[] };
+          setActivity(body.events ?? []);
+        } else {
+          setActivity(null);
+        }
+        if (archivedResult.status === "fulfilled" && archivedResult.value.ok) {
+          const body = (await archivedResult.value.json().catch(() => ({}))) as { projects?: unknown[] };
+          setArchivedCount(body.projects ? body.projects.length : null);
+        } else {
+          setArchivedCount(null);
+        }
+      }
       setState("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Projects could not be loaded.");
@@ -225,6 +281,7 @@ export function ProjectsConsole() {
     // control on the portfolio page — both facts stated rather than implied.
     return (
       <div className="space-y-4">
+        <ProjectTabs active="archived" />
         {projects.map((project) => (
           <Card key={project.id} className="p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -264,17 +321,168 @@ export function ProjectsConsole() {
     );
   }
 
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(projects.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleProjects = projects.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const activeCount = projects.filter((project) => project.status === "active").length;
+  const connectedCount = projects.filter((project) => project.connectionStatus === "connected").length;
+  const repositoryCount = connectedConnections.reduce(
+    (sum, connection) => sum
+      + connection.repositories.filter((repository) => repository.selected && !repository.archived && !repository.disabled).length,
+    0,
+  );
+  const statusBreakdown = [
+    { label: "Active", count: activeCount, dotClassName: "bg-[var(--accent)]" },
+    { label: "Paused", count: projects.filter((project) => project.status === "paused").length, dotClassName: "bg-[var(--warning)]" },
+    { label: "Draft", count: projects.filter((project) => project.status === "draft").length, dotClassName: "bg-[var(--border)]" },
+    ...(archivedCount !== null
+      ? [{ label: "Archived", count: archivedCount, dotClassName: "bg-[var(--text-muted)]" }]
+      : []),
+  ];
+
   return (
     <div className="space-y-4">
-      {projects.map((project) => (
-        <ProjectInspector
-          key={project.id}
-          project={project}
-          connection={connections.find((item) => item.id === project.connectionId) ?? null}
-          connections={connections}
-          onChanged={load}
-        />
-      ))}
+      <ProjectTabs active="all" />
+
+      {/* Every number here is counted from the two live reads above; there
+          are no trend deltas because no historical snapshots exist to
+          compute them from. */}
+      {projects.length ? (
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard icon={FolderKanban} label="Total projects" value={String(projects.length)} detail={archivedCount ? `+ ${archivedCount} archived` : "excluding archived"} />
+          <StatCard icon={CheckCircle2} label="Active" value={String(activeCount)} detail={`${Math.round((activeCount / projects.length) * 100)}% of total`} />
+          <StatCard icon={GitFork} label="Repositories" value={String(repositoryCount)} detail="authorized on GitHub" />
+          <StatCard icon={PlugZap} label="Connected" value={String(connectedCount)} detail={`of ${projects.length} project${projects.length === 1 ? "" : "s"}`} />
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
+      {projects.length ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line">
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Project</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Repository</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Status</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Last run</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Success rate</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Updated</th>
+                  <th scope="col" className="px-4 py-3"><span className="sr-only">Open</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {visibleProjects.map((project) => {
+                  const facts = projectRunFacts(runs, project.id);
+                  return (
+                    <tr key={project.id}>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-foreground">{project.name}</p>
+                        {project.description ? (
+                          <p className="mt-0.5 max-w-56 truncate text-muted" title={project.description}>{project.description}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-muted">
+                        <p className="max-w-56 truncate">{project.githubRepository ?? "None linked"}</p>
+                        <p className="mt-0.5 text-xs text-faint">{project.defaultBranch}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <StatusBadge
+                            tone={project.status === "active" ? "safe" : project.status === "paused" ? "warning" : "neutral"}
+                            dot={false}
+                          >
+                            {formatStatusWord(project.status)}
+                          </StatusBadge>
+                          {project.connectionStatus !== "connected" ? (
+                            <StatusBadge tone="danger" dot={false}>Not Connected</StatusBadge>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {facts.latest ? (
+                          <>
+                            <span
+                              className={cn(
+                                "font-medium",
+                                facts.latest.status === "succeeded"
+                                  ? "text-accent"
+                                  : facts.latest.status === "failed"
+                                    ? "text-[var(--danger)]"
+                                    : "text-muted",
+                              )}
+                            >
+                              {formatStatusWord(facts.latest.status)}
+                            </span>
+                            <p className="mt-0.5 text-xs text-faint">{formatDate(facts.latest.createdAt)}</p>
+                          </>
+                        ) : (
+                          <span className="text-faint">No runs yet</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {facts.successRate !== null ? (
+                          <div>
+                            <span className="font-semibold text-foreground">{facts.successRate}%</span>
+                            <span className="ml-1 text-xs text-faint">
+                              of {facts.finished} finished
+                            </span>
+                            <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-surface-raised">
+                              <div className="h-full rounded-full bg-accent" style={{ width: `${facts.successRate}%` }} aria-hidden="true" />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-faint">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted">
+                        {project.updatedAt ? formatDate(project.updatedAt) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link href={`/solutions/portfolio/${project.id}`} className="btn btn-secondary btn-sm">
+                          Open
+                          <ArrowRight className="size-4" aria-hidden="true" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm text-muted">
+            <p>
+              Showing {currentPage * pageSize + 1} to {Math.min(projects.length, (currentPage + 1) * pageSize)} of {projects.length} project{projects.length === 1 ? "" : "s"}
+            </p>
+            {pageCount > 1 ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage === 0}
+                  className="btn btn-secondary btn-sm"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </button>
+                <span className="tabular">{currentPage + 1} / {pageCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+                  disabled={currentPage >= pageCount - 1}
+                  className="btn btn-secondary btn-sm"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       {!connectedConnections.length ? (
         <BlockedState
@@ -392,6 +600,47 @@ export function ProjectsConsole() {
           </Link>
         </Card>
       )}
+        </div>
+
+        <div className="min-w-0 space-y-4">
+          <Card className="p-5">
+            <SectionTitle title="Projects by status" />
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {statusBreakdown.map((row) => (
+                <li key={row.label} className="flex items-center gap-2.5">
+                  <span className={cn("size-2 shrink-0 rounded-full", row.dotClassName)} aria-hidden="true" />
+                  <span className="flex-1 text-muted">{row.label}</span>
+                  <span className="tabular font-semibold text-foreground">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-2">
+              <SectionTitle title="Recent activity" />
+              <Link href="/solutions/activity" className="text-sm font-medium text-accent">View all</Link>
+            </div>
+            {activity === null ? (
+              <p className="mt-3 text-sm text-faint">Activity is unavailable right now.</p>
+            ) : activity.length === 0 ? (
+              <p className="mt-3 text-sm text-faint">No activity recorded yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-[var(--border)]">
+                {activity.map((item) => (
+                  <li key={item.id} className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                    <Activity className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground">{item.description}</p>
+                      <p className="mt-0.5 text-xs text-faint">{formatDate(item.occurredAt)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -660,6 +909,78 @@ export function ProjectInspector({
       <ProjectBots projectId={project.id} projectName={project.name} />
     </Card>
   );
+}
+
+/**
+ * The design's view switcher. All Projects and Archived are this console's
+ * two real filters; My Projects is its sibling page. The design's Starred tab
+ * has no starring model behind it and is deliberately absent.
+ */
+function ProjectTabs({ active }: { active: "all" | "archived" }) {
+  const tabs = [
+    { key: "all", label: "All Projects", href: "/solutions/projects" },
+    { key: "mine", label: "My Projects", href: "/solutions/myprojects" },
+    { key: "archived", label: "Archived", href: "/solutions/projects?filter=archived" },
+  ] as const;
+  return (
+    <nav aria-label="Project views" className="flex flex-wrap gap-1 border-b border-line">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.key}
+          href={tab.href}
+          aria-current={tab.key === active ? "page" : undefined}
+          className={cn(
+            "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab.key === active
+              ? "border-[var(--accent)] text-foreground"
+              : "border-transparent text-muted hover:text-foreground",
+          )}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail }: { icon: typeof FolderKanban; label: string; value: string; detail?: string }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
+        <p className="text-sm text-faint">{label}</p>
+      </div>
+      <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
+      {detail ? <p className="mt-0.5 text-xs text-faint">{detail}</p> : null}
+    </Card>
+  );
+}
+
+/**
+ * Last run and success rate for one project, from the live runs list. Only
+ * succeeded and failed carry a verdict; queued, running, and cancelled runs
+ * are excluded from the rate the same way cancelled checks are excluded from
+ * "failing" — no verdict is not a verdict.
+ */
+function projectRunFacts(runs: RunSummary[], projectId: string) {
+  const own = runs.filter((run) => run.project?.id === projectId);
+  const latest = own.reduce<RunSummary | null>(
+    (best, run) => (!best || Date.parse(run.createdAt) > Date.parse(best.createdAt) ? run : best),
+    null,
+  );
+  const succeeded = own.filter((run) => run.status === "succeeded").length;
+  const failed = own.filter((run) => run.status === "failed").length;
+  const finished = succeeded + failed;
+  return {
+    latest,
+    finished,
+    successRate: finished ? Math.round((succeeded / finished) * 100) : null,
+  };
+}
+
+function formatStatusWord(value: string) {
+  const spaced = value.replaceAll("_", " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function Stat({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail?: string; tone?: "neutral" | "safe" | "warning" | "danger" }) {
