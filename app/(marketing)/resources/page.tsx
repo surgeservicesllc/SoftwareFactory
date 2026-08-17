@@ -99,7 +99,7 @@ export default async function ResourcesPage() {
                   const Icon = resolveIcon(topic.icon);
                   return (
                     <li key={topic.name}>
-                      <Link href={topic.href} className="group flex items-start gap-2.5">
+                      <Link href={topic.href} className="group flex min-h-11 items-start gap-2.5 py-1.5">
                         <Icon className="mt-0.5 size-4 shrink-0 text-[#8b9bff]" aria-hidden="true" />
                         <span>
                           <span className="block text-xs font-semibold text-white group-hover:text-[#c4b5fd]">
@@ -127,7 +127,7 @@ export default async function ResourcesPage() {
                     <li key={role.name}>
                       <Link
                         href={role.href}
-                        className="group flex items-center gap-3 py-3.5 first:pt-0 last:pb-0"
+                        className="group flex min-h-11 items-center gap-3 py-3.5 first:pt-0 last:pb-0"
                       >
                         <Icon className="size-4 shrink-0 text-[#8b9bff]" aria-hidden="true" />
                         <span className="flex-1 text-xs font-medium text-white group-hover:text-[#c4b5fd]">

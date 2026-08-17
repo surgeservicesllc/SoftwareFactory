@@ -49,7 +49,7 @@ export default async function PricingPage() {
           {pillars.length ? (
             <SurfacePanel className="p-5 sm:p-6">
               <h2 className="text-sm font-semibold text-white">Everything you need to build</h2>
-              <ul className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-5">
+              <ul className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
                 {pillars.map((pillar) => (
                   <li key={pillar.title} className="text-center">
                     <IconTile
@@ -59,7 +59,7 @@ export default async function PricingPage() {
                       className="mx-auto"
                     />
                     <h3 className="mt-3 text-xs font-semibold text-white">{pillar.title}</h3>
-                    <p className="mt-1 text-xs leading-4 text-[#7f8c9e]">{pillar.body}</p>
+                    <p className="mt-1 text-xs leading-4 text-balance break-words text-[#7f8c9e]">{pillar.body}</p>
                   </li>
                 ))}
               </ul>

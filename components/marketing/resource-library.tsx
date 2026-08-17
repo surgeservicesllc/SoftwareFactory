@@ -81,7 +81,7 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
       {matches.length ? (
         <ul className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {matches.map((resource) => (
-            <li key={resource.slug}>
+            <li key={resource.slug} className="relative">
               <SurfacePanel className="flex h-full flex-col overflow-hidden">
                 <div className="relative h-32 bg-gradient-to-br from-[#141b2c] via-[#131a30] to-[#0a0f1a]">
                   <span
@@ -107,11 +107,26 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
 
                 <div className="flex flex-1 flex-col p-4">
                   <h3 className="text-[13px] font-semibold leading-5 text-white">
-                    <Link href={resource.href} className="hover:text-[#c4b5fd]">
+                    {/*
+                      The link wrapped the title text alone, leaving a 15px-tall
+                      tap target on a card several hundred pixels tall. The
+                      stretched pseudo-element makes the whole card the target
+                      without nesting a second interactive element inside it,
+                      and the title is still the accessible name.
+
+                      Several entries carry `href: "#"`, which is a link that
+                      goes nowhere. That is a real defect, but not one this
+                      change can fix: there is no `/resources/[slug]` page for
+                      them to point at, so the destination has to be decided
+                      rather than guessed. Recorded in todo.md.
+                    */}
+                    <Link
+                      href={resource.href}
+                      className="after:absolute after:inset-0 after:z-10 after:content-[''] hover:text-[#c4b5fd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c5cff]"
+                    >
                       {resource.title}
                     </Link>
-                  </h3>
-                  <p className="mt-2 flex-1 text-[11px] leading-5 text-[#7f8c9e]">{resource.summary}</p>
+                  </h3>                  <p className="mt-2 flex-1 text-[11px] leading-5 text-[#7f8c9e]">{resource.summary}</p>
                   <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#151c28] pt-3 text-[10px] text-[#7f8c9e]">
                     {resource.readTime ? (
                       <span className="flex items-center gap-1.5">

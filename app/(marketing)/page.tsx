@@ -72,14 +72,14 @@ export default async function HomePage() {
           action={
             <a
               href="/platform"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
+              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
             >
               Explore the platform
               <ArrowRight className="size-4" aria-hidden="true" />
             </a>
           }
         />
-        <ul className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <ul className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {lifecycle.map((stage) => (
             <li key={stage.title}>
               <SurfacePanel className="h-full p-4 transition-colors hover:border-[#33405a]">
@@ -146,7 +146,7 @@ export default async function HomePage() {
             action={
               <a
                 href="/pricing"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
               >
                 See full pricing
                 <ArrowRight className="size-4" aria-hidden="true" />

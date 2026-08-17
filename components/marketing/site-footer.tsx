@@ -62,12 +62,19 @@ export function SiteFooter() {
               <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#7f8c9e]">
                 {column.heading}
               </h2>
-              <ul className="mt-4 space-y-2.5">
+              {/*
+                `space-y-2.5` around a 16px-tall text link left a 16px tap
+                target on every marketing page — well under the 24px minimum,
+                and the inline-prose exemption does not cover a stacked
+                navigation list. The padding is what makes the target, so it
+                sits on the link rather than on the row.
+              */}
+              <ul className="mt-3 space-y-0.5">
                 {column.links.map((link) => (
                   <li key={`${column.heading}-${link.label}`}>
                     <Link
                       href={link.href}
-                      className="text-sm text-[#93a0b2] transition-colors hover:text-white"
+                      className="inline-flex min-h-11 items-center py-1 text-sm text-[#93a0b2] transition-colors hover:text-white"
                     >
                       {link.label}
                     </Link>

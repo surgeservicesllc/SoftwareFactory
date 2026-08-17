@@ -16,17 +16,40 @@ const WIDTHS = [320, 375, 390, 430, 768, 1024, 1280, 1440];
 
 
 const ROUTES = [
+  "/",
+  "/about",
+  "/features",
+  "/platform",
+  "/pricing",
+  "/resources",
+  "/auth/sign-in",
+  "/auth/sign-up",
   "/solutions",
-  "/solutions/projects",
+  "/solutions/activity",
+  "/solutions/agents",
+  "/solutions/agentos",
   // The factory embeds the console's densest controls step by step, plus a
   // horizontal step band that must compress rather than push the edge.
   "/solutions/ai-factory",
+  "/solutions/autonomy",
+  "/solutions/backlog",
   "/solutions/bot-manager",
-  "/solutions/runs",
-  "/solutions/reports",
+  "/solutions/bot-usage",
+  "/solutions/connections",
+  "/solutions/files",
+  "/solutions/myprojects",
+  "/solutions/operations",
+  "/solutions/pipelines",
+  "/solutions/portfolio",
   // The project page carries the bot roster and the assign wizard's entry
   // point, which is the densest row of controls in the console.
   "/solutions/portfolio/00000000-0000-4000-8000-00000000dead",
+  "/solutions/projects",
+  "/solutions/reports",
+  "/solutions/resources",
+  "/solutions/runs",
+  "/solutions/settings",
+  "/solutions/workflows",
 ];
 
 /**
@@ -49,15 +72,34 @@ async function offenders(page: import("@playwright/test").Page) {
   await settled(page);
   return page.evaluate(() => {
     const root = document.documentElement;
+    const limit = root.clientWidth + 1;
     const past: string[] = [];
-    if (root.scrollWidth > root.clientWidth + 1) {
-      for (const element of Array.from(document.querySelectorAll("*"))) {
+
+    if (root.scrollWidth > limit) {
+      for (const element of Array.from(document.querySelectorAll("body *"))) {
         const box = element.getBoundingClientRect();
-        if (box.width > 0 && box.right > root.clientWidth + 1) {
-          past.push(`<${element.tagName.toLowerCase()} class="${String(element.className).slice(0, 70)}">`);
+        if (box.width === 0 || box.right <= limit) continue;
+
+        /*
+         * Anything inside a horizontal scroller sits past the viewport by
+         * design — that is what the scroller is for. Reporting it named the
+         * wrong element: the pricing comparison table always sorted to the top
+         * of this list while the real cause went unmentioned.
+         */
+        let contained = false;
+        for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const overflowX = getComputedStyle(parent).overflowX;
+          if (overflowX === "auto" || overflowX === "scroll" || overflowX === "hidden") {
+            contained = true;
+            break;
+          }
         }
+        if (contained) continue;
+
+        past.push(`<${element.tagName.toLowerCase()} class="${String(element.className).slice(0, 70)}">`);
       }
     }
+
     return { documentWidth: root.scrollWidth, viewportWidth: root.clientWidth, past: past.slice(0, 3) };
   });
 }
@@ -112,6 +154,14 @@ test("opening every navigation group keeps the layout inside the viewport", asyn
   const nav = page.getByRole("navigation", { name: /console/i }).filter({ visible: true });
   const toggles = nav.getByRole("button", { name: /expand .* subpages/i });
 
+  /*
+   * Waited for rather than counted once. The drawer is mounted by a click and
+   * the docked sidebar by hydration, so under parallel workers a single count
+   * could read zero before either had arrived — which failed as "there are no
+   * groups" when the real answer was "not yet".
+   */
+  await expect(toggles.first()).toBeVisible({ timeout: 15_000 });
+
   // Re-queried each round and driven until none are left, rather than looping a
   // count captured up front: every click removes one "Expand" button from the
   // set, so a fixed count races the shrinking list. The first wait retries,
@@ -152,4 +202,179 @@ test("the drawer leaves content full width when closed", async ({ page }) => {
 
   await drawerButton.click();
   expect((await offenders(page)).past).toEqual([]);
+});
+
+/**
+ * Regressions from the 2026-08-17 project-wide sweep.
+ *
+ * Each of these was a real defect found by measuring every route at every
+ * supported width, and each is the kind that returns quietly: a table that
+ * scrolls the page rather than itself, a grid one breakpoint too tight, a
+ * control the size of its own text. They are asserted rather than described.
+ */
+
+test("the plan comparison stacks instead of scrolling the page sideways", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  // A 720px-minimum table inside a horizontal scroller still inflated the
+  // root's scroll width, so the whole page scrolled sideways on a phone — and
+  // the table was unusable at that width even when the scrolling worked.
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/pricing", { waitUntil: "domcontentloaded" });
+
+  const result = await offenders(page);
+  expect(result.documentWidth).toBeLessThanOrEqual(result.viewportWidth + 1);
+
+  // The stacked form carries the same rows, so nothing is hidden on mobile.
+  await expect(page.getByRole("table")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator("dl").first()).toBeVisible({ timeout: 10_000 });
+});
+
+test("the comparison table returns on a wide screen", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/pricing", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("table")).toBeVisible();
+});
+
+test("no text spills out of its grid cell", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  // Six columns at 1280 and five at 640 were narrower than the words in them,
+  // so the text painted over its neighbour with nothing to reveal it.
+  for (const [route, width] of [["/platform", 1280], ["/pricing", 1024], ["/", 1280]] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(route, { waitUntil: "domcontentloaded" });
+    await settled(page);
+
+    const spills = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("body *"))
+        .filter((element) => {
+          if (element.scrollWidth <= element.clientWidth + 1) return false;
+          const overflowX = getComputedStyle(element).overflowX;
+          return overflowX !== "auto" && overflowX !== "scroll" && overflowX !== "hidden";
+        })
+        .map((element) => `<${element.tagName.toLowerCase()} class="${String(element.className).slice(0, 60)}">`)
+        .slice(0, 3));
+
+    expect(spills, `${route} @ ${width}px clips content inside a cell`).toEqual([]);
+  }
+});
+
+test("the newsletter field is a usable height on a phone", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  // `flex-1` is `flex: 1 1 0%` along the container's main axis. The container
+  // is a column below `sm`, so on a phone it governed the *height* and
+  // collapsed an `h-11` field to the 18px of its own text.
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/resources", { waitUntil: "domcontentloaded" });
+  await settled(page);
+
+  const field = page.getByRole("textbox", { name: /email address/i }).first();
+  const box = await field.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+});
+
+test("stacked navigation links are big enough to hit", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  // The footer's links were the height of their own text on every marketing
+  // page. The inline-prose exemption does not cover a stacked list.
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await settled(page);
+
+  const links = page.getByRole("navigation", { name: "Product" }).getByRole("link");
+  // The footer is the last thing on the page, so counting it before it has
+  // rendered reads zero and fails as "there are no links" — waiting for the
+  // first one is the difference between absent and not-yet.
+  await expect(links.first()).toBeVisible({ timeout: 15_000 });
+
+  const total = await links.count();
+  expect(total).toBeGreaterThan(0);
+
+  for (let index = 0; index < total; index += 1) {
+    /*
+     * Polled rather than measured once. Two animation frames is enough when
+     * the page is the only thing loading, and not enough under parallel
+     * workers — a single reading caught the link before its styles applied and
+     * reported the unstyled text height, which failed only in a full run.
+     */
+    await expect
+      .poll(async () => (await links.nth(index).boundingBox())?.height ?? 0, {
+        message: `footer link ${index} never reached a usable height`,
+        timeout: 10_000,
+      })
+      .toBeGreaterThanOrEqual(24);
+  }
+});
+
+test("a resource card is tappable across its whole surface", async ({ page, isMobile }) => {
+  /*
+   * Drives the viewport, so it belongs in a project that can be resized. The
+   * width sweep above skips mobile device profiles for the same reason:
+   * forcing a width inside a profile that carries touch emulation and its own
+   * device pixel ratio measures a configuration nobody has, and reports the
+   * difference as a defect.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  // The link wrapped the title text alone: a 15px-tall target on a card
+  // several hundred pixels tall. Stretched over the card, the target is the
+  // card — checked by hit-testing a corner far from the text.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/resources", { waitUntil: "domcontentloaded" });
+  await settled(page);
+
+  const card = page.locator("li.relative").first();
+  await card.scrollIntoViewIfNeeded();
+  const box = await card.boundingBox();
+  expect(box).not.toBeNull();
+
+  const hit = await page.evaluate(
+    ([x, y]) => {
+      const element = document.elementFromPoint(x, y);
+      return element ? Boolean(element.closest("a")) || element.tagName === "A" : false;
+    },
+    [Math.round(box!.x + 14), Math.round(box!.y + box!.height - 14)],
+  );
+
+  expect(hit, "the card corner does not resolve to its link").toBe(true);
 });

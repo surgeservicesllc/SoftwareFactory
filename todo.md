@@ -1,5 +1,55 @@
 # SoftwareFactory — shared working status
 
+## PROJECT-WIDE RESPONSIVE AUDIT (2026-08-17)
+
+Every route measured at 320/375/390/430/768/1024/1280/1440, plus an
+interaction sweep: console drawer, every navigation caret opened one at a time
+and all together, collapse-and-return, site nav drawer, pricing cadence toggle,
+resources search, and disclosures on five console pages.
+
+Starting point: 79 findings. Ending point: 0 overflow, 0 nested scrollbars,
+0 load failures, 0 interaction findings.
+
+### Fixed
+
+- [x] **`/pricing` scrolled the whole page sideways on every mobile width.** A
+  720px-minimum table inside a horizontal scroller still inflates the root's
+  scroll width, and the table was unusable at 320px even when the scrolling
+  worked. Now a stacked block per plan below `md`, carrying the same rows,
+  values and included marks; the table returns from `md` up.
+- [x] **Text painting over its neighbour** on `/platform` and `/` (six columns
+  at 1280) and `/pricing` (five at 640) — grids one breakpoint too tight for
+  the words in them. Six only from `2xl`, five from `lg`, and the connector
+  arrows moved to the breakpoint their row starts at.
+- [x] **The newsletter field was 18px tall on a phone.** `flex-1` is
+  `flex: 1 1 0%` along the container's main axis, and the container is a column
+  below `sm` — so it governed the *height* and overrode `h-11`. Now `sm:flex-1`.
+- [x] **Footer navigation links were the height of their own text** on every
+  marketing page. The inline-prose exemption does not cover a stacked list.
+- [x] **Resource cards had a 15px tap target** on a card hundreds of pixels
+  tall; the link is stretched over the card now.
+- [x] Topic and role links in the resources sidebar, same defect, same fix.
+- [x] The overflow detector in `tests/e2e/responsive.spec.ts` blamed the wrong
+  element — anything inside a scroller is past the viewport by design, and it
+  sorted to the top of the report. It now skips contained elements, and the
+  sweep covers all 29 routes rather than five.
+
+### Found, not fixed — needs an owner decision
+
+- [ ] Eight entries in `lib/marketing/content.ts` carry `href: "#"`, so the
+  featured resource cards are links that go nowhere. There is no
+  `/resources/[slug]` page for them to point at, so the destination has to be
+  decided rather than guessed. Removing the link was tried and reverted: an
+  existing contract test asserts these render as links.
+
+### Not defects
+
+24 remaining tap-target readings are three links inside sentences ("Sign in",
+"Create one", "Sign in first"). WCAG 2.2 SC 2.5.8 exempts inline targets whose
+size is constrained by the line-height of the text around them.
+
+---
+
 ## GLOBAL NAVIGATION REBUILD (2026-08-17, owner reference image)
 
 Owner goal: rebuild the global navigation to match the reference image as
