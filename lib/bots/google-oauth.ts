@@ -169,3 +169,85 @@ export async function discoverFirstProject(accessToken: string): Promise<string 
     clearTimeout(timer);
   }
 }
+
+/** The shape sealed under the `vertex` purpose by the sign-in callback. */
+export interface VertexCredential {
+  readonly refreshToken: string;
+  readonly projectId: string;
+}
+
+/**
+ * Reads a stored Vertex connection.
+ *
+ * Both halves are required. A document with a token and no project is half a
+ * credential: there is nothing for Vertex to address, and accepting it would
+ * let a broken connection read as ready.
+ */
+export function parseVertexCredential(opened: string): VertexCredential | null {
+  try {
+    const parsed = JSON.parse(opened) as Partial<VertexCredential>;
+    if (typeof parsed.refreshToken !== "string" || !parsed.refreshToken) return null;
+    if (typeof parsed.projectId !== "string" || !parsed.projectId) return null;
+    return Object.freeze({ refreshToken: parsed.refreshToken, projectId: parsed.projectId });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Proves a stored Vertex connection still works.
+ *
+ * Refreshing is the right liveness check for this credential: it is exactly
+ * what every real call does first, it costs nothing, and it fails in the ways
+ * that matter — a withdrawn grant, a deleted client, a disabled account.
+ */
+export async function refreshGoogleAccessToken(input: {
+  readonly config: GoogleOAuthConfig;
+  readonly refreshToken: string;
+}): Promise<{ ok: true; accessToken: string } | { ok: false; reason: string; revoked: boolean }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: input.config.clientId,
+        client_secret: input.config.clientSecret,
+        refresh_token: input.refreshToken,
+        grant_type: "refresh_token",
+      }),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      // Google answers a withdrawn or expired grant with 400 invalid_grant.
+      // That needs another sign-in, which being unreachable does not.
+      const revoked = response.status === 400 || response.status === 401;
+      return {
+        ok: false,
+        revoked,
+        reason: revoked
+          ? "Google no longer accepts this connection. Sign in again."
+          : `Google returned HTTP ${response.status}.`,
+      };
+    }
+
+    const body = (await response.json()) as { access_token?: unknown };
+    if (typeof body.access_token !== "string" || !body.access_token) {
+      return { ok: false, revoked: false, reason: "Google returned no access token." };
+    }
+    return { ok: true, accessToken: body.access_token };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "AbortError";
+    return {
+      ok: false,
+      revoked: false,
+      reason: timedOut ? "Google did not respond in time." : "Google could not be reached.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -130,3 +130,74 @@ describe("GET /api/bots/providers", () => {
     expect(anthropic.probeVerdict).toBe("not_configured");
   });
 });
+
+describe("a Claude connection made through Google sign-in", () => {
+  // The end-to-end gap this covers: the callback stored a credential under the
+  // `vertex` purpose and nothing read it, so a successful sign-in still showed
+  // "needs a key".
+
+  function connectedThroughGoogle(document: unknown) {
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "client.apps.googleusercontent.com");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "secret");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    loadStoredCredentialOverlay.mockResolvedValue({
+      SOFTWAREFACTORY_VERTEX_CREDENTIAL: JSON.stringify(document),
+    });
+  }
+
+  async function claudeRow() {
+    return (await providerStatuses()).find((entry) => entry.id === "anthropic");
+  }
+
+  it("reports Claude as ready and verified with no API key anywhere", async () => {
+    connectedThroughGoogle({ refreshToken: "1//refresh", projectId: "my-project" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200, json: async () => ({ access_token: "fresh-access" }),
+    })));
+
+    expect(await claudeRow()).toMatchObject({ credentialReady: true, probeVerdict: "verified" });
+  });
+
+  it("reports a withdrawn Google grant as rejected, not unreachable", async () => {
+    connectedThroughGoogle({ refreshToken: "1//revoked", projectId: "my-project" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 400, json: async () => ({ error: "invalid_grant" }),
+    })));
+
+    const claude = await claudeRow();
+
+    // A withdrawn grant needs another sign-in; being unreachable does not.
+    expect(claude).toMatchObject({ probeVerdict: "rejected" });
+    expect(String((claude as unknown as { probeReason: string }).probeReason))
+      .toMatch(/sign in again/i);
+  });
+
+  it("does not report Google being down as a bad connection", async () => {
+    connectedThroughGoogle({ refreshToken: "1//refresh", projectId: "my-project" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 503, json: async () => ({}),
+    })));
+
+    expect(await claudeRow()).toMatchObject({ probeVerdict: "unreachable" });
+  });
+
+  it("never returns the refresh token or the fresh access token to the browser", async () => {
+    connectedThroughGoogle({ refreshToken: "1//secret-refresh", projectId: "secret-project" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200, json: async () => ({ access_token: "fresh-access" }),
+    })));
+
+    const providers = await providerStatuses();
+
+    expect(JSON.stringify(providers)).not.toContain("1//secret-refresh");
+    expect(JSON.stringify(providers)).not.toContain("fresh-access");
+  });
+
+  it("refuses a stored document that is not a usable connection", async () => {
+    // Half a credential must not read as connected: without a project there is
+    // nothing for Vertex to address.
+    connectedThroughGoogle({ refreshToken: "1//refresh" });
+
+    expect(await claudeRow()).toMatchObject({ probeVerdict: "rejected" });
+  });
+});

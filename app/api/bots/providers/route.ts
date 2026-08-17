@@ -1,4 +1,9 @@
 import { BOT_PROVIDERS } from "@/lib/bots/catalog";
+import {
+  parseVertexCredential,
+  readGoogleOAuthConfig,
+  refreshGoogleAccessToken,
+} from "@/lib/bots/google-oauth";
 import { isCredentialPresent } from "@/lib/bots/credentials";
 import { probeProviderCredential, type ProbeResult } from "@/lib/bots/provider-probe";
 import {
@@ -46,6 +51,53 @@ type CacheEntry = { readonly result: ProbeResult; readonly expiresAt: number };
  * set a key is never told stale news.
  */
 const probeCache = new Map<string, CacheEntry>();
+
+/**
+ * Verifies a Google sign-in rather than an API key.
+ *
+ * Claude reached through Vertex has no key to send to a model-list endpoint;
+ * what it has is a refresh token, and refreshing it is exactly what a real call
+ * does first. Without this the sign-in stored a credential nothing ever read,
+ * and the tile stayed on "needs a key" after a successful connection.
+ */
+async function probeVertexCredential(sealedDocument: string): Promise<ProbeResult> {
+  const credential = parseVertexCredential(sealedDocument);
+  if (!credential) {
+    return Object.freeze({
+      verdict: "rejected" as const,
+      reason: "The stored Google connection could not be read. Sign in again.",
+      live: false,
+    });
+  }
+
+  const config = readGoogleOAuthConfig();
+  if (!config) {
+    return Object.freeze({
+      verdict: "not_probed" as const,
+      reason: "Google sign-in is not configured on this deployment.",
+      live: false,
+    });
+  }
+
+  const refreshed = await refreshGoogleAccessToken({
+    config, refreshToken: credential.refreshToken,
+  });
+
+  if (refreshed.ok) {
+    return Object.freeze({
+      verdict: "verified" as const,
+      reason: `Google accepted this connection for project ${credential.projectId}.`,
+      live: true,
+    });
+  }
+
+  // A withdrawn grant needs another sign-in; being unreachable does not.
+  return Object.freeze({
+    verdict: refreshed.revoked ? ("rejected" as const) : ("unreachable" as const),
+    reason: refreshed.reason,
+    live: true,
+  });
+}
 
 async function resolveProbe(
   providerId: string,
@@ -98,14 +150,27 @@ export async function GET(request: Request) {
           ? subscriptionSlotReadiness(subscriptionRef, stored)
           : [];
         const subscriptionReady = subscriptionSlots.some(Boolean);
-        const credentialReady = keyReady || subscriptionReady;
+
+        // Claude reached through Google sign-in leaves no API key and no
+        // subscription token — it leaves a Vertex document. Without this the
+        // console reported "needs a key" straight after a successful sign-in,
+        // because nothing read the credential the callback had stored.
+        const vertexDocument = provider.id === "anthropic"
+          ? stored.SOFTWAREFACTORY_VERTEX_CREDENTIAL ?? null
+          : null;
+
+        const credentialReady = keyReady || subscriptionReady || Boolean(vertexDocument);
 
         // Only present API keys are probed. Probing an absent one is a
         // guaranteed rejection that would read as "your key is bad" when the
         // truth is "you have not set one".
         const probe = keyReady
           ? await resolveProbe(provider.id, ref, refresh, storedSecret)
-          : null;
+          // Only when Vertex is the sole route. A deployment holding a key too
+          // should report the one it would actually use.
+          : vertexDocument
+            ? await probeVertexCredential(vertexDocument)
+            : null;
 
         return {
           id: provider.id,

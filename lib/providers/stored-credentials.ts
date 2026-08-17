@@ -39,6 +39,10 @@ const NAMED_OVERLAY_KEYS: Readonly<Record<string, string>> = Object.freeze({
   mistral_api: "MISTRAL_API_KEY",
   deepseek_api: "DEEPSEEK_API_KEY",
   groq_api: "GROQ_API_KEY",
+  // Not an API key: a JSON document holding a Google refresh token and the
+  // Cloud project to address. It fills a variable of its own because no
+  // provider reads it as a bearer token — the worker exchanges it first.
+  vertex: "SOFTWAREFACTORY_VERTEX_CREDENTIAL",
 });
 
 /** The base variable each subscription slot family fills. */
