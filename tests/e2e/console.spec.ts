@@ -46,11 +46,11 @@ test("loads the control plane without browser errors", async ({
   await expect(page).toHaveTitle(/AI Software Factory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
-  // The shell's own logo renders only in the mobile header: the marketing
-  // global navigation sits directly above the console and already carries the
-  // brand, so a second identity one row down was deliberately removed. This
-  // asserts the affordance that actually survives on every breakpoint and in
-  // both signed-in and signed-out states.
+  // The console shell carries no brand of its own at any breakpoint: the
+  // marketing global navigation sits directly above it and already states the
+  // identity, so the sidebar's logo and then the mobile header's workspace
+  // chip were both removed as the same duplication. This asserts the brand
+  // affordance that actually survives — on every breakpoint, signed in or out.
   await expect(
     page.getByRole("link", { name: /ai software factory home/i }).first(),
   ).toBeVisible();
