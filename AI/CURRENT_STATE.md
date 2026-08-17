@@ -2,6 +2,29 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-17 (AI Factory guided journey):** `/solutions/ai-factory`
+("AI Factory" in the left navigation under Overview) is the owner's guided
+end-to-end path — Connect Repository → Create Project → Configure Pipeline →
+Connect Bots → Assign Bots → Configure Bot Settings → Issue a Command → Watch
+It Ship. Step completion is **derived from live records** (installations,
+projects, connected accounts, assignments and their configuration, commands),
+never from stored wizard state, so progress survives refresh by construction
+and cannot disagree with the rest of the console. Every step's option opens
+the **real existing control as an overlay** over the page (ConnectionsConsole,
+AddProjectForm — extracted to `components/add-project-form.tsx` and shared
+with the Projects dashboard — PipelineTemplatesManager with built-ins compiled
+server-side, BotManagerHome, the per-project ProjectBots roster, and
+CommandComposer); closing an overlay re-reads the journey, and the controls
+that know their completion close themselves. The Assign Bots wizard also
+links Bot Manager accounts directly: connected AI accounts with no bot yet
+are offered in the Select step, and linking provisions a bot per account at
+that account's credential slot (`/api/bots/connect/provision`,
+`additional:true`), re-reads the roster, and selects the new bots — multiple
+at once. Per-posting execution preferences (model override + work effort,
+migration `20260817001100`, hosted) surface on each posting card. No
+execution-authority change anywhere in this surface: assignment remains
+routing intent, graphs record PLANNED work, and the page says so.
+
 **Addendum, 2026-08-16 (per-account usage evidence):** migration
 `20260816001500_ai_account_usage_observations` adds append-only provider-usage
 evidence per AI account (RLS+FORCE, zero direct table access, worker-only
