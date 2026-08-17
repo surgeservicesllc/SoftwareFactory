@@ -118,7 +118,16 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
           (project) => project.connectionStatus === "connected",
         );
         setProjects(availableProjects);
-        setProjectId(availableProjects[0]?.id ?? "");
+        // A person arriving from a specific project ("give this project work")
+        // means that project. Honour it when it is genuinely available, and
+        // fall back to the first rather than leaving an empty selection that
+        // silently disables the button.
+        const requested = new URLSearchParams(window.location.search).get("project");
+        const preselected = requested
+          && availableProjects.some((project) => project.id === requested)
+          ? requested
+          : availableProjects[0]?.id ?? "";
+        setProjectId(preselected);
         setProjectsState("ready");
 
         try {
