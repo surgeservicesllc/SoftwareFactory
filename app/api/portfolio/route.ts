@@ -52,7 +52,7 @@ export async function GET() {
     const { data: projectData, error: projectError } = await client
       .from("projects")
       .select(
-        "id,name,status,github_repository,health_status,autonomous_mode,maximum_autonomous_risk",
+        "id,name,description,status,github_repository,default_branch,production_url,health_status,autonomous_mode,maximum_autonomous_risk,engineering_priority,strategic_focus,engineering_paused,engineering_pause_reason",
       )
       .eq("organization_id", organizationId)
       .order("name", { ascending: true })
@@ -71,6 +71,21 @@ export async function GET() {
       autonomousMode: Boolean(row.autonomous_mode),
       maximumAutonomousRisk: String(row.maximum_autonomous_risk).toUpperCase() as
         ProjectRow["maximumAutonomousRisk"],
+      description: row.description === null || row.description === undefined
+        ? null : String(row.description),
+      defaultBranch: row.default_branch ? String(row.default_branch) : null,
+      productionUrl: row.production_url ? String(row.production_url) : null,
+      // Read as a number only when it really is one. A hosted database without
+      // the Phase 2E columns returns undefined, which stays null and renders as
+      // Unknown rather than silently becoming P0.
+      engineeringPriority: typeof row.engineering_priority === "number"
+        ? row.engineering_priority
+        : null,
+      strategicFocus: row.strategic_focus === true,
+      engineeringPaused: row.engineering_paused === true,
+      engineeringPauseReason: row.engineering_pause_reason
+        ? String(row.engineering_pause_reason)
+        : null,
     }));
 
     const [commands, runs, tasks, incidents, changeRequests, deployments, connectionRows] =
