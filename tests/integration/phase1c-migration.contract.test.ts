@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260817000900_assignment_model_and_effort.sql";
+const latestMigration = "20260817001100_assignment_model_and_effort.sql";
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
@@ -215,7 +215,9 @@ const browserFunctions = [
   "record_phase1c_dispatch_outcome(uuid,uuid,text,text)",
   "list_agents(uuid,integer)",
   "list_tasks(uuid,integer)",
-  "list_agent_runs(uuid,integer)",
+  // Gained p_include_archived in 20260817000700, with a default, so the
+  // two-argument call sites are unchanged and simply stop seeing archived runs.
+  "list_agent_runs(uuid,integer,boolean)",
   "list_reports(uuid,integer)",
   "ensure_default_agents(uuid)",
   "get_provider_agent_assignment(uuid,uuid)",

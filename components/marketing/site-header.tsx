@@ -1,10 +1,11 @@
 "use client";
 
-import { Menu, Settings2, ShieldCheck, X } from "lucide-react";
+import { Menu, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation, PUBLIC_NAV } from "@/lib/navigation";
@@ -32,25 +33,6 @@ export type HeaderViewer = {
 
 const SIGNED_OUT_VIEWER: HeaderViewer = { signedIn: false };
 
-function Wordmark() {
-  return (
-    <Link href="/" className="flex items-center gap-3" aria-label="AI Software Factory home">
-      <span className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-[#2d3550] bg-gradient-to-br from-[#161a2e] to-[#0e1120]">
-        <Settings2 className="size-6 text-[#7c8cff]" strokeWidth={1.5} aria-hidden="true" />
-        <span className="absolute font-mono text-[8px] font-bold text-[#c9d2ff]">AI</span>
-      </span>
-      <span className="leading-none">
-        <span className="block text-[15px] font-bold tracking-[-0.01em] text-white sm:text-[17px]">
-          AI SOFTWARE
-        </span>
-        <span className="mt-1 block font-mono text-[9px] font-semibold uppercase tracking-[0.42em] text-[#8fa0ff] sm:text-[10px]">
-          Factory
-        </span>
-      </span>
-    </Link>
-  );
-}
-
 export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderViewer }) {
   const pathname = usePathname();
   const navItems = globalNavigation({
@@ -73,26 +55,35 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#161d2a] bg-[#080b10]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] w-full max-w-[1400px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
-        <Wordmark />
+      <div className="flex h-[68px] w-full items-center justify-between gap-4 px-4 sm:h-[76px] sm:gap-6 sm:px-6 lg:px-8 2xl:px-10">
+        <BrandMark />
 
-        <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">
+        {/*
+          `min-w-0` so a long entry set shrinks this column rather than pushing
+          the account controls off the right edge — the failure that turns a
+          wide header into a horizontally scrolling page.
+        */}
+        <nav
+          aria-label="Primary"
+          className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 xl:gap-1 lg:flex"
+        >
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               aria-current={isActive(item.href) ? "page" : undefined}
               className={cn(
-                "relative rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "relative whitespace-nowrap rounded-lg px-2.5 py-2 text-[15px] font-medium",
+                "transition-colors xl:px-3.5",
                 isActive(item.href)
                   ? "text-[#a78bfa]"
-                  : "text-[#9aa6b8] hover:text-white",
+                  : "text-[#96a2b4] hover:text-white",
               )}
             >
               {item.label}
               {isActive(item.href) ? (
                 <span
-                  className="absolute inset-x-3 -bottom-[1px] h-0.5 rounded-full bg-gradient-to-r from-[#7c5cff] to-[#4d8dff]"
+                  className="absolute inset-x-2.5 -bottom-[9px] h-[3px] rounded-full bg-[#7c5cff] xl:inset-x-3.5"
                   aria-hidden="true"
                 />
               ) : null}
@@ -100,24 +91,30 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
           {viewer.signedIn ? (
             <>
               {viewer.isSuperAdmin ? (
-                <span className="hidden items-center gap-1.5 rounded-lg border border-[#4c3a86] bg-[#1a1436] px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#c4b5fd] md:inline-flex">
-                  <ShieldCheck className="size-3" aria-hidden="true" />
-                  Super admin
+                <span className="hidden items-center gap-1.5 rounded-xl border border-[#4a3d80] bg-[#161230] px-3 py-1.5 text-[10px] font-bold uppercase leading-[1.15] tracking-[0.14em] text-[#c9bcff] xl:inline-flex">
+                  <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
+                  {/*
+                    Two lines by width rather than a <br>. The break is
+                    typographic, and a hard break splits the accessible name
+                    into two text nodes — so a screen reader, and anything
+                    matching on the label, stops seeing one phrase.
+                  */}
+                  <span className="block max-w-[4.25rem]">Super admin</span>
                 </span>
               ) : null}
               <span
-                className="hidden max-w-[180px] truncate text-sm text-[#9aa6b8] lg:inline"
+                className="hidden max-w-[150px] truncate text-sm text-[#96a2b4] xl:inline"
                 title={viewer.email ?? undefined}
               >
                 {accountLabel}
               </span>
               <Link
                 href="/solutions"
-                className="hidden min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:inline-flex"
+                className="hidden min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#5b7cff] px-4 text-sm font-bold leading-tight text-white transition-opacity hover:opacity-90 sm:inline-flex"
               >
                 Open Console
               </Link>
@@ -167,7 +164,7 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
           />
           <div className="absolute inset-x-0 top-0 border-b border-[#1c2433] bg-[#0a0e15] p-4 pb-6">
             <div className="flex items-center justify-between">
-              <Wordmark />
+              <BrandMark />
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}

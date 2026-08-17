@@ -1,5 +1,47 @@
 # SoftwareFactory — shared working status
 
+## GLOBAL NAVIGATION REBUILD (2026-08-17, owner reference image)
+
+Owner goal: rebuild the global navigation to match the reference image as
+closely as technically possible, fixed once at the architecture level so every
+applicable page inherits it.
+
+### Done
+
+- [x] `components/brand-mark.tsx` — the mark existed twice, drawn differently
+  in the header and in the console sidebar, so the same page could show two
+  logos that disagreed about their own colours. Both now render one component.
+- [x] Header rebuilt against the reference: hexagon-with-AI mark instead of the
+  gear tile, FACTORY in the lime the console already uses as its accent, the
+  bar full-bleed instead of a centred 1400px column (which had the logo sitting
+  280px in from the left edge), and the account cluster as the image shows it —
+  two-line super-admin chip, truncated address, gradient Open Console, Sign out.
+- [x] `lib/navigation.ts` untouched: the entries and their order
+  (Dashboard, Projects, Runs, Activity, Admin, Platform, Features, Pricing,
+  Resources, About) already matched the reference exactly.
+- [x] `app/auth/layout.tsx` — `/auth/sign-in`, `/auth/sign-up` and
+  `/auth/onboarding` sit outside both route groups and inherited only the root
+  layout, so they rendered **no header at all**. They now render the same one.
+- [x] The "every page has the global navigation" contract is asserted for every
+  route in `tests/e2e/pages.spec.ts`, not for the two that were broken, so a
+  future route group cannot become the next exception. Removing the auth layout
+  fails both auth routes.
+
+### Deliberate departures from the image
+
+- The super-admin chip breaks over two lines by width, not a `<br>`: a hard
+  break splits the accessible name into two text nodes, so a screen reader
+  stops hearing one phrase.
+- Open Console keeps its label on one line. The reference wraps it, but that
+  reads as a squeeze at that viewport rather than an intent.
+- The mark takes `min-w-0`, not `shrink-0`. Written the other way it refused to
+  give at 320px and pushed the account controls off the right edge — caught by
+  the responsive sweep. The glyph holds its size; the words truncate.
+- `/offline` keeps no header: it is the one page the service worker caches, so
+  it must not depend on a server-resolved session.
+
+---
+
 ## MULTI-BOT PROJECT ASSIGNMENT (2026-08-17, active goal)
 
 Owner goal: assign several connected bots to ONE project, configure each
