@@ -65,7 +65,9 @@ export function ReportsConsole() {
         signedOutDescription="Reports belong to your workspace."
         returnPath="/solutions/reports"
         emptyTitle="No reports yet"
-        emptyDescription="Structured reports appear only after durable command, run, validation, pull-request, or CI evidence exists."
+        emptyDescription="Reports summarize work that actually happened — requests, runs, checks and pull requests. The first one appears after a bot completes a piece of work."
+        emptyActionHref="/solutions/bot-manager"
+        emptyActionLabel="Give a bot something to do"
       >
         {(reports) => (
           <ul className="divide-y divide-[var(--border)]">

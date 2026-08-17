@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, RefreshCw, type LucideIcon } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCw, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, StatusBadge } from "@/components/ui";
@@ -78,6 +79,8 @@ export function TenantListShell<Item>({
   returnPath,
   emptyTitle,
   emptyDescription,
+  emptyActionHref,
+  emptyActionLabel,
   children,
   action,
 }: {
@@ -90,6 +93,15 @@ export function TenantListShell<Item>({
   returnPath: string;
   emptyTitle: string;
   emptyDescription: string;
+  /**
+   * Where a person goes to make this page non-empty, and what that step is
+   * called. An empty page that only describes its emptiness is a dead end:
+   * the reader has to already know which other page creates the thing. Both
+   * are optional so a page with no such step stays honest rather than
+   * inventing one.
+   */
+  emptyActionHref?: string;
+  emptyActionLabel?: string;
   children: (items: Item[]) => React.ReactNode;
   action?: React.ReactNode;
 }) {
@@ -158,6 +170,12 @@ export function TenantListShell<Item>({
           <div className="max-w-sm">
             <p className="font-semibold text-foreground">{emptyTitle}</p>
             <p className="mt-2 text-sm text-muted">{emptyDescription}</p>
+            {emptyActionHref && emptyActionLabel ? (
+              <Link href={emptyActionHref} className="btn btn-primary btn-sm mt-4">
+                {emptyActionLabel}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            ) : null}
           </div>
         </div>
       )}

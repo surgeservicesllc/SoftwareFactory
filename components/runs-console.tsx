@@ -203,7 +203,13 @@ export function RunsConsole() {
         signedOutDescription="Run history belongs to your workspace."
         returnPath="/solutions/runs"
         emptyTitle="Nothing has run yet"
-        emptyDescription="A connected worker creates a durable run here after the orchestrator resolves a command to one exact repository."
+        /* The old copy explained the architecture ("the orchestrator resolves
+           a command to one exact repository") to a reader who wanted to know
+           where their work went. This says what a run is and where one comes
+           from, and the button is the answer to "so what do I do?". */
+        emptyDescription="A run is one piece of work a bot carried out, with its evidence. Ask a bot for something in Bot Manager and its run appears here."
+        emptyActionHref="/solutions/bot-manager"
+        emptyActionLabel="Give a bot something to do"
       >
         {(runs) => (
           <div className="divide-y divide-[var(--border)]">
