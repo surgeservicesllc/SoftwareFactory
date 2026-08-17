@@ -85,7 +85,11 @@ revoke all on function public.ai_usage_windows_valid(jsonb)
 -- The evidence table
 -- ---------------------------------------------------------------------------
 
-create table public.ai_account_usage_observations (
+-- `if not exists` on the table, indexes, and trigger: this migration rides
+-- the surgical apply path (psql with ON_ERROR_STOP), which may replay a file
+-- the ledger lost track of. Everything else here is create-or-replace or
+-- naturally idempotent (enable/force RLS, revoke/grant).
+create table if not exists public.ai_account_usage_observations (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   ai_account_id uuid not null,
@@ -116,10 +120,10 @@ create table public.ai_account_usage_observations (
 comment on table public.ai_account_usage_observations is
   'Append-only provider-usage evidence per AI account, recorded by the auth-broker sweep. The console renders the latest row per account and nothing else.';
 
-create index ai_account_usage_latest_idx
+create index if not exists ai_account_usage_latest_idx
   on public.ai_account_usage_observations (ai_account_id, observed_at desc);
 
-create index ai_account_usage_organization_idx
+create index if not exists ai_account_usage_organization_idx
   on public.ai_account_usage_observations (organization_id, observed_at desc);
 
 alter table public.ai_account_usage_observations enable row level security;
@@ -144,6 +148,8 @@ $function$;
 revoke all on function public.ai_account_usage_no_rewrite()
   from public, anon, authenticated, service_role;
 
+drop trigger if exists ai_account_usage_observations_append_only
+  on public.ai_account_usage_observations;
 create trigger ai_account_usage_observations_append_only
   before update or delete on public.ai_account_usage_observations
   for each row execute function public.ai_account_usage_no_rewrite();
