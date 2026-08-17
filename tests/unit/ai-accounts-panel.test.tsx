@@ -181,5 +181,58 @@ describe("AiAccountsPanel", () => {
     expect(await screen.findByText("Claude account 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /disconnect/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reconnect/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
+  });
+
+  it("requests a real verification sweep from the Refresh button and waits for evidence", async () => {
+    // Refresh must produce fresh verification, not re-read stale rows: the
+    // click posts a worker wake, and the button stays "Refreshing" until the
+    // account's lastVerifiedAt actually advances.
+    const calls: string[] = [];
+    stubAccounts([connectedAccount, reauthAccount], (url, init) => {
+      if (url === "/api/ai-accounts/refresh") {
+        calls.push(`${init?.method ?? "GET"} ${url}`);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ requested: true, workerWoken: true }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+
+    render(<AiAccountsPanel canManage onChanged={() => undefined} />);
+
+    // One Refresh per verifiable account (connected + needs_reauth).
+    const refreshButtons = await screen.findAllByRole("button", { name: /^refresh$/i });
+    expect(refreshButtons).toHaveLength(2);
+
+    await user.click(refreshButtons[0]!);
+
+    expect(calls).toEqual(["POST /api/ai-accounts/refresh"]);
+    // Evidence has not arrived, so the marker holds and the button disables.
+    const refreshingButton = await screen.findByRole("button", { name: /refreshing/i });
+    expect(refreshingButton).toBeDisabled();
+  });
+
+  it("says so when no worker could be woken directly", async () => {
+    stubAccounts([connectedAccount], (url) => {
+      if (url === "/api/ai-accounts/refresh") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ requested: true, workerWoken: false }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+
+    render(<AiAccountsPanel canManage onChanged={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /^refresh$/i }));
+
+    expect(await screen.findByText(/scheduled sweep will re-verify/i)).toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, KeyRound, Loader2, Pencil, Trash2, Unplug } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Check, KeyRound, Loader2, Pencil, RefreshCw, Trash2, Unplug } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
 import {
@@ -61,13 +61,48 @@ export function AiAccountsPanel({
   const [editName, setEditName] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  // Refresh is evidence, not optimism: the map holds each account's request
+  // time, and the marker clears only when the worker's re-verification moves
+  // `lastVerifiedAt` past it (or a quiet three minutes expires the wait).
+  // The ref mirrors the state so the async load path can prune against the
+  // freshest markers without a setState-in-effect cascade.
+  const [refreshing, setRefreshingState] = useState<Record<string, number>>({});
+  const refreshingRef = useRef<Record<string, number>>({});
+  const updateRefreshing = useCallback((next: Record<string, number>) => {
+    refreshingRef.current = next;
+    setRefreshingState(next);
+  }, []);
 
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/ai-accounts", { cache: "no-store" });
       if (!response.ok) return;
       const body = (await response.json()) as { accounts?: AccountView[] };
-      setAccounts(body.accounts ?? []);
+      const nextAccounts = body.accounts ?? [];
+      setAccounts(nextAccounts);
+      // Fresh evidence clears a refresh marker; a quiet three minutes expires
+      // it with an honest notice instead of an eternal spinner.
+      const entries = Object.entries(refreshingRef.current);
+      if (entries.length > 0) {
+        const next: Record<string, number> = {};
+        let timedOut = false;
+        for (const [id, requestedAt] of entries) {
+          const account = nextAccounts.find((entry) => entry.id === id);
+          const verifiedAt = account?.lastVerifiedAt ? Date.parse(account.lastVerifiedAt) : 0;
+          if (verifiedAt > requestedAt) continue;
+          if (Date.now() - requestedAt > 180_000) {
+            timedOut = true;
+            continue;
+          }
+          next[id] = requestedAt;
+        }
+        if (Object.keys(next).length !== entries.length) {
+          updateRefreshing(next);
+          if (timedOut) {
+            setNotice("The refresh has not completed yet — the worker sweep continues in the background.");
+          }
+        }
+      }
     } catch {
       // The panel is additive; a failed read leaves it hidden rather than red.
     }
@@ -84,7 +119,7 @@ export function AiAccountsPanel({
     } catch {
       // Same rule: absence of usage evidence is not an outage.
     }
-  }, []);
+  }, [updateRefreshing]);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void load(), 0);
@@ -99,6 +134,38 @@ export function AiAccountsPanel({
       window.clearInterval(refresh);
     };
   }, [load]);
+
+  const requestRefresh = useCallback(async (account: AccountView) => {
+    setBusyId(account.id);
+    setNotice("");
+    try {
+      const response = await fetch("/api/ai-accounts/refresh", { method: "POST" });
+      const body = (await response.json()) as {
+        workerWoken?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setNotice(body.error?.message ?? "The refresh could not be requested.");
+        return;
+      }
+      updateRefreshing({ ...refreshingRef.current, [account.id]: Date.now() });
+      if (body.workerWoken === false) {
+        setNotice("Refresh queued — the scheduled sweep will re-verify shortly.");
+      }
+    } catch {
+      setNotice("The refresh could not be requested.");
+    } finally {
+      setBusyId(null);
+    }
+  }, [updateRefreshing]);
+
+  // Poll faster only while a refresh is outstanding, so the new verification
+  // shows up within seconds of the worker recording it.
+  useEffect(() => {
+    if (Object.keys(refreshing).length === 0) return;
+    const interval = window.setInterval(() => void load(), 5_000);
+    return () => window.clearInterval(interval);
+  }, [refreshing, load]);
 
   const rename = useCallback(async (account: AccountView) => {
     const name = editName.trim();
@@ -300,6 +367,21 @@ export function AiAccountsPanel({
               </span>
               {canManage ? (
                 <div className="flex shrink-0 gap-2">
+                  {account.status === "connected" || account.status === "needs_reauth" ? (
+                    <button
+                      type="button"
+                      onClick={() => void requestRefresh(account)}
+                      disabled={busyId === account.id || refreshing[account.id] !== undefined}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      {refreshing[account.id] !== undefined ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <RefreshCw className="size-3.5" aria-hidden="true" />
+                      )}
+                      {refreshing[account.id] !== undefined ? "Refreshing" : "Refresh"}
+                    </button>
+                  ) : null}
                   {account.status !== "connected" && account.status !== "revoked" ? (
                     <button
                       type="button"
