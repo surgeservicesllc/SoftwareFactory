@@ -14,6 +14,35 @@ refusal and change nothing.)
 (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
 
+> ## Probe before you apply — 2026-08-17 20:5xZ (supersedes every count below as a basis for action)
+>
+> **The ledger understates the live schema, and every apply decision made from
+> it alone has been wrong.** Two runs settled this:
+>
+> - Run `32068091179` applied the `20260815` range the ledger called
+>   outstanding, and stopped at the second file: the enum labels and
+>   `organizations.maximum_concurrent_runs` already existed. Nothing was
+>   damaged — the failing statement was an `ALTER TABLE`, which is atomic — but
+>   the premise was false.
+> - Run `32068262957` ran the new read-only `scope=probe` and printed what
+>   actually exists. Of the objects the project controls need, **13 of 19 were
+>   already live** while the ledger listed their whole range as unapplied.
+>
+> The method that works is therefore: **`scope=probe` first, apply only what it
+> reports missing, and record each file as it lands.** Run `32068584897` did
+> exactly that for the six genuinely absent objects — `archive_project`,
+> `unarchive_project`, `update_agent_run_review`, `delete_agent_run`, and the
+> two `agent_runs.review_*` columns — and a confirming probe (`32068654691`)
+> shows 19 of 19 present.
+>
+> A full `db push` still cannot be used: it refuses outright, because local
+> files sort before the remote's last migration. That refusal is the CLI
+> protecting production, not a problem to route around with `--include-all`.
+>
+> The counts in the sections below remain a true description of the *ledger*.
+> They are not a description of the database, and should not be used to decide
+> what to apply.
+
 > ## Measured live, 2026-08-16 17:07Z — the first full listing (supersedes every earlier measure)
 >
 > Workflow run `31960618697` (`apply-hosted-migrations.yml`, `scope=broker-functions`, password-only
