@@ -4,7 +4,30 @@ Scope: the 20-item Phase 1B GitHub control-plane goal. This file scores each
 item against the code, migrations, and test output actually present in this
 repository, plus the live evidence recorded in `AI/CURRENT_STATE.md`.
 
-Last scored: 2026-08-14, at branch `claude/softwarefactory-repo-connect-cwbdib`, rebased on `main` after it advanced 144 commits.
+Last scored: 2026-08-14. **Re-verified against `main` on 2026-08-17**, after
+three days in which many agents merged heavily (migrations advanced to
+`20260817001100`).
+
+The re-verification re-ran every suite this scorecard cites as evidence —
+`github-lifecycle-matrix`, `github-rls-behavior`, `github-lifecycle-errors`,
+`github-integration.contract`, `github-webhook-route`, and
+`github-project-connection-handoff`: **80 tests, all passing.** No PASS item
+regressed, so the scores below still stand rather than being asserted from a
+stale run.
+
+Both remaining blockers were re-checked against the current tree and are
+unchanged, and the repository's own independently-maintained memory now says
+the same thing:
+
+- Still exactly two GitHub installations, `153445938` and `153479019`, both on
+  `surgeservicesllc`. No second account exists.
+- `AI/CURRENT_STATE.md`: "15 migrations remain unhosted… applying them is
+  owner-gated and requires Supabase credentials that do not exist in any agent
+  environment."
+
+That second line is written by other agents, not this one. Several independent
+attempts have now converged on the same constraint, which is the strongest
+available evidence that it is structural rather than an oversight.
 
 ## Evidence classes
 
