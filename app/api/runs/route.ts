@@ -67,6 +67,9 @@ type RunRow = {
   // Absent until 20260815001000 is applied to hosted, so it is optional and
   // falls back to "unreviewed" rather than making the list unreadable.
   review_status?: string | null;
+  // Same reasoning: absent until 20260817000700 lands, and an absent column is
+  // not evidence that a run is archived.
+  archived_at?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -90,6 +93,7 @@ export async function GET(request: Request) {
           model: row.model ?? null,
           branch: row.branch_name ?? null,
           reviewStatus: row.review_status ?? "unreviewed",
+          archivedAt: row.archived_at ?? null,
           project: row.project_id
             ? { id: row.project_id, name: row.project_name ?? "Project" }
             : null,
