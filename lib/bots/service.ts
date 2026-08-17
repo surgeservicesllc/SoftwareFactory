@@ -108,6 +108,8 @@ type AssignmentRow = {
   requires_human_approval?: boolean | null;
   max_concurrent_tasks?: number | null;
   priority?: number | null;
+  model?: string | null;
+  work_effort?: string | null;
 };
 
 type ProjectRow = {
@@ -212,6 +214,9 @@ export function serializeAssignment(row: AssignmentRow): SerializedAssignment {
     status: toAssignmentStatus(row.status),
     assignedAt: row.assigned_at,
     releasedAt: row.released_at,
+    // Per-posting execution preferences: null model means the bot's default.
+    model: row.model ?? null,
+    workEffort: row.work_effort ?? "medium",
     config: assignmentConfigFromRow(row),
   };
 }
@@ -302,7 +307,7 @@ export async function loadBotFabric(
       "id,bot_id,project_id,role_id,status,assigned_at,released_at,preset,responsibilities,"
       + "instructions,repository_access,branch_strategy,can_open_pull_request,"
       + "can_merge_pull_request,pipeline_access,environment_access,tools,"
-      + "requires_human_approval,max_concurrent_tasks,priority",
+      + "requires_human_approval,max_concurrent_tasks,priority,model,work_effort",
       organizationId,
       "assigned_at",
       500,

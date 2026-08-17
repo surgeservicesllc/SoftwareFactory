@@ -24,6 +24,7 @@ describe("AppShell navigation", () => {
     // linked to nothing.
     expect(links).toEqual([
       "Overview",
+      "AI Factory",
       "Projects",
       "Pipelines",
       "Bots",

@@ -161,6 +161,34 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+### AI FACTORY (owner goal 2026-08-17, /loop active — reference image)
+
+Round 1 (this merge):
+- [x] /solutions/ai-factory + "AI Factory" nav entry under Overview
+  (redirect contract, pins, pages.spec, 35-label reachability). Guided
+  8-step journey — Connect Repository → Create Project → Pipeline Ready
+  → Connect Bots → Assign Bots → Configure Bot Settings → Issue a
+  Command → Watch It Ship — with completion DERIVED from live records
+  (installations, projects, accounts, assignments incl. configured
+  count, commands), so progress survives refresh by construction; each
+  step deep-links the real flow (composer carries ?project=). Command
+  execution section shows recent commands with worker-advanced stages.
+  Integrated services (GitHub live count, Vercel-on-merge, Supabase) +
+  Observability links — only real services listed. Mobile-first
+  vertical stepper. 4 unit tests.
+- [x] Owner add-on: per-posting Model (Fable 5/Opus 5/... from the
+  provider's suggested list, or bot default) + Work Effort
+  (low/medium/high/max) — migration 20260817000900
+  (bot_assignments.model bounded identifier + work_effort check,
+  set_bot_assignment_execution owner/admin RPC, audit event), PATCH
+  /api/bot-assignments/[id] extended, selects on each PostingCard in
+  the project roster (steps 6/7 surface), serialized through
+  lib/bots/service. 1 new unit test.
+- [ ] Round 2+: deeper wizard embedding (inline forms per step),
+  reference visual polish (step connectors band on desktop), full
+  journey re-test from a fresh workspace, breakpoint sweep beyond the
+  e2e viewports.
+
 ### Template CRUD (owner goal 2026-08-17)
 
 - [x] Migration 20260817000700: create/update/delete_pipeline_template

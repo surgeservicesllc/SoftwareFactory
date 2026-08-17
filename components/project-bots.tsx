@@ -39,6 +39,7 @@ import {
   type PipelineAccess,
   type RepositoryAccess,
 } from "@/lib/bots/assignment-config";
+import { findBotProvider } from "@/lib/bots/catalog";
 import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -84,10 +85,21 @@ type Posting = {
   roleId: string;
   status: "active" | "paused" | "released";
   assignedAt: string;
+  /** Per-posting model override; null means the bot's own default model. */
+  model?: string | null;
+  /** How hard this posting should think: low, medium, high, or max. */
+  workEffort?: string;
   config: AssignmentConfig;
   bot: ProjectBot | null;
   role: ProjectRole | null;
 };
+
+const WORK_EFFORTS = [
+  { value: "low", label: "Low — quick passes" },
+  { value: "medium", label: "Medium — the default" },
+  { value: "high", label: "High — thorough" },
+  { value: "max", label: "Max — hardest thinking" },
+] as const;
 
 type Roster = {
   canManage: boolean;
@@ -191,6 +203,32 @@ export function ProjectBots({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load, loadUsage]);
+
+  /** Per-posting execution preferences: model override and work effort. */
+  const setExecution = useCallback(
+    async (posting: Posting, patch: { model?: string; workEffort?: string }) => {
+      setBusy(posting.id);
+      setNotice("");
+      try {
+        const response = await fetch(`/api/bot-assignments/${posting.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!response.ok) {
+          const body = (await response.json()) as { error?: { message?: string } };
+          setNotice(body.error?.message ?? "The posting's execution settings could not be changed.");
+          return;
+        }
+        await load();
+      } catch {
+        setNotice("The posting's execution settings could not be changed.");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [load],
+  );
 
   const setStatus = useCallback(
     async (posting: Posting, status: "active" | "paused") => {
@@ -304,6 +342,7 @@ export function ProjectBots({
               onResume={() => void setStatus(posting, "active")}
               onEdit={() => setEditing(posting)}
               onRemove={() => void release(posting)}
+              onSetExecution={(patch) => void setExecution(posting, patch)}
             />
           ))}
         </ul>
@@ -349,6 +388,7 @@ function PostingCard({
   onResume,
   onEdit,
   onRemove,
+  onSetExecution,
 }: {
   posting: Posting;
   busy: boolean;
@@ -358,9 +398,20 @@ function PostingCard({
   onResume: () => void;
   onEdit: () => void;
   onRemove: () => void;
+  onSetExecution: (patch: { model?: string; workEffort?: string }) => void;
 }) {
   const name = posting.bot?.name ?? "Unknown bot";
   const elevated = elevatedPermissions(posting.config);
+  // Suggested models come from the bot's own provider; the bot's default is
+  // always the first, honest option. A stored override outside the suggestion
+  // list still renders — the row shows what is set, never a normalized guess.
+  const suggestedModels = posting.bot
+    ? findBotProvider(posting.bot.provider)?.suggestedModels ?? []
+    : [];
+  const modelOptions = Array.from(new Set([
+    ...suggestedModels,
+    ...(posting.model ? [posting.model] : []),
+  ]));
 
   return (
     <li className="rounded-lg border border-line p-4">
@@ -388,6 +439,50 @@ function PostingCard({
           <dd className="text-muted">{pipelineAccessLabel(posting.config.pipelineAccess)}</dd>
         </div>
       </dl>
+
+      {/* Execution preferences: which model this posting runs, and how hard
+          it thinks. Saved on change through the owner/admin operation; the
+          empty value clears the override back to the bot's own default. */}
+      {canManage ? (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor={`posting-model-${posting.id}`} className="field-label">Model</label>
+            <select
+              id={`posting-model-${posting.id}`}
+              value={posting.model ?? ""}
+              disabled={busy}
+              onChange={(event) => onSetExecution({ model: event.target.value })}
+              className="input"
+            >
+              <option value="">
+                Bot default{posting.bot?.model ? ` (${posting.bot.model})` : ""}
+              </option>
+              {modelOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor={`posting-effort-${posting.id}`} className="field-label">Work effort</label>
+            <select
+              id={`posting-effort-${posting.id}`}
+              value={posting.workEffort ?? "medium"}
+              disabled={busy}
+              onChange={(event) => onSetExecution({ workEffort: event.target.value })}
+              className="input"
+            >
+              {WORK_EFFORTS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-faint">
+          Model: {posting.model ?? `bot default${posting.bot?.model ? ` (${posting.bot.model})` : ""}`} ·
+          Effort: {posting.workEffort ?? "medium"}
+        </p>
+      )}
 
       {posting.config.responsibilities.length ? (
         <p className="mt-2 text-sm text-muted">
