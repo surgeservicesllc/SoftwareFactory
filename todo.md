@@ -6,6 +6,23 @@ Owner goal: autonomously test/audit/fix/verify EVERY feature until
 production-ready; todo.md is the source of truth; loop until a full sweep
 finds zero actionable defects.
 
+### Frictionless UX sweep (2026-08-17, owner goal)
+
+Evidence base: the owner's own questions this session - "what am I
+adding here", "where is the readout", "how to tell if this is running",
+"how can I choose which bot(s) per project" - each marked a page that
+was truthful and a dead end.
+
+- [x] #187 empty pages name their next step (TenantListShell gains an
+  optional action; Runs/Reports/Backlog/Autonomy wired, jargon rewritten)
+- [x] #188 failed work appears on the dashboard with its reason
+- [x] #189 a saved request says what is happening to it, and links to Runs
+- [x] #190 a set-up project leads to "Give this project work", carrying
+  the project into the composer
+- [x] Unwired-control sweep: every button in components/ has a handler or
+  is a submit; no dead controls found
+- [x] Nav sweep: all 16 sidebar links and every static href resolve
+
 ### Audit backlog (loop working set)
 
 - [x] **Loop tick 2026-08-17 01:11Z**: parallel sessions landed #176-#179
