@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Children, useState } from "react";
 
 import {
@@ -26,6 +26,7 @@ type Run = {
   project?: { id: string; name: string } | null;
   task: { id: string; title: string } | null;
   agent: { id: string; name: string } | null;
+  reviewStatus?: ReviewStatus;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -60,6 +61,10 @@ type RunDetail = Run & {
   cancellationRequestedAt?: string | null;
   cancellable?: boolean;
   retryable?: boolean;
+  reviewStatus?: ReviewStatus;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  deletable?: boolean;
   summary?: string | null;
   blocker?: string | null;
   errorMessage?: string | null;
@@ -72,6 +77,27 @@ type RunDetail = Run & {
   pullRequest?: { number: number; title?: string; state?: string; draft?: boolean; url?: string | null } | null;
   checks?: RunCheck[];
   ci?: { status?: string; conclusion?: string | null; checks?: RunCheck[] } | null;
+};
+
+/**
+ * The one part of a run a person may change.
+ *
+ * Everything else on this page is evidence of something that happened —
+ * provider, model, timings, usage, artifacts — and is deliberately read-only.
+ * The panel below says so out loud rather than showing greyed-out fields and
+ * leaving the reader to guess whether editing is broken or forbidden.
+ */
+const REVIEW_STATUSES = [
+  "unreviewed", "acknowledged", "investigating", "resolved", "ignored",
+] as const;
+type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+const REVIEW_LABELS: Readonly<Record<ReviewStatus, string>> = {
+  acknowledged: "Acknowledged",
+  ignored: "Ignored",
+  investigating: "Investigating",
+  resolved: "Resolved",
+  unreviewed: "Unreviewed",
 };
 
 function statusTone(status: string) {
@@ -139,12 +165,29 @@ export function RunsConsole() {
   const [cancelMessage, setCancelMessage] = useState("");
   const [retryState, setRetryState] = useState<"idle" | "pending" | "error">("idle");
   const [retryMessage, setRetryMessage] = useState("");
+  const [reviewState, setReviewState] = useState<"idle" | "pending" | "error">("idle");
+  const [reviewMessage, setReviewMessage] = useState("");
+  // Null means "not editing this run yet", so the form shows the persisted
+  // values rather than a draft left over from the previously opened run.
+  const [reviewDraft, setReviewDraft] = useState<{ note: string; status: ReviewStatus } | null>(null);
+  const [deleteState, setDeleteState] = useState<"idle" | "confirming" | "pending" | "error">("idle");
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [detachEvidence, setDetachEvidence] = useState(false);
 
   function openRun(runId: string) {
     setCancelState("idle");
     setCancelMessage("");
     setRetryState("idle");
     setRetryMessage("");
+    setReviewState("idle");
+    setReviewMessage("");
+    setReviewDraft(null);
+    setDeleteState("idle");
+    setDeleteMessage("");
+    setDeleteReason("");
+    // Destructive options never carry over from the last run that was open.
+    setDetachEvidence(false);
     void detail.open(runId);
   }
 
@@ -192,8 +235,77 @@ export function RunsConsole() {
     }
   }
 
+  async function saveReview(runId: string, status: ReviewStatus, note: string) {
+    setReviewState("pending");
+    setReviewMessage("");
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewStatus: status,
+          ...(note.trim() ? { reviewNote: note.trim() } : {}),
+        }),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The review could not be saved.");
+      setReviewState("idle");
+      setReviewMessage("Review saved.");
+      setReviewDraft(null);
+      await Promise.all([detail.open(runId), Promise.resolve(reload())]);
+    } catch (error) {
+      setReviewState("error");
+      setReviewMessage(error instanceof Error ? error.message : "The review could not be saved.");
+    }
+  }
+
+  async function deleteRun(runId: string) {
+    setDeleteState("pending");
+    setDeleteMessage("");
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detachEvidence, reason: deleteReason.trim() }),
+      });
+      const body = (await response.json()) as {
+        deleted?: { artifacts: number; events: number; validations: number };
+        detached?: { deployments: number; pullRequests: number; testRuns: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be deleted.");
+      // Say what else moved. A bare "deleted" would hide that pull requests or
+      // deployments were unlinked in the same operation.
+      const detached = body.detached;
+      const unlinked = detached
+        ? detached.pullRequests + detached.deployments + detached.testRuns
+        : 0;
+      detail.close();
+      setDeleteState("idle");
+      setDeleteReason("");
+      setDetachEvidence(false);
+      setDeleteMessage(
+        unlinked > 0
+          ? `Run deleted. ${unlinked} linked record${unlinked === 1 ? " was" : "s were"} kept and unlinked.`
+          : "Run deleted.",
+      );
+      reload();
+    } catch (error) {
+      setDeleteState("error");
+      setDeleteMessage(error instanceof Error ? error.message : "The run could not be deleted.");
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {deleteMessage && deleteState !== "confirming" ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${deleteState === "error" ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {deleteMessage}
+        </p>
+      ) : null}
       <TenantListShell
         state={state}
         reload={reload}
@@ -241,6 +353,12 @@ export function RunsConsole() {
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
                         <StatusBadge tone={statusTone(run.status)}>{runStatusLabel(run.status)}</StatusBadge>
+                        {/* Shown only once someone has triaged it. A badge
+                            reading "Unreviewed" on every row would be noise on
+                            the common case and bury the reviewed ones. */}
+                        {run.reviewStatus && run.reviewStatus !== "unreviewed" ? (
+                          <StatusBadge tone="neutral">{REVIEW_LABELS[run.reviewStatus]}</StatusBadge>
+                        ) : null}
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
                           View run
@@ -326,6 +444,170 @@ export function RunsConsole() {
                 <p className={`rounded-lg border p-3 text-sm ${retryState === "error" ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`} aria-live="polite">
                   {retryMessage}
                 </p>
+              ) : null}
+
+              <section className="rounded-lg border border-line p-4" aria-labelledby={`review-${run.id}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 id={`review-${run.id}`} className="text-sm font-semibold text-foreground">
+                    Review
+                  </h3>
+                  <p className="text-xs text-muted">
+                    {run.reviewedAt
+                      ? `Last reviewed ${formatDateTime(run.reviewedAt)}`
+                      : "Not reviewed yet"}
+                  </p>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  The status and note below are the editable part of a run. Everything
+                  else on this page records what actually happened — provider, model,
+                  timings, files, checks — and is read-only so the console cannot state
+                  something the factory did not do.
+                </p>
+
+                <div className="mt-3 flex flex-col gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Status</span>
+                    <select
+                      className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                      value={reviewDraft?.status ?? run.reviewStatus ?? "unreviewed"}
+                      onChange={(event) => setReviewDraft({
+                        note: reviewDraft?.note ?? run.reviewNote ?? "",
+                        status: event.target.value as ReviewStatus,
+                      })}
+                    >
+                      {REVIEW_STATUSES.map((status) => (
+                        <option key={status} value={status}>{REVIEW_LABELS[status]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Note</span>
+                    <textarea
+                      className="min-h-20 rounded border border-line bg-surface px-3 py-2 text-sm"
+                      maxLength={2000}
+                      placeholder="What was decided about this run, and why."
+                      value={reviewDraft?.note ?? run.reviewNote ?? ""}
+                      onChange={(event) => setReviewDraft({
+                        note: event.target.value,
+                        status: reviewDraft?.status ?? run.reviewStatus ?? "unreviewed",
+                      })}
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={reviewState === "pending" || reviewDraft === null}
+                      onClick={() => void saveReview(
+                        run.id,
+                        reviewDraft?.status ?? run.reviewStatus ?? "unreviewed",
+                        reviewDraft?.note ?? "",
+                      )}
+                    >
+                      {reviewState === "pending"
+                        ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        : <Save className="size-4" aria-hidden="true" />}
+                      Save review
+                    </button>
+                    {reviewDraft !== null ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setReviewDraft(null)}
+                      >
+                        Discard changes
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {reviewMessage ? (
+                    <p
+                      className={`text-sm ${reviewState === "error" ? "text-[var(--danger)]" : "text-muted"}`}
+                      aria-live="polite"
+                    >
+                      {reviewMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+
+              {run.deletable ? (
+                <section className="rounded-lg border border-[var(--danger-border)] p-4" aria-labelledby={`delete-${run.id}`}>
+                  <h3 id={`delete-${run.id}`} className="text-sm font-semibold text-[var(--danger)]">
+                    Delete this run
+                  </h3>
+                  <p className="mt-1 text-xs text-muted">
+                    Removes the run and its own events, artifacts and validations. The
+                    deletion itself is recorded in the activity trail first, so the
+                    account of it survives. Nothing outside this database is touched: a
+                    pull request on GitHub stays exactly as it is.
+                  </p>
+
+                  {deleteState === "confirming" ? (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
+                        <input
+                          type="text"
+                          className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                          maxLength={400}
+                          value={deleteReason}
+                          onChange={(event) => setDeleteReason(event.target.value)}
+                          placeholder="Why this run is being removed"
+                        />
+                      </label>
+                      <label className="flex items-start gap-2 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={detachEvidence}
+                          onChange={(event) => setDetachEvidence(event.target.checked)}
+                        />
+                        <span>
+                          Keep and unlink any pull request, deployment or test run this
+                          run produced. Without this, a run that produced one of those is
+                          refused rather than silently orphaning it.
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          disabled={deleteState !== "confirming" || deleteReason.trim().length < 10}
+                          onClick={() => void deleteRun(run.id)}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Delete permanently
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setDeleteState("idle"); setDeleteMessage(""); }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm mt-3"
+                      disabled={deleteState === "pending"}
+                      onClick={() => { setDeleteState("confirming"); setDeleteMessage(""); }}
+                    >
+                      {deleteState === "pending"
+                        ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        : <Trash2 className="size-4" aria-hidden="true" />}
+                      Delete run
+                    </button>
+                  )}
+
+                  {deleteMessage && deleteState === "error" ? (
+                    <p className="mt-2 text-sm text-[var(--danger)]" aria-live="polite">{deleteMessage}</p>
+                  ) : null}
+                </section>
               ) : null}
 
               <DetailFacts facts={[

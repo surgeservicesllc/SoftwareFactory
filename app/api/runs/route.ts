@@ -64,6 +64,9 @@ type RunRow = {
   provider?: string | null;
   model?: string | null;
   branch_name?: string | null;
+  // Absent until 20260815001000 is applied to hosted, so it is optional and
+  // falls back to "unreviewed" rather than making the list unreadable.
+  review_status?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -86,6 +89,7 @@ export async function GET(request: Request) {
           provider: row.provider ?? null,
           model: row.model ?? null,
           branch: row.branch_name ?? null,
+          reviewStatus: row.review_status ?? "unreviewed",
           project: row.project_id
             ? { id: row.project_id, name: row.project_name ?? "Project" }
             : null,

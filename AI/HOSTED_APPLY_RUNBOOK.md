@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 35**, listed in the measured section below. The repository total is 99 migration
+**The current total is 38**, listed in the measured section below. The repository total is 102 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
 outstanding. (Newest: `20260817000100_project_edit_details` — the project name/description edit
 operation, ADR-078, one definer function; until it is applied, production's Edit-project dialog

@@ -188,6 +188,20 @@ export const runDetailSchema = z.object({
   }).strict().nullable(),
   checks: runChecksSchema,
   ci: z.object({ checks: runChecksSchema }).strict(),
+  // The human layer on the run, and whether this caller may remove it.
+  //
+  // Defaulted rather than required, because hosted Supabase serves the older
+  // projection until `20260815001000` is applied and a strict requirement here
+  // would turn every run detail into a 500 in the meantime. The defaults are
+  // also the right answer for that state: an unmigrated database has no
+  // reviews, and `deletable: false` keeps the delete control hidden until the
+  // function that enforces its rules actually exists.
+  reviewStatus: z.enum([
+    "unreviewed", "acknowledged", "investigating", "resolved", "ignored",
+  ]).default("unreviewed"),
+  reviewNote: z.string().min(1).max(2_000).nullable().default(null),
+  reviewedAt: nullableTimestampSchema.default(null),
+  deletable: z.boolean().default(false),
 }).strict();
 
 const taskDependencySchema = z.object({
