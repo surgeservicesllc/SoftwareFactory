@@ -83,12 +83,14 @@ const navigationEntries: readonly NavigationEntry[] = [
   },
   {
     label: "Pipelines",
-    href: "/solutions/workflows",
+    href: "/solutions/pipelines",
     icon: Workflow,
     subpages: [
-      // The workflows page IS the template library: compiled graph templates,
-      // nothing executed. The design's Active/Schedules/Archived subpages
-      // have no pipeline instances behind them yet, so they are not linked.
+      // Active and All are live lifecycle views over saved commands; the
+      // workflows page carries each template's full compiled preview. The
+      // design's Schedules subpage has no scheduler model yet and stays out.
+      { label: "Active", href: "/solutions/pipelines", icon: HeartPulse },
+      { label: "All Pipelines", href: "/solutions/pipelines?view=all", icon: Workflow },
       { label: "Templates", href: "/solutions/workflows", icon: Workflow },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
     ],
