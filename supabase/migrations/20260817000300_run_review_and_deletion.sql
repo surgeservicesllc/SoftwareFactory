@@ -596,8 +596,11 @@ grant execute on function public.delete_agent_run(uuid, uuid, text, boolean) to 
 -- answering it.
 --
 -- The return type gains a column, so this is a drop and recreate rather than a
--- replace. Everything else about the projection is unchanged.
-drop function public.list_agent_runs(uuid, integer);
+-- replace. Everything else about the projection is unchanged. IF EXISTS,
+-- because 20260817001000 later supersedes this signature entirely: on a
+-- surgical re-run the old function is already gone, and the recreate below
+-- is itself dropped again by 001000 later in the same sequence.
+drop function if exists public.list_agent_runs(uuid, integer);
 create function public.list_agent_runs(
   p_organization_id uuid, p_limit integer default 50
 )
