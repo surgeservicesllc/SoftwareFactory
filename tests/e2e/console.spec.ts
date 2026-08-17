@@ -8,6 +8,7 @@ const consoleNavigation = [
   "Overview",
   "Projects",
   "All Projects",
+  "My Projects",
   "Archived",
   "Pipelines",
   "Templates",

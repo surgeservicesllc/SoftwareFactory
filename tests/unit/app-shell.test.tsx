@@ -23,7 +23,7 @@ describe("AppShell navigation", () => {
     // absent rather than linked to nothing.
     expect(links).toEqual([
       "Overview",
-      "Projects", "All Projects", "Archived",
+      "Projects", "All Projects", "My Projects", "Archived",
       "Pipelines", "Templates", "Backlog",
       "Bots", "Connect Bot", "My Bots", "Bot Activity",
       "Runs",

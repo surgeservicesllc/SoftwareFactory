@@ -21,6 +21,7 @@ const nextConfig: NextConfig = {
       "bot-manager",
       "connections",
       "files",
+      "myprojects",
       "operations",
       "portfolio",
       "projects",

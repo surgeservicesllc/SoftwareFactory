@@ -57,6 +57,16 @@ page or anchored section; aspirational subpages are not rendered.
 - [x] Gates: unit 2948+15 green (new collapse/order/archived tests),
   eslint 0, tsc clean, production build exit 0, Playwright console+pages
   72/72 across 3 viewports (30-label reachability contract).
+- [x] Merged #194 (b57cea1); production verified live: all new labels
+  serving on /solutions, archived route 200.
+- [x] My Projects (owner mockup, same day): /solutions/myprojects renders
+  every project as a chevron-collapsible row (first open by default)
+  expanding into the SAME ProjectInspector the Projects page uses (now
+  exported, one source of truth); page actions Import Repository / New
+  Project land on existing controls; nav Projects group gains My Projects
+  (31-label contract); pages.spec covers the route; 3 new unit tests
+  (multi-project expand/fold, empty→add-project, signed-out gate).
+  Shared with Me / Starred still have no backing model and stay absent.
 
 ### Audit backlog (loop working set)
 

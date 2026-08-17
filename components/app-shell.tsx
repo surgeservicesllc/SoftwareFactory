@@ -10,6 +10,7 @@ import {
   Cpu,
   FileText,
   FolderKanban,
+  FolderOpen,
   Gauge,
   Fingerprint,
   GitBranch,
@@ -73,6 +74,10 @@ const navigationEntries: readonly NavigationEntry[] = [
     icon: FolderKanban,
     subpages: [
       { label: "All Projects", href: "/solutions/projects", icon: FolderKanban },
+      // The portfolio as collapsible rows; same live records, reached from a
+      // list-first posture. Shared with Me / Starred still have no backing
+      // model and stay absent.
+      { label: "My Projects", href: "/solutions/myprojects", icon: FolderOpen },
       { label: "Archived", href: "/solutions/projects?filter=archived", icon: ClipboardList },
     ],
   },
