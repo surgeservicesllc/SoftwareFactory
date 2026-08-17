@@ -167,7 +167,6 @@ export function resolveQuorum(
   const passes = verifications.filter(
     (entry) => entry.verdict === "PASS" || (policy.warnPasses && entry.verdict === "WARN"),
   );
-  const rejects = verifications.filter((entry) => entry.verdict === "REJECT");
 
   if (policy.strategy === "SPECIALIZED_LENSES") {
     const required = policy.requiredLenses ?? [];
@@ -180,17 +179,33 @@ export function resolveQuorum(
         reasons: [`Missing required verification lens(es): ${missing.join(", ")}.`],
       };
     }
-    if (rejects.length > 0) {
+    // Everything that did not pass, not only what rejected.
+    //
+    // This branch used to look at REJECT alone, so a WARN returned PASS even
+    // with `warnPasses: false` — every other strategy honours that flag, and
+    // this is the strategy that carries the required security lens, so it was
+    // the worst one to let a warning through. The reason string then said "all
+    // required lenses passed", which was not true of the lens that warned.
+    const failures = verifications.filter((entry) => !passes.includes(entry));
+    if (failures.length > 0) {
       return {
         verdict: "REJECT",
         satisfied: false,
-        reasons: rejects.map(
-          (entry) => `${entry.lens} verifier ${entry.verifier.agentId} returned REJECT.`,
+        reasons: failures.map(
+          (entry) => `${entry.lens} verifier ${entry.verifier.agentId} returned ${entry.verdict}.`,
         ),
       };
     }
-    reasons.push(`All ${required.length} required lens(es) passed.`);
-    return { verdict: "PASS", satisfied: true, reasons };
+    // Surfaced as WARN rather than PASS when `warnPasses` admitted a warning,
+    // matching MAJORITY. The step is satisfied either way; a caller that wants
+    // to know a lens warned should not have to re-derive it from the evidence.
+    const warned = passes.some((entry) => entry.verdict === "WARN");
+    reasons.push(
+      warned
+        ? `All ${required.length} required lens(es) cleared, with at least one warning.`
+        : `All ${required.length} required lens(es) passed.`,
+    );
+    return { verdict: warned ? "WARN" : "PASS", satisfied: true, reasons };
   }
 
   if (policy.strategy === "UNANIMOUS") {

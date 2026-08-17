@@ -381,6 +381,61 @@ describe("verification", () => {
     expect(outcome.reasons[0]).toContain("not the same as passing");
   });
 
+  it("does not let SPECIALIZED_LENSES pass a WARN that the policy said should not pass", () => {
+    // Every other strategy honours `warnPasses`. This branch looked at REJECT
+    // alone, so a warning cleared -- on the one strategy that carries a
+    // required security lens.
+    const verifications: Verification[] = [
+      { verifier: { agentId: "v1", provider: "a" }, lens: "security", verdict: "WARN", evidence: ["weak hash"] },
+      { verifier: { agentId: "v2", provider: "b" }, lens: "correctness", verdict: "PASS", evidence: [] },
+    ];
+    const policy = {
+      strategy: "SPECIALIZED_LENSES" as const,
+      requiredLenses: ["security", "correctness"] as const,
+      warnPasses: false,
+    };
+
+    const outcome = resolveQuorum(verifications, policy);
+    expect(outcome.satisfied).toBe(false);
+    expect(outcome.reasons[0]).toContain("returned WARN");
+
+    // The same inputs under UNANIMOUS always rejected. The two strategies
+    // disagreeing about one flag is what made this a bug rather than a choice.
+    expect(resolveQuorum(verifications, { strategy: "UNANIMOUS", warnPasses: false }).satisfied).toBe(false);
+  });
+
+  it("clears a WARN under SPECIALIZED_LENSES when the policy allows it, and says so", () => {
+    const verifications: Verification[] = [
+      { verifier: { agentId: "v1", provider: "a" }, lens: "security", verdict: "WARN", evidence: ["weak hash"] },
+      { verifier: { agentId: "v2", provider: "b" }, lens: "correctness", verdict: "PASS", evidence: [] },
+    ];
+
+    const outcome = resolveQuorum(verifications, {
+      strategy: "SPECIALIZED_LENSES",
+      requiredLenses: ["security", "correctness"],
+      warnPasses: true,
+    });
+
+    expect(outcome.satisfied).toBe(true);
+    // WARN rather than PASS, matching MAJORITY: a caller should not have to
+    // re-derive from the evidence that a lens warned.
+    expect(outcome.verdict).toBe("WARN");
+    expect(outcome.reasons[0]).toContain("warning");
+  });
+
+  it("still reports a clean SPECIALIZED_LENSES run as PASS", () => {
+    const outcome = resolveQuorum(
+      [
+        { verifier: { agentId: "v1", provider: "a" }, lens: "security", verdict: "PASS", evidence: [] },
+        { verifier: { agentId: "v2", provider: "b" }, lens: "correctness", verdict: "PASS", evidence: [] },
+      ],
+      { strategy: "SPECIALIZED_LENSES", requiredLenses: ["security", "correctness"], warnPasses: false },
+    );
+
+    expect(outcome.verdict).toBe("PASS");
+    expect(outcome.satisfied).toBe(true);
+  });
+
   it("requires every declared lens under SPECIALIZED_LENSES", () => {
     const outcome = resolveQuorum(
       [{ verifier: { agentId: "v1", provider: "a" }, lens: "correctness", verdict: "PASS", evidence: [] }],
