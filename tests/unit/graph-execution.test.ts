@@ -106,6 +106,91 @@ describe("DAG scheduler", () => {
     expect(decision.start).toEqual(["u"]);
   });
 
+  it("propagates blocking past the first hop, so an unreachable subtree is not left PENDING", () => {
+    // a -> b -> c with a failed. Blocking used to stop after one hop: b was
+    // blocked and c sat PENDING forever, because c's only dependency was
+    // BLOCKED rather than FAILED. c can obviously never run.
+    const a = node("a");
+    const b = node("b", { dependsOn: ["a"] });
+    const c = node("c", { dependsOn: ["b"] });
+    const nodes = [a, b, c];
+    const { edges } = analyzeDependencies(nodes, [{ from: "a", to: "b" }, { from: "b", to: "c" }]);
+
+    let state = initialState(nodes);
+    state = transition(state, "a", "FAILED");
+
+    const first = tick(nodes, edges, state, { maxConcurrent: 4 });
+    expect(first.blocked.map((entry) => entry.nodeId)).toEqual(["b"]);
+    state = applyDecision(state, first);
+
+    const second = tick(nodes, edges, state, { maxConcurrent: 4 });
+    expect(second.blocked).toEqual([
+      { nodeId: "c", because: "Dependency b is blocked, so this cannot run either." },
+    ]);
+    state = applyDecision(state, second);
+
+    // One hop per tick, reaching a fixpoint the way the rest of tick does.
+    expect(tick(nodes, edges, state, { maxConcurrent: 4 }).complete).toBe(true);
+  });
+
+  it("distinguishes the node that failed from the ones merely downstream of it", () => {
+    const a = node("a");
+    const b = node("b", { dependsOn: ["a"] });
+    const c = node("c", { dependsOn: ["b"] });
+    const nodes = [a, b, c];
+    const { edges } = analyzeDependencies(nodes, [{ from: "a", to: "b" }, { from: "b", to: "c" }]);
+
+    let state = initialState(nodes);
+    state = transition(state, "a", "FAILED");
+    state = applyDecision(state, tick(nodes, edges, state, { maxConcurrent: 4 }));
+    const second = tick(nodes, edges, state, { maxConcurrent: 4 });
+
+    // The difference between one thing to investigate and twenty.
+    expect(second.blocked[0]?.because).toContain("is blocked");
+    expect(second.blocked[0]?.because).not.toContain("FAILED");
+  });
+
+  it("does not re-report a node that is already blocked", () => {
+    const a = node("a");
+    const b = node("b", { dependsOn: ["a"] });
+    const nodes = [a, b];
+    const { edges } = analyzeDependencies(nodes, [{ from: "a", to: "b" }]);
+
+    let state = initialState(nodes);
+    state = transition(state, "a", "FAILED");
+    state = applyDecision(state, tick(nodes, edges, state, { maxConcurrent: 4 }));
+
+    // A caller writing an activity event per blocked node would otherwise write
+    // one on every tick for the rest of the run.
+    expect(tick(nodes, edges, state, { maxConcurrent: 4 }).blocked).toEqual([]);
+  });
+
+  it("does not call a graph stalled while a failure is still propagating", () => {
+    const a = node("a");
+    const b = node("b", { dependsOn: ["a"] });
+    const c = node("c", { dependsOn: ["b"] });
+    const nodes = [a, b, c];
+    const { edges } = analyzeDependencies(nodes, [{ from: "a", to: "b" }, { from: "b", to: "c" }]);
+
+    let state = initialState(nodes);
+    state = transition(state, "a", "FAILED");
+
+    // Blocking something is progress. These ticks start nothing and defer
+    // nothing, and reporting them as stalled raises an alarm about a graph that
+    // is shutting down exactly as designed.
+    const first = tick(nodes, edges, state, { maxConcurrent: 4 });
+    expect(first.stalled).toBe(false);
+    state = applyDecision(state, first);
+
+    const second = tick(nodes, edges, state, { maxConcurrent: 4 });
+    expect(second.stalled).toBe(false);
+    state = applyDecision(state, second);
+
+    const settled = tick(nodes, edges, state, { maxConcurrent: 4 });
+    expect(settled.stalled).toBe(false);
+    expect(settled.complete).toBe(true);
+  });
+
   it("reports completion only when every node reached a terminal or blocked state", () => {
     const nodes = [node("a"), node("b")];
     let state = initialState(nodes);
