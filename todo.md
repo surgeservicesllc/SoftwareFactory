@@ -59,6 +59,26 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+### Runs clear/delete (owner goal 2026-08-17)
+
+A sibling session shipped per-run review + owner-only deletion (#201,
+migrations 000200/000300/000400 — reason-required, live-lease/queued
+refused, evidence detach opt-in, deletion audit-recorded before it
+happens). This session completed the goal:
+- [x] Clear ALL finished runs: delete_finished_agent_runs (migration
+  20260817000500) loops the SAME per-run guarded path, counting what it
+  refused (kept_for_evidence / kept_for_activity) — never forcing.
+  POST /api/runs/clear-finished; Runs page gains a reason-carrying
+  confirm naming what is untouched (queued/running) and what survives
+  (audit trail; PR/deployment/test-run rows unless keep-and-unlink).
+- [x] Hosted-apply logistics for the WHOLE 2026-08-17 set: 000200-000500
+  joined the surgical allowlist + repairs (000300/000400 made
+  replay-safe first — add column if not exists, drop-constraint-before-
+  add, create index if not exists — the 001500 precedent); tail pins ×12
+  → 000500; runbook 103/39. Without the apply, production's run
+  edit/delete/clear controls receive function-missing refusals.
+- [ ] Trigger hosted apply post-merge and verify.
+
 ### PIPELINE SYSTEM (owner goal 2026-08-17, /loop active)
 
 AUDIT (round 1, verified against code):

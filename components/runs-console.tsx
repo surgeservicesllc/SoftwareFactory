@@ -173,6 +173,13 @@ export function RunsConsole() {
   const [deleteState, setDeleteState] = useState<"idle" | "confirming" | "pending" | "error">("idle");
   const [deleteMessage, setDeleteMessage] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
+  // Clearing all finished runs is its own flow with its own consequence copy,
+  // kept separate from the single-run delete so neither interferes.
+  const [clearState, setClearState] = useState<"idle" | "confirming" | "pending">("idle");
+  const [clearReason, setClearReason] = useState("");
+  const [clearDetach, setClearDetach] = useState(false);
+  const [clearMessage, setClearMessage] = useState("");
+  const [clearFailed, setClearFailed] = useState(false);
   const [detachEvidence, setDetachEvidence] = useState(false);
 
   function openRun(runId: string) {
@@ -259,6 +266,43 @@ export function RunsConsole() {
     }
   }
 
+  async function clearFinishedRuns() {
+    setClearState("pending");
+    setClearMessage("");
+    setClearFailed(false);
+    try {
+      const response = await fetch("/api/runs/clear-finished", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: clearReason.trim(), detachEvidence: clearDetach }),
+      });
+      const body = (await response.json()) as {
+        deletedCount?: number;
+        keptForEvidence?: number;
+        keptForActivity?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "Finished runs could not be cleared.");
+      const deleted = body.deletedCount ?? 0;
+      const keptEvidence = body.keptForEvidence ?? 0;
+      const parts = [
+        `${deleted} run${deleted === 1 ? "" : "s"} cleared.`,
+        keptEvidence > 0
+          ? `${keptEvidence} kept because their work produced pull requests, deployments, or test runs — clear them individually with keep-and-unlink if you mean it.`
+          : null,
+      ].filter(Boolean);
+      setClearState("idle");
+      setClearReason("");
+      setClearDetach(false);
+      setClearMessage(parts.join(" "));
+      reload();
+    } catch (error) {
+      setClearState("idle");
+      setClearFailed(true);
+      setClearMessage(error instanceof Error ? error.message : "Finished runs could not be cleared.");
+    }
+  }
+
   async function deleteRun(runId: string) {
     setDeleteState("pending");
     setDeleteMessage("");
@@ -305,6 +349,86 @@ export function RunsConsole() {
         >
           {deleteMessage}
         </p>
+      ) : null}
+      {clearMessage && clearState === "idle" ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${clearFailed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {clearMessage}
+        </p>
+      ) : null}
+      {state.kind === "ready" && state.items.length > 0 && clearState === "idle" ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setClearMessage("");
+              setClearState("confirming");
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+            Clear finished runs
+          </button>
+        </div>
+      ) : null}
+      {clearState !== "idle" ? (
+        <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-4">
+          <p className="text-sm font-semibold text-foreground">Clear every finished run?</p>
+          <p className="mt-1 text-sm text-muted">
+            Every succeeded, failed, and cancelled run is deleted through the same owner-only,
+            per-run rules — queued and running work is untouched, each deletion is recorded in the
+            audit trail before it happens, and runs whose work produced pull requests, deployments,
+            or test runs are kept unless you choose to keep-and-unlink those records instead.
+          </p>
+          <div className="mt-3">
+            <label htmlFor="clear-runs-reason" className="field-label">Why clear them?</label>
+            <input
+              id="clear-runs-reason"
+              value={clearReason}
+              onChange={(event) => setClearReason(event.target.value)}
+              minLength={10}
+              maxLength={400}
+              className="input"
+              placeholder="Clearing the history before the next audit round"
+            />
+            <span className="field-hint">At least 10 characters; recorded with every deletion.</span>
+          </div>
+          <label className="mt-3 flex items-start gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={clearDetach}
+              onChange={(event) => setClearDetach(event.target.checked)}
+              className="mt-0.5"
+            />
+            Also clear runs with linked pull requests, deployments, or test runs — those records are
+            kept and unlinked. Nothing on GitHub or Vercel is touched either way.
+          </label>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void clearFinishedRuns()}
+              disabled={clearState === "pending" || clearReason.trim().length < 10}
+              className="btn btn-primary btn-sm"
+            >
+              {clearState === "pending" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 className="size-4" aria-hidden="true" />
+              )}
+              Clear finished runs
+            </button>
+            <button
+              type="button"
+              onClick={() => setClearState("idle")}
+              disabled={clearState === "pending"}
+              className="btn btn-secondary btn-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       ) : null}
       <TenantListShell
         state={state}

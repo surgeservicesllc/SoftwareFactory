@@ -32,11 +32,15 @@
 -- ---------------------------------------------------------------------------
 
 alter table public.agent_runs
-  add column review_status text not null default 'unreviewed',
-  add column review_note text,
-  add column reviewed_at timestamptz,
-  add column reviewed_by uuid references auth.users(id) on delete set null;
+  add column if not exists review_status text not null default 'unreviewed',
+  add column if not exists review_note text,
+  add column if not exists reviewed_at timestamptz,
+  add column if not exists reviewed_by uuid references auth.users(id) on delete set null;
 
+alter table public.agent_runs
+  drop constraint if exists agent_runs_review_status_known,
+  drop constraint if exists agent_runs_review_note_bounded,
+  drop constraint if exists agent_runs_review_is_attributed;
 alter table public.agent_runs
   add constraint agent_runs_review_status_known check (
     review_status in ('unreviewed', 'acknowledged', 'investigating', 'resolved', 'ignored')
@@ -60,7 +64,7 @@ comment on column public.agent_runs.review_status is
 comment on column public.agent_runs.review_note is
   'A human note on the run, bounded and refused if it looks like it contains a credential.';
 
-create index agent_runs_review_idx
+create index if not exists agent_runs_review_idx
   on public.agent_runs (organization_id, review_status)
   where review_status <> 'unreviewed';
 
@@ -79,7 +83,7 @@ create index agent_runs_review_idx
 -- deleted. An audit record that disappears when someone deletes the thing it
 -- audits is not an audit record. The column keeps the id it recorded.
 alter table public.scheduling_decisions
-  drop constraint scheduling_decisions_run_fk;
+  drop constraint if exists scheduling_decisions_run_fk;
 
 comment on column public.scheduling_decisions.run_id is
   'The run this decision assigned. Deliberately not a foreign key: this is an append-only audit row and must survive deletion of the run it describes.';
@@ -589,7 +593,7 @@ grant execute on function public.delete_agent_run(uuid, uuid, text, boolean) to 
 --
 -- The return type gains a column, so this is a drop and recreate rather than a
 -- replace. Everything else about the projection is unchanged.
-drop function public.list_agent_runs(uuid, integer);
+drop function if exists public.list_agent_runs(uuid, integer);
 create function public.list_agent_runs(
   p_organization_id uuid, p_limit integer default 50
 )
