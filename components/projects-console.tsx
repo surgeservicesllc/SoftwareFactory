@@ -39,7 +39,7 @@ type Repository = {
   lastSyncedAt?: string | null;
 };
 
-type Connection = {
+export type Connection = {
   id: string;
   name?: string;
   status: "connected" | "not_connected";
@@ -49,7 +49,7 @@ type Connection = {
   repositories: Repository[];
 };
 
-type Project = {
+export type Project = {
   id: string;
   name: string;
   description: string | null;
@@ -396,7 +396,7 @@ export function ProjectsConsole() {
   );
 }
 
-function ProjectInspector({
+export function ProjectInspector({
   project,
   connection,
   connections,
