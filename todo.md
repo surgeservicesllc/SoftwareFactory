@@ -39,12 +39,17 @@ Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` �
 
 ### Genuinely open, and why
 
-- **Nothing here is persisted.** All three are pure functions; the caller owns the
-  reservation set and the rate window, so a process restart forgets both. The plan rows
-  say **COMPLETE (in-process; not yet persisted)** rather than COMPLETE, deliberately.
-  Making them durable is the next real unit of work in this workstream, and the pattern
-  to reuse is the `operations_events` one (`for update skip locked`, unique dedupe keys,
-  bounded attempts) rather than a second invention.
+- **Persistence now exists but is not adopted.** Migration `20260815000700` adds
+  `resource_reservations` and `resource_rate_events`, and `acquire_resource_reservation`
+  checks and takes a slot under an advisory lock in one statement — closing the failure
+  no TypeScript could reach, where two processes each hold their own reservation list and
+  each takes the same last slot. `lib/resources/reservation-store.ts` calls it and
+  **fails closed**, unlike `store.ts`: an unreadable breaker means "no observed failures"
+  and work proceeds, but unreadable *usage* means "unknown", and admitting on unknown
+  deletes the limit during exactly the incident it exists for. What is left: the
+  migration is **unhosted** (one of nine), and **no live path calls it** — `dispatch`
+  still routes against an in-memory set, which is right within one tick and bounds
+  nothing across processes. Wiring that is the next unit of work.
 - **Nothing calls `dispatch` yet.** It is reachable and tested but not on the 1C claim
   path, for the reason recorded in `CURRENT_STATE.md`: that path is hosted and live,
   nothing executes regardless, and changing it now buys no behaviour while risking

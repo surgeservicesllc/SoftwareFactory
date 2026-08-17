@@ -5,17 +5,33 @@ Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 clus
 This exists because the owner actions were previously described loosely — including by me, as
 "three unhosted migrations", which undercounted.
 
-**The current total is 31**, listed across the tables below: seven in "What is actually
-unhosted" (row 6 bundles two migrations), eight in "Added 2026-08-14", one in "Added later
-the same day", one in "Added for Phase 2D", and six in "Added 2026-08-15". One of them has a
-materially different approval requirement from the others. The repository total is 72 migration
-files; the hosted ledger ends at `20260813001400`, so everything after it is in this document.
+**The current total is 9**. The repository total is 73 migration files; the hosted ledger
+ends at `20260814002300`, so everything after it is in this document. See the
+2026-08-15 measurement block below — the ledger moved a long way and most of the tables
+further down are now history rather than instructions.
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
 and none of them is reading this paragraph. `tests/integration/hosted-runbook-counts.test.ts` now
 derives both from the migration directory and fails when they drift, so the next person to add a
 migration is told to update this sentence rather than discovering later that it lied. The tables
 below are not machine-checked and can still fall behind the totals.
+
+> ## Reconciled against hosted, 2026-08-15 — this supersedes every count below
+>
+> The ledger was repaired and reconciled. `20260814000210` had been applied only
+> partially — far enough to create `resource_breakers`, which is why re-running it raised
+> `42P07` instead of doing nothing — and `scripts/repair-20260814000210.sql` completed it
+> idempotently. `scripts/hosted-ledger-record-verified.sql` then recorded only those
+> versions whose every object was verified present.
+>
+> **The ledger now holds 65 rows and ends at `20260814002300`.** `scripts/hosted-schema-audit.mts`
+> reports **0 outstanding and 0 indeterminate** against it. **Nine** migrations are unapplied:
+> `20260814002400`, `20260814002500`, the six Phase 2E files `20260815000100`-`20260815000600`,
+> and `20260815000700_phase2c_resource_reservations.sql`.
+>
+> The tables below that list individual migrations as unhosted were written against the older
+> ledger positions. Most of what they name is now applied. Re-list before trusting any of them —
+> which is the advice this runbook has given twice and been right about twice.
 
 > ## Measured against hosted, 2026-08-14 21:00Z — this section supersedes the table below
 >

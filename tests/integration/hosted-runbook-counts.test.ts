@@ -27,7 +27,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 /** The hosted ledger position the runbook is written against. */
-const HOSTED_LEDGER_ENDS_AT = "20260813001400";
+// Moved 2026-08-15: the repair scripts completed the half-applied
+// `20260814000210` and the ledger was reconciled to 65 rows covering all 64
+// files up to this version, with `scripts/hosted-schema-audit.mts` reporting 0
+// outstanding and 0 indeterminate. Leaving the old position here would have
+// counted already-applied migrations as outstanding, which overstates the
+// owner's remaining work rather than understating it -- still wrong, and the
+// direction that wastes an apply window on migrations that would fail as
+// duplicates.
+const HOSTED_LEDGER_ENDS_AT = "20260814002300";
 
 let runbook = "";
 let migrationFiles: string[] = [];
