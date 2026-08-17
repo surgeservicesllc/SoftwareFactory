@@ -4,7 +4,6 @@ import {
   Activity,
   Bot,
   Boxes,
-  BriefcaseBusiness,
   CircleGauge,
   ClipboardList,
   Cpu,
@@ -99,21 +98,6 @@ const navigationGroups = [
     ],
   },
 ] as const;
-
-function Logo() {
-  return (
-    <Link
-      href="/solutions"
-      className="flex items-center gap-2.5 rounded-lg"
-      aria-label="SoftwareFactory dashboard"
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-[var(--accent-ink)]">
-        <BriefcaseBusiness className="size-[18px]" strokeWidth={2.4} aria-hidden="true" />
-      </span>
-      <span className="font-semibold tracking-[-0.01em] text-foreground">SoftwareFactory</span>
-    </Link>
-  );
-}
 
 function Navigation({
   onNavigate,
@@ -246,20 +230,22 @@ export function AppShell({
 
         It survives on small screens because it carries the button that opens the
         navigation drawer, which has no other entry point.
+
+        The workspace chip that used to sit beside that button is gone: the
+        marketing global navigation directly above already carries the brand,
+        so the chip restated it one row down and cost a full row of height on
+        the narrowest screens for nothing.
       */}
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:hidden">
-        <div className="flex items-center gap-3 xl:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="btn btn-secondary size-10 px-0"
-            aria-label="Open console navigation"
-            aria-expanded={mobileOpen}
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
-          <Logo />
-        </div>
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 xl:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="btn btn-secondary size-10 px-0"
+          aria-label="Open console navigation"
+          aria-expanded={mobileOpen}
+        >
+          <Menu className="size-5" aria-hidden="true" />
+        </button>
       </header>
 
       {mobileOpen ? (
