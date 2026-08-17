@@ -3,7 +3,10 @@
 import { ArrowUp, CheckCircle2, ChevronRight, Loader2, ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import Link from "next/link";
+
 import { cn } from "@/lib/cn";
+import { suggestTemplateForGoal } from "@/lib/graph/suggest";
 
 const examples = [
   "Audit this repository",
@@ -472,6 +475,50 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
       </fieldset>
       </>) : null}
       </div>
+
+      {/* Simple-mode confirmation: what will run, where, and through which
+          stages — all read from the real selections and the real lifecycle.
+          The template is a suggestion and says so: the worker executes the
+          goal as written. */}
+      {instruction.trim() && projectId ? (
+        <div className="mt-6 rounded-lg border border-line bg-surface-raised p-4">
+          <p className="label mb-2">Pipeline</p>
+          <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-faint">Project</dt>
+              <dd className="font-medium text-foreground">
+                {projects.find((project) => project.id === projectId)?.name ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-faint">Requested risk</dt>
+              <dd className="font-medium text-foreground">{riskLevel}</dd>
+            </div>
+            <div>
+              <dt className="text-faint">Suggested template</dt>
+              <dd className="font-medium text-foreground">
+                {(() => {
+                  const suggested = suggestTemplateForGoal(instruction.trim());
+                  return suggested ? `${suggested.name} (v${suggested.version})` : "General build";
+                })()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-faint">Stages</dt>
+              <dd className="font-medium text-foreground">
+                {riskLevel === "RED"
+                  ? "Intake → Waiting for your approval"
+                  : "Intake → Planning → Building → Draft pull request"}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs text-faint">
+            The template is a suggestion — the worker executes your goal as written, and every
+            outcome lands as a draft pull request for your review. Watch progress on{" "}
+            <Link href="/solutions/pipelines" className="font-medium text-accent">Pipelines</Link>.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p id="command-help" className="text-sm text-muted">
