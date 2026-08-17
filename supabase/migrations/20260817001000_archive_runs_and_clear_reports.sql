@@ -331,6 +331,9 @@ grant execute on function public.delete_archived_reports(uuid, text) to authenti
 -- alone, and `migration-object-collisions` refuses overloads in this schema
 -- for exactly that reason.
 drop function if exists public.list_agent_runs(uuid, integer);
+-- Replay-safe: on a surgical re-run the three-argument version already
+-- exists, and a bare CREATE collides with it.
+drop function if exists public.list_agent_runs(uuid, integer, boolean);
 create function public.list_agent_runs(
   p_organization_id uuid,
   p_limit integer default 50,
