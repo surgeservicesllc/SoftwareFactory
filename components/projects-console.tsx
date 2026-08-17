@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProjectBots } from "@/components/project-bots";
 import { ProjectOperationsPanel } from "@/components/project-operations-panel";
+import { ProjectRepository } from "@/components/project-repository";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -217,6 +218,8 @@ export function ProjectsConsole() {
           key={project.id}
           project={project}
           connection={connections.find((item) => item.id === project.connectionId) ?? null}
+          connections={connections}
+          onChanged={load}
         />
       ))}
 
@@ -338,7 +341,17 @@ export function ProjectsConsole() {
   );
 }
 
-function ProjectInspector({ project, connection }: { project: Project; connection: Connection | null }) {
+function ProjectInspector({
+  project,
+  connection,
+  connections,
+  onChanged,
+}: {
+  project: Project;
+  connection: Connection | null;
+  connections: Connection[];
+  onChanged: () => Promise<void> | void;
+}) {
   const [data, setData] = useState<InspectorData>(emptyInspector);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -564,8 +577,19 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
         </div>
       ) : null}
 
-      {/* Which bots serve this project belongs with the project, not buried
-          in a diagnostics drawer three pages away. */}
+      {/* What this project develops, and who develops it, both belong with
+          the project rather than on other pages: the repository picker first
+          shipped only on Connections, and assignments only in a diagnostics
+          drawer. */}
+      <ProjectRepository
+        projectId={project.id}
+        projectName={project.name}
+        currentRepository={project.githubRepository}
+        currentRepositoryId={project.githubRepositoryId}
+        connections={connections}
+        onChanged={onChanged}
+      />
+
       <ProjectBots projectId={project.id} projectName={project.name} />
     </Card>
   );
