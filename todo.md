@@ -1,5 +1,65 @@
 # SoftwareFactory — shared working status
 
+## MULTI-BOT PROJECT ASSIGNMENT (2026-08-17, active goal)
+
+Owner goal: assign several connected bots to ONE project, configure each
+independently, define responsibilities and permissions, work in parallel,
+monitor, and manage afterwards. UI -> API -> database -> orchestration, wired
+end to end. No mock UI.
+
+Starting point: `bot_assignments` already carried bot/project/role and
+`assign_bot` moved one bot at a time. What was missing was everything that
+makes several bots on one project different from one bot repeated.
+
+### Done
+
+- [x] Migration `20260817000500_bot_assignment_configuration.sql` — per-posting
+  configuration (preset, responsibilities, instructions, repository access,
+  branch strategy, PR open/merge, pipeline access, environment access, tools,
+  approval, concurrency, priority), plus `assign_bots_to_project` (atomic
+  multi-bot) and `update_bot_assignment_configuration`.
+  Two structural rules, not advisory:
+  **authority is nested** (`bot_assignments_authority_nested`: open needs
+  repository write, merge needs open) and **elevated authority keeps its human**
+  (`bot_assignments_elevated_requires_approval`: merge or production forces
+  `requires_human_approval`), matching `policies/AUTO_MERGE_POLICY.md`.
+  Defaults are least privilege. Verified against real PostgreSQL (PGlite) in
+  `tests/integration/bot-assignment-configuration.behavior.test.ts` — 33 cases,
+  three mutations confirmed non-vacuous.
+- [x] `lib/bots/assignment-config.ts` — shared browser-safe vocabulary: the
+  seven presets (Developer, Reviewer, Tester, Security, DevOps, Research,
+  Documentation), zod bounds, elevated-permission detection, and row
+  round-tripping that reads an unknown or absent stored value as the *narrow*
+  option so an older assignment cannot gain authority by being displayed.
+- [x] `POST/GET /api/projects/[projectId]/bots` and
+  `PATCH/DELETE /api/projects/[projectId]/bots/[assignmentId]`. Connectedness is
+  resolved server-side from the credential overlay, never from anything the
+  browser sent; one unconnected bot refuses the whole selection.
+- [x] Assign wizard in `components/project-bots.tsx` — Select (search,
+  multi-select, Select All, health, usage, workload, "this moves it off
+  Mobile App"), Configure (presets + every field, per bot), Review (permissions,
+  estimated concurrency, elevated-permission acknowledgement), Confirm. Plus the
+  roster with pause/resume/configure/remove. Rendered from both the project
+  inspector and the project detail page.
+- [x] `lib/bots/assignment-routing.ts` — the configuration now *decides*
+  something: permission is an eligibility gate evaluated before ordering (so
+  priority can never outvote a missing permission), capacity is a second gate,
+  every refusal is a named code, and `dispatchWorkAcrossBots` threads capacity
+  and path claims forward through a batch so two bots cannot be handed the same
+  slot or the same file.
+
+### Still open
+
+- [ ] The routing module has no production caller yet. Phase 1C claim is hosted
+  and live but nothing executes, so wiring it now buys no behavior; it is
+  covered by tests and ready for the claim path.
+- [ ] Migration `20260817000500` is **unhosted**, like the rest of the
+  outstanding set (`AI/HOSTED_APPLY_RUNBOOK.md`). Until it is applied, the
+  wizard's configuration fields have no columns to land in.
+- [ ] Playwright coverage of the wizard at mobile/tablet/desktop widths.
+
+---
+
 ## PRODUCTION-READINESS AUDIT LOOP (2026-08-16 20:25Z, active goal)
 
 Owner goal: autonomously test/audit/fix/verify EVERY feature until

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import type { PortfolioProject, PortfolioView } from "@/lib/portfolio/aggregate";
+import { ProjectBots } from "@/components/project-bots";
 import { Card, Notice, SectionTitle, StatusBadge } from "@/components/ui";
 
 /**
@@ -292,6 +293,22 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
             {`Counts reading Unknown could not be read from: ${unavailable.join(", ")}.`}
           </p>
         ) : null}
+      </section>
+
+      {/* Bots ---------------------------------------------------------------
+          The project's own page is where someone goes to staff it, so the
+          assign flow lives here as well as in the inspector — the same panel
+          reading the same roster, not a second implementation. */}
+      <section aria-labelledby="project-bots">
+        <SectionTitle
+          title="Bots"
+          description="The bots assigned to this project, and what each one may do."
+        />
+        <Card>
+          <div id="project-bots">
+            <ProjectBots projectId={project.id} projectName={project.name} divided={false} />
+          </div>
+        </Card>
       </section>
 
       {/* Editable details --------------------------------------------------- */}

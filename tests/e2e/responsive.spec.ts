@@ -21,6 +21,9 @@ const ROUTES = [
   "/solutions/bot-manager",
   "/solutions/runs",
   "/solutions/reports",
+  // The project page carries the bot roster and the assign wizard's entry
+  // point, which is the densest row of controls in the console.
+  "/solutions/portfolio/00000000-0000-4000-8000-00000000dead",
 ];
 
 /**
