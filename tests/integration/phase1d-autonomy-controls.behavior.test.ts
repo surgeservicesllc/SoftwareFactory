@@ -135,97 +135,161 @@ describe("Phase 1D autonomy controls", () => {
     });
   });
 
-  describe("nothing was relaxed", () => {
-    it.each(ACTION_COLUMNS)("refuses to enable projects.%s", async (column) => {
+  describe("the owner-operated contract (ADR-080)", () => {
+    async function asOwner() {
       await db.exec("reset role");
+      await db.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+      await db.exec("set role authenticated");
+    }
+    async function asNobody() {
+      await db.exec("reset role");
+      await db.query("select set_config('request.jwt.claim.sub', '', false)");
+    }
+
+    it.each(ACTION_COLUMNS)("refuses an unattributed enable of projects.%s", async (column) => {
+      await asNobody();
       const message = await rejects(() =>
         db.exec(`update public.projects set ${column} = true where id = '${projectId}'`),
       );
-
-      expect(message).toMatch(/scaffold-only|projects_phase1d_green_observation_only/i);
+      expect(message).toMatch(/only an organization owner/i);
     });
 
-    it.each(ACTION_COLUMNS)("refuses to enable organizations.%s", async (column) => {
-      await db.exec("reset role");
+    it.each(ACTION_COLUMNS)("refuses an unattributed enable of organizations.%s", async (column) => {
+      await asNobody();
       const message = await rejects(() =>
         db.exec(`update public.organizations set ${column} = true where id = '${organizationId}'`),
       );
-
-      expect(message).toMatch(/scaffold-only|organizations_phase1d_green_observation_only/i);
+      expect(message).toMatch(/only the organization owner/i);
     });
 
-    it("refuses to raise either risk ceiling", async () => {
-      await db.exec("reset role");
+    it("refuses a RED ceiling at either scope, for anyone", async () => {
       for (const [table, id] of [["projects", projectId], ["organizations", organizationId]] as const) {
+        await asNobody();
         const message = await rejects(() =>
           db.exec(`update public.${table} set maximum_autonomous_risk = 'red' where id = '${id}'`),
         );
-        expect(message, `${table} must refuse a raised ceiling`).toMatch(
-          /scaffold-only|green_observation_only/i,
-        );
+        expect(message, `${table} must refuse a RED ceiling`).toMatch(/never be RED/i);
       }
     });
 
-    it("refuses to switch autonomous mode on at either scope", async () => {
-      await db.exec("reset role");
-      for (const [table, id] of [["projects", projectId], ["organizations", organizationId]] as const) {
-        const message = await rejects(() =>
-          db.exec(`update public.${table} set autonomous_mode = true where id = '${id}'`),
-        );
-        expect(message).toMatch(/scaffold-only|green_observation_only/i);
-      }
-    });
-
-    it("refuses to release the global kill switch", async () => {
-      await db.exec("reset role");
+    it("refuses an unattributed kill-switch release", async () => {
+      await asNobody();
       const message = await rejects(() =>
         db.exec(
           `update public.organizations set autonomy_kill_switch_active = false
            where id = '${organizationId}'`,
         ),
       );
-
-      expect(message).toMatch(/kill switch|organizations_phase1d_kill_switch_active/i);
+      expect(message).toMatch(/only the organization owner/i);
     });
 
-    it("refuses a new project that tries to be born with authority", async () => {
+    it("refuses a release without a reason, then releases and re-engages for the owner with audit events", async () => {
+      await asOwner();
+      const refusal = await rejects(() =>
+        db.query(
+          `select * from public.set_autonomy_kill_switch($1::uuid, false, null)`,
+          [organizationId],
+        ),
+      );
+      expect(refusal).toMatch(/a reason is required/i);
+
+      const { rows: released } = await db.query<{ kill_switch_active: boolean }>(
+        `select * from public.set_autonomy_kill_switch($1::uuid, false, 'Supervised GREEN pilot')`,
+        [organizationId],
+      );
+      expect(released[0].kill_switch_active).toBe(false);
+
+      const { rows: engaged } = await db.query<{ kill_switch_active: boolean }>(
+        `select * from public.set_autonomy_kill_switch($1::uuid, true, null)`,
+        [organizationId],
+      );
+      expect(engaged[0].kill_switch_active).toBe(true);
+
       await db.exec("reset role");
+      const { rows: events } = await db.query<{ count: string }>(
+        `select count(*) as count from public.activity_events
+         where organization_id = $1 and event_type = 'autonomy.kill_switch_changed'`,
+        [organizationId],
+      );
+      expect(Number(events[0].count)).toBe(2);
+    });
+
+    it("lets the owner enable an action through the controls operation, audit-evented", async () => {
+      await asOwner();
+      const { rows } = await db.query<{ auto_plan: boolean }>(
+        `select auto_plan from public.set_organization_autonomy_controls(
+           $1::uuid, p_auto_plan => true, p_reason => 'Pilot: planning only')`,
+        [organizationId],
+      );
+      expect(rows[0].auto_plan).toBe(true);
+
+      await db.exec("reset role");
+      const { rows: events } = await db.query<{ count: string }>(
+        `select count(*) as count from public.activity_events
+         where organization_id = $1 and event_type = 'autonomy.controls_changed'`,
+        [organizationId],
+      );
+      expect(Number(events[0].count)).toBeGreaterThanOrEqual(1);
+
+      // Put it back so later resolution tests read the fail-closed default.
+      await asOwner();
+      await db.query(
+        `select * from public.set_organization_autonomy_controls(
+           $1::uuid, p_auto_plan => false, p_reason => 'Pilot ended')`,
+        [organizationId],
+      );
+      await db.exec("reset role");
+    });
+
+    it("refuses the RED ceiling through the owner operation too", async () => {
+      await asOwner();
       const message = await rejects(() =>
+        db.query(
+          `select * from public.set_organization_autonomy_controls(
+             $1::uuid, p_maximum_autonomous_risk => 'red')`,
+          [organizationId],
+        ),
+      );
+      expect(message).toMatch(/never be RED/i);
+      await db.exec("reset role");
+    });
+
+    it("still refuses a new project or organization born with authority", async () => {
+      await asNobody();
+      const projectMessage = await rejects(() =>
         db.exec(
           `insert into public.projects (organization_id, name, status, default_branch, created_by, auto_merge)
            values ('${organizationId}', 'Sneaky', 'active', 'main', '${ownerId}', true)`,
         ),
       );
+      expect(projectMessage).toMatch(/born fail-closed/i);
 
-      expect(message).toMatch(/scaffold-only|green_observation_only/i);
-    });
-
-    it("refuses a new organization that tries to be born with authority", async () => {
-      await db.exec("reset role");
-      const message = await rejects(() =>
+      const organizationMessage = await rejects(() =>
         db.exec(
           `insert into public.organizations (name, slug, created_by, auto_deploy)
            values ('Sneaky Org', 'sneaky-org', '${ownerId}', true)`,
         ),
       );
-
-      expect(message).toMatch(/scaffold-only|green_observation_only/i);
+      expect(organizationMessage).toMatch(/born fail-closed/i);
     });
 
-    it("keeps both constraints validated rather than merely declared", async () => {
+    it("replaced the scaffold constraints with the RED-ceiling refusals", async () => {
       await db.exec("reset role");
-      const { rows } = await db.query<{ conname: string; convalidated: boolean }>(
-        `select conname, convalidated from pg_constraint
+      const { rows } = await db.query<{ conname: string }>(
+        `select conname from pg_constraint
          where conname in (
            'projects_phase1d_green_observation_only',
-           'organizations_phase1d_green_observation_only'
+           'organizations_phase1d_green_observation_only',
+           'organizations_phase1d_kill_switch_active',
+           'projects_autonomy_ceiling_below_red',
+           'organizations_autonomy_ceiling_below_red'
          )`,
       );
-
-      expect(rows).toHaveLength(2);
-      for (const row of rows) {
-        expect(row.convalidated, `${row.conname} must be validated`).toBe(true);
-      }
+      const names = rows.map((row) => row.conname).sort();
+      expect(names).toEqual([
+        "organizations_autonomy_ceiling_below_red",
+        "projects_autonomy_ceiling_below_red",
+      ]);
     });
   });
 

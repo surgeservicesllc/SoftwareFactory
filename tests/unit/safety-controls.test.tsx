@@ -1,76 +1,121 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SafetyControls } from "@/components/safety-controls";
 import { AUTOMATIC_ACTIONS } from "@/lib/autonomy/controls";
 
-describe("SafetyControls", () => {
-  it("lists every automatic action the model defines", () => {
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" },
+    status,
+  });
+}
+
+function controlsBody(overrides: Record<string, unknown> = {}) {
+  return {
+    killSwitchActive: true,
+    canOperate: true,
+    controls: {
+      autonomousMode: false,
+      maximumAutonomousRisk: "GREEN",
+      actions: Object.fromEntries(AUTOMATIC_ACTIONS.map((action) => [action, false])),
+    },
+    ...overrides,
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("SafetyControls (live, ADR-080)", () => {
+  it("lists every automatic action as a real switch wired to the controls API", async () => {
+    const posts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ controls: controlsBody().controls });
+      }
+      return jsonResponse(controlsBody());
+    }));
+
     render(<SafetyControls />);
 
-    const list = screen.getByRole("heading", { name: /what it may do without asking/i })
+    const list = (await screen.findByRole("heading", { name: /what it may do without asking/i }))
       .parentElement!;
-    const items = within(list).getAllByRole("listitem");
+    const switches = within(list).getAllByRole("switch");
+    // A control added to the model cannot go missing from this page.
+    expect(switches).toHaveLength(AUTOMATIC_ACTIONS.length);
+    for (const element of switches) expect(element).toHaveAttribute("aria-checked", "false");
 
-    // A control added to the model must not be able to go missing from the
-    // page a reader uses to check what this thing is allowed to do.
-    expect(items).toHaveLength(AUTOMATIC_ACTIONS.length);
-    for (const action of AUTOMATIC_ACTIONS) {
-      expect(within(list).getByText(new RegExp(`Auto ${action}`, "i"))).toBeInTheDocument();
-    }
+    fireEvent.click(within(list).getByRole("switch", { name: "Decide what to work on" }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toEqual({ control: "autonomy", autoPlan: true });
   });
 
-  it("shows every action as OFF", () => {
+  it("asks for a reason before releasing the kill switch, and posts it", async () => {
+    const posts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ killSwitchActive: false });
+      }
+      return jsonResponse(controlsBody());
+    }));
+
     render(<SafetyControls />);
 
-    const list = screen.getByRole("heading", { name: /what it may do without asking/i })
-      .parentElement!;
+    expect(await screen.findByText(/Kill switch ON\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Release…" }));
+    // Nothing posted yet: release is the consequential direction and must say why.
+    expect(posts).toEqual([]);
+    const confirm = screen.getByRole("button", { name: "Release kill switch" });
+    expect(confirm).toBeDisabled();
 
-    expect(within(list).getAllByText("OFF")).toHaveLength(AUTOMATIC_ACTIONS.length);
-    expect(within(list).queryByText("ON")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Why release it?"), {
+      target: { value: "Supervised GREEN pilot" },
+    });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toEqual({ control: "kill_switch", active: false, reason: "Supervised GREEN pilot" });
   });
 
-  it("explains why they are off rather than only asserting it", () => {
+  it("says in place when a switched-on action is held off, and by what", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(controlsBody({
+      controls: {
+        autonomousMode: false,
+        maximumAutonomousRisk: "GREEN",
+        actions: { ...Object.fromEntries(AUTOMATIC_ACTIONS.map((action) => [action, false])), plan: true },
+      },
+    }))));
+
     render(<SafetyControls />);
 
-    const reasons = screen.getByRole("heading", { name: /why every one of them is off/i })
-      .parentElement!;
-
-    expect(within(reasons).getByText(/global kill switch is on/i)).toBeInTheDocument();
-    expect(within(reasons).getByText(/no execution worker is connected/i)).toBeInTheDocument();
-    expect(within(reasons).getByText(/autonomous mode is off for the organization/i)).toBeInTheDocument();
-    expect(within(reasons).getByText(/autonomous mode is off for this project/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Switched on, held off:/)).toHaveTextContent(
+      /the global kill switch is on\./,
+    );
   });
 
-  it("states the most-restrictive-wins rule", () => {
-    render(<SafetyControls />);
-    expect(screen.getByText(/strictest setting between/i)).toBeInTheDocument();
-  });
+  it("refuses RED as a ceiling choice and renders members read-only", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(controlsBody({ canOperate: false }))));
 
-  it("allows GREEN only", () => {
     render(<SafetyControls />);
 
-    const tiers = screen.getByRole("heading", { name: /highest risk autonomous mode may consider/i })
-      .parentElement!;
-    expect(within(tiers).getAllByText("Allowed")).toHaveLength(1);
-    expect(within(tiers).getAllByText("Blocked")).toHaveLength(2);
+    await screen.findByText(/Kill switch ON\./);
+    // A member sees state, not switches.
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Release…" })).not.toBeInTheDocument();
+    // RED is labeled as never automatic, whoever is looking.
+    expect(screen.getByText("Never automatic")).toBeInTheDocument();
   });
 
-  it("never claims an action ran", () => {
+  it("fails closed for a signed-out visitor", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 401)));
+
     render(<SafetyControls />);
-    expect(screen.getByText(/cannot approve, merge, deploy, roll back/i)).toBeInTheDocument();
-  });
 
-  it("keeps autonomous authority off without blocking manually requested Phase 1C runs", () => {
-    const { container } = render(<SafetyControls />);
-
-    expect(screen.getByText(/autonomous mode off/i)).toBeInTheDocument();
-    expect(screen.getByText(/manual green or yellow request may run/i)).toBeInTheDocument();
-    expect(screen.getByText("GREEN")).toBeInTheDocument();
-    expect(screen.getByText("Auto merge")).toBeInTheDocument();
-    expect(screen.getByText(/no merge endpoint/i)).toBeInTheDocument();
-    expect(screen.getByText(/would_be_eligible or blocked/i)).toBeInTheDocument();
-    expect(container.querySelector("input")).toBeNull();
-    expect(container.querySelector("button")).toBeNull();
+    expect(await screen.findByText(/Sign in to see and operate/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   });
 });

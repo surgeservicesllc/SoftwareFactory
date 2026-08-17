@@ -1,5 +1,5 @@
 import { AutonomyConsole } from "@/components/autonomy-console";
-import { PageHeader, StatusBadge } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 
 export const metadata = {
   title: "Autonomy",
@@ -10,8 +10,7 @@ export default function AutonomyPage() {
     <>
       <PageHeader
         title="Autonomy"
-        description="What the autonomous loop is permitted to do, and every decision it has reached. Enabling an automatic action is an owner-approved change, so nothing here offers a switch."
-        action={<StatusBadge tone="safe">Kill switch ON</StatusBadge>}
+        description="What the autonomous loop is permitted to do, and every decision it has reached. The switches live on Settings and are owner-only; this page shows the resolved result."
       />
       <AutonomyConsole />
     </>
