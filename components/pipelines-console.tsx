@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDotDashed,
-  ClipboardList,
   Loader2,
   Workflow,
   XCircle,
@@ -14,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { commandProgress } from "@/components/commands-console";
+import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -206,7 +206,7 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
       ) : null}
 
       {view === "templates" ? (
-        <TemplatesView templates={templates} />
+        <PipelineTemplatesManager builtIns={templates} />
       ) : (
         <PipelineList
           commands={view === "active" ? active : commands}
@@ -300,44 +300,5 @@ function PipelineList({
         })}
       </ul>
     </Card>
-  );
-}
-
-function TemplatesView({ templates }: { templates: readonly PipelineTemplateSummary[] }) {
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted">
-        Versioned pipeline templates, compiled by the graph engine on every load — the topology,
-        parallel width, and node counts are produced by the same code that schedules the work.
-        Templates are code, so editing one is a reviewed pull request rather than a form.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {templates.map((template) => (
-          <Card key={template.key} className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-foreground">{template.name}</h3>
-              <StatusBadge tone={template.compiles ? "safe" : "danger"} dot={false}>
-                {template.compiles ? `v${template.version}` : "Does not compile"}
-              </StatusBadge>
-            </div>
-            <p className="mt-1 text-sm text-muted">{template.summary}</p>
-            <p className="mt-2 text-xs text-faint">
-              {template.category}
-              {template.topology ? ` · ${template.topology}` : ""}
-              {template.nodeCount !== null ? ` · ${template.nodeCount} nodes` : ""}
-              {template.maxParallelism !== null ? ` · up to ${template.maxParallelism} in parallel` : ""}
-            </p>
-          </Card>
-        ))}
-      </div>
-      <Card className="p-4">
-        <p className="flex items-start gap-2.5 text-sm text-muted">
-          <ClipboardList className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden="true" />
-          The full compiled preview of every template — node contracts, lock waves, removed
-          dependencies — lives on{" "}
-          <Link href="/solutions/workflows" className="font-medium text-accent">Workflows</Link>.
-        </p>
-      </Card>
-    </div>
   );
 }

@@ -128,7 +128,9 @@ const file = (id: string): ResourceRef => ({ kind: "file", id });
  * have none — this is the shape the fake-edge test exists to protect. Only the
  * reduce step waits.
  */
-function auditTemplate(input: {
+/** Exported so custom (database-stored) templates build through the exact
+ * same shape as the built-ins — one builder, no divergence. */
+export function auditTemplate(input: {
   key: string;
   name: string;
   summary: string;
