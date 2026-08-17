@@ -577,3 +577,46 @@ revoke all on function public.delete_agent_run(uuid, uuid, text, boolean)
 
 grant execute on function public.update_agent_run_review(uuid, uuid, text, text) to authenticated;
 grant execute on function public.delete_agent_run(uuid, uuid, text, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Show the review in the list, not only on the detail
+-- ---------------------------------------------------------------------------
+
+-- A triage state that is only visible after opening a run is a triage state
+-- nobody uses: the question a person actually has on this page is "which of
+-- these has anyone looked at", and answering it by opening fifty runs is not
+-- answering it.
+--
+-- The return type gains a column, so this is a drop and recreate rather than a
+-- replace. Everything else about the projection is unchanged.
+drop function public.list_agent_runs(uuid, integer);
+create function public.list_agent_runs(
+  p_organization_id uuid, p_limit integer default 50
+)
+returns table (
+  id uuid, status public.run_status, started_at timestamptz,
+  completed_at timestamptz, created_at timestamptz,
+  task_id uuid, task_title text, agent_id uuid, agent_name text,
+  project_id uuid, project_name text, risk_level public.risk_level,
+  provider text, model text, branch_name text, review_status text
+)
+language sql stable security definer set search_path = pg_catalog as $function$
+  select run.id, run.status, run.started_at, run.completed_at, run.created_at,
+    task.id, task.title, agent.id, agent.name, project.id, project.name,
+    run.risk_level, run.provider, run.model, run.head_branch, run.review_status
+  from public.agent_runs run
+  left join public.tasks task
+    on task.id = run.task_id and task.organization_id = run.organization_id
+  left join public.agents agent
+    on agent.id = run.agent_id and agent.organization_id = run.organization_id
+  left join public.projects project
+    on project.id = run.project_id and project.organization_id = run.organization_id
+  where run.organization_id = p_organization_id
+    and public.is_organization_member(p_organization_id)
+  order by run.created_at desc
+  limit greatest(1, least(coalesce(p_limit, 50), 100));
+$function$;
+
+revoke all on function public.list_agent_runs(uuid, integer)
+  from public, anon, authenticated, service_role;
+grant execute on function public.list_agent_runs(uuid, integer) to authenticated;

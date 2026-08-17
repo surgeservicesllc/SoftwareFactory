@@ -26,6 +26,7 @@ type Run = {
   project?: { id: string; name: string } | null;
   task: { id: string; title: string } | null;
   agent: { id: string; name: string } | null;
+  reviewStatus?: ReviewStatus;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -352,6 +353,12 @@ export function RunsConsole() {
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
                         <StatusBadge tone={statusTone(run.status)}>{runStatusLabel(run.status)}</StatusBadge>
+                        {/* Shown only once someone has triaged it. A badge
+                            reading "Unreviewed" on every row would be noise on
+                            the common case and bury the reviewed ones. */}
+                        {run.reviewStatus && run.reviewStatus !== "unreviewed" ? (
+                          <StatusBadge tone="neutral">{REVIEW_LABELS[run.reviewStatus]}</StatusBadge>
+                        ) : null}
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
                           View run
