@@ -59,6 +59,18 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+- [x] Edit/delete everywhere (owner goal, 2026-08-17 — ADR-078):
+  Projects editable (update_project_details, migration 20260817000100,
+  PATCH /api/projects/[id]; Edit dialogs on the All Projects table +
+  inspector) and archivable/unarchivable in place (reason-carrying
+  dialogs + Unarchive button on the Archived view, existing RPCs). Bots
+  removable from the roster (retire_bot; confirm-in-place naming what is
+  released vs kept) alongside the existing rename. Accounts already had
+  rename/disconnect/remove; runs keep cancel/retry. REFUSED: edit/delete
+  of runs, activity events, audit records (immutability contract), hard
+  project delete, template forms (templates are code). Tail pins ×11 +
+  hosted-apply allowlist moved to 20260817000100; hosted apply pending
+  post-merge; 6 new unit tests.
 - [x] Bot Usage page (owner mockup, same day): /solutions/bot-usage
   renders per-account provider-subscription windows from the REAL
   observation store (ADR-076) — reuses AccountUsage (percent bars +

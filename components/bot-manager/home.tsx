@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronDown, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
+import { Bot, Check, ChevronDown, Loader2, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
@@ -85,6 +85,10 @@ export function BotManagerHome() {
   const [renamingBotId, setRenamingBotId] = useState<string | null>(null);
   const [renameBotName, setRenameBotName] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  // Retiring asks in place first: the row states what is released and what
+  // is kept before anything happens.
+  const [removingBotId, setRemovingBotId] = useState<string | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   // The success screen offers the rename before any next action, through the
   // same endpoint the accounts panel uses.
   const [successEditing, setSuccessEditing] = useState(false);
@@ -194,6 +198,25 @@ export function BotManagerHome() {
       setRenameBusy(false);
     }
   }, [renameBotName, load]);
+
+  const removeBot = useCallback(async (bot: BotView) => {
+    setRemoveBusy(true);
+    setBotNotice("");
+    try {
+      const response = await fetch(`/api/bots/${bot.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+        setBotNotice(body.error?.message ?? "The bot could not be removed.");
+        return;
+      }
+      setRemovingBotId(null);
+      await load();
+    } catch {
+      setBotNotice("The bot could not be removed.");
+    } finally {
+      setRemoveBusy(false);
+    }
+  }, [load]);
 
   const provisionBot = useCallback(async (providerId: string) => {
     setCreatingBot(true);
@@ -651,23 +674,63 @@ export function BotManagerHome() {
                         <p className="flex items-center gap-1.5 truncate text-sm font-medium text-[var(--text)]">
                           {bot.name}
                           {canManage ? (
-                            <button
-                              type="button"
-                              aria-label={`Rename ${bot.name}`}
-                              onClick={() => {
-                                setRenameBotName(bot.name);
-                                setRenamingBotId(bot.id);
-                              }}
-                              className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
-                            >
-                              <Pencil className="size-3.5" aria-hidden="true" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                aria-label={`Rename ${bot.name}`}
+                                onClick={() => {
+                                  setRenameBotName(bot.name);
+                                  setRenamingBotId(bot.id);
+                                }}
+                                className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                              >
+                                <Pencil className="size-3.5" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Remove ${bot.name}`}
+                                onClick={() => setRemovingBotId(bot.id)}
+                                className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                              >
+                                <Trash2 className="size-3.5" aria-hidden="true" />
+                              </button>
+                            </>
                           ) : null}
                         </p>
                       )}
                       <p className="text-xs text-[var(--text-muted)]">
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>
+                      {removingBotId === bot.id ? (
+                        <div className="mt-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-2.5">
+                          <p className="text-xs text-[var(--text)]">
+                            Remove {bot.name}? Its project assignments are released; every run and
+                            audit record it produced is kept.
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void removeBot(bot)}
+                              disabled={removeBusy}
+                              className="btn btn-primary btn-sm"
+                            >
+                              {removeBusy ? (
+                                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Trash2 className="size-3.5" aria-hidden="true" />
+                              )}
+                              Remove bot
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRemovingBotId(null)}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              Keep it
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </li>
                 ))}
