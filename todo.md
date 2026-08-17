@@ -119,6 +119,32 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+### Template CRUD (owner goal 2026-08-17)
+
+- [x] Migration 20260817000700: create/update/delete_pipeline_template
+  over the EXISTING graph_templates table (RLS + member SELECT since the
+  graph engine landed; these are its first write path) — owner/admin,
+  bounded audit-areas definition (1-12 areas, unique ids, no secrets),
+  version bump per edit, pipeline_template.* activity events, delete
+  keeps planned graphs (template_id SET NULL).
+- [x] One builder, no divergence: auditTemplate exported; custom
+  templates build + compile through the exact built-in path
+  (lib/graph/custom-templates.ts); the API refuses a definition the
+  compiler refuses (422 with the compiler's own errors) so every stored
+  template stays runnable.
+- [x] /api/pipeline-templates GET/POST + [id] PATCH/DELETE; built-in
+  slugs reserved (409). /api/graphs POST now accepts custom slugs —
+  loads the row, rebuilds, same launch plan, same truthful
+  PLANNED-not-dispatched note.
+- [x] Templates tab → PipelineTemplatesManager: Your templates (Use /
+  Edit / Delete with in-place confirm) + Built-in templates (Use /
+  Clone; edited as code, stated in place) + New-template editor (key,
+  name, summary, category, capability, 1-12 area rows) + Use dialog
+  (project picker → real POST /api/graphs, result repeats the
+  endpoint's honesty). 4 manager unit tests + console test updated.
+- [x] Pins ×12 → 000700; allowlist+repairs; runbook 105/41. Hosted
+  apply pending post-merge.
+
 ### Safety page fully wired (owner goal 2026-08-17 — ADR-080)
 
 - [x] Migration 20260817000600: the Phase 1D scaffold gives way to

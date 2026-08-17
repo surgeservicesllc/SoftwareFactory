@@ -100,13 +100,17 @@ describe("PipelinesConsole", () => {
 
   it("renders the versioned compiled templates with real topology facts", async () => {
     searchParams.mockReturnValue(new URLSearchParams("view=templates"));
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [] })));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/pipeline-templates") return jsonResponse({ templates: [], canManage: false });
+      return jsonResponse({ commands: [] });
+    }));
 
     render(<PipelinesConsole templates={templates} />);
 
-    const card = (await screen.findByText("Feature Build")).closest("section") as HTMLElement;
-    expect(within(card).getByText("v3")).toBeInTheDocument();
-    expect(within(card).getByText(/DAG · 6 nodes · up to 2 in parallel/)).toBeInTheDocument();
+    const builtIns = (await screen.findByText("Feature Build")).closest("section") as HTMLElement;
+    expect(within(builtIns).getByText("v3")).toBeInTheDocument();
+    expect(within(builtIns).getByText(/DAG · 6 nodes · up to 2 in parallel/)).toBeInTheDocument();
     // Deep compiled previews stay on Workflows — one engine, one source.
     expect(screen.getByRole("link", { name: "Workflows" })).toHaveAttribute("href", "/solutions/workflows");
   });

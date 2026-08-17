@@ -26,7 +26,7 @@ on:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
           applies only the idempotent broker migrations
-          (20260816000400 through 20260817000600) and records them in history;
+          (20260816000400 through 20260817000800) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
           "probe" changes nothing at all and just reports which objects already
@@ -179,7 +179,9 @@ jobs:
             supabase/migrations/20260817000300_run_review_and_deletion.sql \
             supabase/migrations/20260817000400_task_work_lock_leases.sql \
             supabase/migrations/20260817000500_clear_all_finished_runs.sql \
-            supabase/migrations/20260817000600_owner_operated_safety_controls.sql
+            supabase/migrations/20260817000600_owner_operated_safety_controls.sql \
+            supabase/migrations/20260817000700_bot_assignment_configuration.sql \
+            supabase/migrations/20260817000800_custom_pipeline_templates.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -209,6 +211,8 @@ jobs:
           repair 20260817000400
           repair 20260817000500
           repair 20260817000600
+          repair 20260817000700
+          repair 20260817000800
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
