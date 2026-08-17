@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Children, useState } from "react";
 
 import {
@@ -27,6 +27,7 @@ type Run = {
   task: { id: string; title: string } | null;
   agent: { id: string; name: string } | null;
   reviewStatus?: ReviewStatus;
+  archivedAt?: string | null;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -180,6 +181,14 @@ export function RunsConsole() {
   const [clearDetach, setClearDetach] = useState(false);
   const [clearMessage, setClearMessage] = useState("");
   const [clearFailed, setClearFailed] = useState(false);
+  // Row-level archive and delete. Acting on a run should not require opening
+  // it: the list is where a person decides a run is dealt with.
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [rowMessage, setRowMessage] = useState("");
+  const [rowFailed, setRowFailed] = useState(false);
+  const [deletingRow, setDeletingRow] = useState<Run | null>(null);
+  const [rowDeleteReason, setRowDeleteReason] = useState("");
+  const [rowDetach, setRowDetach] = useState(false);
   const [detachEvidence, setDetachEvidence] = useState(false);
 
   function openRun(runId: string) {
@@ -263,6 +272,66 @@ export function RunsConsole() {
     } catch (error) {
       setReviewState("error");
       setReviewMessage(error instanceof Error ? error.message : "The review could not be saved.");
+    }
+  }
+
+  async function archiveRun(run: Run, archived: boolean) {
+    setRowBusy(run.id);
+    setRowMessage("");
+    setRowFailed(false);
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          archived,
+          reason: archived ? "Archived from the Runs page." : undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be archived.");
+      setRowMessage(archived ? "Run archived." : "Run restored to the list.");
+      reload();
+    } catch (error) {
+      setRowFailed(true);
+      setRowMessage(error instanceof Error ? error.message : "The run could not be archived.");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function deleteRunFromList(run: Run) {
+    setRowBusy(run.id);
+    setRowMessage("");
+    setRowFailed(false);
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detachEvidence: rowDetach, reason: rowDeleteReason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        detached?: { deployments: number; pullRequests: number; testRuns: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be deleted.");
+      const unlinked = body.detached
+        ? body.detached.pullRequests + body.detached.deployments + body.detached.testRuns
+        : 0;
+      // Says what else moved: a bare "deleted" would hide that a pull request
+      // or deployment was unlinked in the same operation.
+      setRowMessage(unlinked > 0
+        ? `Run deleted. ${unlinked} linked record${unlinked === 1 ? " was" : "s were"} kept and unlinked.`
+        : "Run deleted.");
+      setDeletingRow(null);
+      setRowDeleteReason("");
+      setRowDetach(false);
+      reload();
+    } catch (error) {
+      setRowFailed(true);
+      setRowMessage(error instanceof Error ? error.message : "The run could not be deleted.");
+    } finally {
+      setRowBusy(null);
     }
   }
 
@@ -350,6 +419,81 @@ export function RunsConsole() {
           {deleteMessage}
         </p>
       ) : null}
+      {rowMessage ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${rowFailed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {rowMessage}
+        </p>
+      ) : null}
+
+      {deletingRow ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Delete run ${deletingRow.id}`}
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-lg">
+            <h2 className="text-lg font-semibold text-foreground">Delete this run</h2>
+            <p className="mt-1 text-sm text-muted">
+              {deletingRow.task?.title ?? "Untitled work"}
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Removes the run and its own events, artifacts and validations. The deletion is
+              recorded in the activity trail first, so the account of it survives. Nothing outside
+              this database is touched. To keep a run and simply take it out of the list, archive
+              it instead.
+            </p>
+            <div className="mt-4 flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
+                <input
+                  type="text"
+                  className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                  maxLength={400}
+                  value={rowDeleteReason}
+                  onChange={(event) => setRowDeleteReason(event.target.value)}
+                  placeholder="Why this run is being removed"
+                />
+              </label>
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={rowDetach}
+                  onChange={(event) => setRowDetach(event.target.checked)}
+                />
+                <span>
+                  Keep and unlink any pull request, deployment or test run this run produced.
+                  Without this, a run that produced one of those is refused rather than silently
+                  orphaning it.
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={rowBusy !== null || rowDeleteReason.trim().length < 10}
+                  onClick={() => void deleteRunFromList(deletingRow)}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete permanently
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setDeletingRow(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {clearMessage && clearState === "idle" ? (
         <p
           className={`rounded-lg border p-3 text-sm ${clearFailed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
@@ -486,6 +630,38 @@ export function RunsConsole() {
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
                           View run
+                        </button>
+                        {/* Archiving is offered only once a run has finished:
+                            hiding work still in flight would hide the thing
+                            most worth watching, and the database refuses it. */}
+                        {["succeeded", "failed", "cancelled"].includes(run.status) ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={rowBusy === run.id}
+                            aria-label={run.archivedAt ? `Restore run ${run.id}` : `Archive run ${run.id}`}
+                            onClick={() => void archiveRun(run, !run.archivedAt)}
+                          >
+                            {rowBusy === run.id
+                              ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                              : <Archive className="size-4" aria-hidden="true" />}
+                            {run.archivedAt ? "Restore" : "Archive"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          disabled={rowBusy === run.id}
+                          aria-label={`Delete run ${run.id}`}
+                          onClick={() => {
+                            setDeletingRow(run);
+                            setRowDeleteReason("");
+                            setRowDetach(false);
+                            setRowMessage("");
+                          }}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Delete
                         </button>
                       </div>
                     </li>
