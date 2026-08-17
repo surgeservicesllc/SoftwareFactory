@@ -2,6 +2,22 @@
 
 Last updated: 2026-08-16
 
+## Newest (2026-08-16 ~23:20Z): per-account usage on the Bot Manager, captured by the broker sweep
+
+The owner asked for each connected bot's usage (session % and weekly %) on
+`/solutions/bot-manager`, fully automated. Landed as ADR-076: evidence table
+`ai_account_usage_observations` (migration `20260816001500`, **unhosted** —
+apply it with the runbook before expecting live rows), probe module
+`lib/worker/usage-probe.ts`, a bounded capture hook in
+`scripts/auth-broker.mts` (frozen file, touched under the owner's explicit
+instruction; login semantics untouched), `GET /api/ai-accounts/usage`, and the
+usage rows in `components/ai-accounts-panel.tsx` /
+`components/bot-manager/account-usage.tsx`. Truthfulness contract: the UI
+renders only recorded observations — measured windows, a named failure, or
+"no usage recorded yet" — and the probe never demotes an account. Codex
+records `unsupported` until a real usage endpoint is proven; proving one is
+the natural next step.
+
 ## Project ↔ repository picker (2026-08-16, branch `feat/project-repo-picker`)
 
 Owners/admins can now choose, change, and unlink which GitHub repository an existing

@@ -3,9 +3,12 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 33**, listed in the measured section below. The repository total is 97 migration
+**The current total is 34**, listed in the measured section below. The repository total is 98 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (The guard test derives both numbers from the migration directory and this document's
+outstanding. (Newest two: `20260816001400_project_repository_picker` — the Connections console's
+per-project repository picker, two definer functions only — and `20260816001500_ai_account_usage_observations`
+— the Bot Manager's usage evidence, ADR-076; until it is applied, production records no usage
+observations and the panel truthfully says "no usage recorded yet".) (The guard test derives both numbers from the migration directory and this document's
 stated position, and fails when they drift.)
 
 > ## Measured live, 2026-08-16 17:07Z — the first full listing (supersedes every earlier measure)

@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-16 (per-account usage evidence):** migration
+`20260816001500_ai_account_usage_observations` adds append-only provider-usage
+evidence per AI account (RLS+FORCE, zero direct table access, worker-only
+`record_ai_account_usage`, member-only `list_ai_account_usage`). The
+auth-broker worker now captures usage automatically — startup, ~5-minute idle
+cadence, and immediately after a sign-in connects — by probing Anthropic's
+OAuth usage endpoint with the sealed credential opened only inside the sweep
+(`lib/worker/usage-probe.ts`); OpenAI/Codex records `unsupported` truthfully
+until a real endpoint is proven. The Bot Manager's AI-accounts panel renders
+the latest observation per account (session/weekly percentages with reset
+times, a named failure, or "no usage recorded yet") via
+`GET /api/ai-accounts/usage`, refreshing every 30 s while visible; a hosted
+database that predates the migration reads as an empty list, not an outage.
+Local and CI evidence only until the migration is hosted — the runbook's
+outstanding set now ends at `20260816001500`. The frozen connect path's login
+semantics are untouched (ADR-076); no execution authority changes.
+
 **Addendum, 2026-08-16 (project repository picker):** migration
 `20260816001400_project_repository_picker` adds `set_project_github_repository` and
 `unlink_project_github_repository` — owner/admin choice of which GitHub repository an

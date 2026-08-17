@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-16 — per-account usage evidence (ADR-076):** migration
+`20260816001500` (append-only usage observations, worker-only write, member
+latest-per-account read), `lib/worker/usage-probe.ts` with the auth-broker
+capture hook, `GET /api/ai-accounts/usage`, and the Bot Manager usage rows are
+implemented and locally certified: the new behavior suite
+`tests/integration/ai-account-usage.behavior.test.ts` and unit suite
+`tests/unit/usage-probe.test.ts` pass alongside the updated
+schema-security-invariants pins (service_role gains exactly
+`record_ai_account_usage`; the policyless allowlist gains the evidence table),
+with lint, typecheck, full vitest, and a production build green on this tree.
+Hosted evidence does not exist yet: the migration is **unhosted**, so
+production records no observations until the owner applies it; the panel then
+fills in automatically from the already-deployed worker cadence. No execution
+authority changes.
+
 **Addendum, 2026-08-16 — project repository picker:** implemented and locally certified:
 migration `20260816001400` (two definer functions, no table/grant/RLS changes),
 `PUT`/`DELETE /api/projects/[projectId]/repository`, and the Connections console picker.

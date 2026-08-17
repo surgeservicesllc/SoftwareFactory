@@ -19,6 +19,15 @@ Last triaged: 2026-08-13
 
 Checked Phase 1C items distinguish implementation/configuration/release milestones from connectivity. Phase 1C is not Connected until the complete live draft-PR/CI journey has exact provider evidence.
 
+## Per-account usage evidence on the Bot Manager (2026-08-16, ADR-076)
+
+- [x] Add append-only `ai_account_usage_observations` (migration `20260816001500`) with key-allowlisted window payloads, worker-only write, member-only latest-per-account read, and zero direct table access.
+- [x] Probe Anthropic subscription usage from the auth-broker sweep (startup, ~5-minute idle cadence, and on a fresh connect), with the credential opened only inside the sweep and failures recorded as named observations that never demote an account.
+- [x] Render session/weekly usage bars with reset times, freshness, and truthful absence states on the Bot Manager's AI-accounts panel, auto-refreshing while visible.
+- [ ] Apply migration `20260816001500` to hosted Supabase (owner-gated, `AI/HOSTED_APPLY_RUNBOOK.md`) — until then production records no observations and the panel says "no usage recorded yet".
+- [ ] Prove a real usage endpoint for OpenAI/Codex subscription accounts; until then each Codex observation records `unsupported` truthfully.
+- [ ] Decide a retention policy for usage observations (append-only rows accumulate ~300/account/day at the idle cadence); pruning is an owner decision, not a delete path this phase adds.
+
 ## Phase 1D autonomous-loop decision controls (execution-inert)
 
 - [x] Complete the nine-action control model (plan, code, test, repair, review, approve, merge, deploy, rollback) at both an organization and a project scope.
