@@ -227,6 +227,19 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
     capability: "security_review",
   }),
   auditTemplate({
+    key: "database_migration",
+    name: "Database Migration",
+    summary:
+      "A schema change as an operation: forward-only, replay-safe, RLS intact, recorded in the ledger, with the read paths it feeds verified.",
+    areas: [
+      { id: "forward", job: "Check the migration is forward-only and replay-safe: if-not-exists guards, no down path, no renumbering of applied history." },
+      { id: "rls", job: "Check every new or altered table keeps RLS and FORCE RLS with tenant-scoped policies and no browser write grants." },
+      { id: "grants", job: "Check function and table grants: security definers re-validate their caller, and anon gains nothing." },
+      { id: "consumers", job: "Check the API routes and views reading the changed schema still return their contract." },
+      { id: "ledger", job: "Check the change is recorded end to end: tail pins, apply allowlists, and runbook counts move together." },
+    ],
+  }),
+  auditTemplate({
     key: "bug_sweep",
     name: "Bug Sweep",
     summary: "Looks for defects by class rather than by file, so the same mistake is found everywhere it was made.",

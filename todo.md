@@ -95,10 +95,19 @@ AUDIT (round 1, verified against code):
   Workflows — one engine, no duplication). Nav Pipelines group → Active,
   All Pipelines, Templates, Backlog (37-label contract); /pipelines
   redirect; pages.spec route; 15s live re-read; 5 unit tests.
-- [ ] Round 2+: PR/CI/deploy evidence joined per pipeline run (needs
-  branch/PR in list_commands or a detail RPC), simple-mode confirmation
-  in the composer, stage-state persistence, failure routes, Database
-  Migration template, graph executor bridge.
+- [x] Round 2: Database Migration template (auditTemplate, 5 areas —
+  forward-only/replay-safe, RLS, grants, consumers, ledger; completes
+  the owner's 13); simple-mode confirmation in the composer — a
+  "Pipeline" card appears once goal+project are set naming Project,
+  Requested risk, Suggested template (suggestTemplateForGoal keyword
+  matcher over GRAPH_TEMPLATES, labeled informational — the worker
+  executes the goal as written), and the real stages (RED → stops at
+  approval), linking to Pipelines. 4 new tests (matcher precedence,
+  fallback).
+- [ ] Round 3+: PR/CI/deploy evidence joined per pipeline run (needs
+  branch/PR in list_commands or a detail RPC), stage-state persistence
+  (PENDING/READY/... vocabulary), failure-route configuration,
+  schedules, graph executor bridge, advanced-mode builder.
 
 - [x] Edit/delete everywhere (owner goal, 2026-08-17 — ADR-078):
   Projects editable (update_project_details, migration 20260817000100,
