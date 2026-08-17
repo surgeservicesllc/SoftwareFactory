@@ -319,28 +319,28 @@ function Navigation({
 }
 
 /**
- * The console brand, left-aligned above the navigation.
+ * The console brand, in the one place it is not already on screen.
  *
- * An earlier revision removed a mark from here because the marketing header
- * above the shell already carried one. That reasoning held only on `/solutions`,
- * where both render; the drawer on mobile and every console route without that
- * header showed a nav with no identity at all. The mark now lives with the
- * navigation it belongs to, and its left edge lines up with the nav rows rather
- * than being centred, so the sidebar reads as one column.
+ * This has been removed once before and had to come back, so the reasoning is
+ * worth stating precisely rather than repeating the argument.
  *
- * Drawn as an inline SVG rather than an image file: it inherits the accent
- * token, stays sharp at any density, and adds no request to the critical path.
+ * On a wide screen the sidebar sits directly beneath the site header, which
+ * renders the same mark unconditionally — two identical logos stacked, one row
+ * apart. That is the duplication, and `xl:hidden` is what removes it.
+ *
+ * Below `xl` the sidebar is a drawer: `fixed inset-0 z-50` over an overlay,
+ * above the header's `z-30`. An open drawer therefore *covers* the header, and
+ * a drawer with no mark is a full-screen navigation with no identity — which is
+ * exactly the defect that brought this component back the first time. So the
+ * mark stays there, and only there.
  */
 function FactoryMark() {
-  // One drawing for the whole product. This used to be a second, hand-drawn
-  // copy of the header's mark, so the same page could show two logos that
-  // disagreed about their own colours.
   return (
     <BrandMark
       href="/solutions"
       label="AI Software Factory console home"
       tone="console"
-      className="mb-6 px-2"
+      className="mb-6 px-2 xl:hidden"
     />
   );
 }
