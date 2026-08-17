@@ -34,6 +34,7 @@ export function ActivityConsole() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -57,10 +58,33 @@ export function ActivityConsole() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // The portfolio facet of the same feed: each project that produced events,
+  // with its count, derived from the loaded events themselves. Events with no
+  // project are organization-level and get their own bucket rather than being
+  // attributed to a project. Counts are of what loaded (the API is bounded),
+  // not a claim about all history.
+  const projectFacets = useMemo(() => {
+    const facets = new Map<string, { id: string; name: string; count: number }>();
+    for (const event of events) {
+      const id = event.project?.id ?? "organization";
+      const facet = facets.get(id) ?? {
+        id,
+        name: event.project?.name ?? "Organization",
+        count: 0,
+      };
+      facet.count += 1;
+      facets.set(id, facet);
+    }
+    return [...facets.values()];
+  }, [events]);
+
   const visibleEvents = useMemo(() => {
+    const scoped = projectFilter === null
+      ? events
+      : events.filter((event) => (event.project?.id ?? "organization") === projectFilter);
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return events;
-    return events.filter((event) => [
+    if (!normalized) return scoped;
+    return scoped.filter((event) => [
       event.description,
       event.eventType,
       event.entity.id,
@@ -74,7 +98,7 @@ export function ActivityConsole() {
       event.evidence.status,
       ...event.evidence.resources.flatMap((resource) => [resource.type, resource.id]),
     ].some((value) => value?.toLowerCase().includes(normalized)));
-  }, [events, query]);
+  }, [events, projectFilter, query]);
 
   if (state === "signed-out") {
     return <BlockedState icon={Activity} title="Sign in to see your activity" description="Your audit trail is visible only to members of your organization." href="/auth/sign-in?next=/activity" label="Sign in" />;
@@ -119,6 +143,30 @@ export function ActivityConsole() {
           </button>
         </div>
       </div>
+
+      {state === "ready" && events.length > 0 ? (
+        <div className="flex flex-wrap gap-2 border-b border-line p-4" role="group" aria-label="Filter activity by project">
+          <button
+            type="button"
+            className={`btn btn-sm ${projectFilter === null ? "btn-primary" : "btn-secondary"}`}
+            aria-pressed={projectFilter === null}
+            onClick={() => setProjectFilter(null)}
+          >
+            All ({events.length})
+          </button>
+          {projectFacets.map((facet) => (
+            <button
+              key={facet.id}
+              type="button"
+              className={`btn btn-sm ${projectFilter === facet.id ? "btn-primary" : "btn-secondary"}`}
+              aria-pressed={projectFilter === facet.id}
+              onClick={() => setProjectFilter(projectFilter === facet.id ? null : facet.id)}
+            >
+              {facet.name} ({facet.count})
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {state === "loading" ? (
         <div className="grid min-h-48 place-items-center">
@@ -167,11 +215,13 @@ export function ActivityConsole() {
         <div className="grid min-h-48 place-items-center p-8 text-center">
           <div className="max-w-sm">
             <p className="font-semibold text-foreground">
-              {query ? "Nothing matches that search" : "Nothing has happened yet"}
+              {query || projectFilter
+                ? "Nothing matches that filter"
+                : "Nothing has happened yet"}
             </p>
             <p className="mt-2 text-sm text-muted">
-              {query
-                ? "Try a different word."
+              {query || projectFilter
+                ? "Try a different word, or clear the project selection."
                 : "Connecting GitHub, adding a project, or opening a draft pull request will all show up here."}
             </p>
           </div>

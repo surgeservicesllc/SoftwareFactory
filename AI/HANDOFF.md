@@ -1,8 +1,100 @@
 # Handoff
 
-Last updated: 2026-08-13
+Last updated: 2026-08-16
+
+## Newest (2026-08-16 ~23:20Z): per-account usage on the Bot Manager, captured by the broker sweep
+
+The owner asked for each connected bot's usage (session % and weekly %) on
+`/solutions/bot-manager`, fully automated. Landed as ADR-076: evidence table
+`ai_account_usage_observations` (migration `20260816001500`, **unhosted** —
+apply it with the runbook before expecting live rows), probe module
+`lib/worker/usage-probe.ts`, a bounded capture hook in
+`scripts/auth-broker.mts` (frozen file, touched under the owner's explicit
+instruction; login semantics untouched), `GET /api/ai-accounts/usage`, and the
+usage rows in `components/ai-accounts-panel.tsx` /
+`components/bot-manager/account-usage.tsx`. Truthfulness contract: the UI
+renders only recorded observations — measured windows, a named failure, or
+"no usage recorded yet" — and the probe never demotes an account. Codex
+records `unsupported` until a real usage endpoint is proven; proving one is
+the natural next step.
+
+## Project ↔ repository picker (2026-08-16, branch `feat/project-repo-picker`)
+
+Owners/admins can now choose, change, and unlink which GitHub repository an existing
+project connects to, end to end: migration `20260816001400_project_repository_picker`
+(two definer functions, serialized with handoff and change reservations, uniqueness
+refusals that name the holding project), `PUT`/`DELETE
+/api/projects/[projectId]/repository`, and a per-project picker in the Connections
+console with explicit no-installation / zero-repository / projects-load-failure states.
+The migration is **unhosted**; apply it through `AI/HOSTED_APPLY_RUNBOOK.md` (its counts
+are updated). Nothing here touches the frozen AI-account connection path, execution
+authority, or RLS.
+
+## Newest (2026-08-16 ~21:30Z): both provider paths frozen; GitHub install host-skew fixed
+
+Both AI-account connection paths are owner-frozen — Claude (ADR-072) and now
+Codex (ADR-073, after the first live Codex connection at 19:06:41Z). The
+operative file list is in `policies/PROTECTED_RESOURCES.md`; diagnosis stays
+allowed, fixes are owner proposals. Separately, the GitHub App install flow
+was failing across the deployment's hostname aliases (`github_state_invalid`
+on `softwarefactory-tan.vercel.app`): the launch and callback legs now
+303-converge on the configured callback host before touching cookies, state
+verification failures name their real cause, the state lifetime is 30
+minutes, and the Connections console strips its one-shot notice query
+parameters after reading them (ADR-074; the host-skew entry in
+`todo.md` has the full defect story). Outcome, owner-verified 19:47Z:
+GitHub is Connected live on a fresh installation `#154236235` scoped to
+exactly `surgeservicesllc/SoftwareFactory`, bound to the owner's live
+workspace. The old installations from the 2026-08-13 setup were bound to
+a workspace the owner's login cannot reach (single-membership login, no
+Workspace card); recovery was uninstall + fresh Connect, not adoption.
+A Workspace switcher card now renders on Connections whenever a login
+belongs to several workspaces (PR #165).
+
+## Active goal: BotBuild — AI accounts + automatic auth broker (2026-08-16)
+
+The owner's active goal (spec recorded in `todo.md` → "Owner goal — BotBuild")
+replaces the copy-a-command connect flow with a fully in-browser one: Add AI
+Account → Connect → the provider's real login → automatic detection →
+Connected. The foundation landed in `20260816000100_ai_accounts_auth_broker`
+(see ADR-071): `ai_accounts` identities, the `ai_auth_sessions` broker state
+machine (worker-driven, definer-function-only, sealed relay code, audit
+events on every transition), and nullable `bots.ai_account_id`. The
+verifying suite is `tests/integration/ai-accounts-auth-broker.behavior.test.ts`.
+Still open, in order: broker API routes, the worker auth runner (GitHub
+Actions job that runs the provider CLI login against a claimed session —
+including a live probe of headless `claude setup-token`; Codex's
+localhost-callback login is a known risk recorded in `todo.md`), the
+auto-completing UI, the Bot Manager redesign, disconnect/reauth surfaces,
+and the verification loop. The subscription connect-command flow (PRs
+#133/#134/#135) keeps working during the transition; do not remove it until
+the broker path is live end to end.
+
+## Read this first: master clean-room audit + frictionless goal (2026-08-16)
+
+The authoritative current state is `todo.md` → "Master clean-room audit
+(2026-08-16, iteration 24 — FINAL GATE)" and the "FRICTIONLESS COMPLETION
+REPORT" above it. Summary: full local gate PASS on merged `main` `69a0156`
+(eslint 0 errors, tsc clean, vitest 2741/0, production build OK), 22/22 live
+production routes 200, zero-token PASS, no unblocked P0/P1 — everything
+remaining is owner-only (1C canary, hosted-ledger position, second
+repository, 2A decision). A nine-iteration frictionless owner-experience
+loop merged as PRs #121, #123–#129 (guided setup, one-click bot connect,
+simple goal box, attention area, plain-language runs, iOS GitHub-connect
+fix, owner-first navigation, journey e2e) with **zero safety-surface
+changes** — presentation and tests only. Deployment caveat: Vercel's
+free-tier daily quota exhausted mid-sequence; production serves main through
+`0126825` (#126) until the next deploy after quota reset, an owner Redeploy,
+or a plan upgrade. The worker's one-click sign-in flow for the owner is:
+production `/auth/sign-in` → "Email me a sign-in link instead" → click the
+link promptly on the same device (PKCE — raw `/auth/v1/otp` links do NOT
+sign into this app; the session travels in a fragment the app ignores).
 
 ## Mission and boundary
+
+**Phase 2E portfolio scheduling landed on `claude/softwarefactory-phase-1e-ops-mjdiiq` on 2026-08-15** (migrations `20260815000100`-`20260815000600`, scored 33/36 PASS in `AI/PHASE_2E_COMPLETION.md`). Read that file and the 2E handoff block at the top of `todo.md` before touching the claim path: `claim_phase1c_run` now orders by effective priority and filters on four ceilings plus circuit-breaker health, and its body has been rewritten twice by copying the previous version and editing it, so a third rewrite should do the same rather than retyping it. Two ordering facts matter operationally — the six new migrations are unhosted, and `20260815000500`/`20260815000600` cannot apply to a database where `20260814000210` is half-applied, because their `language sql` bodies are resolved at creation.
+
+
 
 **Phase 1B close-out merged as `c325dbb` on 2026-08-14.** Scoring is in `AI/PHASE_1B_COMPLETION.md` (18 PASS / 2 PARTIAL / 0 FAIL). Three real defects were fixed, not just covered: generic-`500` lifecycle refusals, a stale suspension marker left after a revocation, and a discovery that aborted against a terminally deleted installation. `tests/integration/github-lifecycle-matrix.test.ts` is the access-loss proof — it attempts a real change reservation after every transition rather than reading a UI label, so do not weaken it into asserting rendered state. Migration `20260814001100` is **unhosted**; apply it as item 7 of `AI/HOSTED_APPLY_RUNBOOK.md`.
 

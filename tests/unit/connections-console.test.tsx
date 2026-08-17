@@ -22,8 +22,30 @@ function organizationResponse() {
   return jsonResponse({ activeOrganizationId: organization.id, organizations: [organization] });
 }
 
+// jsdom's `window.location.assign` is a non-configurable no-op, so it cannot be
+// spied on directly. Replace `window.location` with a proxy that forwards every
+// read to the real location but captures `assign`, which is how the connect
+// action now leaves for the installation launcher.
+const realLocation = window.location;
+function stubNavigation() {
+  const assign = vi.fn();
+  const stand_in = {
+    assign,
+    href: realLocation.href,
+    origin: realLocation.origin,
+    pathname: realLocation.pathname,
+    search: "",
+  } as unknown as Location;
+  delete (window as { location?: Location }).location;
+  (window as { location: Location }).location = stand_in;
+  return assign;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  delete (window as { location?: Location }).location;
+  (window as { location: Location }).location = realLocation;
   window.history.replaceState(null, "", "/");
 });
 
@@ -155,31 +177,42 @@ describe("ConnectionsConsole", () => {
     expect(within(connectionCard!).queryByText("Not Connected")).not.toBeInTheDocument();
   });
 
-  it("keeps the connect action visibly pending while authorization starts", async () => {
-    const pendingResponse = new Promise<Response>(() => undefined);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("starts authorization as a top-level navigation to the launcher, not a fetch", async () => {
+    // The launcher sets the anti-forgery cookie on its own redirect response.
+    // A background fetch would set it on an XHR response, which Safari on
+    // iOS/iPadOS is entitled to drop — the exact cause of the mobile-only
+    // failure this navigation replaces.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/organizations") return organizationResponse();
       if (String(input) === "/api/github/connections") return jsonResponse({ connections: [] });
-      if (String(input) === "/api/github/install/start" && !init?.method) {
-        return jsonResponse({ apps: [] });
-      }
+      if (String(input) === "/api/github/install/start") return jsonResponse({ apps: [] });
       if (String(input) === "/api/projects") return jsonResponse({ projects: [] });
-      return pendingResponse;
+      return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
+    const assign = stubNavigation();
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
     const connect = await screen.findByRole("button", { name: /Connect GitHub/ });
     await user.click(connect);
 
+    // The button reflects the pending navigation, and no POST to /start is made.
     await waitFor(() => expect(connect).toBeDisabled());
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/github/install/start", expect.objectContaining({ method: "POST" }));
+    expect(assign).toHaveBeenCalledTimes(1);
+    const target = new URL(String(assign.mock.calls[0]![0]), "https://factory.test");
+    expect(target.pathname).toBe("/api/github/install/launch");
+    expect(target.searchParams.get("appSlot")).toBe("primary");
+    expect(target.searchParams.get("organizationId")).toBe(organization.id);
+    expect(target.searchParams.get("returnTo")).toBe("/solutions/connections");
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/github/install/start",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("offers only the server-configured candidate App as the replacement target", async () => {
-    const pendingResponse = new Promise<Response>(() => undefined);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/organizations") return organizationResponse();
       if (String(input) === "/api/github/connections") {
         return jsonResponse({
@@ -202,7 +235,7 @@ describe("ConnectionsConsole", () => {
           }],
         });
       }
-      if (String(input) === "/api/github/install/start" && !init?.method) {
+      if (String(input) === "/api/github/install/start") {
         return jsonResponse({
           apps: [
             { appId: 4573846, appSlug: "software-factory", slot: "primary" },
@@ -211,9 +244,10 @@ describe("ConnectionsConsole", () => {
         });
       }
       if (String(input) === "/api/projects") return jsonResponse({ projects: [] });
-      return pendingResponse;
+      return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
+    const assign = stubNavigation();
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
@@ -222,15 +256,11 @@ describe("ConnectionsConsole", () => {
     });
     await user.click(install);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(
-      "/api/github/install/start",
-      expect.objectContaining({ method: "POST" }),
-    ));
-    const request = fetchMock.mock.calls.at(-1)?.[1] as RequestInit;
-    expect(JSON.parse(String(request.body))).toMatchObject({
-      appSlot: "candidate",
-      organizationId: organization.id,
-    });
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    const target = new URL(String(assign.mock.calls[0]![0]), "https://factory.test");
+    expect(target.pathname).toBe("/api/github/install/launch");
+    expect(target.searchParams.get("appSlot")).toBe("candidate");
+    expect(target.searchParams.get("organizationId")).toBe(organization.id);
   });
 
   it("requires explicit RED evidence before handing an existing project to the candidate", async () => {
@@ -361,5 +391,271 @@ describe("ConnectionsConsole", () => {
     expect(await screen.findByText(
       "GitHub installation was cancelled or is awaiting organization approval. (github_installation_cancelled)",
     )).toBeInTheDocument();
+    // The notice parameters are one-shot: they are stripped from the URL the
+    // moment they are read, so reloading (or bookmarking) the page cannot
+    // resurrect a stale success or failure banner over live data.
+    expect(window.location.search).toBe("");
+    expect(window.location.pathname).toBe("/connections");
+  });
+
+  it("offers a workspace switcher out of the wrong-workspace trap", async () => {
+    // Connections are workspace-scoped, and the install callback refuses an
+    // installation bound to another organization (a deliberate cross-tenant
+    // guard). A person whose browser landed in the other workspace saw only an
+    // empty list and that refusal, with no way to change context — the live
+    // 2026-08-16 "not returning back data" report.
+    const otherOrganization = {
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Second Workspace",
+      role: "owner",
+      slug: "second-workspace",
+    };
+    let activeId = organization.id;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/organizations") {
+        return jsonResponse({
+          activeOrganizationId: activeId,
+          organizations: [organization, otherOrganization],
+        });
+      }
+      if (url === "/api/organizations/active") {
+        activeId = (JSON.parse(String(init?.body ?? "{}")) as { organizationId: string }).organizationId;
+        return jsonResponse({ ok: true });
+      }
+      if (url === "/api/github/connections") {
+        return jsonResponse({
+          connections: activeId === otherOrganization.id
+            ? [{
+              account: { login: "example-org", type: "Organization" },
+              id: "55555555-5555-4555-8555-555555555555",
+              installation: {
+                id: 456,
+                lastSyncedAt: "2026-08-12T20:00:00.000Z",
+                repositorySelection: "selected",
+                suspendedAt: null,
+              },
+              name: "example-org",
+              repositories: [],
+              status: "connected",
+              statusLabel: "Connected",
+              statusReason: null,
+            }]
+            : [],
+        });
+      }
+      if (url === "/api/github/install/start") return jsonResponse({ apps: [] });
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ConnectionsConsole />);
+
+    // Wrong workspace: the empty state renders, but so does the switcher.
+    expect(await screen.findByRole("heading", { name: "Connect GitHub to begin" })).toBeInTheDocument();
+    const switcher = screen.getByRole("group", { name: "Switch workspace" });
+    expect(within(switcher).getByRole("button", { name: /Example Engineering — current/ })).toBeDisabled();
+
+    // Switching reloads straight into the workspace that owns the connection.
+    await userEvent.click(within(switcher).getByRole("button", { name: "Second Workspace" }));
+    expect(await screen.findByRole("heading", { name: "example-org" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/organizations/active",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  const pickerConnection = {
+    account: { login: "example-org", type: "Organization" },
+    id: "22222222-2222-4222-8222-222222222222",
+    installation: {
+      id: 456,
+      lastSyncedAt: "2026-08-12T20:00:00.000Z",
+      repositorySelection: "selected",
+      suspendedAt: null,
+    },
+    name: "example-org",
+    repositories: [
+      {
+        archived: false,
+        defaultBranch: "main",
+        disabled: false,
+        fullName: "example-org/application",
+        htmlUrl: "https://github.com/example-org/application",
+        id: 789,
+        private: true,
+        selected: true,
+      },
+      {
+        archived: false,
+        defaultBranch: "trunk",
+        disabled: false,
+        fullName: "example-org/website",
+        htmlUrl: "https://github.com/example-org/website",
+        id: 790,
+        private: true,
+        selected: true,
+      },
+    ],
+    status: "connected",
+    statusLabel: "Connected",
+    statusReason: null,
+  };
+
+  function pickerFetch(options: {
+    projects?: unknown;
+    projectsStatus?: number;
+    connections?: unknown[];
+    onProjectRepository?: (input: string, init?: RequestInit) => Response | Promise<Response>;
+  } = {}) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/organizations") return organizationResponse();
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: options.connections ?? [pickerConnection] });
+      }
+      if (url === "/api/github/install/start") return jsonResponse({ apps: [] });
+      if (url === "/api/projects") {
+        if (options.projectsStatus) {
+          return jsonResponse({ error: { message: "Projects could not be loaded." } }, options.projectsStatus);
+        }
+        return jsonResponse({ projects: options.projects ?? [] });
+      }
+      if (url.startsWith("/api/projects/") && url.endsWith("/repository") && options.onProjectRepository) {
+        return options.onProjectRepository(url, init);
+      }
+      return jsonResponse({});
+    });
+  }
+
+  const linkedProject = {
+    connectionId: pickerConnection.id,
+    githubRepository: "example-org/application",
+    githubRepositoryId: 789,
+    id: "88888888-8888-4888-8888-888888888888",
+    name: "Application",
+  };
+
+  const unlinkedProject = {
+    connectionId: null,
+    githubRepository: null,
+    githubRepositoryId: null,
+    id: "99999999-9999-4999-8999-999999999999",
+    name: "Website",
+  };
+
+  it("shows each project's linked repository and links a chosen repository", async () => {
+    const repositoryCalls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = pickerFetch({
+      projects: [linkedProject, unlinkedProject],
+      onProjectRepository: (url, init) => {
+        repositoryCalls.push({ url, init });
+        return jsonResponse({ project: { githubRepository: "example-org/website" } });
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<ConnectionsConsole />);
+
+    expect(await screen.findByText("Linked to example-org/application")).toBeInTheDocument();
+    expect(screen.getByText("No repository linked")).toBeInTheDocument();
+
+    const select = screen.getByLabelText("Repository for Website");
+    await user.selectOptions(select, `${pickerConnection.id}:790`);
+    await user.click(screen.getByRole("button", { name: "Link repository" }));
+
+    await waitFor(() => expect(repositoryCalls).toHaveLength(1));
+    expect(repositoryCalls[0].url).toBe(`/api/projects/${unlinkedProject.id}/repository`);
+    expect(repositoryCalls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(repositoryCalls[0].init?.body))).toEqual({
+      connectionId: pickerConnection.id,
+      repositoryId: 790,
+    });
+    expect(await screen.findByText("Website is now connected to example-org/website.")).toBeInTheDocument();
+  });
+
+  it("unlinks a project's repository after confirmation", async () => {
+    const repositoryCalls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = pickerFetch({
+      projects: [linkedProject],
+      onProjectRepository: (url, init) => {
+        repositoryCalls.push({ url, init });
+        return jsonResponse({ project: { githubRepository: null } });
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+
+    render(<ConnectionsConsole />);
+
+    await user.click(await screen.findByRole("button", { name: "Unlink" }));
+
+    await waitFor(() => expect(repositoryCalls).toHaveLength(1));
+    expect(repositoryCalls[0].url).toBe(`/api/projects/${linkedProject.id}/repository`);
+    expect(repositoryCalls[0].init?.method).toBe("DELETE");
+    expect(await screen.findByText("Application is no longer linked to a GitHub repository.")).toBeInTheDocument();
+  });
+
+  it("surfaces the server's uniqueness refusal instead of pretending success", async () => {
+    const fetchMock = pickerFetch({
+      projects: [unlinkedProject],
+      onProjectRepository: () => jsonResponse(
+        { error: { message: 'that repository is already linked to project "Application"' } },
+        409,
+      ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<ConnectionsConsole />);
+
+    const select = await screen.findByLabelText("Repository for Website");
+    await user.selectOptions(select, `${pickerConnection.id}:789`);
+    await user.click(screen.getByRole("button", { name: "Link repository" }));
+
+    expect(
+      await screen.findByText('that repository is already linked to project "Application"'),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No repository linked")).toBeInTheDocument();
+  });
+
+  it("renders a projects error state rather than an empty list when the read fails", async () => {
+    vi.stubGlobal("fetch", pickerFetch({ projectsStatus: 500 }));
+
+    render(<ConnectionsConsole />);
+
+    expect(
+      await screen.findByText(/Projects could not be loaded, so repository links cannot be shown/),
+    ).toBeInTheDocument();
+  });
+
+  it("points at the install flow when no GitHub App installation exists", async () => {
+    vi.stubGlobal("fetch", pickerFetch({
+      connections: [],
+      projects: [unlinkedProject],
+    }));
+
+    render(<ConnectionsConsole />);
+
+    expect(
+      await screen.findByText(/No GitHub App installation is connected/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install the GitHub App" })).toBeInTheDocument();
+  });
+
+  it("says so when the installation can reach zero repositories", async () => {
+    vi.stubGlobal("fetch", pickerFetch({
+      connections: [{ ...pickerConnection, repositories: [] }],
+      projects: [unlinkedProject],
+    }));
+
+    render(<ConnectionsConsole />);
+
+    expect(
+      await screen.findByText(/connected but can reach no selected repositories/),
+    ).toBeInTheDocument();
   });
 });

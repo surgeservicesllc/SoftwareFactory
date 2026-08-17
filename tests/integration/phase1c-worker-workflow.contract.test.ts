@@ -9,11 +9,17 @@ const workflow = readFileSync(
 );
 
 describe("Phase 1C durable worker workflow", () => {
-  it("runs only from default-branch dispatch or the scheduled recovery wake-up", () => {
+  it("runs from dispatch, the scheduled recovery wake-up, or main-guarded manual dispatch", () => {
     expect(workflow).toContain("repository_dispatch:");
     expect(workflow).toContain("softwarefactory_phase1c_command");
     expect(workflow).toContain("softwarefactory_phase1c_preflight");
-    expect(workflow).not.toContain("workflow_dispatch:");
+    // Owner-ordered 2026-08-16: manual dispatch is enabled. The job guard is
+    // the contract that keeps it from executing a non-main ref's job with the
+    // workflow's secrets — a dispatch of any other branch is skipped.
+    expect(workflow).toContain("workflow_dispatch: {}");
+    expect(workflow).toContain(
+      "(github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')",
+    );
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain('cron: "*/5 * * * *"');
     expect(workflow).not.toMatch(/\bpush:\s*$/m);
@@ -83,7 +89,7 @@ describe("Phase 1C durable worker workflow", () => {
   });
 
   it("claims one durable run through the fail-closed worker entrypoint", () => {
-    expect(workflow).toContain("if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' }}");
+    expect(workflow).toContain("if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') }}");
     expect(workflow).toContain('SOFTWAREFACTORY_WORKER_ENABLED: "true"');
     expect(workflow).toContain("npm run worker:once");
     expect(workflow).toContain("timeout-minutes: 70");

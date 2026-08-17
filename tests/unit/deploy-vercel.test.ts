@@ -56,6 +56,46 @@ describe("when no provider is configured", () => {
   });
 });
 
+describe("when a connection-resolved credential is supplied", () => {
+  it("uses the credential's token, not the ambient one", async () => {
+    process.env.VERCEL_TOKEN = "ambient-token";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ deployments: [deploymentRow()] }), { status: 200 }),
+    );
+
+    const result = await listRecentDeployments("prj_1", {
+      credential: { token: "team-a-token" },
+    });
+
+    expect(result.status).toBe("connected");
+    const headers = (fetchSpy.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer team-a-token");
+  });
+
+  it("reads two accounts in one process — one per connection credential", async () => {
+    // The structural multi-account claim: with no ambient token at all, two
+    // reads carrying two connections' credentials authenticate as two
+    // different accounts.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ deployments: [] }), { status: 200 }),
+    );
+
+    await listRecentDeployments("prj_a", { credential: { token: "team-a-token" } });
+    await listRecentDeployments("prj_b", { credential: { token: "team-b-token" } });
+
+    const bearers = fetchSpy.mock.calls.map(
+      (call) => ((call[1] as RequestInit).headers as Record<string, string>).Authorization,
+    );
+    expect(bearers).toEqual(["Bearer team-a-token", "Bearer team-b-token"]);
+  });
+
+  it("still reports not connected when neither credential nor ambient token exists", async () => {
+    const result = await listRecentDeployments("prj_1", {});
+    expect(result.status).toBe("not_connected");
+    expect(result.reason).toMatch(/connection-resolved deployment credential/);
+  });
+});
+
 describe("when the provider answers", () => {
   beforeEach(() => {
     process.env.VERCEL_TOKEN = "test-token";

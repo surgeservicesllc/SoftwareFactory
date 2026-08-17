@@ -1,7 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MyProjectsConsole } from "@/components/my-projects-console";
 import { ProjectsConsole } from "@/components/projects-console";
+
+const searchParams = vi.fn(() => new URLSearchParams());
+vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams() }));
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -62,9 +66,11 @@ function connectionsResponse(options: { lastSyncedAt?: string | null; private?: 
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  searchParams.mockReset();
+  searchParams.mockReturnValue(new URLSearchParams());
 });
 
-describe("ProjectsConsole GitHub evidence", () => {
+describe("Project inspector GitHub evidence (via My Projects)", () => {
   it("renders repository sync, branch, pull request, and check details supplied by GitHub", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -117,7 +123,7 @@ describe("ProjectsConsole GitHub evidence", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByText("Private")).toBeInTheDocument();
     expect(screen.getByText("Last synchronized").parentElement).not.toHaveTextContent("Never");
@@ -175,10 +181,420 @@ describe("ProjectsConsole GitHub evidence", () => {
       throw new Error(`Unexpected request: ${url}`);
     }));
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByText("Public")).toBeInTheDocument();
     expect(await screen.findByText("Author: Unknown · Mergeability: Unknown")).toBeInTheDocument();
     expect(screen.getByText("Status: queued · Conclusion: —")).toBeInTheDocument();
+  });
+
+  it("offers the next step a set-up project actually needs, carrying the project", async () => {
+    // Setting a project up used to end with nothing to do with it: the person
+    // had to navigate to Bot Manager and re-pick the project from a list.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return projectsResponse();
+      if (url === "/api/github/connections") return connectionsResponse();
+      if (url.includes("/branches?")) return jsonResponse({ branches: [] });
+      if (url.includes("/commits?")) return jsonResponse({ commits: [] });
+      if (url.includes("/pulls?")) return jsonResponse({ pullRequests: [] });
+      if (url.includes("/checks?")) return jsonResponse({ checkRuns: [] });
+      if (url === "/api/bots") return jsonResponse({ canManage: true, bots: [], roles: [], assignments: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<MyProjectsConsole />);
+
+    expect(await screen.findByRole("link", { name: /give this project work/i })).toHaveAttribute(
+      "href",
+      "/solutions/bot-manager?project=11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("does not call a cancelled check run a failing check", async () => {
+    // The worker queue cancels its own superseded beats by design; only a
+    // conclusion carrying failure evidence may raise "failing on the main
+    // branch" (owner was misled by a cancelled beat on 2026-08-16).
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return projectsResponse();
+      if (url === "/api/github/connections") return connectionsResponse({ lastSyncedAt: null, private: false });
+      if (url.includes("/branches?")) return jsonResponse({ branches: [{ name: "main", protected: true, sha: branchSha }] });
+      if (url.includes("/commits?")) return jsonResponse({ commits: [] });
+      if (url.includes("/pulls?")) return jsonResponse({ pullRequests: [] });
+      if (url.includes("/checks?")) {
+        return jsonResponse({ checkRuns: [{
+          completedAt: "2026-08-16T20:00:00.000Z",
+          conclusion: "success",
+          id: 101,
+          name: "CI",
+          startedAt: "2026-08-16T19:55:00.000Z",
+          status: "completed",
+          url: null,
+        }, {
+          completedAt: "2026-08-16T19:45:00.000Z",
+          conclusion: "cancelled",
+          id: 102,
+          name: "Superseded worker beat",
+          startedAt: "2026-08-16T19:44:00.000Z",
+          status: "completed",
+          url: null,
+        }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<MyProjectsConsole />);
+
+    expect(await screen.findByText("Public")).toBeInTheDocument();
+    // The cancelled run still shows its literal conclusion in the detail row…
+    expect(await screen.findByText("Status: completed · Conclusion: cancelled")).toBeInTheDocument();
+    // …but raises no failure warning and does not flip the summary to Failing.
+    expect(screen.queryByText(/failing on the main branch/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Failing")).not.toBeInTheDocument();
+  });
+});
+
+describe("ProjectsConsole add-project form", () => {
+  function connection(id: string, login: string, repositoryId: number) {
+    return {
+      account: { login, type: "Organization" },
+      id,
+      installation: { id: 456, lastSyncedAt: "2026-08-12T20:00:00.000Z", suspendedAt: null },
+      name: login,
+      repositories: [{
+        archived: false,
+        defaultBranch: "main",
+        disabled: false,
+        fullName: `${login}/application`,
+        htmlUrl: `https://github.com/${login}/application`,
+        id: repositoryId,
+        private: true,
+        selected: true,
+      }],
+      status: "connected",
+      statusLabel: "Connected",
+    };
+  }
+
+  it("does not show an account picker when only one account is connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "example-org", 789)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    // The repository choice (which already names the owner) is the only pick.
+    expect(await screen.findByLabelText("Repository")).toBeInTheDocument();
+    expect(screen.queryByLabelText("GitHub account")).not.toBeInTheDocument();
+    // The name is pre-filled from the repository, so adding is one confirmation.
+    await waitFor(() => expect(screen.getByLabelText("Name it")).toHaveValue("application"));
+  });
+
+  it("shows the account picker only once there are two accounts to choose from", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({
+          connections: [
+            connection(connectionId, "example-org", 789),
+            connection("33333333-3333-4333-8333-333333333333", "second-org", 790),
+          ],
+        });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByLabelText("GitHub account")).toBeInTheDocument();
+  });
+
+  it("anchors the add form for the navigation's New Project quick action", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "example-org", 789)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect((await screen.findByText("Add a project")).closest("section")).toHaveAttribute(
+      "id",
+      "add-project",
+    );
+  });
+});
+
+describe("ProjectsConsole archived view", () => {
+  it("opts into the archived read and shows records, not workspaces", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [{
+          autonomousMode: false,
+          connectionId: null,
+          connectionStatus: "not_connected",
+          defaultBranch: "main",
+          description: "Retired experiment",
+          githubRepository: "example-org/retired",
+          githubRepositoryId: null,
+          healthStatus: "unknown",
+          id: "44444444-4444-4444-8444-444444444444",
+          maximumAutonomousRisk: "GREEN",
+          name: "Retired",
+          status: "archived",
+        }] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectsConsole />);
+
+    const archivedCard = (await screen.findByText("Retired")).closest("section") as HTMLElement;
+    // The badge on the card, distinct from the Archived tab above the list.
+    expect(within(archivedCard).getByText("Archived")).toBeInTheDocument();
+    // Unarchive acts right here, through the owner-guarded control.
+    expect(within(archivedCard).getByRole("button", { name: "Unarchive" })).toBeInTheDocument();
+    // No add form and no live GitHub inspector on the archived view.
+    expect(screen.queryByText("Add a project")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/branches?"), expect.anything());
+  });
+
+  it("unarchives in place through the owner-guarded control", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    const controlPosts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/portfolio/controls" && init?.method === "POST") {
+        controlPosts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ result: [{ project_id: "44444444-4444-4444-8444-444444444444", status: "active" }] });
+      }
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [{
+          autonomousMode: false,
+          connectionId: null,
+          connectionStatus: "not_connected",
+          defaultBranch: "main",
+          description: null,
+          githubRepository: null,
+          githubRepositoryId: null,
+          healthStatus: "unknown",
+          id: "44444444-4444-4444-8444-444444444444",
+          maximumAutonomousRisk: "GREEN",
+          name: "Retired",
+          status: "archived",
+        }] });
+      }
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Unarchive" }));
+
+    await waitFor(() => expect(controlPosts).toHaveLength(1));
+    expect(controlPosts[0]).toEqual({
+      action: "unarchive",
+      projectId: "44444444-4444-4444-8444-444444444444",
+    });
+  });
+
+  it("says plainly when nothing is archived", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects?status=archived") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") return connectionsResponse();
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByText("No archived projects")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /view all projects/i })).toHaveAttribute(
+      "href",
+      "/solutions/projects",
+    );
+  });
+});
+
+describe("ProjectsConsole dashboard view", () => {
+  function dashboardProject(id: string, name: string, overrides: Record<string, unknown> = {}) {
+    return {
+      autonomousMode: false,
+      connectionId,
+      connectionStatus: "connected",
+      defaultBranch: "main",
+      description: null,
+      githubRepository: `example-org/${name.toLowerCase()}`,
+      githubRepositoryId: 789,
+      healthStatus: "unknown",
+      id,
+      maximumAutonomousRisk: "GREEN",
+      name,
+      status: "active",
+      updatedAt: "2026-08-16T10:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  const alphaId = "11111111-1111-4111-8111-111111111111";
+  const betaId = "55555555-5555-4555-8555-555555555555";
+
+  function stubDashboardFetch() {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [
+          dashboardProject(alphaId, "Alpha"),
+          dashboardProject(betaId, "Beta", { connectionId: null, connectionStatus: "not_connected", status: "paused" }),
+        ] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      if (url === "/api/runs") {
+        return jsonResponse({ runs: [
+          { id: "r1", status: "succeeded", createdAt: "2026-08-16T12:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+          { id: "r2", status: "failed", createdAt: "2026-08-16T11:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+          { id: "r3", status: "running", createdAt: "2026-08-16T13:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+        ] });
+      }
+      if (url === "/api/activity?limit=8") {
+        return jsonResponse({ events: [
+          { id: "e1", description: "Project connected to GitHub.", occurredAt: "2026-08-16T12:30:00.000Z" },
+        ] });
+      }
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [dashboardProject("99999999-9999-4999-8999-999999999999", "Old", { status: "archived" })] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+  }
+
+  it("counts, tabulates, and links every project from the live reads", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    // Tabs: the two real filters of this console plus its sibling page; the
+    // design's Starred tab has no model behind it and is absent.
+    const tabs = await screen.findByRole("navigation", { name: "Project views" });
+    expect(within(tabs).getByRole("link", { name: "All Projects" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "My Projects" })).toHaveAttribute("href", "/solutions/myprojects");
+    expect(within(tabs).getByRole("link", { name: "Archived" })).toHaveAttribute("href", "/solutions/projects?filter=archived");
+    expect(within(tabs).queryByText("Starred")).not.toBeInTheDocument();
+
+    // Stat cards are counted from the fetched records.
+    expect(screen.getByText("Total projects").closest("section")).toHaveTextContent("2");
+    expect(screen.getByText("Connected").closest("section")).toHaveTextContent("1");
+
+    // The table shows each project's repository and status, and opens the
+    // real detail page.
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("example-org/alpha")).toBeInTheDocument();
+    expect(within(table).getByText("Not Connected")).toBeInTheDocument();
+    const openLinks = within(table).getAllByRole("link", { name: /open/i });
+    expect(openLinks[0]).toHaveAttribute("href", `/solutions/portfolio/${alphaId}`);
+
+    expect(screen.getByText(/Showing 1 to 2 of 2 projects/)).toBeInTheDocument();
+  });
+
+  it("computes the success rate only from runs that carry a verdict", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    // Alpha: one succeeded + one failed = 50% of 2 finished; the running run
+    // carries no verdict and is excluded. Beta has no runs at all.
+    expect(await screen.findByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("of 2 finished")).toBeInTheDocument();
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+  });
+
+  it("edits a project through the dialog, bounded like the create form", async () => {
+    const patched: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === `/api/projects/${alphaId}` && init?.method === "PATCH") {
+        patched.push({ url, body: JSON.parse(String(init.body)) });
+        return jsonResponse({ project: { id: alphaId, name: "Alpha Prime", description: null, updatedAt: "2026-08-17T16:00:00.000Z" } });
+      }
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [dashboardProject(alphaId, "Alpha")] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Alpha" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Alpha" });
+    const nameInput = within(dialog).getByLabelText("Name");
+    fireEvent.change(nameInput, { target: { value: "Alpha Prime" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(patched).toHaveLength(1));
+    expect(patched[0].body).toEqual({ name: "Alpha Prime" });
+  });
+
+  it("archives through the reason-carrying dialog, promising what survives", async () => {
+    const controlPosts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/portfolio/controls" && init?.method === "POST") {
+        controlPosts.push(JSON.parse(String(init.body)));
+        return jsonResponse({ result: [{ project_id: alphaId, status: "archived" }] });
+      }
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [dashboardProject(alphaId, "Alpha")] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Alpha" }));
+    const dialog = screen.getByRole("dialog", { name: "Archive Alpha" });
+    // The dialog states the survival promise before anything happens.
+    expect(within(dialog).getByText(/Nothing is deleted/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Why archive it?"), { target: { value: "Superseded" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /archive project/i }));
+
+    await waitFor(() => expect(controlPosts).toHaveLength(1));
+    expect(controlPosts[0]).toEqual({ action: "archive", projectId: alphaId, reason: "Superseded" });
+  });
+
+  it("shows the status breakdown and the live activity feed in the rail", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    const breakdown = (await screen.findByText("Projects by status")).closest("section") as HTMLElement;
+    expect(within(breakdown).getByText("Active").parentElement).toHaveTextContent("1");
+    expect(within(breakdown).getByText("Paused").parentElement).toHaveTextContent("1");
+    expect(within(breakdown).getByText("Archived").parentElement).toHaveTextContent("1");
+
+    const rail = screen.getByText("Recent activity").closest("section") as HTMLElement;
+    expect(within(rail).getByText("Project connected to GitHub.")).toBeInTheDocument();
+    expect(within(rail).getByRole("link", { name: "View all" })).toHaveAttribute("href", "/solutions/activity");
   });
 });

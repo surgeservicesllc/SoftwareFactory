@@ -17,7 +17,11 @@ import {
   getGitHubAppConfigurationForSlot,
   type GitHubAppConfiguration,
 } from "@/lib/github/config";
-import { githubRouteErrorResponse } from "@/lib/github/errors";
+import {
+  githubConnectionsErrorRedirect,
+  githubRouteErrorResponse,
+  safeGitHubClientError,
+} from "@/lib/github/errors";
 import {
   GITHUB_INSTALL_STATE_COOKIE,
   GitHubStateError,
@@ -34,9 +38,6 @@ const callbackSchema = z.object({
   installationId: z.coerce.number().int().positive(),
   state: z.string().min(32).max(4096),
 });
-
-const CALLBACK_ERROR_CODE = /^[a-z][a-z0-9_]{0,62}$/;
-const CALLBACK_ERROR_MESSAGE_LIMIT = 240;
 
 function acceptsJson(request: Request) {
   return request.headers.get("accept")?.toLowerCase().includes("application/json") ?? false;
@@ -55,30 +56,9 @@ function callbackRedirect(url: URL) {
 }
 
 async function callbackErrorResponse(request: Request, error: unknown) {
-  const apiResponse = githubRouteErrorResponse(error);
-  if (acceptsJson(request)) return apiResponse;
-
-  let code = "github_callback_failed";
-  let message = "GitHub authorization could not be completed safely.";
-  try {
-    const body = await apiResponse.clone().json() as {
-      error?: { code?: unknown; message?: unknown };
-    };
-    if (typeof body.error?.code === "string" && CALLBACK_ERROR_CODE.test(body.error.code)) {
-      code = body.error.code;
-    }
-    if (typeof body.error?.message === "string" && body.error.message.trim()) {
-      message = body.error.message.trim().slice(0, CALLBACK_ERROR_MESSAGE_LIMIT);
-    }
-  } catch {
-    // The redirect always falls back to a fixed, client-safe failure notice.
-  }
-
-  const redirect = new URL("/solutions/connections", request.url);
-  redirect.searchParams.set("github", "error");
-  redirect.searchParams.set("githubError", code);
-  redirect.searchParams.set("githubMessage", message);
-  return callbackRedirect(redirect);
+  if (acceptsJson(request)) return githubRouteErrorResponse(error);
+  const { code, message } = await safeGitHubClientError(error);
+  return githubConnectionsErrorRedirect(request.url, code, message);
 }
 
 export async function GET(request: Request) {
@@ -86,10 +66,8 @@ export async function GET(request: Request) {
   let userToken: string | null = null;
   try {
     const url = new URL(request.url);
-    const cookieStore = await cookies();
-    const nonce = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
-    cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
     if (url.searchParams.has("error") || url.searchParams.get("setup_action") === "request") {
+      (await cookies()).delete(GITHUB_INSTALL_STATE_COOKIE);
       throw new GitHubAuthorizationError(
         400,
         "github_installation_cancelled",
@@ -114,6 +92,20 @@ export async function GET(request: Request) {
     if (configuration.appId !== stateTarget.appId) {
       throw new GitHubStateError("GitHub installation state does not match the configured App.");
     }
+    // The deployment answers on several hostnames, but the state cookie and the
+    // signed-in session live only on the host the launcher ran on — the
+    // configured callback host. If GitHub (or a stale App registration)
+    // returned the browser to another alias, re-enter this same callback on
+    // the configured host, untouched query and all, before reading any
+    // cookies. The target host comes from server configuration, never from
+    // the request, so this cannot be steered off-site.
+    const configuredCallback = new URL(configuration.callbackUrl);
+    if (url.host !== configuredCallback.host) {
+      return callbackRedirect(new URL(`${url.pathname}${url.search}`, configuredCallback.origin));
+    }
+    const cookieStore = await cookies();
+    const nonce = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
+    cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
     const { activeOrganization, supabase, user } = await requireGitHubUser();
     const state = verifyGitHubInstallState(
       parsed.data.state,

@@ -59,6 +59,21 @@ async function bootstrap(): Promise<PGlite> {
  */
 const DEPENDS_ON_TARGET = "20260814002300_guard_resource_assignment_candidates.sql";
 
+/**
+ * Phase 2E added two more dependants, and they bind harder than a constraint.
+ * `breaker_suppression_reason` and `portfolio_capacity_overview` are
+ * `language sql`, whose bodies PostgreSQL parses and resolves *at creation*, so
+ * both files fail outright on a database where `resource_breakers` is missing —
+ * they cannot be created and then repaired later.
+ *
+ * For the owner this sharpens the ordering: the repair below has to run before
+ * any of these three, not merely before the constraint.
+ */
+const LATER_DEPENDANTS = [
+  "20260815000500_phase2e_breaker_aware_scheduling.sql",
+  "20260815000600_phase2e_portfolio_visibility.sql",
+] as const;
+
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {
   const skip = new Set(options.skip ?? []);
   const files = (await readdir(migrationsDirectory))
@@ -169,7 +184,7 @@ describe("the phase2c repair", () => {
     const db = await bootstrap();
     // Everything except the target, then only the first table it creates —
     // reconstructing the exact state hosted is in.
-    await applyChain(db, { skip: [TARGET, DEPENDS_ON_TARGET] });
+    await applyChain(db, { skip: [TARGET, DEPENDS_ON_TARGET, ...LATER_DEPENDANTS] });
 
     const original = await readFile(resolve(migrationsDirectory, TARGET), "utf8");
     const firstTable = original.slice(0, original.indexOf("comment on table public.resource_breakers"));
@@ -217,6 +232,17 @@ describe("the phase2c repair", () => {
         where conname = 'resource_assignments_candidates_not_sensitive'`,
     );
     expect(guarded).toHaveLength(1);
+
+    // The Phase 2E files are the harder test of the same property: their SQL
+    // function bodies are resolved at creation, so they only apply at all if
+    // `resource_breakers` is genuinely there with its real columns.
+    for (const dependant of LATER_DEPENDANTS) await applyOne(db, dependant);
+    const { rows: scheduling } = await db.query<{ suppressed: string | null }>(
+      `select public.breaker_suppression_reason(
+         '00000000-0000-4000-8000-000000000000'::uuid, 'openai', 'gpt-5.3-codex', now()
+       ) as suppressed`,
+    );
+    expect(scheduling[0].suppressed).toBeNull();
 
     await db.close();
   }, 300_000);

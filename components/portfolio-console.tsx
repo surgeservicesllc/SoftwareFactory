@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import type { SchedulingView } from "@/lib/portfolio/scheduling";
 import {
   filterProjects,
   sortProjects,
@@ -31,8 +34,8 @@ const SORT_LABELS: Readonly<Record<SortKey, string>> = {
 function Count({ value, label }: { value: number | null; label: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-xs text-neutral-500">{label}</span>
-      <span className={value === null ? "text-sm text-neutral-500 italic" : "text-sm font-medium"}>
+      <span className="text-xs text-muted">{label}</span>
+      <span className={value === null ? "text-sm text-muted italic" : "text-sm font-medium"}>
         {value === null ? "Unknown" : value}
       </span>
     </div>
@@ -43,7 +46,7 @@ function Total({ label, value }: { label: string; value: number }) {
   return (
     <Card>
       <div className="flex flex-col">
-        <span className="text-xs text-neutral-500">{label}</span>
+        <span className="text-xs text-muted">{label}</span>
         <span className="text-2xl font-semibold">{value}</span>
       </div>
     </Card>
@@ -60,8 +63,161 @@ function ConnectionLabel({ health }: { health: PortfolioProject["connectionHealt
   return <span className="text-sm">{text}</span>;
 }
 
+function priorityLabel(priority: number) {
+  return `P${priority}`;
+}
+
+function waitedLabel(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+/**
+ * Capacity, the queue, and the bottleneck.
+ *
+ * Same rule as the counts above: nothing here is computed in the browser. Every
+ * number and every reason comes from the functions the scheduler itself calls,
+ * so the console cannot show a queue order the scheduler would not follow.
+ */
+function SchedulingPanel({ scheduling }: { scheduling: SchedulingView }) {
+  const { capacity, projects, queue, unavailable } = scheduling;
+  const running = queue.filter((item) => item.runStatus === "running");
+  const waiting = queue.filter((item) => item.runStatus === "queued");
+  const blocked = waiting.filter((item) => item.blockedReason !== null);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SectionTitle title="Portfolio capacity" />
+
+      {unavailable.length > 0 && (
+        <Notice tone="warning">
+          {`These scheduling sources could not be read, so they are not shown: ${unavailable.join(", ")}.`}
+        </Notice>
+      )}
+
+      {capacity === null ? (
+        <EmptyState
+          title="Capacity is unknown"
+          description="The portfolio capacity projection could not be read, so no figures are shown here rather than showing zeros."
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Total label="Running now" value={capacity.activeRuns} />
+            <Total label="Queued" value={capacity.queuedRuns} />
+            <Total label="Ordinary ceiling" value={capacity.ordinaryCeiling} />
+            <Total label="Reserved for P0" value={capacity.emergencyReserved} />
+          </div>
+          <p className="text-xs text-muted">
+            {`Portfolio ceiling ${capacity.organizationLimit}, of which ${capacity.emergencyReserved} `}
+            {"are reserved for emergency work — routine work stops at "}
+            {`${capacity.ordinaryCeiling} so an incident never has to interrupt a running job. `}
+            {`Queued work gains one priority tier every ${Math.round(capacity.fairnessPromotionSeconds / 60)} minutes it waits.`}
+          </p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {/* Workers are not organization-scoped in Phase 1C, so these are
+                factory-wide totals. Labelled rather than quietly implied. */}
+            <Count value={capacity.workerCount} label="Workers (factory-wide)" />
+            <Count value={capacity.workerCapacity} label="Worker slots (factory-wide)" />
+            <Count value={capacity.openBreakers} label="Open circuit breakers" />
+            <Count value={capacity.pausedProjects} label="Paused projects" />
+          </div>
+          {capacity.emergencyQueued > 0 && (
+            <Notice tone="warning">
+              {`${capacity.emergencyQueued} emergency ${capacity.emergencyQueued === 1 ? "item is" : "items are"} queued.`}
+            </Notice>
+          )}
+        </>
+      )}
+
+      <SectionTitle title={`Queue (${waiting.length} waiting, ${running.length} running)`} />
+
+      {queue.length === 0 ? (
+        <EmptyState
+          title="Nothing queued or running"
+          description="No work is waiting for capacity in this portfolio."
+        />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {queue.map((item) => (
+            <li key={item.runId}>
+              <Card>
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">
+                      {item.queuePosition === null ? "Running" : `#${item.queuePosition}`}
+                      {" · "}
+                      {item.projectName}
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-muted">
+                      {`${priorityLabel(item.effectivePriority)} effective`}
+                      {item.effectivePriority !== item.projectPriority
+                        && ` (project ${priorityLabel(item.projectPriority)})`}
+                      {item.emergency && " · emergency"}
+                      {item.strategicFocus && " · focused"}
+                    </span>
+                  </div>
+                  <span className="text-sm">{item.taskTitle}</span>
+                  <span className="text-xs text-muted">
+                    {item.runStatus === "running"
+                      ? `Running for ${waitedLabel(item.waitingSeconds)}`
+                      : `Waiting ${waitedLabel(item.waitingSeconds)}`}
+                    {item.blockedReason !== null && ` — ${item.blockedReason}`}
+                  </span>
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {blocked.length > 0 && (
+        <Notice tone="warning">
+          {`${blocked.length} queued ${blocked.length === 1 ? "item is" : "items are"} held by a ceiling or an unhealthy provider. The reason is on each row.`}
+        </Notice>
+      )}
+
+      {projects.length > 0 && (
+        <>
+          <SectionTitle title="Project scheduling" />
+          <ul className="flex flex-col gap-2">
+            {projects.map((project) => (
+              <li key={project.projectId}>
+                <Card>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">{project.projectName}</span>
+                      <span className="text-xs uppercase tracking-wide text-muted">
+                        {priorityLabel(project.engineeringPriority)}
+                        {project.strategicFocus && " · strategic focus"}
+                        {project.engineeringPaused && " · paused"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <Count value={project.activeRuns} label="Running" />
+                      <Count value={project.queuedRuns} label="Queued" />
+                      <Count value={project.maximumConcurrentRuns} label="Ceiling" />
+                    </div>
+                    {project.engineeringPaused && (
+                      <Notice tone="warning">
+                        {`Engineering paused: ${project.engineeringPauseReason ?? "no reason recorded"}.`}
+                      </Notice>
+                    )}
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PortfolioConsole() {
   const [view, setView] = useState<PortfolioView | null>(null);
+  const [scheduling, setScheduling] = useState<SchedulingView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("attention");
@@ -79,6 +235,27 @@ export function PortfolioConsole() {
       .catch((cause: unknown) => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "Unexpected error.");
       });
+    // Scheduling is fetched separately and its failure is not fatal: the
+    // portfolio is still worth showing without it, and the panel says so.
+    fetch("/api/portfolio/scheduling", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return response.json() as Promise<{ scheduling: SchedulingView }>;
+      })
+      .then((body) => {
+        if (!cancelled) setScheduling(body.scheduling);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScheduling({
+            capacity: null,
+            projects: [],
+            queue: [],
+            unavailable: ["capacity", "queue", "projects"],
+          });
+        }
+      });
+
     return () => {
       cancelled = true;
     };
@@ -90,7 +267,16 @@ export function PortfolioConsole() {
   }, [view, query, sort]);
 
   if (error) return <Notice tone="danger">{error}</Notice>;
-  if (!view) return <p className="text-sm text-neutral-500">Loading the portfolio…</p>;
+  if (!view) {
+    // Labelled the way every other console labels its spinner, so an
+    // accessibility sweep can wait for the settled state rather than auditing
+    // the loading one — and so a screen reader is told what is loading.
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the portfolio" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,7 +298,7 @@ export function PortfolioConsole() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Search projects</span>
+          <span className="text-xs text-muted">Search projects</span>
           <input
             type="search"
             value={query}
@@ -122,7 +308,7 @@ export function PortfolioConsole() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Sort by</span>
+          <span className="text-xs text-muted">Sort by</span>
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as SortKey)}
@@ -134,6 +320,8 @@ export function PortfolioConsole() {
           </select>
         </label>
       </div>
+
+      {scheduling !== null && <SchedulingPanel scheduling={scheduling} />}
 
       <SectionTitle title={`Projects (${shown.length})`} />
 
@@ -154,32 +342,39 @@ export function PortfolioConsole() {
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-col">
-                      <span className="font-medium">{project.name}</span>
-                      <span className="text-xs text-neutral-500">
+                      <Link
+                        href={`/solutions/portfolio/${project.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {project.name}
+                      </Link>
+                      <span className="text-xs text-muted">
                         {project.repository ?? "No repository bound"}
                       </span>
                     </div>
-                    <span className="text-xs uppercase tracking-wide text-neutral-500">
+                    <span className="text-xs uppercase tracking-wide text-muted">
                       {project.status}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
                     <Count value={project.openCommands} label="Commands" />
                     <Count value={project.activeRuns} label="Active runs" />
                     <Count value={project.openTasks} label="Open tasks" />
                     <Count value={project.openIncidents} label="Incidents" />
+                    <Count value={project.draftPullRequests} label="Draft PRs" />
+                    <Count value={project.activeDeployments} label="Deploys active" />
                     <div className="flex flex-col">
-                      <span className="text-xs text-neutral-500">Health</span>
+                      <span className="text-xs text-muted">Health</span>
                       <span className="text-sm">{project.health}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-xs text-neutral-500">Connection</span>
+                      <span className="text-xs text-muted">Connection</span>
                       <ConnectionLabel health={project.connectionHealth} />
                     </div>
                   </div>
 
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted">
                     {project.autonomousMode
                       ? `Autonomous mode on, ceiling ${project.maximumAutonomousRisk}`
                       : "Autonomous mode off"}

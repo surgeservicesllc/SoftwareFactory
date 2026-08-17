@@ -135,13 +135,17 @@ describe("a provider that is not set up", () => {
     expect(screen.queryByText(/^verified$/i)).not.toBeInTheDocument();
   });
 
-  it("shows the exact variable and a link to the page that issues a key", async () => {
+  it("takes the key here instead of naming an environment variable", async () => {
+    // What replaced the old instructions: no variable name to learn, no
+    // hosting dashboard to visit. Anthropic restricted OAuth to its own
+    // products, so a key is unavoidable — but everything around it is not.
     stubRoutedFetch(providerPayload({ credentialReady: false, probeVerdict: "not_configured", probeReason: null, probeLive: false }));
     const user = await openPicker();
     await user.click(await screen.findByRole("button", { name: /claude/i }));
 
-    expect(await screen.findByText("ANTHROPIC_API_KEY")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open key page/i })).toHaveAttribute(
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    expect(field).toHaveAttribute("type", "password");
+    expect(screen.getByRole("link", { name: /get a key from anthropic/i })).toHaveAttribute(
       "href",
       "https://platform.claude.com/settings/keys",
     );
@@ -297,5 +301,356 @@ describe("a key that is present but does not work", () => {
 
     const urls = fetchMock.mock.calls.map((call) => String(call[0]));
     expect(urls.some((url) => url.includes("/api/bots/providers?refresh=1"))).toBe(true);
+  });
+});
+
+describe("subscription sign-in", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubWithConnect(providers: unknown, command = "npx -y tsx scripts/connect.mts claude --code abc --host https://f.test") {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providers };
+      }
+      if (String(url) === "/api/bots/connect") {
+        return { ok: true, status: 200, json: async () => ({ command, expiresInSeconds: 600 }) };
+      }
+      if (init?.method === "POST") return { ok: true, status: 201, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("offers subscription sign-in ahead of the API key for Claude", async () => {
+    stubWithConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    expect(await screen.findByRole("button", { name: /sign in with anthropic/i }))
+      .toBeInTheDocument();
+    // The key route is still reachable, but named as the alternative and named
+    // as billed, so the free path is the obvious one.
+    expect(screen.getByText(/or use an api key instead \(billed per token\)/i))
+      .toBeInTheDocument();
+  });
+
+  it("hands over one command and never a token", async () => {
+    const command = "npx -y tsx scripts/connect.mts claude --code SECRETCODE --host https://f.test";
+    stubWithConnect(providerPayload(notConfigured), command);
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+
+    expect(await screen.findByText(command)).toBeInTheDocument();
+    // The browser is told what to run and learns nothing else. The token comes
+    // back from the operator's machine straight to the server.
+    expect(screen.getByText(/works once and expires in 10 minutes/i)).toBeInTheDocument();
+  });
+
+  it("re-checks with a cache bypass once the operator says they ran it", async () => {
+    const fetchMock = stubWithConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+    await user.click(await screen.findByRole("button", { name: /i have run it/i }));
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/api/bots/providers?refresh=1"))).toBe(true);
+  });
+
+  it("reports a refusal from the server rather than showing a dead command", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      if (String(url) === "/api/bots/connect") {
+        return {
+          ok: false, status: 503,
+          json: async () => ({ error: { message: "SOFTWAREFACTORY_CREDENTIAL_KEY is not set." } }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.click(await screen.findByRole("button", { name: /sign in with anthropic/i }));
+
+    // A command that could never be redeemed would fail minutes later with no
+    // explanation.
+    expect(await screen.findByText(/CREDENTIAL_KEY is not set/i)).toBeInTheDocument();
+    expect(screen.queryByText(/scripts\/connect.mts/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer subscription sign-in for a provider that has none", async () => {
+    stubWithConnect(providerPayload({
+      ...notConfigured, id: "groq", label: "Groq", vendor: "Groq",
+      credentialRef: "GROQ_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /groq/i }));
+
+    expect(screen.queryByRole("button", { name: /sign in with groq/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/two steps and groq is ready/i)).toBeInTheDocument();
+  });
+});
+
+describe("one click is offered for every provider, not just OpenRouter", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubConnect(providers: unknown) {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providers };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("leads Claude with Sign in with Google, which reaches Claude on Vertex", async () => {
+    // Anthropic's own OAuth is closed to third parties, but Claude runs on
+    // Vertex AI and Google OAuth is not. This is the standard login flow
+    // reaching the intended model through a door that is actually open.
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    const google = await screen.findByRole("link", { name: /sign in with google/i });
+    expect(google).toHaveAttribute("href", "/api/bots/connect/google/start");
+  });
+
+  it("still offers OpenRouter for Claude, as the second one-click route", async () => {
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    expect(await screen.findByRole("link", { name: /sign in with openrouter/i }))
+      .toHaveAttribute("href", "/api/bots/connect/oauth/start");
+    expect(screen.getByText(/through openrouter/i)).toBeInTheDocument();
+  });
+
+  it("does not offer Google sign-in for providers Vertex does not serve", async () => {
+    stubConnect(providerPayload({
+      ...notConfigured, id: "groq", label: "Groq", vendor: "Groq",
+      credentialRef: "GROQ_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /groq/i }));
+
+    expect(screen.queryByRole("link", { name: /sign in with google/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the zero-cost subscription route available as the alternative", async () => {
+    stubConnect(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    // Still there, and still labelled as the one that bills nothing per token.
+    expect(await screen.findByText(/or use your anthropic subscription instead/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/bills nothing per token/i)).toBeInTheDocument();
+  });
+
+  it("does not offer OpenRouter to itself twice", async () => {
+    stubConnect(providerPayload({
+      ...notConfigured, id: "openrouter", label: "OpenRouter", vendor: "OpenRouter",
+      credentialRef: "OPENROUTER_API_KEY",
+    }));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /openrouter/i }));
+
+    expect(screen.queryByText(/get openrouter in one click/i)).not.toBeInTheDocument();
+    expect(await screen.findAllByRole("link", { name: /sign in with openrouter/i }))
+      .toHaveLength(1);
+  });
+});
+
+describe("pasting a key", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  function stubKeyPost(response: { ok: boolean; body: unknown }) {
+    const posted: unknown[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 400,
+          json: async () => response.body,
+        };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return { posted, fetchMock };
+  }
+
+  async function typeKey(user: ReturnType<typeof userEvent.setup>, key: string) {
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.type(await screen.findByLabelText(/anthropic api key/i), key);
+    await user.click(screen.getByRole("button", { name: /^connect$/i }));
+  }
+
+  it("sends the key and re-checks once it is accepted", async () => {
+    const { posted, fetchMock } = stubKeyPost({
+      ok: true, body: { connected: true, verdict: "verified" },
+    });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-a-real-looking-key");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      provider: "anthropic", key: "sk-ant-api03-a-real-looking-key",
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(
+        (call) => String(call[0]).includes("/api/bots/providers?refresh=1"),
+      )).toBe(true);
+    });
+  });
+
+  it("reports the provider's own verdict rather than a generic failure", async () => {
+    // A valid key on an account with no credit must not read as a bad key.
+    const { posted } = stubKeyPost({
+      ok: false,
+      body: { connected: false, verdict: "no_credit", message: "The key is valid but the account has no available credit." },
+    });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-valid-but-broke");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no available credit/i);
+    // The panel must still be open. A nested form would have bubbled this
+    // submit to the register handler, registering the bot and closing it.
+    expect(screen.getByLabelText(/anthropic api key/i)).toBeInTheDocument();
+  });
+
+  it("will not submit something too short to be a key", async () => {
+    const { posted } = stubKeyPost({ ok: true, body: { connected: true } });
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    await user.type(await screen.findByLabelText(/anthropic api key/i), "short");
+
+    expect(screen.getByRole("button", { name: /^connect$/i })).toBeDisabled();
+    expect(posted).toHaveLength(0);
+  });
+
+  it("clears the field once the key is stored, so it is not left on screen", async () => {
+    stubKeyPost({ ok: true, body: { connected: true, verdict: "verified" } });
+    const user = await openPicker();
+    await typeKey(user, "sk-ant-api03-a-real-looking-key");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/anthropic api key/i)).toHaveValue("");
+    });
+  });
+});
+
+describe("pasting is the whole interaction", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  it("connects on paste, with no button press afterwards", async () => {
+    // As close to an OAuth return as policy allows for Anthropic: the paste is
+    // the last thing anyone does. A confirm click would only restate it.
+    const posted: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return { ok: true, status: 200, json: async () => ({ connected: true }) };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    }));
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    field.focus();
+    await user.paste("sk-ant-api03-pasted-straight-in");
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({ key: "sk-ant-api03-pasted-straight-in" });
+  });
+
+  it("ignores a paste too short to be a key rather than posting it", async () => {
+    const posted: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url) === "/api/bots/connect/key") {
+        posted.push(JSON.parse(String(init?.body)));
+        return { ok: true, status: 200, json: async () => ({ connected: true }) };
+      }
+      if (String(url).startsWith("/api/bots/providers")) {
+        return { ok: true, status: 200, json: async () => providerPayload(notConfigured) };
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload };
+    }));
+
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    const field = await screen.findByLabelText(/anthropic api key/i);
+    field.focus();
+    await user.paste("oops");
+
+    // A stray paste must not fire a request that will certainly fail.
+    expect(posted).toHaveLength(0);
+  });
+});
+
+describe("one primary action, not a menu", () => {
+  const notConfigured = {
+    credentialReady: false, probeVerdict: "not_configured",
+    probeReason: null, probeLive: false,
+  };
+
+  it("leads with sign-in and folds the key away", async () => {
+    // Three ways to connect shown at once turns a login into a decision. The
+    // existing tests could not see this: <details> keeps its content in the
+    // DOM when closed, so querying for the field passes either way.
+    stubRoutedFetch(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+
+    // The label sits in a span inside the summary, so both elements match.
+    const [summaryText] = await screen.findAllByText(/paste a key instead/i);
+    const disclosure = summaryText.closest("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
+
+    // The sign-in is not behind anything.
+    expect(screen.getByRole("link", { name: /sign in with openrouter/i })).toBeVisible();
+  });
+
+  it("opens the key path when asked for", async () => {
+    stubRoutedFetch(providerPayload(notConfigured));
+    const user = await openPicker();
+    await user.click(await screen.findByRole("button", { name: /claude/i }));
+    const [summaryText] = await screen.findAllByText(/paste a key instead/i);
+    await user.click(summaryText);
+
+    const disclosure = summaryText.closest("details");
+    expect(disclosure).toHaveAttribute("open");
+    expect(screen.getByLabelText(/anthropic api key/i)).toBeInTheDocument();
   });
 });

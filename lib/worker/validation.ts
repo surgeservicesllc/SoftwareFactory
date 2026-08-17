@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { controlledProcessEnvironment } from "@/lib/worker/env";
@@ -132,7 +132,31 @@ export class DeterministicValidator {
     }
 
     const args = ["ci", "--ignore-scripts", "--no-audit", "--no-fund"];
-    const result = await this.containerProcess({
+    const first = await this.containerProcess({
+      workspace,
+      network: "bridge",
+      command: "npm",
+      args,
+      signal,
+      timeoutMs: 10 * 60_000,
+    });
+    if (first.exitCode === 0) {
+      return Object.freeze({
+        name: "dependency-install",
+        command: renderedCommand("npm", args),
+        status: "passed" as const,
+        durationMs: first.durationMs,
+        output: redactText(first.stdout),
+      });
+    }
+
+    // npm's parallel tar extraction is unreliable on the bind-mounted
+    // workspace (TAR_ENTRY_ERROR ENOENT / ENOTEMPTY, live 2026-08-16 on the
+    // next package's large docs tree). A partially extracted node_modules can
+    // also poison any later attempt, so clean it and try once more before
+    // reporting failure; a second failure reports both outputs.
+    await rm(path.join(workspace.directory, "node_modules"), { force: true, recursive: true });
+    const second = await this.containerProcess({
       workspace,
       network: "bridge",
       command: "npm",
@@ -143,9 +167,11 @@ export class DeterministicValidator {
     return Object.freeze({
       name: "dependency-install",
       command: renderedCommand("npm", args),
-      status: result.exitCode === 0 ? "passed" : "failed",
-      durationMs: result.durationMs,
-      output: redactText(result.exitCode === 0 ? result.stdout : `${result.stdout}\n${result.stderr}`),
+      status: second.exitCode === 0 ? "passed" as const : "failed" as const,
+      durationMs: first.durationMs + second.durationMs,
+      output: redactText(second.exitCode === 0
+        ? `A first npm ci failed and was retried on a cleaned node_modules.\n${second.stdout}`
+        : `First attempt:\n${first.stdout}\n${first.stderr}\n\nRetry on cleaned node_modules:\n${second.stdout}\n${second.stderr}`),
     });
   }
 

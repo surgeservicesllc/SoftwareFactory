@@ -50,6 +50,7 @@ type ConfiguredGithubApp = {
 };
 type GithubProject = {
   connectionId: string | null;
+  githubRepository: string | null;
   githubRepositoryId: number | null;
   id: string;
   name: string;
@@ -77,9 +78,11 @@ export function ConnectionsConsole() {
   const [connections, setConnections] = useState<GithubConnection[]>([]);
   const [configuredApps, setConfiguredApps] = useState<ConfiguredGithubApp[]>([]);
   const [projects, setProjects] = useState<GithubProject[]>([]);
+  const [projectsLoadFailed, setProjectsLoadFailed] = useState(false);
+  const [repositoryChoice, setRepositoryChoice] = useState<Record<string, string>>({});
   const [handoffIntent, setHandoffIntent] = useState<HandoffIntent | null>(null);
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | null>(null);
+  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | "link" | "unlink" | null>(null);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -123,7 +126,11 @@ export function ConnectionsConsole() {
       const projectsBody = (await projectsResponse.json()) as {
         projects?: GithubProject[];
       };
+      // A failed projects read is an error state, never an empty list
+      // pretending to be measured.
+      setProjectsLoadFailed(!projectsResponse.ok);
       setProjects(projectsResponse.ok ? projectsBody.projects ?? [] : []);
+      setRepositoryChoice({});
       if (connectionsResponse.status === 503) setMessage(connectionsBody.error?.message ?? "The GitHub App server configuration is not complete.");
       else if (!appMetadataResponse.ok) {
         setMessage(appMetadataBody.error?.message ?? "Replacement GitHub App configuration is unavailable.");
@@ -137,6 +144,21 @@ export function ConnectionsConsole() {
 
   useEffect(() => {
     const callbackNotice = readGitHubCallbackNotice(window.location.search);
+    if (callbackNotice) {
+      // The callback notice rides in one-shot query parameters. Strip them as
+      // soon as they are read, or every later reload of the bookmarked URL
+      // resurrects a stale success or failure banner over live data — which is
+      // how a days-old github_state_invalid kept greeting the owner.
+      const cleaned = new URL(window.location.href);
+      for (const name of ["github", "githubError", "githubMessage", "connectionId", "repositories"]) {
+        cleaned.searchParams.delete(name);
+      }
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${cleaned.pathname}${cleaned.search}${cleaned.hash}`,
+      );
+    }
     const timer = window.setTimeout(() => {
       if (callbackNotice) setMessage(callbackNotice);
       void load();
@@ -184,23 +206,26 @@ export function ConnectionsConsole() {
     }
   }
 
-  async function connectGithub(appSlot: "candidate" | "primary" = "primary") {
+  function connectGithub(appSlot: "candidate" | "primary" = "primary") {
     if (!organization) return;
     setPending("connect");
     setMessage("");
-    try {
-      const response = await fetch("/api/github/install/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appSlot, organizationId: organization.id, returnTo: "/solutions/connections" }),
-      });
-      const body = (await response.json()) as { authorizationUrl?: string; error?: { message?: string } };
-      if (!response.ok || !body.authorizationUrl) throw new Error(body.error?.message ?? "GitHub authorization could not start.");
-      window.location.assign(body.authorizationUrl);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "GitHub authorization failed.");
-      setPending(null);
-    }
+    // A single top-level navigation to the launcher, which sets the anti-forgery
+    // state cookie on its own redirect response and forwards the browser to
+    // GitHub. This deliberately does not POST-then-redirect: a cookie set on a
+    // background fetch response is dropped by Safari's tracking prevention on
+    // iOS/iPadOS, which broke the return leg only on those devices.
+    const params = new URLSearchParams({
+      appSlot,
+      organizationId: organization.id,
+      returnTo: "/solutions/connections",
+    });
+    // A full-page navigation, not router.push: the target is a route handler
+    // that sets a cookie and 303s to github.com. A client-side navigation would
+    // fetch it as RSC and follow neither the Set-Cookie nor the off-origin
+    // redirect.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`/api/github/install/launch?${params.toString()}`);
   }
 
   async function handoffProject(
@@ -313,6 +338,76 @@ export function ConnectionsConsole() {
       setPending(null);
     }
   }
+
+  async function linkProjectRepository(project: GithubProject) {
+    const choice = repositoryChoice[project.id];
+    if (!choice) return;
+    const [connectionId, repositoryIdText] = choice.split(":");
+    const repositoryId = Number(repositoryIdText);
+    if (!connectionId || !Number.isSafeInteger(repositoryId) || repositoryId <= 0) return;
+    setPending("link");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/projects/${project.id}/repository`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId, repositoryId }),
+      });
+      const body = (await response.json()) as {
+        project?: { githubRepository?: string };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project repository could not be changed safely.");
+      setMessage(`${project.name} is now connected to ${body.project?.githubRepository ?? "the selected repository"}.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The project repository could not be changed safely.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function unlinkProjectRepository(project: GithubProject) {
+    const confirmed = window.confirm(
+      `Unlink ${project.githubRepository ?? "the repository"} from ${project.name}?\n\nThe project and its history are kept. New repository work cannot start until a repository is linked again.`,
+    );
+    if (!confirmed) return;
+    setPending("unlink");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/projects/${project.id}/repository`, { method: "DELETE" });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project repository could not be unlinked safely.");
+      setMessage(`${project.name} is no longer linked to a GitHub repository.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The project repository could not be unlinked safely.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  /**
+   * The repositories a project may link to: every selected, enabled repository
+   * reachable through a connected installation. When several accounts are
+   * connected the option label carries the account so two same-named
+   * repositories stay distinguishable.
+   */
+  const connectedConnections = connections.filter(
+    (connection) => connection.status === "connected" && connection.installation,
+  );
+  const connectedRepositoryOptions = {
+    hasConnection: connectedConnections.length > 0,
+    options: connectedConnections.flatMap((connection) =>
+      connection.repositories
+        .filter((repository) => repository.selected && !repository.archived && !repository.disabled)
+        .map((repository) => ({
+          label: connectedConnections.length > 1
+            ? `${repository.fullName} (installation #${connection.installation?.id})`
+            : repository.fullName,
+          value: `${connection.id}:${repository.id}`,
+        }))),
+  };
 
   const candidateApp = configuredApps.find((app) => app.slot === "candidate") ?? null;
   const hasCandidateInstallation = Boolean(candidateApp && connections.some(
@@ -436,6 +531,34 @@ export function ConnectionsConsole() {
         <p className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning)]" aria-live="polite">
           {message}
         </p>
+      ) : null}
+
+      {organizations.length > 1 ? (
+        <Card className="p-5">
+          <p className="label">Workspace</p>
+          <p className="mt-1 text-sm text-muted">
+            Connections belong to one workspace at a time. If a connection you expect is
+            missing here — or GitHub says the installation is bound to another
+            organization — switch to the workspace that owns it.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Switch workspace">
+            {organizations.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void selectOrganization(item.id)}
+                disabled={pending !== null || item.id === organization?.id}
+                className={item.id === organization?.id ? "btn btn-primary" : "btn btn-secondary"}
+              >
+                {pending === "onboarding" && item.id !== organization?.id
+                  ? <Loader2 className="size-4 animate-spin" />
+                  : null}
+                {item.name}
+                {item.id === organization?.id ? " — current" : ""}
+              </button>
+            ))}
+          </div>
+        </Card>
       ) : null}
 
       {connections.length ? (
@@ -626,6 +749,120 @@ export function ConnectionsConsole() {
           ) : null}
         </div>
       ) : null}
+
+      <Card className="p-5">
+        <p className="label">Project repositories</p>
+        <p className="mt-1 text-sm text-muted">
+          Each project is one GitHub repository. Choose which repository each project
+          connects to; a repository can back only one active project at a time.
+        </p>
+        {projectsLoadFailed ? (
+          <div className="mt-4">
+            <p className="text-sm text-[var(--warning)]">
+              Projects could not be loaded, so repository links cannot be shown or changed right now.
+            </p>
+            <button type="button" onClick={() => void load()} className="btn btn-secondary btn-sm mt-3">
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Retry
+            </button>
+          </div>
+        ) : !connectedRepositoryOptions.hasConnection ? (
+          <div className="mt-4">
+            <p className="text-sm text-muted">
+              No GitHub App installation is connected, so there is no repository list to choose from.
+            </p>
+            <button type="button" onClick={() => void connectGithub("primary")} disabled={pending !== null} className="btn btn-primary btn-sm mt-3">
+              {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+              Install the GitHub App
+            </button>
+          </div>
+        ) : !connectedRepositoryOptions.options.length ? (
+          <p className="mt-4 text-sm text-muted">
+            The GitHub App installation is connected but can reach no selected repositories.
+            Manage the installation on GitHub, select at least one repository, then refresh.
+          </p>
+        ) : !projects.length ? (
+          <p className="mt-4 text-sm text-muted">
+            No projects exist yet. Create a project from the Projects console to link a repository.
+          </p>
+        ) : (
+          <ul className="mt-4 grid gap-3">
+            {projects.map((project) => {
+              const currentValue = project.connectionId && project.githubRepositoryId
+                ? `${project.connectionId}:${project.githubRepositoryId}`
+                : "";
+              const chosenValue = repositoryChoice[project.id] ?? currentValue;
+              const canManage = organization?.role === "owner" || organization?.role === "admin";
+              return (
+                <li key={project.id} className="rounded-lg border border-line p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{project.name}</p>
+                      <p className="mt-0.5 text-sm text-faint">
+                        {project.githubRepository
+                          ? `Linked to ${project.githubRepository}`
+                          : "No repository linked"}
+                      </p>
+                    </div>
+                  </div>
+                  {canManage ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <label className="sr-only" htmlFor={`repository-for-${project.id}`}>
+                        Repository for {project.name}
+                      </label>
+                      <select
+                        id={`repository-for-${project.id}`}
+                        className="input h-9 min-w-0 flex-1 basis-64 py-0 text-sm"
+                        value={chosenValue}
+                        onChange={(event) => setRepositoryChoice((previous) => ({
+                          ...previous,
+                          [project.id]: event.target.value,
+                        }))}
+                        disabled={pending !== null}
+                      >
+                        <option value="">Choose a repository…</option>
+                        {connectedRepositoryOptions.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void linkProjectRepository(project)}
+                        disabled={
+                          pending !== null
+                          || !repositoryChoice[project.id]
+                          || repositoryChoice[project.id] === currentValue
+                        }
+                        className="btn btn-primary btn-sm"
+                      >
+                        {pending === "link" ? <Loader2 className="size-4 animate-spin" /> : null}
+                        {project.githubRepository ? "Change repository" : "Link repository"}
+                      </button>
+                      {project.githubRepository || project.githubRepositoryId ? (
+                        <button
+                          type="button"
+                          onClick={() => void unlinkProjectRepository(project)}
+                          disabled={pending !== null}
+                          className="btn btn-danger btn-sm"
+                        >
+                          {pending === "unlink" ? <Loader2 className="size-4 animate-spin" /> : null}
+                          Unlink
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-faint">
+                      Organization owner or administrator access is required to change this link.
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
 
       <Card className="p-5">
         <p className="label">Other providers</p>

@@ -11,12 +11,47 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+const realLocation = window.location;
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", realLocation.pathname);
 });
 
 describe("CommandComposer", () => {
+  it("opens on the project a person arrived from, and ignores one they cannot use", async () => {
+    // "Give this project work" carries the project in the URL. Honouring it
+    // is the difference between arriving ready and re-picking from a list.
+    const connected = "11111111-1111-4111-8111-111111111111";
+    const second = "33333333-3333-4333-8333-333333333333";
+    const projects = {
+      projects: [
+        { connectionStatus: "connected", id: connected, name: "First application", status: "active" },
+        { connectionStatus: "connected", id: second, name: "Second application", status: "active" },
+        {
+          connectionStatus: "not_connected",
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Historical application",
+          status: "active",
+        },
+      ],
+    };
+
+    window.history.replaceState(null, "", `/solutions/bot-manager?project=${second}`);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(projects)));
+    const { unmount } = render(<CommandComposer />);
+    expect(await screen.findByRole("combobox", { name: /project/i })).toHaveValue(second);
+    unmount();
+
+    // A project that is not selectable (or absent) must not leave the
+    // selection empty, which would silently disable the submit button.
+    window.history.replaceState(null, "", "/solutions/bot-manager?project=22222222-2222-4222-8222-222222222222");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(projects)));
+    render(<CommandComposer />);
+    expect(await screen.findByRole("combobox", { name: /project/i })).toHaveValue(connected);
+  });
+
   it("offers only projects with a currently connected GitHub binding", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       projects: [
@@ -79,6 +114,7 @@ describe("CommandComposer", () => {
 
     await screen.findByRole("option", { name: "Application" });
     await user.type(screen.getByLabelText("What do you want done?"), "Fix the mobile overflow");
+    await user.click(screen.getByRole("button", { name: /Advanced options/ }));
     await user.selectOptions(screen.getByLabelText("Work type"), "mobile");
     await user.click(screen.getByRole("button", { name: /Medium/ }));
     await user.click(screen.getByRole("button", { name: "Queue command" }));
@@ -137,6 +173,8 @@ describe("CommandComposer", () => {
 
     render(<CommandComposer />);
 
+    await screen.findByRole("option", { name: "Application" });
+    await user.click(screen.getByRole("button", { name: /Advanced options/ }));
     const dependencyB = await screen.findByRole("checkbox", { name: /Foundation B/ });
     const dependencyA = screen.getByRole("checkbox", { name: /Foundation A/ });
     expect(screen.queryByText("Failed work")).not.toBeInTheDocument();
@@ -158,5 +196,119 @@ describe("CommandComposer", () => {
     };
     expect(body.acceptanceCriteria).toEqual([]);
     expect(body.dependencyTaskIds).toEqual([dependencyTaskA, dependencyTaskB]);
+  });
+
+  it("opens simple: advanced fields stay behind the disclosure until asked for", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/projects") {
+        return jsonResponse({
+          projects: [{
+            connectionStatus: "connected",
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Application",
+            status: "active",
+          }],
+        });
+      }
+      return jsonResponse({ tasks: [] });
+    }));
+    const user = userEvent.setup();
+
+    render(<CommandComposer />);
+    await screen.findByRole("option", { name: "Application" });
+
+    // The simple view is the goal, the project, and the queue button — the
+    // technical controls do not confront a non-technical owner by default.
+    expect(screen.queryByLabelText("Work type")).not.toBeInTheDocument();
+    expect(screen.queryByText("Requested minimum risk tier")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Depends on existing work/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Acceptance criteria/)).not.toBeInTheDocument();
+
+    const toggle = screen.getByRole("button", { name: /Advanced options/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Work type")).toBeInTheDocument();
+    expect(screen.getByText("Requested minimum risk tier")).toBeInTheDocument();
+    expect(screen.getByText(/Depends on existing work/)).toBeInTheDocument();
+  });
+
+  it("queues a goal from the simple view alone with the safe defaults", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/projects") {
+        return jsonResponse({
+          projects: [{
+            connectionStatus: "connected",
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Application",
+            status: "active",
+          }],
+        });
+      }
+      if (String(input) === "/api/tasks?limit=100") return jsonResponse({ tasks: [] });
+      if (String(input) === "/api/commands" && init?.method === "POST") {
+        return jsonResponse({
+          command: { id: "44444444-4444-4444-8444-444444444444" },
+          execution: { workerDispatch: "requested" },
+          orchestration: { effectiveRisk: "green", repository: "example/application" },
+          requiresOwnerApproval: false,
+        }, 202);
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<CommandComposer />);
+    await screen.findByRole("option", { name: "Application" });
+    await user.type(screen.getByLabelText("What do you want done?"), "Make onboarding effortless");
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+
+    expect(await screen.findByText(/is queued for example\/application as GREEN/)).toBeInTheDocument();
+    const commandCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input) === "/api/commands" && init?.method === "POST",
+    );
+    const body = JSON.parse(String(commandCall?.[1]?.body)) as {
+      acceptanceCriteria: string[];
+      commandType: string;
+      dependencyTaskIds: string[];
+      risk: string;
+    };
+    expect(body.commandType).toBe("other");
+    expect(body.risk).toBe("green");
+    expect(body.acceptanceCriteria).toEqual([]);
+    expect(body.dependencyTaskIds).toEqual([]);
+  });
+
+  it("keeps non-default advanced choices visible when the disclosure is closed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/projects") {
+        return jsonResponse({
+          projects: [{
+            connectionStatus: "connected",
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Application",
+            status: "active",
+          }],
+        });
+      }
+      return jsonResponse({ tasks: [] });
+    }));
+    const user = userEvent.setup();
+
+    render(<CommandComposer />);
+    await screen.findByRole("option", { name: "Application" });
+
+    const toggle = screen.getByRole("button", { name: /Advanced options/ });
+    await user.click(toggle);
+    await user.selectOptions(screen.getByLabelText("Work type"), "security");
+    await user.click(screen.getByRole("button", { name: /Medium/ }));
+    await user.click(toggle);
+
+    // Hidden-but-active settings would be a surprise; the summary keeps them
+    // in view, and the RED-style warnings still render from the status area.
+    expect(screen.getByText(/Security work · YELLOW risk requested/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Work type")).not.toBeInTheDocument();
   });
 });

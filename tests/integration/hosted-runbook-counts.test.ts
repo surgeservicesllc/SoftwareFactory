@@ -26,8 +26,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-/** The hosted ledger position the runbook is written against. */
-const HOSTED_LEDGER_ENDS_AT = "20260813001400";
+/**
+ * The hosted ledger position the runbook is written against — owner-measured
+ * 2026-08-16 (`select count(*), max(version) from
+ * supabase_migrations.schema_migrations` → 65 rows, max below). The one
+ * hosted row above the local file set at this position is the renamed
+ * `20260814002000_graph_engineering`, handled by the runbook's repair step.
+ */
+const HOSTED_LEDGER_ENDS_AT = "20260814002300";
 
 let runbook = "";
 let migrationFiles: string[] = [];

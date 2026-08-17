@@ -51,12 +51,39 @@ export type NodeExecutionResult =
       readonly costMicros?: number;
     };
 
+/**
+ * How many nodes the portfolio will let this graph start right now, and why
+ * that number.
+ *
+ * `granted` is a ceiling, not an instruction: the runner starts at most this
+ * many and may start fewer if the graph has less ready work. Zero is a
+ * legitimate answer and means "not now", not "never" — the run ends as
+ * `CAPACITY_WITHHELD` so the caller knows to come back rather than treating a
+ * full factory as a failed graph.
+ */
+export type CapacityGrant = {
+  readonly granted: number;
+  readonly reason: string;
+};
+
 export type RunnerDependencies = {
   /** Runs one node. Injected so the runner needs no provider to be tested. */
   readonly executeNode: (
     node: CompiledNode,
     attempt: number,
   ) => Promise<NodeExecutionResult>;
+  /**
+   * Asks the portfolio for capacity before each scheduling round.
+   *
+   * Without this the runner takes its concurrency straight from its own
+   * budget — which is to say it assumes the whole factory is available to it,
+   * and two graphs in two projects would each assume the same thing. Injected
+   * rather than imported so the engine core stays free of I/O, and optional so
+   * an isolated graph can still be run without a portfolio around it.
+   */
+  readonly requestCapacity?: (
+    request: { readonly wanted: number },
+  ) => Promise<CapacityGrant> | CapacityGrant;
   /** Validates a node's output against its contract. */
   readonly validateOutput?: (node: CompiledNode, output: unknown) => { valid: boolean; issues: readonly string[] };
   /** Monotonic elapsed milliseconds. Injected so budgets are testable. */
@@ -73,7 +100,8 @@ export type RunnerEvent = {
     | "node_blocked"
     | "node_output_rejected"
     | "budget_degraded"
-    | "budget_stopped";
+    | "budget_stopped"
+    | "capacity_withheld";
   readonly nodeKey?: string;
   readonly detail: string;
 };
@@ -84,6 +112,9 @@ export const RUN_OUTCOMES = [
   "FAILED",
   "BUDGET_STOPPED",
   "STALLED",
+  // Distinct from STALLED on purpose. A stalled graph cannot proceed however
+  // long you wait; a capacity-withheld graph is simply behind other work.
+  "CAPACITY_WITHHELD",
 ] as const;
 export type RunOutcome = (typeof RUN_OUTCOMES)[number];
 
@@ -141,6 +172,7 @@ export async function runGraph(
 
   let assessment = assessBudget(budget, spendNow());
   let stoppedByBudget = false;
+  let capacityWithheld = false;
 
   // Bounded by node count and attempts, so a pathological graph cannot spin.
   const maxIterations = budget.maxNodes * (Math.max(1, budget.maxRetries) + 2) + 10;
@@ -165,11 +197,30 @@ export async function runGraph(
       });
     }
 
+    // Ask before starting anything. The budget says what this graph may use;
+    // the portfolio says what is actually free, and the smaller of the two is
+    // what the scheduler is allowed to work with.
+    let allowed = concurrency;
+    if (deps.requestCapacity) {
+      const grant = await deps.requestCapacity({ wanted: concurrency });
+      allowed = Math.max(0, Math.min(concurrency, Math.floor(grant.granted)));
+      if (allowed < concurrency) {
+        emit({
+          type: "capacity_withheld",
+          detail: `Portfolio granted ${allowed} of ${concurrency}: ${grant.reason}`,
+        });
+      }
+      if (allowed === 0 && state.running.size === 0) {
+        capacityWithheld = true;
+        break;
+      }
+    }
+
     const decision = tick(
       schedulerNodes as unknown as Parameters<typeof tick>[0],
       graph.edges,
       state,
-      { maxConcurrent: concurrency },
+      { maxConcurrent: allowed },
     );
 
     for (const blocked of decision.blocked) {
@@ -287,7 +338,9 @@ export async function runGraph(
     state,
   );
 
-  const outcome: RunOutcome = stoppedByBudget
+  const outcome: RunOutcome = capacityWithheld
+    ? "CAPACITY_WITHHELD"
+    : stoppedByBudget
     ? "BUDGET_STOPPED"
     : fanIn.isWhole
       ? "COMPLETED"

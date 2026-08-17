@@ -1,18 +1,44 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+// The owner's 2026-08-17 structure: top-level destinations with subpage
+// groups that open expanded, then the quick actions. Every entry must stay a
+// real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
-  "Dashboard",
+  "Overview",
+  "AI Factory",
   "Projects",
-  "Bot Manager",
-  "Files",
-  "Agents",
+  "All Projects",
+  "My Projects",
+  "Archived",
+  "Pipelines",
+  "Active",
+  "All Pipelines",
+  "Templates",
   "Backlog",
+  "Bots",
+  "Connect Bot",
+  "My Bots",
+  "Bot Usage",
+  "Bot Activity",
   "Runs",
   "Reports",
-  "Connections",
-  "Activity",
+  "Integrations",
   "Settings",
+  "General",
+  "Bots & Integrations",
+  "Watch",
+  "Operations",
+  "Activity",
+  "Advanced",
+  "Files",
+  "Agents",
+  "Resources",
+  "AgentOS",
+  "Autonomy",
+  "New Project",
+  "Give a bot work",
+  "Import Repository",
 ] as const;
 
 const CONSOLE_ROUTE = "/solutions/projects";
@@ -46,7 +72,14 @@ test("loads the control plane without browser errors", async ({
   await expect(page).toHaveTitle(/AI Software Factory/i);
   await expect(page.locator("main")).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: /softwarefactory dashboard/i }).first()).toBeVisible();
+  // The console shell carries no brand of its own at any breakpoint: the
+  // marketing global navigation sits directly above it and already states the
+  // identity, so the sidebar's logo and then the mobile header's workspace
+  // chip were both removed as the same duplication. This asserts the brand
+  // affordance that actually survives — on every breakpoint, signed in or out.
+  await expect(
+    page.getByRole("link", { name: /ai software factory home/i }).first(),
+  ).toBeVisible();
   // Every surface now reads live tenant records, so there is no seeded
   // content left to label. The truthfulness contract is stronger this way:
   // rather than labelling fake rows, the console shows none at all.
@@ -77,6 +110,15 @@ test("exposes every console destination through accessible navigation", async ({
 
   const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
+
+  // Groups arrive closed, so every destination is reachable rather than
+  // listed. Opening them all is what "reachable" means here — the assertion
+  // below is unchanged, and a destination that no chevron reveals still fails.
+  for (let opened = 0; opened < 20; opened += 1) {
+    const next = navigation.getByRole("button", { name: /expand .* subpages/i }).first();
+    if (await next.count() === 0) break;
+    await next.click();
+  }
 
   for (const destination of consoleNavigation) {
     await expect(

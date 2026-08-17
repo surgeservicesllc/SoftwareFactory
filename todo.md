@@ -1,6 +1,475 @@
 # SoftwareFactory — shared working status
 
-Last updated: 2026-08-15. **Start at the HANDOFF section below.**
+## GLOBAL NAVIGATION REBUILD (2026-08-17, owner reference image)
+
+Owner goal: rebuild the global navigation to match the reference image as
+closely as technically possible, fixed once at the architecture level so every
+applicable page inherits it.
+
+### Done
+
+- [x] `components/brand-mark.tsx` — the mark existed twice, drawn differently
+  in the header and in the console sidebar, so the same page could show two
+  logos that disagreed about their own colours. Both now render one component.
+- [x] Header rebuilt against the reference: hexagon-with-AI mark instead of the
+  gear tile, FACTORY in the lime the console already uses as its accent, the
+  bar full-bleed instead of a centred 1400px column (which had the logo sitting
+  280px in from the left edge), and the account cluster as the image shows it —
+  two-line super-admin chip, truncated address, gradient Open Console, Sign out.
+- [x] `lib/navigation.ts` untouched: the entries and their order
+  (Dashboard, Projects, Runs, Activity, Admin, Platform, Features, Pricing,
+  Resources, About) already matched the reference exactly.
+- [x] `app/auth/layout.tsx` — `/auth/sign-in`, `/auth/sign-up` and
+  `/auth/onboarding` sit outside both route groups and inherited only the root
+  layout, so they rendered **no header at all**. They now render the same one.
+- [x] The "every page has the global navigation" contract is asserted for every
+  route in `tests/e2e/pages.spec.ts`, not for the two that were broken, so a
+  future route group cannot become the next exception. Removing the auth layout
+  fails both auth routes.
+
+### Deliberate departures from the image
+
+- The super-admin chip breaks over two lines by width, not a `<br>`: a hard
+  break splits the accessible name into two text nodes, so a screen reader
+  stops hearing one phrase.
+- Open Console keeps its label on one line. The reference wraps it, but that
+  reads as a squeeze at that viewport rather than an intent.
+- The mark takes `min-w-0`, not `shrink-0`. Written the other way it refused to
+  give at 320px and pushed the account controls off the right edge — caught by
+  the responsive sweep. The glyph holds its size; the words truncate.
+- `/offline` keeps no header: it is the one page the service worker caches, so
+  it must not depend on a server-resolved session.
+
+---
+
+## MULTI-BOT PROJECT ASSIGNMENT (2026-08-17, active goal)
+
+Owner goal: assign several connected bots to ONE project, configure each
+independently, define responsibilities and permissions, work in parallel,
+monitor, and manage afterwards. UI -> API -> database -> orchestration, wired
+end to end. No mock UI.
+
+Starting point: `bot_assignments` already carried bot/project/role and
+`assign_bot` moved one bot at a time. What was missing was everything that
+makes several bots on one project different from one bot repeated.
+
+### Done
+
+- [x] Migration `20260817000500_bot_assignment_configuration.sql` — per-posting
+  configuration (preset, responsibilities, instructions, repository access,
+  branch strategy, PR open/merge, pipeline access, environment access, tools,
+  approval, concurrency, priority), plus `assign_bots_to_project` (atomic
+  multi-bot) and `update_bot_assignment_configuration`.
+  Two structural rules, not advisory:
+  **authority is nested** (`bot_assignments_authority_nested`: open needs
+  repository write, merge needs open) and **elevated authority keeps its human**
+  (`bot_assignments_elevated_requires_approval`: merge or production forces
+  `requires_human_approval`), matching `policies/AUTO_MERGE_POLICY.md`.
+  Defaults are least privilege. Verified against real PostgreSQL (PGlite) in
+  `tests/integration/bot-assignment-configuration.behavior.test.ts` — 33 cases,
+  three mutations confirmed non-vacuous.
+- [x] `lib/bots/assignment-config.ts` — shared browser-safe vocabulary: the
+  seven presets (Developer, Reviewer, Tester, Security, DevOps, Research,
+  Documentation), zod bounds, elevated-permission detection, and row
+  round-tripping that reads an unknown or absent stored value as the *narrow*
+  option so an older assignment cannot gain authority by being displayed.
+- [x] `POST/GET /api/projects/[projectId]/bots` and
+  `PATCH/DELETE /api/projects/[projectId]/bots/[assignmentId]`. Connectedness is
+  resolved server-side from the credential overlay, never from anything the
+  browser sent; one unconnected bot refuses the whole selection.
+- [x] Assign wizard in `components/project-bots.tsx` — Select (search,
+  multi-select, Select All, health, usage, workload, "this moves it off
+  Mobile App"), Configure (presets + every field, per bot), Review (permissions,
+  estimated concurrency, elevated-permission acknowledgement), Confirm. Plus the
+  roster with pause/resume/configure/remove. Rendered from both the project
+  inspector and the project detail page.
+- [x] `lib/bots/assignment-routing.ts` — the configuration now *decides*
+  something: permission is an eligibility gate evaluated before ordering (so
+  priority can never outvote a missing permission), capacity is a second gate,
+  every refusal is a named code, and `dispatchWorkAcrossBots` threads capacity
+  and path claims forward through a batch so two bots cannot be handed the same
+  slot or the same file.
+
+### Still open
+
+- [ ] The routing module has no production caller yet. Phase 1C claim is hosted
+  and live but nothing executes, so wiring it now buys no behavior; it is
+  covered by tests and ready for the claim path.
+- [ ] Migration `20260817000500` is **unhosted**, like the rest of the
+  outstanding set (`AI/HOSTED_APPLY_RUNBOOK.md`). Until it is applied, the
+  wizard's configuration fields have no columns to land in.
+- [ ] Playwright coverage of the wizard at mobile/tablet/desktop widths.
+
+---
+
+## PRODUCTION-READINESS AUDIT LOOP (2026-08-16 20:25Z, active goal)
+
+Owner goal: autonomously test/audit/fix/verify EVERY feature until
+production-ready; todo.md is the source of truth; loop until a full sweep
+finds zero actionable defects.
+
+### Frictionless UX sweep (2026-08-17, owner goal)
+
+Evidence base: the owner's own questions this session - "what am I
+adding here", "where is the readout", "how to tell if this is running",
+"how can I choose which bot(s) per project" - each marked a page that
+was truthful and a dead end.
+
+- [x] #187 empty pages name their next step (TenantListShell gains an
+  optional action; Runs/Reports/Backlog/Autonomy wired, jargon rewritten)
+- [x] #188 failed work appears on the dashboard with its reason
+- [x] #189 a saved request says what is happening to it, and links to Runs
+- [x] #190 a set-up project leads to "Give this project work", carrying
+  the project into the composer
+- [x] Unwired-control sweep: every button in components/ has a handler or
+  is a submit; no dead controls found
+- [x] Nav sweep: all 16 sidebar links and every static href resolve
+- [x] #192 the setup guide names connecting an AI account - previously
+  absent, while "Check your AI worker" (Actions worker status) could tick
+  green with zero accounts connected. "Your Factory is ready" now requires
+  a genuinely connected account.
+- [x] Raw-identifier sweep: status text is underscore-normalized, not raw
+  enums; no jargon leaks found beyond the ones rewritten in #187/#189
+- [x] Touch targets: .btn 40px / .btn-sm 36px / .input 40px - above the
+  WCAG 2.2 24px minimum; axe passes on every route at three viewports
+
+### Navigation subpages (2026-08-17, owner goal + follow-up images)
+
+Owner design: subpage groups under the sidebar destinations, plus quick
+actions. Contract held throughout (ADR-077): every entry links a real
+page or anchored section; aspirational subpages are not rendered.
+
+- [x] Collapsible groups, default-expanded: Projects (All Projects,
+  Archived), Pipelines (Templates, Backlog), Bots (Connect Bot #connect,
+  My Bots, Bot Activity), Settings (General, Bots & Integrations
+  #providers), Watch (Operations, Activity), Advanced (5 consoles).
+  Labels renamed: Overview / Bots / Integrations. Quick actions: New
+  Project (#add-project), Give a bot work, Import Repository, View
+  Documentation. Administration section unchanged for super admins.
+- [x] Archived made real: GET /api/projects accepts opt-in
+  ?status=archived (default still excludes archived); projects console
+  reads ?filter=archived via useSearchParams (page wrapped in Suspense,
+  files-page idiom); archived rows render as records with "Unarchive on
+  Portfolio"; empty state says nothing is archived. archive_project /
+  unarchive_project RPCs existed since 20260815000700.
+- [x] NOT rendered, no backing surface: Secrets, My Projects / Shared
+  with Me / Starred, pipeline Active / All / Schedules / Archived,
+  Members / Teams / Permissions / Billing. Templates IS the workflows
+  page (compiled graph templates), so that label is now the truthful one.
+- [x] Gates: unit 2948+15 green (new collapse/order/archived tests),
+  eslint 0, tsc clean, production build exit 0, Playwright console+pages
+  72/72 across 3 viewports (30-label reachability contract).
+- [x] Merged #194 (b57cea1); production verified live: all new labels
+  serving on /solutions, archived route 200.
+### AI FACTORY (owner goal 2026-08-17, /loop active — reference image)
+
+Round 1 (this merge):
+- [x] /solutions/ai-factory + "AI Factory" nav entry under Overview
+  (redirect contract, pins, pages.spec, 35-label reachability). Guided
+  8-step journey — Connect Repository → Create Project → Pipeline Ready
+  → Connect Bots → Assign Bots → Configure Bot Settings → Issue a
+  Command → Watch It Ship — with completion DERIVED from live records
+  (installations, projects, accounts, assignments incl. configured
+  count, commands), so progress survives refresh by construction; each
+  step deep-links the real flow (composer carries ?project=). Command
+  execution section shows recent commands with worker-advanced stages.
+  Integrated services (GitHub live count, Vercel-on-merge, Supabase) +
+  Observability links — only real services listed. Mobile-first
+  vertical stepper. 4 unit tests.
+- [x] Owner add-on: per-posting Model (Fable 5/Opus 5/... from the
+  provider's suggested list, or bot default) + Work Effort
+  (low/medium/high/max) — migration 20260817000900
+  (bot_assignments.model bounded identifier + work_effort check,
+  set_bot_assignment_execution owner/admin RPC, audit event), PATCH
+  /api/bot-assignments/[id] extended, selects on each PostingCard in
+  the project roster (steps 6/7 surface), serialized through
+  lib/bots/service. 1 new unit test.
+- [ ] Round 2+: deeper wizard embedding (inline forms per step),
+  reference visual polish (step connectors band on desktop), full
+  journey re-test from a fresh workspace, breakpoint sweep beyond the
+  e2e viewports.
+
+### Template CRUD (owner goal 2026-08-17)
+
+- [x] Migration 20260817000700: create/update/delete_pipeline_template
+  over the EXISTING graph_templates table (RLS + member SELECT since the
+  graph engine landed; these are its first write path) — owner/admin,
+  bounded audit-areas definition (1-12 areas, unique ids, no secrets),
+  version bump per edit, pipeline_template.* activity events, delete
+  keeps planned graphs (template_id SET NULL).
+- [x] One builder, no divergence: auditTemplate exported; custom
+  templates build + compile through the exact built-in path
+  (lib/graph/custom-templates.ts); the API refuses a definition the
+  compiler refuses (422 with the compiler's own errors) so every stored
+  template stays runnable.
+- [x] /api/pipeline-templates GET/POST + [id] PATCH/DELETE; built-in
+  slugs reserved (409). /api/graphs POST now accepts custom slugs —
+  loads the row, rebuilds, same launch plan, same truthful
+  PLANNED-not-dispatched note.
+- [x] Templates tab → PipelineTemplatesManager: Your templates (Use /
+  Edit / Delete with in-place confirm) + Built-in templates (Use /
+  Clone; edited as code, stated in place) + New-template editor (key,
+  name, summary, category, capability, 1-12 area rows) + Use dialog
+  (project picker → real POST /api/graphs, result repeats the
+  endpoint's honesty). 4 manager unit tests + console test updated.
+- [x] Pins ×12 → 000700; allowlist+repairs; runbook 105/41. Hosted
+  apply pending post-merge.
+
+### Safety page fully wired (owner goal 2026-08-17 — ADR-080)
+
+- [x] Migration 20260817000600: the Phase 1D scaffold gives way to
+  owner-gated operations — set_autonomy_kill_switch (release needs a
+  reason), set_organization_autonomy_controls (partial), member-scoped
+  read; immutable autonomy.* activity events per transition. Survives
+  as DB refusals: RED ceiling never (both scopes, constraint+trigger+
+  RPC), born fail-closed, owner-only (admins excluded).
+- [x] /api/autonomy/controls GET/POST; SafetyControls rewritten live —
+  real switches for the owner (kill switch with in-place reason flow,
+  autonomous mode, GREEN/YELLOW ceiling picker with RED labeled "Never
+  automatic", all nine action toggles), read-only for members,
+  fail-closed signed out; per-row "switched on, held off: <cause>"
+  honesty (kill switch / mode off / capability missing for merge+deploy
+  which record intent only). Static "Kill switch ON" badges removed
+  from Settings + Autonomy headers (would now be able to lie).
+- [x] phase1d behavior suite: "nothing was relaxed" → "the
+  owner-operated contract" — 44 green incl. owner release/re-engage
+  with 2 audit events, owner enable+revert, RED refusals, born
+  fail-closed. 5 rewritten SafetyControls unit tests.
+- [x] Pins ×12 → 000600; allowlist+repairs through 000600; runbook
+  104/40. Hosted apply pending post-merge.
+
+### Runs clear/delete (owner goal 2026-08-17)
+
+A sibling session shipped per-run review + owner-only deletion (#201,
+migrations 000200/000300/000400 — reason-required, live-lease/queued
+refused, evidence detach opt-in, deletion audit-recorded before it
+happens). This session completed the goal:
+- [x] Clear ALL finished runs: delete_finished_agent_runs (migration
+  20260817000500) loops the SAME per-run guarded path, counting what it
+  refused (kept_for_evidence / kept_for_activity) — never forcing.
+  POST /api/runs/clear-finished; Runs page gains a reason-carrying
+  confirm naming what is untouched (queued/running) and what survives
+  (audit trail; PR/deployment/test-run rows unless keep-and-unlink).
+- [x] Hosted-apply logistics for the WHOLE 2026-08-17 set: 000200-000500
+  joined the surgical allowlist + repairs (000300/000400 made
+  replay-safe first — add column if not exists, drop-constraint-before-
+  add, create index if not exists — the 001500 precedent); tail pins ×12
+  → 000500; runbook 103/39. Without the apply, production's run
+  edit/delete/clear controls receive function-missing refusals.
+- [ ] Trigger hosted apply post-merge and verify.
+
+### PIPELINE SYSTEM (owner goal 2026-08-17, /loop active)
+
+AUDIT (round 1, verified against code):
+- COMPLETE: graph engine (26 modules — compiler, scheduler, launch-plan
+  topology SINGLE/LOOP/DAG/DIAMOND/DISCOVERY, locks, fan-out/in,
+  discovery, budgets, verification) + persistence (graph_templates,
+  graphs, graph_runs, node_runs, artifacts, handoffs, verifications,
+  work_locks; create_graph_from_plan RPC); 14 versioned code templates
+  covering 12/13 of the owner's list (no Database Migration template);
+  command lifecycle with verified intake, RED approval gate, worker
+  claim leases, stale-base replan, cancel/retry, draft-PR-only output;
+  real anchors already exist for CI (GitHub checks), deploy (Vercel on
+  merge), risk (GREEN/YELLOW/RED + kill switch), monitoring
+  (operations/activity/reports).
+- PARTIAL: pipeline experience — round 1 ships /solutions/pipelines
+  (Active / All / Templates over live commands + server-compiled
+  templates); commands list API carries no branch/PR linkage yet, so
+  stages beyond Complete (PR, CI, PREVIEW, VALIDATE) are not stitched
+  into the row; simple-mode confirmation (template/team/stages preview
+  before Start) not yet in the composer.
+- MISSING: stage-level pipeline persistence (PENDING/READY/RUNNING/...
+  vocabulary per stage), advanced-mode visual builder, failure-route
+  configuration, schedules, Database Migration template, graph-node
+  executor (graphs API truthfully says PLANNED-only: "no executor is
+  connected to the graph runner" — the Phase 1C worker executes
+  commands, not graph nodes).
+- BROKEN: nothing found; every unconnected surface names itself.
+
+- [x] Round 1: /solutions/pipelines — Active (live stages from the
+  worker-advanced command status: Intake / Waiting for your approval /
+  Planning / Building / Complete / Failed / Cancelled; owner-attention
+  count; elapsed + duration), All Pipelines (history + outcomes),
+  Templates (versioned, compiled topology facts; deep previews link to
+  Workflows — one engine, no duplication). Nav Pipelines group → Active,
+  All Pipelines, Templates, Backlog (37-label contract); /pipelines
+  redirect; pages.spec route; 15s live re-read; 5 unit tests.
+- [x] Round 2: Database Migration template (auditTemplate, 5 areas —
+  forward-only/replay-safe, RLS, grants, consumers, ledger; completes
+  the owner's 13); simple-mode confirmation in the composer — a
+  "Pipeline" card appears once goal+project are set naming Project,
+  Requested risk, Suggested template (suggestTemplateForGoal keyword
+  matcher over GRAPH_TEMPLATES, labeled informational — the worker
+  executes the goal as written), and the real stages (RED → stops at
+  approval), linking to Pipelines. 4 new tests (matcher precedence,
+  fallback).
+- [ ] Round 3+: PR/CI/deploy evidence joined per pipeline run (needs
+  branch/PR in list_commands or a detail RPC), stage-state persistence
+  (PENDING/READY/... vocabulary), failure-route configuration,
+  schedules, graph executor bridge, advanced-mode builder.
+
+- [x] Edit/delete everywhere (owner goal, 2026-08-17 — ADR-078):
+  Projects editable (update_project_details, migration 20260817000100,
+  PATCH /api/projects/[id]; Edit dialogs on the All Projects table +
+  inspector) and archivable/unarchivable in place (reason-carrying
+  dialogs + Unarchive button on the Archived view, existing RPCs). Bots
+  removable from the roster (retire_bot; confirm-in-place naming what is
+  released vs kept) alongside the existing rename. Accounts already had
+  rename/disconnect/remove; runs keep cancel/retry. REFUSED: edit/delete
+  of runs, activity events, audit records (immutability contract), hard
+  project delete, template forms (templates are code). Tail pins ×11 +
+  hosted-apply allowlist moved to 20260817000100; hosted apply pending
+  post-merge; 6 new unit tests.
+- [x] Bot Usage page (owner mockup, same day): /solutions/bot-usage
+  renders per-account provider-subscription windows from the REAL
+  observation store (ADR-076) — reuses AccountUsage (percent bars +
+  provider reset times; every absence named), headroom bands derived
+  from the same thresholds the bars color by, summary cards (bots
+  connected + average week_all_models across measured bots), Refresh
+  wired to POST /api/ai-accounts/refresh (managers only), View details →
+  Bot Manager, 30s re-read. Mock's plan/billing footer, date-range
+  picker, history tabs ABSENT (observations are latest-per-account; no
+  billing model). Nav Bots group gains Bot Usage (33-label contract);
+  /bot-usage redirect added; pages.spec covers the route; 4 unit tests.
+- [x] All Projects dashboard (owner mockup, same day): /solutions/projects
+  is now the organize/overview posture — stat cards (total / active% /
+  authorized repositories / connected, all counted from the live reads,
+  no trend deltas: no historical snapshots exist), tabs (All Projects |
+  My Projects | Archived; Starred/Shared absent, no model), a projects
+  table (repository+branch, status badges, last run + success rate from
+  /api/runs where only succeeded/failed carry a verdict, updated_at now
+  exposed by GET /api/projects, Open → /solutions/portfolio/{id}),
+  10/page pagination with truthful "Showing X to Y of N", right rail
+  (projects-by-status incl. archived count via the opt-in read + recent
+  activity from /api/activity?limit=8, best-effort with named absence).
+  Page header follows the mock ("All Projects", Import Repository / New
+  Project); add-project form still anchored below the table. The
+  inspector-evidence unit tests moved to MyProjectsConsole, where the
+  inspector now lives inline; 3 new dashboard tests. pages.spec heading
+  pin → "All Projects".
+- [x] My Projects (owner mockup, same day): /solutions/myprojects renders
+  every project as a chevron-collapsible row (first open by default)
+  expanding into the SAME ProjectInspector the Projects page uses (now
+  exported, one source of truth); page actions Import Repository / New
+  Project land on existing controls; nav Projects group gains My Projects
+  (31-label contract); pages.spec covers the route; 3 new unit tests
+  (multi-project expand/fold, empty→add-project, signed-out gate).
+  Shared with Me / Starred still have no backing model and stay absent.
+
+### Audit backlog (loop working set)
+
+- [x] **Loop tick 2026-08-17 01:11Z**: parallel sessions landed #176-#179
+  (repository picker, usage metrics, audit doc, blocker evidence) with TWO
+  unhosted migrations and no apply coverage - the deployed picker/usage UI
+  would have hit missing-function errors live. Fixed (#180): 001500 made
+  replay-safe (if-not-exists guards), both migrations joined the surgical
+  allowlist, merged f64ee63, hosted apply run 31984194358 SUCCESS - both
+  features now fully live. Full vitest on the merged tree: 2889/0.
+
+
+- [ ] **P0 — live canary journey**: Audit Round 2 run `8b5fdd2c` claimed via
+  the FIRST manual dispatch (owner-ordered workflow_dispatch, main-guarded,
+  PR #171) and failed `stale_base_sha` — correctly: five fix merges moved
+  main after it was planned. Recording worked perfectly (truncation fix
+  proven live). ROOT FIX (ADR-075): never-started runs now re-plan to the
+  observed head — `replan_phase1c_run` (migration 20260816001300,
+  service_role, lease-held + head_sha-null guard), WorkspaceError carries
+  the observed SHA, worker re-plans once and retries, `replanned_base`
+  event names both SHAs. Post-execution staleness still fails closed.
+  REMAINING: apply 001300 hosted (surgical scope now covers it), owner
+  queues the audit once more; npm bootstrap retry still untested live.
+- [x] Full gates on current main (01ae6a8 lineage): vitest 2843/0 (+2 new),
+  eslint 0 errors, tsc clean, production build exit 0, Playwright full run
+  exit 0 (6 skipped by design) incl. axe on ~20 routes × 3 viewports and
+  the zero-browser-errors console spec.
+- [x] Checks truthfulness: the Projects page counted a cancelled worker
+  beat as "1 check is failing on the main branch" (owner screenshot
+  20:50Z-era) while every real check was green. Only conclusions carrying
+  failure evidence (failure, timed_out, action_required, startup_failure)
+  now count as failing in the warning and the summary chip; cancelled runs
+  still render their literal conclusion in detail rows.
+- [x] TODO/FIXME/HACK sweep: zero real instances (2 matches are detection
+  regexes in sensitive-data.ts / redact.ts).
+- [x] Mock/placeholder sweep: Demo Data labelling is centralized in ui.tsx per
+  AGENTS.md; marketing fallback is labelled. `otherProviders` chips in
+  connections-console are static but truthful — Anthropic/Vercel "Not
+  Connected" (true), Supabase "Connected" renders only in the ready state,
+  which itself requires a successful Supabase read (evidence-based in
+  context). No change needed.
+- [ ] Env docs: `SOFTWAREFACTORY_CREDENTIAL_KEY` (vault key) is used by the
+  worker but absent from `.env.example` — add a documented server-only entry.
+  (Other absents are platform-provided: NODE_ENV, PATH, VERCEL_*.)
+- [x] Route inventory: 29 pages (6 marketing, 19 portal, 3 auth, offline),
+  95 API routes. Every sidebar nav link resolves to a real page; every
+  static href in app/components resolves. Journey-verify portal pages via
+  Playwright (pages/journey/console specs) + owner live proofs
+  (connections/projects/bot-manager proven live today).
+- [x] API auth sweep: 19 routes with no direct auth import all delegate to
+  shared authenticated handlers (tenant-list/tenant-detail
+  requireActiveOrganization; github route prepareGitHubRepositoryRequest →
+  requireGitHubUser; operations route context). No unauthenticated data
+  route found. Webhooks use signature verification by design.
+- [ ] Accessibility/responsive: Playwright axe suite exists — run it; spot
+  gaps for new UI (workspace switcher, device-code branch).
+- [ ] Secrets: tracked-file scan before each merge (standing); no findings.
+
+### Sweep 2 (2026-08-16 21:21Z, from the beginning)
+
+- [x] **eslint now 0 errors AND 0 warnings repository-wide** (was 10
+  warnings waved through as "pre-existing"): standard `^_` ignore
+  convention configured for @typescript-eslint/no-unused-vars (mock
+  signatures carry parameters for their types), two dead eslint-disable
+  directives removed (sw.js no-undef, connect.mts no-control-regex —
+  the `` escape never triggers the rule), three unused callback
+  params renamed to the convention. Touched suites 64/64.
+- [x] `npm audit`: **0 vulnerabilities**, production and dev trees.
+- [x] proxy.ts (middleware): Supabase auth refresh with graceful
+  fallback; static assets excluded; secure handlers fail closed in the
+  DAL — correct.
+- [x] public/sw.js: documented refusal rules — never caches /api/
+  responses or authenticated navigations, only content-hashed build
+  assets + the offline shell — correct.
+- [x] Dead-code scan: `components/task-run-launcher.tsx` was the one
+  component imported by nothing (no page, no test) — a Phase 2A-era
+  launcher superseded by the Bot Manager composer; removed. All other
+  components are wired.
+
+### Final regression (2026-08-16 21:20Z, merged tree f37c7e4)
+
+- vitest: **2846 passed / 0 failed** (2 skipped by design), 243 files
+- production build: exit 0
+- Playwright: exit 0 — full route sweep + axe × 3 viewports, journey,
+  console (zero browser errors), bot-manager, marketing, auth specs;
+  6 skipped by design
+- eslint 0 errors; tsc clean
+- Hosted: migration 20260816001300 applied via surgical run 31972616619
+  (success); replan_phase1c_run live in production
+
+**Remaining item — precisely why it is owner-blocked, with evidence:**
+the live canary needs one command queued from /solutions/bot-manager.
+`submit_command` grants execute to `authenticated` only; service_role is
+refused (ACL verified in the grants suite). No agent in this loop holds
+an authenticated user JWT: sign-up requires e-mail confirmation to an
+inbox no agent has (and the project's built-in sender is rate-limited),
+and minting a bypass (a service-role submit path) would weaken the
+tenant-security boundary — forbidden by this goal's own fix rules. This
+is exactly the "blocked by unavailable external credentials/access"
+category; it is documented, not marked complete.
+
+**De-risking evidence for the last untested link (21:32Z):** cold-cache
+`npm install next@16.3.0 --ignore-scripts` with npm 10.9.7 / node
+22.22.2 on a plain filesystem extracts the full docs tree cleanly —
+the TAR_ENTRY_ERROR is specific to the worker's container/bind-mount
+environment, which is what the clean-retry fix (#168) targets. If the
+live retry still fails, the next lever is pinning npm inside the
+container step; the failure will record legibly either way.
+
+Completed defect chain for this goal: #167 (mute failures), #168
+(bootstrap retry + truncation cap), #170 (cancelled ≠ failing), #171
+(owner-ordered manual dispatch, main-guarded), #172 (stale-base re-plan,
+ADR-075 + live-installation protection list). Older completed goals below.
+
+Last updated: 2026-08-15 (Phase 2C resource gates). **Start at the HANDOFF section below.**
 Session landed: Phase 1E→1C repair promotion · Phase 2C persistence, UI, routing and model
 declaration · probe DNS-rebinding fix · Supabase RPC contract verification · roadmap audit ·
 Phase 2B graph engineering (PR #27) · Phase 1B adverse lifecycle · concurrently, another agent
@@ -14,7 +483,1167 @@ Several agents work this repository concurrently. This file is the shared pictur
 done, what is genuinely open, and which items only the owner can close. Keep workstream
 sections separate so two agents editing at once conflict on one section rather than the file.
 
-## HANDOFF — read this first (2026-08-14, end of session)
+## MASTER COMPLETION LEDGER (2026-08-15, master certification loop)
+
+This section is the authoritative completion ledger required by the master
+certification loop. Phase detail lives in the per-phase sections below and in
+`AI/PHASE_*_COMPLETION.md`; this section holds the cross-phase picture, the
+priority queue, and evidence for items closed by the loop.
+
+### Current Certification
+
+- Overall: **~76% by phase scorecards** (1B 90% · 1C code-complete/worker LIVE · 1D decision layer 100%, execution blocked by design · 1E ~87% · 2B landed · 2C 94% agent-complete · 2D ~81% · 2E 92% · 2A partial · 3 ~77% ordered-plan complete) **+ frictionless owner-experience goal at ~87%** (its own report below)
+- Last audit: **2026-08-16, master iteration 24 — clean-room, see "Master clean-room audit" below**
+- Current loop: master iteration 24 (final gate)
+- Current blocker: every unblocked agent-actionable item is exhausted; remainder is owner-only (see External Blockers) plus the Vercel deploy-quota wait
+- Next action: owner live proofs (canary first — it unlocks the most)
+
+### P0 Critical
+
+- [x] Determine whether the zero-token worker credential is configured | 1C | **PROVEN LIVE**: Actions run `31894356952` (2026-08-15 16:01Z) logs "Codex authenticates with the owner's ChatGPT subscription. No per-token API billing is possible." then "worker … is ready"; schedule runs every ~5 min, all green | loop | —
+- [x] Determine real hosted migration ledger position | DB | **MEASURED 2026-08-16** (owner SQL, screenshot): **65 rows, max `20260814002300`**. Count arithmetic (64 local files ≤ that mark) confirms the runbook's `20260814002000_graph_engineering` rename derivation — one remote-only ledger row blocks every apply path until the two-line `supabase migration repair` in the rebased runbook. 19 migrations outstanding. | owner ran the query; remaining apply steps in `AI/HOSTED_APPLY_RUNBOOK.md` | —
+- [ ] Live 1C canary: command → claim → factory branch → commit → draft PR → CI | 1C | Worker polls every 5 min and exits idle: nothing is queued. `submit_command` requires an authenticated session (not executable by service_role — verified ACL) | owner (browser: `/solutions/bot-manager`, GREEN command) | worker LIVE ✔
+- [x] Correct AI memory claiming worker "Not Connected pending credential" | docs | This commit — `AI/CURRENT_STATE.md` and `AI/QUALITY_SCORECARD.md` headlines contradicted the Actions evidence | loop | —
+
+### P1 Required
+
+- [x] Hosted-vs-local schema diff once ledger position is known | DB | Done 2026-08-16 from the measured position: 64 shared versions + 1 remote-only (`20260814002000`, renamed) + 19 outstanding (`20260814002400`–`20260815001600`); nothing hosted is missing from the repository beyond the rename artifact | loop | —
+- [x] Runbook `AI/HOSTED_APPLY_RUNBOOK.md` rebased on the real hosted position | DB | Rebased 2026-08-16: measured section supersedes, exact repair-then-push order, 19-item apply list, capacity-defaults warning; `hosted-runbook-counts` guard moved to the measured mark and passes 4/4 | loop | —
+- [ ] 2C portfolio: ~~PR/deployment columns~~ (closed loop 3: `draftPullRequests` from completed change requests — the schema forces a PR number on completion, so the count is truthful; `activeDeployments` incl. rolling_back; null still renders Unknown), ~~per-project detail page~~ (closed loop 4: `/solutions/portfolio/[projectId]` reads the same RLS-scoped aggregate as the list so the two can never disagree; missing and invisible render identically so the surface reveals nothing; links to the six factory surfaces say plainly they are factory-wide views), ~~global bot-manager goals~~ (closed loop 5: `POST /api/portfolio/controls` + owner panel — priority, pause/resume with required reason, focus-here/clear-focus, capacity; explicit actions per goal 14, never parsed prose; authorization stays in the owner-only SECURITY DEFINER functions which write activity events) | 2C | `AI/PHASE_2C_COMPLETION.md` scorecard | loop | —
+- [x] Cross-project isolation negative tests | 2C/2E | goal 18: two live leases across projects already proven (2E "runs two projects at once"). Goal 27 closed this loop: `mark_github_connection_lost` on project A withholds A's queued run (claim filters `connection.status='connected'` + active unsuspended installation), leaves B claimable, keeps A's run `queued` for recovery; restoring connection+installation+repository selection makes the same run claimable with no resubmission. `phase2e-portfolio-scheduling.behavior.test.ts`, 21/21 | loop | —
+- [ ] Second real repository/installation for multi-project live proof | 2C | goal 34 | owner | —
+
+### P2 Improvement
+
+- [ ] Per-project detail page scoping Files/Backlog/Runs/Agents/Reports/Activity (goal 11 PARTIAL)
+- [x] Portfolio roll-up report | 2C | Closed loop 7 — and the audit line was wrong: the daily report was already organization-wide with a portfolio health histogram and attributed risks. The real gap was the healthy majority having no row anywhere. Migration `20260815000800` adds a bounded per-project array (worst-health first, archived included so week-over-week reconciles) with the same open-work counts the portfolio console shows; policy version → phase1e-operations-v2 | loop | —
+- [x] Supabase databases and graph nodes bind to the registry | 2D | Closed loop 16 (rows 4 and 29, the last ABSENT rows). `resolveConnectionCredential` generalizes the three-step binding (route capability -> read secret_reference -> dereference server-side); `resolveDatabaseCredential` proves two projects -> two database credentials with read/migrate as separate authorizations; `lib/graph/connection-bridge.ts` routes a MODEL node's `inference.advisory` identity while DETERMINISTIC/ANCHOR nodes provably never touch the registry. 2D now has zero absent rows | loop | —
+- [x] Vercel binds to the connection registry | 2D | Closed loop 15 as structure (row 3 FAIL-ABSENT -> PARTIAL). `lib/connections/secret-reference.ts` dereferences `env://` references server-side (vault schemes refuse by name — no client exists, and pretending otherwise would misreport a missing integration as a missing secret); `resolveDeploymentCredential` routes deploy.preview/deploy.production and returns the routed connection's token; the Vercel adapter authenticates each read with the supplied credential over the ambient token. Two projects -> two connections -> two accounts in one process, proven by test. Live half owner-blocked: no real Vercel connection exists | loop | —
+- [x] Connection capacity is enforced and truthfully counted | 2D | Closed loop 14 (row 31). Discovery: the 2E scheduler already enforces connection-specific ceilings at claim time, counted live (`status='running' and lease_expires_at > now()`) — the 2D audit predated it. Built: the untested connection-level verdict branch now has an end-to-end claim proof (withheld at ceiling with audited reason, neighbour unaffected, freed slot goes to the capped work); the router's capacity input switched from the stored `active_leases` counter (structurally unable to decay on lease expiry — proven ignored by test) to the same live count the scheduler enforces; the two declared ceilings reconcile strictest-wins | loop | —
+- [x] Identity-routing decisions persisted as evidence | 2D | Closed loop 13 (row 27). Append-only `connection_routing_decisions` mirrors `scheduling_decisions`: RLS member-read, definer-only write via `record_connection_routing_decision` (owner-only, generic not-found, shape check so no row can lie about itself, secret-hygiene bounds on `rejected`). The commands route records every routed decision — selection or refusal — before acting on it, and a recording failure fails the submission. Proven in `connection-registry.test.ts` incl. append-only under the most privileged role | loop | —
+- [x] Identity Router wired into command submission | 2D | Closed loop 12 (2D row 28's named absence: "the seam where a connection would be chosen does not exist"). `lib/connections/routable-candidates.ts` loads capability-labelled mappings and runs the pure router; `POST /api/commands` consults it with `repository.write` before any GitHub call or persistence. Labelled project: router refusal → 409 named reason; selection disagreeing with the resolved primary binding → 409 contradiction, never a tiebreak; registry read failure → 503 fail-closed. Legacy project: proceeds as before, response says `connectionRouting.mode: "legacy"`. Five route tests; existing 12 unaffected | loop | —
+- [x] Explicit cross-project dependency type | 2C | Closed loop 11 (goal 17, the last agent-actionable portfolio row). Migration `20260815001000`: `declare_cross_project_dependency` / `release_cross_project_dependency` — owner-only, reason required, events in both projects, cycle/duplicate/terminal/self refusals by name, generic not-found outside the caller's org. Edges land in `task_dependencies`, which the claim gate already joins by organization (not project) — the scheduler needed no change. `submit_command` carried forward with one surgical replay-check amendment so declared cross-project edges (declaration evidence) never fail an honest idempotent replay. Four behavior tests: withhold-until-honest-completion, refusal battery, release-without-touching-submission-evidence, replay survival | loop | —
+- [x] Portfolio lens on runs + activity, and the agent-context isolation proof | 2C | Closed loop 10. Runs console groups under the owning project with honest counts (no-project runs get "Project unavailable", never attributed); activity console derives per-project facet chips with counts from the loaded events (org-level events get their own bucket) and filters on selection — both asserted by component tests. Goal 31 proven negatively in `phase2e-portfolio-scheduling.behavior.test.ts`: the claim payload's 41 columns are pinned as the worker's entire context, every identifier in it belongs to the claimed project and none to the sibling, and a valid lease on project A's run is refused for heartbeat and completion against project B's running run while B's rightful worker still completes it | loop | —
+- [x] Project archive operation + history-preservation test | 2C | Closed loop 6: `archive_project`/`unarchive_project` (migration `20260815000700`) — owner-only, reason required to archive, immutable activity events, deletes nothing. Behavior test archives a project with real queued work: work stops (claim filter), history rows survive, unarchive makes the same run claimable with no resubmission. API actions + panel buttons added | loop | —
+
+### P3 Optimization
+
+- [x] Guarded project-deletion path | 2C | Closed loop 8 by discovery: every project is born with a `project.created` activity event, `activity_events` references projects ON DELETE RESTRICT, and the trail is append-only — so **projects cannot be deleted, from their first moment, structurally**. Migration `20260815000900` adds the trigger that names that rule (instructive refusal instead of a cryptic FK error), with no escape hatch because none could work. Tests prove the refusal, the birth-record lock even with the trigger dropped, and the trail's immutability | loop | —
+
+### Phase Certification
+
+- [x] 1A Control Plane — **certified this loop**: all 21 routes fetched live on the production origin, 21/21 return 200 (incl. the dynamic project-detail route added today, proving the deployment carries the current route table); per-page truthful-state evidence in `AI/PHASE_1A_CERTIFICATION.md`; e2e suite re-proves headings/viewport/axe at three widths every CI run
+- [ ] 1B GitHub — 90% (18 PASS/2 PARTIAL); remaining items owner-only (second installation + live adverse pass)
+- [ ] 1C Worker Execution — code complete, worker **LIVE and polling**; canary blocked on one owner command
+- [ ] 1D Autonomous Release — decision layer 100%; execution blocked **by design** (AGENTS.md forbids auto-merge in this line)
+- [ ] 1E Production Operations — ~87%; execution authority absent by design
+- [ ] 2A Multi-AI — provider layer built, switch OFF, no live call; zero-token conflict recorded in `AI/PHASE_1C_COMPLETION.md` §5a awaiting owner decision
+- [ ] 2B Graph Engineering — landed (PR #27, then 2E capacity integration); no live graph run yet
+- [ ] 2C Portfolio — **94%** (33 PASS/2 BLOCKED); loop 11 closed the last agent-actionable row (17, explicit cross-project dependencies via `declare_cross_project_dependency`); everything left is owner-only: hosted verify (33), second repo (34)
+- [ ] 2E Resource Optimization — 92% (33 PASS/2 PARTIAL/1 BLOCKED)
+- [ ] 2D Multi-Account Identity — **~81%** (23 PASS/12 PARTIAL/0 ABSENT/1 BLOCKED of 36); loops 12-16 closed every absent row: router into `POST /api/commands` (28), durable decisions (27), capacity truth (31), Vercel binding (3), Supabase database credentials (4), graph-node identity (29). **No agent-actionable structural row remains** — every gap is a live half (second account, real Vercel/Supabase rows, first graph run, 2A switch) or the ambient-worker-session rows, all owner decisions | owner: second real account (35)
+- [ ] 3 Self-Improvement — **~77%** (24 PASS/13 PARTIAL/0 ABSENT of 37 — nothing absent; every gap is a live half, `AI/PHASE_3_COMPLETION.md`, audited 2026-08-15 — the earlier "not started" here was stale memory). Safety half largely inherited and scoring; measurement half unbuilt. Ordered plan: ~~versioned frozen constitution~~ (loop 18: `lib/factory/constitution.ts`, factory-constitution-v1, self-improvement proposal a first-class refused-by-name subject; row 30 PASS) -> ~~improvement ledger~~ (loop 19: migration `20260815001200`, append-only proposal/decision/implementation/evaluation lifecycle; no proposal without a baseline, no implementation before acceptance, no second evaluation — "score shopping" refused by name; rows 23 PASS, 24/32/33/34 ABSENT->PARTIAL, ~47%) -> ~~baseline capture + comparison~~ (loop 20: migration `20260815001300` — telemetry-derived baselines with named unavailability, fixed direction table, derived outcomes, refusal to guess; rows 32/34 PASS, ~53%) -> ~~self-audit engine~~ (loop 21: `audit_factory_health`, migration `20260815001400` — eight domains as evidence, score over measured only with confidence and abstention; rows 1/2/3/5/6/8/10 PASS) -> ~~detectors~~ (loop 22: `detect_factory_improvements`, migration `20260815001500` — five detectors with stated evidence floors, abstaining by name; 12/13/21 PASS proven positively, 17/19 PARTIAL awaiting real history) -> ~~automated intake~~ (loop 23: `propose_improvements_from_detections`, migration `20260815001600` — findings become owner-decidable proposals; rows 22/24 PASS). **The Phase 3 ordered plan is complete**; every remaining PARTIAL is a live half. Honest blocker: telemetry tables hold little real history until the factory has actually done live work
+
+### Owner goal — BotBuildv2: FULL Bot Manager redesign (opened 2026-08-16 15:30Z, supersedes the v1 UX work below)
+
+Spec: uploads/bbe1c92d-BotBuildv2.txt. Product promise: "Connect Claude or
+Codex as easily as signing into any modern SaaS application. Then create as
+many specialized bots as needed." Journey: Bot Manager → Add AI Account →
+Claude/Codex → Sign In → provider login → Connected → Create Bot. The v1
+broker BACKEND (accounts, sessions, worker runner, unbounded slots — merged
+#136/#138) is exactly the spec's §7 architecture and stays; the v1 UI
+(quick-connect command tiles, check-now, OpenRouter CTA, worker banner,
+Fleet/Bots/Roles zero tabs, auto-degrade-to-command) is what gets REBUILT.
+CLI/diagnostic surfaces survive only under Developer Diagnostics (§35).
+
+**Checklist (status vocabulary: TODO / IN PROGRESS / BLOCKED / VERIFIED):**
+
+**GO-LIVE LEDGER (2026-08-16 16:40Z):** #141 `f580db3` (worker default-ON,
+honest stall UI) merged + deployed 16:13:23Z. #142 `de055c9` (lingering
+worker, session diagnostics, Remove account) merged 16:26 at owner
+instruction; its deploy completed after the owner upgraded Vercel to Pro
+(the free-tier 100/day cap had halted deploys 16:16-16:3x). Worker run
+31958640122 confirmed LIVE and LINGERING on the new script (step held open
+vs. previous 1-2s exits). All three Actions secrets present (masked in
+worker env). Broker schema confirmed live on hosted by production behavior;
+Supabase integration applies migrations on merge. Remaining to a completed
+live sign-in: the owner's click-through with the lingering worker up.
+
+**REMOVE FIXED LIVE + BOTH WORKER FIXES SHIPPED (2026-08-16 17:10Z):**
+Run `31960618697` (apply workflow, scope=broker-functions, password-only
+pooler fallback — the access-token secret is malformed, not `sbp_…`-shaped)
+applied `20260816000400`/`000500` to hosted via psql and recorded them:
+`remove_ai_account` is live, the PGRST202 root cause is gone (the user's
+error screenshots at 16:36/16:51/17:03 all predate the 17:07 apply). The
+same run reverted the stale remote-only ledger row `20260814000200` — the
+real blocker of every previous full push (the runbook's `20260814002000`
+derivation was wrong in detail; see the runbook's live-measured section).
+#143 (Enter-as-its-own-keystroke — the verifying death) and #144
+(stale relay codes fail fast on resumed sessions) both merged to main;
+worker dispatched on `72e6a20` at 17:10 with both fixes. AWAITING: the
+owner's live click-through of Remove and a fresh Connect (real provider
+auth — cannot be exercised by an agent).
+
+**GITHUB INSTALL HOST-SKEW FIXED + BOTH PROVIDER PATHS FROZEN (2026-08-16
+~21:30Z, goal):** owner goal "(1) lock down both the Claude and Codex
+connections. (2) GitHub connection is not returning back data." Part 1:
+the Codex device-auth path (worker driver, device-login fragment contract,
+device UI branch, migrations 000800–001200) joined the ADR-072 freeze —
+policies/PROTECTED_RESOURCES.md extended, ADR-073 recorded. Part 2 root
+causes (owner screenshot on softwarefactory-tan.vercel.app): the install
+state cookie and Supabase session are host-scoped while the deployment
+answers on multiple hostnames, so a launch on one host and a callback on
+another could never validate (`github_state_invalid` with a VALID
+signature — the "expired or does not match this session" branch); the
+failure notice lives in query params nothing cleared, so one stale failure
+re-rendered forever; 10-minute state lifetime too short for a real org
+install; and the browser callback is the ONLY connections-row-creating
+path (webhooks just update known installations), so a dead callback =
+GitHub installed, database empty, page truthfully "Connect GitHub to
+begin". Fixes (ADR-074): launch + callback 303-converge on the configured
+callback host before any cookie/session work; verify failures name their
+real cause (invalid vs expired vs different-browser-session); lifetime
+30 min; console strips one-shot github params after reading. Recovery for
+installed-but-empty: click Connect GitHub again — GitHub re-issues the
+callback for installation 153479019 and persist adopts it.
+
+**CANARY ROUND 3 — REAL CAUSES CAPTURED AND FIXED (20:16Z):** the owner
+queued "Audit Round 2" (run 8b5fdd2c, worker run 31970012582 on 3aa6cb6 —
+the first run carrying the truth-telling fix), and both real failures
+surfaced exactly as designed. (A) Run failure `worker_failed`:
+"Dependency bootstrap failed" — npm ci inside the pinned container dies
+extracting the next package's docs tree onto the bind-mounted workspace
+(TAR_ENTRY_ERROR ENOENT on node_modules/next/dist/docs/**.md, ENOTEMPTY
+cleanup); deterministic 3/3; same lockfile installs clean on plain
+runners, so it is the container/bind-mount npm extraction path. Fix:
+bootstrap retries once on a cleaned node_modules and reports both
+outputs on a double failure. (B) Recording failure 23514:
+tasks_blocked_reason_check caps blocked_reason at 1000 chars
+(20260813000900) and redactText appended "\n[TRUNCATED]" BEYOND its
+1000-char cap → 1012 chars → every long failure overflowed the
+constraint by construction. Fix: the marker now counts inside the cap.
+The stuck run recovers by lease-expiry reap → retryable attempt; the
+next scheduled worker beat claims it with both fixes aboard.
+
+**FIRST LIVE CANARY BLOCKED BY MUTE FAILURES (20:05Z, in progress):** the
+owner queued the first real command (c618be8e, YELLOW: full site audit →
+draft PR with docs/AUDIT_2026-08-16.md). The worker claimed it twice
+(runs 31969101724 19:57Z and 31969473610 20:04Z) and both attempts died
+~25s after "ready" with `Run failure failed: [object Object]` — a double
+blindfold: the run execution failed (cause unknown), then recording that
+failure via complete_phase1c_run ALSO errored, and safeErrorMessage
+rendered the plain PostgREST error object with String() as
+"[object Object]", masking both. complete_phase1c_run's signature matches
+the code (20260813001300, hosted), so the RPC error is a raised exception
+inside the function — invisible until now. Fix shipped: safeErrorMessage
+surfaces message/details/hint/code of plain objects (JSON fallback,
+redaction preserved); the worker prints the original failure to the
+process log BEFORE attempting to record it; a recording failure now
+throws a combined message naming both errors. Next: owner re-queues the
+audit (idempotency may dedupe identical text — vary the wording), read
+the REAL error from the next worker run's log, fix the true cause.
+
+**RESOLVED — GITHUB CONNECTED LIVE (owner screenshots 19:47Z):** banner
+"GitHub installation connected with 1 selected repository."; account
+surgeservicesllc Connected; fresh installation #154236235, repository
+access Selected → surgeservicesllc/SoftwareFactory (main); Codex worker
+chip Worker Connected. Path taken: the post-#165 reload showed NO
+Workspace card — the owner's login holds exactly one workspace, so the
+old installations (primary 153445938 and candidate 153479019, both from
+the 2026-08-13 setup) were bound to a workspace this login cannot reach.
+Recovery: owner uninstalled the primary GitHub App ("Surge
+SoftwareFactory") and clicked Connect GitHub — a genuinely fresh install,
+scoped to only the SoftwareFactory repository, bound cleanly to the live
+workspace. Residue: the candidate App "Surge SoftwareFactory Next"
+remains installed on GitHub with its stale phantom-workspace binding —
+inert; optional cleanup is uninstalling it on GitHub. The prior
+Phase 1B identifiers (installation 153479019, connection 85591f43,
+project b1f23696) are historical, not the live path.
+
+**Round 2 (owner screenshot 21:31Z, after #164 deployed):** the host fix
+is verified live — the probe shows theagoras.com hopping to the configured
+callback host (softwarefactory-tan.vercel.app) and the owner's retry got
+PAST state validation, code exchange, and snapshot fetch, failing at the
+database's deliberate cross-tenant guard: "GitHub installation is already
+bound to another organization (github_callback_failed)" (42501 from
+sync_github_installation — NOT weakened). Meaning: the browser's active
+workspace is not the workspace that owns installation 153479019, which
+also explains the empty list (connections are workspace-scoped). The
+console offered no workspace context once one resolved — the wrong-
+workspace trap had no exit. Fix: a Workspace switcher card renders
+whenever the person belongs to more than one organization, naming the
+current one and switching via /api/organizations/active + reload; its
+copy explains both symptoms. Owner recovery: switch workspace on the
+Connections page — the existing connection and repositories appear; no
+reinstall needed.
+
+**BOTH PROVIDERS LIVE E2E — THE PRODUCT PROMISE HOLDS (2026-08-16 19:07Z):**
+owner screenshot: 4 Connected accounts — three Claude (Blackstone, NWV,
+Bubaly; connected live ×3 today, all re-verified 19:03:10 by the restored
+sweep, proving the 42501 vault-read fix) and **Codex Daniel, "Signed in as
+daniel.hughen@gmail.com", verified 19:06:41 — the first live Codex
+connection**, completed through the device-code flow (code displayed with
+Copy, OpenAI approval, credential sealed under the raised envelope cap,
+awaiting_user→verifying transition). The full defect chain that stood
+between "worked once" and "works": Enter-as-keystroke (#143), stale-code
+fail-fast (#144), coverage linger + release-SHA handover (#151/#158/#161),
+sweep non-fatality (#156), cancel-discards-pending (#157),
+cancellation-noticing (#158), vault-read grants (#159), envelope cap
+(#160), device-flow state gap (#162). Multi-account, multi-provider,
+rename, identity, Remove, cancel-cleanup: all owner-verified in
+production.
+
+**CLAUDE E2E VERIFIED LIVE ×2, PATH FROZEN BY OWNER (2026-08-16 ~18:00Z):**
+the owner confirmed "Claude connected, it is working perfectly" after the
+coverage fix — the second live end-to-end connection (first: 17:18Z). The
+owner ordered the connection path protected: no modification without a
+specific owner instruction. Recorded as a freeze in
+policies/PROTECTED_RESOURCES.md (frozen files listed there; diagnosis stays
+allowed, fixes go to the owner as proposals). Frozen-good configuration:
+main 74843ef.
+
+**COVERAGE REGRESSION FIXED (2026-08-16 17:47Z):** the owner's "Claude is
+now not connecting" was a coverage gap, not a code change — the Claude
+sign-in code is byte-identical to what connected them at 17:18. The 4.5-min
+claim window (#145) left multi-minute holes between GitHub's throttled cron
+beats (measured: no worker 17:33:00-17:39:37). Restored the 25-minute
+linger — the configuration that worked — and replaced the short deadline
+with a staleness self-check: every sweep the idle worker compares main
+against its own release SHA and exits on mismatch, so a merge still reaches
+the queue within ~5 minutes without ever cancelling a live login.
+
+**CODEX ERROR TRIAGED (2026-08-16 17:42Z):** the owner's "Only Claude
+accounts…" failure came from a pre-#146 worker — the string no longer exists
+in code, and the first Codex-capable worker run (31961503881, 17:28-17:33)
+saw zero pending sessions, so no Codex attempt has yet reached the new
+driver. Fresh evidence: the driver's URL phase is probe-PASSED against real
+codex-cli 0.147.0 in this container (auth URL captured with client_id +
+redirect_uri, port parse 1455, paste roundtrip); the session projection
+prints live rows (000400 serving); apply runs for 000600/000700 succeeded;
+b6f8fe2 deploy READY; cron handover confirmed (worker 31962262809 live on
+b6f8fe2). Second probe (17:44Z): the CLI's own redirect_uri path is exactly
+/auth/callback on port 1455, and a fake-callback replay against the live
+listener answered HTTP 400 (state mismatch, correctly rejected) — the
+replay transport, port, and path are all proven against codex-cli 0.147.0.
+Every mechanically-verifiable step of the Codex flow now has evidence;
+AWAITING: one owner Codex click-through (REAL PROVIDER AUTH REQUIRED — the
+OAuth exchange itself is the only unproven step, and no agent can perform
+a human's OpenAI login).
+
+**VERIFYING-DEATH ROOT CAUSE (2026-08-16 16:50Z, named from code against the
+live symptom):** the owner's 16:3x sign-in reached "Verifying account" and
+died there — the CLI's paste prompt reads raw keypresses, where Enter is a
+lone carriage return chunk; `submitCode` wrote `code\n` as ONE chunk, so the
+code filled the field and the Enter never registered. The token never
+printed, `waitForToken` expired at 120s, and the session failed (silently on
+de055c9, which predates the failure logging). Fixed in #143: the keystroke
+plan (`codeSubmissionKeystrokes`) types the trimmed code, settles, presses
+Enter alone, then once more against paste-burst swallowing — property pinned
+by a unit test. Remove-error diagnosis rides the same PR: the route's
+`detail` field will read PGRST202 if migration 000500 was missing at click
+time (integration lag), which self-heals on apply.
+
+**MAJOR HOSTED FINDING (2026-08-16 16:00Z, production evidence):** the owner's
+live screenshot shows the Connecting Claude modal in progress phase — which
+only renders after POST /api/ai-accounts/connect returns a sessionId — so
+`create_ai_account`/`open_ai_auth_session` EXIST on hosted: **the Supabase
+GitHub integration applies migrations on merge to main.** The runbook's
+measured position (65 rows @ 20260814002300) is stale; the manual apply
+workflow is moot for schema. The pinned HOSTED_LEDGER_ENDS_AT stays until an
+owner SQL re-measure confirms the new position (inference ≠ measurement).
+Remaining gap to a working sign-in is ONLY the worker: auth-broker.yml now
+default-ON (disable via SOFTWAREFACTORY_AUTH_BROKER_DISABLED=true); still
+required in Actions secrets: SOFTWAREFACTORY_CREDENTIAL_KEY (must equal the
+Vercel value so seals interoperate). UI: the stuck-at-step-1 spinner now
+becomes a calm blocked state after the 75s stall window (what happened,
+nothing changed, Try Again / Close).
+
+**Hosted apply status (2026-08-16 15:45Z):** owner authorized the apply and
+pasted a Supabase access token + DB password INTO CHAT — both treated as
+compromised on arrival (standing rule) and NOT used; owner told to rotate
+both. Direct CLI apply from the agent container is additionally blocked by
+the auto-mode classifier (RED against production — correct guard). Shipped
+instead: `.github/workflows/apply-hosted-migrations.yml` — owner adds FRESH
+SUPABASE_ACCESS_TOKEN + SUPABASE_DB_PASSWORD as Actions secrets, runs the
+workflow with confirmation "apply"; it lists the ledger, repairs the renamed
+row idempotently, pushes all outstanding migrations, and lists again as
+evidence.
+
+Architecture
+- VERIFIED §7 auth architecture (browser→SF→session→broker→CLI→provider→detect→update): merged as #136/#138; acceptance journey test walks it end to end
+- VERIFIED §19 domain model (account→profile→worker→bot→role): ai_accounts + bots.ai_account_id + per-account CLAUDE_CONFIG_DIR in worker; credentials never on bot records
+- TODO §22 realtime channel for auth sessions (current: 3s bounded polling — acceptable interim, no manual refresh/check-now; note as limitation)
+
+Worker
+- VERIFIED worker auth runner + heartbeat on sessions (#136); gated workflow default-OFF
+- BLOCKED §8 live worker green-dot state — REAL WORKER REQUIRED (owner: hosted migrations + SOFTWAREFACTORY_CREDENTIAL_KEY secret + SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true)
+- TODO §8 calm reconnecting presentation replacing "Worker Stale"/"Worker Not Connected" in normal UX
+
+Claude/Codex Authentication
+- VERIFIED Claude: headless setup-token drivable (probe); broker relays code in-page
+- BUILT Codex callback-address relay (2026-08-16 17:23Z): the worker drives `codex login` under a pty, reports the auth URL, and replays the pasted dead-localhost callback address against the CLI's own listener (the CLI holds the PKCE verifier and finishes the exchange); the credential sealed is the auth file the CLI writes, matching the existing shape check. UI paste step carries Codex-specific copy ("copy the page's full address"). CLI pinned @openai/codex@0.147.0 in the worker. AWAITING first live Codex click-through (REAL PROVIDER AUTH REQUIRED)
+- BLOCKED real end-to-end provider sign-in — REAL PROVIDER AUTH REQUIRED (owner go-live steps + a human at claude.ai)
+
+Multi-Account Isolation
+- VERIFIED unbounded accounts/slots; per-purpose seal binding proven (journey test: slot 2 envelope refuses slot 1 purpose); per-account worker config dirs
+- BLOCKED §14 live two-account concurrent proof — REAL PROVIDER AUTH REQUIRED
+
+Database
+- VERIFIED ai_accounts/ai_auth_sessions/RLS/audit (#136), verification RPCs (#138)
+- IN PROGRESS §25/§26 session resume: find_open_ai_auth_session migration + connect-route resume instead of supersede-on-refresh
+
+Account Management
+- VERIFIED panel: lifecycle chips, Reconnect, consequence-naming Disconnect (#136)
+- TODO §27 Manage menu (Rename, Test Connection, View Bots) + §15 grouped accounts view with per-account bot counts
+
+Bot Creation
+- TODO §16 Create Bot wizard (provider→account→name/role→access→autonomy)
+
+Bot Fleet / Details
+- TODO §17 Your AI Team cards (role · provider · account · status) + filters; §18 details view
+
+UI/UX (§2-§6, §10-§11, §30-§32, §34)
+- IN PROGRESS new Bot Manager home: header+subtitle, +Add AI Account / +Create Bot, summary cards, §3 empty state (Claude/Codex cards, Advanced collapsed), §4 modal, §5/§6 connect screens, §10 progress checklist states, §11 success screen
+- IN PROGRESS remove from normal UX: command cards, copy buttons, check-now, Start again/manual-command buttons, OpenRouter CTA, worker banner, zero tabs, control-plane language → Developer Diagnostics section (§35)
+
+Security (§29)
+- VERIFIED no passwords/no tokens client-side/sealed vault/audit/rate-shape checks (v1, tested)
+
+Recovery (§23-§26)
+- IN PROGRESS resume-on-refresh, duplicate-click protection (server already supersedes; client must resume)
+- TODO calm error rewording per §23; §24 matrix noted per-item
+
+Testing / Evidence (§36-§37, §43-§44)
+- TODO docs/verification/bot-manager.md evidence ledger
+- TODO Playwright screenshot pass over the new surfaces; visual review
+- BLOCKED §38-§40 functional acceptance (real Claude/Codex journeys) — REAL PROVIDER AUTH REQUIRED
+
+### Owner goal — BotBuild: AI Accounts + automatic auth broker (opened 2026-08-16)
+
+**LIVE DEFECT (owner report + screenshot, 2026-08-16 15:22Z) — FIXED SAME
+HOUR:** clicking Claude in production showed "The Claude sign-in did not
+finish — The sign-in could not be started" — the broker backend is not
+available on hosted (its migrations/worker are among the owner-gated go-live
+steps), and the UI surfaced that as a dead-end error tile requiring another
+click. Fix: `AiAccountConnect` gained `onUnavailable` — when the broker
+cannot even START a session, the console degrades to the command flow
+automatically (zero extra clicks, no error tile), exactly as if the broker
+had never been offered; mid-journey failures (worker/timeout) still render
+honestly with Start again. The AI Accounts panel's Reconnect keeps the
+error tile (it has no command fallback). Console test now pins the
+automatic degrade: broker 503 → `connect.mts claude` command visible with
+no error and no second click.
+
+**MERGED TO MAIN 2026-08-16 14:47Z:** PR #136 "BotBuild foundation: AI
+accounts, auth broker, worker runner, unbounded slots, auto-completing UI"
+squash-merged as `859ceed` with both real CI checks green on head `8d08307`
+(Lint/typecheck/test/build job 95180034616 success 14:45:37Z; Browser/a11y
+job 95180034594 success 14:43:26Z; full local gate: vitest 2804/0, tsc
+clean, eslint 0 errors, production build exit 0). Vercel production deploy
+of `859ceed`: **VERIFIED — status API `success`, "Deployment has
+completed", 14:49:27Z**; live `/solutions/bot-manager` re-checked 200
+after the deploy. Go-live remains gated on three owner
+actions (migration apply per runbook; Actions secret
+SOFTWAREFACTORY_CREDENTIAL_KEY; repo var
+SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true) — documented in
+`AI/AI_ACCOUNTS_BROKER.md`.
+
+Full spec: uploads/cda1f8a5-BotBuild.txt. Mission: no terminal in normal
+onboarding — Add AI Account → pick Claude/Codex → Connect → provider's real
+sign-in → automatic detection → Connected → create/assign bots. AI Account
+becomes a first-class entity distinct from bots; multiple isolated accounts;
+real worker status; everything wired end-to-end.
+
+**Inspection findings (loop step 1-2, 2026-08-16):**
+- `provider_connect_sessions` + sealed `provider_credentials` (migration
+  `20260814002500`) already model the claim half: digest-coded sessions,
+  purpose-bound seals, one-credential-per-purpose. `ai_auth_sessions` extends
+  this with the broker state machine rather than replacing it.
+- The worker is an ephemeral Actions job (cron */5 + repository_dispatch,
+  70-minute ceiling) — long enough to host a full auth relay session; a
+  dispatched `ai-account-auth` job is the broker's execution vehicle.
+- `bots` has no account linkage — needs nullable `ai_account_id` (legacy-safe;
+  old bots show "AI account required" per the spec's migration rule).
+- Worker status exists as heartbeat evidence (`get_phase1c_worker_status`);
+  "Worker Stale" reflects GitHub cron throttling (~hourly effective), so the
+  spec's worker-status work is presentation + registration, not new telemetry.
+- **Technical risk (must live-probe before promising)**: Claude's
+  `setup-token` is a paste-back device flow — relayable through the web UI
+  (user pastes the provider code into Software Factory, never a terminal).
+  Codex's ChatGPT login opens a **localhost callback** the user's browser
+  cannot reach on a headless worker; unless Codex exposes a headless/device
+  mode, Codex account-connect keeps the operator-machine path under Advanced
+  while Claude gets the full broker flow. **Probe result (2026-08-16, this
+  container, claude CLI 2.1.233): PASS — headless `claude setup-token` under
+  `script -qec` (fake TTY) with an isolated `CLAUDE_CONFIG_DIR` prints the
+  OAuth authorize URL (`https://claude.com/cai/oauth/authorize?code=true&…`)
+  with no browser and no real TTY; the flow then waits for a pasted code.
+  Implementation note: the pty wraps output at 80 columns, so URL capture
+  must strip ANSI and join wrapped lines before matching.**
+
+**Task breakdown (loop step 3):**
+- [x] P0 | BotBuild | **No hard-coded account/bot maximums** (owner goal
+  update 2026-08-16): slots unbounded everywhere — `purposeForSlot`/
+  `slotIndexForPurpose` generate `claude_N`/`codex_N` for any N (vault regex
+  already admits them); `planConnect` fills the lowest free slot and says
+  "full" only at configured capacity (`SOFTWAREFACTORY_MAX_AI_ACCOUNTS_PER_
+  PROVIDER`, default 100 — platform capacity, not a product cap); connect
+  route + `connect.mts` accept any slot purpose (enum removed); provision
+  route resolves `subscription_N` for any N; providers route reports
+  discovered-length `subscriptionSlots`; overlay bridge enumerates stored
+  purposes via new service-role `list_provider_credential_purposes` (names
+  only; falls back to the pre-slot static list against a not-yet-migrated
+  hosted DB); console cap removed ("Connect another account" always
+  offered). Each bot already carries a unique uuid, per-bot readiness,
+  and per-bot assignments; per-bot queue/runtime/logs/history tracking
+  beyond assignments remains project-scoped (agent_runs) — gap recorded
+  in P1 redesign row | PASS — 89 unit tests across 8 suites + 20
+  integration (incl. claude_47 end-to-end walk + enumeration privacy);
+  tsc clean; eslint 0 errors | 2026-08-16
+
+- [x] P0 | BotBuild | `ai_accounts` + `ai_auth_sessions` migration: account
+  entity (org, provider, auth_method, display_name, status, credential
+  purpose linkage, verification timestamps, last_error, metadata, revoked_at),
+  broker sessions (pending→initializing→awaiting_user→authenticated→
+  verifying→connected/failed/expired/revoked, login_url, sealed relay code,
+  worker claim + heartbeat, TTL ceiling 30 min), `bots.ai_account_id`
+  nullable composite-FK; RLS+FORCE with zero direct table access, 13 definer
+  functions (owner-side: create/open/attach-relay/disconnect + 2 read
+  projections; worker-side: claim/report-url/read-relay/verifying/complete/
+  fail/expire/needs-reauth), activity events on every transition. Delivered
+  `20260816000100_ai_accounts_auth_broker.sql` + 10-test behavior suite
+  (happy path, relay-code secrecy, manager auth, supersession, slot
+  uniqueness, expiry, secret-shaped failure sanitizing, credential-deleting
+  disconnect, cross-org bot FK refusal, needs_reauth). Guard updates: RLS
+  count 109→111, tail pins ×11, publicTables +2, runbook 83→84/19→20 |
+  PASS — broker suite 10/10; runbook+grants+pin guards green | 2026-08-16
+- [x] P0 | BotBuild | Broker API: POST /api/ai-accounts/connect (plans
+  reuse-vs-create against the three purpose slots per provider, opens the
+  broker session), GET /api/ai-accounts (identity + lifecycle, no secrets),
+  GET sessions/[id] (polling projection; sealed code structurally absent),
+  POST sessions/[id]/code (pastes into the WEB APP; sealed via sealSecret
+  bound to `ai_auth_relay:<sessionId>` before storage), POST
+  sessions/[id]/cancel, POST [accountId]/disconnect. Owner/admin checks +
+  same-origin asserts; audit events come from the definer functions
+  themselves. `cancel_ai_auth_session` added to the (unmerged) migration —
+  cancel ends the session, touches neither account nor credential |
+  PASS — 18 route tests + broker suite 11/11; tsc + eslint clean | 2026-08-16
+- [x] P0 | BotBuild | Worker auth runner: `lib/worker/auth-broker.ts`
+  (DI-tested protocol: claim → start CLI → URL → awaiting_user → poll sealed
+  relay code → unseal only into CLI stdin → verifying → token → seal under
+  account purpose → connected; failure/timeout/supersession paths),
+  `scripts/auth-broker.mts` (env-gated entry, expire sweep, deadline loop),
+  `.github/workflows/auth-broker.yml` (repository_dispatch
+  `softwarefactory_auth_broker` + cron + manual; gated on repo var
+  `SOFTWAREFACTORY_AUTH_BROKER_ENABLED`; claude CLI pinned 2.1.233),
+  `wakeAuthBrokerWorker` best-effort dispatch on Connect. Headless probe
+  PASS (recorded above); `server-only` split into `lib/security/
+  secret-box-core` + `lib/ai-accounts/purposes` so the worker seals/opens
+  under plain Node — guarded re-exports keep app imports unchanged. Codex
+  refusal RETIRED 2026-08-16 (#146): the worker now drives `codex login`
+  via the callback-address relay; the URL phase is probe-PASSED against
+  codex-cli 0.147.0 | PASS — 9 runner tests + 18 route tests; script boots under tsx and
+  refuses with named env vars; NOT live-tested end-to-end (needs owner:
+  Actions secrets SOFTWAREFACTORY_CREDENTIAL_KEY + repo var
+  SOFTWAREFACTORY_AUTH_BROKER_ENABLED=true, then a real click-through) |
+  2026-08-16
+- [x] P0 | BotBuild | Auto-completing UI: `components/ai-account-connect.tsx`
+  — every rendered state read from the broker session (3s bounded polling),
+  never assumed: waiting-for-worker (honest schedule note + 75s stall
+  detection offering the manual path), worker-initializing, awaiting_user
+  (real login URL as "Continue to {label} sign-in" opened in a new tab +
+  paste-the-code field posting to the relay endpoint), finishing/verifying,
+  Connected, failed (sanitized reason + Start again + fallback + Close),
+  cancel posts the cancel endpoint. NO check-now button, NO command shown
+  on the primary path. Console integration: Claude button broker-first
+  ("Connect another account" too); Codex keeps the command flow (its login
+  is a localhost callback the worker cannot drive); on connected the
+  console maps the account's credentialPurpose (now in GET /api/ai-accounts)
+  to the provision slot and finishes with a Ready bot. Fallback preserved:
+  broker-can't-start → "Use the manual command instead" → old flow intact |
+  PASS — console suite 12/12 incl. full broker walk (no command, no
+  check-now, code pasted in-page, Ready + both uncapped follow-ups) and
+  fallback walk; tsc + eslint clean | 2026-08-16
+- [ ] P1 | BotBuild | Bot Manager redesign: header counts (Worker/Accounts/
+  Bots/Roles), empty state per spec (Claude + Codex cards primary, Advanced
+  below, OpenRouter demoted), AI Accounts management section (Manage/
+  Reauthenticate/Disconnect), Create Bot with AI Account selector
+  (ai_account_id), worker-required state | e2e + component tests | P0 rows
+- [x] P1 | BotBuild | Disconnect/reauth lifecycle (UI + API):
+  `components/ai-accounts-panel.tsx` — org-wide AI Accounts section in the
+  Bot Manager listing every account with its honest lifecycle chip
+  (Connected / Needs sign-in again / Not signed in yet / Disconnected /
+  Revoked), last-verified time, sanitized last error; Disconnect is
+  two-step in place and its confirm names the consequence ("Remove its
+  credential — confirm") → POST [id]/disconnect (vault row deleted,
+  sessions revoked, account kept for Reconnect); Reconnect runs the same
+  auto-completing broker flow against exactly that account
+  (`AiAccountConnect` gained `accountId`); read-only members see status
+  only. Server-side `mark_ai_account_needs_reauth` exists for the
+  verification loop (still open) | PASS — 5 panel tests + console 12/12;
+  tsc + eslint clean | 2026-08-16
+- [x] P1 | BotBuild | Verification loop: migration `20260816000200` adds
+  `list_ai_accounts_for_verification` (connected subscription accounts
+  only — needs_reauth is repaired by a person, not a sweep) +
+  `mark_ai_account_verified` (a routine pass is a timestamp, not an
+  event; refuses non-connected accounts). Worker sweep
+  (`verifyStoredAccounts`) runs on every auth-broker start: vault row
+  exists → seal opens under the current key → provider shape matches
+  (sk-ant-… for Claude, JSON auth file for Codex; unknown providers
+  pass); each failure demotes via `mark_ai_account_needs_reauth` with a
+  named, actionable reason. HONEST LIMIT (documented in the migration
+  and `AI/AI_ACCOUNTS_BROKER.md`): shape-level only — a pass never
+  asserts the provider still honors the token; that verdict comes from
+  real use. Guards: tail pins ×11 → 000200, runbook 85/21, invariants
+  +2 service-role functions | PASS — sweep unit tests (pass/3 failure
+  kinds/shape table) + behavior 13/13 incl. enumeration scope, refused
+  pass, browser-role denial; tsc + eslint clean | 2026-08-16
+
+**#137 merged 2026-08-16 15:02Z** as `3f7a081` (docs + evidence; both CI
+checks green); production deploy verified success 15:03:16Z.
+- [ ] P2 | BotBuild | Multi-account worker isolation live proof (two Claude
+  accounts, no auth collision, per-account config dirs) | live evidence | P0
+- [ ] P2 | BotBuild | Docs: architecture, auth lifecycles, worker setup,
+  troubleshooting | — | P1
+- [x] P3 | BotBuild | Acceptance journey + test matrix:
+  `tests/integration/ai-account-acceptance-journey.behavior.test.ts` walks
+  the spec's journey end to end against the real migrated chain with the
+  REAL worker protocol (`runAuthBrokerOnce` + `verifyStoredAccounts` over a
+  PGlite-backed store calling the same definer functions production does):
+  Connect → claim → login URL → the person pastes the code (sealed,
+  session-bound, attached mid-poll exactly as the route does) → token
+  minted → credential sealed into the vault and openable as exactly that
+  token → sweep verifies → disconnect empties the vault → reconnect
+  re-claims the same account; plus a two-account walk proving seal
+  isolation (slot 2's envelope refuses to open under slot 1's purpose).
+  The one substitution is the provider CLI (scripted; a human at claude.ai
+  cannot be automated) — the live 30-step click-through remains owner
+  work after go-live. Matrix coverage to date: 13 behavior + 2 journey
+  integration tests, 5 panel + 12 console + 18 route + 12 runner/sweep +
+  5 purposes unit tests, all green | PASS | 2026-08-16
+
+### Owner goal — the Claude button (opened 2026-08-16, iteration 1 shipped)
+
+Owner directive: a Claude button in Bot Manager; click → Claude sign-in; once
+logged in the Claude bot is Ready for assignments; many Claude bots
+simultaneously; linked to everything already built.
+
+**Honest design constraint (documented in code since the connect flow was
+built):** Anthropic offers no third-party OAuth. A browser-redirect "Sign in
+with Claude" would require impersonating Claude Code's private OAuth client.
+The supported sign-in IS Claude's own: one pre-filled command runs
+`claude setup-token`, which opens claude.ai's real login in the operator's
+browser (the exact screen in the owner's mock); the credential travels once,
+sealed, through `/api/bots/connect/claim`. The button drives that flow and
+finishes it automatically.
+
+**Iteration 1 — shipped (PR #133, squash `ce66247`, CI green, production
+deploy completed 13:09Z, /solutions/bot-manager 200):**
+- The gap that made "connected" ≠ "ready" for subscriptions: providers
+  status keyed readiness off the API-key ref only, and provisioning wired
+  bots to `ANTHROPIC_API_KEY` — a claimed subscription credential
+  (`SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN`) flipped nothing. Closed
+  end-to-end: catalog gains `subscriptionCredentialRef` (anthropic + openai;
+  literals because the catalog is browser-safe, pinned to the server
+  constants by test); `/api/bots/providers` reports `subscriptionReady`
+  (counted toward readiness, never probed — the model-list probe
+  authenticates keys, and a guaranteed 401 would misread as a bad sign-in);
+  `/api/bots/connect/provision` accepts `credential: "subscription"`
+  resolved server-side from the catalog (arbitrary refs can never arrive
+  from the browser) plus `additional: true`; `ensureProviderBot` takes the
+  ref override and numbers additional bots ("Claude 2", "Claude 3" — the
+  many-bots case) while keeping add-only and never-fails-the-connection.
+- **The Claude button** (`ClaudeQuickConnect`, in the empty-fleet front
+  door): branded tile → one pre-filled command with copy button → live
+  polling flips to "Claude is connected — your Claude bot is Ready for
+  assignments" the moment the claim lands, provisioning against the
+  subscription ref as the signed-in owner; "I have signed in — check now"
+  for the impatient; already-signed-in short-circuit makes the button
+  literally one click with no terminal; "Add another Claude bot" repeats
+  the finish for many bots. Readiness itself needed no change — the vault
+  overlay bridge (PR #121) already makes any bot referencing the claude key
+  read Ready.
+- Tests: bot-provisioning 8/8, provision-route 8/8, new bot-providers-route
+  4/4 (incl. the catalog↔server-constant pin and the never-probe rule),
+  console 10/10 incl. a full button→command→check→Ready walk. tsc clean,
+  eslint 0 errors, adjacent suites 37/37.
+- **Iteration 2 — Codex parity (PR #134, squash `5ff8d45`, CI green,
+production deploy completed 13:22Z):** the owner asked for "the same
+  for codex", and the plumbing was already symmetric (`codex` purpose,
+  `codex login` plan in connect.mts, `SOFTWAREFACTORY_CODEX_AUTH_JSON`
+  overlay, catalog subscription ref on openai). `ClaudeQuickConnect`
+  generalized to `SubscriptionQuickConnect(providerId, purpose)` — accent
+  and copy derived from the catalog, per-accent text color for contrast —
+  and the front door now shows BOTH branded buttons (Claude terracotta,
+  Codex mint) side by side, each ending in "<label> is connected — your
+  <label> bot is Ready for assignments" with "Add another" for many bots.
+  Console suite 11/11 incl. a full Codex walk (button → `connect.mts codex`
+  command → check → provision {provider:"openai",credential:"subscription"}
+  → Ready). tsc + lint clean.
+- **Iteration 3 — multi-account slots (PR #135, merged 2ef50e4):** the vault audit settled
+  it — `purpose` is pattern-checked (`^[a-z][a-z0-9_]{1,62}$`), not
+  enum-constrained, so account slots need NO migration. Purposes
+  `claude_2/claude_3/codex_2/codex_3` (bounded) added to the connect route
+  and the connect script (same login plan as the base, sealed under its own
+  purpose); overlay maps each slot to a suffixed variable
+  (`…_OAUTH_TOKEN_2` etc.); provider status reports per-slot readiness
+  (`subscriptionSlots`); provision accepts `subscription_2/_3` resolved
+  server-side; the ready state gains "Connect another <label> account"
+  (up to 3 accounts signed in simultaneously) alongside "Add another bot".
+  Honest limitation recorded: the live worker consumes slot 1's credential
+  today — further slots store, read Ready, and are assignable; wiring slot
+  selection into worker execution is worker-side follow-up work.
+- **Open next:** live round-trips with the owner (Claude and Codex sign-ins,
+  bots appear Ready in production; second-account slot proof); subscription
+  tiles on non-empty fleets; worker-side slot selection.
+
+### Owner goal — production Magic Link sign-in fix (2026-08-16)
+
+**Symptom:** magic-link emails arrive and the link reaches the app, but the
+browser lands on `/auth/sign-in?error=callback_failed` ("That sign-in link
+could not be verified").
+
+**Root cause (measured, not guessed):** `@supabase/ssr` 0.12.4 defaults both
+clients to `flowType: "pkce"`. The magic-link request stores a PKCE code
+-verifier **cookie in the browser that requested the link**; GoTrue's
+`{{ .ConfirmationURL }}` link redirects back to `/auth/callback?code=…`, and
+`exchangeCodeForSession(code)` requires that verifier cookie. Mail apps
+(Gmail/Outlook in-app browsers) open links in a **different browser context**
+that never had the cookie — and Safari ITP can drop it even same-device,
+since it is set on a fetch response. The old callback supported ONLY the
+PKCE lane, so every cross-context click failed. Not an expiry problem.
+
+**Fix (code, merged with this entry):** `app/auth/callback/route.ts` now has
+two lanes: a new **`?token_hash=&type=` lane** verified server-side with
+`supabase.auth.verifyOtp({ type, token_hash })` — browser-context-free, the
+documented SSR emailed-link pattern — plus the existing `?code=` PKCE lane,
+preserved unchanged for OAuth returns, signup confirmations, and same
+-browser clicks. Type allowlist (`email/magiclink/signup/invite/recovery/
+email_change`), token-hash length bounds, `next` still normalized through
+`normalizeReturnPath`, and bounded server-side failure logging (lane +
+error name/message/code/status — never a token, hash, or code value).
+Password login, sign-up, sessions, sign-out: untouched.
+
+**Supabase dashboard change REQUIRED (owner, ~1 minute):**
+Dashboard → Authentication → Email Templates → **Magic Link** — replace the
+`{{ .ConfirmationURL }}` link with:
+`<p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email">Sign in to The Agoras</a></p>`
+(`{{ .RedirectTo }}` resolves to the app's allowlisted
+`https://www.theagoras.com/auth/callback`; if that variable is unavailable,
+use `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email`.)
+Optionally add `<p>Or use this one-time code: {{ .Token }}</p>` as a
+scanner-proof fallback. Until the template changes, behavior is exactly the
+status quo (PKCE lane, same-browser only) — the code change cannot regress
+it.
+
+**Tests performed:** new `auth-callback-route.test.ts` 7/7 (token-hash lane
+verifies and redirects clean of secret material; off-site `next` refused;
+unsupported type refused before any provider call; expired/used token lands
+on the retryable notice with shape-only logging; PKCE lane preserved;
+neither-param failure; no-user-after-verify refusal). Full gate rerun:
+eslint 0 errors, tsc clean, **full vitest 2748/0**, production build
+compiled. The local-stack e2e (`auth-lifecycle`, `journey`) still exercises
+the preserved `?code=` lane.
+
+**Production verification steps (after the template change):**
+1. theagoras.com/auth/sign-in → "Email me a sign-in link instead".
+2. Open the email **in the Gmail app** and tap the link there (the exact
+   context that used to fail) → should land signed in.
+3. Tap the same link again → the retryable "could not be verified" notice
+   (used token), not a dead end.
+4. Password sign-in and sign-out unchanged.
+
+**Remaining blockers:** the template edit is dashboard-only (owner); mail
+-scanner link prefetch remains a theoretical consumer of one-time links —
+the optional `{{ .Token }}` line in the template is the mitigation, and a
+code-entry box is a possible future enhancement.
+
+### Master clean-room audit (2026-08-16, iteration 24 — FINAL GATE)
+
+Fresh audit on merged `main` (`69a0156`), assuming prior claims may be wrong;
+every number below re-measured this iteration, not carried forward.
+
+- **Local gate: PASS** — eslint 0 errors (14 warnings), `tsc --noEmit` clean,
+  **full vitest 2741 passed / 0 failed** (234 files, 2 skipped by design),
+  production build compiled successfully.
+- **Migrations: PASS** — 83 local migrations, tail `20260815001600_detector_
+  intake.sql`, exactly as documented. Hosted position remains the owner-only
+  SQL check (External Blocker 2); no ledger row was ever inserted manually.
+- **Live production: PASS** — 22/22 routes return 200 on the production
+  origin (re-run this iteration). Deployment caveat, honestly: Vercel's
+  free-tier daily quota exhausted mid-day; production currently serves main
+  **through `0126825` (#126)** — frictionless iterations 4–9 are merged and
+  CI-green but reach production on the next deploy after the quota resets
+  (~24 h), an owner Redeploy, or a plan upgrade. Nothing is lost; main is
+  the source of truth.
+- **Zero-token: PASS** — subscription-authenticated worker (Actions evidence
+  run `31894356952`, logs quote subscription mode; freshness limited to that
+  run — no newer run exists because no command has been queued);
+  `SOFTWAREFACTORY_OPENAI_API_KEY` permanently absent; constitution pins
+  `NO_PAID_TOKEN_DEPENDENCY`; no funded key in any workflow.
+- **Security/RLS: PASS at gate level** — schema-security-invariants, RLS
+  count, service-role grant pins, RPC contract, and migration-chain suites
+  all green in the full run above; no security control weakened anywhere in
+  this session's 16 merged PRs (#114–#129 master + frictionless).
+- **Regressions: none found** — the full suite passed with zero reopened
+  failures; the frictionless iterations changed presentation/tests only.
+- **P0/P1 unblocked: NONE** — every remaining P0/P1 row is owner-only
+  (canary, hosted-ledger position, second repository, 2A decision) or
+  blocked by one of those.
+- **Honest completion statement:** agent-actionable work is exhausted
+  (master loops 1–24, PRs #98–#129). "100%" strictly requires the four
+  owner actions plus the live execution history only real factory operation
+  produces. The certification percentages above are measured, not inflated.
+
+### Owner goal — frictionless bot connection (closed 2026-08-16)
+
+Owner directive: "Make the bot connection MUCH EASIER … similar to logging into
+Claude or Codex, super easy and frictionless." Closed by PR #121 (squash
+`eec1d4c`, CI run `31917860824` green: lint/typecheck/test/build + browser/a11y).
+Four coupled changes, each with tests (bot suite 116/116):
+
+1. A signed-in or pasted credential now makes its bot read **Ready** — bot
+   readiness consults the same vault overlay the providers tab uses
+   (`serializeBot` presence predicate; env-only default preserved for existing
+   callers), so "connected" and "ready" can no longer disagree.
+2. Connecting a provider leaves a ready default bot (`ensureProviderBot`):
+   add-only (never duplicates, never edits a person's own bots), best-effort
+   (a provisioning failure can never fail the already-succeeded connection).
+3. The empty fleet leads with one primary action — "Sign in and add my first
+   bot" (OpenRouter OAuth, the only genuine one-click among the providers,
+   fronting Claude/GPT/Gemini) — with "Add one manually" kept one step down.
+4. `POST /api/bots/connect/provision` finishes the one-click return as the
+   authenticated owner. The service-role OAuth callback still cannot create a
+   bot; owner-authorized work stays owner-authenticated.
+
+Status: code merged and shipping with `main`. Live half **NOT TESTED** — no
+owner has run the production OAuth round-trip since the merge; the first real
+"sign in → ready bot waiting" pass will prove it (no agent can, it needs the
+owner's provider account in a browser).
+
+### Owner goal — frictionless END-TO-END experience (in progress, opened 2026-08-16)
+
+Owner directive: make the ENTIRE owner journey frictionless — "Sign In →
+Connect → Add Project → Give Goal → Factory Plans → AI Team Works →
+Tests/Reviews → PR → Release → Validate → Report" — so a non-technical owner
+mainly answers "What do you want accomplished?" Preserve all RLS / GREEN-YELLOW
+-RED / zero-token safety. Run as a loop: walk journey → find friction →
+simplify/automate → test → record → repeat.
+
+**Journey audit — friction found (this loop):**
+- Dashboard was the signed-in landing page but gave a first-time owner **no
+  path**: metrics + safety facts, no "what to do next." (criteria 1, 27)
+- The only guide (inside `LiveDashboardMetrics`) was a 3-step "Connect → Add
+  project → **Open your files**" list whose last step was `done:false`
+  permanently, so it **never completed**, and it steered to file-browsing, not
+  to the actual goal (Bot Manager / a plain-English goal). It ignored worker
+  readiness. (criteria 1, 9, 10)
+
+**Iteration 1 — shipped (PR #124, squash `14f96a6`, CI green):** dedicated
+`GettingStarted` dashboard guide.
+- Four-step, completable journey that matches the real path: **Connect GitHub →
+  Add a project → Check your AI worker → Give your Factory a goal**, each step's
+  `done` read from live sources (`/api/projects`, `/api/github/connections`,
+  `/api/worker/status`, `/api/commands`) so it can never overclaim. (criteria 1,
+  3, 20)
+- Every incomplete step deep-links to the screen that finishes it — missing
+  config is one click from fixed. (criterion 19)
+- Once all four are done the checklist **collapses into a single CTA — "Give
+  your Factory a goal" → Bot Manager**, making Bot Manager the centerpiece.
+  (criteria 9, 10, 27)
+- Reads are independent/best-effort: a worker-status failure leaves that step
+  unchecked instead of erroring the guide. Removed the stale 3-step guide from
+  `LiveDashboardMetrics` (consolidation, criterion 28).
+- Tests: `getting-started.test.tsx` (7 cases — signed-out no-fetch, per-step
+  deep links, project→2-done, github-only→1-done, all-done ready CTA, worker
+  -failure isolation, refresh-to-ready); `SetupSteps` grid adapts to 4 steps;
+  `live-dashboard-metrics` suite still green. tsc + lint clean.
+
+**Iteration 2 — shipped (PR #125, squash `fecd824`, CI green):** Bot Manager
+goal box opens simple.
+- Journey walk confirmed the goal box exists and is genuinely plain-English
+  ("What do you want done?", example chips, project auto-selected to the first
+  connected one) — the Dashboard CTA is not a dead end. The friction: it
+  confronted every owner with Work type, Acceptance criteria, Depends-on, and
+  the GREEN/YELLOW/RED risk picker on every visit. (criteria 8, 21, 29)
+- `CommandComposer` now defaults to goal + project + Queue; the four technical
+  controls live behind an "Advanced options" disclosure (aria-expanded,
+  conditionally rendered so axe and tests see the true surface). Safe defaults
+  unchanged: work type "other", GREEN, no deps, server-derived acceptance
+  criteria — the server still re-checks risk/policy on every submission, so
+  nothing here widens autonomy.
+- Non-default advanced choices stay visible when the fold is closed (a summary
+  line, e.g. "Security work · YELLOW risk requested") — hidden-but-active
+  settings are how owners get surprised. RED warning still renders whenever
+  RED is selected (it lives in the always-visible status area).
+- Tests: 6/6 in `command-composer.test.tsx` — the three existing behavior cases
+  (connected-projects-only, idempotency-key reuse, sorted dependencies) now
+  open the disclosure first, plus three new: simple-view hides advanced fields,
+  simple-view submission carries the safe defaults, closed-fold summary keeps
+  non-default choices visible. tsc + lint clean.
+
+**Iteration 3 — shipped (PR #126, squash `0126825`, CI green):** unified
+"Needs Your Attention" area.
+- `NeedsYourAttention` on the Dashboard (above the setup guide) lists ONLY
+  decisions the owner alone can make, each as what happened → why it matters →
+  one recommended-action button to the exact screen. (criteria 4, 17, 18, 22)
+- Four decision sources, read independently and best-effort: owner-flagged
+  unresolved production incidents (`/api/operations/overview`), commands
+  awaiting owner approval (`/api/commands`, the RED path), GitHub connections
+  in error (`/api/github/connections`), and queued work with no connected
+  worker (`/api/worker/status` + commands). A failed source stays silent —
+  it can hide its own items but never suppress another source or invent an
+  item. Bounded to 6 items, incidents first.
+- Empty state renders NOTHING — no shell, no zero-count banner — so the area
+  never cries wolf and notifications surface only meaningful exceptions.
+- Tests: 7/7 in `needs-your-attention.test.tsx` (all-clear renders nothing,
+  signed-out fetches nothing, RED-awaiting-approval card → bot-manager,
+  suspended-connection card with reason → connections, queued-work-no-worker
+  card, unresolved-owner-flagged incident (resolved and auto-recovering ones
+  excluded) → operations, one failed source doesn't suppress the others).
+  tsc + lint clean.
+
+**Iteration 4 — shipped (PR #127, squash `bfee914`, CI green):** honest
+plain-language run progress.
+- `run_status` records exactly five states (`queued/running/succeeded/failed/
+  cancelled`, migration `20260812000100`), so the mapping is complete and
+  one-to-one with what is stored: "Waiting for a worker" / "A worker is on it"
+  / "Finished" / "Failed — needs a look" / "Stopped". `runStatusLabel` NEVER
+  invents a phase ("planning", "reviewing") the run does not record; an
+  unknown status falls back to the raw word. (criterion 20, truthfully)
+- The draft-PR link — the run's actual deliverable — is promoted from the
+  bottom of the evidence drawer to a primary "Review draft PR #N" action in
+  the run-detail header. (criteria 20, 27)
+- The recorded enum stays one glance away: a "Recorded status" fact row in the
+  detail keeps the technical vocabulary available. (criterion 21)
+- Tests: 4/4 in `runs-console.test.tsx` (five-state mapping one-to-one,
+  unknown-status verbatim fallback, list shows "Finished" and never the raw
+  enum, detail promotes the PR link and keeps the recorded enum). tsc + lint
+  clean.
+
+**Iteration 5 — shipped (PR #128, squash `eb32f28`, CI green):** Add-Project
+measured, then trimmed.
+- Honest audit against criterion 5 ("wizard-based"): the existing one-screen
+  form already BEATS a wizard — repository auto-picked from the connection's
+  selected repos, project name pre-filled from the repository, default branch
+  taken from GitHub metadata and never asked, description optional, and new
+  projects start with all automation off. Splitting that into wizard steps
+  would add clicks, not remove them. Criterion 5's intent (guided, minimal,
+  inferred) is satisfied by the form; recorded here rather than rebuilt as
+  ceremony. (criteria 5, 6, 7 — nothing asked twice)
+- The one real dead control: a "GitHub account" picker rendered even with
+  exactly one connected account (the common case — a select with one option).
+  It now appears only when there are two or more accounts to choose between;
+  the repository list already names the owner (`owner/repo`), so nothing is
+  lost. (criteria 8, 29)
+- Tests: projects-console 4/4 — the two existing GitHub-evidence cases, plus
+  single-account-hides-picker (and asserts the pre-filled name) and
+  two-accounts-show-picker. tsc + lint clean.
+
+**Iteration 6 — shipped (PR #129):** error-UX audit; the one real dead end fixed.
+- Honest audit of every inline error site (19 `setMessage(error…)` call sites
+  swept): most already carry their next action — the activity console has a
+  full error card with Retry, commands/runs/backlog ride `TenantListShell`'s
+  built-in reload, the file-manager and run-launcher render errors adjacent to
+  the very button that retries, and the projects/connections load failures
+  land on `BlockedState` deep links. Criterion 18 was largely already met;
+  recorded rather than re-plumbed. (criteria 18, 19)
+- The one genuine dead end was the highest-stakes moment: a failed one-click
+  sign-in return (`?connect=expired/invalid/refused/failed`) rendered "Start
+  it again" **with no way to do so** — in both the console-level banner and
+  the providers-tab notice. Both now pair the failure text with a "Try
+  signing in again" action (the same `/api/bots/connect/oauth/start` the
+  front door uses). The retry condition is derived from the message itself,
+  so no separate state can go stale. (criteria 18, 19, 29)
+- Tests: bot-fabric-console 9/9 — new case lands on `?connect=failed` and
+  asserts the notice carries the retry link. tsc + lint clean.
+
+**Iteration 7 — shipped (PR #129, with iteration 6):** functional mobile pass.
+- Audit scope: the five core owner surfaces (Dashboard guide + attention area,
+  goal box, Connections, Add-Project, Runs list/detail), looking for touch
+  targets, hover-only controls, overflow risks, and drawer usability at phone
+  widths — beyond the e2e suite's existing three-width heading/viewport/axe
+  proof. (criterion 26)
+- Sound as found: buttons sit on `min-h-10`/`min-h-9` from the design system;
+  no hover-only controls (hover styles only decorate tappable elements); the
+  run detail is an inline card, not a fixed drawer, so it flows at 375px; repo
+  names truncate; SHAs are shortened; the runs branch line truncates; the
+  composer's chips/risk grid wrap and stack.
+- Three real overflow risks fixed — all owner-authored text rendered without
+  `break-words` inside `min-w-0` containers, where one pasted URL or long
+  token would horizontally scroll a phone: attention-item what/why lines
+  (`needs-your-attention.tsx`), the goal prompt in the commands list
+  (`commands-console.tsx`), and the task title in the runs list
+  (`runs-console.tsx`). Class-level fixes; behavior unchanged; 20/20 across
+  the three affected suites, tsc + lint clean.
+
+**Iteration 8 — shipped (PR #129, with iterations 6-7):** screens audited;
+navigation re-led.
+- Consolidation audit (criterion 28): the five "Work" consoles suspected of
+  overlap have genuinely distinct purposes — Workflows (graph preview),
+  Agents (role definitions), AgentOS (grants + decision inbox), Autonomy
+  (permitted-actions + decision trail), Resources (routing evidence). No two
+  do the same job; merging any pair would remove function, not friction.
+  Recorded, not consolidated.
+- The real criterion-28/8 gap was the sidebar: 16 destinations grouped by
+  which phase built them, with the owner path buried (Bot Manager mid-list
+  under "Work"). Regrouped by how an owner moves: the ungrouped top block is
+  the daily path in journey order (Dashboard → Bot Manager → Projects → Runs
+  → Reports), "Watch" holds Operations + Activity, "Advanced" holds the
+  seven technical consoles (full function kept — nothing removed), "Setup"
+  holds Connections + Settings. Labels and routes unchanged, so the e2e
+  accessible-navigation proof still passes by name. (criteria 8, 21, 27, 28)
+- Tests: new `app-shell.test.tsx` pins the daily-path order and every
+  console's continued reachability. tsc + lint clean.
+
+**Iteration 9 — shipped (PR #129, with iterations 6-8):** the critical
+journey is E2E tested.
+- `tests/e2e/journey.spec.ts`, two honest lanes. Lane 1 (every CI run, all
+  three viewports): the signed-out journey scaffolding — Dashboard guide with
+  all four steps and no attention-area noise, sign-in page offering the
+  passwordless link, connections gate naming itself with a way forward
+  (sign-in gate or truthful local-unavailability, console.spec precedent),
+  the goal box present with Queue honestly disabled, runs naming its
+  sign-in gate. Proven green locally on desktop/tablet/mobile projects.
+- Lane 2 (local Supabase stack, skip-gated like auth-lifecycle.spec.ts): a
+  real browser walks sign-up → confirmation email (Mailpit) → onboarding →
+  Dashboard guide reads "0 of 4 done" with Connect GitHub as the current
+  step → attention area absent for a fresh workspace → goal box renders,
+  says "No connected projects yet", and keeps Queue disabled with text
+  entered. Stops at the external-GitHub boundary by design: connecting a
+  real GitHub App and a live command need the owner's accounts — exactly
+  what the production canary proves. (criterion 30, to the honest limit)
+
+### FRICTIONLESS COMPLETION REPORT (2026-08-16, loop iterations 1–9)
+
+**FRICTIONLESS COMPLETION: ~87%** — 26 of the goal's 30 completion criteria
+MET at the code-and-test level; 4 PARTIAL, each for an honest, named reason;
+everything beyond ~87% requires either the owner's real accounts (live
+proofs) or is a frozen-policy boundary this goal forbids weakening.
+
+**E2E JOURNEY RESULT:** PASS to the external-account boundary.
+`tests/e2e/journey.spec.ts` proves the signed-out scaffolding every CI run at
+three viewports (each step exists, names its gate, offers the next action),
+and the signed-in walk (sign-up → confirmation email → onboarding → live
+4-step guide → honestly gated goal box) against a real local Supabase stack.
+Beyond that boundary — real GitHub App connect and a live command — is
+exactly what the production canary proves, and is owner-blocked.
+
+**STEPS BEFORE → AFTER** (measured from the merged diffs):
+- Bot connect (#121): ~6 owner steps (pick provider, obtain key, paste or
+  name an env var, then hand-build a bot: name/model/credential ref) → **1
+  click + provider approval**, ready bot auto-provisioned on return.
+- First-run orientation (#124): no path (metrics + 16 nav items) → **4-step
+  live checklist** that completes and collapses to one CTA.
+- Goal submission (#125): 6 decisions (sentence, project, work type,
+  acceptance criteria, dependencies, risk) → **2** (sentence, project) with
+  safe defaults behind an Advanced fold.
+- Add project (#128): 4 fields + an account picker → **repo pick + confirm**
+  (name and branch inferred; picker only when ≥2 accounts).
+- Finding owner decisions (#126): hunt across consoles/logs → **one
+  attention area** listing only genuine decisions, each with one button.
+- Understanding a run (#127): raw enums + PR link buried in evidence →
+  **plain language** + "Review draft PR #N" leading the detail.
+- Recovering from a failed sign-in (#129): dead-end text → **retry button
+  in place**.
+- GitHub connect on iPhone/iPad (#123): broken (fetch-set cookie dropped by
+  ITP) → **works** via top-level navigation.
+
+**OWNER INTERVENTIONS REMOVED:** naming credential env vars; hand-building
+the first bot; re-typing repo name/branch GitHub already knows; choosing a
+risk tier for routine work; scanning logs for RED approvals; re-starting
+failed sign-ins from scratch.
+
+**AUTOMATIONS ADDED:** auto-provisioned default bot on provider connect;
+live setup-status detection on the dashboard; inferred project defaults;
+attention aggregation across four decision sources; automatic idempotency
+-key reuse on ambiguous submission failures (pre-existing, now surfaced);
+connect-outcome auto-clear from URLs so refreshes never repeat actions.
+
+**FRICTION REMOVED:** 9 iterations, PRs #121, #123–#129 — all merged with
+green CI (lint/typecheck/test/build + browser/a11y at three widths).
+
+**MOBILE RESULT:** iOS/iPadOS GitHub connect fixed (#123); three
+owner-authored-text overflow risks fixed (attention items, goal prompts,
+task titles); touch targets ≥36px from the design system; no hover-only
+controls; journey e2e green on desktop/tablet/mobile projects. Live iPhone
+round-trip: owner-pending.
+
+**SECURITY/RLS:** zero safety-surface changes across all nine iterations.
+No schema change, no new privileged path, no RLS/FORCE-RLS touch, no
+GREEN/YELLOW/RED widening, zero-token design intact; every server-side
+validation (risk, policy, binding, same-origin, owner-auth) unchanged. The
+two new API routes this session (`/api/github/install/launch`, from #123's
+predecessor line, and `/api/bots/connect/provision`, #121) both REQUIRE
+owner/admin authentication and only reach screens/actions that already
+existed.
+
+**PARTIAL (4), honestly:** guided connect flows for Vercel/Supabase (their
+adapters truthfully read Not Connected — future phase); goal-text → graph
+-vs-single-worker auto-decision (orchestrator plans per command type; the
+graph engine remains an explicit console); live worker auto-selection proof
+(code+tests done, needs the canary and a second worker); production
+protect/rollback/repair execution (control plane complete, execution
+deliberately blocked pending owner enablement — a safety boundary, not a
+gap).
+
+**REMAINING OWNER ACTIONS (path to 100%):** run the production canary (app
+sign-in page → "Email me a sign-in link instead" → click promptly on the
+same device → Bot Manager → queue the canary sentence); one live GitHub
+connect from an iPhone; hosted-ledger position check; second
+repository/account; the Phase 2A paid-adapter decision.
+
+### External Blockers (owner-only)
+
+1. **1C canary**: browser → `/solutions/bot-manager` → GREEN command ("Create a Phase 1C canary documentation file and produce a draft PR"). Worker claims within ~5 min. Verify: `factory/*` branch + draft PR appear.
+2. **Hosted migration apply** (position now measured — 65/`20260814002300`): follow the rebased `AI/HOSTED_APPLY_RUNBOOK.md` top section — `supabase link` → `migration list` (confirm `20260814002000` remote-only) → the two `migration repair` lines → `db push` (19 outstanding). Raise 2E capacity ceilings first if the factory should run wider than the conservative defaults.
+3. **Second repository/installation** for 2C goal 34 (GitHub → SoftwareFactory App → Configure).
+4. **Phase 2A paid-adapter decision**: exempt / remove / re-base (latent, switch OFF).
+
+### Completed Evidence (this loop)
+
+- Worker LIVE: Actions `31894356952`, job `95035227290`, steps all green, log lines quoted above; secret `SOFTWAREFACTORY_CODEX_AUTH_JSON` present (masked) in step env.
+- Hosted ledger ahead of docs: owner screenshot, SQL Editor error `23505` on version `20260813001500`.
+- Zero-token certification: `phase1c-worker-workflow.contract` asserts no step receives a paid key; worker log confirms subscription mode in production.
+
+### Regression Findings
+
+- `AI/CURRENT_STATE.md` + `AI/QUALITY_SCORECARD.md` claimed 1C "Not Connected pending the owner-supplied subscription credential" after the credential was configured and the worker live — stale-memory regression, corrected this commit.
+- `AI/HOSTED_APPLY_RUNBOOK.md` baseline ("hosted ledger ends at `20260813001400`") disproven by the duplicate-key error; runbook needs rebasing once the real position is known (P1).
+
+## HANDOFF — Phase 2C resource gates (2026-08-15, latest session)
+
+**Branch:** `claude/github-connection-confirm-qe3tqm` · **PR #95 open**, CI green on the
+first three commits, fourth in flight at handoff. If it is green, merge it.
+
+Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` §2.1.
+
+- **Capacity** (`lib/resources/capacity.ts`) is now *called*. It had shipped with tests
+  and no caller, which is the same defect as Phase 2B goal 33 — a surface that exists,
+  is tested, and no code path reaches. Wired into `assignWorker` as an eligibility gate
+  beside capability, risk and breakers, never as a score weight: a weight can be
+  outvoted, and "we exceeded the concurrency limit because the model was cheap" is not
+  a trade anyone chose.
+- **Dispatch** (`lib/resources/dispatch.ts`) joins `lib/graph/scheduler.ts` to
+  `assignWorker`. It is deliberately not a loop over the single-node decision —
+  `assignWorker` is told the reservations live *now*, so two nodes released in one tick
+  both see the same free slot. Reservations thread forward through the batch instead.
+- **Rate accounting** (`lib/resources/rate-limits.ts`) is a third gate, not more
+  capacity. Short calls separate them: six concurrent slots filled by two-second calls
+  is 180 requests a minute while never showing more than six in flight. A rate refusal
+  carries `retryAfterMs`; a capacity refusal deliberately does not, because a window
+  clears at a computable time and a concurrency refusal does not.
+
+### Genuinely open, and why
+
+- **Nothing here is persisted.** All three are pure functions; the caller owns the
+  reservation set and the rate window, so a process restart forgets both. The plan rows
+  say **COMPLETE (in-process; not yet persisted)** rather than COMPLETE, deliberately.
+  Making them durable is the next real unit of work in this workstream, and the pattern
+  to reuse is the `operations_events` one (`for update skip locked`, unique dedupe keys,
+  bounded attempts) rather than a second invention.
+- **Nothing calls `dispatch` yet.** It is reachable and tested but not on the 1C claim
+  path, for the reason recorded in `CURRENT_STATE.md`: that path is hosted and live,
+  nothing executes regardless, and changing it now buys no behaviour while risking
+  conflicts with concurrent agents. Whoever wires it should do so with a worker pool
+  that actually executes, or the same "built but unreachable" trap repeats one level up.
+
+### Two corrections landed with it
+
+1. `AI/CURRENT_STATE.md` still called migration `20260814000210` **unhosted**. It is
+   hosted. It had been applied only partially — far enough to create `resource_breakers`,
+   which is why re-running it raised `42P07` instead of doing nothing — and
+   `scripts/repair-20260814000210.sql` completed it before the ledger was reconciled.
+2. **The hosted number below is stale.** The previous section says 29 migrations are
+   unapplied. The ledger now carries 65 rows covering all 64 files up to
+   `20260814002300`, with `scripts/hosted-schema-audit.mts` reporting 0 outstanding and
+   0 indeterminate. **8** migrations are unapplied to hosted: `20260814002400`,
+   `20260814002500`, and the six Phase 2E files. Owner action, runbook unchanged.
+
+### Owner-only, not agent-actionable
+
+These are the whole reason this workstream is not at 100%, and no amount of building
+closes them:
+
+- **Codex quota** — exhausted until **2026-08-20**. Blocks 2A goals 18/19, the live half
+  of 2B goal 30, and 1E rows 14/16. Recorded as `BLOCKED_BY_CODEX_QUOTA`. Buying credits
+  is explicitly *not* the recommendation; the constraint is zero funded per-token usage.
+- **GitHub App install** on `bubalysupport-prog`, selecting `TestMeBubaly` (1B items 2
+  and 20).
+- **Record a graph** via `/solutions/workflows` (2B goals 3 and 4). The launch path
+  exists and is tested; it needs one owner action to produce a real row.
+- **Vercel** is refusing preview deployments on PR #95 with
+  `api-deployments-free-per-day`. Account-level daily cap, unrelated to any diff, and the
+  only remedy it offers is a paid upgrade — left alone on purpose.
+
+---
+
+## HANDOFF — Phase 2E portfolio scheduling (2026-08-15, previous session)
+
+**Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq`, pushed. Six migrations,
+`20260815000100` through `20260815000600`. Full scorecard in `AI/PHASE_2E_COMPLETION.md`:
+**33 PASS · 2 PARTIAL · 0 FAIL · 1 BLOCKED — 92%**.
+
+### What the factory can do now that it could not before
+
+It schedules a *portfolio*. `claim_phase1c_run` was already durable, lease-based and
+dependency-aware, and it had no way to compare two projects: a P3 chore outranked
+critical work whenever its task priority happened to be higher, and concurrency was
+bounded only by how many workers were registered. Now:
+
+- Projects carry P0–P3, strategic focus, an engineering pause, and a run ceiling.
+  Owner-only functions set each and write an activity event.
+- Ceilings exist at four levels — worker, project, provider account (or a single
+  connection), and portfolio — and a reserve inside the portfolio ceiling that only
+  effective-P0 work may occupy.
+- Waiting work gains a priority tier per fairness interval, floored at P1, so nothing
+  starves and nothing ages into the emergency reserve.
+- An open circuit breaker withholds work from the provider it names; the cooldown
+  admits exactly one trial, and taking it restarts the clock.
+- Every assignment is recorded with project, task, agent, provider, connection and
+  reason. Work that was ready and withheld by a ceiling is recorded too, deduplicated
+  per minute so a polling worker cannot flood the audit.
+- `/solutions/portfolio` shows capacity, the queue in scheduler order with a reason on
+  every waiting item, and per-project scheduling state.
+
+### Two defects fixed that were not features
+
+1. **One logical agent per organization made portfolio concurrency impossible.** The
+   scheduler refuses a second concurrent run for one agent, and the roster gave the
+   whole factory one Backend and one QA. Everything else in 2E would have been enforced
+   on a factory that still ran one project at a time. Agents are now cloned per project.
+2. **The portfolio console counted statuses no enum can hold** — commands in `planning`
+   and `blocked`, tasks in `ready`, incidents in `acknowledged` and `mitigating`. Every
+   project reported zero open incidents however many were open, and queued tasks were
+   not counted at all. A test now reads the enums out of the migration.
+
+### Genuinely open, and why
+
+- **Goal 9 (2D Identity Router).** There is no `lib/identity/` in this repository; 2D is
+  not built. The capability is enforced by the claim path's connection joins. When 2D
+  lands it should replace that join, not duplicate it.
+- **Goal 17 (work locks).** Two lock mechanisms exist — the 1C agent-level exclusion and
+  the 2B `graph_work_locks`/`task_work_locks` — and are not unified. Nothing is unsafe;
+  they simply do not know about each other.
+- **Goal 35 (hosted).** ~~29 migrations are unapplied to hosted Supabase.~~ **Superseded —
+  see the section above: the ledger was reconciled and 8 are unapplied, of 72 files.**
+  Verified locally across the full chain. Owner action, unchanged: `AI/HOSTED_APPLY_RUNBOOK.md`.
+
+### Before you add a migration
+
+Eleven test files pin the newest migration filename, and three more derive counts from
+the migrations directory. They exist so a new migration cannot land without those
+suites being re-run against it. Update the pins and the two count sentences in
+`AI/HOSTED_APPLY_RUNBOOK.md`; the failures tell you exactly what to change.
+
+Note one ordering constraint the repair test now encodes: `20260815000500` and
+`20260815000600` define `language sql` functions over `resource_breakers`, whose bodies
+PostgreSQL resolves at creation. They cannot be applied to a database where
+`20260814000210` is half-applied — the repair has to run first.
+
+---
+
+## HANDOFF — previous session (2026-08-14)
 
 **Branch:** `claude/softwarefactory-phase-1e-ops-mjdiiq` · **PR #40 open**, CI running at handoff.
 If #40 is green, merge it. If it failed, the cause is almost certainly the

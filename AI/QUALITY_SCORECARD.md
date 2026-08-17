@@ -2,7 +2,52 @@
 
 Last reviewed: 2026-08-13
 
-Decision: **Phase 1C is re-architected to zero-token subscription-authenticated Codex execution and remains Not Connected pending the owner-supplied credential. The paid-API dependency is removed from the execution path: `OPENAI_API_KEY` is no longer a worker configuration field, `new Codex()` is constructed without an api key, preflight makes no `api.openai.com` request in subscription mode, and no workflow step receives a paid key. The billed mode must name itself and can never be reached by fallback. The schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
+**Addendum, 2026-08-16 — per-account usage evidence (ADR-076):** migration
+`20260816001500` (append-only usage observations, worker-only write, member
+latest-per-account read), `lib/worker/usage-probe.ts` with the auth-broker
+capture hook, `GET /api/ai-accounts/usage`, and the Bot Manager usage rows are
+implemented and locally certified: the new behavior suite
+`tests/integration/ai-account-usage.behavior.test.ts` and unit suite
+`tests/unit/usage-probe.test.ts` pass alongside the updated
+schema-security-invariants pins (service_role gains exactly
+`record_ai_account_usage`; the policyless allowlist gains the evidence table),
+with lint, typecheck, full vitest, and a production build green on this tree.
+Hosted evidence does not exist yet: the migration is **unhosted**, so
+production records no observations until the owner applies it; the panel then
+fills in automatically from the already-deployed worker cadence. No execution
+authority changes.
+
+**Addendum, 2026-08-16 — project repository picker:** implemented and locally certified:
+migration `20260816001400` (two definer functions, no table/grant/RLS changes),
+`PUT`/`DELETE /api/projects/[projectId]/repository`, and the Connections console picker.
+Evidence: `tests/integration/project-repository-picker.behavior.test.ts` (8 tests against
+the full migrated chain: function ACLs, member refusal, link/relink/unlink evidence, the
+named uniqueness refusal, the pending-reservation freeze, the archived-project refusal),
+`tests/unit/project-repository-route.test.ts` (11 tests: same-origin, role, body, RPC
+wiring, verbatim 55000 refusals, 23505 race mapping), and six new Connections console
+component tests (picker render, link, unlink, uniqueness message, load-failure state,
+no-installation state, zero-repository state). Local evidence only; the migration is
+unhosted and no hosted claim is made.
+
+**Addendum, 2026-08-16 — BotBuild (AI accounts + auth broker):** the P0 layer is
+implemented and locally certified: migration `20260816000100` (two RLS+FORCE
+tables with zero direct table access, 16 definer functions, `bots.ai_account_id`),
+the `/api/ai-accounts` broker API, the worker auth runner + gated Actions
+workflow, the auto-completing connect UI (no command, no check-now on the
+primary path), unbounded account/bot slots (configured capacity only), and the
+AI Accounts management panel (reconnect/disconnect). Full local gate on head
+`1cab6f5`: vitest 2804/0, tsc clean, eslint 0 errors. **Superseded live
+(2026-08-16):** the broker is LIVE in production for both providers — three
+Claude accounts and one Codex account are Connected with identity capture and
+periodic verification, owner-verified by screenshot at 19:07Z — and both
+paths are owner-frozen (ADR-072/ADR-073). The freshest full local gate is on
+merged head `aeabc95` (GitHub install host-convergence + freeze extension):
+vitest 2839 passed / 2 skipped / 0 failed, tsc clean, eslint 0 errors
+(10 pre-existing warnings in untouched files), production build exit 0.
+Still open from this addendum: the verification loop UI and per-bot
+runtime/log tracking beyond assignments (todo.md P1–P3).
+
+Decision: **Phase 1C is re-architected to zero-token subscription-authenticated Codex execution, the credential is configured, and the worker is LIVE — scheduled Actions runs pass preflight in subscription mode and poll for work every ~5 minutes (run `31894356952`, 2026-08-15). No live canary exists yet because no command is queued; that is one owner action, not an engineering gap. Superseded text follows for history: ** The paid-API dependency is removed from the execution path: `OPENAI_API_KEY` is no longer a worker configuration field, `new Codex()` is constructed without an api key, preflight makes no `api.openai.com` request in subscription mode, and no workflow step receives a paid key. The billed mode must name itself and can never be reached by fallback. The schema, worker, and fail-closed provider-startup recovery are published, but Phase 1C remains Not Connected. The first owner-approved live acceptance attempt failed safely before any repository mutation. Distinct no-claim diagnostic run `31748582858` passed the exact-model GET and classified the bounded Responses failure as `credit_balance_exhausted`, while skipping Docker preload and durable claim. The failed run's immutable base predates current `main`, so it must not be retried; acceptance requires a new current-base command after funded-provider proof. Activation is OFF. Phase 1D execution and provider execution also remain Not Connected.**
 
 Reason: exact project `qpuofpmagrmyamahqwxw` is reconciled and current through forward migration `130014`; linked lint and focused catalog/runtime/ACL checks pass. Local `130015` restores the assignment/run model constraint bound from 120 to the original 128-character provider catalogue/API contract, adds four no-secret constraints for catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds bounded routing evidence, and closes authenticated raw routing-decision/event reads while retaining tenant-scoped model-catalogue reads, but is unhosted pending fresh exact RED approval. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; it passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Live command `0c4d0ca8-1867-4d00-80cf-476401491a17` produced durable run `f4594556-6f72-4763-a480-6993939e3651` and worker Actions run `31746057998`; a real claim, heartbeat, and provider thread occurred, then provider startup failed before changed files, commit, branch, PR, validation, or exact-head CI. Diagnostic `31748582858` identified exhausted project credits without a claim. The failed run is now stale against the verified baseline and must not be retried. The user-pasted OpenAI key is treated as compromised and its GitHub Actions secret is deleted; the other six protected secrets remain. A successful live draft-PR journey requires credits or a fresh funded replacement key, a passing provider-only diagnostic, and a new current-base command.
 
@@ -238,6 +283,37 @@ committed; the repository is consistent with that account.
 6. After the diagnostic passes, leave stale run `f4594556-6f72-4763-a480-6993939e3651` untouched, submit a new current-base GREEN command, and restore activation absent/OFF immediately after claim.
 7. Preserve durable repository/base SHA, neutral logical agent, routing reasons, lease, recovery state, timeline, validation, artifacts, changed paths, usage, factory branch/commit/open draft PR, stable exact-head CI, structured report, activity, cancellation state, and final-result evidence.
 8. Prove no default-branch write, PR approval/merge, deployment, rollback, RED execution, workflow/provider-setting change, or secret disclosure occurred, and complete the remaining unrelated-authenticated/mutation-denial matrix.
+
+## Phase 2E portfolio scheduling evidence, 2026-08-15
+
+| Check | Result |
+|---|---|
+| Unit and integration tests | 2360 passed, 0 failed, 2 skipped |
+| Playwright, desktop + tablet + mobile with axe | 132 passed, 3 skipped |
+| Lint | 0 errors, 3 warnings (all pre-existing, in test files) |
+| Typecheck | clean |
+| Production build | succeeds |
+| Migration chain on PGlite from empty | 70 applied in order |
+| Tables under RLS + FORCE RLS | 104 of 104 |
+| `service_role` table privileges | still exactly the four GitHub ingress tables |
+
+The five required canaries run in `tests/integration/phase2e-portfolio-scheduling.behavior.test.ts`,
+each against two competing projects in one organization, and each asserting on the run a worker
+actually claimed through `claim_phase1c_run` rather than on a projection:
+
+| Canary | What it proves |
+|---|---|
+| A — competing projects | Beta queued first, Alpha (P1) claimed first, Beta claimed on release |
+| B — P0 | Ceiling 1 with 1 reserved: routine work withheld, an incident-linked repair claimed at effective P0, the routine run still `queued` afterwards |
+| C — capacity | Project ceiling 1 with worker capacity 2: excess withheld with `projectActive: 1, projectLimit: 1`, claimed after release |
+| D — failure | Three outages open a breaker, work withheld naming it, another provider's breaker does not interfere, cooldown admits one trial, the trial consumes the window, success reopens |
+| E — reprioritize | Focus set and cleared in one statement, next claim follows it, the running run keeps its lease token, one activity event |
+
+**What this evidence does not cover.** PGlite is a single connection, so every claim above is
+sequential. These prove ordering, ceilings, release and recovery; they do not prove behaviour
+under simultaneous contention, which rests on the `for update ... skip locked` the claim has used
+since Phase 1C and which these changes did not alter. Nothing here is hosted: 29 migrations remain
+unapplied to hosted Supabase.
 
 ## Release-blocking invariants
 

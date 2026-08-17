@@ -8,7 +8,19 @@ import {
   type NodeComplexity,
   type WorkCapability,
 } from "@/lib/resources/capabilities";
+import {
+  admits,
+  type CapacityLimits,
+  type CapacityRefusal,
+  type Reservation,
+} from "@/lib/resources/capacity";
 import { evaluateBreaker, type BreakerRecord } from "@/lib/resources/breakers";
+import {
+  admitsRate,
+  type RateEvent,
+  type RateLimitPolicy,
+  type RateRefusal,
+} from "@/lib/resources/rate-limits";
 import {
   predictFrom,
   type ObservedPerformance,
@@ -74,6 +86,20 @@ export interface ResourceRequest {
   readonly requestedAgentId?: string | null;
   readonly requestedModel?: string | null;
   readonly requestedProvider?: string | null;
+  /**
+   * Runs currently holding capacity. Optional: a caller that does not track
+   * reservations gets the previous behaviour rather than a silent limit of
+   * zero, which would refuse everything and look like a routing bug.
+   */
+  readonly reservations?: readonly Reservation[];
+  readonly capacityLimits?: CapacityLimits;
+  /**
+   * Requests already made in the current window. Optional for the same reason
+   * `reservations` is: absent means "this caller does not account for rate",
+   * not "no requests are permitted".
+   */
+  readonly rateEvents?: readonly RateEvent[];
+  readonly ratePolicy?: RateLimitPolicy;
   readonly now: number;
 }
 
@@ -83,7 +109,12 @@ export type AssignmentDecision =
   | "NO_ELIGIBLE_WORKER"
   | "REQUESTED_WORKER_INELIGIBLE";
 
-export type ScoreNote = "INSUFFICIENT_HISTORY" | "BREAKER_OPEN" | "RISK_REQUIRES_STRONG_MODEL";
+export type ScoreNote =
+  | "INSUFFICIENT_HISTORY"
+  | "BREAKER_OPEN"
+  | "RISK_REQUIRES_STRONG_MODEL"
+  | "AT_CAPACITY"
+  | "RATE_LIMITED";
 
 export interface ScoredWorker {
   readonly agentId: string;
@@ -98,7 +129,13 @@ export interface ScoredWorker {
     readonly cost: number | null;
     readonly affinity: number;
   };
-  readonly rejections: readonly (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK")[];
+  readonly rejections: readonly (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal | RateRefusal)[];
+  /**
+   * When a rate refusal could clear, in millis. Null unless rate accounting
+   * refused this candidate. A concurrency refusal has no equivalent, because
+   * nobody can say when another run will finish.
+   */
+  readonly retryAfterMs: number | null;
   readonly notes: readonly ScoreNote[];
   readonly prediction: Prediction;
 }
@@ -188,7 +225,7 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
     });
 
     const breaker = evaluateBreaker(candidate.breaker, request.now);
-    const rejections: (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK")[] = [
+    const rejections: (CapabilityRejection | "BREAKER_OPEN" | "RISK_TIER_TOO_WEAK" | CapacityRefusal | RateRefusal)[] = [
       ...capability.rejections,
     ];
     const notes: ScoreNote[] = [];
@@ -201,6 +238,49 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
       rejections.push("RISK_TIER_TOO_WEAK");
       notes.push("RISK_REQUIRES_STRONG_MODEL");
     }
+    // Capacity is a gate, not a weight. A worker at its limit is ineligible in
+    // the same way an undeclared capability is -- a weight could be outvoted,
+    // and exceeding a concurrency limit to save cost is not a trade anyone
+    // chose. Skipped entirely when the caller tracks no reservations, so this
+    // cannot become an accidental limit of zero.
+    if (request.reservations) {
+      const verdict = admits(
+        request.reservations,
+        {
+          agentId: candidate.agent.agentId,
+          provider: candidate.model.provider,
+          model: candidate.model.model,
+          projectId: node.projectId,
+        },
+        request.now,
+        request.capacityLimits,
+      );
+      if (!verdict.admitted) {
+        rejections.push(verdict.refusal!);
+        notes.push("AT_CAPACITY");
+      }
+    }
+
+    // Rate is the third gate, and it asks a question capacity cannot: not "is a
+    // slot free" but "has too much happened recently". Short calls satisfy a
+    // concurrency cap continuously while still exceeding a per-minute limit, so
+    // one does not imply the other.
+    let retryAfterMs: number | null = null;
+    if (request.rateEvents) {
+      const verdict = admitsRate(
+        request.rateEvents,
+        candidate.model.provider,
+        request.now,
+        node.estimatedContextTokens,
+        request.ratePolicy,
+      );
+      if (!verdict.admitted) {
+        rejections.push(verdict.refusal!);
+        notes.push("RATE_LIMITED");
+        retryAfterMs = verdict.retryAfterMs;
+      }
+    }
+
     if (!candidate.performance) notes.push("INSUFFICIENT_HISTORY");
 
     return {
@@ -217,6 +297,7 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
         affinity: candidate.configuredAffinity,
       },
       rejections: Object.freeze(rejections),
+      retryAfterMs,
       notes: Object.freeze(notes),
       prediction: predictFrom(candidate.performance),
     };
@@ -299,6 +380,22 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
 
   const best = ranked.find((candidate) => candidate.eligible);
   if (!best) {
+    // Capacity is worth naming separately. "No eligible worker" reads as a
+    // misconfiguration -- a missing capability, a wrong allowlist -- and sends
+    // someone to change a declaration. Being at capacity is a queue, not a
+    // misconfiguration, and the fix is to wait or raise a named limit.
+    const capacityRefusals = new Set<string>([
+      "WORKER_AT_CAPACITY",
+      "PROVIDER_AT_CAPACITY",
+      "PROJECT_AT_CAPACITY",
+    ]);
+    const capacityOnly = ranked.length > 0
+      && ranked.every(
+        (candidate) =>
+          candidate.rejections.length > 0
+          && candidate.rejections.every((rejection) => capacityRefusals.has(rejection)),
+      );
+
     return Object.freeze({
       policyVersion: RESOURCE_POLICY_VERSION,
       decision: "NO_ELIGIBLE_WORKER",
@@ -307,7 +404,9 @@ export function assignWorker(request: ResourceRequest): ResourceAssignment {
       model: null,
       objective,
       mode,
-      reason: "No candidate satisfied capability, availability, risk, and breaker requirements.",
+      reason: capacityOnly
+        ? "Every otherwise-eligible worker is at capacity; this node waits rather than exceeding a concurrency limit."
+        : "No candidate satisfied capability, availability, risk, capacity, and breaker requirements.",
       candidates: Object.freeze(ranked),
       prediction: predictFrom(null),
     });

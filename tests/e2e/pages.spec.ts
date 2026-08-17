@@ -13,15 +13,23 @@ import { expect, test } from "@playwright/test";
 const routes = [
   // The console home moved to /solutions when / became the marketing landing.
   { path: "/solutions", heading: "Dashboard" },
+  { path: "/solutions/ai-factory", heading: "AI Factory" },
   { path: "/solutions/operations", heading: "Operations" },
-  { path: "/solutions/projects", heading: "Projects" },
+  { path: "/solutions/projects", heading: "All Projects" },
+  { path: "/solutions/myprojects", heading: "My Projects" },
+  { path: "/solutions/portfolio", heading: "Portfolio" },
+  // A dynamic route with an id nothing owns: renders the honest missing state
+  // signed-out, which is what this suite exercises everywhere.
+  { path: "/solutions/portfolio/00000000-0000-4000-8000-00000000dead", heading: "Project detail" },
   { path: "/solutions/files", heading: "Files" },
   { path: "/solutions/bot-manager", heading: "Bot Manager" },
+  { path: "/solutions/bot-usage", heading: "Bot Usage" },
   { path: "/solutions/connections", heading: "Connections" },
   { path: "/solutions/activity", heading: "Activity" },
   { path: "/solutions/settings", heading: "Safety" },
   { path: "/solutions/agents", heading: "Agents" },
   { path: "/solutions/resources", heading: "Resource manager" },
+  { path: "/solutions/pipelines", heading: "Pipelines" },
   { path: "/solutions/workflows", heading: "Workflows" },
   { path: "/solutions/backlog", heading: "Backlog" },
   { path: "/solutions/runs", heading: "Runs" },
@@ -54,6 +62,26 @@ for (const { path, heading } of routes) {
     // Client consoles settle into a signed-out or unconfigured state; wait for
     // the loading spinner to clear so axe sees the real content.
     await expect(page.locator('[aria-label*="Loading"]')).toHaveCount(0, { timeout: 15_000 });
+
+    /*
+     * One global navigation, on every page.
+     *
+     * The authentication pages sit outside both route groups, so they
+     * inherited only the root layout and rendered no header at all — the
+     * product's name was in the tab and nowhere on screen, with no way back
+     * to the site. Asserted for every route rather than for those two, so a
+     * future route group cannot quietly become another exception.
+     */
+    await expect(
+      page.getByRole("link", { name: /ai software factory (home|console home)/i }).first(),
+      `${path} renders no global brand link`,
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Primary" }).or(
+        page.getByRole("button", { name: /open site navigation/i }),
+      ).first(),
+      `${path} renders no global navigation`,
+    ).toBeAttached();
 
     const dimensions = await page.evaluate(() => ({
       viewportWidth: document.documentElement.clientWidth,

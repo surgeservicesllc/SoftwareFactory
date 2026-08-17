@@ -1,7 +1,9 @@
 import "server-only";
 
+import { assignmentConfigFromRow } from "@/lib/bots/assignment-config";
 import { findBotProvider } from "@/lib/bots/catalog";
-import { isCredentialPresent } from "@/lib/bots/credentials";
+import { isCredentialPresent, normalizeCredentialRef } from "@/lib/bots/credentials";
+import { loadStoredCredentialOverlay } from "@/lib/providers/stored-credentials";
 import {
   evaluateBotReadiness,
   isBotReadiness,
@@ -69,6 +71,7 @@ type BotRow = {
   readiness_detail: string | null;
   last_checked_at: string | null;
   notes: string | null;
+  ai_account_id?: string | null;
   created_at: string;
 };
 
@@ -92,6 +95,21 @@ type AssignmentRow = {
   status: string;
   assigned_at: string;
   released_at: string | null;
+  preset?: string | null;
+  responsibilities?: unknown;
+  instructions?: string | null;
+  repository_access?: string | null;
+  branch_strategy?: string | null;
+  can_open_pull_request?: boolean | null;
+  can_merge_pull_request?: boolean | null;
+  pipeline_access?: string | null;
+  environment_access?: string | null;
+  tools?: unknown;
+  requires_human_approval?: boolean | null;
+  max_concurrent_tasks?: number | null;
+  priority?: number | null;
+  model?: string | null;
+  work_effort?: string | null;
 };
 
 type ProjectRow = {
@@ -121,9 +139,26 @@ function toAssignmentStatus(value: string): SerializedAssignment["status"] {
   return value === "active" || value === "paused" ? value : "released";
 }
 
-export function serializeBot(row: BotRow): SerializedBot {
+/**
+ * Whether a bot's referenced credential is available to a worker right now,
+ * counting both server environment variables and credentials a person signed
+ * in or pasted into the console (which live in the vault, not the environment).
+ *
+ * A bot connected through the one-click sign-in must read exactly as ready as
+ * one whose key was set by hand — otherwise "connected" and "ready" disagree,
+ * which is the specific confusion the sign-in flow exists to remove. Reusing
+ * the overlay rather than a presence-only check is deliberate: it counts a
+ * credential ready only if it can actually be opened, which is precisely the
+ * condition under which a worker could use it.
+ */
+export type CredentialPresence = (credentialRef: string | null) => boolean;
+
+export function serializeBot(
+  row: BotRow,
+  isPresent: CredentialPresence = isCredentialPresent,
+): SerializedBot {
   const provider = findBotProvider(row.provider);
-  const credentialPresent = isCredentialPresent(row.credential_ref);
+  const credentialPresent = isPresent(row.credential_ref);
   const current = evaluateBotReadiness({
     provider: row.provider,
     model: row.model,
@@ -151,6 +186,7 @@ export function serializeBot(row: BotRow): SerializedBot {
     lastCheckedAt: row.last_checked_at,
     currentReadiness: current.readiness,
     currentReadinessDetail: current.detail,
+    aiAccountId: row.ai_account_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -178,6 +214,10 @@ export function serializeAssignment(row: AssignmentRow): SerializedAssignment {
     status: toAssignmentStatus(row.status),
     assignedAt: row.assigned_at,
     releasedAt: row.released_at,
+    // Per-posting execution preferences: null model means the bot's default.
+    model: row.model ?? null,
+    workEffort: row.work_effort ?? "medium",
+    config: assignmentConfigFromRow(row),
   };
 }
 
@@ -210,17 +250,45 @@ async function readTable<Row>(
   return (data ?? []) as Row[];
 }
 
+/**
+ * Builds the credential-presence test for one organization: a reference is
+ * present if the server environment holds it, or if a signed-in / pasted
+ * credential for that same variable exists in the vault. Stored credentials
+ * are opened here through the same overlay the provider-status route uses, so
+ * the fleet and the providers tab can never disagree about a connection.
+ */
+async function credentialPresenceForOrganization(
+  organizationId: string,
+): Promise<CredentialPresence> {
+  const overlay = await loadStoredCredentialOverlay(organizationId);
+  const storedRefs = new Set(Object.keys(overlay));
+
+  return (credentialRef: string | null) => {
+    if (!credentialRef) return false;
+    if (isCredentialPresent(credentialRef)) return true;
+    let normalized: string | null = null;
+    try {
+      normalized = normalizeCredentialRef(credentialRef);
+    } catch {
+      return false;
+    }
+    return normalized !== null && storedRefs.has(normalized);
+  };
+}
+
 export async function loadBotFabric(
   client: unknown,
   organizationId: string,
 ): Promise<BotFabricSnapshot> {
   const supabase = client as SupabaseLikeClient;
 
-  const [bots, roles, assignments, projects] = await Promise.all([
+  const [isPresent, [bots, roles, assignments, projects]] = await Promise.all([
+    credentialPresenceForOrganization(organizationId),
+    Promise.all([
     readTable<BotRow>(
       supabase,
       "bots",
-      "id,name,provider,model,credential_ref,base_url,readiness,readiness_detail,last_checked_at,notes,created_at",
+      "id,name,provider,model,credential_ref,base_url,readiness,readiness_detail,last_checked_at,notes,ai_account_id,created_at",
       organizationId,
       "name",
       200,
@@ -236,7 +304,10 @@ export async function loadBotFabric(
     readTable<AssignmentRow>(
       supabase,
       "bot_assignments",
-      "id,bot_id,project_id,role_id,status,assigned_at,released_at",
+      "id,bot_id,project_id,role_id,status,assigned_at,released_at,preset,responsibilities,"
+      + "instructions,repository_access,branch_strategy,can_open_pull_request,"
+      + "can_merge_pull_request,pipeline_access,environment_access,tools,"
+      + "requires_human_approval,max_concurrent_tasks,priority,model,work_effort",
       organizationId,
       "assigned_at",
       500,
@@ -249,10 +320,11 @@ export async function loadBotFabric(
       "name",
       200,
     ),
+    ]),
   ]);
 
   return {
-    bots: bots.map(serializeBot),
+    bots: bots.map((row) => serializeBot(row, isPresent)),
     roles: roles.map(serializeBotRole),
     assignments: assignments
       .map(serializeAssignment)

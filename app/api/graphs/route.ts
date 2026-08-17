@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
-import { findTemplate } from "@/lib/graph/templates";
+import { findTemplate, type GraphTemplate } from "@/lib/graph/templates";
 import {
   invalidRequest,
   operationsContext,
@@ -61,7 +62,38 @@ export async function POST(request: Request) {
       return invalidRequest("Provide a projectId and a templateKey.");
     }
 
-    const template = findTemplate(parsed.data.templateKey);
+    const context = await operationsContext();
+    const forbidden = requireManager(context);
+    if (forbidden) return forbidden;
+
+    // Built-in templates come from code; custom ones from the organization's
+    // graph_templates rows, rebuilt through the same builder so both launch
+    // through the identical compile path.
+    let template: GraphTemplate | null = findTemplate(parsed.data.templateKey) ?? null;
+    if (!template) {
+      const { data: customRow, error: customError } = await context.client
+        .from("graph_templates")
+        .select("slug,name,description,definition,is_archived")
+        .eq("organization_id", context.activeOrganization.id)
+        .eq("slug", parsed.data.templateKey)
+        .eq("is_archived", false)
+        .maybeSingle();
+      if (customError) return databaseErrorResponse(customError);
+      if (customRow) {
+        const input = parseStoredDefinition(
+          customRow.slug,
+          customRow.name,
+          customRow.description ?? "",
+          customRow.definition,
+        );
+        if (!input) {
+          return invalidRequest(
+            `The custom template \`${parsed.data.templateKey}\` has a stored definition this route cannot build.`,
+          );
+        }
+        template = buildCustomTemplate(input);
+      }
+    }
     if (!template) {
       // Named rather than generic: a caller sending an unknown key has a typo
       // or a stale client, and "not found" alone distinguishes neither.
@@ -69,10 +101,6 @@ export async function POST(request: Request) {
         `No graph template is registered under \`${parsed.data.templateKey}\`.`,
       );
     }
-
-    const context = await operationsContext();
-    const forbidden = requireManager(context);
-    if (forbidden) return forbidden;
 
     const built = buildLaunchPlan(template, DEFAULT_GRAPH_BUDGET);
     if (!built.ok) {

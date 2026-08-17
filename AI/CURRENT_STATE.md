@@ -2,11 +2,62 @@
 
 Last reviewed: 2026-08-13
 
-Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution and still Not Connected pending the owner-supplied subscription credential
+**Addendum, 2026-08-16 (per-account usage evidence):** migration
+`20260816001500_ai_account_usage_observations` adds append-only provider-usage
+evidence per AI account (RLS+FORCE, zero direct table access, worker-only
+`record_ai_account_usage`, member-only `list_ai_account_usage`). The
+auth-broker worker now captures usage automatically — startup, ~5-minute idle
+cadence, and immediately after a sign-in connects — by probing Anthropic's
+OAuth usage endpoint with the sealed credential opened only inside the sweep
+(`lib/worker/usage-probe.ts`); OpenAI/Codex records `unsupported` truthfully
+until a real endpoint is proven. The Bot Manager's AI-accounts panel renders
+the latest observation per account (session/weekly percentages with reset
+times, a named failure, or "no usage recorded yet") via
+`GET /api/ai-accounts/usage`, refreshing every 30 s while visible; a hosted
+database that predates the migration reads as an empty list, not an outage.
+Local and CI evidence only until the migration is hosted — the runbook's
+outstanding set now ends at `20260816001500`. The frozen connect path's login
+semantics are untouched (ADR-076); no execution authority changes.
+
+**Addendum, 2026-08-16 (project repository picker):** migration
+`20260816001400_project_repository_picker` adds `set_project_github_repository` and
+`unlink_project_github_repository` — owner/admin choice of which GitHub repository an
+existing project connects to, with change and unlink. Both take the same advisory locks as
+`handoff_github_project_connection` and the change-reservation trigger, enforce one
+non-archived project per repository (naming the conflicting project in the refusal), block
+while a change reservation is pending, and append immutable `connection.changed` activity
+evidence. `PUT`/`DELETE /api/projects/[projectId]/repository` exposes them behind
+same-origin plus owner/admin checks, and the Connections console gains a per-project
+repository picker with truthful no-installation / zero-repository / load-failure states.
+`connect_github_project` (creation-time binding) is untouched; no RLS, grant matrix,
+or execution-authority change. The migration is **unhosted** — the runbook's outstanding
+set is now 33 ending at `20260816001400`. Verified locally by
+`tests/integration/project-repository-picker.behavior.test.ts`,
+`tests/unit/project-repository-route.test.ts`, and the extended Connections console suite.
+
+**Addendum, 2026-08-16 (BotBuild):** migration `20260816000100_ai_accounts_auth_broker`
+adds `ai_accounts` (provider sign-ins as first-class identities; no secrets — only the
+vault purpose linkage), `ai_auth_sessions` (the broker state machine a worker drives
+through the provider's real login), and nullable `bots.ai_account_id`. RLS+FORCE with
+zero direct table access; all transitions via definer functions that write activity
+events. Local and CI-verified; **unhosted** — the runbook's outstanding set is now 20
+ending at `20260816000100`. No execution authority changes. The broker API, worker auth
+runner, and UI are not built yet; the connect-command flow remains the live path.
+
+Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution; the credential is **configured** and the worker is **LIVE**, polling every ~5 minutes (see correction below) — a live canary awaits one owner-submitted command
 
 Overall status: **The protected hosted-database sequence completed on exact project `qpuofpmagrmyamahqwxw`: catalog-proven history for `028`/`130001`-`130005` was reconciled without DDL replay, forward migrations `130006`-`130014` were applied, the ledger is current, and linked lint is clean. Focused hosted verification preserved bot-function identity/security/search-path/ACL boundaries, found zero `pg_catalog.nullif`, passed register/update/readiness audit behavior `1/1/1`, and confirmed the Phase 1D resolver is hosted with all actions OFF and the global kill switch ON. Local migration `130015` restores assignment/run model checks from the accidental 120-character narrowing to the original 128-character provider catalogue/API contract, adds four no-secret constraints for catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds a bounded routing-evidence projection, and revokes authenticated raw reads of routing decisions/events while retaining RLS-scoped model-configuration reads; it is not hosted or covered by an existing approval. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Distinct no-claim diagnostic Actions run `31748582858` passed the exact-model lookup, then the bounded non-stored Responses probe failed with the safe machine-readable code `credit_balance_exhausted`. Docker preload and durable claim were skipped. Durable run `f4594556-6f72-4763-a480-6993939e3651` remains failed safely after attempt 1 of 2, but its immutable planned base predates the published baseline; it must not be retried because the worker would correctly reject it as `stale_base_sha`. Acceptance requires a new command bound to the then-current base after the subscription credential is configured. The activation variable is absent/OFF. The user-pasted OpenAI key is treated as compromised; `SOFTWAREFACTORY_OPENAI_API_KEY` has been removed from repository Actions secrets and is now **permanently** absent rather than pending replacement, because Phase 1C no longer has a paid-API path to restore it to. The other six protected secrets remain. The temporary Supabase release token was revoked and its temporary file deleted. There is still no successful live Phase 1C result, factory branch, or draft PR. Phase 1E execution, Phase 2A provider execution, bot-provider execution, Phase 1D execution, and Phase 1C Codex execution remain **Not Connected**.**
 
-The prior Phase 1B owner path remains live: candidate App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, and project `b1f23696-437e-4d89-b55f-d7a949980e8f` are connected to exactly `surgeservicesllc/SoftwareFactory`. Primary installation `153445938` remains available for rollback; its webhook defect remains recorded in GitHub Support ticket `#4660724`.
+**Correction, 2026-08-15 (master loop):** two long-standing claims in this file are disproven by live evidence and superseded where they conflict with the following.
+
+1. **The Phase 1C worker is LIVE, not "Not Connected pending credential".** Scheduled Actions run `31894356952` (16:01Z) passed every step: `SOFTWAREFACTORY_CODEX_AUTH_JSON` is present in the step environment (masked), and the worker logs "Codex authenticates with the owner's ChatGPT subscription. No per-token API billing is possible." then "SoftwareFactory Codex worker github-actions-31894356952-1 is ready." It registers, polls, and exits idle because no command is queued. The zero-token architecture is running in production, not merely merged. What remains for a live 1C result is one GREEN command submitted through `/solutions/bot-manager`.
+2. **The hosted migration ledger is ahead of the documented `20260813001400` position.** The owner's SQL Editor attempt to insert ledger version `20260813001500` failed with `duplicate key value violates unique constraint "schema_migrations_pkey"` — that version is already applied on hosted. The Supabase GitHub integration (the "Supabase Preview" check on PRs, plus `supabase/config.toml` in-tree) is the probable applier on merge to `main`. The exact hosted position is unknown from any agent environment; the owner query in `todo.md` → External Blockers resolves it. Until then, every claim below about "unhosted" migrations after `20260813001400` is an upper bound, not a fact.
+
+**Correction, 2026-08-16 (live production evidence):** the integration-as-applier claim above holds only up to a point. Migrations through `20260816000300` are provably applied on hosted (the broker connect flow works live), but `20260816000400`/`20260816000500` from PR #142 (merged 16:26Z) are provably NOT applied: production Remove returns PostgREST `PGRST202` (function `remove_ai_account` unknown) at 16:36Z and again at 16:51Z, and worker run `31958640122` printed an empty session projection 400ms before claiming a real session — the projection RPC errored, meaning `inspect_ai_auth_sessions` is missing too. **The Supabase GitHub integration cannot be relied on to apply migrations on merge.** The sanctioned applier is `.github/workflows/apply-hosted-migrations.yml`, which now also works with `SUPABASE_DB_PASSWORD` alone (the live `SUPABASE_ACCESS_TOKEN` secret is malformed — not `sbp_…`-shaped — per apply runs `31957275938`/`31959913171`).
+
+**Superseded 2026-08-16 19:47Z — the live GitHub path changed.** The prior Phase 1B identifiers (candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, project `b1f23696-437e-4d89-b55f-d7a949980e8f`, primary rollback installation `153445938`) are historical: they were bound to a workspace the owner's current login cannot reach, which surfaced as an empty Connections list plus the cross-tenant refusal on every reconnect. The owner uninstalled the primary GitHub App and reconnected fresh: the live path is now a new installation `#154236235` (primary App, repository access Selected → exactly `surgeservicesllc/SoftwareFactory`), bound to the owner's live workspace — owner-verified Connected with the repository listed at 19:47Z. The candidate App "Surge SoftwareFactory Next" remains installed on GitHub with its stale binding (inert; optional cleanup). GitHub Support ticket `#4660724` about the old primary installation's webhook defect is moot for the live path.
+
+**Correction, 2026-08-16 (owner screenshot, 21:29Z):** on the `softwarefactory-tan.vercel.app` alias the Connections page showed "GitHub installation state is expired or does not match this session. (github_state_invalid)" **and** the "Connect GitHub to begin" empty state — the connected path above was not visible there. Root causes found in code: (a) the install state cookie and the Supabase session are host-scoped while the deployment answers on several hostnames, so an install leg that crossed between the canonical domain and an alias could never validate its state; (b) the failure notice rides in query parameters nothing cleared, so one old failure re-rendered on every reload as if current; (c) the ten-minute state lifetime was too short for a real organization install; and (d) the empty list is truthful only per organization — the browser callback is the sole path that creates `connections` rows (webhooks only update known installations), so a callback that dies at state validation leaves GitHub installed but the database empty. Fix (ADR-074): launch and callback now converge on the configured callback host before touching cookies, verification failures name their real cause, the lifetime is 30 minutes, and the console strips the one-shot notice parameters after reading them. Recovery for a GitHub-installed/database-empty skew is clicking Connect GitHub again — GitHub re-issues the callback for the existing installation and the persist step adopts it.
 
 Phase 1B is scored item by item in `AI/PHASE_1B_COMPLETION.md`: **18 PASS, 2 PARTIAL, 0 FAIL — 90%**. Merge `c325dbb` closed the adverse-lifecycle gap and fixed three real truthfulness defects:
 
@@ -16,6 +67,52 @@ Phase 1B is scored item by item in `AI/PHASE_1B_COMPLETION.md`: **18 PASS, 2 PAR
 - `tests/integration/github-lifecycle-matrix.test.ts` proves access loss at the trusted write boundary by attempting a real change reservation after each transition, across two independent installations in one tenant plus a third in a second tenant: repository remove/re-add, archive/unarchive, repository deletion with a stale resurrection attempt, installation suspend, out-of-order unsuspend, valid unsuspend, server-discovered revocation, a late discovery against an already-terminal id, terminal deletion, owner disconnect, and reconnect/resync.
 
 What remains for Phase 1B is not engineering. Items 2 and 20 need one live second GitHub account/organization installation plus one deliberate live adverse-event pass on that throwaway installation; exact pages, fields, and verification are under OWNER ACTION REQUIRED in `AI/PHASE_1B_COMPLETION.md`.
+
+## Phase 2E - portfolio resource optimization (2026-08-15, branch `claude/softwarefactory-phase-1e-ops-mjdiiq`)
+
+Scored item by item in `AI/PHASE_2E_COMPLETION.md`: **33 PASS, 2 PARTIAL, 0 FAIL, 1 BLOCKED - 92%**.
+
+The factory now schedules across projects rather than one project at a time.
+`claim_phase1c_run` was already a durable, lease-based, dependency-aware scheduler; what it
+lacked was any relationship *between* projects. Six migrations (`20260815000100`-`20260815000600`)
+add the portfolio state and the arbitration over it, inside the existing claim path rather than
+beside it:
+
+- P0-P3 project priority, strategic focus, an engineering pause, and per-project run ceilings,
+  each set by an owner-only function that writes an activity event.
+- Ceilings at four levels - worker, project, provider account or single connection, and
+  portfolio - plus a reserve inside the portfolio ceiling that only effective-P0 work may take.
+  Preemption is that subtraction: nothing is ever cancelled to make room.
+- Aging that promotes queued work one tier per fairness interval, floored at P1, so nothing
+  starves and nothing ages into the emergency reserve.
+- Circuit-breaker health consulted at selection, with a cooldown that admits exactly one trial.
+- `scheduling_decisions`, append-only: every assignment with its project, task, agent, provider,
+  connection and reason, and every ready-but-withheld item with the ceiling that held it.
+- Three browser projections behind `/solutions/portfolio`: the queue in scheduler order with a
+  reason per item, portfolio capacity, and per-project scheduling state.
+
+The graph engine now *requests* capacity (`RunnerDependencies.requestCapacity`) instead of taking
+its concurrency from its own budget, and a zero grant ends a run `CAPACITY_WITHHELD` rather than
+`STALLED`.
+
+Two defects were fixed that were not missing features. Logical agents were one per role per
+*organization*, and the scheduler correctly refuses a second concurrent run for one agent, so two
+projects doing the same kind of work serialised however much capacity existed - every other 2E
+control would have been enforced on a factory that still ran one project at a time. And the
+portfolio console counted status values none of the relevant enums can hold (`planning`,
+`blocked`, `ready`, `acknowledged`, `mitigating`), so every project reported zero open incidents
+however many were open, and queued tasks were not counted at all.
+
+Verification: 2360 unit/integration tests pass, 132 Playwright checks pass across desktop, tablet
+and mobile with axe, lint and typecheck are clean, and the production build succeeds. The five
+required canaries all pass against two competing projects, asserting on what a worker actually
+claimed. What they do not cover: PGlite is a single connection, so every claim is sequential -
+they prove ordering, ceilings, release and recovery, not behaviour under simultaneous contention,
+which rests on the unchanged `for update ... skip locked`.
+
+Still open: goal 9 names Phase 2D, which does not exist in this repository; goal 17 asks the 1C
+agent-level exclusion and the 2B lock tables to become one mechanism; goal 35 needs the hosted
+apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 
 ## Published Phase 2A provider layer
 
@@ -32,6 +129,7 @@ What remains for Phase 1B is not engineering. Items 2 and 20 need one live secon
 
 - Next.js 16.3 App Router, React 19.2, TypeScript strict mode, Tailwind CSS 4, server-first Auth/tenant/provider boundaries, and caller-session Supabase RLS reads.
 - The whole control plane is served under `/solutions` from `app/(portal)/`; the former `app/(console)/` group is gone. Twelve routes build there, each rendering the marketing global navigation above the console shell. Permanent redirects cover every former top-level path and its subpaths, and the GitHub return-path allowlist moved with them. `/solutions` is `noindex`, disallowed in `robots.txt`, and absent from the sitemap, which now lists marketing routes only. Each console page carries its own title so a tab no longer reads as the public home page.
+- The console sidebar follows the owner's 2026-08-17 design (ADR-077): top-level destinations — Overview, Projects, Pipelines, Bots, Runs, Reports, Integrations, Settings, Watch, Advanced — with collapsible subpage groups that open expanded, plus a Quick actions section (New Project, Give a bot work, Import Repository — a fourth, View Documentation, linked out to the marketing `/resources` pages and was removed by owner request on 2026-08-17). Every entry links a real page or page section; the design's subpages with no backing capability (Secrets, per-user project lists, Members/Teams/Permissions/Billing, pipeline Active/Schedules/Archived) are deliberately absent. Projects gained an Archived view (`/solutions/projects?filter=archived`, opt-in `?status=archived` on `GET /api/projects`), with unarchive pointed at the portfolio page's owner controls. `/solutions/myprojects` (owner design, 2026-08-17) renders the same live project records as collapsible rows — first row open, chevron per project — expanding into the exported `ProjectInspector`, with Import Repository / New Project page actions landing on the existing controls. `/solutions/projects` is the "All Projects" dashboard (same design set): live stat cards, All Projects / My Projects / Archived tabs, a paginated projects table with last-run and success-rate columns computed from `/api/runs` (only succeeded/failed carry a verdict) and an Open link to the portfolio detail page, plus a right rail with the by-status breakdown and the `/api/activity` feed; the add-project form stays anchored below. `GET /api/projects` exposes `updatedAt`. `/solutions/bot-usage` (same design set) lists every AI account with its latest recorded usage observation — the shared `AccountUsage` percent bars with provider reset times, derived headroom bands, connected/average-weekly summary cards, and a manager-only Refresh wired to the broker wake — with the design's plan/billing, date-range, and history affordances absent for lack of a backing model. Edit/delete controls follow ADR-078: project name/description edit (`update_project_details`, migration `20260817000100`, `PATCH /api/projects/[projectId]`, dialogs on the table and inspector), archive/unarchive in place with reasons, bot retire on the roster — while runs, activity events, and audit records remain immutable and templates are edited as code. `/solutions/pipelines` (owner pipeline goal, round 1) renders the lifecycle over saved commands — Active (worker-advanced human stages with owner-attention counts), All Pipelines (history with outcomes and durations), Templates (the graph engine's versioned templates, server-compiled topology facts, deep previews on Workflows) — with the audit and round plan tracked in `todo.md`.
 - Supabase sign-up/sign-in/magic-link/sign-out/callback/onboarding, organization membership, and active-organization selection.
 - GitHub App installation start/callback, short-lived repository-ID-scoped installation tokens, bounded repository reads, signed/idempotent/redacted webhooks, transaction-serialized project linking by stable repository UUID, and an isolated branch + commit + draft-PR-only file-change flow.
 - Every interactive GitHub route is bound to the caller's exact active organization. Revoked or insufficient-permission token creation is persisted best-effort as connection loss; rate-limit errors do not falsely revoke the connection.
@@ -77,7 +175,7 @@ Phase 1E adds a production-operations control plane and synthetic journeys in so
 
 AgentOS blocks A through G exist in source and in migrations `20260814000300`-`20260814001400`. Block G adds configuration as code: `agentos_export_project_config` and `agentos_apply_project_config` carry `agentos.yml` push and pull, `scripts/agentos.mts` is the CLI, and the round trip the spec names as acceptance is proven both through the file format and through the real migrated schema. Applying a configuration requires owner or admin; deleting is off by default and needs `--prune --yes`. **Every one of those ten migrations is unhosted**, no runner is connected, and every AgentOS surface reports **Not Connected**. Nothing in this workstream executes.
 
-Phase 2C is the intelligence layer that picks agent, provider, and model per unit of work. Its scoring core and its memory exist in source and in migration `20260814000210`; the migration is **unhosted**, and no routing decision has ever been recorded against real work because no provider run has executed.
+Phase 2C is the intelligence layer that picks agent, provider, and model per unit of work. Its scoring core and its memory exist in source and in migration `20260814000210`. That migration **is now hosted**: it had been applied only partially — far enough to create `resource_breakers`, which is why re-running it failed with `42P07` rather than doing nothing — and `scripts/repair-20260814000210.sql` completed it idempotently before the ledger was reconciled. The ledger now carries 65 rows covering all 64 migration files, with `20260814002300` as the high-water mark, and `scripts/hosted-schema-audit.mts` reports 0 outstanding and 0 indeterminate. No routing decision has ever been recorded against real work, because no provider run has executed.
 
 - The scoring core (`lib/resources/capabilities.ts`, `history.ts`, `breakers.ts`, `manager.ts`) is deterministic-gate-first: work a code path can do never buys inference, eligibility is decided before scoring, and RED/judgement/security/architecture/synthesis work can never be pushed onto an economical model to save cost — an eligibility gate rather than a weight, so no objective can outvote it. An owner override selects among eligible workers and can never make an ineligible one eligible.
 - Observed history refuses to compute below a minimum sample count, reports sub-population rates as `null` rather than `0`, marks each prediction evidenced or not, and does not score regret against a guess. Nothing here invents a metric.
@@ -90,7 +188,10 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - Candidates now come from **real tenant rows** rather than code constants: `agents` become agent profiles and `provider_model_configurations` become model profiles (`lib/resources/candidates.ts`). Migration `20260814000220` adds owner-declared `strength_tier` and `context_limit_tokens` to the Phase 2A catalogue additively, touching no constraint that the pending `20260813001500` redefines.
 - **An undeclared model property is never a permissive default.** Null strength resolves to the weakest tier, so the model cannot pass the strong-model eligibility gate; null context resolves to zero, so nothing can be shown to fit it. Only six of Phase 2A's eight capability names map onto Phase 2C's vocabulary — `structured_output` is an output format rather than a kind of work, and `reporting` is deliberately not mapped to `synthesis`, which gates work onto strong models.
 - `POST /api/resources/route` routes one unit of work against those rows plus stored breaker state and records the decision. It **selects and starts nothing**: no claim, no token, no provider call, asserted by `tests/integration/phase2c-routing.contract.test.ts`. An unconfigured organization returns `NO_CANDIDATES_CONFIGURED` rather than a routing failure, and a decision that cannot be stored is still returned marked unrecorded, so a persistence problem cannot masquerade as a routing one.
-- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Queues, dynamic concurrency, and the budget ladder are specified but deliberately not simulated, because they need a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
+- **Concurrency is now bounded rather than specified.** `lib/resources/capacity.ts` limits concurrent runs per worker, per provider, and per project, and every refusal names *which* limit refused — told "the project is full" when one worker is the real constraint, an operator raises the wrong number. It is applied in `assignWorker` as an eligibility gate beside capability and risk, never as a score weight, so cost or preference cannot outvote it. Reservations carry an expiry and expired ones stop counting, so a worker that dies does not strand its slot until someone notices.
+- **The scheduler and the manager are joined.** `lib/resources/dispatch.ts` routes a whole tick of startable nodes: `lib/graph/scheduler.ts` says which nodes may start, `assignWorker` says who runs each. It is not a loop over the single-node decision — reservations are threaded forward through the batch, because routing every node against the reservations live at the *start* of the tick lets two nodes released together take the same last slot. Dispatch order is decided (risk, then stated priority, then nodeId) rather than inherited from the scheduler's emission order, since when capacity binds the order decides who waits. A node held back by a full fleet is `DEFERRED` and re-offered; a node no worker can ever satisfy is `UNROUTABLE` and is not, so the scheduler cannot spin on impossible work.
+- **Rate is accounted separately from concurrency, because they are different questions.** `lib/resources/rate-limits.ts` counts requests and tokens over a sliding per-provider window and gates `assignWorker` alongside capability and capacity. Concurrency asks whether a slot is free; rate asks whether too much has happened recently — six concurrent slots filled by two-second calls is 180 requests a minute while never showing more than six in flight, so one limit does not imply the other. A rate refusal carries `retryAfterMs` and a capacity refusal deliberately does not: a window clears at a computable time, whereas nobody can say when another run will finish. Token budgets are checked against a caller-supplied estimate, and usage marks when it includes estimates rather than measurements — the same refusal to launder a prediction into a number that the history module already applies to success rates.
+- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
 
 ## Durable worker implementation
 

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,9 +20,9 @@ import {
 } from "@/lib/worker/env";
 import { PolicyScanError, scanChangedFiles } from "@/lib/worker/policy-scan";
 import { ProcessExecutionError, runProcess } from "@/lib/worker/process";
-import { hasLikelySecret, redactText } from "@/lib/worker/redact";
+import { hasLikelySecret, redactText, safeErrorMessage } from "@/lib/worker/redact";
 import { workerJobSchema, type WorkerJob } from "@/lib/worker/types";
-import { dockerContainerArguments, PINNED_VALIDATION_IMAGE } from "@/lib/worker/validation";
+import { DeterministicValidator, dockerContainerArguments, PINNED_VALIDATION_IMAGE } from "@/lib/worker/validation";
 import { branchForJob, type PreparedWorkspace } from "@/lib/worker/workspace";
 
 /**
@@ -143,6 +144,61 @@ describe("worker redaction", () => {
     expect(result).not.toContain("super-secret-value");
     expect(result).toContain("[REDACTED]");
     expect(hasLikelySecret(`GITHUB_TOKEN=${token}`)).toBe(true);
+  });
+
+  it("keeps the truncation marker inside the caller's cap", () => {
+    // The marker used to be appended beyond maximumLength, so a bounded
+    // failure message overflowed the database's 1000-character blocked-reason
+    // constraint by exactly the marker's length — recording a live run
+    // failure itself failed (23514, 2026-08-16).
+    const bounded = redactText("x".repeat(5_000), { maximumLength: 1_000 });
+    expect(bounded.length).toBeLessThanOrEqual(1_000);
+    expect(bounded.endsWith("[TRUNCATED]")).toBe(true);
+    expect(redactText("short", { maximumLength: 1_000 })).toBe("short");
+  });
+
+  it("retries dependency bootstrap once on a cleaned node_modules", async () => {
+    const workRoot = await mkdtemp(path.join(tmpdir(), "sf-bootstrap-"));
+    await writeFile(path.join(workRoot, "package-lock.json"), "{}");
+    await mkdir(path.join(workRoot, "node_modules", "next"), { recursive: true });
+    const workspace = {
+      branch: "factory/test",
+      directory: workRoot,
+      gitDirectory: path.join(workRoot, ".git"),
+      hooksDirectory: path.join(workRoot, ".hooks"),
+      runDirectory: workRoot,
+    } as const;
+    const outcomes = [
+      { exitCode: 1, stdout: "", stderr: "npm warn tar TAR_ENTRY_ERROR ENOENT", durationMs: 5, timedOut: false },
+      { exitCode: 0, stdout: "added 100 packages", stderr: "", durationMs: 7, timedOut: false },
+    ];
+    const runner = vi.fn(async () => outcomes.shift()!);
+    const validator = new DeterministicValidator(runner as never);
+
+    const result = await validator.bootstrap(workspace);
+
+    expect(result.status).toBe("passed");
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(result.output).toContain("retried on a cleaned node_modules");
+    // The poisoned partial extract is removed before the retry.
+    expect(existsSync(path.join(workRoot, "node_modules"))).toBe(false);
+    await rm(workRoot, { force: true, recursive: true });
+  });
+
+  it("surfaces the fields of a non-Error failure object instead of [object Object]", () => {
+    // A PostgREST failure is a plain object; String(object) muted two live
+    // run failures on 2026-08-16 as "[object Object]".
+    expect(safeErrorMessage({
+      code: "P0001",
+      details: "lease token mismatch",
+      hint: null,
+      message: "The run is not held by this worker.",
+    })).toBe("The run is not held by this worker. — lease token mismatch (P0001)");
+    expect(safeErrorMessage({ code: "PGRST202" })).toBe('{"code":"PGRST202"} (PGRST202)');
+    expect(safeErrorMessage(new Error("plain error"))).toBe("plain error");
+    expect(safeErrorMessage("just text")).toBe("just text");
+    expect(safeErrorMessage(null)).toBe("");
+    expect(safeErrorMessage({ message: `leaked ghp_${"B".repeat(30)}` })).toContain("[REDACTED]");
   });
 });
 

@@ -102,13 +102,33 @@ describe("GitHub installation state", () => {
       stateSecret,
       now,
     )).toThrow(/does not match this session/);
+    // A signature-valid state still ages out — but only after the full
+    // thirty-minute window an owner may need to finish an organization
+    // install, and the notice names expiry rather than a blended failure.
+    expect(verifyGitHubInstallState(
+      created.token,
+      created.nonce,
+      "22222222-2222-4222-8222-222222222222",
+      stateSecret,
+      now + 29 * 60_000,
+    )).toMatchObject({ appId: 4573846 });
     expect(() => verifyGitHubInstallState(
       created.token,
       created.nonce,
       "22222222-2222-4222-8222-222222222222",
       stateSecret,
-      now + 11 * 60_000,
-    )).toThrow(/expired/);
+      now + 31 * 60_000,
+    )).toThrow(/expired before it was finished/);
+    // A missing cookie is the cross-host / cross-browser arrival, and its
+    // notice tells the person to restart in the same browser — the live
+    // 2026-08-16 failure was indistinguishable from expiry before this.
+    expect(() => verifyGitHubInstallState(
+      created.token,
+      undefined,
+      "22222222-2222-4222-8222-222222222222",
+      stateSecret,
+      now,
+    )).toThrow(/did not start the GitHub installation/);
   });
 
   it("allows only local, explicitly supported return paths", () => {

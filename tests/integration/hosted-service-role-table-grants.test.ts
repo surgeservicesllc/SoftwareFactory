@@ -12,11 +12,13 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260814002400_connection_registry_multi_account.sql";
+  "20260817001100_assignment_model_and_effort.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
   // adding tables, and only after confirming RLS and FORCE RLS are enabled.
+  // Both carry RLS and FORCE RLS with no policy at all, which is stricter than
+  // the rest of this list rather than weaker: no role may read them directly.
   "activity_events",
   "agent_handoffs",
   "agent_runs",
@@ -41,6 +43,9 @@ const publicTables = [
   "agentos_trigger_deliveries",
   "agentos_triggers",
   "agents",
+  "ai_account_usage_observations",
+  "ai_accounts",
+  "ai_auth_sessions",
   "approvals",
   "autonomy_decisions",
   "bot_assignments",
@@ -50,6 +55,7 @@ const publicTables = [
   "claim_anchors",
   "commands",
   "connection_capability_types",
+  "connection_routing_decisions",
   "connections",
   "deployment_validations",
   "deployments",
@@ -71,6 +77,7 @@ const publicTables = [
   "graph_templates",
   "graph_verifications",
   "graphs",
+  "improvement_ledger",
   "incidents",
   "marketing_features",
   "marketing_logos",
@@ -103,6 +110,9 @@ const publicTables = [
   "project_health_snapshots",
   "projects",
   "provider_agent_assignments",
+  "provider_capacity_limits",
+  "provider_connect_sessions",
+  "provider_credentials",
   "provider_model_configurations",
   "provider_routing_decisions",
   "provider_run_events",
@@ -114,6 +124,7 @@ const publicTables = [
   "resource_breaker_events",
   "resource_breakers",
   "rollback_operations",
+  "scheduling_decisions",
   "synthetic_journeys",
   "task_dependencies",
   "task_work_locks",

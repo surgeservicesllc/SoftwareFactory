@@ -25,13 +25,50 @@ export function redactText(
     /(^|\n)(\s*(?:export\s+)?[A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY)[A-Z0-9_]*\s*=\s*)[^\r\n]+/gi,
     "$1$2[REDACTED]",
   );
-  return text.length <= maximumLength
-    ? text
-    : `${text.slice(0, maximumLength)}\n[TRUNCATED]`;
+  // The marker counts toward the cap. Appending it beyond maximumLength made
+  // every long failure message 12 characters too big for the database's
+  // blocked-reason constraint, so recording a real failure itself failed
+  // (23514, live 2026-08-16) and the failure evidence was lost.
+  if (text.length <= maximumLength) return text;
+  const marker = "\n[TRUNCATED]";
+  return `${text.slice(0, Math.max(0, maximumLength - marker.length))}${marker}`;
+}
+
+/**
+ * A provider or PostgREST failure arrives as a plain object, not an `Error`,
+ * and `String(object)` renders it as "[object Object]" — which is exactly how
+ * a live run failure and the failure of its own recording both became
+ * invisible on 2026-08-16. Surface the object's message/details/hint/code
+ * fields when present; fall back to bounded JSON so no failure is ever mute.
+ */
+function describeErrorValue(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      code?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      message?: unknown;
+    };
+    const parts = [candidate.message, candidate.details, candidate.hint]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim());
+    const code = typeof candidate.code === "string" && candidate.code.trim()
+      ? ` (${candidate.code.trim()})`
+      : "";
+    if (parts.length) return `${parts.join(" — ")}${code}`;
+    try {
+      return `${JSON.stringify(error)}${code}`;
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error ?? "");
 }
 
 export function safeErrorMessage(error: unknown) {
-  return redactText(error instanceof Error ? error.message : error, { maximumLength: 1_000 });
+  return redactText(describeErrorValue(error), { maximumLength: 1_000 });
 }
 
 export function hasLikelySecret(value: string) {

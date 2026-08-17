@@ -40,11 +40,11 @@ This is the same rule Phase 1E applied to monitoring: absence of evidence is **U
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| Central scheduler/router across agent, provider, model, capacity | **MISSING** | `routeProvider` routes provider+model only. Nothing selects an agent or reserves capacity. |
+| Central scheduler/router across agent, provider, model, capacity | **COMPLETE (in-process; not yet persisted)** | `lib/resources/manager.ts` selects agent+provider+model; `lib/resources/dispatch.ts` joins it to `lib/graph/scheduler.ts`, routing a whole tick and threading reservations forward so two nodes released together cannot take the same slot. Both are pure functions — the caller still owns persisting reservations, so a process restart currently forgets them. |
 | Agent ≠ provider ≠ model ≠ account ≠ connection | **COMPLETE** | ADR-021; `agents` carries `role` plus optional provider/model preference. The distinction is already correct and must be preserved. |
-| Worker capacity / concurrency control | **MISSING** | No capacity model. Phase 1C leases a worker; nothing bounds how many run at once. |
+| Worker capacity / concurrency control | **COMPLETE** | `lib/resources/capacity.ts` bounds concurrency per worker, per provider, and per project, and names which limit refused. Applied as an eligibility gate in `assignWorker`, not a score weight, so it cannot be outvoted by cost or preference. Reservations expire, so a worker that dies does not strand its slot. |
 | Worktrees | **PARTIAL** | `lib/worker/workspace.ts` isolates a workspace per run; it is not a managed pool. |
-| API/rate limits | **MISSING** | No rate-limit accounting. |
+| API/rate limits | **COMPLETE (in-process; not yet persisted)** | `lib/resources/rate-limits.ts` accounts requests and tokens over a sliding per-provider window, and is applied in `assignWorker` as a third gate beside capability and capacity. It is separate from concurrency because short calls satisfy a concurrency cap continuously while still exceeding a per-minute limit. Unlike a capacity refusal, a rate refusal reports `retryAfterMs`, since the clearing time is computable. Token counts are estimates until settled and are labelled as such. Not persisted: the caller owns the window, so a restart forgets it. |
 | Budgets | **PARTIAL** | Phase 1C carries per-run budget concepts (`lib/worker/types.ts`, `20260813000900`); there is no graph/project budget enforcement across runs. |
 
 ### 2.2 Capability registry (objective §3)

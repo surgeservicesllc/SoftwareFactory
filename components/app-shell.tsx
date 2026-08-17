@@ -4,18 +4,21 @@ import {
   Activity,
   Bot,
   Boxes,
-  BriefcaseBusiness,
+  ChevronDown,
   CircleGauge,
   ClipboardList,
   Cpu,
   FileText,
   FolderKanban,
+  FolderOpen,
   Gauge,
   Fingerprint,
   GitBranch,
   HeartPulse,
+  type LucideIcon,
   Menu,
   PlugZap,
+  Plus,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -27,6 +30,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/cn";
 
 /**
@@ -50,55 +54,158 @@ const superAdminGroup = {
 } as const;
 
 /**
- * Grouped by what you are trying to do. Every destination now reads live
- * tenant records, so there is no longer a "demo only" section to separate —
- * an empty page says it is empty rather than showing illustrative rows.
+ * Owner-ordered structure (2026-08-17): top-level destinations with
+ * expandable subpage groups, mirroring the provided design. Labels follow
+ * that design — Overview, Bots, Integrations — while every href stays a real,
+ * existing page; the design's subpages with no backing capability (per-user
+ * project lists, a secrets store) are deliberately absent rather than linked
+ * to nothing.
+ *
+ * Every destination reads live tenant records; an empty page says it is
+ * empty rather than showing illustrative rows.
  */
-const navigationGroups = [
+type NavigationItem = { label: string; href: string; icon: LucideIcon };
+type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] };
+
+const navigationEntries: readonly NavigationEntry[] = [
+  { label: "Overview", href: "/solutions", icon: CircleGauge },
+  // The guided end-to-end journey over the live flows (owner order,
+  // 2026-08-17): sits directly under Overview.
+  { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
   {
-    heading: null,
-    items: [
-      { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
-      { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
-      { label: "Files", href: "/solutions/files", icon: FileText },
+    label: "Projects",
+    href: "/solutions/projects",
+    icon: FolderKanban,
+    subpages: [
+      { label: "All Projects", href: "/solutions/projects", icon: FolderKanban },
+      // The portfolio as collapsible rows; same live records, reached from a
+      // list-first posture. Shared with Me / Starred still have no backing
+      // model and stay absent.
+      { label: "My Projects", href: "/solutions/myprojects", icon: FolderOpen },
+      { label: "Archived", href: "/solutions/projects?filter=archived", icon: ClipboardList },
     ],
   },
   {
-    heading: "Work",
-    items: [
-      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
-      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
+    label: "Pipelines",
+    href: "/solutions/pipelines",
+    icon: Workflow,
+    subpages: [
+      // Active and All are live lifecycle views over saved commands; the
+      // workflows page carries each template's full compiled preview. The
+      // design's Schedules subpage has no scheduler model yet and stays out.
+      { label: "Active", href: "/solutions/pipelines", icon: HeartPulse },
+      { label: "All Pipelines", href: "/solutions/pipelines?view=all", icon: Workflow },
+      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+    ],
+  },
+  {
+    label: "Bots",
+    href: "/solutions/bot-manager",
+    icon: Bot,
+    subpages: [
+      { label: "Connect Bot", href: "/solutions/bot-manager#connect", icon: Plus },
+      { label: "My Bots", href: "/solutions/bot-manager", icon: Bot },
+      // Recorded provider-subscription windows per account (ADR-076).
+      { label: "Bot Usage", href: "/solutions/bot-usage", icon: Gauge },
+      // Bot work lands in the activity feed; the same page also sits under
+      // Watch, which is deliberate — both readings are true.
+      { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+  { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+  { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
+  {
+    label: "Settings",
+    href: "/solutions/settings",
+    icon: Settings,
+    subpages: [
+      { label: "General", href: "/solutions/settings", icon: Settings },
+      // Provider configuration lives on the settings page; the anchor lands
+      // there. Members/Teams/Permissions/Billing from the design have no
+      // backing surfaces yet and are deliberately absent.
+      { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
+    ],
+  },
+  {
+    label: "Watch",
+    href: "/solutions/operations",
+    icon: HeartPulse,
+    subpages: [
+      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  {
+    label: "Advanced",
+    href: "/solutions/files",
+    icon: Boxes,
+    subpages: [
+      { label: "Files", href: "/solutions/files", icon: FileText },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
       { label: "Autonomy", href: "/solutions/autonomy", icon: Gauge },
     ],
   },
-  {
-    heading: "Evidence & setup",
-    items: [
-      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
-      { label: "Activity", href: "/solutions/activity", icon: Activity },
-      { label: "Connections", href: "/solutions/connections", icon: PlugZap },
-      { label: "Settings", href: "/solutions/settings", icon: Settings },
-    ],
-  },
 ] as const;
 
-function Logo() {
+/**
+ * The shortcuts under the navigation, from the same design. Each one lands on
+ * a real control that starts work: the add-project form, the composer, and
+ * repository authorization.
+ *
+ * A "View Documentation" shortcut sat here and was removed by owner request
+ * (2026-08-17). It pointed at `/resources` on the marketing site — the only
+ * entry in this list that left the console rather than doing something in it,
+ * and reading is not a quick action. The marketing pages are unchanged and
+ * still reachable from the public navigation.
+ */
+const quickActions: readonly NavigationItem[] = [
+  { label: "New Project", href: "/solutions/projects#add-project", icon: Plus },
+  { label: "Give a bot work", href: "/solutions/bot-manager", icon: Bot },
+  { label: "Import Repository", href: "/solutions/connections", icon: GitBranch },
+] as const;
+
+/**
+ * Active-state from the pathname alone. Hrefs carrying a query string (filter
+ * views of a page) are never marked current — the page itself states which
+ * filter it is showing — so the plain view's link stays the single current
+ * marker for that path.
+ */
+function isActiveHref(pathname: string, href: string) {
+  if (href.includes("?") || href.includes("#")) return false;
+  return href === "/solutions" ? pathname === href : pathname.startsWith(href);
+}
+
+function NavigationLink({
+  item,
+  active,
+  nested = false,
+  onNavigate,
+}: {
+  item: NavigationItem;
+  active: boolean;
+  nested?: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.icon;
   return (
     <Link
-      href="/solutions"
-      className="flex items-center gap-2.5 rounded-lg"
-      aria-label="SoftwareFactory dashboard"
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+        nested && "min-h-9 pl-9 text-[13px]",
+        active
+          ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
+          : "text-muted hover:bg-surface-raised hover:text-foreground",
+      )}
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-[var(--accent-ink)]">
-        <BriefcaseBusiness className="size-[18px]" strokeWidth={2.4} aria-hidden="true" />
-      </span>
-      <span className="font-semibold tracking-[-0.01em] text-foreground">SoftwareFactory</span>
+      <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+      {item.label}
     </Link>
   );
 }
@@ -111,42 +218,135 @@ function Navigation({
   isSuperAdmin?: boolean;
 }) {
   const pathname = usePathname();
-  const groups = isSuperAdmin ? [...navigationGroups, superAdminGroup] : navigationGroups;
+  /*
+   * Closed by default, with one exception that keeps the two requirements from
+   * contradicting each other: the group containing the current page opens
+   * itself. "Start collapsed" is about not dumping every destination on
+   * arrival; "preserve active-page highlighting" is about always being able to
+   * see where you are. Collapsing the group you are standing in would satisfy
+   * the first by breaking the second.
+   *
+   * An explicit toggle always wins over that default, so a person who folds the
+   * group they are in keeps it folded.
+   */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string, isOpen: boolean) =>
+    setOverrides((current) => ({ ...current, [label]: !isOpen }));
 
   // Named "Console" rather than "Primary": on /solutions the marketing global
   // navigation is also on the page, and two landmarks sharing an accessible
   // name give screen-reader users no way to tell them apart.
   return (
     <nav aria-label="Console" className="flex-1 space-y-6">
-      {groups.map((group, groupIndex) => (
-        <div key={group.heading ?? `group-${groupIndex}`}>
-          {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
+      <ul className="space-y-0.5">
+        {navigationEntries.map((entry) => {
+          const subpages = entry.subpages ?? [];
+          const entryActive = isActiveHref(pathname, entry.href)
+            || subpages.some((subpage) => isActiveHref(pathname, subpage.href));
+          if (subpages.length === 0) {
+            return (
+              <li key={entry.label}>
+                <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+              </li>
+            );
+          }
+          const containsCurrentPage = subpages.some(
+            (subpage) => isActiveHref(pathname, subpage.href),
+          ) || isActiveHref(pathname, entry.href);
+          const expanded = overrides[entry.label] ?? containsCurrentPage;
+          return (
+            <li key={entry.label}>
+              <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(entry.label, expanded)}
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} subpages`}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                >
+                  <ChevronDown
+                    className={cn("size-4 transition-transform", !expanded && "-rotate-90")}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+              {expanded ? (
+                <ul className="mt-0.5 space-y-0.5">
+                  {subpages.map((subpage) => (
+                    <li key={subpage.label}>
+                      <NavigationLink
+                        item={subpage}
+                        nested
+                        active={isActiveHref(pathname, subpage.href)}
+                        onNavigate={onNavigate}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+
+      {isSuperAdmin ? (
+        <div>
+          <p className="label mb-2 px-3">{superAdminGroup.heading}</p>
           <ul className="space-y-0.5">
-            {group.items.map(({ label, href, icon: Icon }) => {
-              const isActive = href === "/solutions" ? pathname === href : pathname.startsWith(href);
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
-                        : "text-muted hover:bg-surface-raised hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
+            {superAdminGroup.items.map((item) => (
+              <li key={item.href}>
+                <NavigationLink
+                  item={item}
+                  active={isActiveHref(pathname, item.href)}
+                  onNavigate={onNavigate}
+                />
+              </li>
+            ))}
           </ul>
         </div>
-      ))}
+      ) : null}
+
+      <div>
+        <p className="label mb-2 px-3">Quick actions</p>
+        <ul className="space-y-0.5">
+          {quickActions.map((action) => (
+            <li key={action.label}>
+              <NavigationLink item={action} active={false} onNavigate={onNavigate} />
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
+  );
+}
+
+/**
+ * The console brand, in the one place it is not already on screen.
+ *
+ * This has been removed once before and had to come back, so the reasoning is
+ * worth stating precisely rather than repeating the argument.
+ *
+ * On a wide screen the sidebar sits directly beneath the site header, which
+ * renders the same mark unconditionally — two identical logos stacked, one row
+ * apart. That is the duplication, and `xl:hidden` is what removes it.
+ *
+ * Below `xl` the sidebar is a drawer: `fixed inset-0 z-50` over an overlay,
+ * above the header's `z-30`. An open drawer therefore *covers* the header, and
+ * a drawer with no mark is a full-screen navigation with no identity — which is
+ * exactly the defect that brought this component back the first time. So the
+ * mark stays there, and only there.
+ */
+function FactoryMark() {
+  return (
+    <BrandMark
+      href="/solutions"
+      label="AI Software Factory console home"
+      tone="console"
+      className="mb-6 px-2 xl:hidden"
+    />
   );
 }
 
@@ -159,9 +359,7 @@ function Sidebar({
 }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
-      {/* No brand here. The marketing global navigation renders directly above
-          this shell and already carries it, so a second logo one row down was
-          the same identity twice with nothing to distinguish them. */}
+      <FactoryMark />
       <Navigation onNavigate={onNavigate} isSuperAdmin={viewer.isSuperAdmin} />
       {viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">
@@ -188,13 +386,6 @@ function Sidebar({
           </Link>
         </div>
       )}
-      <div className="mt-6 flex items-start gap-2.5 rounded-lg border border-line px-3 py-3 text-sm text-muted">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-        <p>
-          Safety lock on. SoftwareFactory can read your repository and open draft pull requests. It
-          cannot merge, deploy, or run anything on its own.
-        </p>
-      </div>
     </div>
   );
 }
@@ -234,20 +425,22 @@ export function AppShell({
 
         It survives on small screens because it carries the button that opens the
         navigation drawer, which has no other entry point.
+
+        The workspace chip that used to sit beside that button is gone: the
+        marketing global navigation directly above already carries the brand,
+        so the chip restated it one row down and cost a full row of height on
+        the narrowest screens for nothing.
       */}
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:hidden">
-        <div className="flex items-center gap-3 xl:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="btn btn-secondary size-10 px-0"
-            aria-label="Open console navigation"
-            aria-expanded={mobileOpen}
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
-          <Logo />
-        </div>
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 xl:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="btn btn-secondary size-10 px-0"
+          aria-label="Open console navigation"
+          aria-expanded={mobileOpen}
+        >
+          <Menu className="size-5" aria-hidden="true" />
+        </button>
       </header>
 
       {mobileOpen ? (

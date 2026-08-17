@@ -1,0 +1,92 @@
+name: AI account auth broker
+
+# Claims pending AI-account sign-in sessions and drives the provider's real
+# login for each: run the CLI headlessly, report its login URL for the
+# console to open, wait for the person's relayed confirmation code, then seal
+# the minted credential into the vault. The worker holds no provider account
+# of its own and starts none — every session it touches was opened by an
+# owner clicking Connect.
+
+on:
+  repository_dispatch:
+    types:
+      - softwarefactory_auth_broker
+  push:
+    # Every merge to main queues a successor worker. The staleness self-check
+    # makes the running worker step aside when main moves — and stepping
+    # aside with nothing queued is a coverage gap, which is exactly what a
+    # Connect click found on 2026-08-16 18:55Z. The push trigger closes it:
+    # the handover always has a successor carrying the merged code.
+    branches:
+      - main
+  schedule:
+    # Fallback pickup for sessions whose dispatch failed. GitHub throttles
+    # scheduled runs on quiet repositories; the dispatch from Connect is the
+    # path that makes the worker prompt.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auth-broker
+  cancel-in-progress: false
+
+jobs:
+  broker:
+    name: Drive pending AI-account sign-ins
+    # Default ON: the owner demanded the in-browser sign-in work without
+    # further switches. Set the repository variable
+    # SOFTWAREFACTORY_AUTH_BROKER_DISABLED=true to switch the worker off.
+    if: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED != 'true' }}
+    runs-on: ubuntu-latest
+    # Near the six-hour hosted-runner maximum: GitHub throttles cron beats
+    # on this repository to near-zero (measured 2026-08-16: nothing between
+    # 17:59 and 18:40), so short windows leave Connect clicks with no worker.
+    # One long window is the coverage; the staleness self-check inside the
+    # script hands over within minutes of a merge, and the script's own
+    # deadline below leaves room to finish an in-flight login before this
+    # hard stop.
+    timeout-minutes: 355
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+      SOFTWAREFACTORY_WORKER_ID: auth-broker-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out the reviewed worker release
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        # actions/setup-node v4 (reviewed immutable commit)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked worker runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install the provider login CLIs
+        # Claude: the version the headless URL-capture flow was probed
+        # against. Codex: pinned at adoption of the callback-address relay.
+        run: npm install -g @anthropic-ai/claude-code@2.1.233 @openai/codex@0.147.0
+
+      - name: Drive pending sign-ins
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+          SOFTWAREFACTORY_CREDENTIAL_KEY: ${{ secrets.SOFTWAREFACTORY_CREDENTIAL_KEY }}
+          # A long linger is the coverage model: GitHub throttles this
+          # repository's cron to near-zero, so the worker stays for almost
+          # the whole six-hour runner budget. Staleness is handled inside:
+          # the worker compares main against its own checkout every sweep
+          # and exits when a newer release exists, so the concurrency queue
+          # hands over within minutes of a merge without ever cancelling a
+          # live login.
+          SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS: "20700000"
+          SOFTWAREFACTORY_WORKER_RELEASE_SHA: ${{ github.sha }}
+        run: npx tsx scripts/auth-broker.mts

@@ -233,6 +233,104 @@ Extending the matrix to the revocation path exposed two more defects in
 Both were confirmed by running the new cases against the pre-fix function: the
 suspension marker survived, and the terminal call raised.
 
+## Re-verified 2026-08-15, against merged `main`
+
+Re-run because a later session's goal asked for Phase 1B at 100%. The score is
+unchanged at **18 PASS / 2 PARTIAL / 0 FAIL — 90%**, and nothing regressed:
+`github-lifecycle-matrix`, `github-adverse-lifecycle.behavior`,
+`github-rls-behavior`, `github-integration.contract` and
+`github-repository-grants` pass, 45 tests, against the merged 72-migration
+chain.
+
+The two PARTIAL items were re-checked against the environment rather than
+against memory, and both blockers were reproduced today:
+
+- **The authenticated GitHub identity is a single User account.** `get_me`
+  returns `surgeservicesllc`, id `316305532`, created 2026-08-12, one public
+  repository. Item 2 needs an installation on an account or organization that
+  is *not* this one.
+- **No available tool can perform either action.** The GitHub toolset in this
+  environment covers repositories, branches, files, issues, pull requests,
+  reviews and Actions. It exposes nothing for installing a GitHub App on an
+  account, suspending an installation, or uninstalling one — which is what
+  items 2 and 20 require. The REST API has no organization-creation endpoint
+  either, so this is not a permissions gap that a broader token would close.
+
+So the remaining 10% is not engineering work that has been deferred; it is two
+console actions on GitHub that only the account owner can perform, unchanged
+and fully specified under OWNER ACTION REQUIRED above. Everything that does
+not depend on them is done and covered.
+
+What "100% connected to Supabase" means for 1B, restated because it has been
+conflated before: all eleven Phase 1B migrations are applied to hosted
+Supabase, and production serves from it. The unapplied migrations are from
+later phases (1E, 2B, 2C, 2D, 2E) and none of them is a 1B dependency.
+
+## The verification is now a command, not a judgement
+
+Both actions below are still yours to perform. What is no longer manual is
+everything after them.
+
+`lib/github/live-acceptance.ts` states the nine conditions items 2 and 20
+depend on as one pure function of observed rows, and
+`scripts/verify-1b-live-acceptance.mts` gathers those observations and prints a
+per-condition verdict:
+
+```
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+[SOFTWAREFACTORY_FIRST_OWNER_JWT=...] \
+npx tsx scripts/verify-1b-live-acceptance.mts --installation <external-id>
+```
+
+Three properties worth knowing before you run it:
+
+- **A missing observation reads NOT_OBSERVED, never FAIL.** These items have
+  been open for days, and a harness that reported FAIL for "not done yet" would
+  make an unperformed action indistinguishable from a broken one.
+- **It refuses to run against `153445938` or `153479019`.** The pass ends in a
+  deliberate uninstall, and those two are the rollback boundary and the
+  verified production path. The warning below was prose; `PROTECTED_INSTALLATION_IDS`
+  makes it a control.
+- **Without `SOFTWAREFACTORY_FIRST_OWNER_JWT` the two cross-tenant checks stay
+  unobserved.** Service-role bypasses RLS, so probing containment with it would
+  return zero rows for reasons unrelated to the guarantee and report a green
+  result the command never actually tested.
+
+The rules are covered by `tests/unit/github-live-acceptance.test.ts` (11 tests)
+without a second GitHub account, so only the observations are waiting on you —
+not the decision about what counts as proof.
+
+## Why no agent session can close items 2 and 20 — five checks, 2026-08-15
+
+Three sessions have now spent time re-deriving this. Recorded once, in full, so
+the next one does not.
+
+| Avenue | Result |
+|---|---|
+| A second GitHub account already present | No. `get_me` returns one User account, `surgeservicesllc`, id `316305532`, created 2026-08-12, one public repository. |
+| Create an organization via API | No such endpoint. GitHub exposes organization creation only through the enterprise admin API on GHES, not on github.com. |
+| Install the App on another account | No API exists. Installation requires the target account owner's browser consent, by design. |
+| Suspend or uninstall via the App API | `PUT /app/installations/{id}/suspended` needs a JWT signed with the App private key. No App credential is present in an agent environment: `env | grep -ciE "GITHUB_APP|PRIVATE_KEY|WEBHOOK_SECRET"` returns `0`. |
+| Reach installations with the session token | Refused at the proxy. `GET /user/installations` returns **403**: *"This GitHub API path is not available: sessions are bound to their configured repositories. Use repository-scoped endpoints."* |
+
+The last row is the decisive one and it is a deliberate property of the
+environment rather than a missing permission: agent sessions are scoped to
+their configured repositories, so every account-level and installation-level
+endpoint is out of reach no matter which token is supplied.
+
+**What this does and does not mean.** The capability behind item 2 is built and
+proven against real migrations — `github-lifecycle-matrix` runs two independent
+installations in one tenant plus a third in a second tenant, and proves a
+repository of installation B is unreachable through connection A. What is
+missing is a live second account exercising it. So the gap is in the
+*evidence*, not in the software, and the distinction matters: 18/20 is not
+"two features unbuilt", it is "two proofs that need a second GitHub account
+nobody has created yet".
+
+That is also why these two must not be promoted on the strength of the tests
+that exist. `tests/integration/phase1b-scorecard-integrity.test.ts` fails if
+anyone tries.
+
 ## OWNER ACTION REQUIRED
 
 Both remaining PARTIAL items need the same external resource. Everything that

@@ -73,10 +73,35 @@ function commandRequest(
   });
 }
 
+type RegistryRow = Record<string, unknown>;
+
+/** A thenable PostgREST-shaped builder resolving to fixed rows. */
+function registryTable(rows: RegistryRow[] | null, error: { message: string } | null = null) {
+  const result = { data: rows, error };
+  const builder = {
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    gt: vi.fn(() => builder),
+    in: vi.fn(() => builder),
+    then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
+  };
+  return builder;
+}
+
 function configuredClient(options: {
   requiresApproval?: boolean;
   targetData?: typeof target | null;
   targetError?: { code?: string; message?: string } | null;
+  /** project_connections rows; defaults to one legacy (unlabelled) mapping. */
+  mappingRows?: RegistryRow[];
+  connectionRows?: RegistryRow[];
+  registryError?: boolean;
+  /** Make record_connection_routing_decision fail. */
+  decisionError?: boolean;
+  /** Running agent_runs rows counted as live leases. */
+  runningRunRows?: RegistryRow[];
+  /** Connection-specific provider_capacity_limits rows. */
+  capacityLimitRows?: RegistryRow[];
 }) {
   const submission = {
     command_id: commandId,
@@ -87,6 +112,12 @@ function configuredClient(options: {
     was_created: true,
   };
   const rpc = vi.fn((name: string) => {
+    if (name === "record_connection_routing_decision") {
+      return Promise.resolve({
+        data: options.decisionError ? null : "decision-id",
+        error: options.decisionError ? { code: "42501", message: "denied" } : null,
+      });
+    }
     if (name === "record_phase1c_dispatch_outcome") {
       return Promise.resolve({ data: null, error: null });
     }
@@ -98,11 +129,40 @@ function configuredClient(options: {
       ),
     };
   });
+  const from = vi.fn((table: string) => {
+    if (options.registryError) return registryTable(null, { message: "registry unavailable" });
+    if (table === "project_connections") {
+      return registryTable(options.mappingRows ?? [
+        { capability: null, connection_id: target.connection_id, priority: 100 },
+      ]);
+    }
+    if (table === "connections") return registryTable(options.connectionRows ?? []);
+    if (table === "agent_runs") return registryTable(options.runningRunRows ?? []);
+    if (table === "provider_capacity_limits") {
+      return registryTable(options.capacityLimitRows ?? []);
+    }
+    throw new Error(`Unexpected table ${table}`);
+  });
   requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: organizationId, role: "owner" },
-    client: { rpc },
+    client: { from, rpc },
   });
   return rpc;
+}
+
+/** A healthy, labelled, declared `repository.write` connection row. */
+function routableConnection(id: string, overrides: RegistryRow = {}): RegistryRow {
+  return {
+    active_leases: 0,
+    capabilities: ["repository.write"],
+    external_account_label: "surgeservicesllc",
+    health: "connected",
+    id,
+    max_concurrency: null,
+    provider: "github",
+    status: "connected",
+    ...overrides,
+  };
 }
 
 describe("POST /api/commands", () => {
@@ -314,6 +374,197 @@ describe("POST /api/commands", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "submit_command", expect.objectContaining({
       p_requested_risk: "red",
     }));
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("proceeds on legacy mappings and says the router was not authoritative", async () => {
+    // The default fixture is one unlabelled mapping — the pre-2D world. The
+    // command must proceed exactly as before, and the response must say which
+    // path chose the connection rather than implying the router did.
+    configuredClient({});
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: {
+          mode: "legacy",
+          reason: expect.stringContaining("No capability-labelled connection mappings"),
+        },
+      },
+    });
+  });
+
+  it("routes through the identity router when the project labels its mappings", async () => {
+    const rpc = configuredClient({
+      connectionRows: [routableConnection(target.connection_id)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    // The decision is durable evidence, recorded before the command persists.
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", {
+      p_capability: "repository.write",
+      p_connection_id: target.connection_id,
+      p_considered_count: 1,
+      p_decision: "SELECTED",
+      p_project_id: projectId,
+      p_refusal_code: null,
+      p_rejected: [],
+      p_used_fallback: false,
+    });
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: {
+          connectionId: target.connection_id,
+          mode: "routed",
+          rejected: [],
+          usedFallback: false,
+        },
+      },
+    });
+  });
+
+  it("refuses the command when the router refuses, naming the router's reason", async () => {
+    // The one labelled mapping points at an unauthorized connection. Routing
+    // must refuse the submission before any GitHub call or persistence — an
+    // unauthorized identity is not a tiebreak candidate.
+    const rpc = configuredClient({
+      connectionRows: [routableConnection(target.connection_id, { health: "unauthorized" })],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    // The refusal is recorded — an audit of only selections would read as if
+    // the router never said no.
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", expect.objectContaining({
+      p_connection_id: null,
+      p_decision: "REFUSED",
+      p_refusal_code: "CONNECTION_UNHEALTHY",
+    }));
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "connection_routing_refused",
+        message: expect.stringContaining("identity router refused"),
+      },
+    });
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("fails the submission when the routing decision cannot be recorded", async () => {
+    // Acting on an unrecorded decision would be exactly the unauditable
+    // routing the evidence table exists to end.
+    configuredClient({
+      connectionRows: [routableConnection(target.connection_id)],
+      decisionError: true,
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a routing disagreement instead of letting either side guess", async () => {
+    // The router selects a different (eligible) connection than the resolved
+    // primary binding. Contradictory mappings are an owner problem to fix,
+    // never a silent tiebreak.
+    const otherConnection = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    configuredClient({
+      connectionRows: [routableConnection(otherConnection)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: otherConnection, priority: 10 },
+      ],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "connection_routing_disagreement" },
+    });
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connection at its scheduler ceiling, counted from live runs", async () => {
+    // One connection-specific ceiling of 1 in provider_capacity_limits, one
+    // running run on that connection. The router's capacity input is the live
+    // run count — the same number the claim path enforces — so the routed
+    // submission is refused CAPACITY_EXHAUSTED before anything persists.
+    const rpc = configuredClient({
+      capacityLimitRows: [
+        { connection_id: target.connection_id, maximum_concurrent_runs: 1 },
+      ],
+      connectionRows: [routableConnection(target.connection_id)],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+      runningRunRows: [{ connection_id: target.connection_id }],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(409);
+    expect(rpc).toHaveBeenCalledWith("record_connection_routing_decision", expect.objectContaining({
+      p_decision: "REFUSED",
+      p_refusal_code: "CAPACITY_EXHAUSTED",
+    }));
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("ignores the stored active_leases counter in favour of the live count", async () => {
+    // The stored counter cannot decay when a lease expires, so it is never
+    // consulted. A connection whose stored counter claims exhaustion but has
+    // no live running runs is routable.
+    configuredClient({
+      capacityLimitRows: [
+        { connection_id: target.connection_id, maximum_concurrent_runs: 1 },
+      ],
+      connectionRows: [
+        routableConnection(target.connection_id, { active_leases: 99, max_concurrency: 1 }),
+      ],
+      mappingRows: [
+        { capability: "repository.write", connection_id: target.connection_id, priority: 10 },
+      ],
+      runningRunRows: [],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      orchestration: {
+        connectionRouting: { connectionId: target.connection_id, mode: "routed" },
+      },
+    });
+  });
+
+  it("fails closed when the connection registry cannot be read", async () => {
+    // A registry outage must not silently bypass routing enforcement by
+    // degrading to the legacy path.
+    configuredClient({ registryError: true });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "connection_registry_unavailable" },
+    });
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
   });
 });

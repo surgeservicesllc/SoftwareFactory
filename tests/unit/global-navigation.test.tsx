@@ -103,4 +103,64 @@ describe("SiteHeader", () => {
     render(<SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />);
     expect(screen.getByText("person@example.org")).toBeInTheDocument();
   });
+
+  it("orders the signed-in navigation the way the owner's design does", () => {
+    // Console destinations first, then Admin, then the marketing pages —
+    // Solutions dropped because Dashboard already points at that route.
+    render(
+      <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
+    );
+
+    expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Dashboard",
+      "Projects",
+      "Runs",
+      "Activity",
+      "Admin",
+      "Platform",
+      "Features",
+      "Pricing",
+      "Resources",
+      "About",
+    ]);
+  });
+
+  it("marks the current destination and underlines only that one", () => {
+    render(<SiteHeader viewer={{ signedIn: false }} />);
+
+    const current = primaryNav()
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+
+    // The mock pathname is "/", which is no navigation entry, so nothing is
+    // current. An always-current first item would look right and be wrong.
+    expect(current).toHaveLength(0);
+  });
+});
+
+describe("the brand mark", () => {
+  it("is one labelled link, so the lockup is not spelled out line by line", () => {
+    render(<SiteHeader />);
+
+    const brand = screen.getAllByRole("link", { name: /ai software factory home/i });
+    expect(brand.length).toBeGreaterThan(0);
+    expect(brand[0]).toHaveAttribute("href", "/");
+  });
+
+  it("is the same component the console sidebar renders", async () => {
+    // Two hand-drawn copies is how one product ends up with two logos that
+    // disagree about their own colours on the same page.
+    const shell = await import("@/components/app-shell");
+    expect(shell).toBeDefined();
+
+    const source = await import("node:fs/promises");
+    const header = await source.readFile("components/marketing/site-header.tsx", "utf8");
+    const sidebar = await source.readFile("components/app-shell.tsx", "utf8");
+
+    expect(header).toContain("@/components/brand-mark");
+    expect(sidebar).toContain("@/components/brand-mark");
+    // Neither may keep a private copy of the artwork.
+    expect(header).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
+    expect(sidebar).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
+  });
 });

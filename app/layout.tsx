@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
+import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 
 const vercelHost =
   process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
@@ -17,6 +18,20 @@ export const metadata: Metadata = {
   description:
     "An end-to-end platform that helps teams plan, build, deploy and scale better software, faster, with AI agents and automation at every step.",
   applicationName: "AI Software Factory",
+  // iOS ignores the web app manifest for these, so they are declared here as
+  // well or an installed icon falls back to a screenshot of the page.
+  appleWebApp: {
+    capable: true,
+    title: "SoftwareFactory",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     title: "AI Software Factory — Build, Deploy and Scale with AI",
     description:
@@ -57,6 +72,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body>
         {children}
+        {/* Headless: registers the offline shell without delaying first paint. */}
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

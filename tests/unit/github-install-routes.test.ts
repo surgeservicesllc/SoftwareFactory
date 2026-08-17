@@ -91,10 +91,12 @@ vi.mock("@/lib/github/sync", () => ({
 }));
 
 import { GET as callback } from "@/app/api/github/install/callback/route";
+import { GET as launch } from "@/app/api/github/install/launch/route";
 import {
   GET as listConfiguredApps,
   POST as start,
 } from "@/app/api/github/install/start/route";
+import { GitHubAuthorizationError } from "@/lib/github/access";
 import { GitHubApiError } from "@/lib/github/client";
 import { GITHUB_INSTALL_STATE_COOKIE } from "@/lib/github/state";
 
@@ -141,6 +143,19 @@ async function beginInstallation(appSlot: "candidate" | "primary" = "primary") {
   const state = new URL(body.authorizationUrl).searchParams.get("state");
   if (!state) throw new Error("Expected installation state");
   return { body, response, state };
+}
+
+function launchRequest(
+  appSlot: "candidate" | "primary" = "primary",
+  returnTo = "/solutions/connections",
+  organization = organizationId,
+) {
+  const url = new URL("https://factory.example/api/github/install/launch");
+  url.searchParams.set("appSlot", appSlot);
+  url.searchParams.set("organizationId", organization);
+  url.searchParams.set("returnTo", returnTo);
+  // A top-level GET navigation carries no Origin header.
+  return new Request(url.toString());
 }
 
 function callbackRequest(
@@ -207,7 +222,7 @@ describe("GitHub App install routes", () => {
     expect(harness.cookieSet).toHaveBeenCalledWith(
       GITHUB_INSTALL_STATE_COOKIE,
       expect.any(String),
-      expect.objectContaining({ httpOnly: true, maxAge: 600, sameSite: "lax" }),
+      expect.objectContaining({ httpOnly: true, maxAge: 1800, sameSite: "lax" }),
     );
 
     const response = await callback(callbackRequest(installation.state));
@@ -230,6 +245,123 @@ describe("GitHub App install routes", () => {
       "ephemeral-user-token",
     );
     expect(harness.cookieValues.has(GITHUB_INSTALL_STATE_COOKIE)).toBe(false);
+  });
+
+  it("launches installation as a navigation that sets the state cookie and redirects to GitHub", async () => {
+    const response = await launch(launchRequest());
+
+    expect(response.status).toBe(303);
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(location.origin).toBe("https://github.com");
+    expect(location.pathname).toBe("/apps/software-factory/installations/new");
+    expect(location.searchParams.get("state")).toBeTruthy();
+
+    // The cookie is set on this navigation's own response — the fix for iOS /
+    // iPadOS, where a cookie set on a background fetch response is dropped — at
+    // the root path so the callback and its deletion describe the same cookie.
+    expect(harness.cookieSet).toHaveBeenCalledWith(
+      GITHUB_INSTALL_STATE_COOKIE,
+      expect.any(String),
+      expect.objectContaining({ httpOnly: true, maxAge: 1800, path: "/", sameSite: "lax" }),
+    );
+  });
+
+  it("completes the browser callback for a state minted by the launcher", async () => {
+    const launched = await launch(launchRequest());
+    const state = new URL(launched.headers.get("location") ?? "").searchParams.get("state");
+    expect(state).toBeTruthy();
+
+    const response = await callback(callbackRequest(state!));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(response.status).toBe(303);
+    expect(location.pathname).toBe("/solutions/connections");
+    expect(location.searchParams.get("github")).toBe("connected");
+    expect(harness.cookieValues.has(GITHUB_INSTALL_STATE_COOKIE)).toBe(false);
+  });
+
+  it("re-enters the launcher on the configured callback host when launched from another alias", async () => {
+    const alias = new URL("https://softwarefactory-alias.vercel.example/api/github/install/launch");
+    alias.searchParams.set("appSlot", "primary");
+    alias.searchParams.set("organizationId", organizationId);
+    alias.searchParams.set("returnTo", "/solutions/connections");
+
+    const response = await launch(new Request(alias.toString()));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    // The state cookie must be minted on the host GitHub returns the browser
+    // to, so the launch hops there first — before any cookie or session work.
+    expect(response.status).toBe(303);
+    expect(location.origin).toBe("https://factory.example");
+    expect(location.pathname).toBe("/api/github/install/launch");
+    expect(location.searchParams.get("appSlot")).toBe("primary");
+    expect(location.searchParams.get("organizationId")).toBe(organizationId);
+    expect(location.searchParams.get("returnTo")).toBe("/solutions/connections");
+    expect(harness.requireUser).not.toHaveBeenCalled();
+    expect(harness.cookieSet).not.toHaveBeenCalled();
+
+    // The hop converges: the same launch on the configured host proceeds to
+    // GitHub with the cookie set, exactly like a direct launch.
+    const relaunched = await launch(new Request(location.toString()));
+    expect(relaunched.status).toBe(303);
+    expect(new URL(relaunched.headers.get("location") ?? "").origin).toBe("https://github.com");
+    expect(harness.cookieSet).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-enters the callback on the configured host when GitHub returns to another alias", async () => {
+    const launched = await launch(launchRequest());
+    const state = new URL(launched.headers.get("location") ?? "").searchParams.get("state");
+    expect(state).toBeTruthy();
+
+    const aliasCallback = `https://softwarefactory-alias.vercel.example/api/github/install/callback?code=one-time-code&installation_id=${installationId}&state=${encodeURIComponent(state!)}`;
+    const response = await callback(new Request(aliasCallback));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    // The wrong-alias arrival is routed to the configured host with the query
+    // untouched, before any cookie read, session check, or code exchange.
+    expect(response.status).toBe(303);
+    expect(location.origin).toBe("https://factory.example");
+    expect(location.pathname).toBe("/api/github/install/callback");
+    expect(location.searchParams.get("code")).toBe("one-time-code");
+    expect(location.searchParams.get("state")).toBe(state);
+    // Only the launch touched the session; the wrong-alias arrival did not.
+    expect(harness.requireUser).toHaveBeenCalledTimes(1);
+    expect(harness.exchangeCode).not.toHaveBeenCalled();
+    expect(harness.cookieDelete).not.toHaveBeenCalled();
+
+    // Following the hop completes the installation on the configured host.
+    const completed = await callback(new Request(location.toString()));
+    expect(completed.status).toBe(303);
+    expect(new URL(completed.headers.get("location") ?? "").searchParams.get("github")).toBe("connected");
+    expect(harness.persistSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("redirects the launcher to a bounded Connections notice when the caller is not a manager", async () => {
+    harness.requireManager.mockRejectedValueOnce(
+      new GitHubAuthorizationError(403, "manager_required", "Organization owner or administrator access is required."),
+    );
+
+    const response = await launch(launchRequest());
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(response.status).toBe(303);
+    expect(location.pathname).toBe("/solutions/connections");
+    expect(location.searchParams.get("github")).toBe("error");
+    expect(location.searchParams.get("githubError")).toBe("manager_required");
+    expect(harness.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it("redirects the launcher for an invalid request without minting state", async () => {
+    const response = await launch(
+      new Request("https://factory.example/api/github/install/launch?organizationId=not-a-uuid"),
+    );
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(response.status).toBe(303);
+    expect(location.pathname).toBe("/solutions/connections");
+    expect(location.searchParams.get("githubError")).toBe("invalid_install_request");
+    expect(harness.requireUser).not.toHaveBeenCalled();
+    expect(harness.cookieSet).not.toHaveBeenCalled();
   });
 
   it("selects only the configured candidate App and keeps that target through callback", async () => {

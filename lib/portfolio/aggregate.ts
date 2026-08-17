@@ -19,11 +19,41 @@ import type { RiskLevel } from "@/lib/risk";
 export type ProjectHealth = "unknown" | "healthy" | "degraded" | "unhealthy";
 export type ProjectStatus = "draft" | "active" | "paused" | "archived";
 
-/** Statuses that mean a unit of work is still in flight. */
-const OPEN_COMMAND_STATUSES = new Set(["queued", "planning", "running", "blocked"]);
-const OPEN_RUN_STATUSES = new Set(["queued", "claimed", "running"]);
-const OPEN_TASK_STATUSES = new Set(["backlog", "ready", "in_progress", "blocked"]);
-const OPEN_INCIDENT_STATUSES = new Set(["open", "acknowledged", "mitigating"]);
+/**
+ * Statuses that mean a unit of work is still in flight.
+ *
+ * Every name here exists in the corresponding Postgres enum, which was not
+ * true when this file was written: it counted commands in `planning` and
+ * `blocked`, tasks in `ready`, and incidents in `acknowledged` or `mitigating`,
+ * none of which are values any of those enums can hold. A status that cannot
+ * occur matches nothing, so the console reported a confident zero for work that
+ * was plainly in flight — the worst kind of wrong number, because it looks
+ * measured. Tasks in `queued` and commands in `submitted` were missed the same
+ * way, by omission rather than invention.
+ *
+ * `tests/unit/portfolio-open-statuses.test.ts` reads the enums out of the
+ * migrations and fails if a name here is not one of them.
+ */
+const OPEN_COMMAND_STATUSES = new Set([
+  "submitted", "awaiting_approval", "queued", "running",
+]);
+const OPEN_RUN_STATUSES = new Set(["queued", "running"]);
+const OPEN_TASK_STATUSES = new Set([
+  "backlog", "awaiting_approval", "queued", "in_progress", "blocked",
+]);
+// Stated as everything short of resolution. An incident that has been
+// investigated or mitigated but not resolved is still an incident.
+const OPEN_INCIDENT_STATUSES = new Set(["open", "investigating", "mitigated"]);
+// A deployment that has not reached a terminal state, including one on its way
+// back down: a rollback in flight is deployment activity, not its absence.
+const OPEN_DEPLOYMENT_STATUSES = new Set(["pending", "in_progress", "rolling_back"]);
+/**
+ * Deliberately a terminal state. A completed change request is one whose draft
+ * pull request exists — the schema enforces a PR number on completion — so this
+ * counts the factory's created draft PRs, which is what the table can truthfully
+ * say. GitHub owns merge state; claiming "open PRs" from here would be a guess.
+ */
+const DRAFT_PR_CHANGE_REQUEST_STATUSES = new Set(["completed"]);
 
 export interface ProjectRow {
   readonly id: string;
@@ -33,6 +63,20 @@ export interface ProjectRow {
   readonly healthStatus: ProjectHealth;
   readonly autonomousMode: boolean;
   readonly maximumAutonomousRisk: RiskLevel;
+  /**
+   * Identity and scheduling fields the project detail page edits.
+   *
+   * Optional because they were added after this aggregate: a caller that has
+   * not widened its select keeps working, and every one of them lands as null
+   * or false rather than as a fabricated default.
+   */
+  readonly description?: string | null;
+  readonly defaultBranch?: string | null;
+  readonly productionUrl?: string | null;
+  readonly engineeringPriority?: number | null;
+  readonly strategicFocus?: boolean | null;
+  readonly engineeringPaused?: boolean | null;
+  readonly engineeringPauseReason?: string | null;
 }
 
 /** A `{project_id, status}` row from any of the counted tables. */
@@ -54,6 +98,8 @@ export interface PortfolioSources {
   readonly runs: readonly StatusRow[] | null;
   readonly tasks: readonly StatusRow[] | null;
   readonly incidents: readonly StatusRow[] | null;
+  readonly changeRequests: readonly StatusRow[] | null;
+  readonly deployments: readonly StatusRow[] | null;
   readonly connections: readonly ConnectionRow[] | null;
 }
 
@@ -70,11 +116,24 @@ export interface PortfolioProject {
   readonly activeRuns: number | null;
   readonly openTasks: number | null;
   readonly openIncidents: number | null;
+  /** Draft pull requests the factory has created for this project. */
+  readonly draftPullRequests: number | null;
+  /** Deployments not yet in a terminal state, rollbacks included. */
+  readonly activeDeployments: number | null;
   /** The worst connection state bound to this project. */
   readonly connectionHealth: "connected" | "degraded" | "not_connected" | "unknown";
   /** True when something about this project needs a person. */
   readonly ownerAttention: boolean;
   readonly attentionReasons: readonly string[];
+  /** Editable identity, carried so the detail page can show and change it. */
+  readonly description: string | null;
+  readonly defaultBranch: string | null;
+  readonly productionUrl: string | null;
+  /** P0 (0) through P3 (3). Null when the column could not be read. */
+  readonly engineeringPriority: number | null;
+  readonly strategicFocus: boolean;
+  readonly engineeringPaused: boolean;
+  readonly engineeringPauseReason: string | null;
 }
 
 export interface PortfolioView {
@@ -128,6 +187,8 @@ export function buildPortfolio(sources: PortfolioSources): PortfolioView {
   if (sources.runs === null) unavailable.push("runs");
   if (sources.tasks === null) unavailable.push("tasks");
   if (sources.incidents === null) unavailable.push("incidents");
+  if (sources.changeRequests === null) unavailable.push("pull requests");
+  if (sources.deployments === null) unavailable.push("deployments");
   if (sources.connections === null) unavailable.push("connections");
 
   const projects = sources.projects.map((project): PortfolioProject => {
@@ -154,9 +215,23 @@ export function buildPortfolio(sources: PortfolioSources): PortfolioView {
       activeRuns: countFor(sources.runs, project.id, OPEN_RUN_STATUSES),
       openTasks: countFor(sources.tasks, project.id, OPEN_TASK_STATUSES),
       openIncidents,
+      draftPullRequests: countFor(
+        sources.changeRequests, project.id, DRAFT_PR_CHANGE_REQUEST_STATUSES),
+      activeDeployments: countFor(sources.deployments, project.id, OPEN_DEPLOYMENT_STATUSES),
       connectionHealth,
       ownerAttention: attentionReasons.length > 0,
       attentionReasons: Object.freeze(attentionReasons),
+      description: project.description ?? null,
+      defaultBranch: project.defaultBranch ?? null,
+      productionUrl: project.productionUrl ?? null,
+      // Null rather than a default tier: an unread column is not evidence that
+      // the project is P2, and the console renders it as Unknown.
+      engineeringPriority: typeof project.engineeringPriority === "number"
+        ? project.engineeringPriority
+        : null,
+      strategicFocus: project.strategicFocus === true,
+      engineeringPaused: project.engineeringPaused === true,
+      engineeringPauseReason: project.engineeringPauseReason ?? null,
     });
   });
 
