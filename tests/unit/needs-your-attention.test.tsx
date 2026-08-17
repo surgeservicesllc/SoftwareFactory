@@ -10,7 +10,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-/** Stub the four decision sources; unset ones default to all-clear. */
+/** Stub the five decision sources; unset ones default to all-clear. */
 function stubSources(sources: {
   commands?: unknown;
   commandsStatus?: number;
@@ -19,6 +19,8 @@ function stubSources(sources: {
   worker?: unknown;
   operations?: unknown;
   operationsStatus?: number;
+  runs?: unknown;
+  runsStatus?: number;
 }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -33,6 +35,9 @@ function stubSources(sources: {
     }
     if (url === "/api/operations/overview") {
       return jsonResponse(sources.operations ?? { incidents: [] }, sources.operationsStatus ?? 200);
+    }
+    if (url === "/api/runs") {
+      return jsonResponse(sources.runs ?? { runs: [] }, sources.runsStatus ?? 200);
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -172,5 +177,45 @@ describe("NeedsYourAttention", () => {
     // than inventing items or erroring the section.
     expect(await screen.findByText("A RED command is waiting for your approval")).toBeInTheDocument();
     expect(screen.queryByText(/needs attention"/)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a failed run with the reason it failed", async () => {
+    // The gap this closes: on 2026-08-16 a command failed three times and
+    // nothing the owner was looking at said so.
+    stubSources({
+      runs: {
+        runs: [{
+          id: "run-1",
+          status: "failed",
+          errorMessage: "Dependency bootstrap failed.",
+          task: { title: "Audit Round 2" },
+        }],
+      },
+    });
+
+    render(<NeedsYourAttention authenticated />);
+
+    expect(await screen.findByText("Work failed: Audit Round 2")).toBeInTheDocument();
+    expect(screen.getByText("Dependency bootstrap failed.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open runs/i })).toHaveAttribute("href", "/solutions/runs");
+  });
+
+  it("counts several failures instead of listing each", async () => {
+    stubSources({
+      runs: {
+        runs: [
+          { id: "run-1", status: "failed", task: { title: "One" } },
+          { id: "run-2", status: "failed", task: { title: "Two" } },
+          { id: "run-3", status: "succeeded", task: { title: "Fine" } },
+        ],
+      },
+    });
+
+    render(<NeedsYourAttention authenticated />);
+
+    expect(await screen.findByText("2 runs failed")).toBeInTheDocument();
+    // A successful run is not an item: this area earns attention by never
+    // crying wolf.
+    expect(screen.queryByText(/Fine/)).not.toBeInTheDocument();
   });
 });
