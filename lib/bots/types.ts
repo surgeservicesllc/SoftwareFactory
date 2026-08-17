@@ -58,6 +58,10 @@ export type SerializedAssignment = {
   status: "active" | "paused" | "released";
   assignedAt: string;
   releasedAt: string | null;
+  /** Per-posting model override; null means the bot's own default model. */
+  model: string | null;
+  /** How hard this posting should think: low, medium, high, or max. */
+  workEffort: string;
   /**
    * What this bot may do on this project. Present on every assignment: a row
    * written before the configuration columns existed reads as least privilege

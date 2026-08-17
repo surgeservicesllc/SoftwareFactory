@@ -68,6 +68,9 @@ type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] }
 
 const navigationEntries: readonly NavigationEntry[] = [
   { label: "Overview", href: "/solutions", icon: CircleGauge },
+  // The guided end-to-end journey over the live flows (owner order,
+  // 2026-08-17): sits directly under Overview.
+  { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
   {
     label: "Projects",
     href: "/solutions/projects",

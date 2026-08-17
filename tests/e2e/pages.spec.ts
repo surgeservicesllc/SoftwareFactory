@@ -13,6 +13,7 @@ import { expect, test } from "@playwright/test";
 const routes = [
   // The console home moved to /solutions when / became the marketing landing.
   { path: "/solutions", heading: "Dashboard" },
+  { path: "/solutions/ai-factory", heading: "AI Factory" },
   { path: "/solutions/operations", heading: "Operations" },
   { path: "/solutions/projects", heading: "All Projects" },
   { path: "/solutions/myprojects", heading: "My Projects" },

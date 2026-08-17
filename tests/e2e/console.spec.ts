@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 // real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
   "Overview",
+  "AI Factory",
   "Projects",
   "All Projects",
   "My Projects",

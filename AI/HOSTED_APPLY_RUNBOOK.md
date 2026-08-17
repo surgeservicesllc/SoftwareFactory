@@ -3,9 +3,9 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 42**, listed in the measured section below. The repository total is 106 migration
+**The current total is 43**, listed in the measured section below. The repository total is 107 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest: `20260817000800_custom_pipeline_templates` — create/edit/delete for
+outstanding. (Newest: `20260817000900_assignment_model_and_effort` — per-posting model override and work effort, one definer operation. Before it: `20260817000800_custom_pipeline_templates` — create/edit/delete for
 organization pipeline templates, three definer functions over the existing RLS table. Before it:
 `20260817000700_bot_assignment_configuration` — per-posting bot
 configuration plus the atomic multi-bot `assign_bots_to_project`, ADR-079; until it is applied, the

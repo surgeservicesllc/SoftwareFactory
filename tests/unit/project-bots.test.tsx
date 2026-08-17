@@ -448,4 +448,34 @@ describe("managing an assigned bot", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent(/Owner access is required/);
   });
+
+  it("sets a posting's model and work effort through the execution operation", async () => {
+    const user = userEvent.setup();
+    const calls = stub(roster(), (url, init) => {
+      if (url === "/api/bot-assignments/as-1" && init?.method === "PATCH") {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ assignment: { id: "as-1", model: "claude-fable-5", workEffort: "high" } }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+
+    render(<ProjectBots projectId={projectId} projectName="Storefront" />);
+
+    // The Model select offers the bot's default plus its provider's
+    // suggestions; choosing one saves the override for this posting only.
+    const model = await screen.findByLabelText("Model");
+    await user.selectOptions(model, "claude-fable-5");
+    const effort = await screen.findByLabelText("Work effort");
+    await user.selectOptions(effort, "high");
+
+    const patches = calls.filter(
+      (call) => call.url === "/api/bot-assignments/as-1" && call.method === "PATCH",
+    );
+    expect(patches.map((call) => call.body)).toEqual([
+      { model: "claude-fable-5" },
+      { workEffort: "high" },
+    ]);
+  });
 });
