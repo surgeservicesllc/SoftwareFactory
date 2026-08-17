@@ -184,10 +184,28 @@ Round 1 (this merge):
   /api/bot-assignments/[id] extended, selects on each PostingCard in
   the project roster (steps 6/7 surface), serialized through
   lib/bots/service. 1 new unit test.
-- [ ] Round 2+: deeper wizard embedding (inline forms per step),
-  reference visual polish (step connectors band on desktop), full
-  journey re-test from a fresh workspace, breakpoint sweep beyond the
-  e2e viewports.
+- [x] Round 2 (stop-hook directive: "one seamless guided workflow", not
+  deep links): every step now opens its REAL control in place, as an
+  accordion — Connect Repository embeds ConnectionsConsole; Create
+  Project embeds AddProjectForm (extracted from ProjectsConsole into
+  components/add-project-form.tsx, identical markup, both surfaces
+  share it); Configure Pipeline embeds PipelineTemplatesManager with
+  built-ins compiled server-side by the page (editable stages, Use →
+  POST /api/graphs); Connect Bots embeds BotManagerHome (Add AI
+  Account/Create Bot flows); Assign + Configure embed the per-project
+  ProjectBots roster (Select→Configure→Review wizard, role,
+  responsibilities, repository access, Model, Work Effort) behind a
+  project picker when >1; Issue a Command embeds CommandComposer
+  (onSaved refreshes derivation); Watch It Ship's body is the live
+  command list with worker-advanced stages. Current step auto-opens
+  ("follow the journey"); clicking any header opens that step; a
+  desktop horizontal number band (reference's connector strip) jumps +
+  scrolls. Completion still derived from live records only. 5 unit
+  tests (auto-open assertion, embedded-control mount on header click,
+  live-evidence body). Gates: tsc, eslint 0 warnings, vitest 3170,
+  build, Playwright 171.
+- [ ] Round 3+: full journey re-test from a fresh workspace against
+  production, breakpoint sweep beyond the e2e viewports.
 
 ### Template CRUD (owner goal 2026-08-17)
 
