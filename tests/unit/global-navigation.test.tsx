@@ -105,8 +105,9 @@ describe("SiteHeader", () => {
   });
 
   it("orders the signed-in navigation the way the owner's design does", () => {
-    // Console destinations first, then Admin, then the marketing pages —
-    // Solutions dropped because Dashboard already points at that route.
+    // Console destinations, then Admin, and nothing else. The marketing pages
+    // used to trail this list; they sold the product to someone already inside
+    // it and pushed the console links away from the account area.
     render(
       <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
     );
@@ -117,11 +118,6 @@ describe("SiteHeader", () => {
       "Runs",
       "Activity",
       "Admin",
-      "Platform",
-      "Features",
-      "Pricing",
-      "Resources",
-      "About",
     ]);
   });
 

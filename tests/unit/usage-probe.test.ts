@@ -111,6 +111,34 @@ describe("probeAnthropicUsage", () => {
     expect(result.status).toBe("unavailable");
     expect(result.detail).toBe("The usage endpoint could not be reached.");
   });
+
+  it("marks only a refusal as evidence about the credential itself", async () => {
+    // 401/403 is the provider saying it will not accept this credential.
+    for (const status of [401, 403]) {
+      const refused = (async () => new Response("no", { status })) as unknown as typeof fetch;
+      const result = await probeAnthropicUsage("sk-ant-oat01-example", refused);
+      expect(result.credentialRejected).toBe(true);
+    }
+
+    // Everything else is the endpoint having a bad day. Treating these as
+    // credential evidence would disconnect a healthy account on a blip.
+    const serverError = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
+    expect((await probeAnthropicUsage("sk-ant-oat01-example", serverError)).credentialRejected)
+      .toBeFalsy();
+
+    const unreachable = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+    expect((await probeAnthropicUsage("sk-ant-oat01-example", unreachable)).credentialRejected)
+      .toBeFalsy();
+
+    const notJson = (async () => new Response("<html>", {
+      headers: { "content-type": "text/html" },
+      status: 200,
+    })) as unknown as typeof fetch;
+    expect((await probeAnthropicUsage("sk-ant-oat01-example", notJson)).credentialRejected)
+      .toBeFalsy();
+  });
 });
 
 describe("probeAccountUsage", () => {
@@ -140,6 +168,64 @@ describe("captureUsageForAccounts", () => {
     return { recorder, calls };
   }
 
+  it("demotes an account whose credential the provider refuses", async () => {
+    // The whole point. Before this, a 403 was written as a `detail` string and
+    // the account kept a green Connected badge, because the verification sweep
+    // only checks the credential's *shape* -- which an expired token passes.
+    const { recorder, calls } = recorderSpy();
+    const demotions: Array<{ accountId: string; reason: string }> = [];
+
+    const result = await captureUsageForAccounts(
+      {
+        listAccountsForVerification: async () => [account],
+        markAccountNeedsReauth: async (_organizationId, accountId, reason) => {
+          demotions.push({ accountId, reason });
+          return true;
+        },
+        readStoredCredential: async () => "sealed-envelope",
+      },
+      recorder,
+      {
+        fetchImpl: (async () => new Response("no", { status: 403 })) as unknown as typeof fetch,
+        open: () => "sk-ant-oat01-example",
+      },
+    );
+
+    expect(result.demoted).toBe(1);
+    expect(demotions).toHaveLength(1);
+    expect(demotions[0]?.accountId).toBe(account.accountId);
+    expect(demotions[0]?.reason).toContain("refused the stored credential");
+    // The observation is still recorded: the console shows why, and the badge
+    // now agrees with it.
+    expect(calls[0]?.status).toBe("unavailable");
+  });
+
+  it("does not demote an account over a provider outage", async () => {
+    const { recorder } = recorderSpy();
+    const demotions: string[] = [];
+
+    const result = await captureUsageForAccounts(
+      {
+        listAccountsForVerification: async () => [account],
+        markAccountNeedsReauth: async (_organizationId, accountId) => {
+          demotions.push(accountId);
+          return true;
+        },
+        readStoredCredential: async () => "sealed-envelope",
+      },
+      recorder,
+      {
+        fetchImpl: (async () => new Response("nope", { status: 500 })) as unknown as typeof fetch,
+        open: () => "sk-ant-oat01-example",
+      },
+    );
+
+    // A 500 says nothing about the credential. Disconnecting a healthy account
+    // because the provider had a bad minute would be its own truthfulness bug.
+    expect(result.demoted).toBe(0);
+    expect(demotions).toEqual([]);
+  });
+
   it("records a measured observation for a connected account", async () => {
     const { recorder, calls } = recorderSpy();
     const result = await captureUsageForAccounts(
@@ -156,7 +242,7 @@ describe("captureUsageForAccounts", () => {
         })) as unknown as typeof fetch,
       },
     );
-    expect(result).toEqual({ measured: 1, unavailable: 0, unsupported: 0, errors: 0 });
+    expect(result).toEqual({ measured: 1, unavailable: 0, unsupported: 0, errors: 0, demoted: 0 });
     expect(calls[0]).toMatchObject({
       organizationId: account.organizationId,
       accountId: account.accountId,
@@ -183,7 +269,7 @@ describe("captureUsageForAccounts", () => {
         },
       },
     );
-    expect(result).toEqual({ measured: 0, unavailable: 2, unsupported: 0, errors: 0 });
+    expect(result).toEqual({ measured: 0, unavailable: 2, unsupported: 0, errors: 0, demoted: 0 });
     expect(calls.map((call) => call.status)).toEqual(["unavailable", "unavailable"]);
   });
 
