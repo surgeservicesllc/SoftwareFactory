@@ -59,6 +59,17 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+- [x] Bot Usage page (owner mockup, same day): /solutions/bot-usage
+  renders per-account provider-subscription windows from the REAL
+  observation store (ADR-076) — reuses AccountUsage (percent bars +
+  provider reset times; every absence named), headroom bands derived
+  from the same thresholds the bars color by, summary cards (bots
+  connected + average week_all_models across measured bots), Refresh
+  wired to POST /api/ai-accounts/refresh (managers only), View details →
+  Bot Manager, 30s re-read. Mock's plan/billing footer, date-range
+  picker, history tabs ABSENT (observations are latest-per-account; no
+  billing model). Nav Bots group gains Bot Usage (33-label contract);
+  /bot-usage redirect added; pages.spec covers the route; 4 unit tests.
 - [x] All Projects dashboard (owner mockup, same day): /solutions/projects
   is now the organize/overview posture — stat cards (total / active% /
   authorized repositories / connected, all counted from the live reads,

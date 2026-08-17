@@ -100,6 +100,8 @@ const navigationEntries: readonly NavigationEntry[] = [
     subpages: [
       { label: "Connect Bot", href: "/solutions/bot-manager#connect", icon: Plus },
       { label: "My Bots", href: "/solutions/bot-manager", icon: Bot },
+      // Recorded provider-subscription windows per account (ADR-076).
+      { label: "Bot Usage", href: "/solutions/bot-usage", icon: Gauge },
       // Bot work lands in the activity feed; the same page also sits under
       // Watch, which is deliberate — both readings are true.
       { label: "Bot Activity", href: "/solutions/activity", icon: Activity },

@@ -22,6 +22,7 @@ const routes = [
   { path: "/solutions/portfolio/00000000-0000-4000-8000-00000000dead", heading: "Project detail" },
   { path: "/solutions/files", heading: "Files" },
   { path: "/solutions/bot-manager", heading: "Bot Manager" },
+  { path: "/solutions/bot-usage", heading: "Bot Usage" },
   { path: "/solutions/connections", heading: "Connections" },
   { path: "/solutions/activity", heading: "Activity" },
   { path: "/solutions/settings", heading: "Safety" },
