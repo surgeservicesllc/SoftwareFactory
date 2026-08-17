@@ -11,6 +11,8 @@ const consoleNavigation = [
   "My Projects",
   "Archived",
   "Pipelines",
+  "Active",
+  "All Pipelines",
   "Templates",
   "Backlog",
   "Bots",

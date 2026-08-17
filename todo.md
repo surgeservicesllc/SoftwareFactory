@@ -59,6 +59,47 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+### PIPELINE SYSTEM (owner goal 2026-08-17, /loop active)
+
+AUDIT (round 1, verified against code):
+- COMPLETE: graph engine (26 modules — compiler, scheduler, launch-plan
+  topology SINGLE/LOOP/DAG/DIAMOND/DISCOVERY, locks, fan-out/in,
+  discovery, budgets, verification) + persistence (graph_templates,
+  graphs, graph_runs, node_runs, artifacts, handoffs, verifications,
+  work_locks; create_graph_from_plan RPC); 14 versioned code templates
+  covering 12/13 of the owner's list (no Database Migration template);
+  command lifecycle with verified intake, RED approval gate, worker
+  claim leases, stale-base replan, cancel/retry, draft-PR-only output;
+  real anchors already exist for CI (GitHub checks), deploy (Vercel on
+  merge), risk (GREEN/YELLOW/RED + kill switch), monitoring
+  (operations/activity/reports).
+- PARTIAL: pipeline experience — round 1 ships /solutions/pipelines
+  (Active / All / Templates over live commands + server-compiled
+  templates); commands list API carries no branch/PR linkage yet, so
+  stages beyond Complete (PR, CI, PREVIEW, VALIDATE) are not stitched
+  into the row; simple-mode confirmation (template/team/stages preview
+  before Start) not yet in the composer.
+- MISSING: stage-level pipeline persistence (PENDING/READY/RUNNING/...
+  vocabulary per stage), advanced-mode visual builder, failure-route
+  configuration, schedules, Database Migration template, graph-node
+  executor (graphs API truthfully says PLANNED-only: "no executor is
+  connected to the graph runner" — the Phase 1C worker executes
+  commands, not graph nodes).
+- BROKEN: nothing found; every unconnected surface names itself.
+
+- [x] Round 1: /solutions/pipelines — Active (live stages from the
+  worker-advanced command status: Intake / Waiting for your approval /
+  Planning / Building / Complete / Failed / Cancelled; owner-attention
+  count; elapsed + duration), All Pipelines (history + outcomes),
+  Templates (versioned, compiled topology facts; deep previews link to
+  Workflows — one engine, no duplication). Nav Pipelines group → Active,
+  All Pipelines, Templates, Backlog (37-label contract); /pipelines
+  redirect; pages.spec route; 15s live re-read; 5 unit tests.
+- [ ] Round 2+: PR/CI/deploy evidence joined per pipeline run (needs
+  branch/PR in list_commands or a detail RPC), simple-mode confirmation
+  in the composer, stage-state persistence, failure routes, Database
+  Migration template, graph executor bridge.
+
 - [x] Edit/delete everywhere (owner goal, 2026-08-17 — ADR-078):
   Projects editable (update_project_details, migration 20260817000100,
   PATCH /api/projects/[id]; Edit dialogs on the All Projects table +

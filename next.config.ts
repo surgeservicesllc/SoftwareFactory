@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
       "files",
       "myprojects",
       "operations",
+      "pipelines",
       "portfolio",
       "projects",
       "reports",

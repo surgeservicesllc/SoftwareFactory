@@ -24,7 +24,7 @@ describe("AppShell navigation", () => {
     expect(links).toEqual([
       "Overview",
       "Projects", "All Projects", "My Projects", "Archived",
-      "Pipelines", "Templates", "Backlog",
+      "Pipelines", "Active", "All Pipelines", "Templates", "Backlog",
       "Bots", "Connect Bot", "My Bots", "Bot Usage", "Bot Activity",
       "Runs",
       "Reports",
