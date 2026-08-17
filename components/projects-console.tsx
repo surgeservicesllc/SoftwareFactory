@@ -19,7 +19,6 @@ import {
   GitPullRequestArrow,
   Loader2,
   Pencil,
-  Plus,
   PlugZap,
   RefreshCw,
   X,
@@ -29,6 +28,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AddProjectForm } from "@/components/add-project-form";
 import { ProjectBots } from "@/components/project-bots";
 import { ProjectOperationsPanel } from "@/components/project-operations-panel";
 import { ProjectRepository } from "@/components/project-repository";
@@ -133,12 +133,7 @@ export function ProjectsConsole() {
   const [state, setState] = useState<State>("loading");
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [connectionId, setConnectionId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
-  const [saving, setSaving] = useState(false);
   // Dashboard evidence, all best-effort: runs feed the Last-run and
   // Success-rate columns, activity feeds the rail, and the archived count
   // completes the by-status breakdown. Any of them failing degrades its own
@@ -237,59 +232,6 @@ export function ProjectsConsole() {
     () => connections.filter((connection) => connection.status === "connected" && connection.account && connection.installation && !connection.installation.suspendedAt),
     [connections],
   );
-  const activeConnectionId = connectionId || connectedConnections[0]?.id || "";
-  const selectedConnection = connectedConnections.find((connection) => connection.id === activeConnectionId) ?? connectedConnections[0];
-  const availableRepositories = useMemo(
-    () => selectedConnection?.repositories.filter((repository) => repository.selected && !repository.archived && !repository.disabled) ?? [],
-    [selectedConnection],
-  );
-  const unconnectedRepositories = useMemo(
-    () => availableRepositories.filter((repository) => !projects.some((project) => project.githubRepositoryId === repository.id)),
-    [availableRepositories, projects],
-  );
-  const selectedRepository = unconnectedRepositories.find((repository) => String(repository.id) === repositoryId) ?? unconnectedRepositories[0];
-
-  useEffect(() => {
-    if (!selectedRepository || !selectedConnection) return;
-    const repository = selectedRepository.fullName.split("/")[1];
-    if (!repository) return;
-    const timer = window.setTimeout(() => {
-      setRepositoryId(String(selectedRepository.id));
-      setName((current) => current || repository);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [selectedConnection, selectedRepository]);
-
-  async function createProject(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedConnection || !selectedRepository) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionId: selectedConnection.id,
-          repositoryId: selectedRepository.id,
-          name,
-          description,
-          defaultBranch: selectedRepository.defaultBranch,
-        }),
-      });
-      const body = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be added.");
-      setMessage(`${name} is connected. Its live GitHub data is below.`);
-      setName("");
-      setDescription("");
-      setRepositoryId("");
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The project could not be added.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (state === "loading") {
     return (
@@ -556,122 +498,9 @@ export function ProjectsConsole() {
         </Card>
       ) : null}
 
-      {!connectedConnections.length ? (
-        <BlockedState
-          icon={GitFork}
-          title="Connect GitHub first"
-          description="A repository becomes a project only after you have authorized GitHub."
-          href="/solutions/connections"
-          label="Connect GitHub"
-        />
-      ) : unconnectedRepositories.length || !projects.length ? (
-        /* The id anchors the navigation's "New Project" quick action; the
-           scroll margin keeps the heading clear of the fixed mobile header. */
-        <Card id="add-project" className="scroll-mt-24 p-5 sm:p-6">
-          <SectionTitle
-            title="Add a project"
-            description="Pick one of the repositories you authorized. The branch comes straight from GitHub."
-          />
-
-          <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
-            {/* One connected account is the common case, and a picker with a
-                single option is a dead control. The repository list below
-                already names the owner (owner/repo), so nothing is lost. */}
-            {connectedConnections.length > 1 ? (
-              <div>
-                <label htmlFor="project-connection" className="field-label">GitHub account</label>
-                <select
-                  id="project-connection"
-                  value={activeConnectionId}
-                  onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
-                  className="input"
-                >
-                  {connectedConnections.map((connection) => (
-                    <option key={connection.id} value={connection.id}>
-                      {connection.account?.login ?? connection.name ?? "GitHub"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            <div>
-              <label htmlFor="project-repository" className="field-label">Repository</label>
-              <select
-                id="project-repository"
-                value={repositoryId}
-                onChange={(event) => {
-                  setRepositoryId(event.target.value);
-                  const repo = unconnectedRepositories.find((item) => String(item.id) === event.target.value);
-                  setName(repo?.fullName.split("/")[1] ?? "");
-                }}
-                className="input"
-              >
-                {unconnectedRepositories.map((repository) => (
-                  <option key={repository.id} value={repository.id}>{repository.fullName}</option>
-                ))}
-              </select>
-              <span className="field-hint">
-                Branch: {selectedRepository?.defaultBranch ?? "—"} (set by GitHub)
-              </span>
-            </div>
-
-            <div>
-              <label htmlFor="project-name" className="field-label">Name it</label>
-              <input
-                id="project-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                minLength={1}
-                maxLength={160}
-                className="input"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="project-description" className="field-label">
-                What is it? <span className="font-normal text-faint">(optional)</span>
-              </label>
-              <input
-                id="project-description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                maxLength={2000}
-                className="input"
-                placeholder="Customer-facing web app"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <button type="submit" disabled={saving || !selectedRepository || !name.trim()} className="btn btn-primary">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                Add project
-              </button>
-              <p className="mt-3 text-sm text-muted">
-                New projects start with everything automatic switched off.
-              </p>
-            </div>
-          </form>
-
-          {message ? <p className="mt-4 text-sm text-[var(--warning)]" aria-live="polite">{message}</p> : null}
-        </Card>
-      ) : (
-        /* Every authorized repository is taken. Saying only that leaves the
-           person at a dead end, because the way to add another project is not
-           on this page at all: it is authorizing another repository on
-           GitHub. Name that, and link to where it starts. */
-        <Card className="p-5 sm:p-6">
-          <SectionTitle
-            title="Add another project"
-            description="Every repository you authorized is already a project. A project is one repository, so the next one starts by authorizing another repository for SoftwareFactory on GitHub."
-          />
-          <Link href="/solutions/connections" className="btn btn-secondary btn-sm mt-4">
-            <GitFork className="size-4" aria-hidden="true" />
-            Manage repository access
-          </Link>
-        </Card>
-      )}
+      {/* The identical control the AI Factory journey embeds — extracted so
+          both surfaces share one form, one create call, one set of refusals. */}
+      <AddProjectForm id="add-project" onCreated={load} />
         </div>
 
         <div className="min-w-0 space-y-4">

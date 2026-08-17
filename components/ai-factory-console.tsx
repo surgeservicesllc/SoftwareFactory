@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Bot,
   Check,
+  ChevronDown,
   Factory,
   GitBranch,
   Loader2,
@@ -15,17 +16,27 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { pipelineStage } from "@/components/pipelines-console";
+import { AddProjectForm } from "@/components/add-project-form";
+import { BotManagerHome } from "@/components/bot-manager/home";
+import { CommandComposer } from "@/components/command-composer";
+import { ConnectionsConsole } from "@/components/connections-console";
+import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
+import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
+import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 /**
- * AI Factory: the guided end-to-end journey, connected over the flows that
- * already exist. Each step's completion is derived from the live records the
- * step produces — a connected installation, a project, a connected account,
- * an assignment, a saved command — never from a stored wizard state. That is
- * what makes progress survive refresh and navigation by construction, and
- * what makes this page unable to disagree with the rest of the console.
+ * AI Factory: the guided end-to-end journey with the real controls embedded
+ * in place. Each step opens into the same component the rest of the console
+ * uses — the GitHub connections console, the add-project form, the template
+ * manager, the bot manager, the per-project roster, the command composer —
+ * so completing a step here IS completing it, not a rehearsal for doing it
+ * somewhere else. Completion is derived from the live records each step
+ * produces — a connected installation, a project, an assignment, a saved
+ * command — never from a stored wizard state. That is what makes progress
+ * survive refresh and navigation by construction, and what makes this page
+ * unable to disagree with the rest of the console.
  */
 
 type StepId =
@@ -63,8 +74,16 @@ async function readJson<T>(response: Response): Promise<T | null> {
   }
 }
 
-export function AiFactoryConsole() {
+export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
   const [state, setState] = useState<State>({ kind: "loading" });
+  // undefined = follow the journey (the first unfinished step is open);
+  // a StepId or null = the person chose, and their choice wins until the
+  // next click. Choices are ephemeral on purpose: reload lands you back on
+  // the live "you are here", which the records decide.
+  const [chosen, setChosen] = useState<StepId | null | undefined>(undefined);
+  // Which project the roster steps operate on. Empty until projects load;
+  // reset if the chosen project disappears (archived elsewhere).
+  const [rosterProjectId, setRosterProjectId] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -161,8 +180,54 @@ export function AiFactoryConsole() {
   }
 
   const { data } = state;
-  const firstProject = data.projects[0] ?? null;
   const hasSucceededCommand = data.commands.some((command) => command.status === "succeeded");
+  const compiledBuiltIns = builtIns.filter((template) => template.compiles).length;
+
+  const rosterProject =
+    data.projects.find((project) => project.id === rosterProjectId) ?? data.projects[0] ?? null;
+
+  /* The roster — assigning bots and configuring each posting's role,
+     responsibilities, repository access, model, and work effort — is one
+     control serving two steps, scoped to one project at a time. */
+  const rosterEmbed = rosterProject ? (
+    <div className="space-y-4">
+      {data.projects.length > 1 ? (
+        <div className="max-w-xs">
+          <label htmlFor="factory-roster-project" className="field-label">Project</label>
+          <select
+            id="factory-roster-project"
+            value={rosterProject.id}
+            onChange={(event) => setRosterProjectId(event.target.value)}
+            className="input"
+          >
+            {data.projects.map((project) => (
+              <option key={project.id} value={project.id}>{project.name}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <Card className="p-5 sm:p-6">
+        <ProjectBots
+          key={rosterProject.id}
+          projectId={rosterProject.id}
+          projectName={rosterProject.name}
+          divided={false}
+        />
+      </Card>
+    </div>
+  ) : (
+    <Card className="p-5 sm:p-6">
+      <p className="text-sm text-muted">
+        Bots are assigned per project, so this step opens once your first project exists.
+      </p>
+      <button type="button" onClick={() => setChosen("create_project")} className="btn btn-secondary btn-sm mt-3">
+        Go to Create Project
+        <ArrowRight className="size-4" aria-hidden="true" />
+      </button>
+    </Card>
+  );
+
+  const recent = data.commands.slice(0, 3);
 
   const steps: Array<{
     id: StepId;
@@ -170,9 +235,10 @@ export function AiFactoryConsole() {
     description: string;
     done: boolean;
     evidence: string;
-    href: string;
-    action: string;
     icon: typeof Factory;
+    body: React.ReactNode;
+    pageHref: string;
+    pageLabel: string;
   }> = [
     {
       id: "connect_github",
@@ -182,9 +248,10 @@ export function AiFactoryConsole() {
       evidence: data.connectedInstallations > 0
         ? `${data.connectedInstallations} installation${data.connectedInstallations === 1 ? "" : "s"} · ${data.repositories} repositor${data.repositories === 1 ? "y" : "ies"} authorized`
         : "No GitHub installation yet",
-      href: "/solutions/connections",
-      action: "Connect GitHub",
       icon: GitBranch,
+      body: <ConnectionsConsole />,
+      pageHref: "/solutions/connections",
+      pageLabel: "Connections",
     },
     {
       id: "create_project",
@@ -194,19 +261,21 @@ export function AiFactoryConsole() {
       evidence: data.projects.length > 0
         ? `${data.projects.length} project${data.projects.length === 1 ? "" : "s"}: ${data.projects.slice(0, 3).map((project) => project.name).join(", ")}`
         : "No project yet",
-      href: "/solutions/projects#add-project",
-      action: "Create a project",
       icon: Factory,
+      body: <AddProjectForm onCreated={load} />,
+      pageHref: "/solutions/projects",
+      pageLabel: "All Projects",
     },
     {
       id: "pipeline",
-      title: "Pipeline Ready",
-      description: "Every goal runs the same verified lifecycle. Thirteen built-in templates are compiled and ready; add your own.",
+      title: "Configure Pipeline",
+      description: "Every goal runs the same verified lifecycle. Use a built-in template, or define your own stages and record a pipeline for a project.",
       done: data.projects.length > 0,
-      evidence: "Intake → Planning → Building → Draft PR, with CI on every pull request",
-      href: "/solutions/pipelines?view=templates",
-      action: "Review templates",
+      evidence: `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`,
       icon: Workflow,
+      body: <PipelineTemplatesManager builtIns={builtIns} />,
+      pageHref: "/solutions/pipelines?view=templates",
+      pageLabel: "Pipelines",
     },
     {
       id: "connect_bots",
@@ -216,35 +285,38 @@ export function AiFactoryConsole() {
       evidence: data.connectedAccounts > 0
         ? `${data.connectedAccounts} account${data.connectedAccounts === 1 ? "" : "s"} connected · ${data.bots} bot${data.bots === 1 ? "" : "s"}`
         : "No AI account connected yet",
-      href: "/solutions/bot-manager#connect",
-      action: "Connect a bot",
       icon: PlugZap,
+      body: <BotManagerHome />,
+      pageHref: "/solutions/bot-manager",
+      pageLabel: "Bot Manager",
     },
     {
       id: "assign_bots",
       title: "Assign Bots to Project",
-      description: "Put one or many bots on each project.",
+      description: "Put one or many bots on the project. The wizard walks Select → Configure → Review.",
       done: data.assignments > 0,
       evidence: data.assignments > 0
         ? `${data.assignments} active assignment${data.assignments === 1 ? "" : "s"}`
         : "No bot is assigned to a project yet",
-      href: firstProject ? "/solutions/myprojects" : "/solutions/projects",
-      action: "Assign bots",
       icon: Bot,
+      body: rosterEmbed,
+      pageHref: "/solutions/myprojects",
+      pageLabel: "My Projects",
     },
     {
       id: "configure_bots",
       title: "Configure Bot Settings",
-      description: "Give each posting a role, responsibilities, and repository access.",
+      description: "On each posting card: role, responsibilities, repository access, the model it runs (Fable 5, Opus 5, …), and work effort.",
       done: data.configuredAssignments > 0,
       evidence: data.configuredAssignments > 0
         ? `${data.configuredAssignments} of ${data.assignments} assignment${data.assignments === 1 ? "" : "s"} configured`
         : data.assignments > 0
           ? "Assignments exist; none carries a role or responsibilities yet"
           : "Assign a bot first",
-      href: "/solutions/myprojects",
-      action: "Configure",
       icon: Settings2,
+      body: rosterEmbed,
+      pageHref: "/solutions/myprojects",
+      pageLabel: "My Projects",
     },
     {
       id: "command",
@@ -254,9 +326,10 @@ export function AiFactoryConsole() {
       evidence: data.commands.length > 0
         ? `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} recorded`
         : "No command yet",
-      href: firstProject ? `/solutions/bot-manager?project=${firstProject.id}` : "/solutions/bot-manager",
-      action: "Give a bot work",
       icon: Terminal,
+      body: <CommandComposer onSaved={load} />,
+      pageHref: "/solutions/bot-manager",
+      pageLabel: "Bot Manager",
     },
     {
       id: "watch",
@@ -268,15 +341,65 @@ export function AiFactoryConsole() {
         : data.commands.length > 0
           ? "Work is in flight — watch it on Pipelines"
           : "Nothing has run yet",
-      href: "/solutions/pipelines",
-      action: "Open Pipelines",
       icon: Workflow,
+      body: (
+        <Card className="p-5 sm:p-6">
+          <h3 className="text-base font-semibold text-foreground">Command execution, live</h3>
+          <p className="mt-1 text-sm text-muted">
+            Every command runs the same lifecycle: verified intake → queue → a worker claims it →
+            isolated branch → draft pull request with CI. Merging stays yours, and production
+            deploys from the merge.
+          </p>
+          {recent.length ? (
+            <ul className="mt-4 divide-y divide-[var(--border)]">
+              {recent.map((command) => {
+                const stage = pipelineStage(command.status);
+                return (
+                  <li key={command.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                    <p className="min-w-0 flex-1 truncate text-sm text-foreground" title={command.prompt}>
+                      {command.prompt}
+                    </p>
+                    <StatusBadge tone={stage.tone} dot={false}>{stage.label}</StatusBadge>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-faint">
+              No commands yet — your first one will appear here with its live stage.
+            </p>
+          )}
+          <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm mt-4">
+            <Workflow className="size-4" aria-hidden="true" />
+            Open Pipelines
+          </Link>
+        </Card>
+      ),
+      pageHref: "/solutions/pipelines",
+      pageLabel: "Pipelines",
     },
   ];
 
   const currentIndex = steps.findIndex((step) => !step.done);
   const doneCount = steps.filter((step) => step.done).length;
-  const recent = data.commands.slice(0, 3);
+  // The journey's default open step: where you are, or — once everything is
+  // done — the live evidence, because a finished factory is one you watch.
+  const followedId = currentIndex === -1 ? "watch" : steps[currentIndex].id;
+  const expandedId = chosen === undefined ? followedId : chosen;
+
+  function jumpTo(id: StepId) {
+    setChosen(id);
+    // Scrolling happens after the body mounts; rAF is enough because the
+    // accordion renders synchronously with the state change.
+    const scroll = () => {
+      const target = document.getElementById(`factory-step-${id}`);
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(scroll);
+    else scroll();
+  }
 
   return (
     <div className="space-y-6">
@@ -285,8 +408,8 @@ export function AiFactoryConsole() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Your factory, step by step</h2>
             <p className="mt-1 text-sm text-muted">
-              Progress is read from your live records, so it survives refresh and never disagrees
-              with the rest of the console.
+              Each step opens right here — the same controls as the rest of the console, in one
+              guided path. Progress is read from your live records, so it survives refresh.
             </p>
           </div>
           <StatusBadge tone={doneCount === steps.length ? "safe" : "info"} dot={false}>
@@ -294,15 +417,46 @@ export function AiFactoryConsole() {
           </StatusBadge>
         </div>
 
+        {/* The reference's horizontal band, shown where it fits. Each number
+            is a real control: it opens that step below and scrolls to it. */}
+        <nav aria-label="Factory steps" className="mt-5 hidden items-center md:flex">
+          {steps.map((step, index) => (
+            <div key={step.id} className={cn("flex items-center", index > 0 && "flex-1")}>
+              {index > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className={cn("h-0.5 min-w-3 flex-1", steps[index - 1].done ? "bg-[var(--accent)]" : "bg-[var(--border)]")}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => jumpTo(step.id)}
+                title={step.title}
+                aria-label={`Step ${index + 1}: ${step.title}`}
+                aria-current={expandedId === step.id ? "step" : undefined}
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold transition-colors",
+                  step.done
+                    ? "border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-text)]"
+                    : "border-line bg-surface text-faint",
+                  expandedId === step.id && "ring-2 ring-[var(--accent-border)]",
+                )}
+              >
+                {step.done ? <Check className="size-4" /> : index + 1}
+              </button>
+            </div>
+          ))}
+        </nav>
+
         <ol className="mt-6 space-y-0">
           {steps.map((step, index) => {
             const isCurrent = index === currentIndex;
+            const isExpanded = expandedId === step.id;
             const Icon = step.icon;
             return (
-              <li key={step.id} className="relative flex gap-4 pb-6 last:pb-0">
+              <li key={step.id} id={`factory-step-${step.id}`} className="relative flex scroll-mt-24 gap-4 pb-6 last:pb-0">
                 {/* The connector, drawn per row so the column stays honest on
-                    every viewport — vertical steps are the mobile-first shape
-                    of the reference's horizontal band. */}
+                    every viewport and stretches with an open step body. */}
                 {index < steps.length - 1 ? (
                   <span
                     aria-hidden="true"
@@ -326,66 +480,51 @@ export function AiFactoryConsole() {
                   {step.done ? <Check className="size-4" /> : index + 1}
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
-                    <h3 className="font-semibold text-foreground">{step.title}</h3>
-                    {step.done ? (
-                      <StatusBadge tone="safe" dot={false}>Done</StatusBadge>
-                    ) : isCurrent ? (
-                      <StatusBadge tone="info" dot={false}>You are here</StatusBadge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-sm text-muted">{step.description}</p>
-                  <p className="mt-1 text-xs text-faint">{step.evidence}</p>
-                  {/* Done steps hide their action to keep the column quiet —
-                      except the repeatable ones: issuing another command and
-                      watching runs never stop being next actions. */}
-                  {!step.done || isCurrent || step.id === "watch" || step.id === "command" ? (
-                    <Link
-                      href={step.href}
-                      className={cn("mt-2 inline-flex", isCurrent ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm")}
-                    >
-                      {step.action}
-                      <ArrowRight className="size-4" aria-hidden="true" />
-                    </Link>
+                  <button
+                    type="button"
+                    onClick={() => setChosen(isExpanded ? null : step.id)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`factory-body-${step.id}`}
+                    className="group flex w-full items-start justify-between gap-3 text-left"
+                  >
+                    <span className="min-w-0">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
+                        <span className="font-semibold text-foreground">{step.title}</span>
+                        {step.done ? (
+                          <StatusBadge tone="safe" dot={false}>Done</StatusBadge>
+                        ) : isCurrent ? (
+                          <StatusBadge tone="info" dot={false}>You are here</StatusBadge>
+                        ) : null}
+                      </span>
+                      <span className="mt-1 block text-sm text-muted">{step.description}</span>
+                      <span className="mt-1 block text-xs text-faint">{step.evidence}</span>
+                    </span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={cn(
+                        "mt-1 size-4 shrink-0 text-faint transition-transform group-hover:text-foreground",
+                        isExpanded && "rotate-180",
+                      )}
+                    />
+                  </button>
+                  {isExpanded ? (
+                    <div id={`factory-body-${step.id}`} className="mt-4">
+                      {step.body}
+                      <p className="mt-3 text-xs text-faint">
+                        This is the same control as{" "}
+                        <Link href={step.pageHref} className="underline underline-offset-2 hover:text-foreground">
+                          {step.pageLabel}
+                        </Link>
+                        {" "}— finish it in either place.
+                      </p>
+                    </div>
                   ) : null}
                 </div>
               </li>
             );
           })}
         </ol>
-      </Card>
-
-      <Card className="p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-foreground">Command execution, live</h2>
-        <p className="mt-1 text-sm text-muted">
-          Every command runs the same lifecycle: verified intake → queue → a worker claims it →
-          isolated branch → draft pull request with CI. Merging stays yours, and production deploys
-          from the merge.
-        </p>
-        {recent.length ? (
-          <ul className="mt-4 divide-y divide-[var(--border)]">
-            {recent.map((command) => {
-              const stage = pipelineStage(command.status);
-              return (
-                <li key={command.id} className="flex flex-wrap items-center gap-2 py-2.5">
-                  <p className="min-w-0 flex-1 truncate text-sm text-foreground" title={command.prompt}>
-                    {command.prompt}
-                  </p>
-                  <StatusBadge tone={stage.tone} dot={false}>{stage.label}</StatusBadge>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="mt-4 text-sm text-faint">
-            No commands yet — your first one will appear here with its live stage.
-          </p>
-        )}
-        <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm mt-4">
-          <Workflow className="size-4" aria-hidden="true" />
-          Open Pipelines
-        </Link>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
