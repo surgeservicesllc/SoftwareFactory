@@ -61,7 +61,24 @@ export function ProjectOperationsPanel({ projectId }: { projectId: string }) {
     );
   }
 
-  if (state === "unavailable" || !operations) {
+  // Every field this panel reads is checked, not just the envelope. A response
+  // that parsed as JSON but arrived without `project`, `incidents` or
+  // `monitors` — an older deploy, a partially degraded read — used to reach
+  // `operations.project.healthState` and throw, and because this panel renders
+  // inside the project rows on My Projects, that one undefined took the whole
+  // page down to a blank screen. Unavailable is the honest rendering of a
+  // payload this cannot read, and it costs one panel instead of the page.
+  if (
+    state === "unavailable"
+    || !operations
+    || !operations.project
+    || !operations.releaseAuthority
+    || !Array.isArray(operations.releaseAuthority.blockers)
+    || !Array.isArray(operations.incidents)
+    || !Array.isArray(operations.monitors)
+    || !Array.isArray(operations.repairs)
+    || !Array.isArray(operations.rollbacks)
+  ) {
     return (
       <p className="mt-5 rounded-lg border border-line px-3 py-2.5 text-sm text-muted">
         Production status is unavailable for this project.
