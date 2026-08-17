@@ -49,11 +49,22 @@ export async function GET() {
     const { activeOrganization, client } = await requireActiveOrganization();
     const organizationId = activeOrganization.id;
 
+    // Two selects, and the reason is not tidiness.
+    //
+    // PostgREST fails the *whole* query when it names a column the database
+    // does not have, so asking for the Phase 2E scheduling columns against a
+    // database where `20260815000200` is not yet applied does not degrade — it
+    // takes the entire portfolio down with it, on the one source that cannot
+    // fall back to Unknown. The scheduling columns are therefore asked for
+    // separately, and their absence costs exactly the fields they carry.
+    const baseColumns =
+      "id,name,description,status,github_repository,default_branch,production_url,health_status,autonomous_mode,maximum_autonomous_risk";
+    const schedulingColumns =
+      "id,engineering_priority,strategic_focus,engineering_paused,engineering_pause_reason";
+
     const { data: projectData, error: projectError } = await client
       .from("projects")
-      .select(
-        "id,name,description,status,github_repository,default_branch,production_url,health_status,autonomous_mode,maximum_autonomous_risk,engineering_priority,strategic_focus,engineering_paused,engineering_pause_reason",
-      )
+      .select(baseColumns)
       .eq("organization_id", organizationId)
       .order("name", { ascending: true })
       .limit(200);
@@ -62,7 +73,21 @@ export async function GET() {
     // there is no portfolio to report on.
     if (projectError) return databaseErrorResponse(projectError);
 
-    const projects: ProjectRow[] = (projectData ?? []).map((row) => ({
+    const { data: schedulingData } = await client
+      .from("projects")
+      .select(schedulingColumns)
+      .eq("organization_id", organizationId)
+      .limit(200);
+
+    // Absent rather than empty when the columns do not exist, so the console
+    // renders priority as Unknown instead of asserting P0.
+    const schedulingById = new Map(
+      (schedulingData ?? []).map((row) => [String(row.id), row]),
+    );
+
+    const projects: ProjectRow[] = (projectData ?? []).map((row) => {
+      const scheduling = schedulingById.get(String(row.id));
+      return {
       id: String(row.id),
       name: String(row.name),
       status: row.status as ProjectRow["status"],
@@ -78,15 +103,16 @@ export async function GET() {
       // Read as a number only when it really is one. A hosted database without
       // the Phase 2E columns returns undefined, which stays null and renders as
       // Unknown rather than silently becoming P0.
-      engineeringPriority: typeof row.engineering_priority === "number"
-        ? row.engineering_priority
+      engineeringPriority: typeof scheduling?.engineering_priority === "number"
+        ? scheduling.engineering_priority
         : null,
-      strategicFocus: row.strategic_focus === true,
-      engineeringPaused: row.engineering_paused === true,
-      engineeringPauseReason: row.engineering_pause_reason
-        ? String(row.engineering_pause_reason)
+      strategicFocus: scheduling?.strategic_focus === true,
+      engineeringPaused: scheduling?.engineering_paused === true,
+      engineeringPauseReason: scheduling?.engineering_pause_reason
+        ? String(scheduling.engineering_pause_reason)
         : null,
-    }));
+    };
+    });
 
     const [commands, runs, tasks, incidents, changeRequests, deployments, connectionRows] =
       await Promise.all([
