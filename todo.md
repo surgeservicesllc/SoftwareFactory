@@ -8,6 +8,15 @@ finds zero actionable defects.
 
 ### Audit backlog (loop working set)
 
+- [x] **Loop tick 2026-08-17 01:11Z**: parallel sessions landed #176-#179
+  (repository picker, usage metrics, audit doc, blocker evidence) with TWO
+  unhosted migrations and no apply coverage - the deployed picker/usage UI
+  would have hit missing-function errors live. Fixed (#180): 001500 made
+  replay-safe (if-not-exists guards), both migrations joined the surgical
+  allowlist, merged f64ee63, hosted apply run 31984194358 SUCCESS - both
+  features now fully live. Full vitest on the merged tree: 2889/0.
+
+
 - [ ] **P0 — live canary journey**: Audit Round 2 run `8b5fdd2c` claimed via
   the FIRST manual dispatch (owner-ordered workflow_dispatch, main-guarded,
   PR #171) and failed `stale_base_sha` — correctly: five fix merges moved
