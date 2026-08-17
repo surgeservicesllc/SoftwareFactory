@@ -14,6 +14,15 @@ vi.mock("@/lib/supabase/tenant", async () => {
   return { ...actual, requireActiveOrganization };
 });
 
+// The wake is best-effort in the real module (it swallows every failure and
+// returns false against this test client); mocking it lets the refresh tests
+// assert the wiring without a live GitHub App.
+const wakeAuthBrokerWorker = vi.fn();
+vi.mock("@/lib/ai-accounts/dispatch", () => ({
+  AUTH_BROKER_DISPATCH_EVENT: "softwarefactory_auth_broker",
+  wakeAuthBrokerWorker: (...args: unknown[]) => wakeAuthBrokerWorker(...args),
+}));
+
 // A real 32-byte key: the code route seals for real, and the test opens the
 // envelope back to prove the binding, so the store must genuinely work.
 process.env.SOFTWAREFACTORY_CREDENTIAL_KEY = randomBytes(32).toString("base64");
@@ -26,6 +35,7 @@ const { GET: readSession } = await import("@/app/api/ai-accounts/sessions/[sessi
 const { POST: postCode } = await import("@/app/api/ai-accounts/sessions/[sessionId]/code/route");
 const { POST: cancel } = await import("@/app/api/ai-accounts/sessions/[sessionId]/cancel/route");
 const { POST: disconnect } = await import("@/app/api/ai-accounts/[accountId]/disconnect/route");
+const { POST: refresh } = await import("@/app/api/ai-accounts/refresh/route");
 
 const organizationId = "11111111-2222-4333-8444-555555555555";
 const accountId = "22222222-3333-4444-8555-666666666666";
@@ -423,5 +433,41 @@ describe("session cancel and account disconnect", () => {
     expect(cancelResponse.status).toBe(403);
     expect(disconnectResponse.status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("refresh wakes the auth-broker worker for an owner and reports delivery", async () => {
+    wakeAuthBrokerWorker.mockResolvedValue(true);
+
+    const response = await refresh(post("/api/ai-accounts/refresh"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ requested: true, workerWoken: true });
+    expect(wakeAuthBrokerWorker).toHaveBeenCalledWith(client, organizationId);
+  });
+
+  it("refresh is honest when no wake could be posted", async () => {
+    wakeAuthBrokerWorker.mockResolvedValue(false);
+
+    const response = await refresh(post("/api/ai-accounts/refresh"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ requested: true, workerWoken: false });
+  });
+
+  it("refresh refuses a member and a cross-origin request", async () => {
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "member" },
+      client,
+    });
+    const memberResponse = await refresh(post("/api/ai-accounts/refresh"));
+    expect(memberResponse.status).toBe(403);
+    expect(wakeAuthBrokerWorker).not.toHaveBeenCalled();
+
+    const crossOrigin = await refresh(new Request("https://factory.test/api/ai-accounts/refresh", {
+      method: "POST",
+      headers: { origin: "https://evil.example", host: "factory.test" },
+    }));
+    expect(crossOrigin.status).toBeGreaterThanOrEqual(400);
+    expect(wakeAuthBrokerWorker).not.toHaveBeenCalled();
   });
 });
