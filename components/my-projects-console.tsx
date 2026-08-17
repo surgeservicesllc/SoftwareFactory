@@ -1,10 +1,18 @@
 "use client";
 
-import { Archive, ChevronDown, FolderTree, Loader2, Pencil, Plus } from "lucide-react";
+import {
+  Archive,
+  ChevronDown,
+  FolderTree,
+  Loader2,
+  Pencil,
+  Plus,
+  SlidersHorizontal,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { BulkArchiveDialog } from "@/components/my-projects-bulk";
+import { BulkArchiveDialog, BulkPriorityDialog } from "@/components/my-projects-bulk";
 import {
   type Connection,
   type Project,
@@ -43,6 +51,7 @@ export function MyProjectsConsole() {
   // refresh cannot leave the selection holding stale rows.
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [bulkArchiving, setBulkArchiving] = useState(false);
+  const [bulkPriority, setBulkPriority] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -135,6 +144,16 @@ export function MyProjectsConsole() {
               : `${selectedProjects.length} of ${projects.length} selected`}
           </span>
         </label>
+        <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={selectedProjects.length === 0}
+          onClick={() => setBulkPriority(true)}
+        >
+          <SlidersHorizontal className="size-4" aria-hidden="true" />
+          Set priority
+        </button>
         <button
           type="button"
           className="btn btn-danger btn-sm"
@@ -146,6 +165,7 @@ export function MyProjectsConsole() {
             ? `Archive ${selectedProjects.length} projects`
             : "Archive selected"}
         </button>
+        </div>
       </div>
 
       {projects.map((project) => {
@@ -226,6 +246,13 @@ export function MyProjectsConsole() {
           project={archiving}
           onClose={() => setArchiving(null)}
           onArchived={load}
+        />
+      ) : null}
+      {bulkPriority ? (
+        <BulkPriorityDialog
+          projects={selectedProjects}
+          onClose={() => setBulkPriority(false)}
+          onFinished={load}
         />
       ) : null}
       {bulkArchiving ? (

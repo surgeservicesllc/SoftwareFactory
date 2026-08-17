@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Loader2 } from "lucide-react";
+import { Archive, Loader2, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import type { Project } from "@/components/projects-console";
@@ -165,6 +165,165 @@ export function BulkArchiveDialog({
                 Each one is in the Archived view, with its history intact.
               </p>
             )}
+            <button type="button" onClick={onClose} className="btn btn-secondary btn-sm mt-4">
+              Close
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+const PRIORITY_LABELS: Readonly<Record<number, string>> = {
+  0: "P0 · critical incident or security",
+  1: "P1 · critical product or reliability",
+  2: "P2 · normal feature work",
+  3: "P3 · optimization and maintenance",
+};
+
+/**
+ * Setting engineering priority across a selection.
+ *
+ * This is the one edit that means anything in bulk. Name and description are a
+ * project's identity — giving five projects the same name is not a feature —
+ * so they stay per-project, and priority, which exists precisely to rank
+ * projects against each other, is the field a selection can sensibly share.
+ *
+ * Same shape as the bulk archive for the same reason: one owner-gated
+ * `set_project_engineering_priority` per project, and a per-project result when
+ * they do not all agree.
+ */
+export function BulkPriorityDialog({
+  onClose,
+  onFinished,
+  projects,
+}: {
+  onClose: () => void;
+  onFinished: () => Promise<void> | void;
+  projects: readonly Project[];
+}) {
+  const [priority, setPriority] = useState(2);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<readonly BulkOutcome[] | null>(null);
+
+  async function applyAll(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    const outcomes: BulkOutcome[] = [];
+    for (const project of projects) {
+      try {
+        const response = await fetch("/api/portfolio/controls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "set_priority",
+            priority,
+            projectId: project.id,
+            ...(reason.trim() ? { reason: reason.trim() } : {}),
+          }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        outcomes.push({
+          error: response.ok ? null : body.error?.message ?? "Refused.",
+          name: project.name,
+          projectId: project.id,
+        });
+      } catch (cause) {
+        outcomes.push({
+          error: cause instanceof Error ? cause.message : "The request failed.",
+          name: project.name,
+          projectId: project.id,
+        });
+      }
+    }
+    setDone(outcomes);
+    setBusy(false);
+    await onFinished();
+  }
+
+  const failures = done?.filter((outcome) => outcome.error !== null) ?? [];
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Set priority for ${projects.length} projects`}
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+    >
+      <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-lg">
+        {done === null ? (
+          <>
+            <h2 className="text-lg font-semibold text-foreground">
+              {`Set priority for ${projects.length} ${projects.length === 1 ? "project" : "projects"}`}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Priority ranks these projects against every other one when work is scheduled. P0 is
+              reserved for incidents and security; queued work is promoted a tier at a time while
+              it waits, so nothing starves.
+            </p>
+            <form onSubmit={(event) => void applyAll(event)} className="mt-4 space-y-4">
+              <div>
+                <label htmlFor="bulk-priority" className="field-label">Priority</label>
+                <select
+                  id="bulk-priority"
+                  className="input"
+                  value={priority}
+                  onChange={(event) => setPriority(Number(event.target.value))}
+                >
+                  {[0, 1, 2, 3].map((value) => (
+                    <option key={value} value={value}>{PRIORITY_LABELS[value]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="bulk-priority-reason" className="field-label">
+                  Why? (optional)
+                </label>
+                <input
+                  id="bulk-priority-reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={500}
+                  className="input"
+                  placeholder="Shifting focus to the launch"
+                />
+                <span className="field-hint">Recorded against each project&rsquo;s activity trail.</span>
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" disabled={busy} className="btn btn-primary btn-sm">
+                  {busy
+                    ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    : <SlidersHorizontal className="size-4" aria-hidden="true" />}
+                  {busy ? "Applying…" : `Set P${priority} on ${projects.length}`}
+                </button>
+                <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold text-foreground">
+              {failures.length === 0
+                ? `Updated ${done.length}`
+                : `Updated ${done.length - failures.length} of ${done.length}`}
+            </h2>
+            {failures.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm" aria-live="polite">
+                {failures.map((outcome) => (
+                  <li key={outcome.projectId}>
+                    <span className="font-medium">{outcome.name}</span>
+                    <span className="text-[var(--danger)]">{` — ${outcome.error}`}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <button type="button" onClick={onClose} className="btn btn-secondary btn-sm mt-4">
               Close
             </button>
