@@ -25,6 +25,25 @@ afterEach(() => {
   }
 });
 
+/**
+ * Assert a rejection and its code.
+ *
+ * The sentinel throw sits after the try rather than inside it. Inside, it was
+ * caught by its own catch, so a call that wrongly succeeded reported "expected
+ * Error to be an instance of BotCredentialError" instead of saying no rejection
+ * happened. The test failed correctly; it just explained the wrong thing.
+ */
+function expectCredentialRejection(reference: string, code: string) {
+  try {
+    normalizeCredentialRef(reference);
+  } catch (error) {
+    if (!(error instanceof BotCredentialError)) throw error;
+    expect(error.code).toBe(code);
+    return;
+  }
+  throw new Error(`Expected ${reference} to be rejected as ${code}, but it was accepted.`);
+}
+
 describe("normalizeCredentialRef", () => {
   it("accepts and upper-cases a known provider variable", () => {
     expect(normalizeCredentialRef("anthropic_api_key")).toBe("ANTHROPIC_API_KEY");
@@ -65,23 +84,11 @@ describe("normalizeCredentialRef", () => {
   });
 
   it("refuses an unrecognized variable outside the reserved namespace", () => {
-    try {
-      normalizeCredentialRef("SOME_OTHER_TEAM_KEY");
-      throw new Error("expected a rejection");
-    } catch (error) {
-      expect(error).toBeInstanceOf(BotCredentialError);
-      expect((error as BotCredentialError).code).toBe("credential_ref_not_allowed");
-    }
+    expectCredentialRejection("SOME_OTHER_TEAM_KEY", "credential_ref_not_allowed");
   });
 
   it("refuses a pasted credential value rather than a variable name", () => {
-    try {
-      normalizeCredentialRef("sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789");
-      throw new Error("expected a rejection");
-    } catch (error) {
-      expect(error).toBeInstanceOf(BotCredentialError);
-      expect((error as BotCredentialError).code).toBe("credential_ref_malformed");
-    }
+    expectCredentialRejection("sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789", "credential_ref_malformed");
   });
 
   it("refuses a name that is too short to be a variable", () => {

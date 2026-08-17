@@ -38,10 +38,12 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const HOSTED_LEDGER_ENDS_AT = "20260814002300";
 
 let runbook = "";
+let currentState = "";
 let migrationFiles: string[] = [];
 
 beforeAll(async () => {
   runbook = await readFile(resolve(repositoryRoot, "AI/HOSTED_APPLY_RUNBOOK.md"), "utf8");
+  currentState = await readFile(resolve(repositoryRoot, "AI/CURRENT_STATE.md"), "utf8");
   migrationFiles = (await readdir(resolve(repositoryRoot, "supabase/migrations")))
     .filter((name) => name.endsWith(".sql"))
     .sort();
@@ -89,5 +91,50 @@ describe("the hosted apply runbook's counts", () => {
   it("still names the ledger position this document assumes", () => {
     // If the hosted position moves, every count in the file changes meaning.
     expect(runbook).toContain(HOSTED_LEDGER_ENDS_AT);
+  });
+});
+
+/**
+ * `AI/CURRENT_STATE.md` states the same number, in two different paragraphs.
+ *
+ * It drifted the way an unchecked number always does, and the giveaway was that
+ * the two paragraphs disagreed with *each other* — 15 in one, 29 in the other,
+ * and the truth was 9. A reader has no way to tell which to believe, so both
+ * are worthless, and the document is the one an agent reads first.
+ *
+ * The runbook's counts are derived above. These are derived the same way rather
+ * than cross-checked against the runbook: agreeing with another document is not
+ * the same as being right, and two files copying one stale number is exactly
+ * how this got here.
+ */
+describe("the current-state summary's hosted count", () => {
+  function statedCounts(): number[] {
+    return [...currentState.matchAll(/(\d+) migrations (?:behind|remain unhosted)/g)]
+      .map((match) => Number(match[1]));
+  }
+
+  it("still states the count in the expected form, in both places", () => {
+    // Two sentences say this. If a reword drops one, the assertion below would
+    // pass by checking fewer things rather than by being satisfied.
+    expect(statedCounts()).toHaveLength(2);
+  });
+
+  it("matches the number of migrations after the hosted ledger position", () => {
+    const unhosted = migrationFiles.filter(
+      (name) => (/^(\d{14})_/.exec(name)?.[1] ?? "") > HOSTED_LEDGER_ENDS_AT,
+    );
+
+    for (const stated of statedCounts()) {
+      expect(
+        stated,
+        `AI/CURRENT_STATE.md states ${stated} unhosted migrations, but ${unhosted.length} files `
+          + `sort after ${HOSTED_LEDGER_ENDS_AT}. Update both sentences -- they have disagreed `
+          + `with each other before.`,
+      ).toBe(unhosted.length);
+    }
+  });
+
+  it("names the ledger position it is written against", () => {
+    expect(currentState).toContain(HOSTED_LEDGER_ENDS_AT);
   });
 });

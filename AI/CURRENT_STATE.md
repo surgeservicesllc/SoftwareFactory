@@ -61,7 +61,7 @@ which rests on the unchanged `for update ... skip locked`.
 
 Still open: goal 9 names Phase 2D, which does not exist in this repository; goal 17 asks the 1C
 agent-level exclusion and the 2B lock tables to become one mechanism; goal 35 needs the hosted
-apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
+apply, now 9 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 
 ## Published Phase 2A provider layer
 
@@ -282,7 +282,7 @@ Measured directly rather than inferred from a merge succeeding.
 
 - Two migrations shared the version prefix `20260814000300` (`agentos_isolation_model` and `declare_model_characteristics`). Supabase's ledger keys on the numeric prefix, so `supabase db push` would have hit a primary-key collision in `supabase_migrations.schema_migrations` and left the hosted schema **half-applied**. Neither file was hosted, so the fix carried no ledger consequence: `declare_model_characteristics` was renumbered to `20260814000250`, after the `20260814000200` migration whose columns it depends on and before the AgentOS chain.
 - `tests/integration/migration-version-uniqueness.test.ts` now prevents recurrence. This had happened twice, both times from separate agents choosing the same timestamp in parallel.
-- **15 migrations remain unhosted.** The hosted ledger ends at `20260813001400`. `AI/HOSTED_APPLY_RUNBOOK.md` lists all 15 with their approval requirements and corrected counts; applying them is owner-gated and requires Supabase credentials that do not exist in any agent environment.
+- **9 migrations remain unhosted.** The hosted ledger ends at `20260814002300` and holds 65 rows, after the `20260814000210` repair and the ledger reconcile; `scripts/hosted-schema-audit.mts` reports 0 outstanding and 0 indeterminate against it. `AI/HOSTED_APPLY_RUNBOOK.md` lists what remains; applying it is owner-gated and requires Supabase credentials that do not exist in any agent environment. This paragraph and the one under "Phase 2B graph engineering" previously disagreed with each other — 15 against 29, both wrong — which is why `tests/integration/hosted-runbook-counts.test.ts` now derives this number for this file too rather than trusting prose.
 
 ## Schema and wiring guarantees now enforced continuously
 
