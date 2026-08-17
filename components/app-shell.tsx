@@ -378,13 +378,6 @@ function Sidebar({
           </Link>
         </div>
       )}
-      <div className="mt-6 flex items-start gap-2.5 rounded-lg border border-line px-3 py-3 text-sm text-muted">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-        <p>
-          Safety lock on. SoftwareFactory can read your repository and open draft pull requests. It
-          cannot merge, deploy, or run anything on its own.
-        </p>
-      </div>
     </div>
   );
 }

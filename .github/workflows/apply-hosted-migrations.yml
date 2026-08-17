@@ -277,10 +277,16 @@ jobs:
         # is exactly how run 32068091179 failed.
         #
         # Missing, and therefore here: archive_project and unarchive_project —
-        # the project detail page's cancel and restore — and the run review and
-        # deletion pair. All three files are idempotent: the first is
-        # `add value if not exists` plus `create or replace function`, and the
-        # other two were made re-runnable in #203.
+        # the project detail page's cancel and restore — the run review and
+        # deletion pair, and run archiving with the report lifecycle. Every file
+        # is idempotent: enum additions are `add value if not exists`, functions
+        # are `create or replace`, and the two column-adding files use
+        # `add column if not exists` with their constraints dropped before they
+        # are added.
+        #
+        # 20260817001000 also drops and recreates list_agent_runs to add
+        # p_include_archived. The parameter has a default, so the existing
+        # two-argument call sites keep working through the swap.
         if: ${{ inputs.scope == 'project-controls' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -301,7 +307,9 @@ jobs:
           for FILE in \
             supabase/migrations/20260815000700_project_archive_operation.sql \
             supabase/migrations/20260817000200_run_review_activity_types.sql \
-            supabase/migrations/20260817000300_run_review_and_deletion.sql
+            supabase/migrations/20260817000300_run_review_and_deletion.sql \
+            supabase/migrations/20260817000900_run_and_report_lifecycle_types.sql \
+            supabase/migrations/20260817001000_archive_runs_and_clear_reports.sql
           do
             VERSION=$(basename "$FILE" | cut -d_ -f1)
             echo "Applying ${FILE}"
