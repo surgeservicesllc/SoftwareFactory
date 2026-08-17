@@ -31,6 +31,9 @@
 -- The human layer
 -- ---------------------------------------------------------------------------
 
+-- Written to be re-runnable. The hosted ledger has documented drift — DDL that
+-- is live with no history row — so an apply may have to be repeated or run
+-- surgically, and a migration that only works once cannot be part of that.
 alter table public.agent_runs
   add column if not exists review_status text not null default 'unreviewed',
   add column if not exists review_note text,
@@ -41,6 +44,7 @@ alter table public.agent_runs
   drop constraint if exists agent_runs_review_status_known,
   drop constraint if exists agent_runs_review_note_bounded,
   drop constraint if exists agent_runs_review_is_attributed;
+
 alter table public.agent_runs
   add constraint agent_runs_review_status_known check (
     review_status in ('unreviewed', 'acknowledged', 'investigating', 'resolved', 'ignored')
@@ -593,7 +597,7 @@ grant execute on function public.delete_agent_run(uuid, uuid, text, boolean) to 
 --
 -- The return type gains a column, so this is a drop and recreate rather than a
 -- replace. Everything else about the projection is unchanged.
-drop function if exists public.list_agent_runs(uuid, integer);
+drop function public.list_agent_runs(uuid, integer);
 create function public.list_agent_runs(
   p_organization_id uuid, p_limit integer default 50
 )
