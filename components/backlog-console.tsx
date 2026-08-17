@@ -83,7 +83,9 @@ export function BacklogConsole() {
         signedOutDescription="Work items belong to your workspace."
         returnPath="/solutions/backlog"
         emptyTitle="Nothing in the backlog"
-        emptyDescription="Work items appear here when a command is accepted and planned for one connected project."
+        emptyDescription="The backlog holds work that has been accepted and planned but has not run yet. Ask a bot for something and it lands here first."
+        emptyActionHref="/solutions/bot-manager"
+        emptyActionLabel="Give a bot something to do"
       >
         {(tasks) => (
           <>

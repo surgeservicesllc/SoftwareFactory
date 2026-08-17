@@ -75,7 +75,9 @@ function AutonomyStatusList() {
       signedOutDescription="Autonomy controls are scoped to your workspace."
       returnPath="/solutions/autonomy"
       emptyTitle="No projects yet"
-      emptyDescription="Each project shows its resolved permissions and both interlocks."
+      emptyDescription="This page shows what each project is allowed to do on its own. Add a project first and its permissions appear here."
+      emptyActionHref="/solutions/projects"
+      emptyActionLabel="Add a project"
     >
       {(items) => (
         <ul className="divide-y divide-line">
@@ -133,7 +135,9 @@ function AutonomyDecisions() {
       signedOutDescription="The decision trail is scoped to your workspace."
       returnPath="/solutions/autonomy"
       emptyTitle="No decisions yet"
-      emptyDescription="Every decision the loop reaches is recorded here, including the ones it refused."
+      emptyDescription="When work is proposed, the decision to allow or refuse it is recorded here — refusals included. Ask a bot for something to see the first one."
+      emptyActionHref="/solutions/bot-manager"
+      emptyActionLabel="Give a bot something to do"
     >
       {(items) => (
         <ul className="divide-y divide-line">
