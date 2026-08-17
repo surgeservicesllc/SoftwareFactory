@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AiFactoryConsole } from "@/components/ai-factory-console";
@@ -26,10 +26,10 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 /**
- * The `{}` fallback matters more in round 2 than it did in round 1: the
- * embedded consoles (connections, bot manager, roster, composer) fetch their
- * own endpoints when a step opens, and each must land in its honest empty or
- * gated state on an unknown body — never throw.
+ * The `{}` fallback matters here: the embedded consoles (connections, bot
+ * manager, roster, composer) fetch their own endpoints when a step's overlay
+ * opens, and each must land in its honest empty or gated state on an unknown
+ * body — never throw.
  */
 function stubFactory(overrides: Partial<Record<string, unknown>> = {}) {
   const defaults: Record<string, unknown> = {
@@ -52,27 +52,24 @@ afterEach(() => {
 });
 
 describe("AiFactoryConsole", () => {
-  it("starts an empty workspace at Connect Repository, with the real control open in place", async () => {
+  it("starts an empty workspace at Connect Repository, with nothing opening uninvited", async () => {
     stubFactory();
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const first = (await screen.findByText("Connect Repository")).closest("li") as HTMLElement;
     expect(within(first).getByText("You are here")).toBeInTheDocument();
-    // The current step auto-opens and embeds the connections console itself —
-    // the body footnote names the page the same control lives on.
-    expect(within(first).getByRole("button", { name: /Connect Repository/ })).toHaveAttribute(
-      "aria-expanded",
-      "true",
+    // Every option opens over the page — announced on the button — but only
+    // when chosen: no dialog is open on arrival.
+    expect(within(first).getByRole("button", { name: /connect github/i })).toHaveAttribute(
+      "aria-haspopup",
+      "dialog",
     );
-    expect(within(first).getByRole("link", { name: "Connections" })).toHaveAttribute(
-      "href",
-      "/solutions/connections",
-    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
   });
 
-  it("derives progress from the live records and opens the live evidence last", async () => {
+  it("derives progress from the live records and shows the live evidence in its overlay", async () => {
     stubFactory({
       "/api/github/connections": {
         connections: [{
@@ -95,28 +92,65 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     // Seven steps carry evidence; only "Watch It Ship" remains, because no
-    // command has succeeded yet — so its body is the one that auto-opens.
+    // command has succeeded yet.
     expect(await screen.findByText("7 of 8 complete")).toBeInTheDocument();
     const watch = screen.getByText("Watch It Ship").closest("li") as HTMLElement;
     expect(within(watch).getByText("You are here")).toBeInTheDocument();
     expect(within(watch).getByText(/Work is in flight/)).toBeInTheDocument();
-    // The open body shows the live stage from the worker-advanced status.
-    expect(within(watch).getByText("Command execution, live")).toBeInTheDocument();
-    expect(within(watch).getByText("Ship search")).toBeInTheDocument();
-    expect(within(watch).getByText("Building")).toBeInTheDocument();
+
+    fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Command execution, live")).toBeInTheDocument();
+    expect(within(dialog).getByText("Ship search")).toBeInTheDocument();
+    expect(within(dialog).getByText("Building")).toBeInTheDocument();
   });
 
-  it("mounts the real embedded control when a step header is opened", async () => {
+  it("opens the real embedded control in an overlay and closes back to the page", async () => {
     stubFactory();
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const create = (await screen.findByText("Create Project")).closest("li") as HTMLElement;
-    fireEvent.click(within(create).getByRole("button", { name: /Create Project/ }));
+    fireEvent.click(within(create).getByRole("button", { name: /create a project/i }));
 
     // The embedded add-project form runs its own reads and lands on its own
     // honest gate: no GitHub connection means no form, stated plainly.
-    expect(await within(create).findByText("Connect GitHub first")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Connect GitHub first")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("returns to the journey on its own once the overlay's control completes", async () => {
+    stubFactory({
+      "/api/github/connections": {
+        connections: [{
+          id: "conn1",
+          status: "connected",
+          account: { login: "surge", type: "User" },
+          installation: { id: 7, suspendedAt: null },
+          repositories: [
+            { id: 42, fullName: "surge/app", defaultBranch: "main", archived: false, selected: true },
+          ],
+        }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const create = (await screen.findByText("Create Project")).closest("li") as HTMLElement;
+    fireEvent.click(within(create).getByRole("button", { name: /create a project/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    // The form prefills from the selected repository; submitting creates the
+    // project and the overlay closes itself — selection made, journey resumed.
+    const submit = await within(dialog).findByRole("button", { name: /add project/i });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("counts only configured assignments for the configure step", async () => {

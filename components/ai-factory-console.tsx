@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bot,
   Check,
-  ChevronDown,
   Factory,
   GitBranch,
   Loader2,
@@ -12,6 +11,7 @@ import {
   Settings2,
   Terminal,
   Workflow,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -27,16 +27,16 @@ import { BlockedState, Card, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 /**
- * AI Factory: the guided end-to-end journey with the real controls embedded
- * in place. Each step opens into the same component the rest of the console
- * uses — the GitHub connections console, the add-project form, the template
- * manager, the bot manager, the per-project roster, the command composer —
- * so completing a step here IS completing it, not a rehearsal for doing it
- * somewhere else. Completion is derived from the live records each step
- * produces — a connected installation, a project, an assignment, a saved
- * command — never from a stored wizard state. That is what makes progress
- * survive refresh and navigation by construction, and what makes this page
- * unable to disagree with the rest of the console.
+ * AI Factory: the guided end-to-end journey with the real controls opening
+ * as overlays over this page. Choosing an option — create a project, review
+ * templates, assign a bot, issue a command — opens the same component the
+ * rest of the console uses inside a dialog; finishing there closes it and
+ * lands you back here with the selection already reflected, because
+ * completion is derived from the live records each control produces — a
+ * connected installation, a project, an assignment, a saved command — never
+ * from a stored wizard state. That is what makes progress survive refresh
+ * and navigation by construction, and what makes this page unable to
+ * disagree with the rest of the console.
  */
 
 type StepId =
@@ -74,15 +74,67 @@ async function readJson<T>(response: Response): Promise<T | null> {
   }
 }
 
+/**
+ * The overlay every step opens in. Same shell idiom as the console's other
+ * dialogs; top-aligned and scrollable because whole consoles render inside.
+ * Closing — the X, the backdrop, or Escape — always returns to the page,
+ * and the caller refreshes the journey on close so whatever was selected in
+ * here is already showing when the overlay is gone.
+ */
+function StepOverlay({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="relative my-auto w-full max-w-3xl rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn btn-secondary btn-sm absolute right-3 top-3 z-10 size-9 px-0 sm:right-4 sm:top-4"
+          aria-label="Close"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+        <h3 className="pr-12 text-lg font-semibold text-foreground">{title}</h3>
+        <p className="mt-1 pr-12 text-sm text-muted">{description}</p>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
   const [state, setState] = useState<State>({ kind: "loading" });
-  // undefined = follow the journey (the first unfinished step is open);
-  // a StepId or null = the person chose, and their choice wins until the
-  // next click. Choices are ephemeral on purpose: reload lands you back on
-  // the live "you are here", which the records decide.
-  const [chosen, setChosen] = useState<StepId | null | undefined>(undefined);
+  // Which step's control is open as an overlay. Nothing opens on its own —
+  // an uninvited modal is a trap, not a guide — and closing always lands
+  // back on the journey with the fresh records already read.
+  const [openStep, setOpenStep] = useState<StepId | null>(null);
   // Which project the roster steps operate on. Empty until projects load;
-  // reset if the chosen project disappears (archived elsewhere).
+  // falls back to the first project if the chosen one disappears.
   const [rosterProjectId, setRosterProjectId] = useState("");
 
   const load = useCallback(async () => {
@@ -165,6 +217,12 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     };
   }, [load]);
 
+  // Return to the page with whatever was just selected already read back in.
+  const closeOverlay = useCallback(() => {
+    setOpenStep(null);
+    void load();
+  }, [load]);
+
   if (state.kind === "loading") {
     return (
       <Card className="grid min-h-64 place-items-center">
@@ -206,25 +264,23 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           </select>
         </div>
       ) : null}
-      <Card className="p-5 sm:p-6">
-        <ProjectBots
-          key={rosterProject.id}
-          projectId={rosterProject.id}
-          projectName={rosterProject.name}
-          divided={false}
-        />
-      </Card>
+      <ProjectBots
+        key={rosterProject.id}
+        projectId={rosterProject.id}
+        projectName={rosterProject.name}
+        divided={false}
+      />
     </div>
   ) : (
-    <Card className="p-5 sm:p-6">
+    <div>
       <p className="text-sm text-muted">
         Bots are assigned per project, so this step opens once your first project exists.
       </p>
-      <button type="button" onClick={() => setChosen("create_project")} className="btn btn-secondary btn-sm mt-3">
+      <button type="button" onClick={() => setOpenStep("create_project")} className="btn btn-secondary btn-sm mt-3">
         Go to Create Project
         <ArrowRight className="size-4" aria-hidden="true" />
       </button>
-    </Card>
+    </div>
   );
 
   const recent = data.commands.slice(0, 3);
@@ -235,6 +291,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     description: string;
     done: boolean;
     evidence: string;
+    action: string;
     icon: typeof Factory;
     body: React.ReactNode;
     pageHref: string;
@@ -248,6 +305,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: data.connectedInstallations > 0
         ? `${data.connectedInstallations} installation${data.connectedInstallations === 1 ? "" : "s"} · ${data.repositories} repositor${data.repositories === 1 ? "y" : "ies"} authorized`
         : "No GitHub installation yet",
+      action: "Connect GitHub",
       icon: GitBranch,
       body: <ConnectionsConsole />,
       pageHref: "/solutions/connections",
@@ -261,8 +319,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: data.projects.length > 0
         ? `${data.projects.length} project${data.projects.length === 1 ? "" : "s"}: ${data.projects.slice(0, 3).map((project) => project.name).join(", ")}`
         : "No project yet",
+      action: "Create a project",
       icon: Factory,
-      body: <AddProjectForm onCreated={load} />,
+      body: <AddProjectForm onCreated={closeOverlay} />,
       pageHref: "/solutions/projects",
       pageLabel: "All Projects",
     },
@@ -272,6 +331,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       description: "Every goal runs the same verified lifecycle. Use a built-in template, or define your own stages and record a pipeline for a project.",
       done: data.projects.length > 0,
       evidence: `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`,
+      action: "Configure pipeline",
       icon: Workflow,
       body: <PipelineTemplatesManager builtIns={builtIns} />,
       pageHref: "/solutions/pipelines?view=templates",
@@ -285,6 +345,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: data.connectedAccounts > 0
         ? `${data.connectedAccounts} account${data.connectedAccounts === 1 ? "" : "s"} connected · ${data.bots} bot${data.bots === 1 ? "" : "s"}`
         : "No AI account connected yet",
+      action: "Connect a bot",
       icon: PlugZap,
       body: <BotManagerHome />,
       pageHref: "/solutions/bot-manager",
@@ -298,6 +359,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: data.assignments > 0
         ? `${data.assignments} active assignment${data.assignments === 1 ? "" : "s"}`
         : "No bot is assigned to a project yet",
+      action: "Assign bots",
       icon: Bot,
       body: rosterEmbed,
       pageHref: "/solutions/myprojects",
@@ -313,6 +375,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         : data.assignments > 0
           ? "Assignments exist; none carries a role or responsibilities yet"
           : "Assign a bot first",
+      action: "Configure",
       icon: Settings2,
       body: rosterEmbed,
       pageHref: "/solutions/myprojects",
@@ -326,8 +389,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: data.commands.length > 0
         ? `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} recorded`
         : "No command yet",
+      action: "Give a bot work",
       icon: Terminal,
-      body: <CommandComposer onSaved={load} />,
+      body: <CommandComposer onSaved={closeOverlay} />,
       pageHref: "/solutions/bot-manager",
       pageLabel: "Bot Manager",
     },
@@ -341,10 +405,11 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         : data.commands.length > 0
           ? "Work is in flight — watch it on Pipelines"
           : "Nothing has run yet",
+      action: "Watch execution",
       icon: Workflow,
       body: (
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-foreground">Command execution, live</h3>
+        <div>
+          <h4 className="text-base font-semibold text-foreground">Command execution, live</h4>
           <p className="mt-1 text-sm text-muted">
             Every command runs the same lifecycle: verified intake → queue → a worker claims it →
             isolated branch → draft pull request with CI. Merging stays yours, and production
@@ -373,7 +438,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             <Workflow className="size-4" aria-hidden="true" />
             Open Pipelines
           </Link>
-        </Card>
+        </div>
       ),
       pageHref: "/solutions/pipelines",
       pageLabel: "Pipelines",
@@ -382,34 +447,30 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   const currentIndex = steps.findIndex((step) => !step.done);
   const doneCount = steps.filter((step) => step.done).length;
-  // The journey's default open step: where you are, or — once everything is
-  // done — the live evidence, because a finished factory is one you watch.
-  const followedId = currentIndex === -1 ? "watch" : steps[currentIndex].id;
-  const expandedId = chosen === undefined ? followedId : chosen;
-
-  function jumpTo(id: StepId) {
-    setChosen(id);
-    // Scrolling happens after the body mounts; rAF is enough because the
-    // accordion renders synchronously with the state change.
-    const scroll = () => {
-      const target = document.getElementById(`factory-step-${id}`);
-      if (target && typeof target.scrollIntoView === "function") {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(scroll);
-    else scroll();
-  }
+  const open = openStep ? steps.find((step) => step.id === openStep) : undefined;
 
   return (
     <div className="space-y-6">
+      {open ? (
+        <StepOverlay title={open.title} description={open.description} onClose={closeOverlay}>
+          {open.body}
+          <p className="mt-4 text-xs text-faint">
+            This is the same control as{" "}
+            <Link href={open.pageHref} className="underline underline-offset-2 hover:text-foreground">
+              {open.pageLabel}
+            </Link>
+            {" "}— finish it in either place, then close to come back to the journey.
+          </p>
+        </StepOverlay>
+      ) : null}
+
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Your factory, step by step</h2>
             <p className="mt-1 text-sm text-muted">
-              Each step opens right here — the same controls as the rest of the console, in one
-              guided path. Progress is read from your live records, so it survives refresh.
+              Every option opens right here, over this page — no jumping away. Progress is read
+              from your live records, so it survives refresh.
             </p>
           </div>
           <StatusBadge tone={doneCount === steps.length ? "safe" : "info"} dot={false}>
@@ -418,7 +479,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         </div>
 
         {/* The reference's horizontal band, shown where it fits. Each number
-            is a real control: it opens that step below and scrolls to it. */}
+            is a real control: it opens that step's overlay. */}
         <nav aria-label="Factory steps" className="mt-5 hidden items-center md:flex">
           {steps.map((step, index) => (
             <div key={step.id} className={cn("flex items-center", index > 0 && "flex-1")}>
@@ -430,16 +491,16 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
               ) : null}
               <button
                 type="button"
-                onClick={() => jumpTo(step.id)}
+                onClick={() => setOpenStep(step.id)}
                 title={step.title}
                 aria-label={`Step ${index + 1}: ${step.title}`}
-                aria-current={expandedId === step.id ? "step" : undefined}
+                aria-haspopup="dialog"
                 className={cn(
                   "grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold transition-colors",
                   step.done
                     ? "border-[var(--accent-border)] bg-[var(--accent-surface)] text-[var(--accent-text)]"
                     : "border-line bg-surface text-faint",
-                  expandedId === step.id && "ring-2 ring-[var(--accent-border)]",
+                  index === currentIndex && "ring-2 ring-[var(--accent-border)]",
                 )}
               >
                 {step.done ? <Check className="size-4" /> : index + 1}
@@ -451,12 +512,11 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         <ol className="mt-6 space-y-0">
           {steps.map((step, index) => {
             const isCurrent = index === currentIndex;
-            const isExpanded = expandedId === step.id;
             const Icon = step.icon;
             return (
-              <li key={step.id} id={`factory-step-${step.id}`} className="relative flex scroll-mt-24 gap-4 pb-6 last:pb-0">
+              <li key={step.id} className="relative flex gap-4 pb-6 last:pb-0">
                 {/* The connector, drawn per row so the column stays honest on
-                    every viewport and stretches with an open step body. */}
+                    every viewport. */}
                 {index < steps.length - 1 ? (
                   <span
                     aria-hidden="true"
@@ -480,46 +540,26 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                   {step.done ? <Check className="size-4" /> : index + 1}
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
+                    <h3 className="font-semibold text-foreground">{step.title}</h3>
+                    {step.done ? (
+                      <StatusBadge tone="safe" dot={false}>Done</StatusBadge>
+                    ) : isCurrent ? (
+                      <StatusBadge tone="info" dot={false}>You are here</StatusBadge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-sm text-muted">{step.description}</p>
+                  <p className="mt-1 text-xs text-faint">{step.evidence}</p>
                   <button
                     type="button"
-                    onClick={() => setChosen(isExpanded ? null : step.id)}
-                    aria-expanded={isExpanded}
-                    aria-controls={`factory-body-${step.id}`}
-                    className="group flex w-full items-start justify-between gap-3 text-left"
+                    onClick={() => setOpenStep(step.id)}
+                    aria-haspopup="dialog"
+                    className={cn("mt-2 inline-flex", isCurrent ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm")}
                   >
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
-                        <span className="font-semibold text-foreground">{step.title}</span>
-                        {step.done ? (
-                          <StatusBadge tone="safe" dot={false}>Done</StatusBadge>
-                        ) : isCurrent ? (
-                          <StatusBadge tone="info" dot={false}>You are here</StatusBadge>
-                        ) : null}
-                      </span>
-                      <span className="mt-1 block text-sm text-muted">{step.description}</span>
-                      <span className="mt-1 block text-xs text-faint">{step.evidence}</span>
-                    </span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className={cn(
-                        "mt-1 size-4 shrink-0 text-faint transition-transform group-hover:text-foreground",
-                        isExpanded && "rotate-180",
-                      )}
-                    />
+                    {step.action}
+                    <ArrowRight className="size-4" aria-hidden="true" />
                   </button>
-                  {isExpanded ? (
-                    <div id={`factory-body-${step.id}`} className="mt-4">
-                      {step.body}
-                      <p className="mt-3 text-xs text-faint">
-                        This is the same control as{" "}
-                        <Link href={step.pageHref} className="underline underline-offset-2 hover:text-foreground">
-                          {step.pageLabel}
-                        </Link>
-                        {" "}— finish it in either place.
-                      </p>
-                    </div>
-                  ) : null}
                 </div>
               </li>
             );

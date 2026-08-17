@@ -204,7 +204,32 @@ Round 1 (this merge):
   tests (auto-open assertion, embedded-control mount on header click,
   live-evidence body). Gates: tsc, eslint 0 warnings, vitest 3170,
   build, Playwright 171.
-- [ ] Round 3+: full journey re-test from a fresh workspace against
+- [x] Round 3 (owner goal 2026-08-17 23:2xZ): options open as OVERLAYS
+  over the page instead of jumping — StepOverlay (same shell idiom as
+  the console's other dialogs: fixed inset, top-aligned scrollable
+  panel, X, backdrop mousedown, Escape), one per step, opened from the
+  row action button or the desktop number band, aria-haspopup=dialog
+  announced. Nothing opens uninvited. Closing ALWAYS re-reads the
+  journey (closeOverlay = setOpenStep(null) + load), and the controls
+  that know their completion close themselves: AddProjectForm
+  onCreated + CommandComposer onSaved → closeOverlay — selection made,
+  back on the page with it showing. 6 unit tests incl. "returns to the
+  journey on its own once the overlay's control completes".
+  responsive.spec: +/solutions/ai-factory route; flaky nav-group test
+  stabilized (retrying toBeVisible before the non-retrying count()).
+- [x] Round 4 (owner goal 2026-08-17 23:3xZ): the Assign Bots pop-up
+  links the Bot Manager's accounts, multiple at once. ProjectBots
+  reads /api/ai-accounts (best-effort); the wizard's Select step gains
+  "From your Bot Manager": connected accounts with no bot yet (matched
+  by credential variable — account credentialPurpose slot ↔ bot
+  credentialRef over the provider's subscription variable), tick any
+  number → Link N bots → POST /api/bots/connect/provision per account
+  at ITS slot (additional:true), roster re-read, the new bots selected
+  automatically, ready for Configure. Empty state now links the Bot
+  Manager page by name. ProjectBot type gained credentialRef (already
+  serialized). 1 new unit test (two accounts → two slot-correct
+  provisions → "2 bots selected").
+- [ ] Round 5+: full journey re-test from a fresh workspace against
   production, breakpoint sweep beyond the e2e viewports.
 
 ### Template CRUD (owner goal 2026-08-17)
