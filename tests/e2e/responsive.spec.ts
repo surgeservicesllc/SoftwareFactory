@@ -18,6 +18,9 @@ const WIDTHS = [320, 375, 390, 430, 768, 1024, 1280, 1440];
 const ROUTES = [
   "/solutions",
   "/solutions/projects",
+  // The factory embeds the console's densest controls step by step, plus a
+  // horizontal step band that must compress rather than push the edge.
+  "/solutions/ai-factory",
   "/solutions/bot-manager",
   "/solutions/runs",
   "/solutions/reports",
@@ -111,7 +114,10 @@ test("opening every navigation group keeps the layout inside the viewport", asyn
 
   // Re-queried each round and driven until none are left, rather than looping a
   // count captured up front: every click removes one "Expand" button from the
-  // set, so a fixed count races the shrinking list.
+  // set, so a fixed count races the shrinking list. The first wait retries,
+  // because domcontentloaded lands before hydration puts the buttons on screen
+  // and a bare count() measures whatever instant it happens to run in.
+  await expect(toggles.first()).toBeVisible();
   expect(await toggles.count()).toBeGreaterThan(0);
 
   for (let opened = 0; opened < 20; opened += 1) {

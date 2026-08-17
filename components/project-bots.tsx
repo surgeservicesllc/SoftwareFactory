@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -68,6 +69,8 @@ type ProjectBot = {
   readinessLabel: string;
   readinessTone: "safe" | "warning" | "danger" | "neutral";
   aiAccountId: string | null;
+  /** The credential variable this bot reads — how it ties back to an account. */
+  credentialRef?: string | null;
   assignable: boolean;
   blockedReason: string | null;
   alreadyOnThisProject: boolean;
@@ -76,6 +79,35 @@ type ProjectBot = {
   currentRoleId: string | null;
   workload: number;
 };
+
+/** A connected AI account from the Bot Manager, offered for linking here. */
+type LinkableAccount = {
+  id: string;
+  provider: string;
+  providerLabel: string;
+  displayName: string;
+  status: string;
+  credentialPurpose?: string | null;
+};
+
+/**
+ * The credential variable an account's sign-in fills — names only, never
+ * material. The bare purpose is the provider's base subscription variable;
+ * `…_N` is the numbered slot. This is how a bot is recognized as "the bot
+ * for this account": it reads the same variable the account's sign-in fills.
+ */
+function accountCredentialRef(account: LinkableAccount): string | null {
+  const provider = findBotProvider(account.provider);
+  if (!provider?.subscriptionCredentialRef) return null;
+  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
+  return `${provider.subscriptionCredentialRef}${slot ? `_${slot[1]}` : ""}`;
+}
+
+/** The provision endpoint's pattern-checked name for the same slot. */
+function accountCredentialChoice(account: LinkableAccount): string {
+  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
+  return slot ? `subscription_${slot[1]}` : "subscription";
+}
 
 type ProjectRole = { id: string; name: string; slug: string; summary: string };
 
@@ -141,6 +173,7 @@ export function ProjectBots({
 }) {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [usage, setUsage] = useState<UsageByAccount>({});
+  const [accounts, setAccounts] = useState<LinkableAccount[]>([]);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -196,13 +229,31 @@ export function ProjectBots({
     }
   }, []);
 
+  /**
+   * The Bot Manager's connected accounts, so the assign wizard can offer to
+   * link them — an account with no bot is one click from being staffable
+   * instead of a dead end. Best-effort like usage: an unreadable list means
+   * the section simply is not offered.
+   */
+  const loadAccounts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ai-accounts", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = (await response.json()) as { accounts?: LinkableAccount[] };
+      setAccounts((body.accounts ?? []).filter((account) => account.status === "connected"));
+    } catch {
+      /* Absence, not failure. */
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
       void loadUsage();
+      void loadAccounts();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [load, loadUsage]);
+  }, [load, loadUsage, loadAccounts]);
 
   /** Per-posting execution preferences: model override and work effort. */
   const setExecution = useCallback(
@@ -355,6 +406,8 @@ export function ProjectBots({
           bots={roster.available}
           roles={roster.roles}
           usage={usage}
+          accounts={accounts}
+          onRosterRefresh={load}
           onClose={() => setWizardOpen(false)}
           onAssigned={async () => {
             setWizardOpen(false);
@@ -617,6 +670,8 @@ function AssignWizard({
   bots,
   roles,
   usage,
+  accounts,
+  onRosterRefresh,
   onClose,
   onAssigned,
 }: {
@@ -625,6 +680,8 @@ function AssignWizard({
   bots: ProjectBot[];
   roles: ProjectRole[];
   usage: UsageByAccount;
+  accounts: LinkableAccount[];
+  onRosterRefresh: () => Promise<void> | void;
   onClose: () => void;
   onAssigned: () => Promise<void> | void;
 }) {
@@ -635,6 +692,24 @@ function AssignWizard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
+  // The Bot Manager linkage: which accounts are ticked for linking, and
+  // whether a linking round-trip is in flight.
+  const [linkSelected, setLinkSelected] = useState<string[]>([]);
+  const [linking, setLinking] = useState(false);
+
+  /**
+   * Connected accounts from the Bot Manager that no bot reads yet. Each is
+   * one click from being a staffable bot; once a bot for it exists the
+   * account leaves this list, so linking is naturally idempotent.
+   */
+  const linkable = useMemo(
+    () =>
+      accounts.filter((account) => {
+        const ref = accountCredentialRef(account);
+        return ref !== null && !bots.some((bot) => bot.credentialRef === ref);
+      }),
+    [accounts, bots],
+  );
 
   const assignable = useMemo(() => bots.filter((bot) => bot.assignable), [bots]);
 
@@ -686,6 +761,63 @@ function AssignWizard({
       if (!selected.includes(bot.id)) toggle(bot);
     }
   }, [assignable, selected, toggle]);
+
+  /**
+   * Create a bot for each ticked account — the same provision call the Bot
+   * Manager's own Create Bot uses, aimed at that account's credential slot —
+   * then read the roster back and select the bots those accounts produced,
+   * recognized by their credential variable. "Link" means exactly what it
+   * says: those Bot Manager accounts become selected, staffable bots here.
+   */
+  const linkAccounts = useCallback(async () => {
+    setLinking(true);
+    setError("");
+    const refs: string[] = [];
+    try {
+      for (const id of linkSelected) {
+        const account = linkable.find((entry) => entry.id === id);
+        if (!account) continue;
+        const response = await fetch("/api/bots/connect/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: account.provider,
+            credential: accountCredentialChoice(account),
+            additional: true,
+          }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+          throw new Error(body.error?.message ?? `A bot for ${account.displayName} could not be created.`);
+        }
+        const ref = accountCredentialRef(account);
+        if (ref) refs.push(ref);
+      }
+    } catch (linkError) {
+      setError(linkError instanceof Error ? linkError.message : "Those accounts could not be linked.");
+    }
+    // Whatever succeeded before a failure is real: read the roster back,
+    // select the bots the linked accounts produced, and let the parent
+    // refresh so the list behind the wizard agrees.
+    if (refs.length) {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/bots`, { cache: "no-store" });
+        if (response.ok) {
+          const body = (await response.json()) as { available?: ProjectBot[] };
+          for (const created of (body.available ?? []).filter(
+            (entry) => entry.credentialRef && refs.includes(entry.credentialRef) && entry.assignable,
+          )) {
+            toggle(created);
+          }
+        }
+      } catch {
+        /* The bots exist either way; the refreshed roster below shows them. */
+      }
+      setLinkSelected([]);
+      await onRosterRefresh();
+    }
+    setLinking(false);
+  }, [linkSelected, linkable, projectId, toggle, onRosterRefresh]);
 
   const selectedBots = useMemo(
     () => selected.map((id) => bots.find((bot) => bot.id === id)).filter((bot): bot is ProjectBot => Boolean(bot)),
@@ -774,16 +906,76 @@ function AssignWizard({
 
       <div className="mt-4 max-h-[55vh] overflow-y-auto">
         {step === "Select" ? (
-          <SelectStep
-            bots={shown}
-            usage={usage}
-            selected={selected}
-            query={query}
-            onQuery={setQuery}
-            onToggle={toggle}
-            onSelectAll={selectAll}
-            allSelected={assignable.length > 0 && selected.length === assignable.length}
-          />
+          <>
+            <SelectStep
+              bots={shown}
+              usage={usage}
+              selected={selected}
+              query={query}
+              onQuery={setQuery}
+              onToggle={toggle}
+              onSelectAll={selectAll}
+              allSelected={assignable.length > 0 && selected.length === assignable.length}
+              hasLinkableAccounts={linkable.length > 0}
+            />
+
+            {linkable.length > 0 ? (
+              <section className="mt-4 rounded-xl border border-line p-3 sm:p-4" aria-label="Link accounts from the Bot Manager">
+                <h4 className="text-sm font-semibold text-foreground">From your Bot Manager</h4>
+                <p className="mt-1 text-xs text-muted">
+                  These connected AI accounts have no bot yet. Tick any number — linking creates a
+                  bot for each and selects it above. The bots stay yours to manage on the Bot
+                  Manager page.
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {linkable.map((account) => {
+                    const checked = linkSelected.includes(account.id);
+                    return (
+                      <li key={account.id}>
+                        <label
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-lg border p-3",
+                            checked ? "border-[var(--accent-border)] bg-[var(--accent-surface)]" : "border-line",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={linking}
+                            onChange={() =>
+                              setLinkSelected((current) =>
+                                current.includes(account.id)
+                                  ? current.filter((id) => id !== account.id)
+                                  : [...current, account.id],
+                              )
+                            }
+                            className="size-4 shrink-0"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-foreground">{account.displayName}</span>
+                            <span className="block text-xs text-muted">{account.providerLabel} · no bot yet</span>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => void linkAccounts()}
+                  disabled={linking || linkSelected.length === 0}
+                  className="btn btn-secondary btn-sm mt-3"
+                >
+                  {linking ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus className="size-3.5" aria-hidden="true" />
+                  )}
+                  Link {linkSelected.length > 1 ? `${linkSelected.length} bots` : "bot"} from Bot Manager
+                </button>
+              </section>
+            ) : null}
+          </>
         ) : null}
 
         {step === "Configure" ? (
@@ -886,6 +1078,7 @@ function SelectStep({
   onToggle,
   onSelectAll,
   allSelected,
+  hasLinkableAccounts,
 }: {
   bots: ProjectBot[];
   usage: UsageByAccount;
@@ -895,6 +1088,7 @@ function SelectStep({
   onToggle: (bot: ProjectBot) => void;
   onSelectAll: () => void;
   allSelected: boolean;
+  hasLinkableAccounts: boolean;
 }) {
   return (
     <div>
@@ -920,7 +1114,16 @@ function SelectStep({
 
       {bots.length === 0 ? (
         <p className="mt-4 rounded-lg border border-dashed border-line p-4 text-sm text-muted">
-          No bots match that search. Connect a bot from the Bot Manager to staff this project.
+          No bots match that search.{" "}
+          {hasLinkableAccounts ? (
+            <>Link one of your Bot Manager accounts below, or connect another on the{" "}</>
+          ) : (
+            <>Connect a bot on the{" "}</>
+          )}
+          <Link href="/solutions/bot-manager" className="underline underline-offset-2 hover:text-foreground">
+            Bot Manager
+          </Link>{" "}
+          to staff this project.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">

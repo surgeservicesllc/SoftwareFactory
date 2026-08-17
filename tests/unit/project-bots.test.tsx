@@ -332,6 +332,69 @@ describe("assigning several bots at once", () => {
     expect(approval).toBeDisabled();
   });
 
+  it("links Bot Manager accounts as bots and selects them for assignment", async () => {
+    // Two connected accounts, no bots at all: the wizard's dead end before
+    // linking existed. Linking provisions a bot per ticked account against
+    // that account's credential slot, and the refreshed roster's new bots
+    // select themselves.
+    let provisioned = 0;
+    const calls = stub(null, (url, init) => {
+      if (url === "/api/bots/connect/provision" && init?.method === "POST") {
+        provisioned += 1;
+        return {
+          ok: true, status: 200,
+          json: async () => ({ provisioned: true, outcome: "created" }),
+        } as unknown as Response;
+      }
+      if (url === "/api/ai-accounts") {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            accounts: [
+              { id: "acc-1", provider: "anthropic", providerLabel: "Claude", displayName: "Claude Blackstone", status: "connected", credentialPurpose: "subscription" },
+              { id: "acc-2", provider: "anthropic", providerLabel: "Claude", displayName: "Claude NWV", status: "connected", credentialPurpose: "subscription_2" },
+            ],
+          }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        return {
+          ok: true, status: 200,
+          json: async () => roster({
+            assigned: [],
+            available: provisioned >= 2
+              ? [
+                bot("bot-new-1", "Claude", { credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN" }),
+                bot("bot-new-2", "Claude 2", { credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2" }),
+              ]
+              : [],
+          }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    expect(within(dialog).getByText("Claude Blackstone")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /claude blackstone/i }));
+    await user.click(within(dialog).getByRole("checkbox", { name: /claude nwv/i }));
+    await user.click(within(dialog).getByRole("button", { name: /link 2 bots from bot manager/i }));
+
+    // Both provisions aim at the account's own slot, as additional bots.
+    const provisions = calls.filter((call) => call.url === "/api/bots/connect/provision");
+    expect(provisions.map((call) => call.body)).toEqual([
+      { provider: "anthropic", credential: "subscription", additional: true },
+      { provider: "anthropic", credential: "subscription_2", additional: true },
+    ]);
+
+    // The refreshed roster's new bots arrive selected, ready for Configure.
+    expect(await within(dialog).findByText(/2 bots selected/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /next/i })).toBeEnabled();
+  });
+
   it("surfaces a refusal from the server instead of claiming success", async () => {
     stub(roster(), (_url, init) =>
       init?.method === "POST"
