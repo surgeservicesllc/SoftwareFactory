@@ -209,12 +209,20 @@ function Navigation({
   isSuperAdmin?: boolean;
 }) {
   const pathname = usePathname();
-  // Groups open expanded so every destination is one tap away (and visible to
-  // the accessibility tree without an extra interaction); the chevron lets a
-  // person fold a group they do not use.
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const toggleGroup = (label: string) =>
-    setCollapsedGroups((current) => ({ ...current, [label]: !current[label] }));
+  /*
+   * Closed by default, with one exception that keeps the two requirements from
+   * contradicting each other: the group containing the current page opens
+   * itself. "Start collapsed" is about not dumping every destination on
+   * arrival; "preserve active-page highlighting" is about always being able to
+   * see where you are. Collapsing the group you are standing in would satisfy
+   * the first by breaking the second.
+   *
+   * An explicit toggle always wins over that default, so a person who folds the
+   * group they are in keeps it folded.
+   */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string, isOpen: boolean) =>
+    setOverrides((current) => ({ ...current, [label]: !isOpen }));
 
   // Named "Console" rather than "Primary": on /solutions the marketing global
   // navigation is also on the page, and two landmarks sharing an accessible
@@ -233,7 +241,10 @@ function Navigation({
               </li>
             );
           }
-          const expanded = !collapsedGroups[entry.label];
+          const containsCurrentPage = subpages.some(
+            (subpage) => isActiveHref(pathname, subpage.href),
+          ) || isActiveHref(pathname, entry.href);
+          const expanded = overrides[entry.label] ?? containsCurrentPage;
           return (
             <li key={entry.label}>
               <div className="flex items-center gap-1">
@@ -242,7 +253,7 @@ function Navigation({
                 </div>
                 <button
                   type="button"
-                  onClick={() => toggleGroup(entry.label)}
+                  onClick={() => toggleGroup(entry.label, expanded)}
                   aria-expanded={expanded}
                   aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} subpages`}
                   className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
@@ -303,6 +314,65 @@ function Navigation({
   );
 }
 
+/**
+ * The console brand, left-aligned above the navigation.
+ *
+ * An earlier revision removed a mark from here because the marketing header
+ * above the shell already carried one. That reasoning held only on `/solutions`,
+ * where both render; the drawer on mobile and every console route without that
+ * header showed a nav with no identity at all. The mark now lives with the
+ * navigation it belongs to, and its left edge lines up with the nav rows rather
+ * than being centred, so the sidebar reads as one column.
+ *
+ * Drawn as an inline SVG rather than an image file: it inherits the accent
+ * token, stays sharp at any density, and adds no request to the critical path.
+ */
+function FactoryMark() {
+  return (
+    <Link
+      href="/solutions"
+      className="mb-6 flex items-center gap-2.5 rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      aria-label="AI Software Factory console home"
+    >
+      <svg viewBox="0 0 40 44" className="size-9 shrink-0" aria-hidden="true">
+        <defs>
+          <linearGradient id="factory-mark" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#7c5cff" />
+            <stop offset="100%" stopColor="#22d3ee" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M20 1.5 37 11v22L20 42.5 3 33V11z"
+          fill="none"
+          stroke="url(#factory-mark)"
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+        />
+        <text
+          x="20"
+          y="27"
+          textAnchor="middle"
+          fontSize="13"
+          fontWeight="700"
+          fill="currentColor"
+          className="text-foreground"
+        >
+          AI
+        </text>
+      </svg>
+      {/* Two lines, because the second is the half people say out loud. */}
+      <span className="min-w-0 leading-none">
+        <span className="block truncate text-[13px] font-bold tracking-[0.06em] text-foreground">
+          AI SOFTWARE
+        </span>
+        <span className="mt-1 block truncate text-[13px] font-bold tracking-[0.28em] text-[var(--accent-text)]">
+          FACTORY
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 function Sidebar({
   onNavigate,
   viewer,
@@ -312,9 +382,7 @@ function Sidebar({
 }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
-      {/* No brand here. The marketing global navigation renders directly above
-          this shell and already carries it, so a second logo one row down was
-          the same identity twice with nothing to distinguish them. */}
+      <FactoryMark />
       <Navigation onNavigate={onNavigate} isSuperAdmin={viewer.isSuperAdmin} />
       {viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">

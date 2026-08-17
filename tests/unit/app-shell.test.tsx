@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/app-shell";
@@ -10,28 +11,28 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("AppShell navigation", () => {
-  it("renders the owner's ordered destinations with their subpages expanded", () => {
+  it("renders the owner's ordered destinations, closed", () => {
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
 
     const navigation = screen.getByRole("navigation", { name: "Console" });
     const links = within(navigation).getAllByRole("link").map((link) => link.textContent);
 
-    // The exact structure the owner specified (2026-08-17): top-level
-    // destinations in this order, subpage groups expanded by default so every
-    // destination is one tap away, then the quick actions. Subpages with no
-    // backing page (per-user project lists, a secrets store) are deliberately
-    // absent rather than linked to nothing.
+    // The exact structure the owner specified, now closed on arrival: the
+    // top-level destinations in order, with each group's subpages behind its
+    // chevron rather than listed. Subpages with no backing page (per-user
+    // project lists, a secrets store) are deliberately absent rather than
+    // linked to nothing.
     expect(links).toEqual([
       "Overview",
-      "Projects", "All Projects", "My Projects", "Archived",
-      "Pipelines", "Active", "All Pipelines", "Templates", "Backlog",
-      "Bots", "Connect Bot", "My Bots", "Bot Usage", "Bot Activity",
+      "Projects",
+      "Pipelines",
+      "Bots",
       "Runs",
       "Reports",
       "Integrations",
-      "Settings", "General", "Bots & Integrations",
-      "Watch", "Operations", "Activity",
-      "Advanced", "Files", "Agents", "Resources", "AgentOS", "Autonomy",
+      "Settings",
+      "Watch",
+      "Advanced",
       // Quick actions land on real controls: the add-project form, the
       // composer, repository authorization, and the documentation pages.
       "New Project", "Give a bot work", "Import Repository", "View Documentation",
@@ -42,6 +43,21 @@ describe("AppShell navigation", () => {
       "href",
       "/solutions/projects#add-project",
     );
+  });
+
+  it("resolves every subpage to a real page once its group is opened", async () => {
+    // These hrefs are the reason the group exists. Closed-by-default hides
+    // them, so they are asserted after opening rather than dropped.
+    const user = userEvent.setup();
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    for (const group of [/projects/i, /bots/i, /settings/i]) {
+      await user.click(
+        within(navigation).getByRole("button", { name: new RegExp(`expand ${group.source} subpages`, "i") }),
+      );
+    }
+
     expect(within(navigation).getByRole("link", { name: "Archived" })).toHaveAttribute(
       "href",
       "/solutions/projects?filter=archived",
@@ -62,20 +78,21 @@ describe("AppShell navigation", () => {
     );
   });
 
-  it("lets a person fold a subpage group and reopen it", () => {
+  it("lets a person open a subpage group and fold it again", () => {
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
 
     const navigation = screen.getByRole("navigation", { name: "Console" });
-    const toggle = within(navigation).getByRole("button", { name: "Collapse Projects subpages" });
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const toggle = within(navigation).getByRole("button", { name: "Expand Projects subpages" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(toggle);
-    expect(within(navigation).queryByRole("link", { name: "All Projects" })).not.toBeInTheDocument();
-    // Collapsing one group leaves the others alone.
-    expect(within(navigation).getByRole("link", { name: "Templates" })).toBeInTheDocument();
-
-    fireEvent.click(within(navigation).getByRole("button", { name: "Expand Projects subpages" }));
     expect(within(navigation).getByRole("link", { name: "All Projects" })).toBeInTheDocument();
+    // Opening one group leaves the others closed: expanding is a choice about
+    // that group, not a mode the whole menu enters.
+    expect(within(navigation).queryByRole("link", { name: "Templates" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(navigation).getByRole("button", { name: "Collapse Projects subpages" }));
+    expect(within(navigation).queryByRole("link", { name: "All Projects" })).not.toBeInTheDocument();
   });
 
   it("shows the Administration section only to a super admin", () => {
@@ -104,5 +121,38 @@ describe("AppShell navigation", () => {
     expect(
       screen.getByRole("button", { name: /open console navigation/i }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("navigation opens closed, and the brand sits with the menu", () => {
+  it("starts every group collapsed rather than listing every destination", async () => {
+    render(<AppShell viewer={{ signedIn: true, email: "a@b.test" }}>content</AppShell>);
+
+    // Arriving should not dump every subpage on someone. The group headers are
+    // present; their children are not.
+    const projects = screen.getByRole("button", { name: /expand projects subpages/i });
+    expect(projects).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
+  });
+
+  it("opens a group on request and closes it again", async () => {
+    const user = userEvent.setup();
+    render(<AppShell viewer={{ signedIn: true }}>content</AppShell>);
+
+    await user.click(screen.getByRole("button", { name: /expand projects subpages/i }));
+    expect(await screen.findByRole("link", { name: /^archived$/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /collapse projects subpages/i }));
+    expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
+  });
+
+  it("carries the brand into the navigation column, not only the page header", () => {
+    // The mark used to live only in the marketing header above the shell, which
+    // left the mobile drawer — and every console route without that header —
+    // showing a navigation with no identity at all.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(screen.getByRole("link", { name: /ai software factory console home/i }))
+      .toHaveAttribute("href", "/solutions");
   });
 });

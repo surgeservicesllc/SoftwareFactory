@@ -111,6 +111,15 @@ test("exposes every console destination through accessible navigation", async ({
   const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
 
+  // Groups arrive closed, so every destination is reachable rather than
+  // listed. Opening them all is what "reachable" means here — the assertion
+  // below is unchanged, and a destination that no chevron reveals still fails.
+  for (let opened = 0; opened < 20; opened += 1) {
+    const next = navigation.getByRole("button", { name: /expand .* subpages/i }).first();
+    if (await next.count() === 0) break;
+    await next.click();
+  }
+
   for (const destination of consoleNavigation) {
     await expect(
       navigation.getByRole("link", { name: destination, exact: true }),
