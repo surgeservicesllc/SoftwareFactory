@@ -59,6 +59,29 @@ page or anchored section; aspirational subpages are not rendered.
   72/72 across 3 viewports (30-label reachability contract).
 - [x] Merged #194 (b57cea1); production verified live: all new labels
   serving on /solutions, archived route 200.
+### Safety page fully wired (owner goal 2026-08-17 — ADR-080)
+
+- [x] Migration 20260817000600: the Phase 1D scaffold gives way to
+  owner-gated operations — set_autonomy_kill_switch (release needs a
+  reason), set_organization_autonomy_controls (partial), member-scoped
+  read; immutable autonomy.* activity events per transition. Survives
+  as DB refusals: RED ceiling never (both scopes, constraint+trigger+
+  RPC), born fail-closed, owner-only (admins excluded).
+- [x] /api/autonomy/controls GET/POST; SafetyControls rewritten live —
+  real switches for the owner (kill switch with in-place reason flow,
+  autonomous mode, GREEN/YELLOW ceiling picker with RED labeled "Never
+  automatic", all nine action toggles), read-only for members,
+  fail-closed signed out; per-row "switched on, held off: <cause>"
+  honesty (kill switch / mode off / capability missing for merge+deploy
+  which record intent only). Static "Kill switch ON" badges removed
+  from Settings + Autonomy headers (would now be able to lie).
+- [x] phase1d behavior suite: "nothing was relaxed" → "the
+  owner-operated contract" — 44 green incl. owner release/re-engage
+  with 2 audit events, owner enable+revert, RED refusals, born
+  fail-closed. 5 rewritten SafetyControls unit tests.
+- [x] Pins ×12 → 000600; allowlist+repairs through 000600; runbook
+  104/40. Hosted apply pending post-merge.
+
 ### Runs clear/delete (owner goal 2026-08-17)
 
 A sibling session shipped per-run review + owner-only deletion (#201,

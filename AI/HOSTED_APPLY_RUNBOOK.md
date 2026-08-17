@@ -3,9 +3,9 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 39**, listed in the measured section below. The repository total is 103 migration
+**The current total is 40**, listed in the measured section below. The repository total is 104 migration
 files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest: `20260817000500_clear_all_finished_runs` — clear-all applied through the
+outstanding. (Newest: `20260817000600_owner_operated_safety_controls` — the owner-operable kill switch and autonomy controls, ADR-080. Before it: `20260817000500_clear_all_finished_runs` — clear-all applied through the
 per-run `delete_agent_run` guards, one definer function. Before it, the 2026-08-17 run set:
 `000200` review/deletion activity types, `000300` run review + owner-only deletion, `000400`
 task work-lock leases, and `000100` project edit details — until the surgical apply runs,
