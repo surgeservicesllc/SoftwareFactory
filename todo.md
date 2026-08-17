@@ -22,6 +22,14 @@ was truthful and a dead end.
 - [x] Unwired-control sweep: every button in components/ has a handler or
   is a submit; no dead controls found
 - [x] Nav sweep: all 16 sidebar links and every static href resolve
+- [x] #192 the setup guide names connecting an AI account - previously
+  absent, while "Check your AI worker" (Actions worker status) could tick
+  green with zero accounts connected. "Your Factory is ready" now requires
+  a genuinely connected account.
+- [x] Raw-identifier sweep: status text is underscore-normalized, not raw
+  enums; no jargon leaks found beyond the ones rewritten in #187/#189
+- [x] Touch targets: .btn 40px / .btn-sm 36px / .input 40px - above the
+  WCAG 2.2 24px minimum; axe passes on every route at three viewports
 
 ### Audit backlog (loop working set)
 
