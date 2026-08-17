@@ -1,10 +1,17 @@
 "use client";
 
-import { ChevronDown, FolderTree, Loader2, Plus } from "lucide-react";
+import { Archive, ChevronDown, FolderTree, Loader2, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { type Connection, type Project, ProjectInspector } from "@/components/projects-console";
+import { BulkArchiveDialog } from "@/components/my-projects-bulk";
+import {
+  type Connection,
+  type Project,
+  ProjectArchiveDialog,
+  ProjectEditDialog,
+  ProjectInspector,
+} from "@/components/projects-console";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -27,6 +34,15 @@ export function MyProjectsConsole() {
   // design shows) and the rest start folded so a long portfolio scans as a
   // list. Only set once — a refresh must not undo what the person folded.
   const [expanded, setExpanded] = useState<Record<string, boolean> | null>(null);
+  // Editing and archiving are reachable from the row itself, not only from
+  // inside an expanded inspector: acting on a project should not require
+  // reading it first.
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [archiving, setArchiving] = useState<Project | null>(null);
+  // Selection for acting on several at once. Ids rather than projects, so a
+  // refresh cannot leave the selection holding stale rows.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -89,18 +105,67 @@ export function MyProjectsConsole() {
     );
   }
 
+  const selectedProjects = projects.filter((project) => selected.has(project.id));
+  const allSelected = projects.length > 0 && selectedProjects.length === projects.length;
+
+  function toggle(projectId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            aria-label={allSelected ? "Clear selection" : "Select all projects"}
+            onChange={() => setSelected(
+              allSelected ? new Set() : new Set(projects.map((project) => project.id)),
+            )}
+          />
+          <span className="text-muted">
+            {selectedProjects.length === 0
+              ? `Select all ${projects.length}`
+              : `${selectedProjects.length} of ${projects.length} selected`}
+          </span>
+        </label>
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          disabled={selectedProjects.length === 0}
+          onClick={() => setBulkArchiving(true)}
+        >
+          <Archive className="size-4" aria-hidden="true" />
+          {selectedProjects.length > 1
+            ? `Archive ${selectedProjects.length} projects`
+            : "Archive selected"}
+        </button>
+      </div>
+
       {projects.map((project) => {
         const isExpanded = Boolean(expanded?.[project.id]);
         return (
           <section key={project.id} aria-label={project.name}>
+            <div className="flex items-center gap-2 rounded-xl border border-line bg-surface pr-3 transition-colors hover:border-line-strong">
+              <input
+                type="checkbox"
+                className="ml-4 shrink-0"
+                checked={selected.has(project.id)}
+                aria-label={`Select ${project.name}`}
+                onChange={() => toggle(project.id)}
+              />
             <button
               type="button"
               onClick={() => setExpanded((current) => ({ ...current, [project.id]: !current?.[project.id] }))}
               aria-expanded={isExpanded}
               aria-label={`${isExpanded ? "Hide" : "Show"} ${project.name} details`}
-              className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-line-strong"
+              className="flex min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left"
             >
               <ChevronDown
                 className={cn("size-4 shrink-0 text-muted transition-transform", !isExpanded && "-rotate-90")}
@@ -116,6 +181,25 @@ export function MyProjectsConsole() {
                 {project.connectionStatus === "connected" ? "Connected" : "Not Connected"}
               </StatusBadge>
             </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm shrink-0"
+                aria-label={`Edit ${project.name}`}
+                onClick={() => setEditing(project)}
+              >
+                <Pencil className="size-4" aria-hidden="true" />
+                Edit
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm shrink-0"
+                aria-label={`Archive ${project.name}`}
+                onClick={() => setArchiving(project)}
+              >
+                <Archive className="size-4" aria-hidden="true" />
+                Archive
+              </button>
+            </div>
             {isExpanded ? (
               <div className="mt-2">
                 <ProjectInspector
@@ -129,6 +213,33 @@ export function MyProjectsConsole() {
           </section>
         );
       })}
+
+      {editing ? (
+        <ProjectEditDialog
+          project={editing}
+          onClose={() => setEditing(null)}
+          onSaved={load}
+        />
+      ) : null}
+      {archiving ? (
+        <ProjectArchiveDialog
+          project={archiving}
+          onClose={() => setArchiving(null)}
+          onArchived={load}
+        />
+      ) : null}
+      {bulkArchiving ? (
+        <BulkArchiveDialog
+          projects={selectedProjects}
+          onClose={() => setBulkArchiving(false)}
+          onFinished={async () => {
+            // Cleared before reloading: keeping ids that have just been
+            // archived would leave the toolbar counting rows that are gone.
+            setSelected(new Set());
+            await load();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
