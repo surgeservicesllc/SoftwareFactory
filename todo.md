@@ -68,6 +68,26 @@ Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` Â
    0 indeterminate. **8** migrations are unapplied to hosted: `20260814002400`,
    `20260814002500`, and the six Phase 2E files. Owner action, runbook unchanged.
 
+### Found by the end-to-end audit, left as a judgement call
+
+- **`lib/supabase/browser.ts` has no callers.** `createSupabaseBrowserClient` is exported
+  and imported by nothing; the console components use `isBrowserSupabaseConfigured` from
+  `browser-config.ts` and fetch through API routes instead. Not deleted, deliberately:
+  it is ambiguous whether this is dead by accident or reserved for client-side use,
+  `tests/integration/supabase-auth-routes.contract.test.ts` enumerates the file in its
+  no-service-role-credential check, and several agents work this repository in parallel,
+  so a unilateral delete is the kind of change that collides. Decide it, then act.
+
+The rest of the audit found nothing, which is worth recording so the next agent does not
+repeat it: every API route enforces authorization through a shared helper
+(`requireActiveOrganization`, `operationsContext`, `tenantRpc*`, `requireGitHubUser`,
+`requireAuthenticatedUser`, or webhook signature verification); every public table has RLS
+**and** FORCE RLS; no SECURITY DEFINER function is missing `set search_path`; the only
+function granted to `anon` is the public newsletter signup; `read_provider_credential` is
+service-role-only and returns ciphertext useless without a key deliberately absent from the
+database. No `.only`, no empty catch blocks, no floating promises, no `console.log` in
+shipped code, no duplicate migration version prefixes.
+
 ### Owner-only, not agent-actionable
 
 These are the whole reason this workstream is not at 100%, and no amount of building
