@@ -153,14 +153,19 @@ const navigationEntries: readonly NavigationEntry[] = [
 
 /**
  * The shortcuts under the navigation, from the same design. Each one lands on
- * a real control: the add-project form, the composer, repository
- * authorization, and the public documentation pages.
+ * a real control that starts work: the add-project form, the composer, and
+ * repository authorization.
+ *
+ * A "View Documentation" shortcut sat here and was removed by owner request
+ * (2026-08-17). It pointed at `/resources` on the marketing site — the only
+ * entry in this list that left the console rather than doing something in it,
+ * and reading is not a quick action. The marketing pages are unchanged and
+ * still reachable from the public navigation.
  */
 const quickActions: readonly NavigationItem[] = [
   { label: "New Project", href: "/solutions/projects#add-project", icon: Plus },
   { label: "Give a bot work", href: "/solutions/bot-manager", icon: Bot },
   { label: "Import Repository", href: "/solutions/connections", icon: GitBranch },
-  { label: "View Documentation", href: "/resources", icon: FileText },
 ] as const;
 
 /**
