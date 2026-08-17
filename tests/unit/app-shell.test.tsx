@@ -25,7 +25,7 @@ describe("AppShell navigation", () => {
       "Overview",
       "Projects", "All Projects", "My Projects", "Archived",
       "Pipelines", "Templates", "Backlog",
-      "Bots", "Connect Bot", "My Bots", "Bot Activity",
+      "Bots", "Connect Bot", "My Bots", "Bot Usage", "Bot Activity",
       "Runs",
       "Reports",
       "Integrations",

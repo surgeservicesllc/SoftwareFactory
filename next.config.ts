@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       "autonomy",
       "backlog",
       "bot-manager",
+      "bot-usage",
       "connections",
       "files",
       "myprojects",

@@ -16,6 +16,7 @@ const consoleNavigation = [
   "Bots",
   "Connect Bot",
   "My Bots",
+  "Bot Usage",
   "Bot Activity",
   "Runs",
   "Reports",
