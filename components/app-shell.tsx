@@ -30,6 +30,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/cn";
 
 /**
@@ -328,48 +329,16 @@ function Navigation({
  * token, stays sharp at any density, and adds no request to the critical path.
  */
 function FactoryMark() {
+  // One drawing for the whole product. This used to be a second, hand-drawn
+  // copy of the header's mark, so the same page could show two logos that
+  // disagreed about their own colours.
   return (
-    <Link
+    <BrandMark
       href="/solutions"
-      className="mb-6 flex items-center gap-2.5 rounded-lg px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-      aria-label="AI Software Factory console home"
-    >
-      <svg viewBox="0 0 40 44" className="size-9 shrink-0" aria-hidden="true">
-        <defs>
-          <linearGradient id="factory-mark" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#7c5cff" />
-            <stop offset="100%" stopColor="#22d3ee" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M20 1.5 37 11v22L20 42.5 3 33V11z"
-          fill="none"
-          stroke="url(#factory-mark)"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-        <text
-          x="20"
-          y="27"
-          textAnchor="middle"
-          fontSize="13"
-          fontWeight="700"
-          fill="currentColor"
-          className="text-foreground"
-        >
-          AI
-        </text>
-      </svg>
-      {/* Two lines, because the second is the half people say out loud. */}
-      <span className="min-w-0 leading-none">
-        <span className="block truncate text-[13px] font-bold tracking-[0.06em] text-foreground">
-          AI SOFTWARE
-        </span>
-        <span className="mt-1 block truncate text-[13px] font-bold tracking-[0.28em] text-[var(--accent-text)]">
-          FACTORY
-        </span>
-      </span>
-    </Link>
+      label="AI Software Factory console home"
+      tone="console"
+      className="mb-6 px-2"
+    />
   );
 }
 
