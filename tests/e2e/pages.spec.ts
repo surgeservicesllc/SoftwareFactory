@@ -62,6 +62,26 @@ for (const { path, heading } of routes) {
     // the loading spinner to clear so axe sees the real content.
     await expect(page.locator('[aria-label*="Loading"]')).toHaveCount(0, { timeout: 15_000 });
 
+    /*
+     * One global navigation, on every page.
+     *
+     * The authentication pages sit outside both route groups, so they
+     * inherited only the root layout and rendered no header at all — the
+     * product's name was in the tab and nowhere on screen, with no way back
+     * to the site. Asserted for every route rather than for those two, so a
+     * future route group cannot quietly become another exception.
+     */
+    await expect(
+      page.getByRole("link", { name: /ai software factory (home|console home)/i }).first(),
+      `${path} renders no global brand link`,
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Primary" }).or(
+        page.getByRole("button", { name: /open site navigation/i }),
+      ).first(),
+      `${path} renders no global navigation`,
+    ).toBeAttached();
+
     const dimensions = await page.evaluate(() => ({
       viewportWidth: document.documentElement.clientWidth,
       contentWidth: document.documentElement.scrollWidth,
