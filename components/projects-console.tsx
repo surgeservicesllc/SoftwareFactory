@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Archive,
   Bot,
   CheckCircle2,
   CircleDotDashed,
@@ -17,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProjectBots } from "@/components/project-bots";
@@ -100,6 +102,11 @@ const emptyInspector: InspectorData = {
 };
 
 export function ProjectsConsole() {
+  const searchParams = useSearchParams();
+  // The navigation's Archived subpage is this same console with the filter
+  // flipped: the read is opt-in on the API too, so nothing archived leaks
+  // into the default view.
+  const showArchived = searchParams.get("filter") === "archived";
   const [state, setState] = useState<State>("loading");
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -114,7 +121,7 @@ export function ProjectsConsole() {
     setState("loading");
     try {
       const [projectsResponse, connectionsResponse] = await Promise.all([
-        fetch("/api/projects", { cache: "no-store" }),
+        fetch(showArchived ? "/api/projects?status=archived" : "/api/projects", { cache: "no-store" }),
         fetch("/api/github/connections", { cache: "no-store" }),
       ]);
       if (projectsResponse.status === 401 || connectionsResponse.status === 401) {
@@ -136,7 +143,7 @@ export function ProjectsConsole() {
       setMessage(error instanceof Error ? error.message : "Projects could not be loaded.");
       setState("error");
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -212,6 +219,51 @@ export function ProjectsConsole() {
   if (state === "setup") return <BlockedState icon={FolderTree} title="Finish setting up" description="Create or choose a workspace before linking a repository." href="/solutions/connections" label="Open connections" />;
   if (state === "error") return <BlockedState icon={FolderTree} title="Projects are unavailable" description={message || "Your projects could not be loaded."} href="/solutions/connections" label="Check connections" />;
 
+  if (showArchived) {
+    // Archived projects are records, not workspaces: no live GitHub inspector,
+    // no add form. Archiving deletes nothing, and unarchiving is an owner
+    // control on the portfolio page — both facts stated rather than implied.
+    return (
+      <div className="space-y-4">
+        {projects.map((project) => (
+          <Card key={project.id} className="p-5 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold text-foreground">{project.name}</h2>
+                  <StatusBadge tone="neutral">Archived</StatusBadge>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {project.githubRepository ?? "No repository linked"} · {project.defaultBranch}
+                </p>
+                {project.description ? <p className="mt-2 text-sm text-muted">{project.description}</p> : null}
+                <p className="mt-3 text-sm text-muted">
+                  Every run, report, and activity record this project produced is kept.
+                </p>
+              </div>
+              <Link href="/solutions/portfolio" className="btn btn-secondary btn-sm sm:shrink-0">
+                <Archive className="size-4" aria-hidden="true" />
+                Unarchive on Portfolio
+              </Link>
+            </div>
+          </Card>
+        ))}
+        {!projects.length ? (
+          <Card className="p-5 sm:p-6">
+            <SectionTitle
+              title="No archived projects"
+              description="Archiving stops new work on a project while keeping every run, report, and activity record. Nothing is archived right now."
+            />
+            <Link href="/solutions/projects" className="btn btn-secondary btn-sm mt-4">
+              <FolderTree className="size-4" aria-hidden="true" />
+              View all projects
+            </Link>
+          </Card>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {projects.map((project) => (
@@ -233,7 +285,9 @@ export function ProjectsConsole() {
           label="Connect GitHub"
         />
       ) : unconnectedRepositories.length || !projects.length ? (
-        <Card className="p-5 sm:p-6">
+        /* The id anchors the navigation's "New Project" quick action; the
+           scroll margin keeps the heading clear of the fixed mobile header. */
+        <Card id="add-project" className="scroll-mt-24 p-5 sm:p-6">
           <SectionTitle
             title="Add a project"
             description="Pick one of the repositories you authorized. The branch comes straight from GitHub."

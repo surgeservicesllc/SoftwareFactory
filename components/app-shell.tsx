@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   Boxes,
+  ChevronDown,
   CircleGauge,
   ClipboardList,
   Cpu,
@@ -13,8 +14,10 @@ import {
   Fingerprint,
   GitBranch,
   HeartPulse,
+  type LucideIcon,
   Menu,
   PlugZap,
+  Plus,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -49,55 +52,145 @@ const superAdminGroup = {
 } as const;
 
 /**
- * Grouped by how an owner actually moves through the product, not by which
- * phase built each console. The ungrouped block at the top is the daily path
- * in journey order — see what's happening, give a goal, manage projects,
- * follow the work, read the summary. "Watch" is production monitoring.
- * "Advanced" holds the technical consoles: every one keeps its full function
- * (nothing is removed for simplicity), but none of them is required to run
- * the factory day to day, so they no longer crowd the primary path.
+ * Owner-ordered structure (2026-08-17): top-level destinations with
+ * expandable subpage groups, mirroring the provided design. Labels follow
+ * that design — Overview, Bots, Integrations — while every href stays a real,
+ * existing page; the design's subpages with no backing capability (per-user
+ * project lists, a secrets store) are deliberately absent rather than linked
+ * to nothing.
  *
  * Every destination reads live tenant records; an empty page says it is
  * empty rather than showing illustrative rows.
  */
-const navigationGroups = [
+type NavigationItem = { label: string; href: string; icon: LucideIcon };
+type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] };
+
+const navigationEntries: readonly NavigationEntry[] = [
+  { label: "Overview", href: "/solutions", icon: CircleGauge },
   {
-    heading: null,
-    items: [
-      { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
-      { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
-      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
-      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+    label: "Projects",
+    href: "/solutions/projects",
+    icon: FolderKanban,
+    subpages: [
+      { label: "All Projects", href: "/solutions/projects", icon: FolderKanban },
+      { label: "Archived", href: "/solutions/projects?filter=archived", icon: ClipboardList },
     ],
   },
   {
-    heading: "Watch",
-    items: [
+    label: "Pipelines",
+    href: "/solutions/workflows",
+    icon: Workflow,
+    subpages: [
+      // The workflows page IS the template library: compiled graph templates,
+      // nothing executed. The design's Active/Schedules/Archived subpages
+      // have no pipeline instances behind them yet, so they are not linked.
+      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
+      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Bots",
+    href: "/solutions/bot-manager",
+    icon: Bot,
+    subpages: [
+      { label: "Connect Bot", href: "/solutions/bot-manager#connect", icon: Plus },
+      { label: "My Bots", href: "/solutions/bot-manager", icon: Bot },
+      // Bot work lands in the activity feed; the same page also sits under
+      // Watch, which is deliberate — both readings are true.
+      { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+  { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+  { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
+  {
+    label: "Settings",
+    href: "/solutions/settings",
+    icon: Settings,
+    subpages: [
+      { label: "General", href: "/solutions/settings", icon: Settings },
+      // Provider configuration lives on the settings page; the anchor lands
+      // there. Members/Teams/Permissions/Billing from the design have no
+      // backing surfaces yet and are deliberately absent.
+      { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
+    ],
+  },
+  {
+    label: "Watch",
+    href: "/solutions/operations",
+    icon: HeartPulse,
+    subpages: [
       { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
       { label: "Activity", href: "/solutions/activity", icon: Activity },
     ],
   },
   {
-    heading: "Advanced",
-    items: [
+    label: "Advanced",
+    href: "/solutions/files",
+    icon: Boxes,
+    subpages: [
       { label: "Files", href: "/solutions/files", icon: FileText },
-      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
       { label: "Autonomy", href: "/solutions/autonomy", icon: Gauge },
     ],
   },
-  {
-    heading: "Setup",
-    items: [
-      { label: "Connections", href: "/solutions/connections", icon: PlugZap },
-      { label: "Settings", href: "/solutions/settings", icon: Settings },
-    ],
-  },
 ] as const;
+
+/**
+ * The shortcuts under the navigation, from the same design. Each one lands on
+ * a real control: the add-project form, the composer, repository
+ * authorization, and the public documentation pages.
+ */
+const quickActions: readonly NavigationItem[] = [
+  { label: "New Project", href: "/solutions/projects#add-project", icon: Plus },
+  { label: "Give a bot work", href: "/solutions/bot-manager", icon: Bot },
+  { label: "Import Repository", href: "/solutions/connections", icon: GitBranch },
+  { label: "View Documentation", href: "/resources", icon: FileText },
+] as const;
+
+/**
+ * Active-state from the pathname alone. Hrefs carrying a query string (filter
+ * views of a page) are never marked current — the page itself states which
+ * filter it is showing — so the plain view's link stays the single current
+ * marker for that path.
+ */
+function isActiveHref(pathname: string, href: string) {
+  if (href.includes("?") || href.includes("#")) return false;
+  return href === "/solutions" ? pathname === href : pathname.startsWith(href);
+}
+
+function NavigationLink({
+  item,
+  active,
+  nested = false,
+  onNavigate,
+}: {
+  item: NavigationItem;
+  active: boolean;
+  nested?: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+        nested && "min-h-9 pl-9 text-[13px]",
+        active
+          ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
+          : "text-muted hover:bg-surface-raised hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+      {item.label}
+    </Link>
+  );
+}
 
 function Navigation({
   onNavigate,
@@ -107,41 +200,96 @@ function Navigation({
   isSuperAdmin?: boolean;
 }) {
   const pathname = usePathname();
-  const groups = isSuperAdmin ? [...navigationGroups, superAdminGroup] : navigationGroups;
+  // Groups open expanded so every destination is one tap away (and visible to
+  // the accessibility tree without an extra interaction); the chevron lets a
+  // person fold a group they do not use.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string) =>
+    setCollapsedGroups((current) => ({ ...current, [label]: !current[label] }));
 
   // Named "Console" rather than "Primary": on /solutions the marketing global
   // navigation is also on the page, and two landmarks sharing an accessible
   // name give screen-reader users no way to tell them apart.
   return (
     <nav aria-label="Console" className="flex-1 space-y-6">
-      {groups.map((group, groupIndex) => (
-        <div key={group.heading ?? `group-${groupIndex}`}>
-          {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
+      <ul className="space-y-0.5">
+        {navigationEntries.map((entry) => {
+          const subpages = entry.subpages ?? [];
+          const entryActive = isActiveHref(pathname, entry.href)
+            || subpages.some((subpage) => isActiveHref(pathname, subpage.href));
+          if (subpages.length === 0) {
+            return (
+              <li key={entry.label}>
+                <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+              </li>
+            );
+          }
+          const expanded = !collapsedGroups[entry.label];
+          return (
+            <li key={entry.label}>
+              <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(entry.label)}
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} subpages`}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                >
+                  <ChevronDown
+                    className={cn("size-4 transition-transform", !expanded && "-rotate-90")}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+              {expanded ? (
+                <ul className="mt-0.5 space-y-0.5">
+                  {subpages.map((subpage) => (
+                    <li key={subpage.label}>
+                      <NavigationLink
+                        item={subpage}
+                        nested
+                        active={isActiveHref(pathname, subpage.href)}
+                        onNavigate={onNavigate}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+
+      {isSuperAdmin ? (
+        <div>
+          <p className="label mb-2 px-3">{superAdminGroup.heading}</p>
           <ul className="space-y-0.5">
-            {group.items.map(({ label, href, icon: Icon }) => {
-              const isActive = href === "/solutions" ? pathname === href : pathname.startsWith(href);
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
-                        : "text-muted hover:bg-surface-raised hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
+            {superAdminGroup.items.map((item) => (
+              <li key={item.href}>
+                <NavigationLink
+                  item={item}
+                  active={isActiveHref(pathname, item.href)}
+                  onNavigate={onNavigate}
+                />
+              </li>
+            ))}
           </ul>
         </div>
-      ))}
+      ) : null}
+
+      <div>
+        <p className="label mb-2 px-3">Quick actions</p>
+        <ul className="space-y-0.5">
+          {quickActions.map((action) => (
+            <li key={action.label}>
+              <NavigationLink item={action} active={false} onNavigate={onNavigate} />
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
   );
 }

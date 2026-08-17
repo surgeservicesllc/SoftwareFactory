@@ -63,16 +63,22 @@ type GitHubRepositoryRow = {
   disabled: boolean;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Archived projects are excluded by default; the Archived view opts in
+    // explicitly. Both reads go through the same RLS-scoped query — the flag
+    // only flips which status band comes back.
+    const showArchived = new URL(request.url).searchParams.get("status") === "archived";
     const { activeOrganization, client } = await requireActiveOrganization();
-    const { data, error } = await client
+    const base = client
       .from("projects")
       .select(
         "id,name,description,status,github_repository,default_branch,health_status,autonomous_mode,maximum_autonomous_risk,project_connections(connection_id,github_repository_id,is_primary)",
       )
-      .eq("organization_id", activeOrganization.id)
-      .neq("status", "archived")
+      .eq("organization_id", activeOrganization.id);
+    const { data, error } = await (showArchived
+      ? base.eq("status", "archived")
+      : base.neq("status", "archived"))
       .order("name", { ascending: true })
       .limit(100);
 
