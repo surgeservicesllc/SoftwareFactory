@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MyProjectsConsole } from "@/components/my-projects-console";
 import { ProjectsConsole } from "@/components/projects-console";
 
 const searchParams = vi.fn(() => new URLSearchParams());
@@ -69,7 +70,7 @@ afterEach(() => {
   searchParams.mockReturnValue(new URLSearchParams());
 });
 
-describe("ProjectsConsole GitHub evidence", () => {
+describe("Project inspector GitHub evidence (via My Projects)", () => {
   it("renders repository sync, branch, pull request, and check details supplied by GitHub", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -122,7 +123,7 @@ describe("ProjectsConsole GitHub evidence", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByText("Private")).toBeInTheDocument();
     expect(screen.getByText("Last synchronized").parentElement).not.toHaveTextContent("Never");
@@ -180,7 +181,7 @@ describe("ProjectsConsole GitHub evidence", () => {
       throw new Error(`Unexpected request: ${url}`);
     }));
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByText("Public")).toBeInTheDocument();
     expect(await screen.findByText("Author: Unknown · Mergeability: Unknown")).toBeInTheDocument();
@@ -202,7 +203,7 @@ describe("ProjectsConsole GitHub evidence", () => {
       throw new Error(`Unexpected request: ${url}`);
     }));
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByRole("link", { name: /give this project work/i })).toHaveAttribute(
       "href",
@@ -243,7 +244,7 @@ describe("ProjectsConsole GitHub evidence", () => {
       throw new Error(`Unexpected request: ${url}`);
     }));
 
-    render(<ProjectsConsole />);
+    render(<MyProjectsConsole />);
 
     expect(await screen.findByText("Public")).toBeInTheDocument();
     // The cancelled run still shows its literal conclusion in the detail row…
@@ -362,8 +363,9 @@ describe("ProjectsConsole archived view", () => {
 
     render(<ProjectsConsole />);
 
-    expect(await screen.findByText("Retired")).toBeInTheDocument();
-    expect(screen.getByText("Archived")).toBeInTheDocument();
+    const archivedCard = (await screen.findByText("Retired")).closest("section") as HTMLElement;
+    // The badge on the card, distinct from the Archived tab above the list.
+    expect(within(archivedCard).getByText("Archived")).toBeInTheDocument();
     // Unarchiving is an owner control on the portfolio page, and the view
     // says where instead of implying it happens here.
     expect(screen.getByRole("link", { name: /unarchive on portfolio/i })).toHaveAttribute(
@@ -391,5 +393,113 @@ describe("ProjectsConsole archived view", () => {
       "href",
       "/solutions/projects",
     );
+  });
+});
+
+describe("ProjectsConsole dashboard view", () => {
+  function dashboardProject(id: string, name: string, overrides: Record<string, unknown> = {}) {
+    return {
+      autonomousMode: false,
+      connectionId,
+      connectionStatus: "connected",
+      defaultBranch: "main",
+      description: null,
+      githubRepository: `example-org/${name.toLowerCase()}`,
+      githubRepositoryId: 789,
+      healthStatus: "unknown",
+      id,
+      maximumAutonomousRisk: "GREEN",
+      name,
+      status: "active",
+      updatedAt: "2026-08-16T10:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  const alphaId = "11111111-1111-4111-8111-111111111111";
+  const betaId = "55555555-5555-4555-8555-555555555555";
+
+  function stubDashboardFetch() {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [
+          dashboardProject(alphaId, "Alpha"),
+          dashboardProject(betaId, "Beta", { connectionId: null, connectionStatus: "not_connected", status: "paused" }),
+        ] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      if (url === "/api/runs") {
+        return jsonResponse({ runs: [
+          { id: "r1", status: "succeeded", createdAt: "2026-08-16T12:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+          { id: "r2", status: "failed", createdAt: "2026-08-16T11:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+          { id: "r3", status: "running", createdAt: "2026-08-16T13:00:00.000Z", project: { id: alphaId, name: "Alpha" } },
+        ] });
+      }
+      if (url === "/api/activity?limit=8") {
+        return jsonResponse({ events: [
+          { id: "e1", description: "Project connected to GitHub.", occurredAt: "2026-08-16T12:30:00.000Z" },
+        ] });
+      }
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [dashboardProject("99999999-9999-4999-8999-999999999999", "Old", { status: "archived" })] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+  }
+
+  it("counts, tabulates, and links every project from the live reads", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    // Tabs: the two real filters of this console plus its sibling page; the
+    // design's Starred tab has no model behind it and is absent.
+    const tabs = await screen.findByRole("navigation", { name: "Project views" });
+    expect(within(tabs).getByRole("link", { name: "All Projects" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "My Projects" })).toHaveAttribute("href", "/solutions/myprojects");
+    expect(within(tabs).getByRole("link", { name: "Archived" })).toHaveAttribute("href", "/solutions/projects?filter=archived");
+    expect(within(tabs).queryByText("Starred")).not.toBeInTheDocument();
+
+    // Stat cards are counted from the fetched records.
+    expect(screen.getByText("Total projects").closest("section")).toHaveTextContent("2");
+    expect(screen.getByText("Connected").closest("section")).toHaveTextContent("1");
+
+    // The table shows each project's repository and status, and opens the
+    // real detail page.
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("example-org/alpha")).toBeInTheDocument();
+    expect(within(table).getByText("Not Connected")).toBeInTheDocument();
+    const openLinks = within(table).getAllByRole("link", { name: /open/i });
+    expect(openLinks[0]).toHaveAttribute("href", `/solutions/portfolio/${alphaId}`);
+
+    expect(screen.getByText(/Showing 1 to 2 of 2 projects/)).toBeInTheDocument();
+  });
+
+  it("computes the success rate only from runs that carry a verdict", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    // Alpha: one succeeded + one failed = 50% of 2 finished; the running run
+    // carries no verdict and is excluded. Beta has no runs at all.
+    expect(await screen.findByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("of 2 finished")).toBeInTheDocument();
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+  });
+
+  it("shows the status breakdown and the live activity feed in the rail", async () => {
+    stubDashboardFetch();
+
+    render(<ProjectsConsole />);
+
+    const breakdown = (await screen.findByText("Projects by status")).closest("section") as HTMLElement;
+    expect(within(breakdown).getByText("Active").parentElement).toHaveTextContent("1");
+    expect(within(breakdown).getByText("Paused").parentElement).toHaveTextContent("1");
+    expect(within(breakdown).getByText("Archived").parentElement).toHaveTextContent("1");
+
+    const rail = screen.getByText("Recent activity").closest("section") as HTMLElement;
+    expect(within(rail).getByText("Project connected to GitHub.")).toBeInTheDocument();
+    expect(within(rail).getByRole("link", { name: "View all" })).toHaveAttribute("href", "/solutions/activity");
   });
 });
