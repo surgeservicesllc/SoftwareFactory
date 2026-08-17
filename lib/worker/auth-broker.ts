@@ -19,6 +19,23 @@ import { openSecret, sealSecret } from "@/lib/security/secret-box-core";
  * narrow service-role functions, and all without the credential ever being
  * logged or leaving this process unsealed.
  *
+ * PROVIDER TERMS — READ BEFORE EXTENDING THIS.
+ *
+ * For Claude, this drives `claude setup-token`, which mints a *subscription*
+ * OAuth token. Anthropic restricted OAuth authentication to Claude Code and
+ * Claude.ai in February 2026, enforced server-side from January 2026, and using
+ * such a token in a third-party application is a Consumer Terms violation. This
+ * application is a third party.
+ *
+ * The supported route to Claude for software like this is an API key from the
+ * Console — accepted at `/api/bots/connect/key` — or Claude on Vertex AI via
+ * Google sign-in, which is what the console now leads with. The Codex path here
+ * is unaffected by that particular restriction.
+ *
+ * This is left working rather than deleted because a deployment may already
+ * depend on it and the machinery is provider-neutral, but it must not be
+ * presented as the recommended way to connect Claude.
+ *
  * Probed 2026-08-16 (claude CLI 2.1.233): `claude setup-token` under
  * `script -qec` (a fake TTY) with an isolated `CLAUDE_CONFIG_DIR` prints its
  * OAuth authorize URL headlessly, then waits for a pasted code, then prints
