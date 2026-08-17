@@ -147,13 +147,20 @@ describe("navigation opens closed, and the brand sits with the menu", () => {
     expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
   });
 
-  it("carries the brand into the navigation column, not only the page header", () => {
-    // The mark used to live only in the marketing header above the shell, which
-    // left the mobile drawer — and every console route without that header —
-    // showing a navigation with no identity at all.
+  it("carries the brand for the drawer, and hides it where the header already shows one", () => {
+    // Both halves matter and they pull in opposite directions.
+    //
+    // The mark exists because the mobile drawer is a full-screen overlay above
+    // the header, so an open drawer covers the only other copy — that is the
+    // defect that brought this component back after it was first deleted.
+    //
+    // It is hidden at `xl` because there the sidebar sits directly beneath the
+    // header, which renders the same mark unconditionally: two identical logos
+    // one row apart.
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
 
-    expect(screen.getByRole("link", { name: /ai software factory console home/i }))
-      .toHaveAttribute("href", "/solutions");
+    const mark = screen.getByRole("link", { name: /ai software factory console home/i });
+    expect(mark).toHaveAttribute("href", "/solutions");
+    expect(mark.className).toContain("xl:hidden");
   });
 });
