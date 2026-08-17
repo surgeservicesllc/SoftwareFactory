@@ -39,7 +39,6 @@ const consoleNavigation = [
   "New Project",
   "Give a bot work",
   "Import Repository",
-  "View Documentation",
 ] as const;
 
 const CONSOLE_ROUTE = "/solutions/projects";

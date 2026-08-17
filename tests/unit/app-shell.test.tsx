@@ -34,9 +34,11 @@ describe("AppShell navigation", () => {
       "Settings",
       "Watch",
       "Advanced",
-      // Quick actions land on real controls: the add-project form, the
-      // composer, repository authorization, and the documentation pages.
-      "New Project", "Give a bot work", "Import Repository", "View Documentation",
+      // Quick actions land on real controls that start work: the add-project
+      // form, the composer, and repository authorization. A "View
+      // Documentation" shortcut out to the marketing site was removed by
+      // owner request; this list is what asserts it stays gone.
+      "New Project", "Give a bot work", "Import Repository",
     ]);
 
     expect(within(navigation).getByText("Quick actions")).toBeInTheDocument();
