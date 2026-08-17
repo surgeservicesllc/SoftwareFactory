@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ProjectBots } from "@/components/project-bots";
 import { ProjectOperationsPanel } from "@/components/project-operations-panel";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -318,7 +319,20 @@ export function ProjectsConsole() {
           {message ? <p className="mt-4 text-sm text-[var(--warning)]" aria-live="polite">{message}</p> : null}
         </Card>
       ) : (
-        <p className="text-sm text-muted">Every repository you authorized is already a project.</p>
+        /* Every authorized repository is taken. Saying only that leaves the
+           person at a dead end, because the way to add another project is not
+           on this page at all: it is authorizing another repository on
+           GitHub. Name that, and link to where it starts. */
+        <Card className="p-5 sm:p-6">
+          <SectionTitle
+            title="Add another project"
+            description="Every repository you authorized is already a project. A project is one repository, so the next one starts by authorizing another repository for SoftwareFactory on GitHub."
+          />
+          <Link href="/solutions/connections" className="btn btn-secondary btn-sm mt-4">
+            <GitFork className="size-4" aria-hidden="true" />
+            Manage repository access
+          </Link>
+        </Card>
       )}
     </div>
   );
@@ -549,6 +563,10 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
           </ul>
         </div>
       ) : null}
+
+      {/* Which bots serve this project belongs with the project, not buried
+          in a diagnostics drawer three pages away. */}
+      <ProjectBots projectId={project.id} projectName={project.name} />
     </Card>
   );
 }
