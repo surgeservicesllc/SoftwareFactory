@@ -31,6 +31,33 @@ was truthful and a dead end.
 - [x] Touch targets: .btn 40px / .btn-sm 36px / .input 40px - above the
   WCAG 2.2 24px minimum; axe passes on every route at three viewports
 
+### Navigation subpages (2026-08-17, owner goal + follow-up images)
+
+Owner design: subpage groups under the sidebar destinations, plus quick
+actions. Contract held throughout (ADR-077): every entry links a real
+page or anchored section; aspirational subpages are not rendered.
+
+- [x] Collapsible groups, default-expanded: Projects (All Projects,
+  Archived), Pipelines (Templates, Backlog), Bots (Connect Bot #connect,
+  My Bots, Bot Activity), Settings (General, Bots & Integrations
+  #providers), Watch (Operations, Activity), Advanced (5 consoles).
+  Labels renamed: Overview / Bots / Integrations. Quick actions: New
+  Project (#add-project), Give a bot work, Import Repository, View
+  Documentation. Administration section unchanged for super admins.
+- [x] Archived made real: GET /api/projects accepts opt-in
+  ?status=archived (default still excludes archived); projects console
+  reads ?filter=archived via useSearchParams (page wrapped in Suspense,
+  files-page idiom); archived rows render as records with "Unarchive on
+  Portfolio"; empty state says nothing is archived. archive_project /
+  unarchive_project RPCs existed since 20260815000700.
+- [x] NOT rendered, no backing surface: Secrets, My Projects / Shared
+  with Me / Starred, pipeline Active / All / Schedules / Archived,
+  Members / Teams / Permissions / Billing. Templates IS the workflows
+  page (compiled graph templates), so that label is now the truthful one.
+- [x] Gates: unit 2948+15 green (new collapse/order/archived tests),
+  eslint 0, tsc clean, production build exit 0, Playwright console+pages
+  72/72 across 3 viewports (30-label reachability contract).
+
 ### Audit backlog (loop working set)
 
 - [x] **Loop tick 2026-08-17 01:11Z**: parallel sessions landed #176-#179

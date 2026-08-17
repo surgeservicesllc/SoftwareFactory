@@ -32,7 +32,11 @@ export default function SettingsPage() {
             <SafetyControls />
           </Card>
 
-          <ProviderSettings />
+          {/* The navigation's "Bots & Integrations" subpage lands here: AI
+              provider configuration is the settings surface that exists. */}
+          <div id="providers" className="scroll-mt-24">
+            <ProviderSettings />
+          </div>
         </div>
 
         <div className="space-y-4">

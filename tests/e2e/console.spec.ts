@@ -1,18 +1,40 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+// The owner's 2026-08-17 structure: top-level destinations with subpage
+// groups that open expanded, then the quick actions. Every entry must stay a
+// real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
-  "Dashboard",
+  "Overview",
   "Projects",
-  "Bot Manager",
-  "Files",
-  "Agents",
+  "All Projects",
+  "Archived",
+  "Pipelines",
+  "Templates",
   "Backlog",
+  "Bots",
+  "Connect Bot",
+  "My Bots",
+  "Bot Activity",
   "Runs",
   "Reports",
-  "Connections",
-  "Activity",
+  "Integrations",
   "Settings",
+  "General",
+  "Bots & Integrations",
+  "Watch",
+  "Operations",
+  "Activity",
+  "Advanced",
+  "Files",
+  "Agents",
+  "Resources",
+  "AgentOS",
+  "Autonomy",
+  "New Project",
+  "Give a bot work",
+  "Import Repository",
+  "View Documentation",
 ] as const;
 
 const CONSOLE_ROUTE = "/solutions/projects";

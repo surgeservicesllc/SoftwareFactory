@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectsConsole } from "@/components/projects-console";
 
+const searchParams = vi.fn(() => new URLSearchParams());
+vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams() }));
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json" },
@@ -62,6 +65,8 @@ function connectionsResponse(options: { lastSyncedAt?: string | null; private?: 
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  searchParams.mockReset();
+  searchParams.mockReturnValue(new URLSearchParams());
 });
 
 describe("ProjectsConsole GitHub evidence", () => {
@@ -308,5 +313,83 @@ describe("ProjectsConsole add-project form", () => {
     render(<ProjectsConsole />);
 
     expect(await screen.findByLabelText("GitHub account")).toBeInTheDocument();
+  });
+
+  it("anchors the add form for the navigation's New Project quick action", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "example-org", 789)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect((await screen.findByText("Add a project")).closest("section")).toHaveAttribute(
+      "id",
+      "add-project",
+    );
+  });
+});
+
+describe("ProjectsConsole archived view", () => {
+  it("opts into the archived read and shows records, not workspaces", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects?status=archived") {
+        return jsonResponse({ projects: [{
+          autonomousMode: false,
+          connectionId: null,
+          connectionStatus: "not_connected",
+          defaultBranch: "main",
+          description: "Retired experiment",
+          githubRepository: "example-org/retired",
+          githubRepositoryId: null,
+          healthStatus: "unknown",
+          id: "44444444-4444-4444-8444-444444444444",
+          maximumAutonomousRisk: "GREEN",
+          name: "Retired",
+          status: "archived",
+        }] });
+      }
+      if (url === "/api/github/connections") return connectionsResponse();
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByText("Retired")).toBeInTheDocument();
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+    // Unarchiving is an owner control on the portfolio page, and the view
+    // says where instead of implying it happens here.
+    expect(screen.getByRole("link", { name: /unarchive on portfolio/i })).toHaveAttribute(
+      "href",
+      "/solutions/portfolio",
+    );
+    // No add form and no live GitHub inspector on the archived view.
+    expect(screen.queryByText("Add a project")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/branches?"), expect.anything());
+  });
+
+  it("says plainly when nothing is archived", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("filter=archived"));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects?status=archived") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") return connectionsResponse();
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByText("No archived projects")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /view all projects/i })).toHaveAttribute(
+      "href",
+      "/solutions/projects",
+    );
   });
 });
