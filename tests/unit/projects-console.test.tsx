@@ -182,6 +182,29 @@ describe("ProjectsConsole GitHub evidence", () => {
     expect(screen.getByText("Status: queued · Conclusion: —")).toBeInTheDocument();
   });
 
+  it("offers the next step a set-up project actually needs, carrying the project", async () => {
+    // Setting a project up used to end with nothing to do with it: the person
+    // had to navigate to Bot Manager and re-pick the project from a list.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return projectsResponse();
+      if (url === "/api/github/connections") return connectionsResponse();
+      if (url.includes("/branches?")) return jsonResponse({ branches: [] });
+      if (url.includes("/commits?")) return jsonResponse({ commits: [] });
+      if (url.includes("/pulls?")) return jsonResponse({ pullRequests: [] });
+      if (url.includes("/checks?")) return jsonResponse({ checkRuns: [] });
+      if (url === "/api/bots") return jsonResponse({ canManage: true, bots: [], roles: [], assignments: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<ProjectsConsole />);
+
+    expect(await screen.findByRole("link", { name: /give this project work/i })).toHaveAttribute(
+      "href",
+      "/solutions/bot-manager?project=11111111-1111-4111-8111-111111111111",
+    );
+  });
+
   it("does not call a cancelled check run a failing check", async () => {
     // The worker queue cancels its own superseded beats by design; only a
     // conclusion carrying failure evidence may raise "failing on the main

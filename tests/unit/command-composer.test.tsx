@@ -11,12 +11,47 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+const realLocation = window.location;
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", realLocation.pathname);
 });
 
 describe("CommandComposer", () => {
+  it("opens on the project a person arrived from, and ignores one they cannot use", async () => {
+    // "Give this project work" carries the project in the URL. Honouring it
+    // is the difference between arriving ready and re-picking from a list.
+    const connected = "11111111-1111-4111-8111-111111111111";
+    const second = "33333333-3333-4333-8333-333333333333";
+    const projects = {
+      projects: [
+        { connectionStatus: "connected", id: connected, name: "First application", status: "active" },
+        { connectionStatus: "connected", id: second, name: "Second application", status: "active" },
+        {
+          connectionStatus: "not_connected",
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Historical application",
+          status: "active",
+        },
+      ],
+    };
+
+    window.history.replaceState(null, "", `/solutions/bot-manager?project=${second}`);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(projects)));
+    const { unmount } = render(<CommandComposer />);
+    expect(await screen.findByRole("combobox", { name: /project/i })).toHaveValue(second);
+    unmount();
+
+    // A project that is not selectable (or absent) must not leave the
+    // selection empty, which would silently disable the submit button.
+    window.history.replaceState(null, "", "/solutions/bot-manager?project=22222222-2222-4222-8222-222222222222");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(projects)));
+    render(<CommandComposer />);
+    expect(await screen.findByRole("combobox", { name: /project/i })).toHaveValue(connected);
+  });
+
   it("offers only projects with a currently connected GitHub binding", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       projects: [

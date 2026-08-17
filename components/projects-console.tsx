@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Bot,
   CheckCircle2,
   CircleDotDashed,
   ExternalLink,
@@ -477,7 +478,19 @@ function ProjectInspector({
           </div>
           <div className="flex flex-wrap gap-2 sm:shrink-0">
             {isConnected ? (
-              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-primary btn-sm">
+              /* Setting a project up ends with nothing to do with it. This is
+                 the next step a person actually wants — and it carries the
+                 project, so Bot Manager opens already pointed at it. */
+              <Link
+                href={`/solutions/bot-manager?project=${project.id}`}
+                className="btn btn-primary btn-sm"
+              >
+                <Bot className="size-4" aria-hidden="true" />
+                Give this project work
+              </Link>
+            ) : null}
+            {isConnected ? (
+              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-secondary btn-sm">
                 <FolderTree className="size-4" aria-hidden="true" />
                 Browse files
               </Link>
