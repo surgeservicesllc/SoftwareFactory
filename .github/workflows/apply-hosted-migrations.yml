@@ -251,16 +251,22 @@ jobs:
         # project detail page's priority, focus, stop and cancel controls need,
         # and the Runs page's review and delete.
         #
-        # A full push cannot deliver these. The ledger has documented drift —
-        # 20260814002500/002600 and 20260816000100-000300 are live in the
-        # database with no history rows — so `db push` would start by replaying
-        # their non-idempotent DDL and fail before reaching anything here. This
-        # skips them and applies only what is genuinely absent.
+        # Exactly the three files run 32068262957's probe showed missing, and
+        # no others.
         #
-        # Verified before being written: applying this exact list onto a
-        # database holding exactly the hosted set (the ledger printed by run
-        # 32063744693) succeeds file by file and produces all four project
-        # scheduling columns and all five control functions.
+        # The probe is why this list is short. The ledger says the whole
+        # 20260815 range is outstanding; the database says otherwise — every
+        # project scheduling column, and set_project_engineering_pause,
+        # set_project_engineering_priority, focus_portfolio_engineering,
+        # set_portfolio_capacity_limits and update_project_details, are already
+        # live. Applying that range re-runs DDL for objects that exist, which
+        # is exactly how run 32068091179 failed.
+        #
+        # Missing, and therefore here: archive_project and unarchive_project —
+        # the project detail page's cancel and restore — and the run review and
+        # deletion pair. All three files are idempotent: the first is
+        # `add value if not exists` plus `create or replace function`, and the
+        # other two were made re-runnable in #203.
         if: ${{ inputs.scope == 'project-controls' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -277,10 +283,11 @@ jobs:
             fi
           }
           # Each file is applied and immediately recorded, so an interruption
-          # leaves a truthful ledger rather than schema the history denies.
-          for FILE in supabase/migrations/20260815*.sql \
-                      supabase/migrations/20260817000200_*.sql \
-                      supabase/migrations/20260817000300_*.sql
+          # leaves a ledger that is behind rather than one that lies.
+          for FILE in \
+            supabase/migrations/20260815000700_project_archive_operation.sql \
+            supabase/migrations/20260817000200_run_review_activity_types.sql \
+            supabase/migrations/20260817000300_run_review_and_deletion.sql
           do
             VERSION=$(basename "$FILE" | cut -d_ -f1)
             echo "Applying ${FILE}"
@@ -291,7 +298,13 @@ jobs:
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
         # in a non-interactive shell it is simply unread.
-        if: ${{ inputs.scope != 'broker-functions' }}
+        # Named rather than "everything except broker-functions". The negative
+        # form meant every scope added later fell through into a full
+        # production push: run 32068262957 asked only for a read-only probe and
+        # reached this step anyway. `db push` refused to act — it stops rather
+        # than insert migrations before the remote's last one — so nothing was
+        # applied, but the guard was one CLI safety check away from mattering.
+        if: ${{ inputs.scope == 'all' }}
         run: |
           if [ "$MODE" = "token" ]; then
             echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
