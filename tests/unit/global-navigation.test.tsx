@@ -33,13 +33,21 @@ describe("globalNavigation", () => {
     expect(hrefs.filter((href) => href === "/solutions")).toHaveLength(1);
   });
 
-  it("adds the console destinations once signed in", () => {
+  it("replaces the marketing pages with the console destinations once signed in", () => {
     const items = globalNavigation({ signedIn: true });
     const hrefs = items.map((item) => item.href);
 
     for (const item of SIGNED_IN_NAV) expect(hrefs).toContain(item.href);
-    for (const item of PUBLIC_NAV) expect(hrefs).toContain(item.href);
     expect(hrefs).not.toContain("/solutions/admin");
+
+    // Signing in swaps the vocabulary rather than concatenating two of them.
+    // The header used to read Dashboard, Projects, Runs, Activity, Admin,
+    // Platform, Features, Pricing, Resources, About -- the second half selling
+    // the product to someone already inside it.
+    for (const item of PUBLIC_NAV) {
+      if (item.href === "/solutions") continue; // Dashboard is the same route.
+      expect(hrefs).not.toContain(item.href);
+    }
   });
 
   it("adds Admin only for a super administrator", () => {
