@@ -2,6 +2,27 @@
 
 Last triaged: 2026-08-13
 
+## A project's selected pipelines (2026-08-18, ADR-090)
+
+- [x] Add `project_pipelines` (migration `20260818000200`) with RLS + FORCE RLS, every
+  table privilege revoked from `anon`, `authenticated` and `service_role`, and
+  owner/administrator `select_project_pipeline` / `deselect_project_pipeline` plus
+  member `list_project_pipelines` as the only paths, each audit-evented and
+  advisory-locked per project-and-key.
+- [x] Expose them at `GET`/`POST`/`DELETE /api/project-pipelines`, resolving names from
+  `GRAPH_TEMPLATES` for a built-in and `graph_templates` for a custom template so no
+  label can go stale, and refusing a key that names neither before anything is written.
+- [x] Make **Use** a persisted toggle — grey with `aria-pressed` when selected, many per
+  project — and move the graph-planning dialog to its own **Plan graph** button.
+- [x] Make the AI Factory's Configure Pipeline step read the selections: done only when
+  one is chosen, with the chosen names on the page rather than only in the overlay.
+- [x] Cover the migration against the real chain (owner allowed, member read-only,
+  outsider denied, anonymous denied, no direct browser write path), the route boundary,
+  the toggle, and the selected-state layout at every swept width.
+- [ ] Apply `20260818000200` to hosted Supabase through `AI/HOSTED_APPLY_RUNBOOK.md`
+  (`scope=broker-functions` already carries the file); until then `/api/project-pipelines`
+  reports PGRST202 as **Not Connected** and the Use button is disabled naming that reason.
+
 ## Project repository picker (2026-08-16)
 
 - [x] Add `set_project_github_repository` and `unlink_project_github_repository`
