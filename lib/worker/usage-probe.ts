@@ -153,7 +153,17 @@ export async function probeAnthropicUsage(
 
   if (!response.ok) {
     // The status class only — nothing the provider said travels further.
-    const rejected = response.status === 401 || response.status === 403;
+    //
+    // 401 is the provider saying this credential is no longer valid — expired
+    // or revoked — and that verdict is worth a demotion. 403 is the provider
+    // declining THIS ENDPOINT for a credential it authenticated: scope, plan,
+    // or gating. Treating 403 as a dead credential produced an unbreakable
+    // loop on the hosted deployment — the owner reconnected (the broker log
+    // shows session after session ending connected), the sweep probed usage,
+    // the fresh token answered 403 here, and the account was demoted straight
+    // back to "needs sign-in again". A refusal to state usage is evidence
+    // about usage, not about the sign-in.
+    const rejected = response.status === 401;
     return {
       status: "unavailable",
       windows: [],
@@ -161,7 +171,9 @@ export async function probeAnthropicUsage(
       detail: reason(
         rejected
           ? `The provider refused the stored credential (HTTP ${response.status}).`
-          : `The usage endpoint answered HTTP ${response.status}.`,
+          : response.status === 403
+            ? "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected."
+            : `The usage endpoint answered HTTP ${response.status}.`,
       ),
     };
   }

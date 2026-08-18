@@ -112,13 +112,23 @@ describe("probeAnthropicUsage", () => {
     expect(result.detail).toBe("The usage endpoint could not be reached.");
   });
 
-  it("marks only a refusal as evidence about the credential itself", async () => {
-    // 401/403 is the provider saying it will not accept this credential.
-    for (const status of [401, 403]) {
-      const refused = (async () => new Response("no", { status })) as unknown as typeof fetch;
-      const result = await probeAnthropicUsage("sk-ant-oat01-example", refused);
-      expect(result.credentialRejected).toBe(true);
-    }
+  it("marks only a 401 as evidence about the credential itself", async () => {
+    // 401 is the provider saying this credential is no longer valid.
+    const refused = (async () => new Response("no", { status: 401 })) as unknown as typeof fetch;
+    expect((await probeAnthropicUsage("sk-ant-oat01-example", refused)).credentialRejected)
+      .toBe(true);
+
+    // 403 is the provider declining THIS ENDPOINT for a credential it
+    // authenticated — scope, plan, or gating. Treating it as a dead
+    // credential looped the hosted deployment: every successful reconnect
+    // was demoted straight back by the next sweep.
+    const declined = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch;
+    const declinedResult = await probeAnthropicUsage("sk-ant-oat01-example", declined);
+    expect(declinedResult.credentialRejected).toBeFalsy();
+    expect(declinedResult.status).toBe("unavailable");
+    expect(declinedResult.detail).toBe(
+      "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected.",
+    );
 
     // Everything else is the endpoint having a bad day. Treating these as
     // credential evidence would disconnect a healthy account on a blip.
@@ -169,9 +179,10 @@ describe("captureUsageForAccounts", () => {
   }
 
   it("demotes an account whose credential the provider refuses", async () => {
-    // The whole point. Before this, a 403 was written as a `detail` string and
-    // the account kept a green Connected badge, because the verification sweep
-    // only checks the credential's *shape* -- which an expired token passes.
+    // The whole point. Before this, a refusal was written as a `detail` string
+    // and the account kept a green Connected badge, because the verification
+    // sweep only checks the credential's *shape* -- which an expired token
+    // passes. 401 is the provider's own verdict that the credential is dead.
     const { recorder, calls } = recorderSpy();
     const demotions: Array<{ accountId: string; reason: string }> = [];
 
@@ -186,7 +197,7 @@ describe("captureUsageForAccounts", () => {
       },
       recorder,
       {
-        fetchImpl: (async () => new Response("no", { status: 403 })) as unknown as typeof fetch,
+        fetchImpl: (async () => new Response("no", { status: 401 })) as unknown as typeof fetch,
         open: () => "sk-ant-oat01-example",
       },
     );
@@ -198,6 +209,36 @@ describe("captureUsageForAccounts", () => {
     // The observation is still recorded: the console shows why, and the badge
     // now agrees with it.
     expect(calls[0]?.status).toBe("unavailable");
+  });
+
+  it("does not demote over a 403: declining the usage endpoint is not a dead credential", async () => {
+    // The hosted loop this breaks: reconnect succeeds, the fresh token
+    // answers 403 on the usage endpoint, and the account bounced straight
+    // back to "needs sign-in again" — forever.
+    const { recorder, calls } = recorderSpy();
+    const demotions: string[] = [];
+
+    const result = await captureUsageForAccounts(
+      {
+        listAccountsForVerification: async () => [account],
+        markAccountNeedsReauth: async (_organizationId, accountId) => {
+          demotions.push(accountId);
+          return true;
+        },
+        readStoredCredential: async () => "sealed-envelope",
+      },
+      recorder,
+      {
+        fetchImpl: (async () => new Response("no", { status: 403 })) as unknown as typeof fetch,
+        open: () => "sk-ant-oat01-example",
+      },
+    );
+
+    expect(result.demoted).toBe(0);
+    expect(demotions).toHaveLength(0);
+    // The refusal to answer is still recorded honestly, as usage evidence.
+    expect(calls[0]?.status).toBe("unavailable");
+    expect(calls[0]?.detail).toContain("declined the usage probe (HTTP 403)");
   });
 
   it("does not demote an account over a provider outage", async () => {

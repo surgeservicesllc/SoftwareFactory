@@ -578,6 +578,20 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
       insert into public.bots (organization_id, name, provider, model, created_by, ai_account_id)
       values ($1, 'Remove-test bot', 'anthropic', 'claude-opus-5', $2, $3)
     `, [organizationId, ownerId, accountId]);
+    /*
+     * And recorded usage evidence — the state every real account reaches
+     * within minutes of connecting, because the sweep records constantly.
+     * This is exactly what made removal impossible on the hosted database:
+     * the old foreign key cascaded the account delete into this append-only
+     * table, whose trigger refused it with 42501 (probe run 32188102707).
+     * Triggers fire for superusers too, so this reproduces the hosted
+     * failure locally with no RLS caveat.
+     */
+    await db.query(`
+      insert into public.ai_account_usage_observations
+        (organization_id, ai_account_id, status, windows, detail)
+      values ($1, $2, 'unavailable', '[]'::jsonb, 'recorded before removal')
+    `, [organizationId, accountId]);
 
     await assumeRole(db, ownerId);
     const removed = await db.query<{ remove_ai_account: boolean }>(
@@ -606,6 +620,13 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     );
     expect(bot.rows).toHaveLength(1);
     expect(bot.rows[0].ai_account_id).toBeNull();
+    // The usage evidence survives too: append-only history outlives the
+    // account it measured, exactly like activity events.
+    const evidence = await db.query(
+      "select 1 from public.ai_account_usage_observations where ai_account_id = $1",
+      [accountId],
+    );
+    expect(evidence.rows).toHaveLength(1);
   });
 
   it("completes a device-flow sign-in that never pastes a code", async () => {

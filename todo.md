@@ -93,6 +93,38 @@ against real PostgreSQL.
 
 ---
 
+## REMOVE AND RECONNECT: ROOT CAUSES MEASURED AND FIXED (2026-08-18, second session)
+
+**Remove.** The re-aimed probe (run 32188102707) impersonated the real owner of
+the organization that actually holds the accounts and got the answer no
+catalogue query could: `can_manage_organization: t`, then
+`remove_ai_account as owner: 42501 usage observations are append-only`. The
+account delete cascades into `ai_account_usage_observations` (FK `on delete
+cascade` from 20260816001500), and that table's own append-only trigger
+refuses the cascaded delete. The two declarations contradict each other; every
+account with recorded usage — every real account within minutes — was
+unremovable. Fix: migration `20260818000100_removable_accounts_keep_usage_evidence`
+drops the cascade and keeps the trigger; usage evidence is history and now
+survives removal, like activity events. The removal integration test gained
+the missing state (an account WITH usage rows) — triggers fire for superusers
+too, so PGlite reproduces the hosted 42501 exactly without the fix.
+
+**Reconnect.** The broker log (run 32183453093) shows session after session
+ending `status=connected` — reconnect always worked. What made it LOOK broken:
+the usage sweep treats 403 from Anthropic's usage endpoint as
+`credentialRejected` and demotes the account, so every successful reconnect
+bounced straight back to "Needs sign-in again" on the next sweep. 403 is the
+provider declining THAT ENDPOINT for a credential it authenticated (scope,
+plan, gating); dead credentials answer 401. Fix in `lib/worker/usage-probe.ts`:
+only 401 demotes; 403 records "The provider declined the usage probe (HTTP
+403); usage stays unknown, and the sign-in itself is unaffected." After one
+more reconnect per demoted account, they go green and stay green.
+
+Follow-up noted, not done: a needs_reauth account's Refresh marker can only
+expire (mark_ai_account_verified touches connected rows only), so the panel
+shows "the refresh has not completed yet" for a sweep that did complete —
+cosmetic once the demote loop is gone.
+
 ## "THE ACCOUNT COULD NOT BE REMOVED. (42501)" (2026-08-18)
 
 A SQLSTATE and no words. `42501` is `insufficient_privilege`, and it covers two
