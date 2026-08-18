@@ -18,7 +18,6 @@ import {
   KeyRound,
   type LucideIcon,
   Menu,
-  PanelLeft,
   PlugZap,
   Plus,
   Rocket,
@@ -33,7 +32,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
-import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
 
@@ -477,38 +475,10 @@ function Navigation({
   );
 }
 
-/**
- * The mark at the top of the navigation column.
- *
- * This was `xl:hidden` — shown only in the mobile drawer — on the reasoning
- * that the marketing header sits above the console and already states the
- * identity, so a second wordmark at desktop is duplication. That reasoning is
- * sound and it is overruled: the owner's reference shows the mark at the top
- * left of the sidebar, aligned with the menu beneath it, and asked for exactly
- * that. A design decision an owner has made explicitly is not one to re-derive.
- *
- * `px-2` rather than `px-3`: the navigation rows carry `px-3` *inside* a
- * rounded background, so their text starts about two pixels further in than
- * their box. Matching the box would leave the wordmark visibly out of line
- * with every label under it.
- */
-function FactoryMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <BrandMark
-      href="/solutions"
-      label="AI Software Factory console home"
-      tone="console"
-      glyphOnly={compact}
-      className={cn("mb-6", compact ? "justify-center px-0" : "px-2")}
-    />
-  );
-}
-
 function Sidebar({
   onNavigate,
   viewer,
   compact = false,
-  onToggleCompact,
   /**
    * The site's own destinations, listed at the foot of the drawer.
    *
@@ -523,31 +493,18 @@ function Sidebar({
   onNavigate?: () => void;
   viewer: ShellViewer;
   compact?: boolean;
-  /** Absent in the mobile drawer, which closes rather than narrows. */
-  onToggleCompact?: () => void;
   siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
+  /*
+   * The navigation starts at the top of the column.
+   *
+   * Two blocks used to sit above it and both were removed by owner request
+   * (2026-08-17): a wordmark, which the site header one row above already
+   * renders, and a "Collapse navigation" toggle. Nothing replaces them — the
+   * menu is what the column is for, so it begins where they were.
+   */
   return (
     <div className={cn("flex h-full flex-col overflow-y-auto py-5", compact ? "px-2" : "px-3")}>
-      <FactoryMark compact={compact} />
-      {onToggleCompact ? (
-        <button
-          type="button"
-          onClick={onToggleCompact}
-          aria-pressed={compact}
-          title={compact ? "Expand navigation" : "Collapse navigation"}
-          className={cn(
-            "mb-4 flex min-h-9 items-center rounded-lg text-sm font-medium text-muted",
-            "transition-colors hover:bg-surface-raised hover:text-foreground",
-            compact ? "justify-center px-0" : "gap-2 px-3",
-          )}
-        >
-          <PanelLeft className="size-4 shrink-0" aria-hidden="true" />
-          <span className={compact ? "sr-only" : undefined}>
-            {compact ? "Expand navigation" : "Collapse navigation"}
-          </span>
-        </button>
-      ) : null}
       <Navigation
         onNavigate={onNavigate}
         isSuperAdmin={viewer.isSuperAdmin}
@@ -600,48 +557,6 @@ function Sidebar({
   );
 }
 
-const COMPACT_STORAGE_KEY = "softwarefactory:sidebar-compact";
-
-/*
- * The rail preference is an external store, so it is read as one.
- *
- * `localStorage` does not exist on the server, and a component that reads it
- * during render hydrates into a mismatch. Reading it in an effect and calling
- * `setState` is the usual workaround and is worse: it is a render the user
- * sees at the wrong width, and React's own lint rule rejects it. A store with
- * a server snapshot says the same thing without either problem — and the
- * `storage` listener means opening a second tab does not leave the two
- * disagreeing about a preference the person set once.
- */
-const compactListeners = new Set<() => void>();
-
-function subscribeToCompact(listener: () => void) {
-  compactListeners.add(listener);
-  window.addEventListener("storage", listener);
-  return () => {
-    compactListeners.delete(listener);
-    window.removeEventListener("storage", listener);
-  };
-}
-
-function readCompact() {
-  try {
-    return window.localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
-  } catch {
-    // A blocked or full storage is not a reason to fail to render a page.
-    return false;
-  }
-}
-
-function writeCompact(next: boolean) {
-  try {
-    window.localStorage.setItem(COMPACT_STORAGE_KEY, next ? "1" : "0");
-  } catch {
-    // Same: the preference is a convenience, never a precondition.
-  }
-  for (const listener of compactListeners) listener();
-}
-
 /*
  * Three tiers, not two.
  *
@@ -677,11 +592,17 @@ export function AppShell({
   viewer = SIGNED_OUT_VIEWER,
 }: Readonly<{ children: React.ReactNode; viewer?: ShellViewer }>) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  // Expanded on the server, then whatever the person last chose.
-  const chosenCompact = useSyncExternalStore(subscribeToCompact, readCompact, () => false);
+  /*
+   * Width alone decides the column's form now.
+   *
+   * A stored per-person preference used to widen it back on request, but its
+   * only control was the "Collapse navigation" button the owner removed, so
+   * the preference became a value nothing could set. Between 1024 and 1279
+   * the rail is still the only form that fits beside content; from 1280 the
+   * column is full width.
+   */
   const expandable = useSyncExternalStore(subscribeToExpandable, readExpandable, () => true);
-  // Between 1024 and 1279 the rail is the only form that fits beside content.
-  const compact = chosenCompact || !expandable;
+  const compact = !expandable;
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -718,7 +639,7 @@ export function AppShell({
           "w-[var(--sidebar-w)] transition-[width] duration-200 ease-out motion-reduce:transition-none",
         )}
       >
-        <Sidebar viewer={viewer} compact={compact} onToggleCompact={expandable ? () => writeCompact(!compact) : undefined} />
+        <Sidebar viewer={viewer} compact={compact} />
       </aside>
 
       {/*

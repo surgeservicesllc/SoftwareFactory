@@ -143,9 +143,17 @@ describe("the brand mark", () => {
     expect(brand[0]).toHaveAttribute("href", "/");
   });
 
-  it("is the same component the console sidebar renders", async () => {
-    // Two hand-drawn copies is how one product ends up with two logos that
-    // disagree about their own colours on the same page.
+  it("is drawn in one place, and nowhere else keeps a copy", async () => {
+    /*
+     * Two hand-drawn copies is how one product ends up with two logos that
+     * disagree about their own colours on the same page.
+     *
+     * This used to also require the console shell to import `BrandMark`. It no
+     * longer renders a mark at all (ADR-090), so that half asserted a caller
+     * rather than the rule. The rule is the path data: whoever draws the mark
+     * imports the component, and no file inlines the artwork — which is what
+     * has to hold if the sidebar ever carries one again.
+     */
     const shell = await import("@/components/app-shell");
     expect(shell).toBeDefined();
 
@@ -154,8 +162,9 @@ describe("the brand mark", () => {
     const sidebar = await source.readFile("components/app-shell.tsx", "utf8");
 
     expect(header).toContain("@/components/brand-mark");
-    expect(sidebar).toContain("@/components/brand-mark");
-    // Neither may keep a private copy of the artwork.
+    // The console column renders no mark; what matters is that it has not
+    // grown a private one.
+    expect(sidebar).not.toContain("@/components/brand-mark");
     expect(header).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
     expect(sidebar).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
   });
