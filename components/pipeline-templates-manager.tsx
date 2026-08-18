@@ -76,12 +76,16 @@ export function PipelineTemplatesManager({
 }: {
   builtIns: readonly PipelineTemplateSummary[];
   /**
-   * The project the caller is already working on. The AI Factory journey has
-   * one and passes it, so the step does not ask again for something the page
-   * has already established. Without it this component asks, because a
-   * pipeline is selected *for* a project and there is no honest default.
+   * The project the caller is already working on.
+   *
+   * Three distinct states, and the difference matters. A project means select
+   * against that one. `null` means the caller *has* a project concept and
+   * there is none right now — the AI Factory while a new factory is being
+   * started — so falling back to some other project would select against a
+   * factory the person is not looking at. `undefined` means the caller has no
+   * project concept at all, and this component asks.
    */
-  projectContext?: { id: string; name: string };
+  projectContext?: { id: string; name: string } | null;
   /** Lets a caller showing the same selections refresh alongside a toggle. */
   onSelectionChanged?: () => void;
 }) {
@@ -146,7 +150,7 @@ export function PipelineTemplatesManager({
   // Only asked for when the caller did not say which project it is. A page
   // that already knows should not make a person answer twice.
   const loadProjects = useCallback(async () => {
-    if (projectContext) return;
+    if (projectContext !== undefined) return;
     try {
       const response = await fetch("/api/projects", { cache: "no-store" });
       const body = (await response.json().catch(() => ({}))) as {
@@ -172,10 +176,11 @@ export function PipelineTemplatesManager({
    * otherwise the one chosen here, falling back to the first so a workspace
    * with a single project needs no answer at all.
    */
-  const activeProject = projectContext
-    ?? (projects ?? []).find((project) => project.id === chosenProjectId)
-    ?? (projects ?? [])[0]
-    ?? null;
+  const activeProject = projectContext !== undefined
+    ? projectContext
+    : (projects ?? []).find((project) => project.id === chosenProjectId)
+      ?? (projects ?? [])[0]
+      ?? null;
 
   const selectedKeys = useMemo(() => {
     if (!activeProject) return new Set<string>();
@@ -282,7 +287,8 @@ export function PipelineTemplatesManager({
         disabledReason={selectionDisabledReason}
         notice={selectionNotice}
         onChooseProject={setChosenProjectId}
-        projects={projectContext ? null : projects}
+        projects={projectContext !== undefined ? null : projects}
+        projectsLoading={projectContext === undefined && projects === null}
         selectedCount={selectedKeys.size}
       />
 
@@ -539,6 +545,7 @@ function SelectionSummary({
   notice,
   onChooseProject,
   projects,
+  projectsLoading,
   selectedCount,
 }: {
   activeProject: { id: string; name: string } | null;
@@ -547,6 +554,12 @@ function SelectionSummary({
   notice: string;
   onChooseProject: (projectId: string) => void;
   projects: Array<{ id: string; name: string }> | null;
+  /**
+   * Distinct from `projects === null`: a caller that named its own project —
+   * or named that it has none — never reads this list, so "not loaded" would
+   * otherwise render as "still loading" forever.
+   */
+  projectsLoading: boolean;
   selectedCount: number;
 }) {
   const showPicker = projects !== null && projects.length > 1;
@@ -561,7 +574,7 @@ function SelectionSummary({
                 ? `No pipeline selected for ${activeProject.name} yet. Press Use on a template to add one — a project can run as many as it needs.`
                 : `${selectedCount} pipeline${selectedCount === 1 ? "" : "s"} selected for ${activeProject.name}. Selection is recorded intent: nothing runs until work is dispatched.`}
             </p>
-          ) : projects === null ? (
+          ) : projectsLoading ? (
             <p className="mt-1 text-sm text-muted">Reading your projects…</p>
           ) : (
             <p className="mt-1 text-sm text-muted">

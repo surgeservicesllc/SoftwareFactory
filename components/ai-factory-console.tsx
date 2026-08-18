@@ -439,12 +439,17 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
        * The project this journey is building, handed to the step, so Use
        * writes against it without asking again — and `load` on every toggle,
        * so the page behind the overlay is already right when it closes.
+       *
+       * `null`, not `undefined`, while a new factory is being started: the
+       * journey has a project concept and no project yet, and letting the
+       * control fall back to some other project would select a pipeline for a
+       * factory the person is not looking at.
        */
       body: (
         <PipelineTemplatesManager
           builtIns={builtIns}
           onSelectionChanged={() => void load()}
-          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : undefined}
+          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : null}
         />
       ),
       pageHref: "/solutions/pipelines?view=templates",

@@ -382,4 +382,30 @@ describe("PipelineTemplatesManager", () => {
     expect(screen.getByRole("button", { name: "Use Feature Build" })).toBeDisabled();
     expect(screen.queryByText(/owner or administrator access/i)).not.toBeInTheDocument();
   });
+  it("does not fall back to another project when the caller has none in hand", async () => {
+    const posted: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/project-pipelines" && init?.method === "POST") {
+        posted.push(JSON.parse(String(init.body)));
+        return jsonResponse({ pipeline: {}, created: true });
+      }
+      if (url === "/api/project-pipelines") return jsonResponse({ pipelines: [], canManage: true });
+      if (url === "/api/pipeline-templates") return jsonResponse({ templates: [], canManage: true });
+      if (url === "/api/projects") {
+        return jsonResponse({ projects: [{ id: "p1", name: "Some other factory" }] });
+      }
+      return jsonResponse({});
+    }));
+
+    // `null` is the AI Factory starting a new factory: a project concept with
+    // no project yet. Selecting against p1 would attach a pipeline to a
+    // factory the person is not looking at.
+    render(<PipelineTemplatesManager builtIns={builtIns} projectContext={null} />);
+
+    expect(await screen.findByText(/this workspace has none yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use Feature Build" })).toBeDisabled();
+    expect(screen.queryByText("Some other factory")).not.toBeInTheDocument();
+    expect(posted).toEqual([]);
+  });
 });
