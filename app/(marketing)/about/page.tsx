@@ -27,7 +27,7 @@ export default async function AboutPage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-14">
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           <div>
             {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
             <h1 className="mt-5 text-balance text-[38px] font-bold leading-[1.06] tracking-[-0.04em] text-white sm:text-[52px]">
@@ -50,7 +50,7 @@ export default async function AboutPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-10">
-        <SurfacePanel className="grid gap-10 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,2fr)]">
+        <SurfacePanel className="grid grid-cols-1 gap-10 p-6 sm:p-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,2fr)]">
           <div className="lg:border-r lg:border-[#1c2433] lg:pr-8">
             <div className="flex items-center gap-3">
               <IconTile icon="sparkles" accent="violet" className="border-[#3b2f6b]" />
@@ -72,7 +72,7 @@ export default async function AboutPage() {
               <IconTile icon="gem" accent="blue" className="border-[#26406b]" />
               <h2 className="text-lg font-semibold tracking-[-0.02em] text-white">Our Values</h2>
             </div>
-            <ul className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-5">
+            <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-5">
               {values.map((value) => (
                 <li key={value.title}>
                   <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export default async function AboutPage() {
           title="Our Leadership"
           description="A team of builders, innovators and leaders passionate about the future of software."
         />
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {content.team.map((member) => (
             <li key={member.name}>
               <SurfacePanel className="flex h-full overflow-hidden">

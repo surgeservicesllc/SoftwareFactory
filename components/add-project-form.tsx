@@ -188,7 +188,7 @@ export function AddProjectForm({
         description="Pick one of the repositories you authorized. The branch comes straight from GitHub."
       />
 
-      <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
+      <form onSubmit={createProject} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* One connected account is the common case, and a picker with a
             single option is a dead control. The repository list below
             already names the owner (owner/repo), so nothing is lost. */}

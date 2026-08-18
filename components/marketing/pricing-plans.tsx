@@ -75,7 +75,7 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
         ) : null}
       </div>
 
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const tone = resolveAccent(plan.accent);
           const cardFeatures = plan.features.filter((feature) => feature.label);

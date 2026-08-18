@@ -354,7 +354,7 @@ export function ProjectsConsole() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-4">
       {projects.length ? (
         <Card className="overflow-hidden">
@@ -740,7 +740,7 @@ export function ProjectInspector({
           />
         ) : null}
 
-        <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Visibility" value={repository ? (repository.private ? "Private" : "Public") : "Unavailable"} />
           <Stat label="Last synchronized" value={lastSynced ? formatDate(lastSynced) : "Never"} />
           <Stat label="Latest commit" value={latestCommit ? shortSha(latestCommit.sha) : loading ? "…" : "—"} detail={latestCommit?.message.split("\n")[0]} />
@@ -814,7 +814,7 @@ export function ProjectInspector({
       {isConnected && data.checkRuns.length ? (
         <div className="border-t border-line p-5">
           <p className="label">Checks on {project.defaultBranch}</p>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}
           </ul>
         </div>

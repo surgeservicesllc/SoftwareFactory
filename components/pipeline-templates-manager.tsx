@@ -128,7 +128,7 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
             </p>
           </Card>
         ) : (
-          <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {custom.map((template) => (
               <Card key={template.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -222,7 +222,7 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
           Maintained in code and versioned by review. Clone one to make an editable copy in your
           workspace.
         </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {builtIns.map((template) => (
             <Card key={template.key} className="p-4">
               <div className="flex items-start justify-between gap-2">
@@ -380,7 +380,7 @@ function TemplateEditorDialog({
         reports on. It saves only if it compiles; every edit bumps the version.
       </p>
       <form onSubmit={save} className="mt-4 space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {!isEdit ? (
             <div>
               <label htmlFor="template-slug" className="field-label">Key</label>

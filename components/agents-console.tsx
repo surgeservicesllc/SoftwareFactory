@@ -279,7 +279,7 @@ export function AgentsConsole() {
                 </ul>
               </section>
 
-              <ul className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+              <ul className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
                 {agents.map((agent) => (
                   <li key={agent.id} className="card-inset flex flex-col p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -375,7 +375,7 @@ export function AgentsConsole() {
               { label: "Active runs", value: String(agent.currentRuns?.length ?? agent.runCounts?.running ?? 0) },
             ]} />
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <AgentSection title="Responsibilities" empty="No responsibilities have been recorded.">
                 {(agent.responsibilities ?? agent.capabilities ?? []).map((item) => <li key={item} className="py-2 text-sm text-muted">{item}</li>)}
               </AgentSection>

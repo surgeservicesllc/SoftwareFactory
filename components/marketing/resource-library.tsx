@@ -79,7 +79,7 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
       </div>
 
       {matches.length ? (
-        <ul className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <ul className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {matches.map((resource) => (
             <li key={resource.slug} className="relative">
               <SurfacePanel className="flex h-full flex-col overflow-hidden">

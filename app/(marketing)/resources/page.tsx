@@ -30,7 +30,7 @@ export default async function ResourcesPage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-14">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.7fr)] lg:items-center">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.7fr)] lg:items-center">
           <div>
             <h1 className="text-balance text-[34px] font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-[44px]">
               {page?.headline}{" "}
@@ -73,7 +73,7 @@ export default async function ResourcesPage() {
       {categories.length ? (
         <MarketingSection className="mt-10">
           <h2 className="sr-only">Browse by category</h2>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {categories.map((category) => (
               <li key={category.title}>
                 <Link href="/resources" className="block h-full">
@@ -90,7 +90,7 @@ export default async function ResourcesPage() {
       ) : null}
 
       <MarketingSection className="mt-10">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {topics.length ? (
             <SurfacePanel className="p-5 sm:p-6">
               <h2 className="text-base font-semibold text-white">Popular Topics</h2>

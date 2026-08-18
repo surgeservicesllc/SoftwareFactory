@@ -1297,7 +1297,7 @@ function ConfigureCard({
         </div>
       </fieldset>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="label">Role</span>
           <select
@@ -1567,7 +1567,7 @@ function ReviewStep({
         })}
       </ul>
 
-      <dl className="mt-4 grid gap-x-4 gap-y-1 rounded-lg border border-line p-3 text-sm sm:grid-cols-2">
+      <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-1 rounded-lg border border-line p-3 text-sm sm:grid-cols-2">
         <div className="flex justify-between gap-2">
           <dt className="text-faint">Total bots</dt>
           <dd className="text-foreground">{bots.length}</dd>

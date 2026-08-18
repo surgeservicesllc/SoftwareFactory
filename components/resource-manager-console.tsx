@@ -226,7 +226,7 @@ export function ResourceManagerConsole({ authenticated }: { authenticated: boole
         <h2 id="routing-summary-title" className="sr-only">
           Routing summary
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Recorded decisions"
             value={state === "loading" ? "—" : String(assignments.length)}
@@ -355,7 +355,7 @@ export function ResourceManagerConsole({ authenticated }: { authenticated: boole
                   </div>
                 </div>
 
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-faint">Predicted success</dt>
                     {/* An unevidenced prediction shows no number at all. Zero

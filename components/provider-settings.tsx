@@ -245,7 +245,7 @@ export function ProviderSettings() {
               {entry.configuredModels.length === 0 ? (
                 <p className="mt-1.5 text-xs text-[var(--text-faint)]">No models configured.</p>
               ) : (
-                <ul className="mt-2 grid gap-2 md:grid-cols-2">
+                <ul className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {entry.configuredModels.map((model) => (
                     <li
                       key={model.id}

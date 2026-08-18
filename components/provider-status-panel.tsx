@@ -121,7 +121,7 @@ export function ProviderStatusPanel() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {payload.providers.map((provider) => (
           <Card key={provider.provider} className="p-4">
             <div className="flex items-start justify-between gap-3">

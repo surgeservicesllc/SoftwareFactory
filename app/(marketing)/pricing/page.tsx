@@ -27,7 +27,7 @@ export default async function PricingPage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-14">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
           <div>
             <h1 className="text-balance text-[36px] font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-[46px]">
               {page?.headline}{" "}
@@ -73,7 +73,7 @@ export default async function PricingPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-10">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
           <PricingPlans plans={content.plans} />
 
           <aside className="space-y-4">

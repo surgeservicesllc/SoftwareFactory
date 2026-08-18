@@ -37,7 +37,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-[#161d2a] bg-[#070a0f]">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div className="max-w-sm">
             <div className="flex items-center gap-3">
               <span className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-[#2d3550] bg-gradient-to-br from-[#161a2e] to-[#0e1120]">

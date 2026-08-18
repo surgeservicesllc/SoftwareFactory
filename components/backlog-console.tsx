@@ -100,7 +100,7 @@ export function BacklogConsole() {
               {tasks.map((task) => (
                 <li
                   key={task.id}
-                  className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_96px_96px_140px_88px] md:items-center md:gap-4"
+                  className="grid grid-cols-1 gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_96px_96px_140px_88px] md:items-center md:gap-4"
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{task.title}</p>
@@ -155,7 +155,7 @@ export function BacklogConsole() {
               </p>
             ) : null}
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <TaskSection title="Acceptance criteria" empty="No acceptance criteria have been recorded.">
                 {(task.acceptanceCriteria ?? []).map((criterion, index) => <li key={`${index}-${criterion}`} className="py-2 text-sm text-muted">{criterion}</li>)}
               </TaskSection>

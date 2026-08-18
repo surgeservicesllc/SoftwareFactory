@@ -682,7 +682,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         </ol>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h2 className="text-base font-semibold text-foreground">Integrated services</h2>
           <ul className="mt-3 space-y-2.5 text-sm">

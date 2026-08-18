@@ -338,7 +338,7 @@ export function ReportsConsole() {
               </section>
             ))}
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Deterministic validation" empty="No validation evidence is recorded.">
                 {(report.validations ?? []).map((validation, index) => (
                   <li key={`${validation.attempt}-${validation.round}-${validation.name}-${index}`} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -361,7 +361,7 @@ export function ReportsConsole() {
               </ReportSection>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Changed files" empty="No changed-file evidence is recorded.">
                 {(report.changedFiles ?? []).map((file) => (
                   <li key={file} className="break-all py-2 font-mono text-xs text-foreground">{file}</li>
@@ -385,7 +385,7 @@ export function ReportsConsole() {
               </section>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Findings" empty="No findings are recorded.">
                 {(report.findings ?? []).map((finding, index) => (
                   <li key={finding.id ?? `${index}-${finding.title}`} className="py-2 text-sm">
@@ -410,7 +410,7 @@ export function ReportsConsole() {
               </ReportSection>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Linked runs" empty="No run is linked to this report.">
                 {(report.runs ?? []).map((run) => (
                   <li key={run.id} className="flex items-center justify-between gap-3 py-2 text-sm">

@@ -274,7 +274,7 @@ export function BotManagerHome() {
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Choose the AI provider you want your bots to use.
         </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {CONNECTABLE.map((entry) => (
             <button
               key={entry.providerId}
@@ -571,7 +571,7 @@ export function BotManagerHome() {
               No API keys required for supported account-login connections.
             </span>
           </p>
-          <div className="mx-auto mt-6 grid max-w-2xl gap-4 sm:grid-cols-2">
+          <div className="mx-auto mt-6 grid grid-cols-1 max-w-2xl gap-4 sm:grid-cols-2">
             {CONNECTABLE.map((entry) => (
               <div
                 key={entry.providerId}
@@ -632,7 +632,7 @@ export function BotManagerHome() {
           {bots.length > 0 ? (
             <section aria-label="Your AI team" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <h2 className="text-sm font-semibold text-[var(--text)]">Your AI Team</h2>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {bots.map((bot) => (
                   <li
                     key={bot.id}

@@ -174,7 +174,7 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
                 <X className="size-5" aria-hidden="true" />
               </button>
             </div>
-            <nav aria-label="Mobile" className="mt-5 grid gap-1">
+            <nav aria-label="Mobile" className="mt-5 grid grid-cols-1 gap-1">
               {navItems.map((item) => (
                 <Link
                   key={item.href}

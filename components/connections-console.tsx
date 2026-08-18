@@ -633,7 +633,7 @@ export function ConnectionsConsole() {
               && handoffIntent.projectId === project.id ? (
                 <form
                   key={`handoff-${project.id}`}
-                  className="grid gap-4 border-t border-line bg-surface-muted p-5"
+                  className="grid grid-cols-1 gap-4 border-t border-line bg-surface-muted p-5"
                   onSubmit={(event) => void handoffProject(event, connection, project)}
                 >
                   <div>
@@ -642,7 +642,7 @@ export function ConnectionsConsole() {
                       The existing project ID and history are preserved. No merge, deploy, or default-branch write is authorized.
                     </p>
                   </div>
-                  <label className="grid gap-1 text-sm text-muted">
+                  <label className="grid grid-cols-1 gap-1 text-sm text-muted">
                     Type HANDOFF GITHUB PROJECT
                     <input
                       className="input"
@@ -652,7 +652,7 @@ export function ConnectionsConsole() {
                       required
                     />
                   </label>
-                  <label className="grid gap-1 text-sm text-muted">
+                  <label className="grid grid-cols-1 gap-1 text-sm text-muted">
                     Rationale (20–500 characters)
                     <textarea
                       className="input min-h-24 py-3"
@@ -663,7 +663,7 @@ export function ConnectionsConsole() {
                       required
                     />
                   </label>
-                  <label className="grid gap-1 text-sm text-muted">
+                  <label className="grid grid-cols-1 gap-1 text-sm text-muted">
                     Rollback and containment plan (20–500 characters)
                     <textarea
                       className="input min-h-24 py-3"
@@ -690,7 +690,7 @@ export function ConnectionsConsole() {
             {connection.repositories.length ? (
               <div className="border-t border-line p-5">
                 <p className="label">Repositories SoftwareFactory can read</p>
-                <ul className="mt-3 grid gap-2 md:grid-cols-2">
+                <ul className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {connection.repositories.map((repository) => (
                     <li key={repository.id}>
                       <a
@@ -787,7 +787,7 @@ export function ConnectionsConsole() {
             No projects exist yet. Create a project from the Projects console to link a repository.
           </p>
         ) : (
-          <ul className="mt-4 grid gap-3">
+          <ul className="mt-4 grid grid-cols-1 gap-3">
             {projects.map((project) => {
               const currentValue = project.connectionId && project.githubRepositoryId
                 ? `${project.connectionId}:${project.githubRepositoryId}`

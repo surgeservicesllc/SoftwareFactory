@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
       <LiveDashboardMetrics authenticated={authenticated} />
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="flex flex-col p-5">
           <SectionTitle
             title="Safety"

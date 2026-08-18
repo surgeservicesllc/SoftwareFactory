@@ -119,11 +119,11 @@ async function unreachable(page: import("@playwright/test").Page, container: str
 }
 
 const CASES = [
+  // Everything the console renders once there are rows. Each is one fixture
+  // and one case name; the measurement below is identical for all of them.
   "project-bots",
   "ai-accounts",
   "app-shell",
-  // Every console surface that only exists once there are rows. Each is one
-  // fixture and one case name; the measurement below is the same for all.
   "runs",
   "reports",
   "agents",
@@ -131,6 +131,19 @@ const CASES = [
   "backlog",
   "connections",
   "projects",
+  "my-projects",
+  "portfolio",
+  "pipelines",
+  "agentos",
+  "autonomy",
+  "bot-usage",
+  "bot-fabric",
+  "bot-manager",
+  "files",
+  "operations",
+  "resources",
+  "safety",
+  "provider-settings",
 ] as const;
 
 for (const width of WIDTHS) {

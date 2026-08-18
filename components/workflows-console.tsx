@@ -247,7 +247,7 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label="Topology"
               value={preview.topology}
@@ -299,7 +299,7 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
             </div>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <SectionTitle title="Node detail" />
               <div className="mt-4">

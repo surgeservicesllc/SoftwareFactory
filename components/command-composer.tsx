@@ -309,7 +309,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
         ))}
       </div>
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <label htmlFor="command-project" className="field-label">
             Project
@@ -450,7 +450,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
 
       <fieldset>
         <legend className="field-label">Requested minimum risk tier</legend>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {riskOptions.map((option) => (
             <button
               key={option.tier}
@@ -483,7 +483,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
       {instruction.trim() && projectId ? (
         <div className="mt-6 rounded-lg border border-line bg-surface-raised p-4">
           <p className="label mb-2">Pipeline</p>
-          <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-faint">Project</dt>
               <dd className="font-medium text-foreground">

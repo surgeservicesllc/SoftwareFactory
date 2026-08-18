@@ -946,7 +946,7 @@ export function RunsConsole() {
                 ))}
               </EvidenceSection>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <EvidenceSection title="Validation" empty="No validation evidence has been recorded.">
                   {(run.validations ?? []).map((validation, index) => (
                     <li key={validation.id ?? `${validation.name}-${index}`} className="flex items-start justify-between gap-3 py-2 text-sm">
@@ -968,7 +968,7 @@ export function RunsConsole() {
                 </EvidenceSection>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <EvidenceSection title="Commits" empty="No commit evidence has been recorded.">
                   {(run.commits ?? []).map((commit) => (
                     <li key={commit.sha} className="py-2 text-sm">
@@ -1016,7 +1016,7 @@ function RunRoutingEvidence({ run }: { run: RunDetail }) {
       </div>
       {run.provider ? (
         <>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="card-inset min-w-0 p-3">
               <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">Selected provider</dt>
               <dd className="mt-1 break-words text-sm text-foreground">{providerDisplayName(run.provider)}</dd>
@@ -1043,7 +1043,7 @@ function RunRoutingEvidence({ run }: { run: RunDetail }) {
                 ))}
               </ul>
               {run.routing.candidates.length ? (
-                <ul className="grid gap-2 sm:grid-cols-2" aria-label="Provider routing candidates">
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Provider routing candidates">
                   {run.routing.candidates.map((candidate) => (
                     <li key={`${candidate.provider}-${candidate.model ?? "default"}`} className="card-inset min-w-0 p-3 text-sm">
                       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">

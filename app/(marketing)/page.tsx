@@ -36,7 +36,7 @@ export default async function HomePage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-16">
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div>
             {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
             <h1 className="mt-5 text-balance text-[40px] font-bold leading-[1.04] tracking-[-0.045em] text-white sm:text-[58px]">
@@ -79,7 +79,7 @@ export default async function HomePage() {
             </a>
           }
         />
-        <ul className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <ul className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {lifecycle.map((stage) => (
             <li key={stage.title}>
               <SurfacePanel className="h-full p-4 transition-colors hover:border-[#33405a]">
@@ -95,12 +95,12 @@ export default async function HomePage() {
       </MarketingSection>
 
       <MarketingSection className="mt-14">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <SurfacePanel className="p-6 sm:p-8">
             <h2 className="text-[22px] font-semibold tracking-[-0.03em] text-white">
               Built on a foundation you do not have to assemble
             </h2>
-            <ul className="mt-6 grid gap-6 sm:grid-cols-3">
+            <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
               {foundation.map((item) => (
                 <li key={item.title}>
                   <IconTile icon={item.icon} accent={item.accent} />
@@ -153,7 +153,7 @@ export default async function HomePage() {
               </a>
             }
           />
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {content.plans.map((plan) => (
               <li key={plan.slug}>
                 <SurfacePanel className="h-full p-5">

@@ -4,6 +4,19 @@ import { createRoot } from "react-dom/client";
 import "@/app/globals.css";
 
 import { ActivityConsole } from "@/components/activity-console";
+import { AgentOsConsole } from "@/components/agentos-console";
+import { AutonomyConsole } from "@/components/autonomy-console";
+import { BotFabricConsole } from "@/components/bot-fabric-console";
+import { BotManagerHome } from "@/components/bot-manager/home";
+import { BotUsageConsole } from "@/components/bot-usage-console";
+import { GitHubFileManager } from "@/components/github-file-manager";
+import { MyProjectsConsole } from "@/components/my-projects-console";
+import { OperationsConsole } from "@/components/operations-console";
+import { PipelinesConsole } from "@/components/pipelines-console";
+import { PortfolioConsole } from "@/components/portfolio-console";
+import { ProviderSettings } from "@/components/provider-settings";
+import { ResourceManagerConsole } from "@/components/resource-manager-console";
+import { SafetyControls } from "@/components/safety-controls";
 import { AgentsConsole } from "@/components/agents-console";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { AppShell } from "@/components/app-shell";
@@ -24,6 +37,7 @@ import {
   PROJECTS,
   REPORTS,
   RUNS,
+  TEMPLATES,
 } from "./fixtures";
 
 /**
@@ -45,6 +59,24 @@ function serveFixtures() {
   window.fetch = ((input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/bots") && url.includes("/projects/")) return json(PROJECT_BOTS_ROSTER);
+    // Order matters: the more specific bot routes before the fabric snapshot.
+    if (url.includes("/api/bots/providers")) return json({ providers: [] });
+    if (url.includes("/api/bots")) {
+      return json({
+        activeOrganizationId: "10000000-0000-4000-8000-000000000001",
+        canManage: true,
+        bots: PROJECT_BOTS_ROSTER.available,
+        roles: PROJECT_BOTS_ROSTER.roles,
+        assignments: PROJECT_BOTS_ROSTER.assigned,
+        projects: PROJECTS,
+        executor: {
+          connected: false,
+          label: "Not Connected",
+          detail: "No worker is connected in this phase.",
+          globalKillSwitchActive: true,
+        },
+      });
+    }
     if (url.includes("/api/ai-accounts/usage")) return json({ usage: [] });
     if (url.includes("/api/ai-accounts")) return json({ accounts: AI_ACCOUNTS });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
@@ -80,6 +112,19 @@ const CASES: Record<string, () => React.ReactElement> = {
   backlog: () => <InShell><BacklogConsole /></InShell>,
   connections: () => <InShell><ConnectionsConsole /></InShell>,
   projects: () => <InShell><ProjectsConsole /></InShell>,
+  "my-projects": () => <InShell><MyProjectsConsole /></InShell>,
+  portfolio: () => <InShell><PortfolioConsole /></InShell>,
+  pipelines: () => <InShell><PipelinesConsole templates={TEMPLATES} /></InShell>,
+  agentos: () => <InShell><AgentOsConsole /></InShell>,
+  autonomy: () => <InShell><AutonomyConsole /></InShell>,
+  "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
+  "bot-fabric": () => <InShell><BotFabricConsole /></InShell>,
+  "bot-manager": () => <InShell><BotManagerHome /></InShell>,
+  files: () => <InShell><GitHubFileManager /></InShell>,
+  operations: () => <InShell><OperationsConsole authenticated /></InShell>,
+  resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,
+  safety: () => <InShell><SafetyControls /></InShell>,
+  "provider-settings": () => <InShell><ProviderSettings /></InShell>,
   "project-bots": () => (
     <div className="bg-background p-4">
       <ProjectBots projectId={PROJECT_ID} projectName="E-Commerce Platform" />

@@ -116,7 +116,7 @@ export function ProjectOperationsPanel({ projectId }: { projectId: string }) {
         {operations.project.healthReason ?? "No health evidence has been recorded yet."}
       </p>
 
-      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-4">
         <div className="flex justify-between gap-2 rounded border border-line px-3 py-2">
           <dt className="text-muted">Monitors</dt>
           <dd className="tabular text-foreground">{connectedMonitors}</dd>

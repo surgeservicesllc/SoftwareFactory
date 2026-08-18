@@ -262,3 +262,30 @@ export const CONNECTIONS = [
     lastSyncedAt: "2026-08-17T10:00:00.000Z",
   },
 ];
+
+/** Built-in pipeline templates, in the shape the pipelines console takes. */
+export const TEMPLATES = [
+  {
+    key: "production-readiness",
+    name: "Production Readiness",
+    category: "audit",
+    summary:
+      "Checks the things that break on the first real day: configuration, migrations, error handling, observability and rollback.",
+    version: 1,
+    topology: "diamond",
+    nodeCount: 7,
+    maxParallelism: 5,
+    compiles: true,
+  },
+  {
+    key: "security-audit",
+    name: "Security Audit",
+    category: "audit",
+    summary: "Looks for unsafe patterns, dependency risk and exposed material.",
+    version: 1,
+    topology: "fan-out",
+    nodeCount: 5,
+    maxParallelism: 4,
+    compiles: true,
+  },
+];

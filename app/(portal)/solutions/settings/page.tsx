@@ -27,7 +27,7 @@ export default function SettingsPage() {
         description="What SoftwareFactory is allowed to do, and what always needs you."
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Card className="p-5 sm:p-6">
             <SafetyControls />
