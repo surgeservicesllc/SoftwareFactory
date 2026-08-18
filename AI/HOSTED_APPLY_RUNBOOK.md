@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 109 migration
+**The current total is 19**, named in the list below. The repository total is 110 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -46,7 +46,11 @@ the three apply steps were skipped by their `if:` conditions, and the log shows 
 `20260817` range — `000100` through `001100`. So the run-review controls, the owner-operated
 safety controls, `20260817000700_bot_assignment_configuration` (the Assign Bots wizard's
 configuration columns and `assign_bots_to_project`), the custom pipeline templates and the
-per-posting model/effort override are **applied on production**. Earlier revisions of this
+per-posting model/effort override are **applied on production**.
+`20260818000100_removable_accounts_keep_usage_evidence` (drops the usage table's
+account cascade so `remove_ai_account` stops dying against the append-only
+trigger — probe run 32188102707's 42501) is newer than that measurement and is
+outstanding until the next `scope=broker-functions` run applies it. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 
