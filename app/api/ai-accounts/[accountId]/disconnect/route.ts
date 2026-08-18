@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { botFabricErrorResponse } from "@/lib/bots/route";
-import { jsonNoStore } from "@/lib/server/http";
+import { databaseErrorResponse, jsonNoStore } from "@/lib/server/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -42,10 +42,17 @@ export async function POST(
       p_ai_account_id: accountId,
     });
     if (error) {
-      return jsonNoStore(
-        { error: { code: "disconnect_failed", message: "The account could not be disconnected." } },
-        { status: 403 },
-      );
+      /*
+       * The database's own sentence for the codes the shared policy has
+       * vetted, and nothing at all for the rest.
+       *
+       * Every mutation in this section used to answer with a house sentence
+       * and, at best, a bare SQLSTATE — which is how an owner came to be told
+       * "The account could not be removed. (42501)" and had no way to tell an
+       * authorization refusal, whose message this repository wrote, from a
+       * missing privilege on a table, which names the table. Both are 42501.
+       */
+      return databaseErrorResponse(error);
     }
 
     return jsonNoStore({ disconnected: data === true });

@@ -93,6 +93,44 @@ against real PostgreSQL.
 
 ---
 
+## "THE ACCOUNT COULD NOT BE REMOVED. (42501)" (2026-08-18)
+
+A SQLSTATE and no words. `42501` is `insufficient_privilege`, and it covers two
+completely different problems: an authorization refusal, whose message is a
+sentence this repository wrote — "owner or admin role is required to remove an
+AI account" — and a missing privilege on a table, which names the table.
+Telling them apart is the entire diagnosis, and the route was discarding the
+only thing that could.
+
+**Every mutation in this section did the same.** Remove, Disconnect, the
+session read and its cancel all answered with a house sentence and, at best, a
+bare code. They now go through `databaseErrorResponse`, which is the shared
+policy and already the right one: it passes the database's own message for the
+codes it has vetted as client-safe (`22023`, `23502`, `23514`, `42501`,
+`40001`, `55000`, `P0002`) and stays generic for everything else — so an
+unrecognised fault still says nothing, which is what the original caution was
+actually about. Rename keeps its one friendly translation, because `23505` is
+*not* on that list and a raw unique-violation names a constraint.
+
+**The function itself is correct.** `remove_ai_account` was exercised against
+the real migrated schema in the four states production actually holds, and all
+four pass: a disconnected account whose credential is already gone, a second
+removal of something already removed (answers false rather than raising), a
+member (42501 with that sentence), and an outsider's organization id. Only the
+happy path had been covered, so the state most likely to be removed was
+untested.
+
+So the hosted failure is not the logic — it is a privilege difference on that
+database. A `SECURITY DEFINER` function runs as its owner, and if the function
+and the tables it writes were applied by different roles, the function can lack
+privileges on them. The `scope=probe` step now prints the owner of every
+function and table in this section, whether each function is definer, and
+whether `authenticated` may execute it; every function should share one owner
+with every table. With the route fixed, the next attempt also names the cause
+on screen instead of "(42501)".
+
+---
+
 ## THE CONSOLE WAS ENFORCING A RULE THE SERVER DOES NOT HAVE (2026-08-18)
 
 The owner's screenshot is the whole bug report: four accounts, three of which

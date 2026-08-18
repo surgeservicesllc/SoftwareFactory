@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { botFabricErrorResponse } from "@/lib/bots/route";
-import { jsonNoStore } from "@/lib/server/http";
+import { databaseErrorResponse, jsonNoStore } from "@/lib/server/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -40,10 +40,17 @@ export async function POST(
       p_session_id: sessionId,
     });
     if (error) {
-      return jsonNoStore(
-        { error: { code: "cancel_failed", message: "The sign-in could not be cancelled." } },
-        { status: 403 },
-      );
+      /*
+       * The database's own sentence for the codes the shared policy has
+       * vetted, and nothing at all for the rest.
+       *
+       * Every mutation in this section used to answer with a house sentence
+       * and, at best, a bare SQLSTATE — which is how an owner came to be told
+       * "The account could not be removed. (42501)" and had no way to tell an
+       * authorization refusal, whose message this repository wrote, from a
+       * missing privilege on a table, which names the table. Both are 42501.
+       */
+      return databaseErrorResponse(error);
     }
 
     // false is a finished session — cancelled twice, or already terminal.
