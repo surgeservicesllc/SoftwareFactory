@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 110 migration
+**The current total is 19**, named in the list below. The repository total is 111 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -49,8 +49,14 @@ configuration columns and `assign_bots_to_project`), the custom pipeline templat
 per-posting model/effort override are **applied on production**.
 `20260818000100_removable_accounts_keep_usage_evidence` (drops the usage table's
 account cascade so `remove_ai_account` stops dying against the append-only
-trigger — probe run 32188102707's 42501) is newer than that measurement and is
-outstanding until the next `scope=broker-functions` run applies it. Earlier revisions of this
+trigger — probe run 32188102707's 42501) and
+`20260818000200_project_pipeline_selection` (the `project_pipelines` table and
+its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
+functions, which is what makes the AI Factory's Use button record anything) are
+both newer than that measurement and are outstanding until the next
+`scope=broker-functions` run applies them. Until then the Configure Pipeline
+step reads **Not Connected** in effect: `/api/project-pipelines` will return the
+database's own missing-function error rather than pretending a selection stuck. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 

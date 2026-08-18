@@ -38,6 +38,7 @@ function stubFactory(overrides: Partial<Record<string, unknown>> = {}) {
     "/api/ai-accounts": { accounts: [] },
     "/api/bots": { bots: [], assignments: [] },
     "/api/commands": { commands: [] },
+    "/api/project-pipelines": { pipelines: [], canManage: true },
   };
   const bodies = { ...defaults, ...overrides };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -86,6 +87,10 @@ describe("AiFactoryConsole", () => {
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+      "/api/project-pipelines": {
+        pipelines: [{ id: "pp1", projectId: "p1", templateKey: "general_audit", name: "General Audit" }],
+        canManage: true,
       },
     });
 
@@ -171,6 +176,48 @@ describe("AiFactoryConsole", () => {
 
     const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
     expect(within(configure).getByText(/none carries a role or responsibilities yet/)).toBeInTheDocument();
+  });
+
+  it("does not call Configure Pipeline done until a pipeline is actually selected", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    // A project existing is not a pipeline being chosen. The step used to
+    // read done the moment step 2 finished, which made it the one step on
+    // the page nobody could ever work on.
+    expect(within(step).queryByText("Done")).not.toBeInTheDocument();
+    expect(within(step).getByText(/No pipeline selected yet/)).toBeInTheDocument();
+    expect(within(step).getByRole("button", { name: /choose a pipeline/i })).toBeInTheDocument();
+  });
+
+  it("shows the selected pipelines on the page itself, not only inside the overlay", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/project-pipelines": {
+        pipelines: [
+          { id: "pp1", projectId: "p1", templateKey: "general_audit", name: "General Audit" },
+          { id: "pp2", projectId: "p1", templateKey: "rls_audit", name: "RLS Audit" },
+          { id: "pp3", projectId: "p2", templateKey: "bug_sweep", name: "Bug Sweep" },
+        ],
+        canManage: true,
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(step).getByText("Done")).toBeInTheDocument();
+    expect(within(step).getByText(/2 pipelines selected: General Audit, RLS Audit/)).toBeInTheDocument();
+
+    const chips = within(step).getByRole("list", { name: "Selected pipelines" });
+    expect(within(chips).getByText("General Audit")).toBeInTheDocument();
+    expect(within(chips).getByText("RLS Audit")).toBeInTheDocument();
+    // Another factory's selection belongs to that factory, not this one.
+    expect(within(chips).queryByText("Bug Sweep")).not.toBeInTheDocument();
   });
 
   it("fails closed for a signed-out visitor", async () => {

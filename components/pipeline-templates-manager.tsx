@@ -1,11 +1,12 @@
 "use client";
 
-import { ClipboardList, Copy, Loader2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ClipboardList, Copy, Loader2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PipelineTemplateSummary } from "@/components/pipelines-console";
 import { Card, StatusBadge } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { NODE_CAPABILITIES } from "@/lib/graph/contracts";
 import { TEMPLATE_CATEGORIES } from "@/lib/graph/templates";
 
@@ -15,6 +16,14 @@ import { TEMPLATE_CATEGORIES } from "@/lib/graph/templates";
  * functions, and plan a real graph from any template — built-in or custom —
  * through the same launch endpoint. Every topology fact shown is compiled,
  * and a definition the compiler refuses never saves.
+ *
+ * Use selects the template for a project and writes that selection to
+ * Supabase, so it survives closing the overlay, a refresh, and a move to
+ * another surface — it is a record, not a highlight this component
+ * remembers. A selected card's Use turns grey and says Selected, pressing it
+ * again removes the selection, and a project may select as many pipelines as
+ * it needs. Planning a graph is the separate, heavier act it always was, and
+ * keeps its own button.
  */
 
 type CustomTemplate = {
@@ -32,6 +41,13 @@ type CustomTemplate = {
   nodeCount?: number | null;
   maxParallelism?: number | null;
   errors?: string[];
+};
+
+type PipelineSelection = {
+  id: string;
+  projectId: string;
+  templateKey: string;
+  templateId: string | null;
 };
 
 type EditorSeed = {
@@ -53,14 +69,42 @@ const EMPTY_SEED: EditorSeed = {
   areas: [{ id: "area_1", job: "" }],
 };
 
-export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
+export function PipelineTemplatesManager({
+  builtIns,
+  projectContext,
+  onSelectionChanged,
+}: {
+  builtIns: readonly PipelineTemplateSummary[];
+  /**
+   * The project the caller is already working on. The AI Factory journey has
+   * one and passes it, so the step does not ask again for something the page
+   * has already established. Without it this component asks, because a
+   * pipeline is selected *for* a project and there is no honest default.
+   */
+  projectContext?: { id: string; name: string };
+  /** Lets a caller showing the same selections refresh alongside a toggle. */
+  onSelectionChanged?: () => void;
+}) {
   const [custom, setCustom] = useState<CustomTemplate[] | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [notice, setNotice] = useState("");
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
   const [deletingId, setDeletingId] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [using, setUsing] = useState<{ key: string; name: string } | null>(null);
+  const [planning, setPlanning] = useState<{ key: string; name: string } | null>(null);
+
+  const [selections, setSelections] = useState<PipelineSelection[] | null>(null);
+  const [canSelect, setCanSelect] = useState(false);
+  /**
+   * Whether this database can record a selection at all. Distinct from
+   * "nothing is selected": both render an empty set, and only one of them
+   * means pressing Use would silently do nothing.
+   */
+  const [selectionAvailable, setSelectionAvailable] = useState(true);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [chosenProjectId, setChosenProjectId] = useState("");
+  const [togglingKey, setTogglingKey] = useState("");
+  const [selectionNotice, setSelectionNotice] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -77,10 +121,128 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
     }
   }, []);
 
+  const loadSelections = useCallback(async () => {
+    try {
+      const response = await fetch("/api/project-pipelines", { cache: "no-store" });
+      if (!response.ok) {
+        setSelections([]);
+        setSelectionAvailable(false);
+        return;
+      }
+      const body = (await response.json()) as {
+        available?: boolean;
+        canManage?: boolean;
+        pipelines?: PipelineSelection[];
+      };
+      setSelections(body.pipelines ?? []);
+      setCanSelect(Boolean(body.canManage));
+      setSelectionAvailable(body.available !== false);
+    } catch {
+      setSelections([]);
+      setSelectionAvailable(false);
+    }
+  }, []);
+
+  // Only asked for when the caller did not say which project it is. A page
+  // that already knows should not make a person answer twice.
+  const loadProjects = useCallback(async () => {
+    if (projectContext) return;
+    try {
+      const response = await fetch("/api/projects", { cache: "no-store" });
+      const body = (await response.json().catch(() => ({}))) as {
+        projects?: Array<{ id: string; name: string }>;
+      };
+      setProjects(body.projects ?? []);
+    } catch {
+      setProjects([]);
+    }
+  }, [projectContext]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const timer = window.setTimeout(() => {
+      void load();
+      void loadSelections();
+      void loadProjects();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, loadProjects, loadSelections]);
+
+  /**
+   * The project a press of Use applies to: the caller's if it gave one,
+   * otherwise the one chosen here, falling back to the first so a workspace
+   * with a single project needs no answer at all.
+   */
+  const activeProject = projectContext
+    ?? (projects ?? []).find((project) => project.id === chosenProjectId)
+    ?? (projects ?? [])[0]
+    ?? null;
+
+  const selectedKeys = useMemo(() => {
+    if (!activeProject) return new Set<string>();
+    return new Set(
+      (selections ?? [])
+        .filter((selection) => selection.projectId === activeProject.id)
+        .map((selection) => selection.templateKey),
+    );
+  }, [activeProject, selections]);
+
+  async function toggleSelection(templateKey: string, templateName: string) {
+    if (!activeProject) return;
+    const alreadySelected = selectedKeys.has(templateKey);
+    setTogglingKey(templateKey);
+    setSelectionNotice("");
+    try {
+      const response = alreadySelected
+        ? await fetch(
+            `/api/project-pipelines?projectId=${encodeURIComponent(activeProject.id)}&templateKey=${encodeURIComponent(templateKey)}`,
+            { method: "DELETE" },
+          )
+        : await fetch("/api/project-pipelines", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId: activeProject.id, templateKey }),
+          });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(
+          body.error?.message
+            ?? `${templateName} could not be ${alreadySelected ? "removed" : "selected"}.`,
+        );
+      }
+      await loadSelections();
+      onSelectionChanged?.();
+    } catch (error) {
+      setSelectionNotice(
+        error instanceof Error
+          ? error.message
+          : `${templateName} could not be ${alreadySelected ? "removed" : "selected"}.`,
+      );
+    } finally {
+      setTogglingKey("");
+    }
+  }
+
+  const selectionDisabledReason = !activeProject
+    ? "A pipeline is selected for a project, and this workspace has none yet."
+    : !selectionAvailable
+      ? "Not Connected — this database does not have the pipeline-selection migration applied yet, so a selection cannot be recorded."
+      : !canSelect
+        ? "Selecting a project's pipelines needs organization owner or administrator access."
+        : "";
+
+  function pipelineUseButton(templateKey: string, templateName: string, compiles: boolean) {
+    const selected = selectedKeys.has(templateKey);
+    return (
+      <SelectPipelineButton
+        busy={togglingKey === templateKey}
+        compiles={compiles}
+        disabledReason={selectionDisabledReason}
+        onToggle={() => void toggleSelection(templateKey, templateName)}
+        selected={selected}
+        templateName={templateName}
+      />
+    );
+  }
 
   async function deleteTemplate(template: CustomTemplate) {
     setDeleteBusy(true);
@@ -113,6 +275,16 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
         ) : null}
       </div>
       {notice ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{notice}</p> : null}
+
+      <SelectionSummary
+        activeProject={activeProject}
+        chosenProjectId={chosenProjectId}
+        disabledReason={selectionDisabledReason}
+        notice={selectionNotice}
+        onChooseProject={setChosenProjectId}
+        projects={projectContext ? null : projects}
+        selectedCount={selectedKeys.size}
+      />
 
       <section aria-label="Your templates">
         <h3 className="label">Your templates</h3>
@@ -148,14 +320,16 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
                   <p className="mt-2 text-xs text-[var(--danger)]">{template.errors[0]}</p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-1.5">
+                  {pipelineUseButton(template.slug, template.name, template.compiles)}
                   <button
                     type="button"
-                    onClick={() => setUsing({ key: template.slug, name: template.name })}
+                    aria-label={`Plan a graph from ${template.name}`}
+                    onClick={() => setPlanning({ key: template.slug, name: template.name })}
                     disabled={!template.compiles}
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-secondary btn-sm"
                   >
                     <Play className="size-4" aria-hidden="true" />
-                    Use
+                    Plan graph
                   </button>
                   {canManage && template.editable ? (
                     <>
@@ -239,14 +413,16 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
                 {template.maxParallelism !== null ? ` · up to ${template.maxParallelism} in parallel` : ""}
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
+                {pipelineUseButton(template.key, template.name, template.compiles)}
                 <button
                   type="button"
-                  onClick={() => setUsing({ key: template.key, name: template.name })}
+                  aria-label={`Plan a graph from ${template.name}`}
+                  onClick={() => setPlanning({ key: template.key, name: template.name })}
                   disabled={!template.compiles}
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-secondary btn-sm"
                 >
                   <Play className="size-4" aria-hidden="true" />
-                  Use
+                  Plan graph
                 </button>
                 {canManage ? (
                   <button
@@ -291,10 +467,135 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
           }}
         />
       ) : null}
-      {using ? (
-        <TemplateUseDialog templateKey={using.key} templateName={using.name} onClose={() => setUsing(null)} />
+      {planning ? (
+        <TemplatePlanDialog templateKey={planning.key} templateName={planning.name} onClose={() => setPlanning(null)} />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The Use control, and the whole of what "selected" looks like.
+ *
+ * Selected renders grey rather than accent, because accent on this page means
+ * "a thing you can still do" and a selection is a thing already done. The
+ * state is carried by `aria-pressed` as well as by colour, so it reaches
+ * someone who cannot see the difference, and the accessible name says what
+ * pressing it will do rather than what the button currently is.
+ */
+function SelectPipelineButton({
+  busy,
+  compiles,
+  disabledReason,
+  onToggle,
+  selected,
+  templateName,
+}: {
+  busy: boolean;
+  compiles: boolean;
+  disabledReason: string;
+  onToggle: () => void;
+  selected: boolean;
+  templateName: string;
+}) {
+  const blocked = Boolean(disabledReason) || !compiles;
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={selected ? `Stop using ${templateName}` : `Use ${templateName}`}
+      title={
+        compiles
+          ? disabledReason || undefined
+          : "This template does not compile, so it cannot be selected."
+      }
+      onClick={onToggle}
+      disabled={blocked || busy}
+      className={cn("btn btn-sm", selected ? "btn-secondary" : "btn-primary")}
+    >
+      {busy ? (
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+      ) : selected ? (
+        <Check className="size-4" aria-hidden="true" />
+      ) : (
+        <Play className="size-4" aria-hidden="true" />
+      )}
+      {selected ? "Selected" : "Use"}
+    </button>
+  );
+}
+
+/**
+ * What the selections below add up to, and which project they belong to.
+ *
+ * A grid of grey buttons is only meaningful if the page says what they are
+ * grey *for*; and when the caller did not name a project, this is where one
+ * is chosen — once, above the cards, rather than per card.
+ */
+function SelectionSummary({
+  activeProject,
+  chosenProjectId,
+  disabledReason,
+  notice,
+  onChooseProject,
+  projects,
+  selectedCount,
+}: {
+  activeProject: { id: string; name: string } | null;
+  chosenProjectId: string;
+  disabledReason: string;
+  notice: string;
+  onChooseProject: (projectId: string) => void;
+  projects: Array<{ id: string; name: string }> | null;
+  selectedCount: number;
+}) {
+  const showPicker = projects !== null && projects.length > 1;
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="label">Selected pipelines</h3>
+          {activeProject ? (
+            <p className="mt-1 text-sm text-muted">
+              {selectedCount === 0
+                ? `No pipeline selected for ${activeProject.name} yet. Press Use on a template to add one — a project can run as many as it needs.`
+                : `${selectedCount} pipeline${selectedCount === 1 ? "" : "s"} selected for ${activeProject.name}. Selection is recorded intent: nothing runs until work is dispatched.`}
+            </p>
+          ) : projects === null ? (
+            <p className="mt-1 text-sm text-muted">Reading your projects…</p>
+          ) : (
+            <p className="mt-1 text-sm text-muted">
+              A pipeline is selected for a project, and this workspace has none yet.{" "}
+              <Link href="/solutions/projects#add-project" className="text-accent underline">
+                Create a project
+              </Link>{" "}
+              first.
+            </p>
+          )}
+        </div>
+        {showPicker && activeProject ? (
+          <div className="min-w-48">
+            <label htmlFor="pipeline-selection-project" className="field-label">Project</label>
+            <select
+              id="pipeline-selection-project"
+              value={chosenProjectId || activeProject.id}
+              onChange={(event) => onChooseProject(event.target.value)}
+              className="input"
+            >
+              {(projects ?? []).map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+      </div>
+      {activeProject && disabledReason ? (
+        <p className="mt-2 text-xs text-faint">{disabledReason}</p>
+      ) : null}
+      {notice ? (
+        <p className="mt-2 text-sm text-[var(--danger)]" aria-live="polite">{notice}</p>
+      ) : null}
+    </Card>
   );
 }
 
@@ -482,7 +783,7 @@ function TemplateEditorDialog({
  * launch endpoint. The result states exactly what the endpoint states: the
  * graph is recorded and nothing has been dispatched.
  */
-function TemplateUseDialog({
+function TemplatePlanDialog({
   templateKey,
   templateName,
   onClose,
@@ -549,8 +850,8 @@ function TemplateUseDialog({
   }
 
   return (
-    <DialogShell label={`Use ${templateName}`} onClose={onClose}>
-      <h2 className="text-lg font-semibold text-foreground">Use {templateName}</h2>
+    <DialogShell label={`Plan a graph from ${templateName}`} onClose={onClose}>
+      <h2 className="text-lg font-semibold text-foreground">Plan a graph from {templateName}</h2>
       <p className="mt-1 text-sm text-muted">
         This plans a graph from the template against a project and records it — nodes, edges, and
         budget — through the same write boundary the engine uses. Nothing is dispatched: execution
@@ -571,7 +872,7 @@ function TemplateUseDialog({
             <Link href="/solutions/projects#add-project" className="text-accent underline">
               Create a project
             </Link>{" "}
-            first, then use this template.
+            first, then plan a graph from this template.
           </p>
         ) : (
           <>

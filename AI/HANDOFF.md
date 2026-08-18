@@ -2,6 +2,26 @@
 
 Last updated: 2026-08-18
 
+## Newest (2026-08-18): Use records a project's pipeline — one owner action outstanding
+
+`Configure Pipeline` on `/solutions/ai-factory` now has something to configure.
+Pressing **Use** on a template card selects it for the project the journey is
+scoped to, writes that to `project_pipelines`, and the step reads it back: done
+only when at least one pipeline is selected, with the chosen names rendered on
+the page. Many can be selected; pressing a selected card again removes it. The
+graph-planning dialog Use used to open is now its own **Plan graph** button.
+
+**Outstanding owner action:** migration `20260818000200_project_pipeline_selection`
+is not on the hosted ledger. Run
+`.github/workflows/apply-hosted-migrations.yml` with `confirm=apply` and
+`scope=broker-functions` — the file is in that scope's list, and every statement
+in it is idempotent (`create table if not exists`, `alter type ... add value if
+not exists`, `create or replace function`). Until then the console tells the
+truth about itself rather than appearing to work: `/api/project-pipelines`
+returns `pipeline_selection_not_connected` and the Use button is disabled with
+"Not Connected — this database does not have the pipeline-selection migration
+applied yet".
+
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 
 Probe run `32103778884` (`.github/workflows/apply-hosted-migrations.yml`,

@@ -58,6 +58,7 @@ type FactoryData = {
   bots: number;
   assignments: Array<{ projectId: string | null; configured: boolean }>;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
+  pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
 };
 
 type State =
@@ -156,12 +157,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   const load = useCallback(async () => {
     try {
-      const [connections, projects, accounts, bots, commands] = await Promise.allSettled([
+      const [connections, projects, accounts, bots, commands, pipelines] = await Promise.allSettled([
         fetch("/api/github/connections", { cache: "no-store" }),
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/ai-accounts", { cache: "no-store" }),
         fetch("/api/bots", { cache: "no-store" }),
         fetch("/api/commands", { cache: "no-store" }),
+        fetch("/api/project-pipelines", { cache: "no-store" }),
       ]);
 
       const first = connections.status === "fulfilled" ? connections.value : null;
@@ -182,6 +184,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         bots: 0,
         assignments: [],
         commands: [],
+        pipelines: [],
       };
 
       if (first?.ok) {
@@ -224,6 +227,14 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       if (commands.status === "fulfilled" && commands.value.ok) {
         const body = await readJson<{ commands?: FactoryData["commands"] }>(commands.value);
         data.commands = body?.commands ?? [];
+      }
+      if (pipelines.status === "fulfilled" && pipelines.value.ok) {
+        const body = await readJson<{ pipelines?: FactoryData["pipelines"] }>(pipelines.value);
+        data.pipelines = (body?.pipelines ?? []).map((pipeline) => ({
+          name: pipeline.name,
+          projectId: pipeline.projectId,
+          templateKey: pipeline.templateKey,
+        }));
       }
 
       setState({ kind: "ready", data });
@@ -334,6 +345,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   /** Still choosing: the flow is open and no project has appeared for it yet. */
   const isStartingNew = startingNewFactory && activeProject === null;
 
+  const scopedPipelines = activeProject
+    ? data.pipelines.filter((pipeline) => pipeline.projectId === activeProject.id)
+    : [];
   const scopedAssignments = activeProject
     ? data.assignments.filter((assignment) => assignment.projectId === activeProject.id)
     : [];
@@ -353,6 +367,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     evidence: string;
     action: string;
     icon: typeof Factory;
+    /** Rendered under the evidence line when a step has something to show. */
+    detail?: React.ReactNode;
     body: React.ReactNode;
     pageHref: string;
     pageLabel: string;
@@ -389,11 +405,48 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "pipeline",
       title: "Configure Pipeline",
       description: "Every goal runs the same verified lifecycle. Use a built-in template, or define your own stages and record a pipeline for a project.",
-      done: activeProject !== null,
-      evidence: `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`,
-      action: "Configure pipeline",
+      /*
+       * Done means this factory has chosen a pipeline, not that a project
+       * exists. The step used to read done the moment step 2 finished, which
+       * made it the one step on the page that could not be worked on: there
+       * was nothing to select and nothing that could have been.
+       */
+      done: scopedPipelines.length > 0,
+      evidence: scopedPipelines.length > 0
+        ? `${scopedPipelines.length} pipeline${scopedPipelines.length === 1 ? "" : "s"} selected: ${scopedPipelines.map((pipeline) => pipeline.name).join(", ")}`
+        : `No pipeline selected yet · ${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled, ready to use`,
+      action: scopedPipelines.length > 0 ? "Change pipelines" : "Choose a pipeline",
       icon: Workflow,
-      body: <PipelineTemplatesManager builtIns={builtIns} />,
+      /*
+       * The selections themselves, on the page rather than only inside the
+       * overlay that made them. Pressing Use is only believable if what it
+       * chose is still here after the overlay closes.
+       */
+      detail: scopedPipelines.length > 0 ? (
+        <ul aria-label="Selected pipelines" className="mt-2 flex flex-wrap gap-1.5">
+          {scopedPipelines.map((pipeline) => (
+            <li
+              key={pipeline.templateKey}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-[var(--surface-raised)] px-2.5 py-1 text-xs text-muted"
+            >
+              <Check className="size-3.5 shrink-0 text-[var(--accent-text)]" aria-hidden="true" />
+              {pipeline.name}
+            </li>
+          ))}
+        </ul>
+      ) : null,
+      /*
+       * The project this journey is building, handed to the step, so Use
+       * writes against it without asking again — and `load` on every toggle,
+       * so the page behind the overlay is already right when it closes.
+       */
+      body: (
+        <PipelineTemplatesManager
+          builtIns={builtIns}
+          onSelectionChanged={() => void load()}
+          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : undefined}
+        />
+      ),
       pageHref: "/solutions/pipelines?view=templates",
       pageLabel: "Pipelines",
     },
@@ -678,6 +731,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                   </div>
                   <p className="mt-1 text-sm text-muted">{step.description}</p>
                   <p className="mt-1 text-xs text-faint">{step.evidence}</p>
+                  {step.detail}
                   <button
                     type="button"
                     onClick={() => setOpenStep(step.id)}

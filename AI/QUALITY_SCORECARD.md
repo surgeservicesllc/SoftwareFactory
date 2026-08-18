@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-18
 
+**Addendum, 2026-08-18 — a project's selected pipelines (ADR-090):**
+migration `20260818000200` (`project_pipelines`, RLS + FORCE RLS, all table
+privileges revoked from `anon`/`authenticated`/`service_role`, three definer
+functions), `GET`/`POST`/`DELETE /api/project-pipelines`, the Use toggle in
+`PipelineTemplatesManager`, and the AI Factory's Configure Pipeline step are
+covered by `tests/integration/project-pipeline-selection.behavior.test.ts` (16
+cases against the real migration chain, including owner-allowed,
+member-denied-write/allowed-read, outsider-denied, anonymous-denied, and no
+direct browser write path), `tests/unit/project-pipelines-routes.test.ts` (14
+cases) and the two component suites. Lint, typecheck, the full 3258-test suite
+and a production build are green on this change.
+
+**The migration is unhosted**, so no production claim is made and none is
+implied by the console: `/api/project-pipelines` reports PGRST202 as **Not
+Connected** with its own code, and the Use button is disabled naming that
+reason rather than rendering an empty selection set. The hosted evidence class
+for this feature is therefore *none* until
+`.github/workflows/apply-hosted-migrations.yml` (`scope=broker-functions`, which
+now carries the file) is run by the owner.
+
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to
 several entries below was derived from a ledger high-water mark, and probe run
