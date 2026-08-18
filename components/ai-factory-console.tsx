@@ -8,6 +8,7 @@ import {
   GitBranch,
   Loader2,
   PlugZap,
+  Plus,
   Settings2,
   Terminal,
   Workflow,
@@ -23,7 +24,7 @@ import { ConnectionsConsole } from "@/components/connections-console";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
 import { ProjectBots } from "@/components/project-bots";
-import { BlockedState, Card, StatusBadge } from "@/components/ui";
+import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 /**
@@ -55,8 +56,7 @@ type FactoryData = {
   projects: Array<{ id: string; name: string }>;
   connectedAccounts: number;
   bots: number;
-  assignments: number;
-  configuredAssignments: number;
+  assignments: Array<{ projectId: string | null; configured: boolean }>;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
 };
 
@@ -133,6 +133,23 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   // an uninvited modal is a trap, not a guide — and closing always lands
   // back on the journey with the fresh records already read.
   const [openStep, setOpenStep] = useState<StepId | null>(null);
+  /**
+   * Which factory the journey is showing, and whether a brand-new one is being
+   * started. Both are a *view* over live records, never a substitute for them:
+   * clearing the selection cannot mark a finished step unfinished for a
+   * project that still exists, it only stops pointing at that project.
+   */
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [startingNewFactory, setStartingNewFactory] = useState(false);
+  /**
+   * Project ids that existed when the new-factory flow began.
+   *
+   * `AddProjectForm` is shared with the rest of the console and reports only
+   * that it finished, not what it made. Rather than widen that contract for
+   * every caller, the new project is identified by being the one that was not
+   * here a moment ago.
+   */
+  const [projectIdsBeforeNew, setProjectIdsBeforeNew] = useState<readonly string[] | null>(null);
   // Which project the roster steps operate on. Empty until projects load;
   // falls back to the first project if the chosen one disappears.
   const [rosterProjectId, setRosterProjectId] = useState("");
@@ -163,8 +180,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         projects: [],
         connectedAccounts: 0,
         bots: 0,
-        assignments: 0,
-        configuredAssignments: 0,
+        assignments: [],
         commands: [],
       };
 
@@ -188,14 +204,22 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       if (bots.status === "fulfilled" && bots.value.ok) {
         const body = await readJson<{
           bots?: unknown[];
-          assignments?: Array<{ status?: string; roleId?: string | null; responsibilities?: unknown[] }>;
+          assignments?: Array<{
+            projectId?: string | null;
+            responsibilities?: unknown[];
+            roleId?: string | null;
+            status?: string;
+          }>;
         }>(bots.value);
         data.bots = (body?.bots ?? []).length;
-        const active = (body?.assignments ?? []).filter((assignment) => assignment.status !== "released");
-        data.assignments = active.length;
-        data.configuredAssignments = active.filter(
-          (assignment) => assignment.roleId || (assignment.responsibilities ?? []).length > 0,
-        ).length;
+        data.assignments = (body?.assignments ?? [])
+          .filter((assignment) => assignment.status !== "released")
+          .map((assignment) => ({
+            configured: Boolean(
+              assignment.roleId || (assignment.responsibilities ?? []).length > 0,
+            ),
+            projectId: assignment.projectId ?? null,
+          }));
       }
       if (commands.status === "fulfilled" && commands.value.ok) {
         const body = await readJson<{ commands?: FactoryData["commands"] }>(commands.value);
@@ -238,7 +262,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   }
 
   const { data } = state;
-  const hasSucceededCommand = data.commands.some((command) => command.status === "succeeded");
   const compiledBuiltIns = builtIns.filter((template) => template.compiles).length;
 
   const rosterProject =
@@ -283,7 +306,44 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     </div>
   );
 
-  const recent = data.commands.slice(0, 3);
+  /**
+   * The factory being built right now.
+   *
+   * Steps 2-8 are properties of one project, so with two projects the journey
+   * has to say *which*. GitHub stays out of it: an installation is account
+   * level, so it is genuinely done for every factory once it is done for one.
+   *
+   * `null` means a new factory is being started. Nothing is deleted to get
+   * there -- the steps read empty because they are genuinely empty for a
+   * project that does not exist yet, which keeps completion derived from live
+   * records rather than from a wizard remembering it was reset.
+   */
+  // A project created during the new-factory flow is adopted by derivation
+  // rather than by an effect writing state back: it is simply the project that
+  // was not here when the flow started. That keeps this a pure read of live
+  // records, and avoids a render pass that exists only to catch up with one.
+  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
+    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
+    : null;
+
+  const activeProject = activeProjectId
+    ? data.projects.find((project) => project.id === activeProjectId) ?? null
+    : adoptedProject
+      ?? (startingNewFactory ? null : data.projects[0] ?? null);
+
+  /** Still choosing: the flow is open and no project has appeared for it yet. */
+  const isStartingNew = startingNewFactory && activeProject === null;
+
+  const scopedAssignments = activeProject
+    ? data.assignments.filter((assignment) => assignment.projectId === activeProject.id)
+    : [];
+  const scopedConfigured = scopedAssignments.filter((assignment) => assignment.configured);
+  const scopedCommands = activeProject
+    ? data.commands.filter((command) => command.project?.id === activeProject.id)
+    : [];
+
+  const hasSucceededCommand = scopedCommands.some((command) => command.status === "succeeded");
+  const recent = scopedCommands.slice(0, 3);
 
   const steps: Array<{
     id: StepId;
@@ -315,10 +375,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "create_project",
       title: "Create Project",
       description: "A project is one repository. Name it and it persists with its branch and history.",
-      done: data.projects.length > 0,
-      evidence: data.projects.length > 0
-        ? `${data.projects.length} project${data.projects.length === 1 ? "" : "s"}: ${data.projects.slice(0, 3).map((project) => project.name).join(", ")}`
-        : "No project yet",
+      done: activeProject !== null,
+      evidence: activeProject
+        ? `This factory: ${activeProject.name}`
+        : "No project yet for this factory",
       action: "Create a project",
       icon: Factory,
       body: <AddProjectForm onCreated={closeOverlay} />,
@@ -329,7 +389,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "pipeline",
       title: "Configure Pipeline",
       description: "Every goal runs the same verified lifecycle. Use a built-in template, or define your own stages and record a pipeline for a project.",
-      done: data.projects.length > 0,
+      done: activeProject !== null,
       evidence: `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`,
       action: "Configure pipeline",
       icon: Workflow,
@@ -355,10 +415,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "assign_bots",
       title: "Assign Bots to Project",
       description: "Put one or many bots on the project. The wizard walks Select → Configure → Review.",
-      done: data.assignments > 0,
-      evidence: data.assignments > 0
-        ? `${data.assignments} active assignment${data.assignments === 1 ? "" : "s"}`
-        : "No bot is assigned to a project yet",
+      done: scopedAssignments.length > 0,
+      evidence: scopedAssignments.length > 0
+        ? `${scopedAssignments.length} active assignment${scopedAssignments.length === 1 ? "" : "s"} on this factory`
+        : "No bot is assigned to this factory yet",
       action: "Assign bots",
       icon: Bot,
       body: rosterEmbed,
@@ -369,10 +429,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "configure_bots",
       title: "Configure Bot Settings",
       description: "On each posting card: role, responsibilities, repository access, the model it runs (Fable 5, Opus 5, …), and work effort.",
-      done: data.configuredAssignments > 0,
-      evidence: data.configuredAssignments > 0
-        ? `${data.configuredAssignments} of ${data.assignments} assignment${data.assignments === 1 ? "" : "s"} configured`
-        : data.assignments > 0
+      done: scopedConfigured.length > 0,
+      evidence: scopedConfigured.length > 0
+        ? `${scopedConfigured.length} of ${scopedAssignments.length} assignment${scopedAssignments.length === 1 ? "" : "s"} configured`
+        : scopedAssignments.length > 0
           ? "Assignments exist; none carries a role or responsibilities yet"
           : "Assign a bot first",
       action: "Configure",
@@ -385,10 +445,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "command",
       title: "Issue a Command",
       description: "Describe the outcome you want in plain words. The server verifies it, queues it, and a worker builds it.",
-      done: data.commands.length > 0,
-      evidence: data.commands.length > 0
-        ? `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} recorded`
-        : "No command yet",
+      done: scopedCommands.length > 0,
+      evidence: scopedCommands.length > 0
+        ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`
+        : "No command yet for this factory",
       action: "Give a bot work",
       icon: Terminal,
       body: <CommandComposer onSaved={closeOverlay} />,
@@ -449,8 +509,63 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const doneCount = steps.filter((step) => step.done).length;
   const open = openStep ? steps.find((step) => step.id === openStep) : undefined;
 
+  const startNewFactory = () => {
+    // Nothing is deleted. The journey stops pointing at the current project,
+    // so every project-scoped step reads empty because it genuinely is empty
+    // for a factory that has no project yet.
+    setProjectIdsBeforeNew(
+      state.kind === "ready" ? state.data.projects.map((project) => project.id) : [],
+    );
+    setActiveProjectId(null);
+    setStartingNewFactory(true);
+    setOpenStep("create_project");
+  };
+
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="AI Factory"
+        description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            {data.projects.length > 1 || (isStartingNew && data.projects.length > 0) ? (
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <span className="sr-only">Factory</span>
+                <select
+                  aria-label="Factory"
+                  className="input h-9 py-0 text-sm"
+                  value={activeProject?.id ?? ""}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStartingNewFactory(next === "");
+                    setActiveProjectId(next === "" ? null : next);
+                  }}
+                >
+                  {isStartingNew ? <option value="">New factory…</option> : null}
+                  {data.projects.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button type="button" className="btn btn-primary" onClick={startNewFactory}>
+              <Plus className="size-4" aria-hidden="true" />
+              Create New AI Factory
+            </button>
+          </div>
+        }
+      />
+
+      {isStartingNew ? (
+        <Card className="border-[var(--accent-border)] bg-[var(--accent-surface)] p-4">
+          <p className="text-sm text-foreground">
+            Starting a new factory. Nothing was deleted — the steps below are empty because this
+            factory has no project yet.
+            {data.projects.length > 0 ? " Your existing factories are still in the picker above." : ""}
+          </p>
+        </Card>
+      ) : null}
+
       {open ? (
         <StepOverlay title={open.title} description={open.description} onClose={closeOverlay}>
           {open.body}
