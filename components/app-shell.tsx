@@ -191,11 +191,21 @@ function NavigationLink({
   active,
   nested = false,
   onNavigate,
+  /**
+   * True when an enclosing row already paints the state.
+   *
+   * A group's row is the link plus its chevron, and the owner's reference
+   * highlights the whole row as one block. Painting the background here as
+   * well would draw a pill that stops before the chevron — two controls where
+   * the design shows one.
+   */
+  inRow = false,
 }: {
   item: NavigationItem;
   active: boolean;
   nested?: boolean;
   onNavigate?: () => void;
+  inRow?: boolean;
 }) {
   const Icon = item.icon;
   return (
@@ -206,9 +216,11 @@ function NavigationLink({
       className={cn(
         "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
         nested && "min-h-9 pl-9 text-[13px]",
-        active
-          ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
-          : "text-muted hover:bg-surface-raised hover:text-foreground",
+        inRow
+          ? cn("flex-1", active ? "text-[var(--accent-text)]" : "text-muted")
+          : active
+            ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
+            : "text-muted hover:bg-surface-raised hover:text-foreground",
       )}
     >
       <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
@@ -263,16 +275,32 @@ function Navigation({
           const expanded = overrides[entry.label] ?? containsCurrentPage;
           return (
             <li key={entry.label}>
-              <div className="flex items-center gap-1">
+              {/*
+                One row, one highlight. The reference shows a group's label and
+                its chevron inside a single block; painting only the link left a
+                pill that stopped short of the chevron and read as two separate
+                controls sharing a line.
+              */}
+              <div
+                className={cn(
+                  "flex items-center rounded-lg pr-1 transition-colors",
+                  entryActive
+                    ? "bg-[var(--accent-surface)]"
+                    : "hover:bg-surface-raised",
+                )}
+              >
                 <div className="min-w-0 flex-1">
-                  <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+                  <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} inRow />
                 </div>
                 <button
                   type="button"
                   onClick={() => toggleGroup(entry.label, expanded)}
                   aria-expanded={expanded}
                   aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} subpages`}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                    entryActive ? "text-[var(--accent-text)]" : "text-muted hover:text-foreground",
+                  )}
                 >
                   <ChevronDown
                     className={cn("size-4 transition-transform", !expanded && "-rotate-90")}
@@ -364,20 +392,19 @@ function Navigation({
 }
 
 /**
- * The console brand, in the one place it is not already on screen.
+ * The mark at the top of the navigation column.
  *
- * This has been removed once before and had to come back, so the reasoning is
- * worth stating precisely rather than repeating the argument.
+ * This was `xl:hidden` — shown only in the mobile drawer — on the reasoning
+ * that the marketing header sits above the console and already states the
+ * identity, so a second wordmark at desktop is duplication. That reasoning is
+ * sound and it is overruled: the owner's reference shows the mark at the top
+ * left of the sidebar, aligned with the menu beneath it, and asked for exactly
+ * that. A design decision an owner has made explicitly is not one to re-derive.
  *
- * On a wide screen the sidebar sits directly beneath the site header, which
- * renders the same mark unconditionally — two identical logos stacked, one row
- * apart. That is the duplication, and `xl:hidden` is what removes it.
- *
- * Below `xl` the sidebar is a drawer: `fixed inset-0 z-50` over an overlay,
- * above the header's `z-30`. An open drawer therefore *covers* the header, and
- * a drawer with no mark is a full-screen navigation with no identity — which is
- * exactly the defect that brought this component back the first time. So the
- * mark stays there, and only there.
+ * `px-2` rather than `px-3`: the navigation rows carry `px-3` *inside* a
+ * rounded background, so their text starts about two pixels further in than
+ * their box. Matching the box would leave the wordmark visibly out of line
+ * with every label under it.
  */
 function FactoryMark() {
   return (
@@ -385,7 +412,7 @@ function FactoryMark() {
       href="/solutions"
       label="AI Software Factory console home"
       tone="console"
-      className="mb-6 px-2 xl:hidden"
+      className="mb-6 px-2"
     />
   );
 }

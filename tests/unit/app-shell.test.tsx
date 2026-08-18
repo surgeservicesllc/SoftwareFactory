@@ -149,20 +149,67 @@ describe("navigation opens closed, and the brand sits with the menu", () => {
     expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
   });
 
-  it("carries the brand for the drawer, and hides it where the header already shows one", () => {
-    // Both halves matter and they pull in opposite directions.
-    //
-    // The mark exists because the mobile drawer is a full-screen overlay above
-    // the header, so an open drawer covers the only other copy — that is the
-    // defect that brought this component back after it was first deleted.
-    //
-    // It is hidden at `xl` because there the sidebar sits directly beneath the
-    // header, which renders the same mark unconditionally: two identical logos
-    // one row apart.
+  it("carries the brand at every width, at the top of the navigation column", () => {
+    /*
+     * This was `xl:hidden` — drawer only — because the marketing header sits
+     * directly above the console and renders the same mark, so a desktop
+     * sidebar logo is a second copy one row apart. That is a real observation
+     * and it lost to an explicit instruction: the owner's reference shows the
+     * mark at the top left of the sidebar, aligned with the menu, and asked
+     * for it there. A decision the owner has made is not one to re-derive.
+     */
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
 
     const mark = screen.getByRole("link", { name: /ai software factory console home/i });
     expect(mark).toHaveAttribute("href", "/solutions");
-    expect(mark.className).toContain("xl:hidden");
+    expect(mark.className).not.toContain("hidden");
+  });
+});
+
+describe("the navigation column against the owner's reference", () => {
+  it("puts the mark above the menu and in line with it", () => {
+    // The reference aligns the wordmark with the labels beneath it, not with
+    // the rows' boxes — the rows carry their padding inside a rounded
+    // background, so matching the box would leave the mark visibly out of line.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const mark = screen.getByRole("link", { name: /ai software factory console home/i });
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    expect(mark.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(mark.className).toContain("px-2");
+  });
+
+  it("makes a group's label and chevron one highlighted row", () => {
+    // The reference shows one block per group. Painting only the link left a
+    // pill that stopped short of the chevron, reading as two controls sharing
+    // a line rather than one row.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+    const chevron = within(navigation).getByRole("button", {
+      name: /expand projects subpages/i,
+    });
+    const projects = within(navigation).getByRole("link", { name: "Projects" });
+
+    // Same row element, and that row is what carries the background.
+    expect(chevron.parentElement).toBe(projects.parentElement?.parentElement);
+    expect(chevron.parentElement?.className).toMatch(/rounded-lg/);
+    // The link itself must not paint a second background inside that row.
+    expect(projects.className).not.toContain("bg-[var(--accent-surface)]");
+  });
+
+  it("leads the actions with New Project as a button, then the shortcuts", () => {
+    // The reference gives New Project a button of its own rather than a fourth
+    // identical link, because it is the action people come here to take.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+    const newProject = within(navigation).getByRole("link", { name: "New Project" });
+
+    expect(newProject.className).toContain("btn");
+    expect(within(navigation).getByText("Quick actions")).toBeInTheDocument();
+    expect(within(navigation).getByText(/automate\. build\. ship\./i)).toBeInTheDocument();
   });
 });
