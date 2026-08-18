@@ -337,6 +337,40 @@ jobs:
             order by 1, 2;"
           echo "For a table row the boolean column is FORCE row level security, not execute."
           echo "Every function above should share one owner with every table above."
+          echo ""
+          echo "Does the owner bypass RLS, and can a definer function write an audit row at all?"
+          echo "FORCE row level security subjects the table owner to its own policies, and only a"
+          echo "superuser or a BYPASSRLS role escapes that. activity_events carries exactly one"
+          echo "policy and it is SELECT, so an owner that does not bypass cannot insert an audit"
+          echo "row - which is the last statement of remove_ai_account, and a 42501."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select rolname, rolsuper, rolbypassrls
+              from pg_roles
+             where rolname in ('postgres', 'authenticated', 'service_role')
+             order by rolname;"
+          cat > /tmp/audit-write-probe.sql <<'PROBE_SQL'
+          do $probe$
+          declare
+            v_org uuid;
+          begin
+            select id into v_org from public.organizations limit 1;
+            if v_org is null then
+              raise notice 'no organization to write a probe row against';
+              return;
+            end if;
+            begin
+              insert into public.activity_events
+                (organization_id, event_type, entity_type, description)
+              values (v_org, 'ai_account.changed', 'ai_account', 'probe row, deleted immediately');
+              delete from public.activity_events where description = 'probe row, deleted immediately';
+              raise notice 'activity_events insert as %: OK, probe row deleted', current_user;
+            exception when others then
+              raise notice 'activity_events insert as %: % %', current_user, sqlstate, sqlerrm;
+            end;
+          end
+          $probe$;
+          PROBE_SQL
+          psql "$DB_URL" -q -f /tmp/audit-write-probe.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
             select 'column' as kind, table_name || '.' || column_name as object
               from information_schema.columns
