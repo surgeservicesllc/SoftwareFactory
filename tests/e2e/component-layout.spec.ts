@@ -345,56 +345,14 @@ for (const layoutCase of CASES) {
 }
 
 /*
- * The desktop rail: narrower column, wider content, and the choice remembered.
+ * The desktop column and the tablet rail.
  *
- * "Compact collapsible sidebar" and "the main content area must recalculate
- * available width" are one requirement measured from two sides — a column that
- * narrows while the content keeps its old padding has reclaimed nothing. Both
- * numbers are read here rather than the class names that produce them, because
- * the class names are the implementation and the widths are the promise.
+ * A test above this one drove a "Collapse navigation" toggle and measured the
+ * column narrowing while the content grew. The owner removed that toggle
+ * (2026-08-17), so the case went with it — there is no longer a control to
+ * click, and a test that asserts a width nobody can ask for measures nothing.
+ * What survives is the tier the viewport decides, which is below.
  */
-test("collapsing the sidebar gives its width back to the content", async ({ page, isMobile }) => {
-  test.skip(Boolean(isMobile), "the rail is a desktop control; phones get the drawer");
-  await open(page, "app-shell", 1280);
-
-  const aside = page.locator("aside").first();
-  const main = page.locator("#main-content");
-
-  const wideColumn = (await aside.boundingBox())?.width ?? 0;
-  const wideContent = await main.evaluate(
-    (element) => element.clientWidth - parseFloat(getComputedStyle(element).paddingLeft),
-  );
-  expect(wideColumn).toBeGreaterThan(200);
-
-  await page.getByRole("button", { name: /collapse navigation/i }).click();
-  await settled(page);
-  // The width transitions, so the measurement waits for it to land.
-  await expect.poll(async () => Math.round((await aside.boundingBox())?.width ?? 0))
-    .toBeLessThan(wideColumn - 100);
-
-  const narrowContent = await main.evaluate(
-    (element) => element.clientWidth - parseFloat(getComputedStyle(element).paddingLeft),
-  );
-  expect(
-    narrowContent,
-    "the column narrowed but the content kept its old left padding",
-  ).toBeGreaterThan(wideContent + 100);
-
-  // Every destination survives the narrowing, by accessible name.
-  const rail = page.getByRole("navigation", { name: /console/i });
-  for (const label of ["Overview", "Projects", "Pipelines", "Bots", "Settings"]) {
-    await expect(rail.getByRole("link", { name: label, exact: true })).toBeVisible();
-  }
-
-  expect(await overflowing(page), "the collapsed rail pushed content out").toEqual([]);
-  expect(await unreachable(page, "body")).toEqual([]);
-
-  await page.getByRole("button", { name: /expand navigation/i }).click();
-  await settled(page);
-  await expect.poll(async () => Math.round((await aside.boundingBox())?.width ?? 0))
-    .toBeGreaterThan(wideColumn - 10);
-});
-
 test("the tablet band gets a standing rail rather than the phone's drawer", async ({
   page,
   isMobile,

@@ -128,7 +128,7 @@ describe("AppShell navigation", () => {
   });
 });
 
-describe("navigation opens closed, and the brand sits with the menu", () => {
+describe("navigation opens closed, and the menu starts the column", () => {
   it("starts every group collapsed rather than listing every destination", async () => {
     render(<AppShell viewer={{ signedIn: true, email: "a@b.test" }}>content</AppShell>);
 
@@ -150,38 +150,42 @@ describe("navigation opens closed, and the brand sits with the menu", () => {
     expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
   });
 
-  it("carries the brand at every width, at the top of the navigation column", () => {
+  it("carries no mark of its own, and no control above the menu", () => {
     /*
-     * This was `xl:hidden` — drawer only — because the marketing header sits
-     * directly above the console and renders the same mark, so a desktop
-     * sidebar logo is a second copy one row apart. That is a real observation
-     * and it lost to an explicit instruction: the owner's reference shows the
-     * mark at the top left of the sidebar, aligned with the menu, and asked
-     * for it there. A decision the owner has made is not one to re-derive.
+     * This assertion has been inverted twice, so the history is the point.
+     *
+     * The mark was drawer-only, then restored at every width against a
+     * reference image, and is now gone entirely — the owner boxed it on the
+     * live page and asked for it removed, along with the "Collapse
+     * navigation" toggle beneath it. The site header one row above still
+     * renders the identity, so nothing is lost by its absence here.
+     *
+     * Asserted as absence rather than deleted, because the column is what
+     * this file describes: a future session that adds a block above the menu
+     * should have to change a test that says not to.
      */
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
 
-    const mark = screen.getByRole("link", { name: /ai software factory console home/i });
-    expect(mark).toHaveAttribute("href", "/solutions");
-    expect(mark.className).not.toContain("hidden");
+    expect(
+      screen.queryByRole("link", { name: /ai software factory console home/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /collapse navigation|expand navigation/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts the navigation at the top of the column", () => {
+    // "Move the navigation up" is the other half of the same instruction, and
+    // it is what the removals were for. The menu must be the column's first
+    // child, not merely present somewhere below whatever replaced them.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+    expect(navigation.parentElement?.firstElementChild).toBe(navigation);
   });
 });
 
 describe("the navigation column against the owner's reference", () => {
-  it("puts the mark above the menu and in line with it", () => {
-    // The reference aligns the wordmark with the labels beneath it, not with
-    // the rows' boxes — the rows carry their padding inside a rounded
-    // background, so matching the box would leave the mark visibly out of line.
-    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
-
-    const mark = screen.getByRole("link", { name: /ai software factory console home/i });
-    const navigation = screen.getByRole("navigation", { name: "Console" });
-
-    expect(mark.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
-    expect(mark.className).toContain("px-2");
-  });
-
   it("makes a group's label and chevron one highlighted row", () => {
     // The reference shows one block per group. Painting only the link left a
     // pill that stopped short of the chevron, reading as two controls sharing

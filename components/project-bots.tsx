@@ -800,9 +800,20 @@ function AssignWizard({
             additional: true,
           }),
         });
-        if (!response.ok) {
-          const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
-          throw new Error(body.error?.message ?? `A bot for ${account.displayName} could not be created.`);
+        const body = (await response.json().catch(() => ({}))) as {
+          provisioned?: boolean;
+          outcome?: string;
+          reason?: string;
+          error?: { message?: string };
+        };
+        // "skipped" arrives as a 200 with a reason; celebrating it is how a
+        // linked account produced no bot and no sentence.
+        if (!response.ok || body.provisioned !== true) {
+          throw new Error(
+            body.reason
+              ?? body.error?.message
+              ?? `A bot for ${account.displayName} could not be created.`,
+          );
         }
         const ref = accountCredentialRef(account);
         if (ref) refs.push(ref);

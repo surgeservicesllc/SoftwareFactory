@@ -2,7 +2,7 @@
 
 Last triaged: 2026-08-13
 
-## A project's selected pipelines (2026-08-18, ADR-090)
+## A project's selected pipelines (2026-08-18, ADR-091)
 
 - [x] Add `project_pipelines` (migration `20260818000200`) with RLS + FORCE RLS, every
   table privilege revoked from `anon`, `authenticated` and `service_role`, and

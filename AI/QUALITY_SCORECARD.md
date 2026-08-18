@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-18
 
-**Addendum, 2026-08-18 — a project's selected pipelines (ADR-090):**
+**Addendum, 2026-08-18 — a project's selected pipelines (ADR-091):**
 migration `20260818000200` (`project_pipelines`, RLS + FORCE RLS, all table
 privileges revoked from `anon`/`authenticated`/`service_role`, three definer
 functions), `GET`/`POST`/`DELETE /api/project-pipelines`, the Use toggle in

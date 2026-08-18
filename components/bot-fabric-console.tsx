@@ -2205,16 +2205,21 @@ function SubscriptionQuickConnect({
           additional,
         }),
       });
-      const body = (await response.json()) as { outcome?: string };
+      const body = (await response.json()) as { outcome?: string; reason?: string };
       if (!response.ok) throw new Error();
+      // "skipped" arrives as a 200 with a reason; a phase that says ready
+      // over it is how a finished sign-in ended with no bot and no sentence.
+      if (body.outcome === "skipped") throw new Error(body.reason);
       setReadyBots((count) => count + (body.outcome === "created" ? 1 : 0));
       setConnectedSlots((count) => Math.max(count, slot + 1));
       await onReady();
       setPhase("ready");
-    } catch {
+    } catch (error) {
       setDetail(
-        "You are signed in, but the bot could not be added automatically. "
-        + "The credential is stored — add a bot manually and it will read Ready.",
+        error instanceof Error && error.message
+          ? `You are signed in, but the bot could not be added: ${error.message}`
+          : "You are signed in, but the bot could not be added automatically. "
+            + "The credential is stored — add a bot manually and it will read Ready.",
       );
       setPhase("failed");
     }
