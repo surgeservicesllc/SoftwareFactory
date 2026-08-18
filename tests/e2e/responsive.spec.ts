@@ -53,6 +53,8 @@ const ROUTES = [
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",
+  // A resource's own page: the eight library entries used to point at "#".
+  "/resources/ultimate-guide-ai-powered-software-development",
 ];
 
 /**

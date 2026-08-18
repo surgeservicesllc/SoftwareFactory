@@ -136,3 +136,27 @@ for (const route of MARKETING_ROUTES) {
     ).toEqual([]);
   });
 }
+
+test("every resource in the library leads somewhere real", async ({ page }) => {
+  // Eight entries carried `href: "#"` — links on a public page that went
+  // nowhere. Each now has its own page, which states what the library holds
+  // and says plainly that the piece itself is not written yet.
+  await page.goto("/resources");
+
+  await expect(page.locator('a[href="#"]')).toHaveCount(0);
+
+  const first = page.getByRole("link", { name: /ultimate guide to ai-powered/i }).first();
+  await expect(first).toBeVisible();
+  await first.click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: /ultimate guide to ai-powered/i }),
+  ).toBeVisible();
+  // The honest part: it must not imply an article exists behind it.
+  await expect(page.getByText(/not written yet/i)).toBeVisible();
+});
+
+test("an unknown resource slug is a 404, not an empty page", async ({ page }) => {
+  const response = await page.goto("/resources/no-such-resource");
+  expect(response?.status()).toBe(404);
+});

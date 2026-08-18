@@ -48,12 +48,22 @@ Autonomy — all real pages. Matching the image exactly would delete the only
 route to them, and "do not remove functionality" is not a rule the picture
 overrides. Pinned by a test so it reads as a decision rather than drift.
 
-### Still true, and not a responsive problem
+### The two production blockers
 
-Migrations remain unhosted (`AI/HOSTED_APPLY_RUNBOOK.md`), so the assign
-wizard's configuration fields have no columns to land in on production until
-an owner applies them. Eight marketing resources carry `href: "#"` and need a
-destination decided rather than guessed.
+**Eight `href: "#"` marketing links — fixed.** Each resource now has a page at
+`/resources/<slug>` showing what the library holds and saying plainly that the
+piece itself is not written yet. Inventing an article to fill the page would
+have been worse than the dead link. Unknown slugs 404 rather than rendering an
+empty body with a 200, which is what `dynamicParams = false` is for.
+
+**Unhosted migrations — owner action, and the only one left.** Applying them
+needs `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD`, which no agent has;
+`.github/workflows/apply-hosted-migrations.yml` is `workflow_dispatch` and an
+owner runs it. What is already proven is that the set applies: every
+integration test execs all 106 migration files in order against real
+PostgreSQL, so the outstanding batch is verified to apply cleanly before it
+ever reaches hosted. Until it runs, the assign wizard's configuration fields
+have no columns on production.
 
 ---
 
