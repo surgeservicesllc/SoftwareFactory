@@ -35,6 +35,27 @@ export default defineConfig({
       { find: /^@\//, replacement: repositoryRoot },
     ],
   },
+  /*
+   * The browser-configuration gate, answered.
+   *
+   * `isBrowserSupabaseConfigured()` reads these, and `useTenantList` renders
+   * the signed-out state when it returns false. Vite's build shims
+   * `process.env` to `{}`, so it returned false for every case — and the
+   * harness, whose whole purpose is measuring *populated* layouts, was
+   * measuring signed-out gates for every component that consults it. That is
+   * the same vacuity that got an earlier populated sweep deleted, hiding
+   * inside the thing built to replace it.
+   *
+   * These are placeholders in a reserved TLD, not credentials, and nothing
+   * reaches the network: `main.tsx` installs a fixture-serving `fetch` before
+   * the first render. What they buy is the fetch path being taken at all.
+   */
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("development"),
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify("http://harness.invalid"),
+    "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify("harness-placeholder"),
+    "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": JSON.stringify(""),
+  },
   build: {
     outDir: `${here}dist`,
     emptyOutDir: true,

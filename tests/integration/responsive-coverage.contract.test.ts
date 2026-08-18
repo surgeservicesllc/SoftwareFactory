@@ -180,3 +180,54 @@ describe("every component's layout is measured in a browser", () => {
     }
   });
 });
+
+describe("the harness serves the code that is on disk", () => {
+  it("never reuses a server that is serving a build", async () => {
+    /*
+     * The measurement is only worth what the server under it is serving.
+     *
+     * The harness entry is `harness:build && harness:serve` — `vite preview`,
+     * which serves a compiled artifact. Combined with Playwright's
+     * `reuseExistingServer`, which is on outside CI, the first local run built
+     * the bundle and every run afterwards reused that server and skipped the
+     * build. A preview started hours earlier answered every request, and the
+     * width sweep passed against components that had since changed. It was
+     * caught by breaking a layout on purpose and watching the suite stay
+     * green.
+     *
+     * CI never saw it, because `reuseExistingServer` is false there. That is
+     * the worst shape for this kind of bug: it only misleads the machine
+     * drawing the conclusions.
+     *
+     * Either half is fine on its own — a dev server may be reused because it
+     * compiles on request, and a build may be served as long as it is rebuilt
+     * every run. The combination is what lies.
+     */
+    const config = await readFile(resolve(repositoryRoot, "playwright.config.ts"), "utf8");
+    const packageJson = JSON.parse(
+      await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+
+    const entry = /\{(?:[^{}]|\n)*url: HARNESS_URL,(?:[^{}]|\n)*\}/.exec(config)?.[0];
+    expect(
+      entry,
+      "playwright.config.ts no longer has a webServer entry keyed on HARNESS_URL.",
+    ).toBeTruthy();
+
+    const scripts = [...entry!.matchAll(/npm run ([a-z:]+)/g)]
+      .map((match) => packageJson.scripts[match[1]] ?? "");
+    expect(scripts.length, `no npm scripts found in the harness webServer entry: ${entry}`)
+      .toBeGreaterThan(0);
+
+    const servesABuild = scripts.some((script) => /vite (build|preview)/.test(script));
+    const reuses = !/reuseExistingServer:\s*false/.test(entry!);
+
+    expect(
+      servesABuild && reuses,
+      `The harness runs ${JSON.stringify(scripts)} with reuse `
+        + `${reuses ? "enabled" : "disabled"}. A reused preview keeps answering with whatever `
+        + "was compiled when it started, which made this suite measure stale code. Either "
+        + "set reuseExistingServer: false, or serve the harness with `vite` dev.",
+    ).toBe(false);
+  });
+});

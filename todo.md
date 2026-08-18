@@ -93,6 +93,92 @@ against real PostgreSQL.
 
 ---
 
+## THE LAYOUT SUITE WAS MEASURING ALMOST NOTHING (2026-08-18, fixed)
+
+Found by attacking the suite rather than reading it: a deliberate defect was
+put into the assign wizard and the whole width sweep stayed green. Pulling that
+thread turned up four independent reasons, each sufficient on its own, and
+every one of them had been silently in effect.
+
+**1. The harness served a build from hours ago.** Playwright's harness entry is
+`harness:build && harness:serve` — `vite preview`, which serves a compiled
+artifact — and `reuseExistingServer` is on outside CI. So the first local run
+built the bundle and every run afterwards reused that server and skipped the
+build. A preview started at 02:18 answered every request for the rest of the
+session; components edited after that were measured in their old form. CI was
+never affected (`reuseExistingServer` is false there), which is why it
+survived: it only misleads the machine drawing the conclusions. Now
+`reuseExistingServer: false` on that entry. A dev server was tried first and
+reverted — it compiles per request, which took this suite from ten minutes to
+over twenty-five; one build per run is the cheaper half of the trade.
+
+**2. Nothing inside a dialog was measured.** `overflowing()` returns early when
+the document fits, and a dialog is `position: fixed` — it never widens the
+document however wide its contents get. Over-wide content makes the *overlay*
+scroll sideways instead, which every check either skipped or counted as
+legitimate reach. Eight components render dialogs; none had horizontal
+coverage. `sidewaysScroll()` now measures the overlay itself, which keeps a
+deliberate inner scroller legitimate — a wide table with its own `overflow-x`
+absorbs its overflow and the overlay never grows.
+
+**3. Every gate-consulting console was rendering its signed-out state.** Seven
+components call `isBrowserSupabaseConfigured()`, and `useTenantList` returns
+signed-out when it says no. Vite's build shims `process.env` to `{}`, so it
+said no for every case — and this suite, built precisely because an earlier
+populated sweep turned out to be measuring gates, was measuring gates. The
+vacuity moved rather than went away, and nothing failed when it did. The
+harness now defines those values.
+
+**4. Unserved endpoints answered 200 with no keys.** The fixture server ended
+in `return json({})`. Components believed it: `AgentsConsole` read
+`/api/providers`, got `{}`, entered its ready state and threw on
+`payload.providers.map`, so the case rendered nothing at all while the sweep
+reported it fitting at every width. `ReportsConsole` threw the same way on
+`report.type` — the reports fixture used `kind`, `projectId` and `projectName`,
+none of which that route returns, and nobody noticed because the console was
+showing a gate and never read the fixture. Unserved now answers 503 and names
+the URL, and thirteen endpoints gained fixtures shaped like their routes.
+
+### What the honest suite then found
+
+`portfolio-controls` overflowed a 320px screen and kept overflowing to 430px:
+its Project `<select>` lists project names, and a select's min-content width is
+its widest option. Same root cause as the earlier `.input` fix, which this file
+missed by using raw classes rather than the token. Fixed here and on the three
+other unguarded selects, since an option list that is short today can hold a
+long name tomorrow.
+
+### A fifth, in the route sweep
+
+`responsive.spec.ts` walks all thirty-four routes inside one test with the
+default 45s timeout, against `next dev` — which compiles a route the first time
+it is asked for. That fits only when the server is already warm, and locally it
+always was, because `reuseExistingServer` kept one alive between runs. Against a
+cold server the sweep times out mid-walk and reports `net::ERR_ABORTED; maybe
+frame was detached?`, which reads like a layout failure and is a stopwatch. Ten
+of these appeared the moment the stale servers were cleared. The sweep now sets
+a timeout scaled to the route count; a warm run still finishes in about twenty
+seconds and exits early.
+
+### What now prevents each from returning
+
+- `tests/integration/responsive-coverage.contract.test.ts` fails if the harness
+  webServer both serves a build and permits reuse. Either half alone is fine;
+  the combination is what lies.
+- Every case asserts it renders no sign-in gate heading — matched on the
+  heading, because the guided journey's own step description reads "Sign in to
+  Claude or Codex…" and is content, not a gate.
+- Every case asserts it read no endpoint the harness cannot answer. An error
+  card is the same shape of lie as a gate: a few centred words that fit every
+  width.
+- `open()` collects page errors, so a case that throws during mount fails with
+  the exception instead of a bare "#root is empty" after a 15s timeout.
+- The portfolio fixture is built by calling the route's own pure aggregator
+  rather than transcribing its output, so it cannot drift out of shape the way
+  the reports one had.
+
+---
+
 ## RESPONSIVE COVERAGE: WHAT IS AND IS NOT MEASURED (2026-08-18)
 
 An attempt to sweep the console's *populated* layouts at all eight widths was

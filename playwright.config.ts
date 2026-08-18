@@ -82,9 +82,25 @@ export default defineConfig({
         timeout: 120_000,
       }]),
     {
+      /*
+       * Rebuilt every run, never reused.
+       *
+       * `vite preview` serves a compiled artifact, and Playwright's
+       * `reuseExistingServer` is on outside CI — so the first local run built
+       * the bundle and every run afterwards reused that server and skipped the
+       * build. A preview started hours earlier answered every request, and the
+       * width sweep passed against components that had since changed. It was
+       * caught by breaking a layout on purpose and watching the suite stay
+       * green, and CI never saw it, which is the worst shape for this: it only
+       * misleads the machine drawing the conclusions.
+       *
+       * `false` here rather than a dev server, because a dev server compiling
+       * every module on request took this suite from ten minutes to over
+       * twenty-five. One build per run is the cheap half of that trade.
+       */
       command: "npm run harness:build && npm run harness:serve",
       url: HARNESS_URL,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 180_000,
     },
   ],

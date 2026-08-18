@@ -451,7 +451,7 @@ export function RunsConsole() {
                 <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
                 <input
                   type="text"
-                  className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                  className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                   maxLength={400}
                   value={rowDeleteReason}
                   onChange={(event) => setRowDeleteReason(event.target.value)}
@@ -768,7 +768,7 @@ export function RunsConsole() {
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-muted">Status</span>
                     <select
-                      className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                      className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                       value={reviewDraft?.status ?? run.reviewStatus ?? "unreviewed"}
                       onChange={(event) => setReviewDraft({
                         note: reviewDraft?.note ?? run.reviewNote ?? "",
@@ -851,7 +851,7 @@ export function RunsConsole() {
                         <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
                         <input
                           type="text"
-                          className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                          className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                           maxLength={400}
                           value={deleteReason}
                           onChange={(event) => setDeleteReason(event.target.value)}

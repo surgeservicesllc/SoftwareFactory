@@ -39,17 +39,36 @@ import { ProjectsConsole } from "@/components/projects-console";
 import { ReportsConsole } from "@/components/reports-console";
 import { RunsConsole } from "@/components/runs-console";
 
+import { buildPortfolio } from "@/lib/portfolio/aggregate";
+
 import {
   ACTIVITY,
+  AGENTOS_CHAINS,
+  AGENTOS_GOALS,
+  AGENTOS_GRANTS,
+  AGENTOS_MESSAGES,
+  AGENTOS_TRIGGERS,
   AGENTS,
   AI_ACCOUNTS,
+  AUTONOMY_CONTROLS,
+  AUTONOMY_DECISIONS,
+  AUTONOMY_STATUS,
+  COMMANDS,
   CONNECTIONS,
+  OPERATIONS_OVERVIEW,
+  PORTFOLIO_SCHEDULING,
+  PORTFOLIO_SOURCES,
   PROJECT_BOTS_ROSTER,
   PROJECT_ID,
+  PROJECT_OPERATIONS,
   PROJECTS,
+  PROVIDER_STATUS,
   REPORTS,
+  RESOURCE_MODELS,
+  RESOURCES_OVERVIEW,
   RUNS,
   TEMPLATES,
+  WORKER_STATUS,
   WORKFLOW_TEMPLATES,
 } from "./fixtures";
 
@@ -68,6 +87,26 @@ function serveFixtures() {
       status: 200,
       json: async () => body,
     } as unknown as Response);
+
+  /*
+   * Anything not served above answers like a failing endpoint, not like a
+   * successful empty one.
+   *
+   * This used to `return json({})`: a 200 with no keys. Components believed
+   * it. `AgentsConsole` read `/api/providers`, got `{}`, entered its ready
+   * state, and threw on `payload.providers.map` — the case rendered nothing
+   * at all while the width sweep reported it fitting at every width. An
+   * unserved endpoint is a gap in the harness, and the honest rendering of a
+   * gap is the component's documented error path.
+   */
+  const unserved = (url: string) => {
+    console.warn(`[harness] no fixture for ${url}; answering 503`);
+    return Promise.resolve({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: { message: `No harness fixture for ${url}` } }),
+    } as unknown as Response);
+  };
 
   window.fetch = ((input: RequestInfo | URL) => {
     const url = String(input);
@@ -102,7 +141,30 @@ function serveFixtures() {
     if (url.includes("/api/organizations")) {
       return json({ organizations: [], activeOrganization: { id: "org-1", role: "owner" } });
     }
-    return json({});
+    if (url.includes("/api/providers")) return json(PROVIDER_STATUS);
+    /*
+     * The portfolio payload is built by the same pure aggregator the route
+     * uses, not transcribed from it. `buildPortfolio` is what turns rows into
+     * what the browser receives, so this fixture cannot drift out of shape the
+     * way the reports one silently had.
+     */
+    if (url.includes("/api/portfolio/scheduling")) return json({ scheduling: PORTFOLIO_SCHEDULING });
+    if (url.includes("/api/portfolio")) return json({ portfolio: buildPortfolio(PORTFOLIO_SOURCES) });
+    if (url.includes("/api/operations/overview")) return json(OPERATIONS_OVERVIEW);
+    if (url.includes("/api/operations/projects/")) return json(PROJECT_OPERATIONS);
+    if (url.includes("/api/resources/models")) return json(RESOURCE_MODELS);
+    if (url.includes("/api/resources/overview")) return json(RESOURCES_OVERVIEW);
+    if (url.includes("/api/agentos/grants")) return json({ agentGrants: AGENTOS_GRANTS });
+    if (url.includes("/api/agentos/inbox")) return json({ messages: AGENTOS_MESSAGES });
+    if (url.includes("/api/agentos/goals")) return json({ goals: AGENTOS_GOALS });
+    if (url.includes("/api/agentos/chains")) return json({ chains: AGENTOS_CHAINS });
+    if (url.includes("/api/agentos/triggers")) return json({ triggers: AGENTOS_TRIGGERS });
+    if (url.includes("/api/autonomy/controls")) return json(AUTONOMY_CONTROLS);
+    if (url.includes("/api/autonomy/status")) return json({ status: AUTONOMY_STATUS });
+    if (url.includes("/api/autonomy/decisions")) return json({ decisions: AUTONOMY_DECISIONS });
+    if (url.includes("/api/worker/status")) return json({ worker: WORKER_STATUS });
+    if (url.includes("/api/commands")) return json({ commands: COMMANDS });
+    return unserved(url);
   }) as typeof window.fetch;
 }
 

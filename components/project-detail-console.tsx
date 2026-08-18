@@ -321,7 +321,7 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
                 <span className="text-xs text-muted">Name</span>
                 <input
                   type="text"
-                  className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                  className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                   maxLength={160}
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
@@ -402,7 +402,7 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
             <label className="flex max-w-md flex-col gap-1">
               <span className="text-xs text-muted">Engineering priority</span>
               <select
-                className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                 disabled={busy}
                 value={project.engineeringPriority ?? 2}
                 onChange={(event) => void control(
@@ -484,7 +484,7 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
                     <span className="text-xs text-muted">Reason (required)</span>
                     <input
                       type="text"
-                      className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                      className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                       maxLength={500}
                       value={stopReason}
                       onChange={(event) => setStopReason(event.target.value)}
@@ -536,7 +536,7 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
                     <span className="text-xs text-muted">Reason (required)</span>
                     <input
                       type="text"
-                      className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                      className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
                       maxLength={500}
                       value={cancelReason}
                       onChange={(event) => setCancelReason(event.target.value)}

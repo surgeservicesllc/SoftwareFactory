@@ -192,16 +192,68 @@ export const RUNS = [
   },
 ];
 
+/*
+ * Shaped like `GET /api/reports` actually answers, key for key.
+ *
+ * It previously carried `kind`, `projectId` and `projectName` — none of which
+ * that route returns. `ReportsConsole` reads `report.type`, so it threw on
+ * `undefined.replace` and rendered nothing; the mismatch went unnoticed
+ * because the console was showing a signed-out gate and never read the
+ * fixture at all. A fixture that does not match its route measures a screen
+ * no user can reach.
+ */
 export const REPORTS = [
   {
     id: "bbbbbbbb-1111-4111-8111-111111111111",
-    kind: "ceo_summary",
+    type: "ceo_summary",
+    status: "published",
     title: LONG_TITLE,
     summary: "One paragraph that is deliberately long enough to wrap on a phone screen.",
-    projectId: PROJECT_ID,
-    projectName: "E-Commerce Platform",
+    periodStart: "2026-08-15T00:00:00.000Z",
+    periodEnd: "2026-08-16T00:00:00.000Z",
+    publishedAt: "2026-08-16T10:00:00.000Z",
     createdAt: "2026-08-16T10:00:00.000Z",
-    status: "published",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    generatedBy: { id: "cccccccc-1111-4111-8111-111111111111", name: "Orchestrator" },
+  },
+];
+
+/** `GET /api/providers`, which the Agents console reads for its status row. */
+export const PROVIDER_STATUS = {
+  executionEnabled: false,
+  providers: [
+    {
+      provider: "openai",
+      label: "OpenAI",
+      state: "not_configured" as const,
+      stateLabel: "Not Connected",
+      detail: "No provider credential is configured in this environment.",
+      checkedAt: "2026-08-18T05:00:00.000Z",
+      latencyMs: null,
+      defaultModel: null,
+      configuredModels: [],
+      environmentVariableNames: [],
+    },
+  ],
+};
+
+/** `GET /api/worker/status`, read by the guided journey. */
+export const WORKER_STATUS = {
+  connectionStatus: "disconnected",
+  label: "Not Connected",
+  detail: "No worker has registered in this environment.",
+};
+
+/** `GET /api/commands`, read by the guided journey and the pipelines console. */
+export const COMMANDS = [
+  {
+    id: "dddddddd-1111-4111-8111-111111111111",
+    prompt: LONG_TITLE,
+    risk: "GREEN",
+    status: "succeeded",
+    submittedAt: "2026-08-16T09:00:00.000Z",
+    completedAt: "2026-08-16T09:42:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
   },
 ];
 
@@ -306,3 +358,422 @@ export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   preview: null,
   compileErrors: [] as string[],
 }));
+
+/*
+ * The consoles below read their own endpoints, and until these existed the
+ * harness answered every one of them with a 200 and no keys. Ten cases
+ * therefore rendered an error card — a few centred words that fit every width
+ * and reach every control, so the sweep passed them unconditionally while
+ * measuring none of their real layout.
+ *
+ * The portfolio payload is built by the same pure aggregator the route uses
+ * rather than transcribed from it, so it cannot drift from the shape the
+ * browser actually receives. The rest are written against their route's
+ * response, key for key.
+ */
+
+export const PORTFOLIO_SOURCES = {
+  projects: [
+    {
+      id: PROJECT_ID,
+      name: "E-Commerce Platform",
+      status: "active" as const,
+      githubRepository: "acme/storefront",
+      healthStatus: "healthy" as const,
+      autonomousMode: false,
+      maximumAutonomousRisk: "GREEN" as const,
+      description: "Checkout, catalogue and fulfilment for the storefront.",
+      defaultBranch: "main",
+      productionUrl: "https://example.invalid",
+      engineeringPriority: 1,
+      strategicFocus: true,
+      engineeringPaused: false,
+      engineeringPauseReason: null,
+    },
+    {
+      id: "11111111-2222-4222-8222-222222222222",
+      name: LONG_TITLE,
+      status: "paused" as const,
+      githubRepository: null,
+      healthStatus: "degraded" as const,
+      autonomousMode: false,
+      maximumAutonomousRisk: "GREEN" as const,
+      description: null,
+      defaultBranch: null,
+      productionUrl: null,
+      engineeringPriority: 3,
+      strategicFocus: false,
+      engineeringPaused: true,
+      engineeringPauseReason: "Waiting on the owner to confirm the migration window.",
+    },
+  ],
+  commands: [{ projectId: PROJECT_ID, status: "succeeded" }],
+  runs: [{ projectId: PROJECT_ID, status: "running" }],
+  tasks: [{ projectId: PROJECT_ID, status: "in_progress" }],
+  incidents: [],
+  changeRequests: [{ projectId: PROJECT_ID, status: "completed" }],
+  deployments: [],
+  connections: [{ projectId: PROJECT_ID, status: "connected", provider: "github" }],
+};
+
+export const PORTFOLIO_SCHEDULING = {
+  capacity: {
+    activeRuns: 2,
+    emergencyQueued: 0,
+    emergencyReserved: 1,
+    fairnessPromotionSeconds: 900,
+    focusedProjects: 1,
+    openBreakers: 0,
+    ordinaryCeiling: 4,
+    organizationLimit: 5,
+    pausedProjects: 1,
+    queuedRuns: 3,
+    workerCapacity: 4,
+    workerCount: 1,
+    workerLeases: 2,
+  },
+  projects: [
+    {
+      activeRuns: 2,
+      engineeringPaused: false,
+      engineeringPauseReason: null,
+      engineeringPriority: 1,
+      maximumConcurrentRuns: 3,
+      projectId: PROJECT_ID,
+      projectName: "E-Commerce Platform",
+      queuedRuns: 1,
+      strategicFocus: true,
+    },
+  ],
+  queue: [
+    {
+      blockedReason: null,
+      effectivePriority: 1,
+      emergency: false,
+      projectName: "E-Commerce Platform",
+      projectPriority: 1,
+      queuePosition: 1,
+      runId: "eeeeeeee-1111-4111-8111-111111111111",
+      runStatus: "queued",
+      strategicFocus: true,
+      taskTitle: LONG_TITLE,
+      waitingSeconds: 240,
+    },
+  ],
+  unavailable: [] as string[],
+};
+
+/** `GET /api/operations/overview`, read by Operations and Needs Your Attention. */
+export const OPERATIONS_OVERVIEW = {
+  activeOrganizationId: "10000000-0000-4000-8000-000000000001",
+  role: "owner",
+  // Every executor is off in this phase, and the console says so in place.
+  executionAllowed: false,
+  deploymentExecutor: "not_connected",
+  rollbackExecutor: "not_connected",
+  repairWorker: "not_connected",
+  summary: {
+    projectsTotal: 2,
+    projectsHealthy: 1,
+    projectsDegraded: 1,
+    projectsCritical: 0,
+    projectsUnknown: 0,
+    projectsPaused: 1,
+    projectsFrozen: 0,
+    openIncidents: 1,
+    openSev1: 0,
+    openSev2: 1,
+    incidentsResolved24h: 2,
+    failedDeployments24h: 0,
+    rollbacks24h: 0,
+    failedRollbacks24h: 0,
+    repairsOpen: 1,
+    ownerAttention: 1,
+    connectedMonitors: 0,
+    pendingEvents: 0,
+  },
+  projects: [
+    {
+      id: PROJECT_ID,
+      name: "E-Commerce Platform",
+      status: "active",
+      healthState: "healthy",
+      healthReason: null,
+      healthComputedAt: "2026-08-18T05:00:00.000Z",
+      releasesFrozen: false,
+      operationsStopped: false,
+      ownerAttentionRequired: false,
+      connectedMonitors: 0,
+      openIncidents: 0,
+    },
+    {
+      id: "11111111-2222-4222-8222-222222222222",
+      name: LONG_TITLE,
+      status: "paused",
+      healthState: "degraded",
+      healthReason: "A checkout journey has been failing since the last release.",
+      healthComputedAt: "2026-08-18T05:00:00.000Z",
+      releasesFrozen: true,
+      operationsStopped: false,
+      ownerAttentionRequired: true,
+      connectedMonitors: 0,
+      openIncidents: 1,
+    },
+  ],
+  incidents: [
+    {
+      id: "ffffffff-1111-4111-8111-111111111111",
+      projectId: "11111111-2222-4222-8222-222222222222",
+      projectName: LONG_TITLE,
+      title: LONG_TITLE,
+      severity: "sev2",
+      status: "open",
+      source: "manual",
+      symptoms: "Checkout returns a 500 for a subset of carts.",
+      impact: "Some customers cannot complete an order.",
+      occurrenceCount: 3,
+      detectedAt: "2026-08-18T04:00:00.000Z",
+      lastSignalAt: "2026-08-18T04:50:00.000Z",
+      resolvedAt: null,
+      ownerAttentionRequired: true,
+      rootCause: null,
+      correctiveAction: null,
+      autoCreated: false,
+    },
+  ],
+  monitors: [],
+  auditEvents: [
+    {
+      id: "ffffffff-2222-4222-8222-222222222222",
+      projectId: PROJECT_ID,
+      kind: "project.updated",
+      entityType: "project",
+      entityId: PROJECT_ID,
+      summary: "Default branch changed to main.",
+      createdAt: "2026-08-18T03:00:00.000Z",
+    },
+  ],
+  journeys: [],
+  providers: [],
+};
+
+/** `GET /api/resources/overview`, read by the resource manager. */
+export const RESOURCES_OVERVIEW = {
+  policyVersion: "phase2c-resources-v1",
+  capabilities: [],
+  executionState: "not_connected",
+  executionLabel: "Not Connected",
+  executionReason:
+    "No provider run has executed, so no routing decision has ever been recorded against real work.",
+  breakers: [
+    {
+      target: "openai",
+      state: "closed",
+      fault: null,
+      faultExplanation: null,
+      consecutiveFaults: 0,
+      openedAt: null,
+      cooldownMs: null,
+      reason: null,
+      updatedAt: "2026-08-18T05:00:00.000Z",
+    },
+  ],
+  transitions: [],
+  assignments: [],
+};
+
+/** The five reads behind `/solutions/agentos`, one populated row each. */
+export const AGENTOS_GRANTS = [
+  {
+    agentId: "cccccccc-1111-4111-8111-111111111111",
+    agentName: "Orchestrator",
+    configured: true,
+    inboxAccess: "read_write",
+    runnerPreference: "container",
+    environment: { name: "default", networking: "restricted", allowedHostCount: 3 },
+    counts: {
+      mcpConnections: 2,
+      skills: 4,
+      repos: 1,
+      filesystemGrants: 2,
+      collaborators: 1,
+    },
+  },
+];
+
+export const AGENTOS_MESSAGES = [
+  {
+    id: "aaaaaaaa-9111-4111-8111-111111111111",
+    author: "agent",
+    kind: "question",
+    status: "open",
+    body: LONG_TITLE,
+    choices: ["Keep the current behaviour", "Change it and open a pull request"],
+    selectedChoice: null,
+    answerBody: null,
+    agentName: "Orchestrator",
+    agentRunId: "eeeeeeee-1111-4111-8111-111111111111",
+    createdAt: "2026-08-18T04:00:00.000Z",
+    answeredAt: null,
+  },
+];
+
+export const AGENTOS_GOALS = [
+  {
+    id: "aaaaaaaa-9222-4222-8222-222222222222",
+    title: LONG_TITLE,
+    status: "running",
+    projectName: "E-Commerce Platform",
+    definitionOfDone: { total: 4, satisfied: 2 },
+    spend: { capUsd: 25, spentUsd: 4, uncappedAcknowledged: false },
+    maxDurationMinutes: 120,
+    stuckThreshold: 3,
+    iterations: 6,
+    stoppedReason: null,
+    createdAt: "2026-08-18T03:00:00.000Z",
+  },
+];
+
+export const AGENTOS_CHAINS = [
+  {
+    id: "aaaaaaaa-9333-4333-8333-333333333333",
+    title: LONG_TITLE,
+    templateName: "Feature delivery",
+    projectName: "E-Commerce Platform",
+    progress: { total: 5, done: 2 },
+    currentStep: { name: "Implement", state: "running", approvalGate: false },
+    createdAt: "2026-08-18T03:30:00.000Z",
+  },
+];
+
+export const AGENTOS_TRIGGERS = [
+  {
+    id: "aaaaaaaa-9444-4444-8444-444444444444",
+    name: "storefront-push",
+    displayName: "Storefront push",
+    agentName: "Orchestrator",
+    projectName: "E-Commerce Platform",
+    enabled: false,
+    // Whether a secret exists, never the secret.
+    secretConfigured: true,
+    deliveries: { total: 12, accepted: 11, rejected: 1 },
+    lastReceivedAt: "2026-08-17T21:00:00.000Z",
+  },
+];
+
+/** `GET /api/autonomy/status` and `/decisions`, read by the Autonomy console. */
+export const AUTONOMY_STATUS = [
+  {
+    projectId: PROJECT_ID,
+    projectName: "E-Commerce Platform",
+    autonomousMode: false,
+    riskCeiling: "green",
+    riskCeilingSource: "organization",
+    killSwitchActive: true,
+    releaseFrozen: false,
+    executorConnected: false,
+    actions: { enabled: 0, total: 9 },
+    decisionsRecorded: 1,
+    lastDecisionAt: "2026-08-18T04:00:00.000Z",
+  },
+];
+
+export const AUTONOMY_DECISIONS = [
+  {
+    id: "aaaaaaaa-9555-4555-8555-555555555555",
+    projectName: "E-Commerce Platform",
+    action: "merge",
+    decision: "refused",
+    risk: "yellow",
+    riskEscalated: true,
+    headSha: "0123456789abcdef0123456789abcdef01234567",
+    blockers: ["EXECUTOR_NOT_CONNECTED", "KILL_SWITCH_ACTIVE"],
+    reachedStage: "authority",
+    policyVersion: "phase1d-autonomy-v1",
+    hadAuthor: true,
+    hadApprover: false,
+    independentApproval: false,
+    decidedAt: "2026-08-18T04:00:00.000Z",
+  },
+];
+
+/** `GET /api/autonomy/controls`, read by the Safety page. */
+export const AUTONOMY_CONTROLS = {
+  killSwitchActive: true,
+  controls: {
+    autonomousMode: false,
+    maximumAutonomousRisk: "GREEN",
+    actions: {
+      plan: false,
+      code: false,
+      test: false,
+      repair: false,
+      review: false,
+      approve: false,
+      merge: false,
+      deploy: false,
+      rollback: false,
+    },
+  },
+  canOperate: true,
+};
+
+/** `GET /api/operations/projects/[projectId]`, read by My Projects. */
+export const PROJECT_OPERATIONS = {
+  executionAllowed: false,
+  deploymentExecutor: "not_connected",
+  rollbackExecutor: "not_connected",
+  repairWorker: "not_connected",
+  project: {
+    id: PROJECT_ID,
+    name: "E-Commerce Platform",
+    status: "active",
+    healthState: "healthy",
+    healthReason: null,
+    healthComputedAt: "2026-08-18T05:00:00.000Z",
+    releasesFrozen: false,
+    operationsStopped: false,
+    ownerAttentionRequired: false,
+  },
+  releaseAuthority: { allowed: false, blockers: ["EXECUTOR_NOT_CONNECTED"] },
+  healthHistory: [
+    {
+      id: "aaaaaaaa-9666-4666-8666-666666666666",
+      state: "healthy",
+      previousState: "degraded",
+      reason: "The failing checkout journey recovered.",
+      computedAt: "2026-08-18T05:00:00.000Z",
+    },
+  ],
+  incidents: [],
+  monitors: [],
+  freezes: [],
+  rollbacks: [],
+  repairs: [],
+};
+
+/** `GET /api/resources/models`, the declaration table under the resource manager. */
+export const RESOURCE_MODELS = {
+  models: [
+    {
+      provider: "openai",
+      model: "gpt-5.3-codex",
+      enabled: true,
+      strengthTier: "strong",
+      contextLimitTokens: 400_000,
+      fullyDeclared: true,
+    },
+    {
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      enabled: false,
+      strengthTier: null,
+      contextLimitTokens: null,
+      fullyDeclared: false,
+    },
+  ],
+  undeclared: [{ provider: "anthropic", model: "claude-sonnet-4-5" }],
+  note:
+    "An undeclared model cannot take work that requires a strong model, and cannot be shown to"
+    + " fit any context. Routing will refuse it until both values are declared.",
+};

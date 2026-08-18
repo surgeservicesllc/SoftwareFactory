@@ -120,6 +120,20 @@ for (const width of WIDTHS) {
      * which is the case that matters for it.
      */
     test.skip(Boolean(isMobile), "viewport sweep runs in the resizable projects");
+    /*
+     * A clock, not a layout budget.
+     *
+     * This walks all thirty-four routes in one test, and the server under it
+     * is `next dev`, which compiles a route the first time it is asked for.
+     * The default 45s covers that only when the server is already warm — which
+     * it was, locally, because `reuseExistingServer` kept one alive between
+     * runs. Against a cold server the sweep times out mid-walk and reports
+     * `net::ERR_ABORTED; maybe frame was detached?`, which reads like a
+     * layout failure and is a stopwatch. The ceiling is generous on purpose:
+     * a warm run still finishes in about twenty seconds and exits early, so
+     * the only thing it costs is the ability to fail for the wrong reason.
+     */
+    test.setTimeout(20_000 + ROUTES.length * 6_000);
     await page.setViewportSize({ width, height: 900 });
 
     for (const route of ROUTES) {

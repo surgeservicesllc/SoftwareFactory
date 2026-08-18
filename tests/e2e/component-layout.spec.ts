@@ -31,13 +31,35 @@ async function settled(page: import("@playwright/test").Page) {
 }
 
 async function open(page: import("@playwright/test").Page, layoutCase: string, width: number) {
+  /*
+   * A throw during mount is a failure with a name, not an empty page.
+   *
+   * Two cases were rendering nothing at all — `ReportsConsole` on
+   * `undefined.replace`, `AgentsConsole` on `undefined.map` — and the only
+   * symptom was `#root` staying empty until the 15s timeout, reported as
+   * "not.toBeEmpty() failed". That says nothing about what broke. Collecting
+   * the page errors turns the same failure into the exception message.
+   */
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
   await page.setViewportSize({ width, height: 900 });
   await page.goto(`${HARNESS_URL}/index.html?case=${layoutCase}`, {
     waitUntil: "domcontentloaded",
   });
   // The components fetch their fixtures on mount; wait for real content.
-  await expect(page.locator("#root")).not.toBeEmpty({ timeout: 15_000 });
+  try {
+    await expect(page.locator("#root")).not.toBeEmpty({ timeout: 15_000 });
+  } catch (failure) {
+    if (errors.length) {
+      throw new Error(
+        `${layoutCase} rendered nothing at ${width}px; it threw: ${errors.join(" | ")}`,
+      );
+    }
+    throw failure;
+  }
   await settled(page);
+  expect(errors, `${layoutCase} threw while mounting at ${width}px`).toEqual([]);
 }
 
 /** Elements past the viewport that no ancestor clips or scrolls. */
@@ -118,6 +140,32 @@ async function unreachable(page: import("@playwright/test").Page, container: str
   }, container);
 }
 
+/**
+ * How far a container scrolls sideways.
+ *
+ * `overflowing` measures against the document and returns early when the
+ * document itself fits — and an overlay is `position: fixed`, so it never
+ * widens the document however wide its contents get. Nothing inside a dialog
+ * was measured at all. What over-wide dialog content does instead is make the
+ * overlay scroll sideways, which is the same defect wearing a different hat:
+ * the requirement is no horizontal scrolling, and "only the modal scrolls" is
+ * not an exemption.
+ *
+ * Measured on the overlay itself rather than on its descendants, which keeps
+ * a deliberate inner scroller legitimate: a wide table with its own
+ * `overflow-x` absorbs its overflow, so the overlay's scrollWidth never grows
+ * and nothing is reported. Content that simply refuses to reflow does grow
+ * it, and is.
+ */
+async function sidewaysScroll(page: import("@playwright/test").Page, container: string) {
+  await settled(page);
+  return page.evaluate((selector) => {
+    const root = document.querySelector(selector);
+    if (!root) return { found: false, overflowBy: 0 };
+    return { found: true, overflowBy: Math.max(0, root.scrollWidth - root.clientWidth) };
+  }, container);
+}
+
 const CASES = [
   // Everything the console renders once there are rows. Each is one fixture
   // and one case name; the measurement below is identical for all of them.
@@ -187,29 +235,111 @@ test("every recovery action on a stuck account is reachable on a phone", async (
   expect(await unreachable(page, "body")).toEqual([]);
 });
 
-test("the assign wizard fits a phone at each of its three steps", async ({ page, isMobile }) => {
-  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
-  await open(page, "project-bots", 320);
+// The wizard's own layout, not just its entry point. The roster is swept with
+// the other cases above, but the dialog only exists once opened, and its
+// Configure step is the densest form in the application — thirteen controls
+// whose grid changes at the breakpoints. Measuring it at one width leaves the
+// layouts either side of every one of those switches unmeasured.
+for (const width of WIDTHS) {
+  test(`the assign wizard fits each of its three steps at ${width}px`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, "project-bots", width);
 
-  await page.getByRole("button", { name: /assign more|assign bots/i }).first().click();
-  const dialog = page.getByRole("dialog", { name: /assign bots/i });
-  await expect(dialog).toBeVisible();
+    await page.getByRole("button", { name: /assign more|assign bots/i }).first().click();
+    const dialog = page.getByRole("dialog", { name: /assign bots/i });
+    await expect(dialog).toBeVisible();
 
-  expect(await overflowing(page), "the Select step overflowed").toEqual([]);
-  expect(await unreachable(page, '[role="dialog"]'), "a Select control is out of reach").toEqual([]);
-
-  await dialog.getByLabel("Select Test Engineer").click();
-
-  for (const step of ["Configure", "Review"]) {
-    await dialog.getByRole("button", { name: /next/i }).click();
-    await settled(page);
-    expect(await overflowing(page), `the ${step} step overflowed`).toEqual([]);
+    expect(await overflowing(page), `the Select step overflowed at ${width}px`).toEqual([]);
     expect(
       await unreachable(page, '[role="dialog"]'),
-      `a ${step} control is out of reach`,
+      `a Select control is out of reach at ${width}px`,
     ).toEqual([]);
-  }
-});
+    expect(
+      await sidewaysScroll(page, '[role="dialog"]'),
+      `the Select step made the dialog scroll sideways at ${width}px`,
+    ).toEqual({ found: true, overflowBy: 0 });
+
+    await dialog.getByLabel("Select Test Engineer").click();
+
+    for (const step of ["Configure", "Review"]) {
+      await dialog.getByRole("button", { name: /next/i }).click();
+      await settled(page);
+      expect(await overflowing(page), `the ${step} step overflowed at ${width}px`).toEqual([]);
+      expect(
+        await unreachable(page, '[role="dialog"]'),
+        `a ${step} control is out of reach at ${width}px`,
+      ).toEqual([]);
+      expect(
+        await sidewaysScroll(page, '[role="dialog"]'),
+        `the ${step} step made the dialog scroll sideways at ${width}px`,
+      ).toEqual({ found: true, overflowBy: 0 });
+    }
+  });
+}
+
+/**
+ * The harness measures populated layouts, or it measures nothing.
+ *
+ * Seven components consult `isBrowserSupabaseConfigured()`, and
+ * `useTenantList` renders the signed-out state when it says no. Vite's build
+ * shims `process.env` to `{}`, so it said no for every case — and this suite,
+ * built precisely because an earlier populated sweep turned out to be
+ * measuring gates, was measuring gates. The vacuity moved rather than went
+ * away, and nothing failed when it did.
+ *
+ * A gate is a handful of centred words: it fits every width, reaches every
+ * control, and passes everything below unconditionally. So its absence is the
+ * precondition for the rest of this file meaning anything, and it is asserted
+ * rather than assumed.
+ */
+for (const layoutCase of CASES) {
+  test(`${layoutCase} renders content rather than a sign-in gate`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, layoutCase, 1280);
+
+    // A heading, not any sentence starting that way: the guided journey's own
+    // step description reads "Sign in to Claude or Codex…" and is content, not
+    // a gate. `BlockedState` renders its title as an <h2>.
+    const gates = await page.getByRole("heading", { name: /^Sign in to / }).count();
+    expect(
+      gates,
+      `${layoutCase} rendered a sign-in gate instead of its populated layout, so every `
+        + "width assertion about it passed against a few centred words. Check that the "
+        + "harness answers whatever this component gates on.",
+    ).toBe(0);
+  });
+
+  test(`${layoutCase} has a fixture for every endpoint it reads`, async ({ page, isMobile }) => {
+    /*
+     * An error card is the same shape of lie as a gate.
+     *
+     * The fixture server used to answer anything it did not recognise with a
+     * 200 and no keys, so ten consoles rendered their error state and the
+     * sweep measured that instead of their layout. It now answers 503 and says
+     * so, which is honest but still not measured — an error card fits every
+     * width just as well. So the warning is the assertion: a console reaching
+     * for an endpoint the harness cannot answer is an unmeasured console.
+     */
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+    const missing: string[] = [];
+    page.on("console", (message) => {
+      const text = message.text();
+      if (text.startsWith("[harness] no fixture for ")) missing.push(text);
+    });
+
+    await open(page, layoutCase, 1280);
+    // The consoles fetch on mount and some chain a second read off the first.
+    await page.waitForTimeout(750);
+
+    expect(
+      [...new Set(missing)],
+      `${layoutCase} read an endpoint the harness does not serve, so it rendered an error `
+        + "card rather than its populated layout. Add the fixture in tests/harness/fixtures.ts, "
+        + "shaped like the route's own response.",
+    ).toEqual([]);
+  });
+}
 
 test("opening every navigation caret reflows rather than overflowing", async ({ page, isMobile }) => {
   test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
@@ -314,6 +444,14 @@ for (const layoutCase of CASES) {
             await unreachable(page, '[role="dialog"]'),
             `${layoutCase} @ ${width}px clipped a control in a dialog`,
           ).toEqual([]);
+          // And the overlay must not answer over-wide content by scrolling
+          // sideways. `overflowing` cannot see this: a fixed overlay never
+          // widens the document, so every dialog in the application was
+          // outside the width sweep entirely until this line.
+          expect(
+            await sidewaysScroll(page, '[role="dialog"]'),
+            `${layoutCase} @ ${width}px made a dialog scroll sideways`,
+          ).toEqual({ found: true, overflowBy: 0 });
           await page.keyboard.press("Escape").catch(() => {});
           await settled(page);
         }
