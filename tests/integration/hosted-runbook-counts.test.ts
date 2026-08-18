@@ -6,40 +6,39 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 /**
- * The apply runbook states two counts. They must match the repository.
+ * The apply runbook states the hosted position. It must agree with the
+ * repository and with the workflow that measures production.
  *
  * `AI/HOSTED_APPLY_RUNBOOK.md` is the document an owner executes from when
- * applying migrations to hosted Supabase. It opens by saying how many
- * migrations exist and how many are unhosted, and those numbers are how a
- * reader decides whether the tables below them are complete.
+ * applying migrations to hosted Supabase, and its opening numbers are how a
+ * reader decides whether the tables below them are complete. They have gone
+ * stale repeatedly, for a structural reason rather than a careless one:
+ * several agents add migrations to this repository in parallel, and none of
+ * them is reading that paragraph. A count maintained by remembering is a count
+ * that drifts, and a runbook that undercounts tells an owner they are finished
+ * when they are not.
  *
- * Both have gone stale three times. The reason is structural rather than
- * careless: several agents add migrations to this repository in parallel, and
- * none of them is reading that paragraph. A count maintained by remembering is
- * a count that drifts, and a runbook that undercounts is worse than one that
- * says nothing — it tells an owner they are finished when they are not.
- *
- * So the numbers are derived here and asserted. The failure message points at
- * the sentence to edit, because the fix is a documentation edit rather than a
- * code change and that is not obvious from a red test.
+ * The model the earlier version of this test enforced — a single hosted
+ * high-water mark, everything after it outstanding — was itself disproven.
+ * Probe run 32103778884 showed the hosted ledger is missing nineteen versions
+ * in the *middle* of the sequence while carrying every row above them, so no
+ * prefix describes it. What is asserted now is the measured set: the runbook
+ * names it, the workflow's probe asks about exactly it, and every version in
+ * it is a real file.
  */
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-/**
- * The hosted ledger position the runbook is written against — owner-measured
- * 2026-08-16 (`select count(*), max(version) from
- * supabase_migrations.schema_migrations` → 65 rows, max below). The one
- * hosted row above the local file set at this position is the renamed
- * `20260814002000_graph_engineering`, handled by the runbook's repair step.
- */
-const HOSTED_LEDGER_ENDS_AT = "20260814002300";
-
 let runbook = "";
+let workflow = "";
 let migrationFiles: string[] = [];
 
 beforeAll(async () => {
   runbook = await readFile(resolve(repositoryRoot, "AI/HOSTED_APPLY_RUNBOOK.md"), "utf8");
+  workflow = await readFile(
+    resolve(repositoryRoot, ".github/workflows/apply-hosted-migrations.yml"),
+    "utf8",
+  );
   migrationFiles = (await readdir(resolve(repositoryRoot, "supabase/migrations")))
     .filter((name) => name.endsWith(".sql"))
     .sort();
@@ -55,15 +54,34 @@ function statedUnhosted(): number | null {
   return match ? Number(match[1]) : null;
 }
 
-describe("the hosted apply runbook's counts", () => {
+/**
+ * The versions the runbook's measured table lists as absent from the hosted
+ * ledger. Read from the table's first cell, which is the only place the set is
+ * written down in full.
+ */
+function runbookLedgerAbsent(): string[] {
+  const table = /\*\*Absent from the hosted ledger[^\n]*\n([\s\S]*?)\n\n/.exec(runbook);
+  if (!table) return [];
+  return [...table[1].matchAll(/^\| `(\d{14})` \|/gm)].map((match) => match[1]);
+}
+
+/** The versions the workflow's read-only probe asks about, one row each. */
+function probedVersions(): string[] {
+  const block = /with expected\(version, kind, object, marker\) as \(values([\s\S]*?)\n\s*\)\n/
+    .exec(workflow);
+  if (!block) return [];
+  return [...block[1].matchAll(/\('(\d{14})',/g)].map((match) => match[1]);
+}
+
+describe("the hosted apply runbook", () => {
   it("still states both numbers in the expected form", () => {
-    // If this fails the sentences were reworded, and the two assertions below
+    // If this fails the sentences were reworded, and the assertions below
     // would otherwise pass vacuously by matching nothing.
     expect(statedTotal()).not.toBeNull();
     expect(statedUnhosted()).not.toBeNull();
   });
 
-  it("matches the number of migration files in the repository", () => {
+  it("states a repository total matching the migration directory", () => {
     expect(
       statedTotal(),
       `AI/HOSTED_APPLY_RUNBOOK.md says "the repository total is ${statedTotal()} migration files" `
@@ -71,21 +89,43 @@ describe("the hosted apply runbook's counts", () => {
     ).toBe(migrationFiles.length);
   });
 
-  it("matches the number of migrations after the hosted ledger position", () => {
-    const unhosted = migrationFiles.filter(
-      (name) => (/^(\d{14})_/.exec(name)?.[1] ?? "") > HOSTED_LEDGER_ENDS_AT,
-    );
-
+  it("names as many ledger-absent versions as it claims", () => {
+    const named = runbookLedgerAbsent();
     expect(
-      statedUnhosted(),
-      `AI/HOSTED_APPLY_RUNBOOK.md says "The current total is ${statedUnhosted()}" unhosted `
-        + `migrations, but ${unhosted.length} files sort after ${HOSTED_LEDGER_ENDS_AT}. `
-        + `Update that sentence, and check whether the tables below it need a new row.`,
-    ).toBe(unhosted.length);
+      named.length,
+      `AI/HOSTED_APPLY_RUNBOOK.md says "The current total is ${statedUnhosted()}" but its `
+        + `"Absent from the hosted ledger" table names ${named.length} versions. `
+        + `Update whichever is wrong — the table is the one an owner acts from.`,
+    ).toBe(statedUnhosted());
   });
 
-  it("still names the ledger position this document assumes", () => {
-    // If the hosted position moves, every count in the file changes meaning.
-    expect(runbook).toContain(HOSTED_LEDGER_ENDS_AT);
+  it("names only versions that exist as migration files", () => {
+    const versions = new Set(
+      migrationFiles.map((name) => /^(\d{14})_/.exec(name)?.[1] ?? ""),
+    );
+    const unknown = runbookLedgerAbsent().filter((version) => !versions.has(version));
+    expect(
+      unknown,
+      `AI/HOSTED_APPLY_RUNBOOK.md lists ${unknown.join(", ")} as unhosted, but no migration `
+        + "file carries those versions. A renamed or deleted migration leaves the runbook "
+        + "pointing at nothing.",
+    ).toEqual([]);
+  });
+
+  it("is probed by the workflow for exactly the set it names", () => {
+    // The probe is what an owner runs to decide repair-versus-apply. If it
+    // asks about a different set than the runbook names, the answer it prints
+    // is not an answer to the question the runbook poses.
+    expect(
+      probedVersions(),
+      "The scope=probe step in .github/workflows/apply-hosted-migrations.yml asks about a "
+        + "different set of versions than AI/HOSTED_APPLY_RUNBOOK.md names as ledger-absent. "
+        + "Bring the two into line.",
+    ).toEqual(runbookLedgerAbsent());
+  });
+
+  it("still records the run the measurement came from", () => {
+    // Without the run id the table is an assertion; with it, it is evidence.
+    expect(runbook).toContain("32103778884");
   });
 });

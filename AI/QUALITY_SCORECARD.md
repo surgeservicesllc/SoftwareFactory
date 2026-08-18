@@ -1,6 +1,23 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-18
+
+**Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
+migration is unhosted, so no hosted claim is made" qualifier attached to
+several entries below was derived from a ledger high-water mark, and probe run
+`32103778884` (read-only) shows that mark does not describe this ledger: it has
+nineteen gaps in the middle and carries every row above them. Two entries below
+are wrong as written — `20260816001500` (usage observations) and
+`20260816001400` (repository picker) are both **on the hosted ledger**. The
+`20260817` range is on it too, `20260817000700` included.
+
+That is not the same as a hosted *quality* claim, and none is added here. A
+ledger row proves the DDL ran; it does not prove behavior observed in
+production, which is what these entries withhold. What changes is only the
+stated reason for withholding it: for those migrations the reason is now "no
+hosted behavioral observation", not "the schema is absent". The nineteen still
+absent, and the per-version marker that decides repair-versus-apply for each,
+are in `AI/HOSTED_APPLY_RUNBOOK.md`.
 
 **Addendum, 2026-08-16 — per-account usage evidence (ADR-076):** migration
 `20260816001500` (append-only usage observations, worker-only write, member
@@ -12,9 +29,10 @@ implemented and locally certified: the new behavior suite
 schema-security-invariants pins (service_role gains exactly
 `record_ai_account_usage`; the policyless allowlist gains the evidence table),
 with lint, typecheck, full vitest, and a production build green on this tree.
-Hosted evidence does not exist yet: the migration is **unhosted**, so
-production records no observations until the owner applies it; the panel then
-fills in automatically from the already-deployed worker cadence. No execution
+Hosted behavioral evidence does not exist yet. This entry originally said the
+migration was unhosted; the 2026-08-18 measurement finds `20260816001500` **on
+the hosted ledger**, so the schema is there and the panel fills in from the
+already-deployed worker cadence. What is still unobserved is a production row. No execution
 authority changes.
 
 **Addendum, 2026-08-16 — project repository picker:** implemented and locally certified:
@@ -26,8 +44,10 @@ named uniqueness refusal, the pending-reservation freeze, the archived-project r
 `tests/unit/project-repository-route.test.ts` (11 tests: same-origin, role, body, RPC
 wiring, verbatim 55000 refusals, 23505 race mapping), and six new Connections console
 component tests (picker render, link, unlink, uniqueness message, load-failure state,
-no-installation state, zero-repository state). Local evidence only; the migration is
-unhosted and no hosted claim is made.
+no-installation state, zero-repository state). Local evidence only, and no hosted claim is made. The
+"unhosted" reason originally given here is withdrawn: `20260816001400` is on
+the hosted ledger as of the 2026-08-18 measurement. What is missing is a
+production observation, not the schema.
 
 **Addendum, 2026-08-16 — BotBuild (AI accounts + auth broker):** the P0 layer is
 implemented and locally certified: migration `20260816000100` (two RLS+FORCE

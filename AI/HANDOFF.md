@@ -1,13 +1,43 @@
 # Handoff
 
-Last updated: 2026-08-16
+Last updated: 2026-08-18
+
+## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
+
+Probe run `32103778884` (`.github/workflows/apply-hosted-migrations.yml`,
+`scope=probe`, read-only; the three apply steps were skipped and the log shows
+it) printed the full local-vs-remote ledger. **It is not a contiguous prefix of
+the local files.** Nineteen versions are missing from the middle —
+`20260814002500`–`002600`, `20260815000200`–`000600`,
+`20260815000800`–`001600`, `20260816000100`–`000300` — while every row above
+them is present, the whole `20260817` range included.
+
+Every "the migration is unhosted" note further down this file was written
+against a high-water-mark model that the measurement disproves. Check a version
+against the table in `AI/HOSTED_APPLY_RUNBOOK.md` before acting on any of them.
+Two that are now known to be wrong as written: `20260816001500` and
+`20260816001400` are both **on the ledger**, so the usage rows and the
+repository picker are backed on production.
+
+The ledger also still understates the schema: 19 of 19 probed objects came back
+present, among them `scheduling_decisions` and `projects.engineering_priority`,
+both owned by `20260815000200`, which has no ledger row. Where a marker object
+is present the correct action is `migration repair --status applied <version>`,
+recording history that is already true — not re-running the file. The probe now
+prints a `present` boolean per version so that call can be made per file rather
+than for the batch.
+
+Only the probe was run. `AGENTS.md` puts RED actions behind explicit owner
+approval in Phase 1, so `scope=all`, `broker-functions` and `project-controls`
+remain the owner's to trigger.
 
 ## Newest (2026-08-16 ~23:20Z): per-account usage on the Bot Manager, captured by the broker sweep
 
 The owner asked for each connected bot's usage (session % and weekly %) on
 `/solutions/bot-manager`, fully automated. Landed as ADR-076: evidence table
-`ai_account_usage_observations` (migration `20260816001500`, **unhosted** —
-apply it with the runbook before expecting live rows), probe module
+`ai_account_usage_observations` (migration `20260816001500` — recorded as
+unhosted when this was written; the 2026-08-18 measurement finds it **on the
+hosted ledger**, so live rows are possible), probe module
 `lib/worker/usage-probe.ts`, a bounded capture hook in
 `scripts/auth-broker.mts` (frozen file, touched under the owner's explicit
 instruction; login semantics untouched), `GET /api/ai-accounts/usage`, and the
@@ -26,8 +56,9 @@ project connects to, end to end: migration `20260816001400_project_repository_pi
 refusals that name the holding project), `PUT`/`DELETE
 /api/projects/[projectId]/repository`, and a per-project picker in the Connections
 console with explicit no-installation / zero-repository / projects-load-failure states.
-The migration is **unhosted**; apply it through `AI/HOSTED_APPLY_RUNBOOK.md` (its counts
-are updated). Nothing here touches the frozen AI-account connection path, execution
+The migration was recorded as **unhosted** here; the 2026-08-18 measurement finds
+`20260816001400` on the hosted ledger. `AI/HOSTED_APPLY_RUNBOOK.md` carries the
+current position. Nothing here touches the frozen AI-account connection path, execution
 authority, or RLS.
 
 ## Newest (2026-08-16 ~21:30Z): both provider paths frozen; GitHub install host-skew fixed
@@ -92,7 +123,7 @@ sign into this app; the session travels in a fragment the app ignores).
 
 ## Mission and boundary
 
-**Phase 2E portfolio scheduling landed on `claude/softwarefactory-phase-1e-ops-mjdiiq` on 2026-08-15** (migrations `20260815000100`-`20260815000600`, scored 33/36 PASS in `AI/PHASE_2E_COMPLETION.md`). Read that file and the 2E handoff block at the top of `todo.md` before touching the claim path: `claim_phase1c_run` now orders by effective priority and filters on four ceilings plus circuit-breaker health, and its body has been rewritten twice by copying the previous version and editing it, so a third rewrite should do the same rather than retyping it. Two ordering facts matter operationally — the six new migrations are unhosted, and `20260815000500`/`20260815000600` cannot apply to a database where `20260814000210` is half-applied, because their `language sql` bodies are resolved at creation.
+**Phase 2E portfolio scheduling landed on `claude/softwarefactory-phase-1e-ops-mjdiiq` on 2026-08-15** (migrations `20260815000100`-`20260815000600`, scored 33/36 PASS in `AI/PHASE_2E_COMPLETION.md`). Read that file and the 2E handoff block at the top of `todo.md` before touching the claim path: `claim_phase1c_run` now orders by effective priority and filters on four ceilings plus circuit-breaker health, and its body has been rewritten twice by copying the previous version and editing it, so a third rewrite should do the same rather than retyping it. Two ordering facts matter operationally — five of the six migrations are ledger-absent as measured on 2026-08-18 (`20260815000100` is on the ledger; `000200`-`000600` are not, though `000200`'s objects are demonstrably live), and `20260815000500`/`20260815000600` cannot apply to a database where `20260814000210` is half-applied, because their `language sql` bodies are resolved at creation.
 
 
 

@@ -64,11 +64,13 @@ type RunRow = {
   provider?: string | null;
   model?: string | null;
   branch_name?: string | null;
-  // Absent until 20260815001000 is applied to hosted, so it is optional and
-  // falls back to "unreviewed" rather than making the list unreadable.
+  // Optional because it postdates the rest of the row: `20260817000300` added
+  // it, and a database that predates that migration must still render a
+  // readable list rather than a broken one. It falls back to "unreviewed".
+  // (Applied on hosted — measured 2026-08-18, AI/HOSTED_APPLY_RUNBOOK.md.)
   review_status?: string | null;
-  // Same reasoning: absent until 20260817000700 lands, and an absent column is
-  // not evidence that a run is archived.
+  // Same reasoning, from `20260817001000`. An absent column is not evidence
+  // that a run is archived. (Also applied on hosted, same measurement.)
   archived_at?: string | null;
 };
 

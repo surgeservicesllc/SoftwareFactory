@@ -53,8 +53,9 @@ evidence. `PUT`/`DELETE /api/projects/[projectId]/repository` exposes them behin
 same-origin plus owner/admin checks, and the Connections console gains a per-project
 repository picker with truthful no-installation / zero-repository / load-failure states.
 `connect_github_project` (creation-time binding) is untouched; no RLS, grant matrix,
-or execution-authority change. The migration is **unhosted** — the runbook's outstanding
-set is now 33 ending at `20260816001400`. Verified locally by
+or execution-authority change. The migration was **unhosted** when this was written;
+`20260816001400` is on the hosted ledger as of the 2026-08-18 measurement, and the
+"outstanding set of 33 ending at ..." framing is superseded by that correction. Verified locally by
 `tests/integration/project-repository-picker.behavior.test.ts`,
 `tests/unit/project-repository-route.test.ts`, and the extended Connections console suite.
 
@@ -63,8 +64,9 @@ adds `ai_accounts` (provider sign-ins as first-class identities; no secrets — 
 vault purpose linkage), `ai_auth_sessions` (the broker state machine a worker drives
 through the provider's real login), and nullable `bots.ai_account_id`. RLS+FORCE with
 zero direct table access; all transitions via definer functions that write activity
-events. Local and CI-verified; **unhosted** — the runbook's outstanding set is now 20
-ending at `20260816000100`. No execution authority changes. The broker API, worker auth
+events. Local and CI-verified; recorded as **unhosted** when this was written. The
+2026-08-18 measurement finds `20260816000100` still absent from the ledger while the
+broker connect flow works live against production — unledgered DDL, not missing schema. No execution authority changes. The broker API, worker auth
 runner, and UI are not built yet; the connect-command flow remains the live path.
 
 Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution; the credential is **configured** and the worker is **LIVE**, polling every ~5 minutes (see correction below) — a live canary awaits one owner-submitted command
@@ -77,6 +79,40 @@ Overall status: **The protected hosted-database sequence completed on exact proj
 2. **The hosted migration ledger is ahead of the documented `20260813001400` position.** The owner's SQL Editor attempt to insert ledger version `20260813001500` failed with `duplicate key value violates unique constraint "schema_migrations_pkey"` — that version is already applied on hosted. The Supabase GitHub integration (the "Supabase Preview" check on PRs, plus `supabase/config.toml` in-tree) is the probable applier on merge to `main`. The exact hosted position is unknown from any agent environment; the owner query in `todo.md` → External Blockers resolves it. Until then, every claim below about "unhosted" migrations after `20260813001400` is an upper bound, not a fact.
 
 **Correction, 2026-08-16 (live production evidence):** the integration-as-applier claim above holds only up to a point. Migrations through `20260816000300` are provably applied on hosted (the broker connect flow works live), but `20260816000400`/`20260816000500` from PR #142 (merged 16:26Z) are provably NOT applied: production Remove returns PostgREST `PGRST202` (function `remove_ai_account` unknown) at 16:36Z and again at 16:51Z, and worker run `31958640122` printed an empty session projection 400ms before claiming a real session — the projection RPC errored, meaning `inspect_ai_auth_sessions` is missing too. **The Supabase GitHub integration cannot be relied on to apply migrations on merge.** The sanctioned applier is `.github/workflows/apply-hosted-migrations.yml`, which now also works with `SUPABASE_DB_PASSWORD` alone (the live `SUPABASE_ACCESS_TOKEN` secret is malformed — not `sbp_…`-shaped — per apply runs `31957275938`/`31959913171`).
+
+**Correction, 2026-08-18 (the hosted ledger, measured end to end):** every
+count above and below this line that describes the hosted position is
+superseded. Probe run `32103778884` (`scope=probe`, read-only) printed the full
+local-vs-remote ledger, and the shape it printed is one no earlier statement
+allowed for: **the hosted ledger is not a contiguous prefix of the local
+files.** It is missing nineteen versions in the middle —
+`20260814002500`–`002600`, `20260815000200`–`000600`, `20260815000800`–`001600`,
+`20260816000100`–`000300` — while carrying every row above them, including the
+entire `20260817` range. So sentences of the form "the ledger ends at X,
+everything after X is outstanding" are not merely out of date; the model behind
+them is wrong, and every apply decision taken from one has been wrong.
+
+Three consequences worth stating plainly:
+
+1. `20260817000700_bot_assignment_configuration` **is applied on production**.
+   The Assign Bots wizard's configuration columns and `assign_bots_to_project`
+   exist there. This file, `todo.md` and the runbook previously said the
+   opposite.
+2. `20260816000100`–`000300` are ledger-absent, yet the 2026-08-16 correction
+   above records the broker connect flow working live against production. Both
+   observations stand: the DDL is live and the history row is not. The same run
+   confirms it structurally — 19 of 19 probed objects present, including
+   `scheduling_decisions` and `projects.engineering_priority`, both owned by
+   `20260815000200`, which has no ledger row.
+3. Part of the remaining gap is therefore **bookkeeping over DDL that already
+   ran**, where the correct action is `migration repair --status applied`, not
+   re-running the file. `AI/HOSTED_APPLY_RUNBOOK.md` carries the nineteen-row
+   table, the marker object that settles each one, and the procedure.
+
+No mutating scope was run. `AGENTS.md` puts RED actions behind explicit owner
+approval in Phase 1 and the runbook requires a fresh exact approval per apply,
+so the repair-versus-apply decision is written down for the owner rather than
+taken.
 
 **Superseded 2026-08-16 19:47Z — the live GitHub path changed.** The prior Phase 1B identifiers (candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, project `b1f23696-437e-4d89-b55f-d7a949980e8f`, primary rollback installation `153445938`) are historical: they were bound to a workspace the owner's current login cannot reach, which surfaced as an empty Connections list plus the cross-tenant refusal on every reconnect. The owner uninstalled the primary GitHub App and reconnected fresh: the live path is now a new installation `#154236235` (primary App, repository access Selected → exactly `surgeservicesllc/SoftwareFactory`), bound to the owner's live workspace — owner-verified Connected with the repository listed at 19:47Z. The candidate App "Surge SoftwareFactory Next" remains installed on GitHub with its stale binding (inert; optional cleanup). GitHub Support ticket `#4660724` about the old primary installation's webhook defect is moot for the live path.
 
@@ -357,7 +393,7 @@ Measured directly rather than inferred from a merge succeeding.
 
 - Two migrations shared the version prefix `20260814000300` (`agentos_isolation_model` and `declare_model_characteristics`). Supabase's ledger keys on the numeric prefix, so `supabase db push` would have hit a primary-key collision in `supabase_migrations.schema_migrations` and left the hosted schema **half-applied**. Neither file was hosted, so the fix carried no ledger consequence: `declare_model_characteristics` was renumbered to `20260814000250`, after the `20260814000200` migration whose columns it depends on and before the AgentOS chain.
 - `tests/integration/migration-version-uniqueness.test.ts` now prevents recurrence. This had happened twice, both times from separate agents choosing the same timestamp in parallel.
-- **15 migrations remain unhosted.** The hosted ledger ends at `20260813001400`. `AI/HOSTED_APPLY_RUNBOOK.md` lists all 15 with their approval requirements and corrected counts; applying them is owner-gated and requires Supabase credentials that do not exist in any agent environment.
+- **Nineteen versions are absent from the hosted ledger**, measured 2026-08-18 by probe run `32103778884` — not the 15 this bullet claimed, and not a tail: the gap is in the middle of the sequence (see the 2026-08-18 correction near the top of this file). `AI/HOSTED_APPLY_RUNBOOK.md` names all nineteen with the marker object that decides, per version, whether the correct action is a history repair or a real apply. Both are owner-gated and need Supabase credentials that exist in no agent environment.
 
 ## Schema and wiring guarantees now enforced continuously
 

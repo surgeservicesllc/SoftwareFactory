@@ -3,23 +3,80 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 45**, listed in the measured section below. The repository total is 109 migration
-files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest: `20260817001100_assignment_model_and_effort` — per-posting model override and work effort, one definer operation. Before it: `20260817000800_custom_pipeline_templates` — create/edit/delete for
-organization pipeline templates, three definer functions over the existing RLS table. Before it:
-`20260817000700_bot_assignment_configuration` — per-posting bot
-configuration plus the atomic multi-bot `assign_bots_to_project`, ADR-079; until it is applied, the
-Assign Bots wizard's configuration fields have no columns to land in and the batch assign receives
-the database's function-missing refusal. Before it:
-`20260817000600_owner_operated_safety_controls` — the owner-operable kill switch and autonomy
-controls, ADR-080. Before it: `20260817000500_clear_all_finished_runs` — clear-all applied through the
-per-run `delete_agent_run` guards, one definer function. Before it, the 2026-08-17 run set:
-`000200` review/deletion activity types, `000300` run review + owner-only deletion, `000400`
-task work-lock leases, and `000100` project edit details — until the surgical apply runs,
-production's run edit/delete and clear-all controls receive the database's function-missing
-refusal and change nothing.)
-(The guard test derives both numbers from the migration directory and this document's
-stated position, and fails when they drift.)
+**The current total is 19**, named in the list below. The repository total is 109 migration
+files. Those two numbers no longer stand in the old relationship, and the reason matters: the
+hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
+rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
+false, and every apply decision made from one has been wrong.
+(The guard test derives the repository total from the migration directory, checks that each
+version named below is a real file, and checks that the probe in
+`.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
+probe cannot drift apart.)
+
+## The ledger, measured — 2026-08-18 05:40Z, run `32103778884` (`scope=probe`, read-only)
+
+This supersedes every count and every high-water mark stated below it. The run mutated nothing:
+the three apply steps were skipped by their `if:` conditions, and the log shows it.
+
+**Absent from the hosted ledger — 19 versions:**
+
+| Version | Migration | Marker object the probe asks about |
+|---|---|---|
+| `20260814002500` | provider_credential_vault | table `provider_credentials` |
+| `20260814002600` | store_provider_credential | function `store_provider_credential` |
+| `20260815000200` | phase2e_portfolio_scheduling | table `scheduling_decisions` |
+| `20260815000300` | phase2e_portfolio_scheduler | function `portfolio_capacity_verdict` |
+| `20260815000400` | phase2e_project_scoped_agents | body of `plan_phase1c_task_and_run` |
+| `20260815000500` | phase2e_breaker_aware_scheduling | function `breaker_cooldown_seconds` |
+| `20260815000600` | phase2e_portfolio_visibility | function `portfolio_scheduling_queue` |
+| `20260815000800` | report_per_project_view | body of `generate_operations_report` |
+| `20260815000900` | guard_project_deletion | function `refuse_project_deletion` |
+| `20260815001000` | cross_project_dependencies | function `declare_cross_project_dependency` |
+| `20260815001100` | connection_routing_decisions | table `connection_routing_decisions` |
+| `20260815001200` | improvement_ledger | table `improvement_ledger` |
+| `20260815001300` | improvement_measurement | function `capture_improvement_baseline` |
+| `20260815001400` | factory_self_audit | function `audit_factory_health` |
+| `20260815001500` | factory_detectors | function `detect_factory_improvements` |
+| `20260815001600` | detector_intake | function `propose_improvements_from_detections` |
+| `20260816000100` | ai_accounts_auth_broker | table `ai_accounts` |
+| `20260816000200` | ai_account_verification | function `list_ai_accounts_for_verification` |
+| `20260816000300` | resume_ai_auth_session | function `find_open_ai_auth_session` |
+
+**Present in the hosted ledger:** every other local version, including the whole
+`20260817` range — `000100` through `001100`. So the run-review controls, the owner-operated
+safety controls, `20260817000700_bot_assignment_configuration` (the Assign Bots wizard's
+configuration columns and `assign_bots_to_project`), the custom pipeline templates and the
+per-posting model/effort override are **applied on production**. Earlier revisions of this
+document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
+high-water mark and is withdrawn.
+
+**And the ledger still understates the schema.** The same run's object probe returned 19 of 19
+present, among them `scheduling_decisions`, `provider_capacity_limits`,
+`projects.engineering_priority`, `projects.strategic_focus` and
+`set_project_engineering_priority` — all owned by `20260815000200`, which has no ledger row. That
+is unledgered DDL: live schema with no history behind it.
+
+### What follows from that
+
+- The gap is, at least in part, **bookkeeping rather than missing schema**. Where the probe shows
+  a marker present, the correct action is `migration repair --status applied <version>` — record
+  the history that is already true. Re-running the file would be the wrong move.
+- Where the probe shows a marker **absent**, that file genuinely has not run and applying it is
+  real DDL against production.
+- The probe now reports one row per absent version with a `present` boolean, so it distinguishes
+  "absent" from "never asked". The older query printed only what existed, which is why the two
+  cases looked alike.
+- **Nobody has run the mutating scopes on the strength of this measurement.** Only `scope=probe`
+  was run. `AGENTS.md` puts RED actions behind explicit owner approval in Phase 1, and the
+  approval section below requires a fresh exact approval per apply — so the repair-versus-apply
+  decision above is written down for the owner, not acted on.
+
+### The next run, for whoever executes it
+
+1. `scope=probe` again — it now covers all 19 and prints `f` for anything truly missing.
+2. For each version whose marker came back `t`: `migration repair --status applied <version>`.
+3. For each version whose marker came back `f`: apply that file, then record it.
+
 
 > ## Probe before you apply — 2026-08-17 20:5xZ (supersedes every count below as a basis for action)
 >

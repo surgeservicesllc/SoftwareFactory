@@ -56,14 +56,40 @@ piece itself is not written yet. Inventing an article to fill the page would
 have been worse than the dead link. Unknown slugs 404 rather than rendering an
 empty body with a 200, which is what `dynamicParams = false` is for.
 
-**Unhosted migrations — owner action, and the only one left.** Applying them
-needs `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD`, which no agent has;
-`.github/workflows/apply-hosted-migrations.yml` is `workflow_dispatch` and an
-owner runs it. What is already proven is that the set applies: every
-integration test execs all 106 migration files in order against real
-PostgreSQL, so the outstanding batch is verified to apply cleanly before it
-ever reaches hosted. Until it runs, the assign wizard's configuration fields
-have no columns on production.
+**Unhosted migrations — measured, and smaller and stranger than stated.**
+This entry previously ended "the assign wizard's configuration fields have no
+columns on production." That is false, and the correction matters more than
+the entry did.
+
+Probe run `32103778884` (`scope=probe`, read-only — the three apply steps were
+skipped and the log shows it) printed the hosted ledger. It is **not a
+contiguous prefix** of the local files, which is the premise every earlier
+count rested on. Nineteen versions are missing from the middle
+(`20260814002500`–`002600`, most of `20260815`, `20260816000100`–`000300`),
+while every row of the `20260817` range sits above them — including
+`20260817000700_bot_assignment_configuration`. **The assign wizard's
+configuration columns and `assign_bots_to_project` are live on production.**
+
+And the ledger still understates the schema: the same run's object probe
+returned 19 of 19 present, among them `scheduling_decisions`,
+`provider_capacity_limits` and `projects.engineering_priority` — all owned by
+`20260815000200`, which has no ledger row. So part of the remaining gap is
+bookkeeping over DDL that already ran, and the fix there is
+`migration repair --status applied <version>`, not re-running the file.
+
+Which of the nineteen are which is now answerable in one read-only run: the
+probe names the marker object each of them introduces and prints a `present`
+boolean per version, so a genuinely missing object shows as `f` instead of
+being invisible. `AI/HOSTED_APPLY_RUNBOOK.md` carries the table and the
+repair-versus-apply procedure, and a guard test keeps the runbook's list, the
+workflow's probe and the migration directory in agreement.
+
+**Not run: the mutating scopes.** `AGENTS.md` puts RED actions behind explicit
+owner approval in Phase 1 and the runbook requires a fresh exact approval per
+apply, so `scope=all` / `broker-functions` / `project-controls` remain an owner
+decision. Only the probe was run. What is already proven about the set is that
+it applies: every integration test execs all 109 migration files in order
+against real PostgreSQL.
 
 ---
 
@@ -246,9 +272,11 @@ makes several bots on one project different from one bot repeated.
 - [ ] The routing module has no production caller yet. Phase 1C claim is hosted
   and live but nothing executes, so wiring it now buys no behavior; it is
   covered by tests and ready for the claim path.
-- [ ] Migration `20260817000500` is **unhosted**, like the rest of the
-  outstanding set (`AI/HOSTED_APPLY_RUNBOOK.md`). Until it is applied, the
-  wizard's configuration fields have no columns to land in.
+- [x] Migration `20260817000500` — and the rest of the `20260817` range,
+  `20260817000700` included — is **on hosted**, measured by probe run
+  `32103778884` on 2026-08-18. The wizard's configuration columns exist in
+  production. The earlier "unhosted" claim came from a ledger high-water mark
+  that does not describe this ledger; see `AI/HOSTED_APPLY_RUNBOOK.md`.
 - [ ] Playwright coverage of the wizard at mobile/tablet/desktop widths.
 
 ---
