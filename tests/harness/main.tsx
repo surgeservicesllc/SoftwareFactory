@@ -24,6 +24,7 @@ import { BotUsageConsole } from "@/components/bot-usage-console";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
+import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { PipelinesConsole } from "@/components/pipelines-console";
 import { PortfolioConsole } from "@/components/portfolio-console";
 import { ProviderSettings } from "@/components/provider-settings";
@@ -55,12 +56,14 @@ import {
   AUTONOMY_STATUS,
   COMMANDS,
   CONNECTIONS,
+  CUSTOM_PIPELINE_TEMPLATES,
   OPERATIONS_OVERVIEW,
   PORTFOLIO_SCHEDULING,
   PORTFOLIO_SOURCES,
   PROJECT_BOTS_ROSTER,
   PROJECT_ID,
   PROJECT_OPERATIONS,
+  PROJECT_PIPELINES,
   PROJECTS,
   PROVIDER_STATUS,
   REPORTS,
@@ -146,6 +149,12 @@ function serveFixtures() {
           : AI_ACCOUNTS,
         canManage: true,
       });
+    }
+    if (url.includes("/api/project-pipelines")) {
+      return json({ available: true, canManage: true, pipelines: PROJECT_PIPELINES });
+    }
+    if (url.includes("/api/pipeline-templates")) {
+      return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
     }
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
@@ -233,6 +242,20 @@ const CASES: Record<string, () => React.ReactElement> = {
       <BotManagerHome
         projectContext={{ id: PROJECT_ID, name: "E-Commerce Platform" }}
         onFinished={() => {}}
+      />
+    </InShell>
+  ),
+  /*
+   * The manager with pipelines already selected. A selected card is a layout
+   * that only exists once something is selected — grey Use with a check, and
+   * a summary counting them above the grid — so it needs its own case or the
+   * sweep only ever measures the unselected one.
+   */
+  "pipeline-templates-selected": () => (
+    <InShell>
+      <PipelineTemplatesManager
+        builtIns={TEMPLATES}
+        projectContext={{ id: PROJECT_ID, name: "E-Commerce Platform" }}
       />
     </InShell>
   ),

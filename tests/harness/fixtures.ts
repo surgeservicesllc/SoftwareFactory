@@ -394,6 +394,54 @@ export const TEMPLATES = [
  * `compileErrors.map`, which is the fixture being wrong rather than the
  * component being fragile.
  */
+/**
+ * A project with pipelines already selected, so the *selected* card — grey
+ * Use, check icon, the summary counting them — is a layout the sweep can
+ * measure. Unselected is what every other case already shows.
+ */
+export const PROJECT_PIPELINES = [
+  {
+    id: "aaaaaaaa-1111-4111-8111-111111111111",
+    projectId: PROJECT_ID,
+    templateKey: "production-readiness",
+    templateId: null,
+    kind: "built_in" as const,
+    name: "Production Readiness",
+    summary: "Checks the things that break on the first real day.",
+    selectedAt: "2026-08-18T09:00:00.000Z",
+  },
+  {
+    id: "aaaaaaaa-2222-4222-8222-222222222222",
+    projectId: PROJECT_ID,
+    templateKey: "checkout_audit",
+    templateId: "bbbbbbbb-3333-4333-8333-333333333333",
+    kind: "custom" as const,
+    name: "Checkout Audit",
+    summary: null,
+    selectedAt: "2026-08-18T09:05:00.000Z",
+  },
+];
+
+/** One custom template, so the custom half of the manager renders rows too. */
+export const CUSTOM_PIPELINE_TEMPLATES = [
+  {
+    id: "bbbbbbbb-3333-4333-8333-333333333333",
+    slug: "checkout_audit",
+    name: "Checkout Audit",
+    summary: "Audit the checkout flow end to end, from cart to receipt email.",
+    category: "AUDIT",
+    capability: "review",
+    areas: [{ id: "payments", job: "Check the payment flow." }],
+    version: 2,
+    editable: true,
+    compiles: true,
+    topology: "DIAMOND",
+    nodeCount: 3,
+    maxParallelism: 1,
+    errors: [] as string[],
+  },
+];
+
 export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   key: template.key,
   name: template.name,

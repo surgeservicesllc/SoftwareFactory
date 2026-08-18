@@ -182,6 +182,7 @@ const CASES = [
   "my-projects",
   "portfolio",
   "pipelines",
+  "pipeline-templates-selected",
   "agentos",
   "autonomy",
   "bot-usage",
@@ -726,3 +727,37 @@ for (const layoutCase of CASES) {
     });
   }
 }
+
+test("a selected pipeline says so without colour, and stays reachable on a phone", async ({ page, isMobile }) => {
+  /*
+   * The defect this pins is the whole point of the control: pressing Use has
+   * to leave a mark a person can find again. Grey alone would not be enough —
+   * someone who cannot see the difference between the accent and the border
+   * needs the same fact — so the pressed state is asserted on the element, not
+   * on its class.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "pipeline-templates-selected", 320);
+
+  const selected = page.getByRole("button", { name: "Stop using Production Readiness" });
+  await expect(selected).toBeVisible();
+  await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await expect(selected).toHaveText(/Selected/);
+
+  // A template nobody chose still offers itself.
+  const unselected = page.getByRole("button", { name: "Use Security Audit" });
+  await expect(unselected).toHaveAttribute("aria-pressed", "false");
+
+  // Both selections are counted where a person looks for them, and planning a
+  // graph is its own action rather than something Use does behind their back.
+  await expect(page.getByText(/2 pipelines selected for E-Commerce Platform/)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Plan a graph from Production Readiness" }),
+  ).toBeVisible();
+
+  expect(await overflowing(page), "the selected pipeline grid overflowed at 320px").toEqual([]);
+  expect(
+    await unreachable(page, "body"),
+    "a selected pipeline's controls went out of reach at 320px",
+  ).toEqual([]);
+});
