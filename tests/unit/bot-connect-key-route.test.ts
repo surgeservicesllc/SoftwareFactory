@@ -85,8 +85,12 @@ describe("verify before store", () => {
     requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
+        // One `eq` (organization) then `limit`: `ensureProviderBot` reads every
+        // bot name in the organization, because names are unique per
+        // organization and the old per-provider filter numbered around
+        // collisions it could not see.
         from: () => ({
-          select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+          select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }),
         }),
         rpc: register,
       },
