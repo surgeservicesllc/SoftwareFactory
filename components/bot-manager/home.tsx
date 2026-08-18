@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AiAccountConnect } from "@/components/ai-account-connect";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { findBotProvider } from "@/lib/bots/catalog";
+import { accountCanBackABot } from "@/lib/bots/accounts";
 import { cn } from "@/lib/cn";
 
 /**
@@ -369,7 +370,7 @@ export function BotManagerHome({
     setBotNotice("");
     try {
       const chosenAccounts = (accounts ?? []).filter(
-        (account) => selectedAccountIds.includes(account.id) && account.status === "connected",
+        (account) => selectedAccountIds.includes(account.id) && accountCanBackABot(account.status),
       );
 
       let botsToAssign = bots.filter((bot) => selectedBotIds.includes(bot.id));
@@ -491,7 +492,7 @@ export function BotManagerHome({
    */
   const selectionCount = selectedBotIds.length
     + (accounts ?? []).filter(
-      (account) => selectedAccountIds.includes(account.id) && account.status === "connected",
+      (account) => selectedAccountIds.includes(account.id) && accountCanBackABot(account.status),
     ).length;
 
   let dialog: React.ReactNode = null;
@@ -537,7 +538,9 @@ export function BotManagerHome({
      * are listed so one can be chosen, and an account that cannot back a bot
      * says why rather than being quietly skipped.
      */
-    const connectable = (accounts ?? []).filter((account) => account.status === "connected");
+    const connectable = (accounts ?? []).filter(
+      (account) => accountCanBackABot(account.status),
+    );
     dialog = modal(
       <div className="relative">
         {closeButton}
@@ -551,12 +554,12 @@ export function BotManagerHome({
             <p className="text-sm text-[var(--text)]">
               {(accounts ?? []).length === 0
                 ? "No AI account is connected yet."
-                : `None of your ${(accounts ?? []).length} accounts currently holds a working credential, so none of them can back a bot.`}
+                : `None of your ${(accounts ?? []).length} accounts holds a credential, so none of them can back a bot.`}
             </p>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
               {(accounts ?? []).length === 0
                 ? "Add one first — it takes a sign-in with the account you already pay for."
-                : "Use Reconnect on an account below to sign in again, then create the bot."}
+                : "Use Reconnect on an account below to restore one, then create the bot."}
             </p>
             <button
               type="button"
@@ -582,7 +585,10 @@ export function BotManagerHome({
                     {account.displayName}
                   </p>
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    {account.providerLabel} · Connected
+                    {account.providerLabel}
+                    {account.status === "connected"
+                      ? " · Connected"
+                      : " · Needs signing in again — the bot is created, but waits"}
                   </p>
                 </button>
               </li>
@@ -590,10 +596,10 @@ export function BotManagerHome({
           </ul>
         )}
 
-        {(accounts ?? []).some((account) => account.status !== "connected") ? (
+        {(accounts ?? []).some((account) => !accountCanBackABot(account.status)) ? (
           <p className="mt-4 text-xs text-[var(--text-muted)]">
-            Accounts that need signing in again are not listed here. Reconnect one below and it
-            becomes available.
+            Accounts whose credential was removed or never added are not listed here. Reconnect
+            one below and it becomes available.
           </p>
         ) : null}
         {botNotice ? (

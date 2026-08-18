@@ -269,6 +269,16 @@ describe("BotManagerHome", () => {
   });
 });
 
+const disconnectedAccount = {
+  id: "acc-4",
+  provider: "openai",
+  providerLabel: "Codex",
+  displayName: "Codex Daniel",
+  status: "disconnected",
+  lastVerifiedAt: null,
+  lastError: null,
+};
+
 const needsReauthAccount = {
   id: "acc-2",
   provider: "anthropic",
@@ -291,20 +301,26 @@ describe("BotManagerHome — creating a bot", () => {
     await user.click(await screen.findByRole("button", { name: /create bot/i }));
 
     const dialog = await screen.findByRole("dialog", { name: /create bot/i });
-    // The connected one is offered; the one that cannot back a bot is not.
+    /*
+     * Both accounts that still hold credential material are offered — including
+     * the one whose last verification came back 403, because
+     * `mark_ai_account_needs_reauth` writes only `status` and `last_error` and
+     * a bot's readiness is resolved from credential presence. Only the
+     * disconnected one, whose credential was removed, is absent.
+     */
     expect(within(dialog).getByRole("button", { name: /claude account 1/i })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /claude blackstone/i })).toBeNull();
-    expect(within(dialog).getByText(/need signing in again are not listed/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /claude blackstone/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /codex daniel/i })).toBeNull();
   });
 
-  it("says why it cannot create one when every account needs signing in again", async () => {
+  it("says why it cannot create one when no account holds a credential", async () => {
     /*
-     * The defect this pins: with accounts present but none connected, Create
-     * Bot silently opened the *add an account* chooser. Four accounts on
-     * screen, and the button offered to add a fifth without a word.
+     * The defect this pins: with accounts present but none usable, Create Bot
+     * silently opened the *add an account* chooser. Four accounts on screen,
+     * and the button offered to add a fifth without a word.
      */
     const user = userEvent.setup();
-    stub({ accounts: [needsReauthAccount], bots: [] });
+    stub({ accounts: [disconnectedAccount], bots: [] });
     render(<BotManagerHome />);
 
     await user.click(await screen.findByRole("button", { name: /create bot/i }));
@@ -403,15 +419,6 @@ const secondBot = {
   readinessLabel: "Ready to assign",
 };
 
-const secondAccount = {
-  id: "acc-3",
-  provider: "openai",
-  providerLabel: "Codex",
-  displayName: "Codex Daniel",
-  status: "connected",
-  lastVerifiedAt: null,
-  lastError: null,
-};
 
 describe("BotManagerHome — selecting one or many", () => {
   it("assigns every selected bot in a single atomic request", async () => {
@@ -466,7 +473,7 @@ describe("BotManagerHome — selecting one or many", () => {
     const user = userEvent.setup();
     const provisioned: unknown[] = [];
     stub({
-      accounts: [connectedAccount, secondAccount, needsReauthAccount],
+      accounts: [connectedAccount, needsReauthAccount, disconnectedAccount],
       bots: [],
       roles: [role],
       projects: [project],
@@ -481,16 +488,20 @@ describe("BotManagerHome — selecting one or many", () => {
     render(<BotManagerHome />);
 
     await user.click(await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }));
-    await user.click(screen.getByRole("button", { name: `Select ${secondAccount.displayName}` }));
     await user.click(screen.getByRole("button", { name: `Select ${needsReauthAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${disconnectedAccount.displayName}` }));
 
-    // Both numbers, so the button's count is never a mystery.
-    expect(screen.getByText(/3 selected · 2 can create a bot/i)).toBeInTheDocument();
+    // One count for what cannot be done at all, a separate line for what can
+    // be done but will wait — they are different facts and were being conflated.
+    expect(screen.getByText(/3 selected · 1 cannot back a bot yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/needs signing in again/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
 
+    // Both are Claude, so the second asks for an additional bot rather than
+    // being told one already exists.
     expect(provisioned).toEqual([
       { provider: "anthropic", credential: "subscription", additional: false },
-      { provider: "openai", credential: "subscription", additional: false },
+      { provider: "anthropic", credential: "subscription", additional: true },
     ]);
   });
 });

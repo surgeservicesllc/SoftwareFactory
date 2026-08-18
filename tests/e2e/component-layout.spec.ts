@@ -188,6 +188,7 @@ const CASES = [
   "bot-fabric",
   "bot-manager",
   "bot-manager-in-journey",
+  "bot-manager-stalled",
   "files",
   "operations",
   "resources",
@@ -451,6 +452,40 @@ test("selecting accounts and bots holds its layout at every width", async ({
     // Pressed state, not colour alone.
     await expect(accountSelects.first()).toHaveAttribute("aria-pressed", "true");
   }
+});
+
+test("a workspace whose accounts have all gone stale still has a way forward", async ({
+  page,
+  isMobile,
+}) => {
+  /*
+   * The owner's screenshot, reproduced: four accounts, three of which refused
+   * their stored credential, one disconnected, and no bots at all. The console
+   * offered nothing — "None can create a bot", no Add Bots, and an empty team
+   * with nothing to select — because it treated "connected" as the condition
+   * for backing a bot. That is stricter than the server, which resolves
+   * readiness from credential presence, and the accounts that 403'd still hold
+   * theirs.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "bot-manager-stalled", 1280);
+
+  await page.getByRole("button", { name: "Select Claude Blackstone" }).click();
+  await page.getByRole("button", { name: "Select Claude NWV" }).click();
+
+  // The offer exists, counts them, and says what the consequence is.
+  await expect(page.getByRole("button", { name: /create 2 bots/i })).toBeEnabled();
+  await expect(page.getByText(/need signing in again/i).first()).toBeVisible();
+  const addBots = page.getByRole("button", { name: /^add bots$/i });
+  await expect(addBots).toBeVisible();
+  await expect(page.getByText(/E-Commerce Platform/).first()).toBeVisible();
+
+  // The disconnected account has no credential left, so it still cannot.
+  await page.getByRole("button", { name: "Select Codex Daniel" }).click();
+  await expect(page.getByText(/1 cannot back a bot yet/i)).toBeVisible();
+
+  expect(await overflowing(page), "the stalled state overflowed").toEqual([]);
+  expect(await unreachable(page, "body")).toEqual([]);
 });
 
 test("Add Bots lands the selection on the journey's project", async ({ page, isMobile }) => {

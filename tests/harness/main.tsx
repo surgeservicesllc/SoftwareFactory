@@ -66,6 +66,7 @@ import {
   REPORTS,
   RESOURCE_MODELS,
   RESOURCES_OVERVIEW,
+  STALE_AI_ACCOUNTS,
   RUNS,
   TEMPLATES,
   WORKER_STATUS,
@@ -137,7 +138,15 @@ function serveFixtures() {
      * width sweep. The route returns it for an owner or an admin; so does
      * this.
      */
-    if (url.includes("/api/ai-accounts")) return json({ accounts: AI_ACCOUNTS, canManage: true });
+    if (url.includes("/api/ai-accounts")) {
+      // The stalled case swaps in the owner's four-stale-accounts state.
+      return json({
+        accounts: window.location.search.includes("case=bot-manager-stalled")
+          ? STALE_AI_ACCOUNTS
+          : AI_ACCOUNTS,
+        canManage: true,
+      });
+    }
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });
@@ -207,6 +216,18 @@ const CASES: Record<string, () => React.ReactElement> = {
    * the in-place Add Bots row exists to be measured. Without a case for it the
    * width sweep only ever saw the standalone form.
    */
+  /*
+   * The screenshot state: every account stale, no bots. The case exists to
+   * prove the journey still has a way forward from there.
+   */
+  "bot-manager-stalled": () => (
+    <InShell>
+      <BotManagerHome
+        projectContext={{ id: PROJECT_ID, name: "E-Commerce Platform" }}
+        onFinished={() => {}}
+      />
+    </InShell>
+  ),
   "bot-manager-in-journey": () => (
     <InShell>
       <BotManagerHome

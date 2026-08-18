@@ -93,6 +93,53 @@ against real PostgreSQL.
 
 ---
 
+## THE CONSOLE WAS ENFORCING A RULE THE SERVER DOES NOT HAVE (2026-08-18)
+
+The owner's screenshot is the whole bug report: four accounts, three of which
+had refused their stored credential with HTTP 403, one disconnected, and no
+bots. The bar read "2 selected · 0 can create a bot", the button read "None can
+create a bot", the team section was empty so there was nothing else to select,
+and **Add Bots never appeared**. The journey simply stopped.
+
+It stopped on a rule the console invented. A bot's readiness is resolved by
+`evaluateBotReadiness`, which asks whether the **credential resolves on the
+server** and nothing else — the same test `POST /api/projects/:id/bots` applies
+before assigning. And `mark_ai_account_needs_reauth` writes only `status` and
+`last_error`; it does not touch the vault. So an account whose last
+verification came back 403 still holds its credential, and a bot referencing
+that slot is `ready` by the server's own definition. The console was refusing
+to offer what the server would have accepted.
+
+`lib/bots/accounts.ts` now holds the rule in one place: an account can back a
+bot when it is `connected` **or** `needs_reauth`; `pending`, `disconnected` and
+`revoked` cannot, because those have no credential material — and an unknown
+status is treated as unusable rather than guessed at.
+
+Two facts that had been conflated are now separate, because they call for
+different actions:
+
+- **Cannot back a bot** — final until something changes, counted against the
+  offer, and the reason named ("not signed in yet", "its credential was
+  removed", "its credential was revoked").
+- **Needs signing in again** — does not stop anything being created or
+  assigned; it means the work waits. Said as its own line: "their bots are
+  created and assigned, but will not run until you reconnect."
+
+`bot-manager-stalled` is the screenshot as a harness case — four stale
+accounts, no bots — and its browser check asserts the workspace has a way
+forward from exactly that state. Reverting the rule to `connected` alone fails
+one browser check and four unit tests.
+
+### One more thing this explains
+
+The intermittent single vitest failure in the combined gate was a live
+`next dev` rewriting `.next/dev/types` while `tsc` read it. Next re-adds that
+path to `tsconfig.json`'s `include` on every build, so it cannot be excluded —
+the operational rule is simply not to run the typecheck while a dev server is
+up.
+
+---
+
 ## CONNECT BOTS FINISHES THE STEP IT IS PART OF (2026-08-18)
 
 Inside the AI Factory, Connect Bots could only connect. The selection made

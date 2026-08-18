@@ -17,6 +17,10 @@ import {
   AccountUsage,
   type AccountUsageView,
 } from "@/components/bot-manager/account-usage";
+import {
+  accountCanBackABot,
+  accountNeedsSignInAgain,
+} from "@/lib/bots/accounts";
 import { cn } from "@/lib/cn";
 
 /**
@@ -281,9 +285,12 @@ export function AiAccountsPanel({
 
   const selectedAccounts = accounts.filter((account) => selected.includes(account.id));
   const connectableSelection = selectedAccounts.filter(
-    (account) => account.status === "connected",
+    (account) => accountCanBackABot(account.status),
   );
   const selectableCount = connectableSelection.length;
+  const staleSelection = connectableSelection.filter(
+    (account) => accountNeedsSignInAgain(account.status),
+  ).length;
 
   function toggleSelected(accountId: string) {
     setSelected(
@@ -340,17 +347,29 @@ export function AiAccountsPanel({
 
       {selected.length > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
-          <p className="min-w-0 flex-1 text-sm text-[var(--text)]">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
             {/*
-              Both numbers, always. Creating bots only from the accounts that
-              can back one is right; doing it without saying which were left
-              out would make the button's count a mystery.
+              Two different facts, kept apart. "Cannot back a bot" is about
+              credential material and is final until something changes;
+              "needs signing in again" is about the last verification and does
+              not stop a bot being created — it only means the work waits. The
+              old copy said the second when it meant the first, so a workspace
+              whose accounts had all 403'd was told nothing could be created.
             */}
-            {selected.length} selected
-            {selectableCount === selected.length
-              ? ""
-              : ` · ${selectableCount} can create a bot, the rest need signing in again`}
-          </p>
+            <p className="text-sm text-[var(--text)]">
+              {selected.length} selected
+              {selectableCount === selected.length
+                ? ""
+                : ` · ${selected.length - selectableCount} cannot back a bot yet`}
+            </p>
+            {staleSelection > 0 ? (
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                {staleSelection === 1
+                  ? "One needs signing in again: its bot is created and assigned, but will not run until you reconnect."
+                  : `${staleSelection} need signing in again: their bots are created and assigned, but will not run until you reconnect.`}
+              </p>
+            ) : null}
+          </div>
           {onCreateBots && canManage ? (
             <button
               type="button"

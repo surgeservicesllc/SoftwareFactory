@@ -142,6 +142,51 @@ export const AI_ACCOUNTS = [
   },
 ];
 
+/**
+ * The owner's screenshot, as data: four accounts, none freshly verified, and
+ * no bots at all. Three refused their stored credential (HTTP 403) and one has
+ * been disconnected — the state in which the console previously offered no way
+ * forward and said only "None can create a bot".
+ */
+export const STALE_AI_ACCOUNTS = [
+  {
+    id: "77777777-7777-4777-8777-77777777777a",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude Blackstone",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-18T07:05:22.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777b",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude NWV",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-17T20:11:24.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777c",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude Bubaly",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-17T20:11:24.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777d",
+    provider: "openai",
+    providerLabel: "Codex",
+    displayName: "Codex Daniel",
+    status: "disconnected",
+    lastVerifiedAt: "2026-08-16T15:51:14.000Z",
+    lastError: null,
+  },
+];
+
 /* ------------------------------------------------ the remaining consoles */
 
 const LONG_TITLE =
