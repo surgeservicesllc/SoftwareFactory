@@ -93,6 +93,31 @@ against real PostgreSQL.
 
 ---
 
+## AGENTS PAGE: EVERY AGENT SELECTABLE (2026-08-18, second session)
+
+The owner's goal: make any or all agents selectable at /solutions/agents.
+The whole selection chain already existed and was Supabase-wired end to end —
+per-agent select → POST /api/agents/[id]/assignment →
+`set_agent_provider_assignment` (owner/admin, activity-evented, hosted since
+the 20260813 range) — but the RPC only accepts **enabled catalogue
+configurations** (`provider_model_configurations`), and a fresh organization
+has an empty catalogue. So every select offered exactly one row, "Automatic
+routing", and the way out lived unexplained on the settings page.
+
+Fix, no migration needed: `lib/providers/standard-catalogue.ts` derives the
+standard model list from the bot catalog's per-provider suggested models
+(one source of truth; display names spelled where the schema demands one),
+and the Agents page's assignment boundary now offers **Enable the standard
+model catalogue** exactly when the catalogue has no enabled models and the
+viewer can manage — one click seeds all 8 through the same
+`/api/providers/models` upsert the settings page uses (idempotent), reloads,
+and every agent's select becomes a real choice persisted to Supabase.
+Refusals are counted and named, never celebrated. Boundary copy names the
+dead end when it exists. 1 new unit test (provider-surfaces: 11) walking
+empty catalogue → seed → 8 upserts → options present. Also fixed
+bot-connect-key-route's client mock, which still modelled the pre-#228
+two-eq read chain.
+
 ## CREATE BOT MADE NOTHING, SAID NOTHING — FIXED (2026-08-18, second session)
 
 The owner finished the connect flow, the success screen said Ready, Create My
