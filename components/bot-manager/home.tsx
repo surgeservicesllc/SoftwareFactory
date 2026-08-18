@@ -328,6 +328,7 @@ export function BotManagerHome({
     const seen = new Set(bots.map((bot) => bot.provider));
     let created = 0;
     const failed: string[] = [];
+    let refusal = "";
     for (const account of selected) {
       try {
         const response = await fetch("/api/bots/connect/provision", {
@@ -339,18 +340,27 @@ export function BotManagerHome({
             additional: seen.has(account.provider),
           }),
         });
-        if (!response.ok) throw new Error();
+        const body = (await response.json().catch(() => ({}))) as {
+          provisioned?: boolean;
+          outcome?: string;
+          reason?: string;
+        };
+        // A 200 that made nothing is a failure with a reason, not a success.
+        if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
+          throw new Error(body.reason ?? "");
+        }
         seen.add(account.provider);
         created += 1;
-      } catch {
+      } catch (error) {
         failed.push(account.provider);
+        if (error instanceof Error && error.message) refusal = error.message;
       }
     }
     await load();
     setBotNotice(
       failed.length === 0
         ? `${created} bot${created === 1 ? "" : "s"} created.`
-        : `${created} created, ${failed.length} failed. Try the ones that failed again.`,
+        : `${created} created, ${failed.length} failed.${refusal ? ` ${refusal}` : " Try the ones that failed again."}`,
     );
   }, [bots, load]);
 
@@ -388,7 +398,15 @@ export function BotManagerHome({
               additional: seen.has(account.provider),
             }),
           });
-          if (!response.ok) throw new Error("A bot could not be created for a selected account.");
+          const body = (await response.json().catch(() => ({}))) as {
+            provisioned?: boolean;
+            outcome?: string;
+            reason?: string;
+          };
+          // A 200 that made nothing is a refusal; carry its sentence.
+          if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
+            throw new Error(body.reason ?? "A bot could not be created for a selected account.");
+          }
           seen.add(account.provider);
         }
         const refreshed = await fetch("/api/bots", { cache: "no-store" });
@@ -448,11 +466,33 @@ export function BotManagerHome({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: providerId, credential: "subscription", additional: bots.some((bot) => bot.provider === providerId) }),
       });
+      const body = (await response.json().catch(() => ({}))) as {
+        provisioned?: boolean;
+        outcome?: string;
+        reason?: string;
+      };
       if (!response.ok) throw new Error();
+      /*
+       * The endpoint answers 200 for "made one", "already had one", AND "the
+       * database refused" — treating them all as success is exactly how the
+       * owner followed every step and ended with zero bots. Only a created
+       * or already-existing bot closes this dialog; a refusal stays on
+       * screen with the database's own sentence.
+       */
+      if (!body.provisioned && body.outcome !== "exists") {
+        throw new Error(body.reason ?? "The bot was not created.");
+      }
       await load();
       setStage({ kind: "closed" });
-    } catch {
-      setBotNotice("The bot could not be created. Try again from the accounts list.");
+      if (body.outcome === "exists") {
+        setBotNotice("You already have a bot for this provider — it is in Your AI Team below.");
+      }
+    } catch (error) {
+      setBotNotice(
+        error instanceof Error && error.message
+          ? error.message
+          : "The bot could not be created. Try again from the accounts list.",
+      );
     } finally {
       setCreatingBot(false);
     }
@@ -1101,6 +1141,17 @@ export function BotManagerHome({
                 </>
               )}
             </form>
+          ) : null}
+
+          {/* The page-level outcome line. The selection bar's flows — create
+              bots for accounts, add the selection to a project — run with no
+              modal open, and their notices previously rendered only inside
+              modals: a refusal had nowhere to appear, which is how "Create
+              Bot" could fail without a single visible word. */}
+          {botNotice && stage.kind === "closed" ? (
+            <p className="text-sm text-[var(--danger)]" role="status" aria-live="polite">
+              {botNotice}
+            </p>
           ) : null}
 
           {bots.length > 0 ? (

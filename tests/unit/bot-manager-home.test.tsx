@@ -480,7 +480,10 @@ describe("BotManagerHome — selecting one or many", () => {
       extra: (url, init) => {
         if (url === "/api/bots/connect/provision" && init?.method === "POST") {
           provisioned.push(JSON.parse(String(init.body)));
-          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+          return {
+            ok: true, status: 200,
+            json: async () => ({ provisioned: true, outcome: "created" }),
+          } as unknown as Response;
         }
         return null;
       },
@@ -503,6 +506,43 @@ describe("BotManagerHome — selecting one or many", () => {
       { provider: "anthropic", credential: "subscription", additional: false },
       { provider: "anthropic", credential: "subscription", additional: true },
     ]);
+  });
+
+  it("does not celebrate a 200 that made nothing: a skipped provision shows its sentence", async () => {
+    /*
+     * The provision endpoint answers 200 for "the database refused" too, by
+     * design — the connect flow must never turn a stored credential into a
+     * failure. The console celebrating that 200 is exactly how the owner
+     * followed every step and ended with zero bots.
+     */
+    const user = userEvent.setup();
+    stub({
+      accounts: [connectedAccount],
+      bots: [],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (url === "/api/bots/connect/provision" && init?.method === "POST") {
+          return {
+            ok: true, status: 200,
+            json: async () => ({
+              provisioned: false,
+              outcome: "skipped",
+              reason: "The bot could not be created: owner or admin role is required.",
+            }),
+          } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: /create 1 bot/i }));
+
+    expect(
+      await screen.findByText(/0 created, 1 failed\. The bot could not be created: owner or admin role is required\./),
+    ).toBeInTheDocument();
   });
 });
 
@@ -564,7 +604,10 @@ describe("BotManagerHome — inside the AI Factory", () => {
       }
       if (url === "/api/bots/connect/provision") {
         provisioned += 1;
-        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        return {
+          ok: true, status: 200,
+          json: async () => ({ provisioned: true, outcome: "created" }),
+        } as unknown as Response;
       }
       if (url === "/api/bots") {
         botsRead += 1;
