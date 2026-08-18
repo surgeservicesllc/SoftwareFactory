@@ -52,3 +52,4 @@ supabase/.temp/
 next-env.d.ts
 
 .vercel
+tests/harness/dist/

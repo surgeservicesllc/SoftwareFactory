@@ -7,6 +7,8 @@ const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
 // revision this Playwright version downloads. Pointing at that binary is safer
 // than re-downloading; unset, Playwright resolves its own managed browser.
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+/** Where the component layout harness is served. */
+export const HARNESS_URL = process.env.PLAYWRIGHT_HARNESS_URL ?? "http://localhost:4321";
 const launchOptions = chromiumExecutable
   ? { executablePath: chromiumExecutable }
   : undefined;
@@ -59,14 +61,31 @@ export default defineConfig({
       },
     },
   ],
-  webServer: externalServer
-    ? undefined
-    : {
+  /*
+   * Two servers: the application, and a static build of the layout harness.
+   *
+   * The harness exists because the console resolves its tenant on the server —
+   * without Supabase the browser suite only ever reaches the "not configured"
+   * gate, so every layout that appears once there are rows went unmeasured.
+   * It is served over HTTP rather than opened from disk because ES modules
+   * cannot load over file://.
+   */
+  webServer: [
+    ...(externalServer
+      ? []
+      : [{
         command:
           process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ??
           "npm run dev",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
-      },
+      }]),
+    {
+      command: "npm run harness:build && npm run harness:serve",
+      url: HARNESS_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+  ],
 });

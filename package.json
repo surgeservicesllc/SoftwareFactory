@@ -19,7 +19,9 @@
     "worker:preflight": "tsx scripts/worker-preflight.mts",
     "worker:once": "tsx scripts/worker.mts --once",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "agentos": "tsx scripts/agentos.mts"
+    "agentos": "tsx scripts/agentos.mts",
+    "harness:build": "vite build --config tests/harness/vite.config.ts",
+    "harness:serve": "vite preview --config tests/harness/vite.config.ts --port 4321 --strictPort"
   },
   "engines": {
     "node": ">=22.0.0"

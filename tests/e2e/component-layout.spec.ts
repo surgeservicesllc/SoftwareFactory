@@ -1,0 +1,177 @@
+import { expect, test } from "@playwright/test";
+
+import { HARNESS_URL } from "../../playwright.config";
+
+/**
+ * The layouts that only exist once there are rows.
+ *
+ * The rest of the browser suite measures pages, and every console page renders
+ * a "not configured" gate without Supabase — so the projects roster, the bot
+ * cards, the assign wizard and the accounts panel had no width coverage at
+ * all. Every responsive defect found so far has been inside that gap, and all
+ * of them were found by hand on a phone rather than by CI.
+ *
+ * These mount the real components against fixture props in a real browser.
+ * jsdom cannot do this: it can prove a button exists, never that it sits past
+ * the right edge of the panel it lives in.
+ *
+ * What this does not cover is the server — authorization, tenant scoping and
+ * the routes' own behaviour are tested where they live. This is a layout probe
+ * and nothing more.
+ */
+
+const WIDTHS = [320, 375, 390, 430, 768, 1024, 1280, 1440];
+
+async function settled(page: import("@playwright/test").Page) {
+  await page.evaluate(
+    () => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }),
+  );
+}
+
+async function open(page: import("@playwright/test").Page, layoutCase: string, width: number) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${HARNESS_URL}/index.html?case=${layoutCase}`, {
+    waitUntil: "domcontentloaded",
+  });
+  // The components fetch their fixtures on mount; wait for real content.
+  await expect(page.locator("#root")).not.toBeEmpty({ timeout: 15_000 });
+  await settled(page);
+}
+
+/** Elements past the viewport that no ancestor clips or scrolls. */
+async function overflowing(page: import("@playwright/test").Page) {
+  await settled(page);
+  return page.evaluate(() => {
+    const root = document.documentElement;
+    const limit = root.clientWidth + 1;
+    if (root.scrollWidth <= limit) return [];
+
+    const past: string[] = [];
+    for (const element of Array.from(document.querySelectorAll("body *"))) {
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 || box.right <= limit) continue;
+
+      let contained = false;
+      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+        const overflowX = getComputedStyle(parent).overflowX;
+        if (overflowX === "auto" || overflowX === "scroll" || overflowX === "hidden") {
+          contained = true;
+          break;
+        }
+      }
+      if (!contained) {
+        past.push(`<${element.tagName.toLowerCase()} class="${String(element.className).slice(0, 70)}">`);
+      }
+    }
+    return past.slice(0, 3);
+  });
+}
+
+/**
+ * Controls whose edges fall outside their own scrolling container.
+ *
+ * Measured against the container rather than the viewport, because a control
+ * inside a scroll area is reachable by scrolling that area — what matters is
+ * whether anything can reach it at all. This is the exact shape of the defect
+ * that hid the Disconnect button on a phone.
+ */
+async function unreachable(page: import("@playwright/test").Page, container: string) {
+  await settled(page);
+  return page.evaluate((selector) => {
+    const root = selector === "body" ? document.body : document.querySelector(selector);
+    if (!root) return [`container ${selector} not found`];
+
+    const bounds = root.getBoundingClientRect();
+    const clipped: string[] = [];
+    for (const control of Array.from(root.querySelectorAll("button, a, input, select, textarea"))) {
+      const box = control.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      if (getComputedStyle(control).visibility === "hidden") continue;
+      if (box.right > bounds.right + 2 || box.left < bounds.left - 2) {
+        clipped.push(
+          `${control.tagName.toLowerCase()} "${(control.textContent ?? "").trim().slice(0, 32)}"`,
+        );
+      }
+    }
+    return clipped.slice(0, 5);
+  }, container);
+}
+
+const CASES = ["project-bots", "ai-accounts", "app-shell"] as const;
+
+for (const width of WIDTHS) {
+  for (const layoutCase of CASES) {
+    test(`${layoutCase} fits and stays reachable at ${width}px`, async ({ page, isMobile }) => {
+      test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+      await open(page, layoutCase, width);
+
+      expect(await overflowing(page), `${layoutCase} @ ${width}px overflowed`).toEqual([]);
+      expect(
+        await unreachable(page, "body"),
+        `${layoutCase} @ ${width}px put a control out of reach`,
+      ).toEqual([]);
+    });
+  }
+}
+
+test("every recovery action on a stuck account is reachable on a phone", async ({ page, isMobile }) => {
+  // The defect this pins: Refresh, Reconnect and Disconnect sat in a row that
+  // refused to shrink, so the last of them ran off the panel's right edge and
+  // a stuck account could not be recovered from a phone at all.
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "ai-accounts", 320);
+
+  await expect(page.getByRole("button", { name: /refresh/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /reconnect/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /disconnect/i }).first()).toBeVisible();
+
+  expect(await unreachable(page, "body")).toEqual([]);
+});
+
+test("the assign wizard fits a phone at each of its three steps", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "project-bots", 320);
+
+  await page.getByRole("button", { name: /assign more|assign bots/i }).first().click();
+  const dialog = page.getByRole("dialog", { name: /assign bots/i });
+  await expect(dialog).toBeVisible();
+
+  expect(await overflowing(page), "the Select step overflowed").toEqual([]);
+  expect(await unreachable(page, '[role="dialog"]'), "a Select control is out of reach").toEqual([]);
+
+  await dialog.getByLabel("Select Test Engineer").click();
+
+  for (const step of ["Configure", "Review"]) {
+    await dialog.getByRole("button", { name: /next/i }).click();
+    await settled(page);
+    expect(await overflowing(page), `the ${step} step overflowed`).toEqual([]);
+    expect(
+      await unreachable(page, '[role="dialog"]'),
+      `a ${step} control is out of reach`,
+    ).toEqual([]);
+  }
+});
+
+test("opening every navigation caret reflows rather than overflowing", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "app-shell", 320);
+
+  const opener = page.getByRole("button", { name: /open console navigation/i });
+  if (await opener.isVisible().catch(() => false)) await opener.click();
+
+  const nav = page.getByRole("navigation", { name: /console/i }).filter({ visible: true });
+  const carets = nav.getByRole("button", { name: /expand .* subpages/i });
+  await expect(carets.first()).toBeVisible({ timeout: 10_000 });
+
+  for (let round = 0; round < 20; round += 1) {
+    if ((await carets.count()) === 0) break;
+    await carets.first().click();
+    expect(await overflowing(page), `caret ${round + 1} pushed content out`).toEqual([]);
+  }
+
+  // Everything open, and the column still fits.
+  expect(await carets.count()).toBe(0);
+  expect(await unreachable(page, "body")).toEqual([]);
+});

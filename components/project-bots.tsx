@@ -381,7 +381,12 @@ export function ProjectBots({
           worker executes because of it yet.
         </p>
       ) : (
-        <ul className="mt-4 grid gap-3 lg:grid-cols-2">
+        // `grid-cols-1` rather than a bare `grid`. Without an explicit template the
+        // implicit column is `auto`, whose minimum is the item's min-content — so
+        // one card that could not shrink sized the whole column to 369px inside
+        // 248px of space and pushed the roster off the screen. Tailwind's
+        // `grid-cols-1` is `minmax(0, 1fr)`, which clamps.
+        <ul className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           {assigned.map((posting) => (
             <PostingCard
               key={posting.id}
@@ -498,14 +503,23 @@ function PostingCard({
           empty value clears the override back to the bot's own default. */}
       {canManage ? (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
+          {/*
+            `min-w-0` on the cells and `w-full` on the controls.
+
+            A select sizes itself to its widest option, and a model identifier
+            is long — "Bot default (claude-opus-5-…)" is wider than a phone. An
+            auto-sized grid track takes that as its minimum, so the whole
+            posting card was pushed past the right edge of a 320px screen by
+            one dropdown nobody had measured.
+          */}
+          <div className="min-w-0">
             <label htmlFor={`posting-model-${posting.id}`} className="field-label">Model</label>
             <select
               id={`posting-model-${posting.id}`}
               value={posting.model ?? ""}
               disabled={busy}
               onChange={(event) => onSetExecution({ model: event.target.value })}
-              className="input"
+              className="input w-full"
             >
               <option value="">
                 Bot default{posting.bot?.model ? ` (${posting.bot.model})` : ""}
@@ -515,14 +529,14 @@ function PostingCard({
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label htmlFor={`posting-effort-${posting.id}`} className="field-label">Work effort</label>
             <select
               id={`posting-effort-${posting.id}`}
               value={posting.workEffort ?? "medium"}
               disabled={busy}
               onChange={(event) => onSetExecution({ workEffort: event.target.value })}
-              className="input"
+              className="input w-full"
             >
               {WORK_EFFORTS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>

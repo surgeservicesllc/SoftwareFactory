@@ -32,6 +32,8 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "work/**",
     "next-env.d.ts",
+    // The layout harness's build output — a bundle, not source.
+    "tests/harness/dist/**",
   ]),
 ]);
 

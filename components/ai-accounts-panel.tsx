@@ -319,8 +319,14 @@ export function AiAccountsPanel({
                     </button>
                   </form>
                 ) : (
-                  <p className="flex items-center gap-1.5 truncate text-sm font-medium text-[var(--text)]">
-                    {account.displayName}
+                  // `truncate` belongs on the name, not on the row. On the row
+                  // it sets `white-space: nowrap` and `overflow: hidden` for the
+                  // whole flex container, so a long account name pushed the
+                  // rename button past the edge and the container clipped it —
+                  // the control was on the page and unreachable. The name
+                  // truncates now; the button holds its size.
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--text)]">
+                    <span className="min-w-0 truncate">{account.displayName}</span>
                     {canManage ? (
                       <button
                         type="button"
@@ -329,7 +335,7 @@ export function AiAccountsPanel({
                           setEditName(account.displayName);
                           setEditingId(account.id);
                         }}
-                        className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                        className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
                       >
                         <Pencil className="size-3.5" aria-hidden="true" />
                       </button>
