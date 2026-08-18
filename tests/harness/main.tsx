@@ -4,6 +4,18 @@ import { createRoot } from "react-dom/client";
 import "@/app/globals.css";
 
 import { ActivityConsole } from "@/components/activity-console";
+import { AiFactoryConsole } from "@/components/ai-factory-console";
+import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
+import { CommandComposer } from "@/components/command-composer";
+import { GettingStarted } from "@/components/getting-started";
+import { GraphExecutionSummary } from "@/components/graph-execution-summary";
+import { GraphLaunchControl } from "@/components/graph-launch-control";
+import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
+import { NeedsYourAttention } from "@/components/needs-your-attention";
+import { PortfolioControls } from "@/components/portfolio-controls";
+import { ProjectDetailConsole } from "@/components/project-detail-console";
+import { RecentActivityCard } from "@/components/recent-activity-card";
+import { WorkflowsConsole } from "@/components/workflows-console";
 import { AgentOsConsole } from "@/components/agentos-console";
 import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
@@ -38,6 +50,7 @@ import {
   REPORTS,
   RUNS,
   TEMPLATES,
+  WORKFLOW_TEMPLATES,
 } from "./fixtures";
 
 /**
@@ -125,6 +138,24 @@ const CASES: Record<string, () => React.ReactElement> = {
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,
   safety: () => <InShell><SafetyControls /></InShell>,
   "provider-settings": () => <InShell><ProviderSettings /></InShell>,
+  "ai-factory": () => <InShell><AiFactoryConsole builtIns={TEMPLATES} /></InShell>,
+  workflows: () => <InShell><WorkflowsConsole templates={WORKFLOW_TEMPLATES} /></InShell>,
+  "bot-workspace": () => <InShell><BotManagerWorkspace /></InShell>,
+  composer: () => <InShell><CommandComposer /></InShell>,
+  "getting-started": () => <InShell><GettingStarted authenticated /></InShell>,
+  "graph-summary": () => (
+    <InShell><GraphExecutionSummary templateKey={TEMPLATES[0].key} /></InShell>
+  ),
+  "graph-launch": () => (
+    <InShell>
+      <GraphLaunchControl templateKey={TEMPLATES[0].key} templateName={TEMPLATES[0].name} />
+    </InShell>
+  ),
+  "dashboard-metrics": () => <InShell><LiveDashboardMetrics authenticated /></InShell>,
+  attention: () => <InShell><NeedsYourAttention authenticated /></InShell>,
+  "portfolio-controls": () => <InShell><PortfolioControls /></InShell>,
+  "project-detail": () => <InShell><ProjectDetailConsole projectId={PROJECT_ID} /></InShell>,
+  "recent-activity": () => <InShell><RecentActivityCard authenticated /></InShell>,
   "project-bots": () => (
     <div className="bg-background p-4">
       <ProjectBots projectId={PROJECT_ID} projectName="E-Commerce Platform" />

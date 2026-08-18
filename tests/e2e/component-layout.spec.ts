@@ -144,6 +144,18 @@ const CASES = [
   "resources",
   "safety",
   "provider-settings",
+  "ai-factory",
+  "workflows",
+  "bot-workspace",
+  "composer",
+  "getting-started",
+  "graph-summary",
+  "graph-launch",
+  "dashboard-metrics",
+  "attention",
+  "portfolio-controls",
+  "project-detail",
+  "recent-activity",
 ] as const;
 
 for (const width of WIDTHS) {

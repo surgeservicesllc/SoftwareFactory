@@ -50,6 +50,9 @@ const ROUTES = [
   "/solutions/runs",
   "/solutions/settings",
   "/solutions/workflows",
+  "/solutions/admin",
+  "/auth/onboarding",
+  "/offline",
 ];
 
 /**

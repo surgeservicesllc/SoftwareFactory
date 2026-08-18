@@ -289,3 +289,20 @@ export const TEMPLATES = [
     compiles: true,
   },
 ];
+
+/**
+ * The workflows console takes a richer summary than the pipelines one: each
+ * template carries its compiled preview and any errors from compiling it.
+ * Two shapes, two fixtures — reusing the wrong one crashed the page on
+ * `compileErrors.map`, which is the fixture being wrong rather than the
+ * component being fragile.
+ */
+export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
+  key: template.key,
+  name: template.name,
+  category: template.category,
+  summary: template.summary,
+  version: template.version,
+  preview: null,
+  compileErrors: [] as string[],
+}));

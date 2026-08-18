@@ -134,7 +134,11 @@ export function GraphLaunchControl({
             <select
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
-              className="rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm"
+              // The `.input` token rather than a hand-rolled copy of it. The
+              // copy missed the token's `min-width: 0`, so a project named
+              // longer than a phone is wide sized this control to its widest
+              // option and carried the whole panel off the screen.
+              className="input"
             >
               <option value="">Select a project…</option>
               {projects.map((project) => (
