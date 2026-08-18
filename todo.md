@@ -93,6 +93,34 @@ against real PostgreSQL.
 
 ---
 
+## CREATE BOT MADE NOTHING, SAID NOTHING — FIXED (2026-08-18, second session)
+
+The owner finished the connect flow, the success screen said Ready, Create My
+First Bot was clicked — zero bots, zero words. Probe run 32192344287 proves
+`register_bot` itself works on production (created as the impersonated owner,
+rolled back; the org holds 0 bot rows), so the failure lived entirely in the
+layers above it, each of which ate part of the truth:
+
+1. `/api/bots/connect/provision` answers 200 for "made one", "already had
+   one", AND "the database refused" (ensureProviderBot swallows every error
+   into `skipped` — by design, so auto-provision never fails a connection).
+   Every caller checked only `response.ok` and celebrated. Now the skip's
+   reason travels (the database's own sentence for vetted codes), and every
+   caller — provisionBot, createBotsForAccounts, addSelectionToProject, the
+   fabric console's connect finish, the assign wizard's linking — treats an
+   unprovisioned answer as the failure it is.
+2. Bot names are unique per ORGANIZATION; the auto-name was numbered by a
+   per-PROVIDER count, so deletions/renames/cross-provider squats made
+   "Label N" collide (23505 → silent 200). Names are now picked from the
+   names actually taken.
+3. `botNotice` rendered only inside modal stages; the selection bar's flows
+   run with none open, so even a carried reason had nowhere to appear. A
+   page-level role=status line now renders under the accounts panel.
+
+PR #228, merged ed19a61, live on production (~15s). Tests: bot-provisioning
+10 (free-name + vetted-sentence), bot-manager-home 21 (skipped-200 shows its
+sentence).
+
 ## REMOVE AND RECONNECT: ROOT CAUSES MEASURED AND FIXED (2026-08-18, second session)
 
 **Remove.** The re-aimed probe (run 32188102707) impersonated the real owner of
