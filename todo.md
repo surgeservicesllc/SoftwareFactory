@@ -1,5 +1,62 @@
 # SoftwareFactory — shared working status
 
+## RESPONSIVE + NAVIGATION: WHERE THIS LANDED (2026-08-18)
+
+Coverage is now derived rather than asserted, which is the part that had been
+missing every time this was called incomplete.
+
+`tests/integration/responsive-coverage.contract.test.ts` computes two claims:
+every `page.tsx` under `app/` is in a width sweep, and every component under
+`components/` is reachable from something that measures it. Reachability is
+transitive, so a component has to be *rendered* by a measured surface rather
+than listed — adding a page or a component without coverage fails the build.
+
+`tests/harness/` mounts 35 real component surfaces in a real browser at
+320/375/390/430/768/1024/1280/1440, because the console resolves its tenant on
+the server and the route sweep only ever reaches the "not configured" gate.
+`tests/integration/supabase-wiring.contract.test.ts` traces all 109 API routes
+to the Supabase boundary and refuses seeded records.
+
+### Defects this found, all of which had reached production
+
+- A bare `grid` cannot shrink: its implicit column is `auto`, minimum
+  min-content. 37 files; one long project name made a console 498px wide
+  inside 320px.
+- `w-full` does not stop a form control widening its parent — a select's
+  min-content is its widest option. Fixed once on the `.input` token.
+- Six copies of a date formatter, none guarding an unparseable value.
+  `Intl.format(new Date(bad))` throws, and a throw in render blanks the page.
+  Now one safe formatter in `lib/format/date.ts`.
+- Button rows that did not wrap: Disconnect on an account, Cancel in two
+  forms — you could open a form and not get out of it on a phone.
+- `truncate` on a flex row rather than its text, clipping the control beside it.
+
+### The navigation, against the owner's reference
+
+Carried from it: the nine top-level destinations in the reference's order,
+the mark at the top left aligned with the menu, one highlighted row per group
+with its chevron inside, New Project as a button, and the closing card.
+
+**Secrets** was absent on the grounds that nothing backed it. That stopped
+being true when the provider credential vault landed
+(`20260814002500`/`002600`); it now points at `settings#providers`, where
+credentials are actually connected and rotated.
+
+**Watch and Advanced** are kept although the reference does not show them.
+They hold Operations, Activity, Files, Agents, Resources, AgentOS and
+Autonomy — all real pages. Matching the image exactly would delete the only
+route to them, and "do not remove functionality" is not a rule the picture
+overrides. Pinned by a test so it reads as a decision rather than drift.
+
+### Still true, and not a responsive problem
+
+Migrations remain unhosted (`AI/HOSTED_APPLY_RUNBOOK.md`), so the assign
+wizard's configuration fields have no columns to land in on production until
+an owner applies them. Eight marketing resources carry `href: "#"` and need a
+destination decided rather than guessed.
+
+---
+
 ## RESPONSIVE COVERAGE: WHAT IS AND IS NOT MEASURED (2026-08-18)
 
 An attempt to sweep the console's *populated* layouts at all eight widths was

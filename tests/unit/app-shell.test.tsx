@@ -31,6 +31,7 @@ describe("AppShell navigation", () => {
       "Runs",
       "Reports",
       "Integrations",
+      "Secrets",
       "Settings",
       "Watch",
       "Advanced",
@@ -211,5 +212,66 @@ describe("the navigation column against the owner's reference", () => {
     expect(newProject.className).toContain("btn");
     expect(within(navigation).getByText("Quick actions")).toBeInTheDocument();
     expect(within(navigation).getByText(/automate\. build\. ship\./i)).toBeInTheDocument();
+  });
+});
+
+describe("what the navigation takes from the reference, and what it does not", () => {
+  /**
+   * The owner's reference lists nine top-level destinations. This records how
+   * ours relates to it, so the differences read as decisions rather than as
+   * drift — and so a future session cannot quietly re-litigate either one.
+   */
+  const REFERENCE_ORDER = [
+    "Overview",
+    "Projects",
+    "Pipelines",
+    "Bots",
+    "Runs",
+    "Reports",
+    "Integrations",
+    "Secrets",
+    "Settings",
+  ] as const;
+
+  it("carries every destination the reference names, in its order", () => {
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    const labels = within(navigation)
+      .getAllByRole("link")
+      .map((link) => link.textContent ?? "");
+    const positions = REFERENCE_ORDER.map((label) => labels.indexOf(label));
+
+    expect(positions.some((index) => index < 0), `missing: ${
+      REFERENCE_ORDER.filter((_, index) => positions[index] < 0).join(", ")
+    }`).toBe(false);
+    // Same relative order as the reference, whatever sits between them.
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it("points Secrets at the surface that manages credentials", () => {
+    // Added once the provider credential vault existed. Before that the entry
+    // would have been a link to a page invented to justify the label.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(
+      within(screen.getByRole("navigation", { name: "Console" }))
+        .getByRole("link", { name: "Secrets" }),
+    ).toHaveAttribute("href", "/solutions/settings#providers");
+  });
+
+  it("keeps Watch and Advanced, which the reference does not show", () => {
+    /*
+     * A deliberate departure, and the reason is the other half of the same
+     * instruction: these hold Operations, Activity, Files, Agents, Resources,
+     * AgentOS and Autonomy, all of which are real pages. Matching the image
+     * exactly would mean deleting the only way to reach them, and "do not
+     * remove functionality" is not a rule the picture overrides.
+     */
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    expect(within(navigation).getByRole("link", { name: "Watch" })).toBeInTheDocument();
+    expect(within(navigation).getByRole("link", { name: "Advanced" })).toBeInTheDocument();
   });
 });

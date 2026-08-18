@@ -15,6 +15,7 @@ import {
   Fingerprint,
   GitBranch,
   HeartPulse,
+  KeyRound,
   type LucideIcon,
   Menu,
   PlugZap,
@@ -117,6 +118,15 @@ const navigationEntries: readonly NavigationEntry[] = [
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   { label: "Reports", href: "/solutions/reports", icon: ScrollText },
   { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
+  /*
+   * The reference lists Secrets, and an earlier revision left it out on the
+   * grounds that nothing backed it. That was true then and is not now: the
+   * provider credential vault (migrations `20260814002500`/`002600`) stores
+   * sealed material, and the settings page's `#providers` section is where an
+   * owner connects and rotates it. The entry points at the surface that
+   * actually manages secrets rather than at a page invented to justify it.
+   */
+  { label: "Secrets", href: "/solutions/settings#providers", icon: KeyRound },
   {
     label: "Settings",
     href: "/solutions/settings",
