@@ -202,6 +202,72 @@ describe("AgentsConsole provider assignment", () => {
     );
   });
 
+  it("offers the standard catalogue when nothing is enabled, and every agent becomes selectable", async () => {
+    /*
+     * The dead end this closes: the assignment RPC only accepts enabled
+     * catalogue configurations, and a fresh organization has none — so every
+     * select offered exactly one row, "Automatic routing", with the way out
+     * hidden on the settings page. One click seeds the standard models
+     * through the same upsert endpoint the settings page uses.
+     */
+    const seeded: Array<{ provider: string; model: string; displayName: string }> = [];
+    const anthropicEmpty: ProviderStatus = {
+      ...anthropicConnected,
+      configuredModels: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/providers") {
+        return seeded.length === 0
+          ? providerPayload(false, "owner", [anthropicEmpty, openaiNotConfigured])
+          : providerPayload(false, "owner", [
+            {
+              ...anthropicConnected,
+              configuredModels: seeded
+                .filter((entry) => entry.provider === "anthropic")
+                .map((entry, index) => ({
+                  id: `cfg-${index}`,
+                  provider: "anthropic",
+                  model: entry.model,
+                  displayName: entry.displayName,
+                  enabled: true,
+                  isDefault: false,
+                })),
+            },
+            openaiNotConfigured,
+          ]);
+      }
+      if (url === "/api/providers/models" && init?.method === "POST") {
+        seeded.push(JSON.parse(String(init.body)) as { provider: string; model: string; displayName: string });
+        return jsonResponse({ model: { enabled: true } });
+      }
+      if (url === "/api/agents") return jsonResponse({ agents: [baseAgent] });
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentsConsole />);
+
+    // No enabled models: the boundary names the dead end and offers the way out.
+    expect(await screen.findByText(/Enable the standard catalogue to make each agent selectable/)).toBeInTheDocument();
+    const enable = screen.getByRole("button", { name: "Enable the standard model catalogue" });
+    await userEvent.click(enable);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "8 standard models are enabled. Every agent below is now selectable.",
+    );
+    // The standard list flows through the same upsert endpoint, one per model.
+    expect(seeded).toHaveLength(8);
+    expect(seeded[0]).toMatchObject({ provider: "anthropic", model: "claude-opus-5", displayName: "Claude Opus 5" });
+    expect(seeded.filter((entry) => entry.provider === "openai")).toHaveLength(4);
+
+    // And the reloaded catalogue makes the agent's select a real choice.
+    const selector = screen.getByRole("combobox", { name: "Provider assignment for Security Reviewer" });
+    expect(
+      within(selector).getByRole("option", { name: "Claude Opus 5 (Anthropic / Claude)" }),
+    ).toBeInTheDocument();
+  });
+
   it("fails closed with an explicit Not Connected state when provider status is unavailable", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
