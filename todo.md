@@ -1,5 +1,39 @@
 # SoftwareFactory — shared working status
 
+## RESPONSIVE COVERAGE: WHAT IS AND IS NOT MEASURED (2026-08-18)
+
+An attempt to sweep the console's *populated* layouts at all eight widths was
+written and then deleted, because it did not test what it claimed.
+
+The console pages resolve their tenant on the **server**. Without Supabase
+configured for the browser suite they render "Projects are unavailable —
+Supabase is not configured for this environment" and never mount the client
+components, so intercepting the browser's `/api/*` reads changes nothing: the
+fetches never happen. The sweep passed at every width without laying out a
+single row. A test that green-lights an empty gate while claiming to measure a
+populated table is worse than no test.
+
+**Measured today:** every route's chrome and empty/gated state at
+320/375/390/430/768/1024/1280/1440; the console drawer and every navigation
+caret, opened one at a time and all together; the marketing pages fully
+populated (they need no session); dialogs on signed-out console pages.
+
+**Not measured:** any console layout that only exists once there are rows —
+the projects table with data, the bot roster, the assign wizard's three steps,
+the Connect Bots panel. These have component tests (behaviour, in jsdom, no
+layout) but no width coverage.
+
+**What would close it,** in preference order:
+1. A seeded Supabase project for the browser suite, so the server renders rows.
+2. Playwright component testing, which mounts the real components in a real
+   browser without needing a server session. No config exists for it yet.
+
+Both are real work rather than an oversight. Until one exists, defects inside
+populated console layouts are found by hand — which is how the three fixed on
+2026-08-18 were found, from owner screenshots.
+
+---
+
 ## PROJECT-WIDE RESPONSIVE AUDIT (2026-08-17)
 
 Every route measured at 320/375/390/430/768/1024/1280/1440, plus an

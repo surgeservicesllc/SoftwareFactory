@@ -19,6 +19,7 @@ import {
   Menu,
   PlugZap,
   Plus,
+  Rocket,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -162,8 +163,14 @@ const navigationEntries: readonly NavigationEntry[] = [
  * and reading is not a quick action. The marketing pages are unchanged and
  * still reachable from the public navigation.
  */
+/** The one action the design gives a button of its own. */
+const primaryAction: NavigationItem = {
+  label: "New Project",
+  href: "/solutions/projects#add-project",
+  icon: Plus,
+};
+
 const quickActions: readonly NavigationItem[] = [
-  { label: "New Project", href: "/solutions/projects#add-project", icon: Plus },
   { label: "Give a bot work", href: "/solutions/bot-manager", icon: Bot },
   { label: "Import Repository", href: "/solutions/connections", icon: GitBranch },
 ] as const;
@@ -309,15 +316,48 @@ function Navigation({
         </div>
       ) : null}
 
-      <div>
-        <p className="label mb-2 px-3">Quick actions</p>
-        <ul className="space-y-0.5">
-          {quickActions.map((action) => (
-            <li key={action.label}>
-              <NavigationLink item={action} active={false} onNavigate={onNavigate} />
-            </li>
-          ))}
-        </ul>
+      {/*
+        The owner's design leads this section with New Project as a button
+        rather than one more link in a list — it is the action people come to
+        the sidebar to take, and a row of identical links gives it no more
+        weight than "Import Repository".
+      */}
+      <div className="space-y-3">
+        <Link
+          href={primaryAction.href}
+          onClick={onNavigate}
+          className="btn btn-secondary flex min-h-11 w-full items-center justify-center gap-2"
+        >
+          <Plus className="size-4 shrink-0" aria-hidden="true" />
+          {primaryAction.label}
+        </Link>
+
+        <div>
+          <p className="label mb-2 px-3">Quick actions</p>
+          <ul className="space-y-0.5">
+            {quickActions.map((action) => (
+              <li key={action.label}>
+                <NavigationLink item={action} active={false} onNavigate={onNavigate} />
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/*
+          The design closes the column with this card. It states what the
+          product is for rather than reporting anything, so it carries no
+          numbers — a panel that looked like a readout but was decorative
+          would be exactly what AGENTS.md forbids.
+        */}
+        <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
+            <Rocket className="size-4 shrink-0" aria-hidden="true" />
+            Automate. Build. Ship.
+          </p>
+          <p className="mt-1.5 text-[13px] leading-5 text-muted">
+            Let AI handle the repetitive work so you can focus on what matters.
+          </p>
+        </div>
       </div>
     </nav>
   );
