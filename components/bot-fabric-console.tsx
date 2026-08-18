@@ -1530,7 +1530,7 @@ function BotDirectory({
                 <ShieldCheck className="size-4 text-[var(--accent)]" aria-hidden="true" />
                 Registration stores metadata and a secret reference only.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setDraft(null)} className="btn btn-secondary btn-sm">
                   Cancel
                 </button>
@@ -1870,7 +1870,7 @@ function RoleWorkshop({
                 className="input"
               />
             </Field>
-            <div className="flex justify-end gap-2 md:col-span-2">
+            <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
               <button type="button" onClick={() => setDraft(null)} className="btn btn-secondary btn-sm">
                 Cancel
               </button>

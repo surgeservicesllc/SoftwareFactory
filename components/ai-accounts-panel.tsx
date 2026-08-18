@@ -281,7 +281,11 @@ export function AiAccountsPanel({
               <div className="min-w-0 flex-1">
                 {editingId === account.id ? (
                   <form
-                    className="flex items-center gap-2"
+                    // Wraps, and the field shares the row rather than claiming
+                    // a fixed 224px. At 320px the input plus Save plus Cancel
+                    // did not fit, and a non-wrapping row put Cancel off the
+                    // edge — so the way out of a rename was unreachable.
+                    className="flex flex-wrap items-center gap-2"
                     onSubmit={(event) => {
                       event.preventDefault();
                       void rename(account);
@@ -296,7 +300,7 @@ export function AiAccountsPanel({
                       onChange={(event) => setEditName(event.target.value)}
                       maxLength={80}
                       autoFocus
-                      className="w-56 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
+                      className="min-w-0 flex-1 basis-40 rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
                     />
                     <button
                       type="submit"

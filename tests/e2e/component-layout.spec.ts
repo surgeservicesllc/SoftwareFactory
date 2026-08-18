@@ -220,3 +220,92 @@ test("opening every navigation caret reflows rather than overflowing", async ({ 
   expect(await carets.count()).toBe(0);
   expect(await unreachable(page, "body")).toEqual([]);
 });
+
+/**
+ * Interactive state, across every surface.
+ *
+ * A layout that fits on arrival can still break the moment something opens:
+ * a dialog, a disclosure, a tab, a menu. The defects found by hand on a phone
+ * were all in that second state, and measuring only the first would have
+ * missed every one of them.
+ *
+ * This drives each surface's own controls rather than a list of known ones —
+ * a control added later is swept without anybody remembering to add it here.
+ */
+for (const layoutCase of CASES) {
+  for (const width of [320, 1280]) {
+    test(`${layoutCase} survives its own controls at ${width}px`, async ({ page, isMobile }) => {
+      test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+      /*
+       * Longer than the default: this drives up to a dozen controls and
+       * re-opens the case whenever one navigates. Overrunning the default
+       * timeout tore the context down mid-measurement and reported "target
+       * closed", which reads like a crash and is only a clock.
+       */
+      test.setTimeout(90_000);
+      await open(page, layoutCase, width);
+
+      // Bounded: enough to reach the interesting states without the sweep
+      // becoming the slowest thing in the suite.
+      const controls = page.locator(
+        'button:visible, summary:visible, [role="tab"]:visible, [role="switch"]:visible',
+      );
+      /*
+       * Eight, not every control. Each click re-renders a surface that may
+       * mount fetching children, and the measurement walks the whole DOM
+       * afterwards — twelve of those on the heaviest console took over two
+       * minutes and hit the timeout, which reads as a crash. Eight reaches the
+       * dialogs and disclosures that matter while the test stays a test.
+       */
+      const total = Math.min(await controls.count(), 8);
+
+      let restores = 0;
+      for (let index = 0; index < total; index += 1) {
+        const control = controls.nth(index);
+        // Controls disappear as panels swap; a stale one is not a failure.
+        const label = await control.textContent().catch(() => "");
+        // A control that will not accept a click in this state is not a
+        // layout defect; the measurement after it still is.
+        await control.click({ timeout: 700, trial: false }).catch(() => {});
+
+        /*
+         * Some controls submit a form or follow a link, which takes the page
+         * off the harness. That is the control working, not a defect — but
+         * measuring the page it landed on would be measuring nothing. Put the
+         * case back and carry on with the next control.
+         */
+        if (page.isClosed()) {
+          // A control that tears the page down is worth naming, not swallowing.
+          throw new Error(
+            `${layoutCase} @ ${width}px: "${(label ?? "").trim().slice(0, 40)}" closed the page`,
+          );
+        }
+        if (!page.url().includes(`case=${layoutCase}`)) {
+          // Restoring costs a full mount; once is a hiccup, repeatedly is the
+          // sweep spending its budget on navigation instead of measurement.
+          if (restores >= 2) break;
+          restores += 1;
+          await open(page, layoutCase, width);
+          continue;
+        }
+        await settled(page);
+
+        expect(
+          await overflowing(page),
+          `${layoutCase} @ ${width}px overflowed after "${(label ?? "").trim().slice(0, 30)}"`,
+        ).toEqual([]);
+
+        // Anything a click opened must also be reachable inside it.
+        const dialog = page.locator('[role="dialog"]');
+        if (await dialog.count() > 0) {
+          expect(
+            await unreachable(page, '[role="dialog"]'),
+            `${layoutCase} @ ${width}px clipped a control in a dialog`,
+          ).toEqual([]);
+          await page.keyboard.press("Escape").catch(() => {});
+          await settled(page);
+        }
+      }
+    });
+  }
+}
