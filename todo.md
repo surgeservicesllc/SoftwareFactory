@@ -129,6 +129,17 @@ whether `authenticated` may execute it; every function should share one owner
 with every table. With the route fixed, the next attempt also names the cause
 on screen instead of "(42501)".
 
+### The rest of the section, audited
+
+`tests/integration/bots-section-wiring.contract.test.ts` extracts every
+`/api/...` path the five Bots components call — thirty of them — and resolves
+each against the route files on disk, matching `${...}` segments to `[param]`
+directories the way Next does. A path typed into a template literal has no
+compiler behind it: rename a segment and the button still renders, still
+clicks, and answers 404, which the console reports as the generic failure for
+whatever it was trying to do. Renaming one path to a route that does not exist
+fails the test and names it.
+
 ---
 
 ## THE CONSOLE WAS ENFORCING A RULE THE SERVER DOES NOT HAVE (2026-08-18)
