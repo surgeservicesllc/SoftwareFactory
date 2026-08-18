@@ -202,6 +202,19 @@ const CASES: Record<string, () => React.ReactElement> = {
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   "bot-fabric": () => <InShell><BotFabricConsole /></InShell>,
   "bot-manager": () => <InShell><BotManagerHome /></InShell>,
+  /*
+   * The same component as the AI Factory hands it: a project in context, so
+   * the in-place Add Bots row exists to be measured. Without a case for it the
+   * width sweep only ever saw the standalone form.
+   */
+  "bot-manager-in-journey": () => (
+    <InShell>
+      <BotManagerHome
+        projectContext={{ id: PROJECT_ID, name: "E-Commerce Platform" }}
+        onFinished={() => {}}
+      />
+    </InShell>
+  ),
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

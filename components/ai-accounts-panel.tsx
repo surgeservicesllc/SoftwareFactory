@@ -64,10 +64,22 @@ export function AiAccountsPanel({
    * accounts up keeps one authorization path rather than a second copy here.
    */
   onCreateBots,
+  /**
+   * The selection, raised.
+   *
+   * The panel still owns the control and the highlight; a caller that can act
+   * on the choice — the AI Factory, which knows the project — needs to see it,
+   * and two components each keeping their own copy of "what is selected" is
+   * how the button and the list come to disagree.
+   */
+  selectedIds,
+  onSelectedChange,
 }: {
   canManage: boolean;
   onChanged: () => Promise<void> | void;
   onCreateBots?: (accounts: readonly { id: string; provider: string }[]) => Promise<void> | void;
+  selectedIds?: readonly string[];
+  onSelectedChange?: (ids: readonly string[]) => void;
 }) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [usageByAccount, setUsageByAccount] = useState<Record<string, AccountUsageView>>({});
@@ -82,8 +94,13 @@ export function AiAccountsPanel({
   const [notice, setNotice] = useState("");
   // One or many. A set rather than a single id, because the whole point of
   // the control is acting on several accounts at once.
-  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const [ownSelectedIds, setOwnSelectedIds] = useState<readonly string[]>([]);
   const [creatingBots, setCreatingBots] = useState(false);
+  const selected = selectedIds ?? ownSelectedIds;
+  const setSelected = (next: readonly string[]) => {
+    if (onSelectedChange) onSelectedChange(next);
+    else setOwnSelectedIds(next);
+  };
   // Refresh is evidence, not optimism: the map holds each account's request
   // time, and the marker clears only when the worker's re-verification moves
   // `lastVerifiedAt` past it (or a quiet three minutes expires the wait).
@@ -262,18 +279,18 @@ export function AiAccountsPanel({
     }
   }, [load, onChanged]);
 
-  const selectedAccounts = accounts.filter((account) => selectedIds.includes(account.id));
+  const selectedAccounts = accounts.filter((account) => selected.includes(account.id));
   const connectableSelection = selectedAccounts.filter(
     (account) => account.status === "connected",
   );
   const selectableCount = connectableSelection.length;
 
   function toggleSelected(accountId: string) {
-    setSelectedIds((current) => (
-      current.includes(accountId)
-        ? current.filter((id) => id !== accountId)
-        : [...current, accountId]
-    ));
+    setSelected(
+      selected.includes(accountId)
+        ? selected.filter((id) => id !== accountId)
+        : [...selected, accountId],
+    );
   }
 
   async function createBotsFromSelection() {
@@ -285,7 +302,7 @@ export function AiAccountsPanel({
         id: account.id,
         provider: account.provider,
       })));
-      setSelectedIds([]);
+      setSelected([]);
     } finally {
       setCreatingBots(false);
     }
@@ -321,7 +338,7 @@ export function AiAccountsPanel({
         </div>
       ) : null}
 
-      {selectedIds.length > 0 ? (
+      {selected.length > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
           <p className="min-w-0 flex-1 text-sm text-[var(--text)]">
             {/*
@@ -329,8 +346,8 @@ export function AiAccountsPanel({
               can back one is right; doing it without saying which were left
               out would make the button's count a mystery.
             */}
-            {selectedIds.length} selected
-            {selectableCount === selectedIds.length
+            {selected.length} selected
+            {selectableCount === selected.length
               ? ""
               : ` · ${selectableCount} can create a bot, the rest need signing in again`}
           </p>
@@ -346,12 +363,19 @@ export function AiAccountsPanel({
               ) : (
                 <Sparkles className="size-3.5" aria-hidden="true" />
               )}
-              {selectableCount === 1 ? "Create 1 bot" : `Create ${selectableCount} bots`}
+              {/*
+                Never "Create 0 bots". A disabled button whose label counts
+                nothing reads as broken rather than as unavailable; naming the
+                reason is what makes it the second.
+              */}
+              {selectableCount === 0
+                ? "None can create a bot"
+                : selectableCount === 1 ? "Create 1 bot" : `Create ${selectableCount} bots`}
             </button>
           ) : null}
           <button
             type="button"
-            onClick={() => setSelectedIds([])}
+            onClick={() => setSelected([])}
             className="btn btn-secondary btn-sm"
           >
             Clear selection
@@ -378,7 +402,7 @@ export function AiAccountsPanel({
                */
               className={cn(
                 "rounded-lg border px-3 py-2 transition-colors",
-                selectedIds.includes(account.id)
+                selected.includes(account.id)
                   ? "border-[var(--accent-border)] bg-[var(--accent-surface)]"
                   : "border-[var(--border)] bg-[var(--surface-raised)]",
               )}
@@ -476,7 +500,7 @@ export function AiAccountsPanel({
               {canManage ? (
                 <button
                   type="button"
-                  aria-pressed={selectedIds.includes(account.id)}
+                  aria-pressed={selected.includes(account.id)}
                   /*
                    * The name lives in `aria-label`, not in an `sr-only` span.
                    * A hidden text node carrying the account's name makes the
@@ -487,12 +511,12 @@ export function AiAccountsPanel({
                   onClick={() => toggleSelected(account.id)}
                   className={cn(
                     "shrink-0 rounded-lg border px-4 py-2 text-sm font-bold uppercase tracking-wide transition-colors",
-                    selectedIds.includes(account.id)
+                    selected.includes(account.id)
                       ? "border-[var(--accent-border)] bg-[var(--accent)] text-[var(--accent-ink)]"
                       : "border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)]",
                   )}
                 >
-                  {selectedIds.includes(account.id) ? (
+                  {selected.includes(account.id) ? (
                     <span className="flex items-center gap-1.5">
                       <Check className="size-3.5" aria-hidden="true" />
                       Selected

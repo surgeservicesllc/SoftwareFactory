@@ -85,7 +85,24 @@ type ConnectStage =
   /** Put one bot on one project, from the roster rather than the project page. */
   | { kind: "assign"; bots: readonly BotView[] };
 
-export function BotManagerHome() {
+export function BotManagerHome({
+  /**
+   * The project this surface is being used in service of.
+   *
+   * Set by the AI Factory, where Connect Bots is one step of a journey that
+   * already knows which project it is building. With it the panel can finish
+   * the job in place — connect, create, assign — instead of sending someone to
+   * a second screen to name a project the page was already holding. Absent on
+   * the standalone Bot Manager, where no project is implied and the assign
+   * dialog asks.
+   */
+  projectContext,
+  /** Called once the selection has landed on the project, to return the caller. */
+  onFinished,
+}: {
+  projectContext?: { id: string; name: string };
+  onFinished?: () => void;
+} = {}) {
   const [accounts, setAccounts] = useState<AccountView[] | null>(null);
   const [bots, setBots] = useState<BotView[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
@@ -111,6 +128,10 @@ export function BotManagerHome() {
   // call, so the roster lets a person pick that many rather than repeating a
   // single-bot dialog.
   const [selectedBotIds, setSelectedBotIds] = useState<readonly string[]>([]);
+  // Lifted out of the accounts panel: with a project in hand the two
+  // selections feed one action, so one place has to hold both.
+  const [selectedAccountIds, setSelectedAccountIds] = useState<readonly string[]>([]);
+
   // The success screen offers the rename before any next action, through the
   // same endpoint the accounts panel uses.
   const [successEditing, setSuccessEditing] = useState(false);
@@ -332,6 +353,91 @@ export function BotManagerHome() {
     );
   }, [bots, load]);
 
+  /**
+   * The whole chain, in one press: connect → create → assign → return.
+   *
+   * Only available with a project in hand. Accounts that are selected but have
+   * no bot yet get one first, and the ids that appear between the two reads of
+   * `/api/bots` are how the new bots are identified — the provision endpoint
+   * answers "made one" or "already had one" rather than naming a row, and
+   * inventing an id from the account would be guessing. Every bot then lands
+   * in a single atomic assign, so the project either gains all of them or none.
+   */
+  const addSelectionToProject = useCallback(async (roleId: string) => {
+    if (!projectContext) return;
+    setAssignBusy(true);
+    setBotNotice("");
+    try {
+      const chosenAccounts = (accounts ?? []).filter(
+        (account) => selectedAccountIds.includes(account.id) && account.status === "connected",
+      );
+
+      let botsToAssign = bots.filter((bot) => selectedBotIds.includes(bot.id));
+
+      if (chosenAccounts.length > 0) {
+        const before = new Set(bots.map((bot) => bot.id));
+        const seen = new Set(bots.map((bot) => bot.provider));
+        for (const account of chosenAccounts) {
+          const response = await fetch("/api/bots/connect/provision", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              provider: account.provider,
+              credential: "subscription",
+              additional: seen.has(account.provider),
+            }),
+          });
+          if (!response.ok) throw new Error("A bot could not be created for a selected account.");
+          seen.add(account.provider);
+        }
+        const refreshed = await fetch("/api/bots", { cache: "no-store" });
+        const body = (await refreshed.json().catch(() => ({}))) as FabricPayload;
+        const appeared = (body.bots ?? [])
+          .filter((bot) => !before.has(bot.id))
+          .map((bot) => ({
+            id: bot.id,
+            name: bot.name,
+            provider: bot.provider,
+            providerLabel: bot.providerLabel,
+            readiness: bot.readiness,
+            readinessLabel: bot.readinessLabel,
+          }));
+        botsToAssign = [...botsToAssign, ...appeared];
+      }
+
+      if (botsToAssign.length === 0) {
+        throw new Error("Select a bot, or an account that can create one, first.");
+      }
+
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectContext.id)}/bots`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bots: botsToAssign.map((bot) => ({ botId: bot.id, roleId })),
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "The bots could not be added to the project.");
+      }
+
+      await load();
+      setSelectedBotIds([]);
+      setSelectedAccountIds([]);
+      setStage({ kind: "closed" });
+      onFinished?.();
+    } catch (error) {
+      setBotNotice(
+        error instanceof Error ? error.message : "The bots could not be added to the project.",
+      );
+    } finally {
+      setAssignBusy(false);
+    }
+  }, [accounts, bots, load, onFinished, projectContext, selectedAccountIds, selectedBotIds]);
+
   const provisionBot = useCallback(async (providerId: string) => {
     setCreatingBot(true);
     setBotNotice("");
@@ -378,6 +484,15 @@ export function BotManagerHome() {
       <X className="size-4" aria-hidden="true" />
     </button>
   );
+
+  /*
+   * Accounts that cannot back a bot are not counted: pressing Add Bots must
+   * never promise something the next request will refuse.
+   */
+  const selectionCount = selectedBotIds.length
+    + (accounts ?? []).filter(
+      (account) => selectedAccountIds.includes(account.id) && account.status === "connected",
+    ).length;
 
   let dialog: React.ReactNode = null;
   if (stage.kind === "choose") {
@@ -925,7 +1040,62 @@ export function BotManagerHome() {
             canManage={canManage}
             onChanged={load}
             onCreateBots={createBotsForAccounts}
+            selectedIds={selectedAccountIds}
+            onSelectedChange={setSelectedAccountIds}
           />
+
+          {projectContext && selectionCount > 0 ? (
+            /*
+             * The step finished where it started. Connect Bots is one stop on a
+             * journey that already knows its project, so the selection made
+             * here can land on that project and return, instead of closing the
+             * overlay and asking someone to name a project the page was
+             * holding all along.
+             */
+            <form
+              className="flex flex-wrap items-end gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const roleId = String(new FormData(event.currentTarget).get("roleId") ?? "");
+                if (roleId) void addSelectionToProject(roleId);
+              }}
+            >
+              <p className="min-w-0 flex-1 basis-full text-sm text-[var(--text)]">
+                Add {selectionCount} selected
+                {" "}
+                {selectionCount === 1 ? "item" : "items"} to
+                {" "}
+                <span className="font-semibold">{projectContext.name}</span>
+                {selectedAccountIds.length > 0
+                  ? " — an account with no bot yet gets one first."
+                  : "."}
+              </p>
+              {roles.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">
+                  This workspace has no bot roles defined, and every assignment carries one.
+                </p>
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <label htmlFor="factory-assign-role" className="field-label">Role</label>
+                    <select id="factory-assign-role" name="roleId" className="input w-full min-w-0">
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="submit" disabled={assignBusy} className="btn btn-primary btn-sm">
+                    {assignBusy ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Plus className="size-4" aria-hidden="true" />
+                    )}
+                    Add Bots
+                  </button>
+                </>
+              )}
+            </form>
+          ) : null}
 
           {bots.length > 0 ? (
             <section aria-label="Your AI team" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -947,9 +1117,13 @@ export function BotManagerHome() {
                     className="btn btn-primary btn-sm"
                   >
                     <Plus className="size-3.5" aria-hidden="true" />
-                    {selectedBotIds.length === 1
-                      ? "Add to project"
-                      : `Add ${selectedBotIds.length} to a project`}
+                    {/*
+                      Always counted, even at one. "Add to project" is also the
+                      label on every row's own button, so at a selection of one
+                      the bar and the row offered two identical controls that
+                      did different things.
+                    */}
+                    {`Add ${selectedBotIds.length} to a project`}
                   </button>
                   <button
                     type="button"

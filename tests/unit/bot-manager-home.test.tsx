@@ -494,3 +494,103 @@ describe("BotManagerHome — selecting one or many", () => {
     ]);
   });
 });
+
+describe("BotManagerHome — inside the AI Factory", () => {
+  const project2 = { id: "00000000-0000-4000-8000-000000000099", name: "Storefront" };
+
+  it("adds the selected bots to the journey's project and returns", async () => {
+    const user = userEvent.setup();
+    const assigned: unknown[] = [];
+    let finished = 0;
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot, secondBot],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes(`/projects/${project2.id}/bots`)) {
+          assigned.push(JSON.parse(String(init.body)));
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(
+      <BotManagerHome projectContext={project2} onFinished={() => { finished += 1; }} />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: `Select ${readyBot.name}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${secondBot.name}` }));
+    // The project is named in place; no second screen asks for it again.
+    expect(screen.getByText(/add 2 selected items to/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^add bots$/i }));
+
+    expect(assigned).toEqual([
+      { bots: [{ botId: readyBot.id, roleId: role.id }, { botId: secondBot.id, roleId: role.id }] },
+    ]);
+    expect(finished).toBe(1);
+  });
+
+  it("creates a bot for a selected account first, then assigns what appeared", async () => {
+    /*
+     * The provision endpoint answers "made one" or "already had one" rather
+     * than naming a row, so the new bot is identified by the id that appears
+     * between the two reads of /api/bots. Inventing one from the account would
+     * be a guess that assigns the wrong bot.
+     */
+    const user = userEvent.setup();
+    const assigned: unknown[] = [];
+    let provisioned = 0;
+    let botsRead = 0;
+    const newBot = { ...secondBot, id: "bot-new", name: "Claude Builder 2" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ai-accounts") {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ accounts: [connectedAccount], canManage: true }),
+        } as unknown as Response;
+      }
+      if (url === "/api/bots/connect/provision") {
+        provisioned += 1;
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }
+      if (url === "/api/bots") {
+        botsRead += 1;
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            bots: provisioned > 0 && botsRead > 1 ? [readyBot, newBot] : [readyBot],
+            assignments: [], roles: [role], projects: [project], canManage: true,
+          }),
+        } as unknown as Response;
+      }
+      if (init?.method === "POST" && url.includes(`/projects/${project2.id}/bots`)) {
+        assigned.push(JSON.parse(String(init.body)));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+    }));
+
+    render(<BotManagerHome projectContext={project2} onFinished={() => {}} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }),
+    );
+    await user.click(screen.getByRole("button", { name: /^add bots$/i }));
+
+    expect(provisioned).toBe(1);
+    expect(assigned).toEqual([{ bots: [{ botId: newBot.id, roleId: role.id }] }]);
+  });
+
+  it("asks for a project when there is no journey to supply one", async () => {
+    const user = userEvent.setup();
+    stub({ accounts: [connectedAccount], bots: [readyBot], roles: [role], projects: [project] });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: `Select ${readyBot.name}` }));
+    // No project in hand, so no in-place Add Bots — the dialog asks.
+    expect(screen.queryByRole("button", { name: /^add bots$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /add to project/i })).toBeInTheDocument();
+  });
+});

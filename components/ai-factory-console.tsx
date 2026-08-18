@@ -407,7 +407,19 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         : "No AI account connected yet",
       action: "Connect a bot",
       icon: PlugZap,
-      body: <BotManagerHome />,
+      /*
+       * The project this journey is building, handed to the step.
+       *
+       * Without it Connect Bots could only connect: the selection had nowhere
+       * to go, and finishing meant closing the overlay and starting the assign
+       * step over from a project picker this page had already filled in.
+       */
+      body: (
+        <BotManagerHome
+          projectContext={rosterProject ? { id: rosterProject.id, name: rosterProject.name } : undefined}
+          onFinished={closeOverlay}
+        />
+      ),
       pageHref: "/solutions/bot-manager",
       pageLabel: "Bot Manager",
     },

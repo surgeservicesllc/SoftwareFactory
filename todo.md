@@ -93,6 +93,41 @@ against real PostgreSQL.
 
 ---
 
+## CONNECT BOTS FINISHES THE STEP IT IS PART OF (2026-08-18)
+
+Inside the AI Factory, Connect Bots could only connect. The selection made
+there had nowhere to go: finishing meant closing the overlay and starting the
+assign step over from a project picker the page had already filled in.
+
+The journey now hands the step its project, and the panel gains **Add Bots** —
+one press for the whole chain:
+
+1. every selected account that is connected but has no bot gets one,
+2. the bots that appeared between two reads of `/api/bots` are identified by id
+   — the provision endpoint answers "made one" or "already had one" rather than
+   naming a row, and deriving an id from the account would be a guess that
+   assigns the wrong bot,
+3. those plus any directly selected bots land on the project in one atomic
+   assign,
+4. `onFinished` returns the caller to the journey.
+
+The role the assignment requires is chosen in the same row rather than in a
+second dialog, since the only thing the standalone dialog still had to ask for
+was the project.
+
+**Two labels that were lying.** "Create 0 bots" — a disabled button whose count
+is zero reads as broken rather than as unavailable; it now names the reason.
+And the bulk bar's "Add to project" at a selection of one was the same string
+as every row's own button, two identical controls doing different things; the
+bar always counts.
+
+Selecting an account that needs signing in again deliberately does **not** count
+towards the offer, so Add Bots never promises what the next request would
+refuse — pinned by the browser check, which selects such an account first and
+asserts the row stays absent.
+
+---
+
 ## CONNECT BOTS, REDRAWN TO THE OWNER'S IMAGE, WITH ONE-OR-MANY SELECTION (2026-08-18)
 
 **The account row is a column now, not one wrapping flex row.** The design puts

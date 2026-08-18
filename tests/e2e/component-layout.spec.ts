@@ -187,6 +187,7 @@ const CASES = [
   "bot-usage",
   "bot-fabric",
   "bot-manager",
+  "bot-manager-in-journey",
   "files",
   "operations",
   "resources",
@@ -450,6 +451,37 @@ test("selecting accounts and bots holds its layout at every width", async ({
     // Pressed state, not colour alone.
     await expect(accountSelects.first()).toHaveAttribute("aria-pressed", "true");
   }
+});
+
+test("Add Bots lands the selection on the journey's project", async ({ page, isMobile }) => {
+  /*
+   * The step finishing where it started. With a project in context the panel
+   * names it, offers the role the assignment needs, and puts the selection on
+   * it — no second screen asking for a project this page was already holding.
+   * Measured at 320px because that row carries a select and a button and is
+   * the densest thing the overlay gained.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "bot-manager-in-journey", 320);
+
+  // Nothing selected: no offer to add nothing.
+  await expect(page.getByRole("button", { name: /^add bots$/i })).toHaveCount(0);
+
+  /*
+   * A bot, not just any Select. The first account in the fixture needs signing
+   * in again, and an account that cannot back a bot deliberately does not
+   * count towards the offer — selecting it must leave the row absent.
+   */
+  const team = page.getByRole("region", { name: /your ai team/i });
+  await team.getByRole("button", { name: /^Select .+/ }).first().click();
+
+  const addBots = page.getByRole("button", { name: /^add bots$/i });
+  await expect(addBots).toBeVisible();
+  await expect(page.getByText(/E-Commerce Platform/).first()).toBeVisible();
+  await expect(page.getByLabel("Role")).toBeVisible();
+
+  expect(await overflowing(page), "the Add Bots row overflowed at 320px").toEqual([]);
+  expect(await unreachable(page, "body"), "a control left reach at 320px").toEqual([]);
 });
 
 test("the bot roster's own dialogs fit a phone", async ({ page, isMobile }) => {
