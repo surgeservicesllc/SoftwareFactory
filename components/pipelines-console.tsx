@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
 import { commandProgress } from "@/components/commands-console";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
@@ -83,9 +84,8 @@ export function pipelineStage(status: string): {
   }
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
+/** Shared, and safe: an unparseable time renders a dash, not a thrown page. */
+const formatDate = formatDateTime;
 
 function formatDuration(startIso: string, endIso: string | null): string {
   const start = Date.parse(startIso);

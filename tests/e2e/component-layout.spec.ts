@@ -85,21 +85,53 @@ async function unreachable(page: import("@playwright/test").Page, container: str
 
     const bounds = root.getBoundingClientRect();
     const clipped: string[] = [];
+
     for (const control of Array.from(root.querySelectorAll("button, a, input, select, textarea"))) {
       const box = control.getBoundingClientRect();
       if (box.width === 0 || box.height === 0) continue;
       if (getComputedStyle(control).visibility === "hidden") continue;
-      if (box.right > bounds.right + 2 || box.left < bounds.left - 2) {
-        clipped.push(
-          `${control.tagName.toLowerCase()} "${(control.textContent ?? "").trim().slice(0, 32)}"`,
-        );
+      if (box.right <= bounds.right + 2 && box.left >= bounds.left - 2) continue;
+
+      /*
+       * Past the edge is not the same as out of reach.
+       *
+       * A control inside a horizontal scroller is reached by scrolling it —
+       * that is what the scroller is for, and a table's last column lives
+       * there by design. What cannot be reached is a control an ancestor
+       * *clips*: `overflow: hidden` paints it away with nothing to scroll,
+       * which is exactly how a long account name hid its Rename button.
+       */
+      let reachable = false;
+      for (let parent = control.parentElement; parent; parent = parent.parentElement) {
+        const overflowX = getComputedStyle(parent).overflowX;
+        if (overflowX === "auto" || overflowX === "scroll") { reachable = true; break; }
+        if (overflowX === "hidden") break;
+        if (parent === root) break;
       }
+      if (reachable) continue;
+
+      clipped.push(
+        `${control.tagName.toLowerCase()} "${(control.textContent ?? "").trim().slice(0, 32)}"`,
+      );
     }
     return clipped.slice(0, 5);
   }, container);
 }
 
-const CASES = ["project-bots", "ai-accounts", "app-shell"] as const;
+const CASES = [
+  "project-bots",
+  "ai-accounts",
+  "app-shell",
+  // Every console surface that only exists once there are rows. Each is one
+  // fixture and one case name; the measurement below is the same for all.
+  "runs",
+  "reports",
+  "agents",
+  "activity",
+  "backlog",
+  "connections",
+  "projects",
+] as const;
 
 for (const width of WIDTHS) {
   for (const layoutCase of CASES) {

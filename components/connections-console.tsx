@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
 import { BlockedState, Card, NotConnectedBadge, StatusBadge } from "@/components/ui";
 import { WorkerStatusBadge } from "@/components/worker-status";
 
@@ -892,8 +893,9 @@ export function ConnectionsConsole() {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "never";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  // "never" rather than a dash here: this column reports whether a sync has
+  // ever happened, and that is a different statement from "unknown".
+  return formatDateTime(value, "never");
 }
 
 function formatRepositorySelection(value: string) {

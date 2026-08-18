@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
 import { AddProjectForm } from "@/components/add-project-form";
 import { ProjectBots } from "@/components/project-bots";
 import { ProjectOperationsPanel } from "@/components/project-operations-panel";
@@ -1214,4 +1215,5 @@ function formatMergeability(value: PullRequest["mergeability"]) {
   if (value === "conflicting") return "Conflicting";
   return "Unknown";
 }
-function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+/** Shared, and safe: an unparseable time renders a dash, not a thrown page. */
+const formatDate = formatDateTime;

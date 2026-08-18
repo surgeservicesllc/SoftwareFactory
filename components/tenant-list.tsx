@@ -4,6 +4,7 @@ import { ArrowRight, Loader2, RefreshCw, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
 import { BlockedState, Card, StatusBadge } from "@/components/ui";
 import { isBrowserSupabaseConfigured } from "@/lib/supabase/browser-config";
 
@@ -188,12 +189,8 @@ export function riskTone(risk: string) {
   return normalized === "green" ? "safe" : normalized === "yellow" ? "warning" : "danger";
 }
 
-export function formatDateTime(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(value),
-  );
-}
+/** Re-exported so existing callers keep their import; the logic is shared. */
+export { formatDateTime };
 
 export function formatDuration(ms: number | null) {
   if (ms === null) return "—";

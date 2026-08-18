@@ -3,6 +3,7 @@
 import { Activity, Loader2, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
 import { BlockedState, Card, StatusBadge } from "@/components/ui";
 
 type ActivityEvent = {
@@ -231,9 +232,8 @@ export function ActivityConsole() {
   );
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
+/** Shared, and safe: an unparseable time renders a dash, not a thrown page. */
+const formatDate = formatDateTime;
 
 function sourceLabel(source: ActivityEvent["evidence"]["source"]) {
   return source === "github" ? "GitHub" : "SoftwareFactory";
