@@ -341,6 +341,128 @@ for (const layoutCase of CASES) {
   });
 }
 
+/*
+ * The desktop rail: narrower column, wider content, and the choice remembered.
+ *
+ * "Compact collapsible sidebar" and "the main content area must recalculate
+ * available width" are one requirement measured from two sides — a column that
+ * narrows while the content keeps its old padding has reclaimed nothing. Both
+ * numbers are read here rather than the class names that produce them, because
+ * the class names are the implementation and the widths are the promise.
+ */
+test("collapsing the sidebar gives its width back to the content", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "the rail is a desktop control; phones get the drawer");
+  await open(page, "app-shell", 1280);
+
+  const aside = page.locator("aside").first();
+  const main = page.locator("#main-content");
+
+  const wideColumn = (await aside.boundingBox())?.width ?? 0;
+  const wideContent = await main.evaluate(
+    (element) => element.clientWidth - parseFloat(getComputedStyle(element).paddingLeft),
+  );
+  expect(wideColumn).toBeGreaterThan(200);
+
+  await page.getByRole("button", { name: /collapse navigation/i }).click();
+  await settled(page);
+  // The width transitions, so the measurement waits for it to land.
+  await expect.poll(async () => Math.round((await aside.boundingBox())?.width ?? 0))
+    .toBeLessThan(wideColumn - 100);
+
+  const narrowContent = await main.evaluate(
+    (element) => element.clientWidth - parseFloat(getComputedStyle(element).paddingLeft),
+  );
+  expect(
+    narrowContent,
+    "the column narrowed but the content kept its old left padding",
+  ).toBeGreaterThan(wideContent + 100);
+
+  // Every destination survives the narrowing, by accessible name.
+  const rail = page.getByRole("navigation", { name: /console/i });
+  for (const label of ["Overview", "Projects", "Pipelines", "Bots", "Settings"]) {
+    await expect(rail.getByRole("link", { name: label, exact: true })).toBeVisible();
+  }
+
+  expect(await overflowing(page), "the collapsed rail pushed content out").toEqual([]);
+  expect(await unreachable(page, "body")).toEqual([]);
+
+  await page.getByRole("button", { name: /expand navigation/i }).click();
+  await settled(page);
+  await expect.poll(async () => Math.round((await aside.boundingBox())?.width ?? 0))
+    .toBeGreaterThan(wideColumn - 10);
+});
+
+test("the tablet band gets a standing rail rather than the phone's drawer", async ({
+  page,
+  isMobile,
+}) => {
+  /*
+   * Three tiers, measured at the two boundaries that define the middle one.
+   *
+   * The column used to exist only from 1280px up, so a landscape tablet got
+   * the phone treatment: no standing navigation on a screen with room for it.
+   * At 1024 the rail is present and there is no drawer opener; at 900 the
+   * drawer opener is back and the column is gone.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  await open(page, "app-shell", 1024);
+  const rail = page.locator("aside").first();
+  await expect(rail).toBeVisible();
+  expect(Math.round((await rail.boundingBox())?.width ?? 0)).toBeLessThan(120);
+  await expect(page.getByRole("button", { name: /open console navigation/i })).toBeHidden();
+  // A reduced footprint is not a hidden one: the destinations are still there.
+  await expect(
+    page.getByRole("navigation", { name: /console/i }).getByRole("link", { name: "Projects", exact: true }),
+  ).toBeVisible();
+  expect(await overflowing(page), "the tablet rail pushed content out").toEqual([]);
+
+  await open(page, "app-shell", 900);
+  await expect(page.locator("aside").first()).toBeHidden();
+  await expect(page.getByRole("button", { name: /open console navigation/i })).toBeVisible();
+  expect(await overflowing(page), "the drawer band overflowed").toEqual([]);
+});
+
+test("a collapsed submenu keeps its links out of the tab order", async ({ page, isMobile }) => {
+  /*
+   * The smooth reveal is a grid track animating from 0fr, which hides the
+   * submenu by clipping it. Clipping is a visual state: without the
+   * `invisible` alongside it the links stay focusable, so tabbing through a
+   * collapsed navigation walks destinations nobody can see.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "app-shell", 1280);
+
+  const nav = page.getByRole("navigation", { name: /console/i });
+
+  /*
+   * Named, not positional. `/expand .* subpages/` matched the first *closed*
+   * group, and Playwright locators re-resolve on every use — so the moment the
+   * click opened it, the same expression pointed at the next group along and
+   * the assertion measured a submenu nobody had touched. Matching on the group
+   * name holds through both states.
+   */
+  const opener = nav.getByRole("button", { name: /expand .* subpages/i }).first();
+  await expect(opener).toBeVisible();
+  const groupName = ((await opener.getAttribute("aria-label")) ?? "")
+    .replace(/^Expand /, "")
+    .replace(/ subpages$/, "");
+  expect(groupName, "could not read a group name from the caret").not.toBe("");
+
+  const caret = nav.getByRole("button", { name: new RegExp(`${groupName} subpages`, "i") });
+  const group = caret.locator("xpath=ancestor::li[1]");
+  const links = group.locator("ul a");
+  expect(await links.count(), "the group has no subpages to hide").toBeGreaterThan(0);
+  await expect(links.first()).toBeHidden();
+
+  await caret.click();
+  await expect(links.first()).toBeVisible();
+  expect(await overflowing(page), "revealing a submenu pushed content out").toEqual([]);
+
+  await caret.click();
+  await expect(links.first()).toBeHidden();
+});
+
 test("opening every navigation caret reflows rather than overflowing", async ({ page, isMobile }) => {
   test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
   await open(page, "app-shell", 320);
@@ -403,9 +525,23 @@ for (const layoutCase of CASES) {
 
       let restores = 0;
       for (let index = 0; index < total; index += 1) {
+        /*
+         * The list shrinks under the sweep, and an index past its end must not
+         * be waited on.
+         *
+         * `locator.textContent()` takes no timeout from this config — the
+         * default action timeout is unbounded — so reading a control that a
+         * previous click removed waits until the *test* times out. That was
+         * latent until the sidebar gained a collapse toggle: it is the first
+         * control whose click deletes the controls after it, and every
+         * `survives its own controls at 1280px` case then hung for ninety
+         * seconds and reported the page closing, which is the teardown rather
+         * than the cause.
+         */
+        if (index >= (await controls.count())) break;
         const control = controls.nth(index);
         // Controls disappear as panels swap; a stale one is not a failure.
-        const label = await control.textContent().catch(() => "");
+        const label = await control.textContent({ timeout: 1_000 }).catch(() => "");
         // A control that will not accept a click in this state is not a
         // layout defect; the measurement after it still is.
         await control.click({ timeout: 700, trial: false }).catch(() => {});

@@ -93,6 +93,130 @@ against real PostgreSQL.
 
 ---
 
+## THREE WAYS A PLAYWRIGHT ACTION COULD HANG (2026-08-18, fixed)
+
+Adding the sidebar collapse toggle turned 86 browser checks red, and none of
+them were about the sidebar. Playwright's default `actionTimeout` is 0 —
+unbounded — so any locator action on an element that is not there consumes the
+whole test budget and then reports as a timeout with no bearing on the cause.
+It bit three times in one sitting:
+
+- `locator.textContent()` in the interactive sweep, on a control index that an
+  earlier click had removed. Latent since that sweep was written; the collapse
+  toggle is simply the first control whose click deletes the controls after it.
+- `locator.click()` on a drawer scrim that the drawer itself covers, so the
+  click could never be delivered.
+- The same click again, after the scrim and the X inside the drawer turned out
+  to share the accessible name "Close console navigation" — two elements for
+  one name, one of them unclickable.
+
+`actionTimeout: 10_000` now bounds all of them, well under the 45s test
+timeout, so each fails at the line that caused it. The sweep also re-reads the
+live control count before addressing an index, the scrim became a click-away
+(`aria-hidden`, `tabIndex={-1}`) rather than a second control with the same
+name, and the drawer interaction in the page suite retries the *click* rather
+than polling an assertion — a click that lands before hydration attaches the
+handler does nothing at all, and only the heaviest console page was slow enough
+to show it.
+
+---
+
+
+
+Adding the sidebar collapse toggle turned 86 browser checks red, and none of
+them were about the sidebar. `locator.textContent()` takes no timeout from this
+config — Playwright's default action timeout is unbounded — so reading a
+control that an earlier click removed waits until the *test* times out at 90s.
+Every `survives its own controls at 1280px` case then failed with "the page
+closed", which is the teardown rather than the cause.
+
+The flaw was latent from the day that sweep was written; the collapse toggle is
+simply the first control whose click deletes the controls after it. It now
+re-reads the live count before addressing an index and bounds the label read to
+a second, so a shrinking list ends the sweep instead of stalling it. Thirty-five
+cases that had been hanging now finish in thirty-nine seconds.
+
+---
+
+## TWO HAMBURGERS, ONE PHONE (2026-08-18, from the owner's screenshots)
+
+The red box in the third screenshot is the console's own mobile bar, and the
+problem it frames is that the page has a second menu button in the bar above
+it. The console renders the global header *and* its own drawer, so a phone
+showed two identical hamburger icons in two stacked bars, distinguishable only
+by accessible names nobody sees, and 137px of chrome before any content.
+
+The console's button is the one that stays — it opens the navigation the page
+is about. The global header suppresses its own on console pages, and its
+destinations move into the console drawer under a "Site" heading, so nothing
+that was reachable stops being reachable. Pinned by a test that counts the
+menu buttons on `/solutions` at 390px and then opens the drawer to confirm
+Platform and Pricing are still one tap away; mutation-checked by removing the
+suppression, which reports "Expected: 1, Received: 2".
+
+### The other two screenshots
+
+Both show production, which is behind `main`, and both are already fixed
+there. The "AI Accounts 0 Connected" tile above a list headed "AI accounts 4"
+now reads "n of m Connected" and carries a comment naming that contradiction as
+the reason. The Configure Pipeline dialog's **Use** is a real flow, not a
+label: it reads the workspace's projects, refuses honestly when there are none
+(with a link to create one rather than an empty dropdown beside a dead button),
+and posts to `/api/graphs` with the project and template to record a planned
+graph through the engine's own write boundary — reporting the topology and node
+count it actually produced. **Clone** copies a built-in into an editable
+workspace template. Nothing on that dialog is a mock.
+
+---
+
+## THE THREE NAVIGATION REQUIREMENTS THAT WERE STILL UNMET (2026-08-18)
+
+Re-read against the brief rather than against the last summary. Three items
+were still not done, and each is now measured rather than asserted.
+
+**"When a caret is opened, reveal its submenu smoothly."** The chevron rotated
+with a transition; the submenu itself was `{expanded ? <ul> : null}` — an
+instant mount. It now animates on a grid track from `0fr` to `1fr`, which
+reaches exactly the submenu's own height without anybody measuring it and
+without a hard-coded number that goes stale the first time a subpage is added.
+`invisible` rides alongside the clipping, because `overflow-hidden` hides links
+from the eye and not from the keyboard: without it, tabbing through a collapsed
+navigation walks destinations nobody can see.
+
+**"Desktop: compact collapsible sidebar."** There was no way to collapse it.
+The column was a fixed `w-64` at `xl` and hidden below it, so a 1280px laptop
+gave up 256px permanently. There is now a rail: a toggle at the top of the
+column, icons with `sr-only` labels (an icon-only link with no accessible name
+is an unlabelled link, and `title` alone does not reliably reach a screen
+reader), and groups rendering as their own link rather than growing a flyout
+with nowhere to go but over the content.
+
+**"The main content area must automatically shift/recalculate available
+width."** The width lived twice — `w-64` on the column, `xl:pl-64` on the main —
+two values with no way to disagree loudly. It is one custom property now, so
+the content's available width is derived from the column's rather than kept in
+step by hand.
+
+**"Tablet: reduce sidebar footprint intelligently."** There were two tiers, not
+three: the column existed from 1280px up and everything below it got the
+phone's drawer, so a landscape tablet had no standing navigation on a screen
+with room for it. From 1024px the column is now present as the rail; from
+1280px the person's own choice decides. Below 1024 the drawer is still right,
+and still what renders.
+
+The preference is read through `useSyncExternalStore` with a server snapshot
+rather than `localStorage` in an effect: reading storage during render hydrates
+into a mismatch, and the effect-plus-`setState` workaround is a render the
+person sees at the wrong width — React's own lint rule rejects it. A `storage`
+listener comes free, so a second tab does not disagree about a preference set
+once.
+
+Both new tests were mutation-checked: dropping `invisible` fails the tab-order
+test, and pinning `xl:pl-64` back onto the main fails the reflow test with "the
+column narrowed but the content kept its old left padding".
+
+---
+
 ## THE LAYOUT SUITE WAS MEASURING ALMOST NOTHING (2026-08-18, fixed)
 
 Found by attacking the suite rather than reading it: a deliberate defect was

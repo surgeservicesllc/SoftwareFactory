@@ -149,6 +149,37 @@ for (const width of WIDTHS) {
   });
 }
 
+test("a console page offers one menu button, not two", async ({ page }) => {
+  /*
+   * The console renders the global header and its own drawer, so a phone had
+   * two hamburgers stacked in two bars — distinguishable only by their
+   * accessible names, which nobody sees. The console's is the one that stays,
+   * because it is the navigation the page is about; the site's destinations
+   * move into it rather than losing their route.
+   */
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/solutions", { waitUntil: "domcontentloaded" });
+
+  const menus = page.getByRole("button", { name: /open (site|console) navigation/i });
+  await expect(menus).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /open console navigation/i })).toBeVisible();
+
+  /*
+   * The click is retried, not just the assertion: these pages are rendered on
+   * the server and then hydrated, and a click that lands before the handler is
+   * attached does nothing at all.
+   */
+  const opener = page.getByRole("button", { name: /open console navigation/i });
+  await expect(async () => {
+    if (await opener.isVisible()) await opener.click();
+    // Every destination the suppressed menu carried is still one tap away.
+    for (const label of ["Platform", "Pricing"]) {
+      await expect(page.getByRole("link", { name: label, exact: true }).first())
+        .toBeVisible({ timeout: 2_000 });
+    }
+  }).toPass({ timeout: 20_000 });
+});
+
 test("opening every navigation group keeps the layout inside the viewport", async ({ page }) => {
   // Expanding is the case most likely to break the promise: a group that grows
   // the sidebar can push the content column out rather than reflowing beside it.

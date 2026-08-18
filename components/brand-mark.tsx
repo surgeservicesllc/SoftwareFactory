@@ -23,11 +23,20 @@ export function BrandMark({
   className,
   /** The header sits on dark chrome at every breakpoint; the console follows its theme. */
   tone = "chrome",
+  /**
+   * Glyph only, for the collapsed console rail.
+   *
+   * The wordmark is already `aria-hidden` and the link carries the accessible
+   * name, so dropping it costs a screen reader nothing — and keeping it would
+   * make a 64px rail as wide as its longest word.
+   */
+  glyphOnly = false,
 }: {
   href?: string;
   label?: string;
   className?: string;
   tone?: "chrome" | "console";
+  glyphOnly?: boolean;
 }) {
   return (
     <Link
@@ -75,6 +84,7 @@ export function BrandMark({
         </text>
       </svg>
 
+      {glyphOnly ? null : (
       <span className="min-w-0 leading-none" aria-hidden="true">
         <span
           className={cn(
@@ -88,6 +98,7 @@ export function BrandMark({
           Factory
         </span>
       </span>
+      )}
     </Link>
   );
 }

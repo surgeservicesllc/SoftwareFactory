@@ -33,7 +33,22 @@ export type HeaderViewer = {
 
 const SIGNED_OUT_VIEWER: HeaderViewer = { signedIn: false };
 
-export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderViewer }) {
+export function SiteHeader({
+  viewer = SIGNED_OUT_VIEWER,
+  /**
+   * Whether this header carries the small-screen menu button.
+   *
+   * The console renders this header *and* its own navigation drawer, so a
+   * phone showed two hamburgers in two stacked bars — one for the site, one
+   * for the console — with no way to tell which was which but their invisible
+   * accessible names. The console passes `false` and lists the site's
+   * destinations inside its own drawer, so there is one button and one menu.
+   */
+  showMobileMenu = true,
+}: {
+  viewer?: HeaderViewer;
+  showMobileMenu?: boolean;
+}) {
   const pathname = usePathname();
   const navItems = globalNavigation({
     signedIn: viewer.signedIn,
@@ -142,25 +157,30 @@ export function SiteHeader({ viewer = SIGNED_OUT_VIEWER }: { viewer?: HeaderView
           </Link>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open site navigation"
-            aria-expanded={mobileOpen}
-            className="grid size-10 place-items-center rounded-xl border border-[#2b3547] bg-[#0f1520] text-[#aab5c3] lg:hidden"
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
+          {showMobileMenu ? (
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open site navigation"
+              aria-expanded={mobileOpen}
+              className="grid size-10 place-items-center rounded-xl border border-[#2b3547] bg-[#0f1520] text-[#aab5c3] lg:hidden"
+            >
+              <Menu className="size-5" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {mobileOpen ? (
+      {mobileOpen && showMobileMenu ? (
         <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Same as the console drawer: a click-away scrim, not a second
+              control sharing the X's accessible name. */}
           <button
             type="button"
             className="absolute inset-0 bg-black/75 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close site navigation"
+            aria-hidden="true"
+            tabIndex={-1}
           />
           <div className="absolute inset-x-0 top-0 border-b border-[#1c2433] bg-[#0a0e15] p-4 pb-6">
             <div className="flex items-center justify-between">

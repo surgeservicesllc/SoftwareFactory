@@ -76,12 +76,51 @@ for (const { path, heading } of routes) {
       page.getByRole("link", { name: /ai software factory (home|console home)/i }).first(),
       `${path} renders no global brand link`,
     ).toBeVisible();
+    /*
+     * Three forms, one promise: from anywhere, the site's destinations are
+     * reachable.
+     *
+     * The third was added when the console stopped rendering a second menu
+     * button. It carries the global header *and* its own drawer, so a phone
+     * showed two identical hamburgers in two stacked bars; the header now
+     * suppresses its own there and the drawer lists those destinations under
+     * "Site". Accepting the console opener without checking what it opens
+     * would weaken this into "some button exists", so the destinations
+     * themselves are asserted below.
+     */
+    const consoleOpener = page.getByRole("button", { name: /open console navigation/i });
     await expect(
-      page.getByRole("navigation", { name: "Primary" }).or(
-        page.getByRole("button", { name: /open site navigation/i }),
-      ).first(),
+      page.getByRole("navigation", { name: "Primary" })
+        .or(page.getByRole("button", { name: /open site navigation/i }))
+        .or(consoleOpener)
+        .first(),
       `${path} renders no global navigation`,
     ).toBeAttached();
+
+    if (
+      await consoleOpener.isVisible().catch(() => false)
+      && !(await page.getByRole("navigation", { name: "Primary" }).isVisible().catch(() => false))
+    ) {
+      /*
+       * The click is retried, not just the assertion.
+       *
+       * These pages are server-rendered and then hydrated; a click that lands
+       * before the handler is attached does nothing at all, and only the
+       * heaviest console page was slow enough to show it. Retrying the whole
+       * interaction is the honest fix — polling the link alone would wait
+       * forever on a drawer nothing ever opened.
+       */
+      const siteLink = page.getByRole("link", { name: "Platform", exact: true }).first();
+      await expect(async () => {
+        if (await consoleOpener.isVisible()) await consoleOpener.click();
+        await expect(siteLink).toBeVisible({ timeout: 2_000 });
+      }, `${path} hides the site's destinations behind a drawer that does not list them`)
+        .toPass({ timeout: 20_000 });
+      // Closed deterministically, and only once: the checks below measure the
+      // page, and a drawer left open is a different page.
+      await page.getByRole("button", { name: /close console navigation/i }).click();
+      await expect(consoleOpener).toBeVisible();
+    }
 
     const dimensions = await page.evaluate(() => ({
       viewportWidth: document.documentElement.clientWidth,

@@ -18,6 +18,7 @@ import {
   KeyRound,
   type LucideIcon,
   Menu,
+  PanelLeft,
   PlugZap,
   Plus,
   Rocket,
@@ -29,11 +30,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
 import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/cn";
+import { globalNavigation } from "@/lib/navigation";
 
 /**
  * The console shell renders for signed-out visitors too — individual pages
@@ -210,22 +212,33 @@ function NavigationLink({
    * the design shows one.
    */
   inRow = false,
+  /**
+   * The collapsed rail: the glyph alone, the label still announced.
+   *
+   * `sr-only` rather than dropping the text, because an icon-only link with no
+   * accessible name is an unlabelled link — and `title` alone does not
+   * reliably reach a screen reader.
+   */
+  compact = false,
 }: {
   item: NavigationItem;
   active: boolean;
   nested?: boolean;
   onNavigate?: () => void;
   inRow?: boolean;
+  compact?: boolean;
 }) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
+      title={compact ? item.label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
-        nested && "min-h-9 pl-9 text-[13px]",
+        "flex min-h-10 items-center rounded-lg text-sm font-medium transition-colors",
+        compact ? "justify-center px-0" : "gap-3 px-3",
+        !compact && nested && "min-h-9 pl-9 text-[13px]",
         inRow
           ? cn("flex-1", active ? "text-[var(--accent-text)]" : "text-muted")
           : active
@@ -234,7 +247,7 @@ function NavigationLink({
       )}
     >
       <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
-      {item.label}
+      <span className={compact ? "sr-only" : undefined}>{item.label}</span>
     </Link>
   );
 }
@@ -242,9 +255,11 @@ function NavigationLink({
 function Navigation({
   onNavigate,
   isSuperAdmin = false,
+  compact = false,
 }: {
   onNavigate?: () => void;
   isSuperAdmin?: boolean;
+  compact?: boolean;
 }) {
   const pathname = usePathname();
   /*
@@ -272,10 +287,23 @@ function Navigation({
           const subpages = entry.subpages ?? [];
           const entryActive = isActiveHref(pathname, entry.href)
             || subpages.some((subpage) => isActiveHref(pathname, subpage.href));
-          if (subpages.length === 0) {
+          if (subpages.length === 0 || compact) {
+            /*
+             * The rail carries destinations, not disclosure. A chevron there
+             * would open a submenu with nowhere to go but over the content —
+             * which is the one thing the layout must never do — so a group in
+             * the rail is its own link, and its highlight still shows when a
+             * subpage is the current page. Expanding the rail brings the
+             * chevrons back.
+             */
             return (
               <li key={entry.label}>
-                <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} />
+                <NavigationLink
+                  item={entry}
+                  active={entryActive}
+                  onNavigate={onNavigate}
+                  compact={compact}
+                />
               </li>
             );
           }
@@ -318,8 +346,44 @@ function Navigation({
                   />
                 </button>
               </div>
-              {expanded ? (
-                <ul className="mt-0.5 space-y-0.5">
+              {/*
+                A grid row that animates from 0fr to 1fr.
+                
+                Height cannot be transitioned from `auto`, and hard-coding one
+                would be a number that goes stale the first time a subpage is
+                added. A collapsed grid track does the same job and stays
+                correct: the submenu animates to exactly its own height. It is
+                `invisible` while closed so its links leave the tab order —
+                `overflow-hidden` alone hides them from the eye but not from
+                the keyboard. Motion is dropped entirely for anyone who asked
+                for that.
+              */}
+              <div
+                /*
+                 * Hidden by attribute, not only by paint.
+                 *
+                 * The animation needs the submenu to stay mounted, and a
+                 * mounted-but-clipped list is still in the accessibility tree
+                 * and still tabbable. `inert` removes it from both; the
+                 * `aria-hidden` beside it says the same thing to anything that
+                 * does not implement `inert` yet, and to a test environment
+                 * with no stylesheet — where `invisible` is just a class name
+                 * and every collapsed destination would otherwise read as
+                 * present.
+                 */
+                inert={!expanded}
+                aria-hidden={expanded ? undefined : "true"}
+                className={cn(
+                  "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                  expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                )}
+              >
+                <ul
+                  className={cn(
+                    "overflow-hidden",
+                    expanded ? "mt-0.5 space-y-0.5" : "invisible",
+                  )}
+                >
                   {subpages.map((subpage) => (
                     <li key={subpage.label}>
                       <NavigationLink
@@ -331,7 +395,7 @@ function Navigation({
                     </li>
                   ))}
                 </ul>
-              ) : null}
+              </div>
             </li>
           );
         })}
@@ -339,7 +403,7 @@ function Navigation({
 
       {isSuperAdmin ? (
         <div>
-          <p className="label mb-2 px-3">{superAdminGroup.heading}</p>
+          {compact ? null : <p className="label mb-2 px-3">{superAdminGroup.heading}</p>}
           <ul className="space-y-0.5">
             {superAdminGroup.items.map((item) => (
               <li key={item.href}>
@@ -347,6 +411,7 @@ function Navigation({
                   item={item}
                   active={isActiveHref(pathname, item.href)}
                   onNavigate={onNavigate}
+                  compact={compact}
                 />
               </li>
             ))}
@@ -364,18 +429,27 @@ function Navigation({
         <Link
           href={primaryAction.href}
           onClick={onNavigate}
-          className="btn btn-secondary flex min-h-11 w-full items-center justify-center gap-2"
+          title={compact ? primaryAction.label : undefined}
+          className={cn(
+            "btn btn-secondary flex min-h-11 w-full items-center justify-center",
+            compact ? "px-0" : "gap-2",
+          )}
         >
           <Plus className="size-4 shrink-0" aria-hidden="true" />
-          {primaryAction.label}
+          <span className={compact ? "sr-only" : undefined}>{primaryAction.label}</span>
         </Link>
 
         <div>
-          <p className="label mb-2 px-3">Quick actions</p>
+          {compact ? null : <p className="label mb-2 px-3">Quick actions</p>}
           <ul className="space-y-0.5">
             {quickActions.map((action) => (
               <li key={action.label}>
-                <NavigationLink item={action} active={false} onNavigate={onNavigate} />
+                <NavigationLink
+                  item={action}
+                  active={false}
+                  onNavigate={onNavigate}
+                  compact={compact}
+                />
               </li>
             ))}
           </ul>
@@ -387,15 +461,17 @@ function Navigation({
           numbers — a panel that looked like a readout but was decorative
           would be exactly what AGENTS.md forbids.
         */}
-        <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-3">
-          <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
-            <Rocket className="size-4 shrink-0" aria-hidden="true" />
-            Automate. Build. Ship.
-          </p>
-          <p className="mt-1.5 text-[13px] leading-5 text-muted">
-            Let AI handle the repetitive work so you can focus on what matters.
-          </p>
-        </div>
+        {compact ? null : (
+          <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
+              <Rocket className="size-4 shrink-0" aria-hidden="true" />
+              Automate. Build. Ship.
+            </p>
+            <p className="mt-1.5 text-[13px] leading-5 text-muted">
+              Let AI handle the repetitive work so you can focus on what matters.
+            </p>
+          </div>
+        )}
       </div>
     </nav>
   );
@@ -416,13 +492,14 @@ function Navigation({
  * their box. Matching the box would leave the wordmark visibly out of line
  * with every label under it.
  */
-function FactoryMark() {
+function FactoryMark({ compact = false }: { compact?: boolean }) {
   return (
     <BrandMark
       href="/solutions"
       label="AI Software Factory console home"
       tone="console"
-      className="mb-6 px-2"
+      glyphOnly={compact}
+      className={cn("mb-6", compact ? "justify-center px-0" : "px-2")}
     />
   );
 }
@@ -430,14 +507,70 @@ function FactoryMark() {
 function Sidebar({
   onNavigate,
   viewer,
+  compact = false,
+  onToggleCompact,
+  /**
+   * The site's own destinations, listed at the foot of the drawer.
+   *
+   * Only the drawer: on a wide screen the global header is on the page and
+   * these links are already visible in it. On a phone that header hides its
+   * menu button so there is one hamburger rather than two, which means this
+   * list is the only route to Platform, Pricing and the rest — so it is not
+   * decoration, it is what makes suppressing the other button safe.
+   */
+  siteLinks,
 }: {
   onNavigate?: () => void;
   viewer: ShellViewer;
+  compact?: boolean;
+  /** Absent in the mobile drawer, which closes rather than narrows. */
+  onToggleCompact?: () => void;
+  siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
-      <FactoryMark />
-      <Navigation onNavigate={onNavigate} isSuperAdmin={viewer.isSuperAdmin} />
+    <div className={cn("flex h-full flex-col overflow-y-auto py-5", compact ? "px-2" : "px-3")}>
+      <FactoryMark compact={compact} />
+      {onToggleCompact ? (
+        <button
+          type="button"
+          onClick={onToggleCompact}
+          aria-pressed={compact}
+          title={compact ? "Expand navigation" : "Collapse navigation"}
+          className={cn(
+            "mb-4 flex min-h-9 items-center rounded-lg text-sm font-medium text-muted",
+            "transition-colors hover:bg-surface-raised hover:text-foreground",
+            compact ? "justify-center px-0" : "gap-2 px-3",
+          )}
+        >
+          <PanelLeft className="size-4 shrink-0" aria-hidden="true" />
+          <span className={compact ? "sr-only" : undefined}>
+            {compact ? "Expand navigation" : "Collapse navigation"}
+          </span>
+        </button>
+      ) : null}
+      <Navigation
+        onNavigate={onNavigate}
+        isSuperAdmin={viewer.isSuperAdmin}
+        compact={compact}
+      />
+      {siteLinks?.length ? (
+        <div className="mt-6">
+          <p className="label mb-2 px-3">Site</p>
+          <ul className="space-y-0.5">
+            {siteLinks.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  onClick={onNavigate}
+                  className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">
           <p className="label mb-1">Signed in</p>
@@ -467,11 +600,88 @@ function Sidebar({
   );
 }
 
+const COMPACT_STORAGE_KEY = "softwarefactory:sidebar-compact";
+
+/*
+ * The rail preference is an external store, so it is read as one.
+ *
+ * `localStorage` does not exist on the server, and a component that reads it
+ * during render hydrates into a mismatch. Reading it in an effect and calling
+ * `setState` is the usual workaround and is worse: it is a render the user
+ * sees at the wrong width, and React's own lint rule rejects it. A store with
+ * a server snapshot says the same thing without either problem — and the
+ * `storage` listener means opening a second tab does not leave the two
+ * disagreeing about a preference the person set once.
+ */
+const compactListeners = new Set<() => void>();
+
+function subscribeToCompact(listener: () => void) {
+  compactListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    compactListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function readCompact() {
+  try {
+    return window.localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
+  } catch {
+    // A blocked or full storage is not a reason to fail to render a page.
+    return false;
+  }
+}
+
+function writeCompact(next: boolean) {
+  try {
+    window.localStorage.setItem(COMPACT_STORAGE_KEY, next ? "1" : "0");
+  } catch {
+    // Same: the preference is a convenience, never a precondition.
+  }
+  for (const listener of compactListeners) listener();
+}
+
+/*
+ * Three tiers, not two.
+ *
+ * The persistent column used to exist only from 1280px up, so everything below
+ * it — including a landscape tablet — got the phone's drawer and no standing
+ * navigation at all. That is not "reduce the sidebar footprint"; it is the
+ * mobile treatment applied to a screen with room to spare. From 1024px the
+ * column is present as the rail, and from 1280px the person's own choice
+ * decides. Read as a store for the same reason the preference is: a media
+ * query has no server answer, and guessing at one during render hydrates into
+ * a mismatch.
+ */
+const EXPANDABLE_QUERY = "(min-width: 1280px)";
+
+function subscribeToExpandable(listener: () => void) {
+  // jsdom has no `matchMedia`, and a shell that throws on render there would
+  // take every component test down with it.
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(EXPANDABLE_QUERY);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function readExpandable() {
+  // An environment that cannot answer the query gets the widest tier: the
+  // fallback should be the fullest navigation, never the most reduced one.
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia(EXPANDABLE_QUERY).matches;
+}
+
 export function AppShell({
   children,
   viewer = SIGNED_OUT_VIEWER,
 }: Readonly<{ children: React.ReactNode; viewer?: ShellViewer }>) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Expanded on the server, then whatever the person last chose.
+  const chosenCompact = useSyncExternalStore(subscribeToCompact, readCompact, () => false);
+  const expandable = useSyncExternalStore(subscribeToExpandable, readExpandable, () => true);
+  // Between 1024 and 1279 the rail is the only form that fits beside content.
+  const compact = chosenCompact || !expandable;
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -481,7 +691,20 @@ export function AppShell({
   }, [mobileOpen]);
 
   return (
-    <div className="min-h-screen">
+    /*
+     * One number, declared once, read by both the column and the content.
+     *
+     * The width lived twice — `w-64` on the aside and `xl:pl-64` on the main —
+     * so narrowing the sidebar meant editing two values that had no way to
+     * disagree loudly. As a custom property the content's available width is
+     * derived from the column's actual width rather than kept in step with it
+     * by hand, which is what "recalculate the usable space" has to mean if it
+     * is to survive the next change to either.
+     */
+    <div
+      className="min-h-screen"
+      style={{ "--sidebar-w": compact ? "4rem" : "16rem" } as React.CSSProperties}
+    >
       <a
         href="#main-content"
         className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-[var(--accent-ink)] transition-transform focus:translate-y-0"
@@ -489,8 +712,13 @@ export function AppShell({
         Skip to content
       </a>
 
-      <aside className="fixed bottom-0 left-0 top-[var(--shell-top,0px)] z-40 hidden w-64 border-r border-line bg-surface xl:block">
-        <Sidebar viewer={viewer} />
+      <aside
+        className={cn(
+          "fixed bottom-0 left-0 top-[var(--shell-top,0px)] z-40 hidden border-r border-line bg-surface lg:block",
+          "w-[var(--sidebar-w)] transition-[width] duration-200 ease-out motion-reduce:transition-none",
+        )}
+      >
+        <Sidebar viewer={viewer} compact={compact} onToggleCompact={expandable ? () => writeCompact(!compact) : undefined} />
       </aside>
 
       {/*
@@ -508,7 +736,7 @@ export function AppShell({
         so the chip restated it one row down and cost a full row of height on
         the narrowest screens for nothing.
       */}
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 xl:hidden">
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -521,12 +749,21 @@ export function AppShell({
       </header>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 xl:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/*
+            A click-away, not a control. It carried the same accessible name
+            as the X inside the drawer, so "Close console navigation" matched
+            two elements — the scrim, which the drawer covers on the left and
+            which therefore cannot always receive a click, and the button
+            people actually mean. `aria-hidden` with `tabIndex={-1}` keeps the
+            behaviour and leaves exactly one named way to close.
+          */}
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close console navigation"
+            aria-hidden="true"
+            tabIndex={-1}
           />
           <aside className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] border-r border-line bg-surface">
             <button
@@ -537,12 +774,25 @@ export function AppShell({
             >
               <X className="size-4" aria-hidden="true" />
             </button>
-            <Sidebar onNavigate={() => setMobileOpen(false)} viewer={viewer} />
+            <Sidebar
+              onNavigate={() => setMobileOpen(false)}
+              viewer={viewer}
+              siteLinks={globalNavigation({
+                signedIn: viewer.signedIn,
+                isSuperAdmin: viewer.isSuperAdmin,
+              })}
+            />
           </aside>
         </div>
       ) : null}
 
-      <main id="main-content" className="min-h-screen pt-16 xl:pl-64 xl:pt-0">
+      <main
+        id="main-content"
+        className={cn(
+          "min-h-screen pt-16 lg:pl-[var(--sidebar-w)] lg:pt-0",
+          "transition-[padding] duration-200 ease-out motion-reduce:transition-none",
+        )}
+      >
         <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>

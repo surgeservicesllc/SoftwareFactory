@@ -31,6 +31,19 @@ export default defineConfig({
   timeout: 45_000,
   use: {
     baseURL,
+    /*
+     * No locator action waits forever.
+     *
+     * Playwright's default `actionTimeout` is 0 — unbounded — so a click or a
+     * `textContent()` on an element that is not there consumes the whole test
+     * budget and then reports as a timeout with no bearing on the cause. It
+     * has now cost two debugging sessions: an untimed `textContent()` in the
+     * interactive sweep hung 86 checks, and an untimed `click()` on a drawer
+     * that had already closed hung every mobile page check. A bound well under
+     * the 45s test timeout turns both into a named failure at the line that
+     * caused them.
+     */
+    actionTimeout: 10_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
