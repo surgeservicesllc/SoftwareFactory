@@ -130,7 +130,14 @@ function serveFixtures() {
       });
     }
     if (url.includes("/api/ai-accounts/usage")) return json({ usage: [] });
-    if (url.includes("/api/ai-accounts")) return json({ accounts: AI_ACCOUNTS });
+    /*
+     * `canManage` matters: the Bot Manager renders read-only without it, so
+     * every management control — Add AI Account, Create Bot, Add to project,
+     * rename, remove — was absent from the harness and therefore from the
+     * width sweep. The route returns it for an owner or an admin; so does
+     * this.
+     */
+    if (url.includes("/api/ai-accounts")) return json({ accounts: AI_ACCOUNTS, canManage: true });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });

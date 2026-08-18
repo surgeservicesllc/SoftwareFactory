@@ -39,6 +39,9 @@ type BotView = {
 
 type AssignmentView = { id: string };
 
+type RoleView = { id: string; name: string };
+type ProjectView = { id: string; name: string };
+
 type FabricPayload = {
   canManage?: boolean;
   bots?: Array<{
@@ -46,6 +49,14 @@ type FabricPayload = {
     readiness: string; readinessLabel: string;
   }>;
   assignments?: AssignmentView[];
+  /*
+   * Both already arrive in the fabric snapshot and were being discarded here.
+   * Assigning a bot needs a project to assign it to and a role to assign it
+   * as, and fetching either again from this component would be asking the
+   * server for something it had already sent.
+   */
+  roles?: RoleView[];
+  projects?: ProjectView[];
 };
 
 const CONNECTABLE = [
@@ -68,12 +79,18 @@ type ConnectStage =
   | { kind: "choose" }
   | { kind: "confirm"; providerId: "anthropic" | "openai" }
   | { kind: "connecting"; providerId: "anthropic" | "openai" }
-  | { kind: "connected"; providerId: "anthropic" | "openai"; accountId: string };
+  | { kind: "connected"; providerId: "anthropic" | "openai"; accountId: string }
+  /** Which account should back the new bot — asked, not assumed. */
+  | { kind: "create-bot" }
+  /** Put one bot on one project, from the roster rather than the project page. */
+  | { kind: "assign"; bot: BotView };
 
 export function BotManagerHome() {
   const [accounts, setAccounts] = useState<AccountView[] | null>(null);
   const [bots, setBots] = useState<BotView[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
+  const [roles, setRoles] = useState<RoleView[]>([]);
+  const [projects, setProjects] = useState<ProjectView[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -89,6 +106,7 @@ export function BotManagerHome() {
   // is kept before anything happens.
   const [removingBotId, setRemovingBotId] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [assignBusy, setAssignBusy] = useState(false);
   // The success screen offers the rename before any next action, through the
   // same endpoint the accounts panel uses.
   const [successEditing, setSuccessEditing] = useState(false);
@@ -127,6 +145,8 @@ export function BotManagerHome() {
           readinessLabel: bot.readinessLabel,
         })));
         setAssignments(body.assignments ?? []);
+        setRoles(body.roles ?? []);
+        setProjects(body.projects ?? []);
       }
     } catch {
       setAccounts((current) => current ?? []);
@@ -218,6 +238,42 @@ export function BotManagerHome() {
     }
   }, [load]);
 
+  const assignBotToProject = useCallback(async (
+    bot: BotView,
+    projectId: string,
+    roleId: string,
+  ) => {
+    setAssignBusy(true);
+    setBotNotice("");
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/bots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bots: [{ botId: bot.id, roleId }] }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      /*
+       * The server's own words, not a generic failure. It refuses a bot whose
+       * credential has gone missing, a bot already posted to this project, and
+       * a caller who is not a manager — three different problems a person can
+       * act on differently, and "it did not work" tells them apart from none
+       * of them.
+       */
+      if (!response.ok) throw new Error(body.error?.message ?? "The bot could not be assigned.");
+      await load();
+      setStage({ kind: "closed" });
+      setBotNotice(`${bot.name} is now on ${
+        projects.find((project) => project.id === projectId)?.name ?? "the project"
+      }.`);
+    } catch (error) {
+      setBotNotice(error instanceof Error ? error.message : "The bot could not be assigned.");
+    } finally {
+      setAssignBusy(false);
+    }
+  }, [load, projects]);
+
   const provisionBot = useCallback(async (providerId: string) => {
     setCreatingBot(true);
     setBotNotice("");
@@ -295,6 +351,171 @@ export function BotManagerHome() {
         </a>
       </div>,
       "Add AI Account",
+    );
+  } else if (stage.kind === "create-bot") {
+    /*
+     * Which account backs the bot is a question, not a guess.
+     *
+     * Create Bot used to call `provisionBot(connectedAccounts[0].provider)`
+     * and, when no account was connected, silently open the *add an account*
+     * chooser instead. With four accounts on screen — all of them needing to
+     * sign in again — pressing "Create Bot" therefore offered to add a fifth
+     * and explained nothing. Both halves of that are fixed here: the accounts
+     * are listed so one can be chosen, and an account that cannot back a bot
+     * says why rather than being quietly skipped.
+     */
+    const connectable = (accounts ?? []).filter((account) => account.status === "connected");
+    dialog = modal(
+      <div className="relative">
+        {closeButton}
+        <h2 className="text-xl font-semibold text-[var(--text)]">Create Bot</h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          A bot runs on one of your connected AI accounts. Choose which one.
+        </p>
+
+        {connectable.length === 0 ? (
+          <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+            <p className="text-sm text-[var(--text)]">
+              {(accounts ?? []).length === 0
+                ? "No AI account is connected yet."
+                : `None of your ${(accounts ?? []).length} accounts currently holds a working credential, so none of them can back a bot.`}
+            </p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              {(accounts ?? []).length === 0
+                ? "Add one first — it takes a sign-in with the account you already pay for."
+                : "Use Reconnect on an account below to sign in again, then create the bot."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setStage((accounts ?? []).length === 0
+                ? { kind: "choose" }
+                : { kind: "closed" })}
+              className="btn btn-primary btn-sm mt-3"
+            >
+              {(accounts ?? []).length === 0 ? "Add AI Account" : "Back to accounts"}
+            </button>
+          </div>
+        ) : (
+          <ul className="mt-5 grid grid-cols-1 gap-2">
+            {connectable.map((account) => (
+              <li key={account.id}>
+                <button
+                  type="button"
+                  disabled={creatingBot}
+                  onClick={() => void provisionBot(account.provider)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-left transition-colors hover:border-[var(--accent-border)] disabled:opacity-60"
+                >
+                  <p className="truncate text-sm font-semibold text-[var(--text)]">
+                    {account.displayName}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {account.providerLabel} · Connected
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {(accounts ?? []).some((account) => account.status !== "connected") ? (
+          <p className="mt-4 text-xs text-[var(--text-muted)]">
+            Accounts that need signing in again are not listed here. Reconnect one below and it
+            becomes available.
+          </p>
+        ) : null}
+        {botNotice ? (
+          <p className="mt-3 text-sm text-[var(--danger)]" aria-live="polite">{botNotice}</p>
+        ) : null}
+      </div>,
+      "Create Bot",
+    );
+  } else if (stage.kind === "assign") {
+    /*
+     * The roster's own route onto a project.
+     *
+     * Assignment existed only on the project page's wizard, so someone looking
+     * at their bots had no way to act on one — the answer to "add this bot to
+     * a project" was "go somewhere else and start from the project instead".
+     * This posts through the same endpoint the wizard uses, which resolves
+     * readiness server-side and applies the least-privilege defaults; opening
+     * the wizard is still the way to depart from them.
+     */
+    const bot = stage.bot;
+    dialog = modal(
+      <form
+        className="relative"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const projectId = String(data.get("projectId") ?? "");
+          const roleId = String(data.get("roleId") ?? "");
+          if (projectId && roleId) void assignBotToProject(bot, projectId, roleId);
+        }}
+      >
+        {closeButton}
+        <h2 className="text-xl font-semibold text-[var(--text)]">Add {bot.name} to a project</h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          The bot is posted with the safest configuration: read-only repository access, no pull
+          requests, and human approval required. Open the project&rsquo;s Assign Bots wizard to
+          widen any of that.
+        </p>
+
+        {projects.length === 0 || roles.length === 0 ? (
+          <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+            <p className="text-sm text-[var(--text)]">
+              {projects.length === 0
+                ? "This workspace has no projects yet, and a bot is assigned to a project."
+                : "This workspace has no bot roles defined, and every assignment carries one."}
+            </p>
+            <a
+              href={projects.length === 0 ? "/solutions/projects#add-project" : "/solutions/agents"}
+              className="btn btn-primary btn-sm mt-3"
+            >
+              {projects.length === 0 ? "Create a project" : "Open roles"}
+            </a>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4">
+              <label htmlFor="assign-project" className="field-label">Project</label>
+              <select id="assign-project" name="projectId" className="input w-full" required>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-3">
+              <label htmlFor="assign-role" className="field-label">Role</label>
+              <select id="assign-role" name="roleId" className="input w-full" required>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button type="submit" disabled={assignBusy} className="btn btn-primary btn-sm">
+                {assignBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Plus className="size-4" aria-hidden="true" />
+                )}
+                Add to project
+              </button>
+              <button
+                type="button"
+                onClick={() => setStage({ kind: "closed" })}
+                className="btn btn-secondary btn-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+        {botNotice ? (
+          <p className="mt-3 text-sm text-[var(--danger)]" aria-live="polite">{botNotice}</p>
+        ) : null}
+      </form>,
+      `Add ${bot.name} to a project`,
     );
   } else if (stage.kind === "confirm") {
     const entry = CONNECTABLE.find((candidate) => candidate.providerId === stage.providerId)!;
@@ -510,11 +731,7 @@ export function BotManagerHome() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                const provider = connectedAccounts[0]?.provider;
-                if (provider) void provisionBot(provider);
-                else setStage({ kind: "choose" });
-              }}
+              onClick={() => setStage({ kind: "create-bot" })}
               className="btn btn-secondary btn-sm"
             >
               <Plus className="size-4" aria-hidden="true" />
@@ -536,16 +753,24 @@ export function BotManagerHome() {
                * them currently holds a working credential. Saying both numbers
                * is the only phrasing that is true and legible at once.
                */
+              /*
+               * The count large, the word beneath it — not one phrase left to
+               * wrap. "0 of 4 Connected" at tile size broke across three lines
+               * on a phone and stretched the card to twice the height of the
+               * three beside it.
+               */
               value: (accounts ?? []).length === connectedAccounts.length
-                ? `${connectedAccounts.length} Connected`
-                : `${connectedAccounts.length} of ${(accounts ?? []).length} Connected`,
+                ? String(connectedAccounts.length)
+                : `${connectedAccounts.length} of ${(accounts ?? []).length}`,
+              detail: "Connected",
             },
-            { label: "Active Bots", value: String(bots.length) },
+            { label: "Active Bots", value: String(bots.length), detail: null },
             {
               label: "Ready",
               value: String(bots.filter((bot) => bot.readiness === "ready").length),
+              detail: null,
             },
-            { label: "Assignments", value: String(assignments.length) },
+            { label: "Assignments", value: String(assignments.length), detail: null },
           ].map((card) => (
             <div
               key={card.label}
@@ -553,6 +778,9 @@ export function BotManagerHome() {
             >
               <p className="text-xs text-[var(--text-muted)]">{card.label}</p>
               <p className="mt-1 text-xl font-semibold text-[var(--text)]">{card.value}</p>
+              {card.detail ? (
+                <p className="text-xs text-[var(--text-muted)]">{card.detail}</p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -683,8 +911,19 @@ export function BotManagerHome() {
                           </button>
                         </form>
                       ) : (
-                        <p className="flex items-center gap-1.5 truncate text-sm font-medium text-[var(--text)]">
-                          {bot.name}
+                        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--text)]">
+                          {/*
+                            `truncate` on the name, never on the row. On the row
+                            it sets `white-space: nowrap` and `overflow: hidden`
+                            for the whole flex container, so a long bot name
+                            pushed the rename and remove buttons past the edge
+                            and the container clipped them — on the page and
+                            unreachable. The accounts panel carries the same
+                            fix; this copy had it the wrong way round, and no
+                            test could see it while the harness rendered the
+                            roster read-only.
+                          */}
+                          <span className="min-w-0 truncate">{bot.name}</span>
                           {canManage ? (
                             <>
                               <button
@@ -694,7 +933,7 @@ export function BotManagerHome() {
                                   setRenameBotName(bot.name);
                                   setRenamingBotId(bot.id);
                                 }}
-                                className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                                className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
                               >
                                 <Pencil className="size-3.5" aria-hidden="true" />
                               </button>
@@ -702,7 +941,7 @@ export function BotManagerHome() {
                                 type="button"
                                 aria-label={`Remove ${bot.name}`}
                                 onClick={() => setRemovingBotId(bot.id)}
-                                className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                                className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--danger)]"
                               >
                                 <Trash2 className="size-3.5" aria-hidden="true" />
                               </button>
@@ -713,6 +952,19 @@ export function BotManagerHome() {
                       <p className="text-xs text-[var(--text-muted)]">
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBotNotice("");
+                            setStage({ kind: "assign", bot });
+                          }}
+                          className="btn btn-secondary btn-sm mt-2"
+                        >
+                          <Plus className="size-3.5" aria-hidden="true" />
+                          Add to project
+                        </button>
+                      ) : null}
                       {removingBotId === bot.id ? (
                         <div className="mt-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-2.5">
                           <p className="text-xs text-[var(--text)]">

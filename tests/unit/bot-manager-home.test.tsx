@@ -26,6 +26,8 @@ const readyBot = {
 function stub(options: {
   accounts?: unknown[];
   bots?: unknown[];
+  roles?: unknown[];
+  projects?: unknown[];
   extra?: (url: string, init?: RequestInit) => Response | null;
 }) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -41,7 +43,13 @@ function stub(options: {
     if (url === "/api/bots") {
       return {
         ok: true, status: 200,
-        json: async () => ({ bots: options.bots ?? [], assignments: [], canManage: true }),
+        json: async () => ({
+          bots: options.bots ?? [],
+          assignments: [],
+          roles: options.roles ?? [],
+          projects: options.projects ?? [],
+          canManage: true,
+        }),
       } as unknown as Response;
     }
     return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
@@ -198,7 +206,11 @@ describe("BotManagerHome", () => {
 
     render(<BotManagerHome />);
 
-    expect(await screen.findByText("1 Connected")).toBeInTheDocument();
+    // The count and the word are separate lines now — one phrase at tile size
+    // wrapped to three on a phone and doubled the card's height.
+    const accountsCard = (await screen.findByText("AI Accounts")).parentElement!;
+    expect(within(accountsCard).getByText("1")).toBeInTheDocument();
+    expect(within(accountsCard).getByText("Connected")).toBeInTheDocument();
     expect(screen.getByText(/your ai team/i)).toBeInTheDocument();
     expect(screen.getByText("Claude Builder 1")).toBeInTheDocument();
     // No zero-state tab chrome on the primary surface.
@@ -254,5 +266,130 @@ describe("BotManagerHome", () => {
     expect(deleted).toEqual([]);
     expect(screen.queryByText(/assignments are released/i)).not.toBeInTheDocument();
     expect(screen.getByText("Claude Builder 1")).toBeInTheDocument();
+  });
+});
+
+const needsReauthAccount = {
+  id: "acc-2",
+  provider: "anthropic",
+  providerLabel: "Claude",
+  displayName: "Claude Blackstone",
+  status: "needs_reauth",
+  lastVerifiedAt: null,
+  lastError: "The provider refused the stored credential (HTTP 403).",
+};
+
+const role = { id: "00000000-0000-4000-8000-0000000000r1".replace("r1", "01"), name: "Developer" };
+const project = { id: "00000000-0000-4000-8000-0000000000p1".replace("p1", "02"), name: "Storefront" };
+
+describe("BotManagerHome — creating a bot", () => {
+  it("asks which account should back the bot instead of taking the first", async () => {
+    const user = userEvent.setup();
+    stub({ accounts: [connectedAccount, needsReauthAccount], bots: [readyBot] });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /create bot/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /create bot/i });
+    // The connected one is offered; the one that cannot back a bot is not.
+    expect(within(dialog).getByRole("button", { name: /claude account 1/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /claude blackstone/i })).toBeNull();
+    expect(within(dialog).getByText(/need signing in again are not listed/i)).toBeInTheDocument();
+  });
+
+  it("says why it cannot create one when every account needs signing in again", async () => {
+    /*
+     * The defect this pins: with accounts present but none connected, Create
+     * Bot silently opened the *add an account* chooser. Four accounts on
+     * screen, and the button offered to add a fifth without a word.
+     */
+    const user = userEvent.setup();
+    stub({ accounts: [needsReauthAccount], bots: [] });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /create bot/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /create bot/i });
+    expect(within(dialog).getByText(/none of your 1 accounts/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/use reconnect on an account below/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^add ai account$/i })).toBeNull();
+  });
+
+  it("offers the account chooser when there is no account at all", async () => {
+    const user = userEvent.setup();
+    stub({ accounts: [], bots: [readyBot] });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /create bot/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /create bot/i });
+    expect(within(dialog).getByText(/no ai account is connected yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("BotManagerHome — putting a bot on a project", () => {
+  it("assigns the chosen bot through the project's own endpoint", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ url: string; body: unknown }> = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes("/bots")) {
+          calls.push({ url, body: JSON.parse(String(init.body)) });
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /add to project/i }));
+    const dialog = await screen.findByRole("dialog", { name: /add claude builder 1 to a project/i });
+    await user.click(within(dialog).getByRole("button", { name: /add to project/i }));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain(project.id);
+    expect(calls[0].body).toEqual({ bots: [{ botId: readyBot.id, roleId: role.id }] });
+  });
+
+  it("repeats the server's refusal rather than a generic failure", async () => {
+    const user = userEvent.setup();
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes("/bots")) {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: { message: "Claude Builder 1 is already on Storefront." } }),
+          } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /add to project/i }));
+    const dialog = await screen.findByRole("dialog", { name: /add claude builder 1 to a project/i });
+    await user.click(within(dialog).getByRole("button", { name: /add to project/i }));
+
+    expect(await screen.findByText(/already on storefront/i)).toBeInTheDocument();
+  });
+
+  it("names the missing prerequisite rather than showing an empty dropdown", async () => {
+    const user = userEvent.setup();
+    stub({ accounts: [connectedAccount], bots: [readyBot], roles: [role], projects: [] });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /add to project/i }));
+    const dialog = await screen.findByRole("dialog", { name: /add claude builder 1 to a project/i });
+    expect(within(dialog).getByText(/has no projects yet/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: /create a project/i })).toBeInTheDocument();
   });
 });

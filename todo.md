@@ -93,6 +93,46 @@ against real PostgreSQL.
 
 ---
 
+## CONNECT BOTS: WHY IT WAS UNUSABLE, AND THE ROUTE ONTO A PROJECT (2026-08-18)
+
+**Create Bot offered to add a fifth account.** It called
+`provisionBot(connectedAccounts[0].provider)` and, when nothing was connected,
+silently fell through to the *add an account* chooser. The owner's screenshot
+shows four accounts, every one of them needing to sign in again — so pressing
+"Create Bot" opened "Add AI Account" and explained nothing. It now asks which
+account should back the bot, lists only the ones that can, and when none can
+says so with the number of accounts and where Reconnect is. With no account at
+all it still offers the chooser, which is the right answer to a different
+question.
+
+**A bot on the roster had no way onto a project.** Assignment lived only in the
+project page's wizard, so someone looking at their bots was told, in effect, to
+start again from somewhere else. Each row now carries **Add to project**: pick
+a project and a role, and it posts through the same
+`POST /api/projects/:id/bots` the wizard uses — readiness resolved server-side,
+least-privilege defaults, and the server's own refusal repeated rather than a
+generic failure. Missing prerequisites are named (no projects, no roles) with a
+link, instead of an empty dropdown beside a dead button.
+
+**The tile stopped wrapping mid-phrase.** "0 of 4 Connected" broke across three
+lines on a phone and doubled the card's height. The count is the value and
+"Connected" is a line beneath it.
+
+### What the harness had been hiding
+
+`canManage` never reached it: `/api/ai-accounts` returned accounts and no
+permission flag, so the Bot Manager rendered **read-only** in every layout
+check. Add AI Account, Create Bot, rename, remove and the new Add to project
+were all absent from the width sweep. Supplying the flag the route actually
+returns turned three checks red immediately — the bot roster carried `truncate`
+on the *row* rather than the name, so a long bot name pushed its rename and
+remove buttons past the edge and the row clipped them: on the page and
+unreachable at 320 and 375. The accounts panel had been fixed for exactly this
+and carries a comment saying so; the roster copy had it the wrong way round,
+and no test could see it while the fixture rendered the roster read-only.
+
+---
+
 ## THREE WAYS A PLAYWRIGHT ACTION COULD HANG (2026-08-18, fixed)
 
 Adding the sidebar collapse toggle turned 86 browser checks red, and none of

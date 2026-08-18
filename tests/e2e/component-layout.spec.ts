@@ -423,6 +423,41 @@ test("the tablet band gets a standing rail rather than the phone's drawer", asyn
   expect(await overflowing(page), "the drawer band overflowed").toEqual([]);
 });
 
+test("the bot roster's own dialogs fit a phone", async ({ page, isMobile }) => {
+  /*
+   * Both are new routes out of a dead end the owner hit: Create Bot used to
+   * open the *add an account* chooser when nothing was connected, and a bot on
+   * the roster had no way onto a project at all. Measured at 320px because
+   * that is where the screenshot came from, and because a dialog is exactly
+   * the thing `overflowing` cannot see — a fixed overlay never widens the
+   * document, it scrolls sideways instead.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "bot-manager", 320);
+
+  await page.getByRole("button", { name: /^create bot$/i }).click();
+  const createDialog = page.getByRole("dialog", { name: /create bot/i });
+  await expect(createDialog).toBeVisible();
+  expect(await overflowing(page), "the Create Bot dialog overflowed").toEqual([]);
+  expect(await unreachable(page, '[role="dialog"]')).toEqual([]);
+  expect(await sidewaysScroll(page, '[role="dialog"]'))
+    .toEqual({ found: true, overflowBy: 0 });
+  await page.getByRole("button", { name: /^close$/i }).first().click();
+
+  const addToProject = page.getByRole("button", { name: /add to project/i }).first();
+  await expect(addToProject).toBeVisible();
+  await addToProject.click();
+  const assignDialog = page.getByRole("dialog", { name: /to a project/i });
+  await expect(assignDialog).toBeVisible();
+  // The controls that make the choice, not just the frame around them.
+  await expect(assignDialog.getByLabel("Project")).toBeVisible();
+  await expect(assignDialog.getByLabel("Role")).toBeVisible();
+  expect(await overflowing(page), "the assign dialog overflowed").toEqual([]);
+  expect(await unreachable(page, '[role="dialog"]')).toEqual([]);
+  expect(await sidewaysScroll(page, '[role="dialog"]'))
+    .toEqual({ found: true, overflowBy: 0 });
+});
+
 test("a collapsed submenu keeps its links out of the tab order", async ({ page, isMobile }) => {
   /*
    * The smooth reveal is a grid track animating from 0fr, which hides the
