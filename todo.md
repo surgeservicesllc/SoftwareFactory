@@ -93,6 +93,24 @@ against real PostgreSQL.
 
 ---
 
+## AGENTS SELECTABILITY, REDONE SERVER-SIDE AND PROVEN (2026-08-18 23:5xZ)
+
+The owner reported the first round incomplete. The button-dependent seed was
+the weakness: selection still hinged on a person finding the control and
+eight client requests all succeeding. Redone decisively: migration
+`20260818000200_seed_standard_model_catalogue` seeds the eight standard
+models per organization server-side (attributed to the earliest
+owner/admin, ON CONFLICT DO NOTHING — replay-safe and coexists with
+console-seeded rows). Applied to production by run 32199155823; probe run
+32199285229 then measured the live database: **both organizations hold 8
+enabled model configurations (11 and 12 agents), and
+`set_agent_provider_assignment` as the impersonated owner succeeded —
+anthropic / claude-fable-5 (rolled back)**. Every select on
+/solutions/agents now offers the real models with zero setup, and each
+choice persists to Supabase. Behavior test applies the chain, re-runs the
+seed file against a later-created org (the hosted re-apply shape), asserts
+8 enabled rows, replay no-op, and a successful assignment. PR #233.
+
 ## AGENTS PAGE: EVERY AGENT SELECTABLE (2026-08-18, second session)
 
 The owner's goal: make any or all agents selectable at /solutions/agents.
