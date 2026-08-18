@@ -1,6 +1,5 @@
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import { type PipelineTemplateSummary } from "@/components/pipelines-console";
-import { PageHeader } from "@/components/ui";
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { previewTemplate } from "@/lib/graph/preview";
 import { GRAPH_TEMPLATES } from "@/lib/graph/templates";
@@ -34,13 +33,8 @@ export default function AiFactoryPage() {
     };
   });
 
-  return (
-    <>
-      <PageHeader
-        title="AI Factory"
-        description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
-      />
-      <AiFactoryConsole builtIns={templates} />
-    </>
-  );
+  // The header lives in the console, not here: its action is "Create New AI
+  // Factory", which needs the client state that decides which factory the
+  // journey is showing.
+  return <AiFactoryConsole builtIns={templates} />;
 }

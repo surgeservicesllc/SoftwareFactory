@@ -82,7 +82,7 @@ describe("AiFactoryConsole", () => {
       "/api/ai-accounts": { accounts: [{ status: "connected" }] },
       "/api/bots": {
         bots: [{ id: "b1" }],
-        assignments: [{ id: "a1", status: "active", roleId: "builder" }],
+        assignments: [{ id: "a1", projectId: "p1", roleId: "builder", status: "active" }],
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
@@ -156,12 +156,15 @@ describe("AiFactoryConsole", () => {
   it("counts only configured assignments for the configure step", async () => {
     stubFactory({
       "/api/bots": {
-        bots: [{ id: "b1" }],
         assignments: [
-          { id: "a1", status: "active" },
-          { id: "a2", status: "released", roleId: "builder" },
+          { id: "a1", projectId: "p1", status: "active" },
+          { id: "a2", projectId: "p1", roleId: "builder", status: "released" },
         ],
+        bots: [{ id: "b1" }],
       },
+      // An assignment names a project, so the project has to exist for the
+      // fixture to describe a state the database could actually hold.
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
     });
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
@@ -176,5 +179,68 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
+  });
+});
+
+describe("Create New AI Factory", () => {
+  const twoProjects = {
+    "/api/bots": {
+      assignments: [
+        { projectId: "p1", responsibilities: ["ship"], roleId: "r1", status: "active" },
+      ],
+      bots: [{ id: "b1" }],
+    },
+    "/api/commands": {
+      commands: [
+        { id: "c1", project: { id: "p1", name: "First" }, prompt: "go", status: "succeeded" },
+      ],
+    },
+    "/api/projects": { projects: [{ id: "p1", name: "First" }] },
+  };
+
+  it("scopes the journey to one factory and starts a new one without deleting anything", async () => {
+    stubFactory(twoProjects);
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    // The existing factory reads its own live records.
+    await waitFor(() => {
+      expect(screen.getByText(/This factory: First/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/1 active assignment on this factory/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Create New AI Factory/i }));
+
+    // Nothing was deleted: the steps are empty because the new factory has no
+    // project yet, and the message says so rather than implying a wipe.
+    await waitFor(() => {
+      expect(screen.getByText(/Nothing was deleted/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/No project yet for this factory/)).toBeInTheDocument();
+    expect(screen.getByText(/No bot is assigned to this factory yet/)).toBeInTheDocument();
+  });
+
+  it("keeps the account-level GitHub step done for a brand-new factory", async () => {
+    stubFactory({
+      ...twoProjects,
+      "/api/github/connections": {
+        connections: [{
+          installation: { id: 1 },
+          repositories: [{ archived: false, selected: true }],
+          status: "connected",
+        }],
+      },
+    });
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Create New AI Factory/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Create New AI Factory/i }));
+
+    // An installation belongs to the account, not to one factory, so it stays
+    // genuinely done. Resetting it would be a lie in the other direction.
+    await waitFor(() => {
+      expect(screen.getByText(/1 installation/)).toBeInTheDocument();
+    });
   });
 });
