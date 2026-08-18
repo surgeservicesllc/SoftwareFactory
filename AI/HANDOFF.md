@@ -14,9 +14,13 @@ graph-planning dialog Use used to open is now its own **Plan graph** button.
 **Outstanding owner action:** migration `20260818000200_project_pipeline_selection`
 is not on the hosted ledger. Run
 `.github/workflows/apply-hosted-migrations.yml` with `confirm=apply` and
-`scope=broker-functions` — the file is in that scope's list, and every statement
-in it is idempotent (`create table if not exists`, `alter type ... add value if
-not exists`, `create or replace function`). Until then the console tells the
+**`scope=pipeline-selection`** — a scope added for exactly this file, so
+reaching production does not mean re-running twenty-three unrelated migrations.
+It applies, records the ledger row, and reloads the PostgREST schema cache.
+Every statement is idempotent (`create table if not exists`,
+`create index if not exists`, `alter type ... add value if not exists`,
+`create or replace function`), and the migration adds — it alters nothing that
+already exists. The file is also in `scope=broker-functions` for a batch run. Until then the console tells the
 truth about itself rather than appearing to work: `/api/project-pipelines`
 returns `pipeline_selection_not_connected` and the Use button is disabled with
 "Not Connected — this database does not have the pipeline-selection migration

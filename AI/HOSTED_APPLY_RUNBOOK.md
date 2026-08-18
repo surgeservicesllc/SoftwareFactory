@@ -53,8 +53,10 @@ trigger — probe run 32188102707's 42501) and
 `20260818000200_project_pipeline_selection` (the `project_pipelines` table and
 its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
 functions, which is what makes the AI Factory's Use button record anything) are
-both newer than that measurement and are outstanding until the next
-`scope=broker-functions` run applies them. Until then the Configure Pipeline
+both newer than that measurement and are outstanding.
+`20260818000200` has its own one-file scope, **`scope=pipeline-selection`**, so it
+can reach production without re-running the other twenty-three files in
+`broker-functions`; both are still in that batch scope as well. Until then the Configure Pipeline
 step reads **Not Connected** in effect: `/api/project-pipelines` will return the
 database's own missing-function error rather than pretending a selection stuck. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old

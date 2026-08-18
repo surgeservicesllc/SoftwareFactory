@@ -19,9 +19,11 @@ Last triaged: 2026-08-13
 - [x] Cover the migration against the real chain (owner allowed, member read-only,
   outsider denied, anonymous denied, no direct browser write path), the route boundary,
   the toggle, and the selected-state layout at every swept width.
-- [ ] Apply `20260818000200` to hosted Supabase through `AI/HOSTED_APPLY_RUNBOOK.md`
-  (`scope=broker-functions` already carries the file); until then `/api/project-pipelines`
-  reports PGRST202 as **Not Connected** and the Use button is disabled naming that reason.
+- [ ] Apply `20260818000200` to hosted Supabase: run the apply workflow with
+  `confirm=apply`, `scope=pipeline-selection` — a one-file scope added for it, so
+  production is reached without re-running twenty-three unrelated migrations. Until
+  then `/api/project-pipelines` reports PGRST202 as **Not Connected** and the Use
+  button is disabled naming that reason.
 
 ## Project repository picker (2026-08-16)
 
