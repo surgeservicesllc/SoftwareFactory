@@ -497,6 +497,8 @@ function TemplateUseDialog({
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
 
+  const [loadingProjects, setLoadingProjects] = useState(true);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -509,6 +511,8 @@ function TemplateUseDialog({
         }
       } catch {
         if (!cancelled) setProjects([]);
+      } finally {
+        if (!cancelled) setLoadingProjects(false);
       }
     })();
     return () => {
@@ -553,21 +557,43 @@ function TemplateUseDialog({
         starts only when a worker claims work.
       </p>
       <div className="mt-4">
-        <label htmlFor="use-template-project" className="field-label">Project</label>
-        <select
-          id="use-template-project"
-          value={projectId}
-          onChange={(event) => setProjectId(event.target.value)}
-          className="input"
-        >
-          {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-        </select>
+        {/*
+          A template is planned *against* a project, so with none there is
+          nothing to plan against. This used to render an empty dropdown beside
+          a permanently disabled button and say nothing — a dead end that reads
+          as a broken dialog rather than as a missing prerequisite.
+        */}
+        {loadingProjects ? (
+          <p className="text-sm text-muted">Reading your projects…</p>
+        ) : projects.length === 0 ? (
+          <p className="text-sm text-muted">
+            A pipeline is planned against a project, and this workspace has none yet.{" "}
+            <Link href="/solutions/projects#add-project" className="text-accent underline">
+              Create a project
+            </Link>{" "}
+            first, then use this template.
+          </p>
+        ) : (
+          <>
+            <label htmlFor="use-template-project" className="field-label">Project</label>
+            <select
+              id="use-template-project"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className="input w-full"
+            >
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </>
+        )}
       </div>
-      <div className="mt-4 flex gap-2">
-        <button type="button" onClick={() => void plan()} disabled={busy || !projectId} className="btn btn-primary btn-sm">
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" aria-hidden="true" />}
-          Plan graph
-        </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {projects.length > 0 ? (
+          <button type="button" onClick={() => void plan()} disabled={busy || !projectId} className="btn btn-primary btn-sm">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" aria-hidden="true" />}
+            Plan graph
+          </button>
+        ) : null}
         <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Close</button>
       </div>
       {result ? <p className="mt-3 text-sm text-accent" aria-live="polite">{result}</p> : null}

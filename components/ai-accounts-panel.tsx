@@ -366,7 +366,12 @@ export function AiAccountsPanel({
                 {status.label}
               </span>
               {canManage ? (
-                <div className="flex shrink-0 gap-2">
+                // Wraps rather than refusing to shrink. An account in a bad
+                // state offers Refresh, Reconnect, Disconnect and Remove at
+                // once, and `shrink-0` on a non-wrapping row ran that set off
+                // the right edge of the panel on a phone — the last button was
+                // simply unreachable, which is how a stuck account stays stuck.
+                <div className="flex flex-wrap items-center gap-2">
                   {account.status === "connected" || account.status === "needs_reauth" ? (
                     <button
                       type="button"

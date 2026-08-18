@@ -527,7 +527,19 @@ export function BotManagerHome() {
       {!empty && !loading ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { label: "AI Accounts", value: `${connectedAccounts.length} Connected` },
+            {
+              label: "AI Accounts",
+              /*
+               * "0 Connected" directly above a list headed "AI accounts 4"
+               * reads as a contradiction, and the reader has to work out which
+               * number is wrong. Neither is: four accounts exist and none of
+               * them currently holds a working credential. Saying both numbers
+               * is the only phrasing that is true and legible at once.
+               */
+              value: (accounts ?? []).length === connectedAccounts.length
+                ? `${connectedAccounts.length} Connected`
+                : `${connectedAccounts.length} of ${(accounts ?? []).length} Connected`,
+            },
             { label: "Active Bots", value: String(bots.length) },
             {
               label: "Ready",

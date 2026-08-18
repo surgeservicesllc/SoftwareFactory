@@ -236,3 +236,29 @@ describe("AiAccountsPanel", () => {
     expect(await screen.findByText(/scheduled sweep will re-verify/i)).toBeInTheDocument();
   });
 });
+
+describe("an account in a bad state, on a narrow screen", () => {
+  it("offers every recovery action, in a row that can wrap", async () => {
+    /*
+     * A stuck account carries Refresh, Reconnect, Disconnect and Remove at
+     * once. The row that holds them was `shrink-0` and did not wrap, so on a
+     * phone the last button ran past the panel's right edge and could not be
+     * reached — which is how a stuck account stays stuck.
+     *
+     * jsdom has no layout, so the wrap itself is asserted on the container
+     * rather than measured; the browser suite measures reachability. What this
+     * pins is the pair: the actions all exist, and nothing pins them to one
+     * line.
+     */
+    stubAccounts([reauthAccount]);
+    render(<AiAccountsPanel canManage onChanged={() => {}} />);
+
+    const refresh = await screen.findByRole("button", { name: /refresh/i });
+    expect(screen.getByRole("button", { name: /reconnect/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /disconnect/i })).toBeInTheDocument();
+
+    const actions = refresh.parentElement;
+    expect(actions?.className).toContain("flex-wrap");
+    expect(actions?.className).not.toContain("shrink-0");
+  });
+});
