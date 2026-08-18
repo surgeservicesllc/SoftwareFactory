@@ -83,7 +83,7 @@ type ConnectStage =
   /** Which account should back the new bot — asked, not assumed. */
   | { kind: "create-bot" }
   /** Put one bot on one project, from the roster rather than the project page. */
-  | { kind: "assign"; bot: BotView };
+  | { kind: "assign"; bots: readonly BotView[] };
 
 export function BotManagerHome() {
   const [accounts, setAccounts] = useState<AccountView[] | null>(null);
@@ -107,6 +107,10 @@ export function BotManagerHome() {
   const [removingBotId, setRemovingBotId] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
+  // One or many: the assign endpoint takes up to 25 postings in one atomic
+  // call, so the roster lets a person pick that many rather than repeating a
+  // single-bot dialog.
+  const [selectedBotIds, setSelectedBotIds] = useState<readonly string[]>([]);
   // The success screen offers the rename before any next action, through the
   // same endpoint the accounts panel uses.
   const [successEditing, setSuccessEditing] = useState(false);
@@ -238,18 +242,24 @@ export function BotManagerHome() {
     }
   }, [load]);
 
-  const assignBotToProject = useCallback(async (
-    bot: BotView,
+  const assignBotsToProject = useCallback(async (
+    chosen: readonly BotView[],
     projectId: string,
     roleId: string,
   ) => {
     setAssignBusy(true);
     setBotNotice("");
     try {
+      /*
+       * One request for the whole selection. `assign_bots_to_project` is
+       * atomic — every posting lands or none does — so sending them together
+       * is the difference between "these five bots are on the project" and
+       * "three are, and you get to work out which two are not".
+       */
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/bots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bots: [{ botId: bot.id, roleId }] }),
+        body: JSON.stringify({ bots: chosen.map((bot) => ({ botId: bot.id, roleId })) }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: { message?: string };
@@ -261,18 +271,66 @@ export function BotManagerHome() {
        * act on differently, and "it did not work" tells them apart from none
        * of them.
        */
-      if (!response.ok) throw new Error(body.error?.message ?? "The bot could not be assigned.");
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "The bots could not be assigned.");
+      }
       await load();
       setStage({ kind: "closed" });
-      setBotNotice(`${bot.name} is now on ${
-        projects.find((project) => project.id === projectId)?.name ?? "the project"
-      }.`);
+      setSelectedBotIds([]);
+      const projectName = projects.find((project) => project.id === projectId)?.name
+        ?? "the project";
+      setBotNotice(chosen.length === 1
+        ? `${chosen[0].name} is now on ${projectName}.`
+        : `${chosen.length} bots are now on ${projectName}.`);
     } catch (error) {
-      setBotNotice(error instanceof Error ? error.message : "The bot could not be assigned.");
+      setBotNotice(error instanceof Error ? error.message : "The bots could not be assigned.");
     } finally {
       setAssignBusy(false);
     }
   }, [load, projects]);
+
+  /**
+   * One bot per selected account, in order.
+   *
+   * Sequential rather than parallel: `ensureProviderBot` decides whether an
+   * organization already has a bot for a provider, and four simultaneous
+   * requests for the same provider would each read "none yet" before any of
+   * them wrote. `additional` is true after the first of a provider so a second
+   * account on the same provider gets its own bot instead of being told one
+   * already exists.
+   */
+  const createBotsForAccounts = useCallback(async (
+    selected: readonly { id: string; provider: string }[],
+  ) => {
+    setBotNotice("");
+    const seen = new Set(bots.map((bot) => bot.provider));
+    let created = 0;
+    const failed: string[] = [];
+    for (const account of selected) {
+      try {
+        const response = await fetch("/api/bots/connect/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: account.provider,
+            credential: "subscription",
+            additional: seen.has(account.provider),
+          }),
+        });
+        if (!response.ok) throw new Error();
+        seen.add(account.provider);
+        created += 1;
+      } catch {
+        failed.push(account.provider);
+      }
+    }
+    await load();
+    setBotNotice(
+      failed.length === 0
+        ? `${created} bot${created === 1 ? "" : "s"} created.`
+        : `${created} created, ${failed.length} failed. Try the ones that failed again.`,
+    );
+  }, [bots, load]);
 
   const provisionBot = useCallback(async (providerId: string) => {
     setCreatingBot(true);
@@ -440,7 +498,10 @@ export function BotManagerHome() {
      * readiness server-side and applies the least-privilege defaults; opening
      * the wizard is still the way to depart from them.
      */
-    const bot = stage.bot;
+    const chosen = stage.bots;
+    const heading = chosen.length === 1
+      ? `Add ${chosen[0].name} to a project`
+      : `Add ${chosen.length} bots to a project`;
     dialog = modal(
       <form
         className="relative"
@@ -449,15 +510,20 @@ export function BotManagerHome() {
           const data = new FormData(event.currentTarget);
           const projectId = String(data.get("projectId") ?? "");
           const roleId = String(data.get("roleId") ?? "");
-          if (projectId && roleId) void assignBotToProject(bot, projectId, roleId);
+          if (projectId && roleId) void assignBotsToProject(chosen, projectId, roleId);
         }}
       >
         {closeButton}
-        <h2 className="text-xl font-semibold text-[var(--text)]">Add {bot.name} to a project</h2>
+        <h2 className="text-xl font-semibold text-[var(--text)]">{heading}</h2>
+        {chosen.length > 1 ? (
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            {chosen.map((bot) => bot.name).join(", ")}
+          </p>
+        ) : null}
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          The bot is posted with the safest configuration: read-only repository access, no pull
-          requests, and human approval required. Open the project&rsquo;s Assign Bots wizard to
-          widen any of that.
+          {chosen.length === 1 ? "The bot is" : "Each bot is"} posted with the safest
+          configuration: read-only repository access, no pull requests, and human approval
+          required. Open the project&rsquo;s Assign Bots wizard to widen any of that.
         </p>
 
         {projects.length === 0 || roles.length === 0 ? (
@@ -515,7 +581,7 @@ export function BotManagerHome() {
           <p className="mt-3 text-sm text-[var(--danger)]" aria-live="polite">{botNotice}</p>
         ) : null}
       </form>,
-      `Add ${bot.name} to a project`,
+      heading,
     );
   } else if (stage.kind === "confirm") {
     const entry = CONNECTABLE.find((candidate) => candidate.providerId === stage.providerId)!;
@@ -855,16 +921,55 @@ export function BotManagerHome() {
 
       {!empty && !loading ? (
         <>
-          <AiAccountsPanel canManage={canManage} onChanged={load} />
+          <AiAccountsPanel
+            canManage={canManage}
+            onChanged={load}
+            onCreateBots={createBotsForAccounts}
+          />
 
           {bots.length > 0 ? (
             <section aria-label="Your AI team" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <h2 className="text-sm font-semibold text-[var(--text)]">Your AI Team</h2>
+              {selectedBotIds.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
+                  <p className="min-w-0 flex-1 text-sm text-[var(--text)]">
+                    {selectedBotIds.length} selected
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBotNotice("");
+                      setStage({
+                        kind: "assign",
+                        bots: bots.filter((bot) => selectedBotIds.includes(bot.id)),
+                      });
+                    }}
+                    className="btn btn-primary btn-sm"
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    {selectedBotIds.length === 1
+                      ? "Add to project"
+                      : `Add ${selectedBotIds.length} to a project`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBotIds([])}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              ) : null}
               <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {bots.map((bot) => (
                   <li
                     key={bot.id}
-                    className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5"
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                      selectedBotIds.includes(bot.id)
+                        ? "border-[var(--accent-border)] bg-[var(--accent-surface)]"
+                        : "border-[var(--border)] bg-[var(--surface-raised)]",
+                    )}
                   >
                     <span
                       className={cn(
@@ -953,17 +1058,37 @@ export function BotManagerHome() {
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>
                       {canManage ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBotNotice("");
-                            setStage({ kind: "assign", bot });
-                          }}
-                          className="btn btn-secondary btn-sm mt-2"
-                        >
-                          <Plus className="size-3.5" aria-hidden="true" />
-                          Add to project
-                        </button>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            aria-pressed={selectedBotIds.includes(bot.id)}
+                            aria-label={`Select ${bot.name}`}
+                            onClick={() => setSelectedBotIds((current) => (
+                              current.includes(bot.id)
+                                ? current.filter((id) => id !== bot.id)
+                                : [...current, bot.id]
+                            ))}
+                            className={cn(
+                              "rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors",
+                              selectedBotIds.includes(bot.id)
+                                ? "border-[var(--accent-border)] bg-[var(--accent)] text-[var(--accent-ink)]"
+                                : "border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)]",
+                            )}
+                          >
+                            {selectedBotIds.includes(bot.id) ? "Selected" : "Select"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBotNotice("");
+                              setStage({ kind: "assign", bots: [bot] });
+                            }}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            <Plus className="size-3.5" aria-hidden="true" />
+                            Add to project
+                          </button>
+                        </div>
                       ) : null}
                       {removingBotId === bot.id ? (
                         <div className="mt-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-2.5">

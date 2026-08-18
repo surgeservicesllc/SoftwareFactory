@@ -423,6 +423,35 @@ test("the tablet band gets a standing rail rather than the phone's drawer", asyn
   expect(await overflowing(page), "the drawer band overflowed").toEqual([]);
 });
 
+test("selecting accounts and bots holds its layout at every width", async ({
+  page,
+  isMobile,
+}) => {
+  /*
+   * Selection changes the row — a border, a filled button, and a bar that
+   * appears above the list — so the selected state is a layout nobody had
+   * measured. Both lists are exercised, because both grew the control.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  for (const width of [320, 768, 1440]) {
+    await open(page, "bot-manager", width);
+
+    const accountSelects = page.getByRole("button", { name: /^Select .+/ });
+    const total = await accountSelects.count();
+    expect(total, "no Select control rendered").toBeGreaterThan(1);
+    for (let index = 0; index < total; index += 1) await accountSelects.nth(index).click();
+
+    // The bar states the selection, and every selected row stays inside.
+    await expect(page.getByText(/\d+ selected/).first()).toBeVisible();
+    expect(await overflowing(page), `selection overflowed at ${width}px`).toEqual([]);
+    expect(await unreachable(page, "body"), `a control left reach at ${width}px`).toEqual([]);
+
+    // Pressed state, not colour alone.
+    await expect(accountSelects.first()).toHaveAttribute("aria-pressed", "true");
+  }
+});
+
 test("the bot roster's own dialogs fit a phone", async ({ page, isMobile }) => {
   /*
    * Both are new routes out of a dead end the owner hit: Create Bot used to

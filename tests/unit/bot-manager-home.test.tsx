@@ -393,3 +393,104 @@ describe("BotManagerHome — putting a bot on a project", () => {
     expect(within(dialog).getByRole("link", { name: /create a project/i })).toBeInTheDocument();
   });
 });
+
+const secondBot = {
+  id: "bot-2",
+  name: "Codex Reviewer",
+  provider: "openai",
+  providerLabel: "Codex",
+  readiness: "ready",
+  readinessLabel: "Ready to assign",
+};
+
+const secondAccount = {
+  id: "acc-3",
+  provider: "openai",
+  providerLabel: "Codex",
+  displayName: "Codex Daniel",
+  status: "connected",
+  lastVerifiedAt: null,
+  lastError: null,
+};
+
+describe("BotManagerHome — selecting one or many", () => {
+  it("assigns every selected bot in a single atomic request", async () => {
+    /*
+     * One request, not one per bot: `assign_bots_to_project` is atomic, so
+     * sending them together is the difference between "these two are on the
+     * project" and "one is, work out which".
+     */
+    const user = userEvent.setup();
+    const posts: unknown[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot, secondBot],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes("/bots")) {
+          posts.push(JSON.parse(String(init.body)));
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: `Select ${readyBot.name}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${secondBot.name}` }));
+    await user.click(screen.getByRole("button", { name: /add 2 to a project/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /add 2 bots to a project/i });
+    await user.click(within(dialog).getByRole("button", { name: /add to project/i }));
+
+    expect(posts).toEqual([
+      { bots: [{ botId: readyBot.id, roleId: role.id }, { botId: secondBot.id, roleId: role.id }] },
+    ]);
+  });
+
+  it("reports the selection as pressed so its state is not colour alone", async () => {
+    const user = userEvent.setup();
+    stub({ accounts: [connectedAccount], bots: [readyBot], roles: [role], projects: [project] });
+    render(<BotManagerHome />);
+
+    const select = await screen.findByRole("button", { name: `Select ${readyBot.name}` });
+    expect(select).toHaveAttribute("aria-pressed", "false");
+    await user.click(select);
+    expect(select).toHaveAttribute("aria-pressed", "true");
+    await user.click(select);
+    expect(select).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("creates one bot per selected account, and says which could not", async () => {
+    const user = userEvent.setup();
+    const provisioned: unknown[] = [];
+    stub({
+      accounts: [connectedAccount, secondAccount, needsReauthAccount],
+      bots: [],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (url === "/api/bots/connect/provision" && init?.method === "POST") {
+          provisioned.push(JSON.parse(String(init.body)));
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${secondAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${needsReauthAccount.displayName}` }));
+
+    // Both numbers, so the button's count is never a mystery.
+    expect(screen.getByText(/3 selected · 2 can create a bot/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
+
+    expect(provisioned).toEqual([
+      { provider: "anthropic", credential: "subscription", additional: false },
+      { provider: "openai", credential: "subscription", additional: false },
+    ]);
+  });
+});

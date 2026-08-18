@@ -93,6 +93,39 @@ against real PostgreSQL.
 
 ---
 
+## CONNECT BOTS, REDRAWN TO THE OWNER'S IMAGE, WITH ONE-OR-MANY SELECTION (2026-08-18)
+
+**The account row is a column now, not one wrapping flex row.** The design puts
+the name and its SELECT control on the first line, the account's own facts
+under it, and the state badge at the head of the action row where it explains
+the buttons beside it. As a single wrapping row the badge landed wherever the
+name's length left it — on a narrow panel, between the name and the buttons it
+describes.
+
+**SELECT, and it means one or many.** Selecting is a set, not a radio: every
+account row and every bot row carries the control, pressed state is
+`aria-pressed` rather than colour alone, and a bar above the list states the
+count with the action that applies to it.
+
+- **Accounts → bots.** "Create N bots" provisions one bot per selected account,
+  sequentially, because `ensureProviderBot` decides whether the organization
+  already has a bot for a provider and four simultaneous requests would each
+  read "none yet" before any of them wrote. A second account on the same
+  provider passes `additional`, so it gets its own bot rather than being told
+  one exists. Accounts that cannot back a bot are counted separately and named
+  — "3 selected · 2 can create a bot, the rest need signing in again" — so the
+  button's number is never a mystery.
+- **Bots → a project.** "Add N to a project" sends the whole selection in one
+  request, because `assign_bots_to_project` is atomic: together is the
+  difference between "these five are on the project" and "three are, work out
+  which two are not". The single-bot button stays for the common case.
+
+The name lives in each control's `aria-label` rather than an `sr-only` span: a
+hidden text node carrying the account's name puts that name in the accessible
+tree twice, and in anything matching on text twice as well.
+
+---
+
 ## CONNECT BOTS: WHY IT WAS UNUSABLE, AND THE ROUTE ONTO A PROJECT (2026-08-18)
 
 **Create Bot offered to add a fifth account.** It called

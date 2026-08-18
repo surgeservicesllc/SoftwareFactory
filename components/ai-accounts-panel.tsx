@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, KeyRound, Loader2, Pencil, RefreshCw, Trash2, Unplug } from "lucide-react";
+import {
+  Check,
+  KeyRound,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  Unplug,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
@@ -46,9 +55,19 @@ const STATUS_LABELS: Readonly<Record<string, { label: string; tone: string }>> =
 export function AiAccountsPanel({
   canManage,
   onChanged,
+  /**
+   * Turn the chosen accounts into bots.
+   *
+   * The panel owns the selection because that is where the rows are; it does
+   * not own provisioning, which is owner-authorized work the Bot Manager
+   * already performs through `/api/bots/connect/provision`. Passing the
+   * accounts up keeps one authorization path rather than a second copy here.
+   */
+  onCreateBots,
 }: {
   canManage: boolean;
   onChanged: () => Promise<void> | void;
+  onCreateBots?: (accounts: readonly { id: string; provider: string }[]) => Promise<void> | void;
 }) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [usageByAccount, setUsageByAccount] = useState<Record<string, AccountUsageView>>({});
@@ -61,6 +80,10 @@ export function AiAccountsPanel({
   const [editName, setEditName] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  // One or many. A set rather than a single id, because the whole point of
+  // the control is acting on several accounts at once.
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const [creatingBots, setCreatingBots] = useState(false);
   // Refresh is evidence, not optimism: the map holds each account's request
   // time, and the marker clears only when the worker's re-verification moves
   // `lastVerifiedAt` past it (or a quiet three minutes expires the wait).
@@ -239,6 +262,35 @@ export function AiAccountsPanel({
     }
   }, [load, onChanged]);
 
+  const selectedAccounts = accounts.filter((account) => selectedIds.includes(account.id));
+  const connectableSelection = selectedAccounts.filter(
+    (account) => account.status === "connected",
+  );
+  const selectableCount = connectableSelection.length;
+
+  function toggleSelected(accountId: string) {
+    setSelectedIds((current) => (
+      current.includes(accountId)
+        ? current.filter((id) => id !== accountId)
+        : [...current, accountId]
+    ));
+  }
+
+  async function createBotsFromSelection() {
+    if (!onCreateBots || connectableSelection.length === 0) return;
+    setCreatingBots(true);
+    setNotice("");
+    try {
+      await onCreateBots(connectableSelection.map((account) => ({
+        id: account.id,
+        provider: account.provider,
+      })));
+      setSelectedIds([]);
+    } finally {
+      setCreatingBots(false);
+    }
+  }
+
   if (accounts.length === 0) return null;
 
   return (
@@ -269,6 +321,44 @@ export function AiAccountsPanel({
         </div>
       ) : null}
 
+      {selectedIds.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
+          <p className="min-w-0 flex-1 text-sm text-[var(--text)]">
+            {/*
+              Both numbers, always. Creating bots only from the accounts that
+              can back one is right; doing it without saying which were left
+              out would make the button's count a mystery.
+            */}
+            {selectedIds.length} selected
+            {selectableCount === selectedIds.length
+              ? ""
+              : ` · ${selectableCount} can create a bot, the rest need signing in again`}
+          </p>
+          {onCreateBots && canManage ? (
+            <button
+              type="button"
+              disabled={creatingBots || selectableCount === 0}
+              onClick={() => void createBotsFromSelection()}
+              className="btn btn-primary btn-sm"
+            >
+              {creatingBots ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="size-3.5" aria-hidden="true" />
+              )}
+              {selectableCount === 1 ? "Create 1 bot" : `Create ${selectableCount} bots`}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="btn btn-secondary btn-sm"
+          >
+            Clear selection
+          </button>
+        </div>
+      ) : null}
+
       <ul className="mt-3 space-y-2">
         {accounts.map((account) => {
           const status = STATUS_LABELS[account.status]
@@ -276,8 +366,24 @@ export function AiAccountsPanel({
           return (
             <li
               key={account.id}
-              className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2"
+              /*
+               * A column, not one wrapping row.
+               *
+               * The design puts the name and the SELECT control on the first
+               * line, the account's own facts under it, and the state badge at
+               * the head of the action row where it explains the buttons
+               * beside it. As a single wrapping flex row the badge landed
+               * wherever the name's length left it, which on a narrow panel
+               * was between the name and the buttons it describes.
+               */
+              className={cn(
+                "rounded-lg border px-3 py-2 transition-colors",
+                selectedIds.includes(account.id)
+                  ? "border-[var(--accent-border)] bg-[var(--accent-surface)]"
+                  : "border-[var(--border)] bg-[var(--surface-raised)]",
+              )}
             >
+              <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 {editingId === account.id ? (
                   <form
@@ -367,6 +473,38 @@ export function AiAccountsPanel({
                   <AccountUsage usage={usageByAccount[account.id]} />
                 ) : null}
               </div>
+              {canManage ? (
+                <button
+                  type="button"
+                  aria-pressed={selectedIds.includes(account.id)}
+                  /*
+                   * The name lives in `aria-label`, not in an `sr-only` span.
+                   * A hidden text node carrying the account's name makes the
+                   * name appear twice in the accessible tree — and, more
+                   * practically, twice to anything matching on text.
+                   */
+                  aria-label={`Select ${account.displayName}`}
+                  onClick={() => toggleSelected(account.id)}
+                  className={cn(
+                    "shrink-0 rounded-lg border px-4 py-2 text-sm font-bold uppercase tracking-wide transition-colors",
+                    selectedIds.includes(account.id)
+                      ? "border-[var(--accent-border)] bg-[var(--accent)] text-[var(--accent-ink)]"
+                      : "border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)]",
+                  )}
+                >
+                  {selectedIds.includes(account.id) ? (
+                    <span className="flex items-center gap-1.5">
+                      <Check className="size-3.5" aria-hidden="true" />
+                      Selected
+                    </span>
+                  ) : (
+                    "Select"
+                  )}
+                </button>
+              ) : null}
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className={cn(
                   "shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold",
@@ -468,6 +606,7 @@ export function AiAccountsPanel({
                   )}
                 </div>
               ) : null}
+              </div>
             </li>
           );
         })}
