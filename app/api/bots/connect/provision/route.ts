@@ -98,6 +98,9 @@ export async function POST(request: Request) {
     return jsonNoStore({
       provisioned: result.outcome === "created",
       outcome: result.outcome,
+      // The refusal's sentence travels: "skipped" with no reason is how the
+      // console ended up celebrating a bot that was never created.
+      ...(result.outcome === "skipped" ? { reason: result.reason } : {}),
     });
   } catch (error) {
     return botFabricErrorResponse(
