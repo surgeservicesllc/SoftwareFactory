@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/app-shell";
 
@@ -150,7 +150,7 @@ describe("navigation opens closed, and the menu starts the column", () => {
     expect(screen.queryByRole("link", { name: /^archived$/i })).not.toBeInTheDocument();
   });
 
-  it("carries no mark of its own, and no control above the menu", () => {
+  it("carries no mark of its own", () => {
     /*
      * This assertion has been inverted twice, so the history is the point.
      *
@@ -168,9 +168,6 @@ describe("navigation opens closed, and the menu starts the column", () => {
 
     expect(
       screen.queryByRole("link", { name: /ai software factory console home/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /collapse navigation|expand navigation/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -277,5 +274,114 @@ describe("what the navigation takes from the reference, and what it does not", (
 
     expect(within(navigation).getByRole("link", { name: "Watch" })).toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "Advanced" })).toBeInTheDocument();
+  });
+});
+
+/*
+ * Retracting the column, and the two questions that gate it.
+ *
+ * jsdom has no `matchMedia` at all, which is why every test above sees the
+ * full column and no control: the shell treats "cannot say how this device is
+ * driven" as "not a pointer device". These stub it to model the real cases.
+ */
+describe("retracting the column on a pointer device", () => {
+  function stubDevice({ wide, pointer }: { wide: boolean; pointer: boolean }) {
+    const listeners = new Set<() => void>();
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      // The shell asks two questions; each stub answers the one it was asked.
+      matches: query.includes("min-width") ? wide : pointer,
+      media: query,
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    }));
+    return listeners;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+  });
+
+  it("offers the control on a wide pointer device", () => {
+    stubDevice({ wide: true, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(
+      screen.getByRole("button", { name: /collapse navigation/i }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("withholds it from a touch device, which has the drawer instead", () => {
+    // A phone or tablet closes the drawer rather than narrowing a column, so a
+    // retract control there would act on something that is not on screen.
+    stubDevice({ wide: true, pointer: false });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(
+      screen.queryByRole("button", { name: /collapse navigation|expand navigation/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("withholds it below the width where both forms fit", () => {
+    // Between 1024 and 1279 the rail is the only form that fits beside
+    // content, so the width decides and there is nothing to offer.
+    stubDevice({ wide: false, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(
+      screen.queryByRole("button", { name: /collapse navigation|expand navigation/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("retracts and expands again, and remembers which", async () => {
+    const user = userEvent.setup();
+    stubDevice({ wide: true, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
+
+    const expand = await screen.findByRole("button", { name: /expand navigation/i });
+    expect(expand).toHaveAttribute("aria-pressed", "true");
+    // The choice outlives the render, or it is not a preference.
+    expect(window.localStorage.getItem("softwarefactory:sidebar-compact")).toBe("1");
+
+    await user.click(expand);
+    expect(
+      await screen.findByRole("button", { name: /collapse navigation/i }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem("softwarefactory:sidebar-compact")).toBe("0");
+  });
+
+  it("keeps every destination reachable while retracted", async () => {
+    // A reduced column is not a hidden one. The labels go to `sr-only`, so the
+    // accessible name is what proves they survived.
+    const user = userEvent.setup();
+    stubDevice({ wide: true, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    for (const label of ["Overview", "Projects", "Runs", "Settings"]) {
+      expect(within(navigation).getByRole("link", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("puts the control below the menu, never above it", () => {
+    /*
+     * The position is the point, not an incidental. The owner removed this
+     * control from the head of the column and asked for the menu to move up;
+     * bringing it back above the menu would undo that instruction while
+     * appearing to satisfy this one.
+     */
+    stubDevice({ wide: true, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+    const control = screen.getByRole("button", { name: /collapse navigation/i });
+
+    expect(navigation.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(navigation.parentElement?.firstElementChild).toBe(navigation);
   });
 });
