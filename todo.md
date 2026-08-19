@@ -210,7 +210,24 @@ Round 4 — tolerant fan-in (goal rule 14, the last engine-rule gap):
   in-flight / blocks on nothing-completed), tolerant-diamond behavior test
   through the real chain (synthesize COMPLETED with missing list, run
   PARTIAL), full graph suite 10/10, all 12 tail-pin chain suites green on
-  the 114-migration chain.
+  the 114-migration chain. Applied to production by run 32212056032.
+
+Round 4b — executors dispatch by declaration, not by assumption:
+
+- The worker sent EVERY node to the CLI, DETERMINISTIC (model tier NONE)
+  included — the first-day template's reduce node would have spent a
+  subscription turn on work code does perfectly. `executeDeterministicNode`
+  routes reduce nodes through the engine's own reducers (dedupe first
+  occurrence wins, severity-ranked, stable), with honesty in-band:
+  malformed rows counted, unreducible inputs named, missing inputs listed.
+  A DETERMINISTIC node with nothing reducible fails plainly and without
+  retry (deterministic means deterministic). ANCHOR nodes (test runs,
+  probes) fail with the reason they need the Phase 1C workspace path —
+  never quietly routed to a model.
+- Deferred deliberately: output-schema enforcement (validateOutput +
+  transport outputFormat) waits until the first real production run proves
+  live output shapes, then tightens; enforcing now could fail the first
+  live nodes on a shape the prompt merely suggests.
 
 Remaining blockers requiring external services/credentials: executing real
 nodes needs the graph-worker workflow dispatched (or its schedule variable
