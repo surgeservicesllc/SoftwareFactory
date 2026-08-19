@@ -304,6 +304,41 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+Rounds 9-11 — what checking the WHOLE found that checking the parts did not:
+
+- Verification gates were schema-and-engine only. graph_verifications,
+  record_verification, independence and quorum all existed; the executed
+  path used none of it, so a reviewing node's verdict was filed as an
+  ordinary artifact. record_verification_as_worker now records verdict,
+  lens, evidence and shared-context per subject (derived from the answer
+  already given — never a second call), list_graph_runs returns them, and
+  the panel shows them. Unreadable output yields NO verdict: absence of
+  evidence is not evidence of passing. (#260, #261)
+- The panel crashed the whole view on a payload without `verifications` —
+  which is what an older deployment or a partial rollout serves. Every
+  list it reads now tolerates absence, with a test rendering a
+  pre-verification payload. (#261)
+- Six engine modules have no production caller (discovery, handoffs,
+  integration, optimizer, connection-bridge, anchor-store). Not dead code —
+  unwired capability. ARCHITECTURE now separates what executes from what
+  merely exists, and the one a user can see (a DISCOVERY_GRAPH template
+  promising rounds the executor does not run) says so on the template
+  itself. (#262)
+- **Running the full suite instead of the touched parts found a version
+  collision**: 20260819000700 was claimed by an ADR-036 security fix at
+  09:18Z and again by my verification boundary. 97 tests red — but the
+  quiet half was worse: both applies had run `repair 20260819000700`, so
+  production recorded the version while the constraint it named had never
+  run, and a later scope=all would have skipped it forever. Renumbered to
+  000900, the security fix added to the apply list, the ledger row
+  documented as untrustworthy, and a guard added so no two migrations can
+  share a version again. (#264)
+- **The replayed apply was idempotent per file but not as a sequence**:
+  000800 widens list_graph_runs, so replaying 000400 tried to narrow it and
+  Postgres refused — aborting the run before the same security fix, twice in
+  one afternoon. 000400 now drops first, and a guard requires a guarded drop
+  wherever two replayed migrations define one function. (#265)
+
 Round 8 — THE FULL CHAIN EXECUTED IN PRODUCTION (drain 32254860997,
 graph run ca347ab9-5e4c-4f9b-a60a-cd357c5696bb):
 
