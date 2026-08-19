@@ -36,6 +36,7 @@ type GraphRunRow = {
   completed_at: string | null;
   nodes: unknown;
   artifact_counts: unknown;
+  verifications: unknown;
 };
 
 export async function GET(request: Request) {
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
           typeof row.artifact_counts === "object" && row.artifact_counts !== null
             ? row.artifact_counts
             : {},
+        verifications: Array.isArray(row.verifications) ? row.verifications : [],
       })),
     });
   } catch (error) {

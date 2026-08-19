@@ -675,6 +675,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       state: string;
       nodes: Array<{ node_key: string; state: string; provider: string | null; error_message: string | null }>;
       artifact_counts: Record<string, number>;
+      verifications: Array<{ subject_node_key: string; lens: string; verdict: string; shared_worker_context: boolean }>;
     };
 
     await asOwner(db);
@@ -693,6 +694,8 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(diamond?.nodes).toHaveLength(4);
     expect(diamond?.nodes.find((n) => n.node_key === "inspect_a")?.provider).toBe("deterministic");
     expect(diamond?.artifact_counts).toEqual({ RAW: 3, SYNTHESIS: 1 });
+    // A run with no reviewing node reports an empty list, not a missing key.
+    expect(diamond?.verifications).toEqual([]);
 
     // A failed node's error travels verbatim.
     const contained = listed.rows.find((row) => row.goal === "Survive one failed inspector");
@@ -782,6 +785,23 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
         where gr.graph_id = $1 and e.event_type = 'verification_recorded'`, [graphId],
     );
     expect(events.rows[0].count).toBe(2);
+
+    // And a member can actually see them: evidence nobody can read is the
+    // same as evidence nobody stored.
+    await asOwner(db);
+    const listed = await db.query<{ goal: string; verifications: Array<{ subject_node_key: string; lens: string; verdict: string; shared_worker_context: boolean }> }>(
+      "select goal, verifications from public.list_graph_runs($1::uuid, 50)",
+      [organizationId],
+    );
+    await reset(db);
+    const reviewed = listed.rows.find((row) => row.goal === "Review what the inspectors found");
+    expect(reviewed?.verifications).toHaveLength(2);
+    expect(reviewed?.verifications.map((v) => v.subject_node_key)).toEqual(["inspect_a", "inspect_b"]);
+    expect(reviewed?.verifications[0]).toMatchObject({
+      lens: "correctness",
+      verdict: "REJECT",
+      shared_worker_context: false,
+    });
   });
 
   it("refuses a worker verification that has no subject", async () => {

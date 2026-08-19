@@ -138,6 +138,16 @@ describe("PipelinesConsole", () => {
               { node_key: "rollback", executor: "MODEL", capability: "review", state: "FAILED", provider: "anthropic", model: "claude-opus-5", latency_ms: 9_000, error_message: "The area could not be read." },
             ],
             artifactCounts: { RAW: 2 },
+            verifications: [
+              {
+                subject_node_key: "config",
+                lens: "correctness",
+                verdict: "REJECT",
+                evidence: ["high: Unbounded query"],
+                verifier_provider: "anthropic",
+                shared_worker_context: false,
+              },
+            ],
           },
         ] });
       }
@@ -154,6 +164,36 @@ describe("PipelinesConsole", () => {
     expect(screen.getByText("The area could not be read.")).toBeInTheDocument();
     expect(screen.getByText(/Inputs were incomplete/)).toBeInTheDocument();
     expect(screen.getByText(/2 RAW/)).toBeInTheDocument();
+    // A recorded verdict is shown with its subject, lens, and cited evidence.
+    expect(screen.getByText("Verifications")).toBeInTheDocument();
+    expect(screen.getByText("REJECT")).toBeInTheDocument();
+    expect(screen.getByText("correctness")).toBeInTheDocument();
+    expect(screen.getByText("high: Unbounded query")).toBeInTheDocument();
+  });
+
+  it("renders a run from a payload that predates verifications", async () => {
+    // This is JSON off the network. A response from an older deployment, or
+    // one truncated by a partial rollout, must render the run it does have
+    // rather than blanking the whole view on a missing key.
+    searchParams.mockReturnValue(new URLSearchParams("view=graphs"));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/graphs/runs") {
+        return jsonResponse({ runs: [
+          {
+            graphRunId: "r9", graphId: "g9", goal: "An older payload", topology: "DAG",
+            riskLevel: "green", projectId: "p1", state: "COMPLETED", hadPartialInput: false,
+            startedAt: null, completedAt: null, nodes: [], artifactCounts: {},
+          },
+        ] });
+      }
+      return jsonResponse({ commands: [] });
+    }));
+
+    render(<PipelinesConsole templates={templates} />);
+
+    expect(await screen.findByText("An older payload")).toBeInTheDocument();
+    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
   });
 
   it("names the next step when no graph run exists yet", async () => {
