@@ -59,8 +59,12 @@ impersonated owner succeeded. `20260819000100_graph_worker_execution` (the
 graph executor's service-role claim/persist boundary: `claim_planned_graph`,
 `record_node_state_as_worker`, `record_graph_artifact_as_worker`,
 `complete_graph_run_as_worker` — all create-or-replace plus grants,
-idempotent) is newer still and is outstanding until the next
-`scope=broker-functions` run applies it. Earlier revisions of this
+idempotent) was applied by `scope=broker-functions` run `32208528984` and
+exercised by the first two real worker dispatches (runs `32208699123`,
+`32208975669` — claims, parallel dispatch, containment, and honest FAILED
+closes all recorded on production). Its bounded re-claim revision (a
+failed-only graph is claimable again, at most three runs total) re-applies
+through the same replay-safe `scope=broker-functions` path. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 
