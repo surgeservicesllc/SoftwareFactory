@@ -38,6 +38,8 @@ export type TemplateNode = {
   readonly writes?: readonly ResourceRef[];
   /** Structured output is the default; a node opts into prose explicitly. */
   readonly prose?: boolean;
+  /** Override the capability-derived fan-in tolerance (see below). */
+  readonly toleratesPartialInputs?: boolean;
 };
 
 export type GraphTemplate = {
@@ -99,6 +101,21 @@ function schemaFor(node: TemplateNode): z.ZodTypeAny {
   }
 }
 
+/**
+ * Capabilities that aggregate other nodes' outputs. Their fan-ins tolerate
+ * missing or failed inputs by default (§14): a reduce of nineteen findings
+ * sets, or a synthesis of two surviving reviews, stated as partial, beats
+ * losing the surviving work to the one branch that failed. Implementation,
+ * QA, and review nodes keep the strict rule — they genuinely need their
+ * inputs. A single-dependency node behaves identically either way, since a
+ * tolerant fan-in still requires at least one completed input.
+ */
+const AGGREGATING_CAPABILITIES: ReadonlySet<NodeCapability> = new Set([
+  "extraction",
+  "synthesis",
+  "reporting",
+]);
+
 /** Turn a template's declarative nodes into full contracts the compiler accepts. */
 export function templateNodeContracts(template: GraphTemplate): readonly NodeContract[] {
   return template.nodes.map((node) =>
@@ -115,6 +132,9 @@ export function templateNodeContracts(template: GraphTemplate): readonly NodeCon
       reads: node.reads ?? [],
       writes: node.writes ?? [],
       risk: template.risk,
+      toleratesPartialInputs:
+        node.toleratesPartialInputs
+        ?? (AGGREGATING_CAPABILITIES.has(node.capability) && (node.dependsOn ?? []).length > 0),
     }),
   );
 }

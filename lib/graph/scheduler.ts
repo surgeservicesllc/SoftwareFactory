@@ -97,23 +97,45 @@ export function tick(
 
     const deps = dependenciesOf(node.nodeId, edges);
 
-    const fatal = deps.find((dep) => {
-      const depState = stateOf(dep);
-      return depState === "FAILED" || depState === "CANCELLED";
-    });
-    if (fatal) {
-      blocked.push({
-        nodeId: node.nodeId,
-        because: `Dependency ${fatal} is ${stateOf(fatal)}.`,
+    if (node.toleratesPartialInputs === true && deps.length > 0) {
+      // A tolerant fan-in (§14) waits until every dependency has settled —
+      // completed, failed, cancelled, skipped, or blocked in its own right —
+      // then runs with whatever actually completed. Its executor receives
+      // the missing set, so the output states its own incompleteness. It
+      // still refuses to run on nothing: a synthesis with zero surviving
+      // inputs would be invented, not synthesised.
+      const settled = deps.every((dep) => {
+        const depState = stateOf(dep);
+        return isTerminal(depState) || depState === "BLOCKED";
       });
-      continue;
-    }
+      if (!settled) continue;
+      const anyInput = deps.some((dep) => stateOf(dep) === "COMPLETED");
+      if (!anyInput) {
+        blocked.push({
+          nodeId: node.nodeId,
+          because: "Every dependency failed or was cancelled; a tolerant fan-in still needs at least one completed input.",
+        });
+        continue;
+      }
+    } else {
+      const fatal = deps.find((dep) => {
+        const depState = stateOf(dep);
+        return depState === "FAILED" || depState === "CANCELLED";
+      });
+      if (fatal) {
+        blocked.push({
+          nodeId: node.nodeId,
+          because: `Dependency ${fatal} is ${stateOf(fatal)}.`,
+        });
+        continue;
+      }
 
-    const unmet = deps.filter((dep) => {
-      const depState = stateOf(dep);
-      return depState !== "COMPLETED" && depState !== "SKIPPED";
-    });
-    if (unmet.length > 0) continue;
+      const unmet = deps.filter((dep) => {
+        const depState = stateOf(dep);
+        return depState !== "COMPLETED" && depState !== "SKIPPED";
+      });
+      if (unmet.length > 0) continue;
+    }
 
     if (slots <= 0) {
       deferred.push({

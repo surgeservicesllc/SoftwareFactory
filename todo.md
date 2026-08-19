@@ -182,6 +182,36 @@ answer — "You've hit your session limit · resets 7:30am (UTC)"):
   so the capacity-aware worker has something real to claim after the
   session limit resets at 7:30am UTC.
 
+Round 3 production verification (worker run 32211229999): the re-planted
+graph was claimed, every session-limit refusal was classified (one attempt
+per node, not two), the run closed CANCELLED with the honest detail, and
+the drain stopped with "graphs keep their chances for a dispatch the
+provider will fuel". The graph holds 0 FAILED / 1 CANCELLED of 10. A
+send_later check-in at 07:40 UTC dispatches the worker after the reset.
+
+Round 4 — tolerant fan-in (goal rule 14, the last engine-rule gap):
+
+- `NodeContract.toleratesPartialInputs` (opt-in): the scheduler readies a
+  tolerant fan-in once every dependency has SETTLED (terminal or blocked)
+  with at least one COMPLETED input, instead of blocking on the first
+  failure — the surviving branches' work is synthesized, stated as
+  partial. A tolerant node with zero completed inputs is still blocked:
+  a synthesis with no inputs would be invented, not synthesised. Run-level
+  honesty unchanged: the run still closes PARTIAL when any input failed.
+- Migration `20260819000300_tolerant_fan_in`: guarded graph_nodes column +
+  create_graph_from_plan persists it; claim projection (20260819000100)
+  carries it; worker treats absence as false.
+- Templates: aggregating capabilities (extraction/synthesis/reporting)
+  with dependencies default to tolerant; implementation/QA/review keep the
+  strict rule. Explicit per-node override available.
+- Truthfulness: POST /api/graphs' "no executor is connected" note predated
+  the worker and is corrected.
+- Tests: scheduler tolerance triple (runs with what completed / waits for
+  in-flight / blocks on nothing-completed), tolerant-diamond behavior test
+  through the real chain (synthesize COMPLETED with missing list, run
+  PARTIAL), full graph suite 10/10, all 12 tail-pin chain suites green on
+  the 114-migration chain.
+
 Remaining blockers requiring external services/credentials: executing real
 nodes needs the graph-worker workflow dispatched (or its schedule variable
 set) with the existing subscription secret; file-WRITING graph nodes are

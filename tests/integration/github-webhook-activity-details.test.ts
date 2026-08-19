@@ -46,7 +46,7 @@ async function applyFullMigrationChain(db: PGlite) {
     .filter((file) => /^\d+.*\.sql$/.test(file))
     .sort();
   expect(migrationFiles.at(-1)).toBe(
-    "20260819000200_replant_exhausted_graph.sql",
+    "20260819000300_tolerant_fan_in.sql",
   );
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));

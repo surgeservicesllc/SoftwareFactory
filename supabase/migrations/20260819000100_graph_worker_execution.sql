@@ -129,6 +129,7 @@ begin
         'timeout_ms', n.timeout_ms,
         'max_attempts', n.max_attempts,
         'allow_provider_fallback', n.allow_provider_fallback,
+        'tolerates_partial_inputs', n.tolerates_partial_inputs,
         'input_schema', c.input_schema,
         'output_schema', c.output_schema,
         'reads', c.reads,
