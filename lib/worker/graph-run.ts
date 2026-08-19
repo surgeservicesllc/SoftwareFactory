@@ -156,6 +156,26 @@ export function budgetFromClaim(claim: ClaimedGraph): GraphBudget {
   };
 }
 
+/**
+ * Which kind of artifact a node's output is.
+ *
+ * The schema distinguishes RAW evidence from a REDUCED (lossy) view and a
+ * SYNTHESIS built on top of both, and labelling everything RAW throws that
+ * distinction away — a reviewer auditing a run could no longer tell which
+ * rows are the original findings and which are derived from them. The node's
+ * own declaration answers it: an anchor produces measured evidence, a
+ * deterministic extraction is exactly the reduce step, and synthesis or
+ * reporting nodes produce the written-up view.
+ */
+export function artifactKindForNode(
+  node: Pick<CompiledNode, "executor" | "capability">,
+): "RAW" | "REDUCED" | "SYNTHESIS" | "ANCHOR" {
+  if (node.executor === "ANCHOR") return "ANCHOR";
+  if (node.capability === "synthesis" || node.capability === "reporting") return "SYNTHESIS";
+  if (node.executor === "DETERMINISTIC" && node.capability === "extraction") return "REDUCED";
+  return "RAW";
+}
+
 /** The persistence the runner needs, injected so this module stays pure. */
 export type GraphRunStore = {
   readonly recordNodeState: (
@@ -166,7 +186,7 @@ export type GraphRunStore = {
   ) => Promise<void>;
   readonly recordArtifact: (
     graphRunId: string,
-    kind: "RAW" | "REDUCED" | "SYNTHESIS",
+    kind: "RAW" | "REDUCED" | "SYNTHESIS" | "ANCHOR",
     payload: unknown,
     nodeRunId?: string | null,
   ) => Promise<void>;
@@ -263,7 +283,7 @@ export async function runClaimedGraph(
             model: outcome.model,
             latencyMs: outcome.latencyMs,
           });
-          await store.recordArtifact(claim.graph_run_id, "RAW", outcome.output, nodeRunId);
+          await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
         } else if (
           !outcome.retryable
           || attempt >= (compiled.nodes.find((n) => n.nodeKey === node.nodeKey)?.maxAttempts ?? 1)
