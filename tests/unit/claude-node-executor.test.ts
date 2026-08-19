@@ -130,6 +130,36 @@ describe("buildClaudeNodeExecutor", () => {
   });
 });
 
+describe("the node deadline", () => {
+  it("stops a node that outlives its declared timeout, and says which limit it hit", async () => {
+    // The transport starts no timer of its own; it only mirrors the signal it
+    // is handed. Before this, the executor handed it a controller nothing
+    // aborted, so timeoutMs bounded nothing and a hung call held its
+    // concurrency slot until the workflow was killed.
+    executeMock.mockImplementation((_r: unknown, _p: unknown, signal: AbortSignal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("The Claude run was cancelled.")), { once: true });
+      }));
+
+    const quick = { ...node, timeoutMs: 40 } as unknown as CompiledNode;
+    const result = await buildClaudeNodeExecutor(auth, options)(quick, 1);
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.error).toBe("The node exceeded its 0s timeout and was stopped.");
+    // A timeout may not recur, so it stays retryable — unlike a capacity
+    // refusal, which will not pass until the window resets.
+    expect(result.retryable).toBe(true);
+    expect(result.capacityWithheld).toBe(false);
+  });
+
+  it("leaves a prompt answer inside the deadline untouched", async () => {
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 10, outputTokens: 5 });
+    const result = await buildClaudeNodeExecutor(auth, options)(node, 1);
+    expect(result.status).toBe("SUCCEEDED");
+  });
+});
+
 describe("defaultModelForNode", () => {
   it("tiers models by declared complexity", () => {
     expect(defaultModelForNode({ ...node, modelTier: "ECONOMY" } as unknown as CompiledNode)).toBe("claude-haiku-4-5");
