@@ -20,12 +20,16 @@ concurrency:
   # `refs/heads/gh-readonly-queue/...` ref, so it never shares a group with a
   # pull-request run or with another queue entry, and nothing can cancel it.
   #
-  # Do not add `cancel-in-progress: ${{ github.event_name != 'merge_group' }}`
-  # here. It looks like a useful guard against a cancelled check ejecting a pull
-  # request from the queue, but the ref already prevents that -- and GitHub
-  # silently stops creating workflow runs for the branch when that expression is
-  # present. No run object, no error, no annotation: the pull request simply
-  # never gets checks. That cost an hour to find by bisection.
+  # Do not make cancel-in-progress conditional on the event name. It looks like
+  # a useful guard against a cancelled check ejecting a pull request from the
+  # queue, but the ref above already prevents that, and GitHub silently stops
+  # creating workflow runs for the branch when an expression appears here. No
+  # run object, no error, no annotation: the pull request simply never gets
+  # checks, which is indistinguishable from a dropped webhook.
+  #
+  # The same is true of writing that expression inside a comment, which is how
+  # this note originally read and why it took a second bisection. Describe it in
+  # prose; do not spell the interpolation.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
