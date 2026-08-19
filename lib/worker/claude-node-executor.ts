@@ -1,6 +1,7 @@
 import type { CompiledNode } from "@/lib/graph/compiler";
 import { taskKindForNode } from "@/lib/graph/provider-bridge";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
+import type { NodeInputs } from "@/lib/worker/graph-run";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
 import { executeClaudeThroughCli } from "@/lib/providers/claude-cli-transport";
 import type { ProviderRunRequest } from "@/lib/providers/types";
@@ -35,13 +36,51 @@ export function defaultModelForNode(node: CompiledNode): string {
   return DEFAULT_MODEL;
 }
 
+/**
+ * A provider refusal that means "not now", not "wrong": session limits, rate
+ * limits, overload. Retrying seconds later burns attempts a reset would have
+ * honoured, so these are classified rather than treated as node failures.
+ */
+export function isCapacityRefusal(message: string): boolean {
+  return /session limit|rate limit|too many requests|overloaded|capacity|\b429\b|\b529\b/i.test(message);
+}
+
+/** Enough to carry real findings; bounded so one verbose upstream cannot
+ * drown the prompt. Truncation is labeled, never silent. */
+const MAX_INPUT_CHARS = 20_000;
+
+function renderInputs(inputs: NodeInputs | undefined): string | null {
+  if (!inputs) return null;
+  const parts: string[] = [];
+  for (const [nodeKey, value] of Object.entries(inputs.outputs)) {
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(value, null, 2) ?? String(value);
+    } catch {
+      serialized = String(value);
+    }
+    parts.push(
+      serialized.length > MAX_INPUT_CHARS
+        ? `Input from upstream node "${nodeKey}" (truncated after ${MAX_INPUT_CHARS} characters):\n${serialized.slice(0, MAX_INPUT_CHARS)}`
+        : `Input from upstream node "${nodeKey}":\n${serialized}`,
+    );
+  }
+  if (inputs.missing.length > 0) {
+    parts.push(
+      `Missing inputs: upstream node(s) ${inputs.missing.join(", ")} produced no output. `
+      + "Work with what arrived, and state this incompleteness explicitly in your answer.",
+    );
+  }
+  return parts.length > 0 ? parts.join("\n\n") : null;
+}
+
 export function buildClaudeNodeExecutor(
   auth: ClaudeAuthResolution,
   options: NodeExecutorOptions,
-): (node: CompiledNode, attempt: number) => Promise<NodeExecutionResult> {
+): (node: CompiledNode, attempt: number, inputs?: NodeInputs) => Promise<NodeExecutionResult> {
   const pickModel = options.modelForNode ?? defaultModelForNode;
 
-  return async (node, attempt) => {
+  return async (node, attempt, inputs) => {
     const model = pickModel(node);
     const startedAt = Date.now();
     const request: ProviderRunRequest = {
@@ -70,10 +109,15 @@ export function buildClaudeNodeExecutor(
       "Respond with the requested structured output only.",
     ].join("\n");
 
+    // An edge is a data dependency: what upstream nodes produced travels
+    // into this node's prompt, or the fan-in would run blind.
+    const renderedInputs = renderInputs(inputs);
+    const task = renderedInputs === null ? node.job : `${node.job}\n\n${renderedInputs}`;
+
     try {
       const execution = await executeClaudeThroughCli(
         request,
-        { system, task: node.job },
+        { system, task },
         new AbortController().signal,
         auth,
         {
@@ -100,12 +144,17 @@ export function buildClaudeNodeExecutor(
         latencyMs: Date.now() - startedAt,
       };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "The node execution failed.";
+      const capacityWithheld = isCapacityRefusal(message);
       return {
         status: "FAILED",
-        error: error instanceof Error ? error.message : "The node execution failed.",
+        error: message,
         // A transport or timeout failure may pass on retry; the runner's
         // policy bounds how often that optimism is allowed to cost a turn.
-        retryable: attempt < 3,
+        // A capacity refusal will not pass until the limit resets, so it is
+        // never retried within the run.
+        retryable: !capacityWithheld && attempt < 3,
+        capacityWithheld,
         provider: "anthropic",
         model,
         latencyMs: Date.now() - startedAt,

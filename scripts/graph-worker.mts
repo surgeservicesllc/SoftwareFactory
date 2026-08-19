@@ -91,8 +91,8 @@ async function main() {
       workingDirectory: process.cwd(),
     });
 
-    const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt) => {
-      const outcome = await executor(node, attempt);
+    const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt, inputs) => {
+      const outcome = await executor(node, attempt, inputs);
       if (outcome.status === "FAILED") {
         // The database keeps the error on the node_run; the log keeps it
         // where a person reading the drain can see it without a query.
@@ -105,6 +105,17 @@ async function main() {
       + `${summary.nodesSucceeded} succeeded, ${summary.nodesFailed} failed`
       + `${summary.incompleteness ? ` — ${summary.incompleteness}` : ""}\n`,
     );
+
+    if (summary.capacityWithheld) {
+      // The credential is out of capacity; every further claim would burn a
+      // run against the same refusal. Stop and let a later dispatch — after
+      // the limit resets — drain what remains.
+      process.stdout.write(
+        "The provider is withholding capacity (session or rate limit). "
+        + "Stopping this drain so graphs keep their chances for a dispatch the provider will fuel.\n",
+      );
+      break;
+    }
 
     if (once) break;
   } while (!stopping);

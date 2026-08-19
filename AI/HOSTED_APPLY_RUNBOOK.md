@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 112 migration
+**The current total is 19**, named in the list below. The repository total is 113 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -62,9 +62,17 @@ graph executor's service-role claim/persist boundary: `claim_planned_graph`,
 idempotent) was applied by `scope=broker-functions` run `32208528984` and
 exercised by the first two real worker dispatches (runs `32208699123`,
 `32208975669` — claims, parallel dispatch, containment, and honest FAILED
-closes all recorded on production). Its bounded re-claim revision (a
-failed-only graph is claimable again, at most three runs total) re-applies
-through the same replay-safe `scope=broker-functions` path. Earlier revisions of this
+closes all recorded on production). Its bounded re-claim revision (applied by
+run `32209731806`) was then production-proven by worker run `32209893742`:
+both failed-only graphs were re-claimed to their three-run cap, and every
+node failed on a real provider answer — a session limit — which exposed that
+capacity refusals were spending convergence attempts. The current revision
+therefore closes capacity-voided runs as CANCELLED (retryable, uncounted,
+with a total-run ceiling of 10), and `20260819000200_replant_exhausted_graph`
+re-plants one copy of the owner's exhausted first-day readiness graph (fixed
+id, so replays are no-ops forever) for the capacity-aware worker to claim
+after the limit resets. Both re-apply through the same replay-safe
+`scope=broker-functions` path. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 

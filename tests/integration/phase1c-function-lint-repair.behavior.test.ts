@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260819000100_graph_worker_execution.sql";
+const latestMigration = "20260819000200_replant_exhausted_graph.sql";
 
 describe("Phase 1C function lint repair", () => {
   let db: PGlite;

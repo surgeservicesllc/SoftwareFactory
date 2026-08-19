@@ -168,7 +168,7 @@ export type GraphRunStore = {
   ) => Promise<void>;
   readonly completeRun: (
     graphRunId: string,
-    state: "COMPLETED" | "PARTIAL" | "FAILED" | "BUDGET_STOPPED",
+    state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
     hadPartialInput: boolean,
     detail?: string | null,
   ) => Promise<void>;
@@ -176,11 +176,29 @@ export type GraphRunStore = {
 
 export type GraphRunSummary = {
   readonly outcome: RunResult["outcome"];
-  readonly finalState: "COMPLETED" | "PARTIAL" | "FAILED" | "BUDGET_STOPPED";
+  readonly finalState: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED";
   readonly nodesSucceeded: number;
   readonly nodesFailed: number;
   readonly incompleteness: string | null;
+  /**
+   * True when the run produced nothing because the provider refused every
+   * attempt (session/rate limit). The run closed CANCELLED — void, not a
+   * consumed chance — and the caller should stop draining rather than burn
+   * further graphs against a credential that will refuse them too.
+   */
+  readonly capacityWithheld: boolean;
 };
+
+/**
+ * What a node's incoming edges delivered. An edge is a data dependency, so
+ * the executor receives the actual upstream outputs — not just the fact that
+ * they exist — and an explicit list of dependencies that contributed nothing,
+ * so a fan-in can state its own incompleteness instead of running blind.
+ */
+export type NodeInputs = Readonly<{
+  readonly outputs: Readonly<Record<string, unknown>>;
+  readonly missing: readonly string[];
+}>;
 
 /**
  * Drive one claimed graph to a persisted conclusion.
@@ -195,10 +213,24 @@ export async function runClaimedGraph(
   claim: ClaimedGraph,
   compiled: CompiledGraph,
   store: GraphRunStore,
-  executeNode: (node: CompiledNode, attempt: number) => Promise<NodeExecutionResult>,
+  executeNode: (node: CompiledNode, attempt: number, inputs: NodeInputs) => Promise<NodeExecutionResult>,
 ): Promise<GraphRunSummary> {
   const nodeRunIds = new Map(claim.nodes.map((node) => [node.node_key, node.node_run_id]));
   const started = Date.now();
+
+  // Incoming edges per node: the data each node is owed by its upstreams.
+  const incoming = new Map<string, string[]>();
+  for (const edge of claim.edges) {
+    const into = incoming.get(edge.to_node_key) ?? [];
+    into.push(edge.from_node_key);
+    incoming.set(edge.to_node_key, into);
+  }
+  const completedOutputs = new Map<string, unknown>();
+
+  // Final-attempt failures, split by kind: a run whose every failure was a
+  // capacity refusal never truly executed and must not spend a chance.
+  let finalFailures = 0;
+  let capacityFinalFailures = 0;
 
   const result = await runGraph(compiled, budgetFromClaim(claim), {
     executeNode: async (node, attempt) => {
@@ -206,7 +238,19 @@ export async function runClaimedGraph(
       if (nodeRunId && attempt === 1) {
         await store.recordNodeState(nodeRunId, "RUNNING");
       }
-      const outcome = await executeNode(node, attempt);
+      const outputs: Record<string, unknown> = {};
+      const missing: string[] = [];
+      for (const dependency of incoming.get(node.nodeKey) ?? []) {
+        if (completedOutputs.has(dependency)) {
+          outputs[dependency] = completedOutputs.get(dependency);
+        } else {
+          missing.push(dependency);
+        }
+      }
+      const outcome = await executeNode(node, attempt, { outputs, missing });
+      if (outcome.status === "SUCCEEDED") {
+        completedOutputs.set(node.nodeKey, outcome.output);
+      }
       if (nodeRunId) {
         if (outcome.status === "SUCCEEDED") {
           await store.recordNodeState(nodeRunId, "COMPLETED", null, {
@@ -215,10 +259,16 @@ export async function runClaimedGraph(
             latencyMs: outcome.latencyMs,
           });
           await store.recordArtifact(claim.graph_run_id, "RAW", outcome.output, nodeRunId);
-        } else if (attempt >= (compiled.nodes.find((n) => n.nodeKey === node.nodeKey)?.maxAttempts ?? 1)) {
+        } else if (
+          !outcome.retryable
+          || attempt >= (compiled.nodes.find((n) => n.nodeKey === node.nodeKey)?.maxAttempts ?? 1)
+        ) {
           // Only the final attempt's failure is terminal; a retry in flight
           // is still a RUNNING node, and marking it FAILED early would make
-          // the recovery invisible.
+          // the recovery invisible. A non-retryable failure IS the final
+          // attempt, whatever the attempt counter says.
+          finalFailures += 1;
+          if (outcome.capacityWithheld === true) capacityFinalFailures += 1;
           await store.recordNodeState(nodeRunId, "FAILED", outcome.error, {
             provider: outcome.provider,
             model: outcome.model,
@@ -253,19 +303,32 @@ export async function runClaimedGraph(
     if (state === "FAILED") failed += 1;
   }
 
-  const finalState: GraphRunSummary["finalState"] = result.outcome === "COMPLETED"
-    ? "COMPLETED"
-    : result.outcome === "FAILED"
-      ? "FAILED"
-      : result.outcome === "BUDGET_STOPPED"
-        ? "BUDGET_STOPPED"
-        : "PARTIAL";
+  // A run in which nothing succeeded and every terminal failure was a
+  // provider capacity refusal never truly executed: it closes CANCELLED so
+  // the graph keeps its chances for a worker the provider will actually
+  // fuel. If anything succeeded, the run is a real (partial) answer and is
+  // judged as one.
+  const capacityVoided = succeeded === 0
+    && finalFailures > 0
+    && capacityFinalFailures === finalFailures;
+
+  const finalState: GraphRunSummary["finalState"] = capacityVoided
+    ? "CANCELLED"
+    : result.outcome === "COMPLETED"
+      ? "COMPLETED"
+      : result.outcome === "FAILED"
+        ? "FAILED"
+        : result.outcome === "BUDGET_STOPPED"
+          ? "BUDGET_STOPPED"
+          : "PARTIAL";
 
   await store.completeRun(
     claim.graph_run_id,
     finalState,
     result.incompleteness !== null,
-    result.incompleteness,
+    capacityVoided
+      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
+      : result.incompleteness,
   );
 
   return {
@@ -274,5 +337,6 @@ export async function runClaimedGraph(
     nodesSucceeded: succeeded,
     nodesFailed: failed,
     incompleteness: result.incompleteness,
+    capacityWithheld: capacityVoided,
   };
 }

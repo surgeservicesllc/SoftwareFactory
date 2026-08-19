@@ -136,14 +136,51 @@ The missing wire, built by extension (no duplicate systems):
   key can leak in).
 
 Verified against the real migrated schema
-(tests/integration/graph-worker-execution.behavior.test.ts, 5 tests):
+(tests/integration/graph-worker-execution.behavior.test.ts, 6 tests):
 atomic claim with whole projection + second-claimer-finds-nothing +
 approval-gated graphs wait; the diamond executes with MEASURED parallel
 fan-out (maxInFlight >= 3) and synthesis last; real RPC persistence (node_runs
 all COMPLETED, run COMPLETED, 4 RAW artifacts); one failed inspector is
 CONTAINED (siblings COMPLETED, dependent SKIPPED, run PARTIAL with
-had_partial_input); terminal protection on nodes and runs. Templates-manager
+had_partial_input); terminal protection on nodes and runs; bounded re-claim
+(a failed-only graph is claimable again with a fresh run, capped at three
+total runs; answered graphs never re-enter the queue). Templates-manager
 copy updated to name the executor honestly.
+
+Driven against production: migration applied (run 32208528984), first
+worker dispatches claimed both real graphs and closed them honestly FAILED
+— run 32208699123 died at import (server-only marker → shim, PR #237),
+run 32208975669 dispatched all nodes in parallel but the CLI was missing
+(install pinned + node-failure logging, PR #238). The convergence gap that
+left those graphs dead — only never-run graphs were claimable — is closed
+by PR #239: failed-only graphs re-enter the queue for at most three total
+runs, so an infrastructure fix makes the next dispatch execute them for
+real instead of a person re-planning.
+
+Round 3, from worker run 32209893742 (the re-claim's own production proof:
+both graphs re-claimed to their caps, every node failing on a REAL provider
+answer — "You've hit your session limit · resets 7:30am (UTC)"):
+
+- Edges now carry data in the worker path. `runClaimedGraph` hands each
+  node its upstreams' actual outputs plus an explicit missing list, and the
+  executor folds them into the prompt (bounded, labeled truncation; missing
+  inputs demand stated incompleteness). Before this, a synthesis node ran
+  blind — the exact silent-quality failure the goal bans.
+- Capacity refusals are classified, not spent. A session/rate-limit failure
+  is non-retryable within the run (`isCapacityRefusal`), a run in which
+  nothing succeeded and every failure was a refusal closes CANCELLED (void,
+  with an honest detail), and the drain STOPS instead of burning the queue
+  against an exhausted credential. `claim_planned_graph` treats CANCELLED
+  as retryable-but-uncounted: the three-attempt convergence bound counts
+  only FAILED runs, under a hard total-run ceiling of 10.
+- A non-retryable node failure is recorded FAILED at once (previously a
+  node with attempts remaining could strand its node_run RUNNING forever),
+  and `complete_graph_run_as_worker` refuses non-terminal "closures".
+- `20260819000200_replant_exhausted_graph` re-plants ONE copy (fixed id,
+  replays no-op forever) of the owner's first-day readiness graph, whose
+  three chances were all consumed by infrastructure faults now fixed —
+  so the capacity-aware worker has something real to claim after the
+  session limit resets at 7:30am UTC.
 
 Remaining blockers requiring external services/credentials: executing real
 nodes needs the graph-worker workflow dispatched (or its schedule variable
