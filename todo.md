@@ -248,6 +248,31 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+Round 8 — THE FULL CHAIN EXECUTED IN PRODUCTION (drain 32254860997,
+graph run ca347ab9-5e4c-4f9b-a60a-cd357c5696bb):
+
+- **PARTIAL: 3 succeeded, 4 failed — and no node "never reported".** Every
+  previous drain listed reduce and report as never dispatched. This one ran
+  them: the rollback inspector completed through the CLI, the DETERMINISTIC
+  reduce folded its findings in code (no model turn spent), and the report
+  synthesis completed from the reduce output carried in its prompt. That is
+  fan-out → parallel model execution → deterministic reduction → synthesis,
+  end to end, on production data, with the incompleteness stated.
+- The tolerant fan-in is what made it possible: four inspectors failed, and
+  under the old strict rule reduce and report would have been SKIPPED and
+  the surviving inspector's work thrown away. Instead the graph produced a
+  real report that says exactly which four inputs are missing.
+- Root cause of the four failures, found by reading the log rather than
+  guessing: "Reached maximum number of turns (8)" — while the executor
+  declared 24. `MAX_TURNS_CEILING = 8` in the transport was **silently
+  clamping** the declared budget, so round 7's fix looked correct and
+  changed nothing. Ceiling raised to the measured 24, and the two numbers
+  are now pinned against each other by a test (a declared budget quietly
+  discarded is a change that looks made and is not).
+- Also fixed this round: artifacts were all labelled RAW, discarding the
+  schema's RAW/REDUCED/SYNTHESIS/ANCHOR distinction exactly where a
+  reviewer needs it. `artifactKindForNode` labels by declaration.
+
 Round 7 — the first real production node success, and the turn ceiling
 (worker run 32228988434, post-reset live proof):
 

@@ -17,8 +17,14 @@ run `32228988434`, graph run `e51c57a5-…` — the rollback inspector completed
 through the CLI, its RAW artifact was recorded, and the run closed PARTIAL
 with the incompleteness stated (every other node hit the worker's old
 8-turn ceiling, since raised to 24 with an eight-minute MODEL-node
-timeout). The stronger claim — a full seven-node COMPLETED run — is still
-withheld until a drain log shows it; migration `20260819000500` plants the
+timeout). **The full chain has now executed end to end in production**: drain run
+`32254860997`, graph run `ca347ab9-…` — an inspector completed through the
+CLI, the deterministic reduce folded its findings in code, and the report
+synthesis completed from the reduce output, with no node left undispatched
+and the incompleteness stated. The remaining claim — a run where *every*
+inspector succeeds — is still withheld: four failed on a transport turn
+ceiling that silently clamped the declared budget, now raised to the
+measured 24 and pinned by test; migration `20260819000500` plants the
 copy that next dispatch runs with the corrected envelope. CI on main is
 fully green on the merged state (run `32216103242`, 1605 browser tests).
 

@@ -22,9 +22,13 @@ artifact recorded, run closed PARTIAL honestly). The residual failures were
 the executor's own 8-turn ceiling — raised to 24 by measurement, with MODEL
 template nodes now carrying an eight-minute timeout, and `buildLaunchPlan`
 now passing the compiled timeout/attempts instead of letting database
-defaults override the planner. `20260819000500` plants the final fixed-id
-copy with the corrected envelope; the next dispatch should drive it to a
-full COMPLETED with a report artifact. CI on main is fully green
+defaults override the planner. Drain `32254860997` (graph run `ca347ab9-…`) then executed **the whole
+chain**: inspector → deterministic reduce → report synthesis, nothing left
+undispatched, closed PARTIAL with the four failed inputs named. Those four
+failed because the transport's `MAX_TURNS_CEILING` was silently clamping
+the executor's declared 24 back to 8 — raised to 24 and pinned against the
+executor's constant by a test, so the pair cannot drift again. The next
+dispatch is the attempt at every inspector succeeding. CI on main is fully green
 (run `32216103242`) after the outgrown e2e ceiling was raised (PR #248).
 The worker's schedule stays off until the repo variable
 `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED` is set. File-writing nodes remain
