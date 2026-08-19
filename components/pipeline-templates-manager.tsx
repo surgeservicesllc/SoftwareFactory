@@ -597,7 +597,15 @@ function TemplateUseDialog({
         ) : null}
         <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Close</button>
       </div>
-      {result ? <p className="mt-3 text-sm text-accent" aria-live="polite">{result}</p> : null}
+      {result ? (
+        <p className="mt-3 text-sm text-accent" aria-live="polite">
+          {result}{" "}
+          <Link href="/solutions/pipelines?view=graphs" className="underline">
+            Watch it on Graph runs
+          </Link>
+          .
+        </p>
+      ) : null}
       {error ? <p className="mt-3 text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
     </DialogShell>
   );

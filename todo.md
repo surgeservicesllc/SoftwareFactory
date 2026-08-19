@@ -229,6 +229,25 @@ Round 4b — executors dispatch by declaration, not by assumption:
   live output shapes, then tightens; enforcing now could fail the first
   live nodes on a shape the prompt merely suggests.
 
+Round 5 — graph runs become visible (nothing read graph_runs/node_runs/
+graph_artifacts; results landed in tables no human saw):
+
+- Migration `20260819000400_list_graph_runs`: member-facing definer read
+  (membership-checked, authenticated only, service_role revoked) returning
+  each run with per-node truth (state/provider/model/latency/error
+  verbatim) and artifact counts. Also widens node_runs' provider check to
+  admit 'deterministic' — caught before production: the old check would
+  have failed the first deterministic COMPLETED record.
+- GET /api/graphs/runs (no derivation) + a "Graph runs" view on the
+  pipelines console: state-badged rows, expandable per-node tables,
+  incompleteness stated when the database says so, empty state naming the
+  next step. The Use-template dialog's success line now links straight to
+  it. PRs #243 (executor dispatch), #244 (visibility).
+- Known limitation recorded: a stored DISCOVERY_GRAPH executes as its
+  recorded DAG — the worker does not add rounds mid-run; bounded discovery
+  stays engine-side (canary-proven) until stored-graph discovery is a
+  designed increment.
+
 Remaining blockers requiring external services/credentials: executing real
 nodes needs the graph-worker workflow dispatched (or its schedule variable
 set) with the existing subscription secret; file-WRITING graph nodes are
