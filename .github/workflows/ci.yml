@@ -10,9 +10,16 @@ on:
 permissions:
   contents: read
 
+# A push to main must never cancel the verification of the commit before it.
+# Rapid merges repeatedly left main with a `cancelled` CI verdict (runs
+# 32272713212, 32216103242) — merges landed with no completed full-suite proof
+# behind them, which is indistinguishable from a suite that was never run.
+# Pull-request refs keep the supersede behaviour: a newer push to the same
+# branch makes the older run's answer worthless. Main pushes get a per-commit
+# group so each commit is verified on its own and nothing pre-empts it.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   quality:
