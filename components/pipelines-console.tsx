@@ -49,6 +49,14 @@ export type PipelineTemplateSummary = {
   topology: string | null;
   nodeCount: number | null;
   maxParallelism: number | null;
+  /**
+   * Nodes needing a workspace with real command execution — run the tests,
+   * attempt the reproduction. The analysis worker provides no such executor
+   * and, since migration 20260819001000, does not claim a graph containing
+   * one. A person choosing this template should know that before the graph is
+   * recorded, not after it sits unclaimed.
+   */
+  anchorNodeCount: number | null;
   compiles: boolean;
 };
 

@@ -80,6 +80,7 @@ export async function GET() {
         topology: compiled.ok ? compiled.preview.topology : null,
         nodeCount: compiled.ok ? compiled.preview.nodes.length : null,
         maxParallelism: compiled.ok ? compiled.preview.maxParallelism : null,
+        anchorNodeCount: compiled.ok ? compiled.preview.anchorNodeCount : null,
         errors: compiled.ok ? [] : compiled.errors,
       }];
     });
