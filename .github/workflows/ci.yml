@@ -2,6 +2,12 @@ name: CI
 
 on:
   pull_request:
+  # The merge queue builds a candidate commit containing this pull request on
+  # top of everything ahead of it, and waits for the required checks to report
+  # against *that* commit. Without this trigger the checks never fire on a
+  # queued candidate and every merge blocks forever, so this line is a
+  # prerequisite for enabling the queue rather than an optimisation.
+  merge_group:
   push:
     branches:
       - main
@@ -12,7 +18,11 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a queued candidate. Each entry has its own
+  # `refs/heads/gh-readonly-queue/...` ref, so nothing should collide -- but a
+  # cancelled check reads to the queue as a failed one, and it would eject the
+  # pull request and look like flakiness rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   quality:
