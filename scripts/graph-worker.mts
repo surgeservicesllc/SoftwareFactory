@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
+import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import { compileClaimedGraph, parseClaimedGraph, repositoryMismatch, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
@@ -118,7 +119,10 @@ async function main() {
               error:
                 `Anchor node ${node.nodeKey} needs real command execution (tests, probes), `
                 + "which the read-only analysis worker does not wire. Anchor evidence belongs "
-                + "to the Phase 1C workspace path.",
+                + "to the Phase 1C workspace path. Reaching this means the claim was served "
+                + `by a database that predates executor matching (this worker declares `
+                + `${WORKER_SUPPORTED_EXECUTORS.join(", ")}); apply 20260819001000 and the `
+                + "graph will wait for a worker that can run it instead of spending a run.",
             }
           : await executor(node, attempt, inputs);
       if (outcome.status === "FAILED") {
