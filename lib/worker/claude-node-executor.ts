@@ -1,5 +1,3 @@
-import "server-only";
-
 import type { CompiledNode } from "@/lib/graph/compiler";
 import { taskKindForNode } from "@/lib/graph/provider-bridge";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
