@@ -26,7 +26,7 @@ on:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
           applies only the idempotent broker migrations
-          (20260816000400 through 20260819001100) and records them in history;
+          (20260816000400 through 20260819001200) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
           "probe" changes nothing at all and just reports which objects already
@@ -197,7 +197,8 @@ jobs:
             supabase/migrations/20260819000800_list_graph_run_verifications.sql \
             supabase/migrations/20260819000900_record_verification_as_worker.sql \
             supabase/migrations/20260819001000_claim_by_executor_capability.sql \
-            supabase/migrations/20260819001100_usage_survives_a_rate_limited_probe.sql
+            supabase/migrations/20260819001100_usage_survives_a_rate_limited_probe.sql \
+            supabase/migrations/20260819001200_replant_for_the_complete_run.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -245,6 +246,7 @@ jobs:
           repair 20260819000900
           repair 20260819001000
           repair 20260819001100
+          repair 20260819001200
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
@@ -345,6 +347,17 @@ jobs:
               from pg_constraint
              where conname = 'bots_credential_ref_not_privileged';"
           echo "no row = the constraint is absent; covers_all_five_added = f means the parity fix has not run."
+          echo ""
+          echo "The last five usage observations, newest first — the measured evidence behind"
+          echo "the Bot Manager's usage line. The detail column is constraint-guaranteed"
+          echo "secret-free (<=400 chars, text_has_likely_secret refused), so printing it in a"
+          echo "log is safe, and it is the only way to read WHY a probe failed without a"
+          echo "database console: the counts in the auth-broker log say only that it failed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select observed_at, status, left(coalesce(detail, ''), 200) as detail
+              from public.ai_account_usage_observations
+             order by observed_at desc
+             limit 5;" || echo "usage observations table absent: migration 20260816001500 has not run here."
           echo ""
           echo "Ownership and grants for the AI-account section, which is where a 42501 comes from."
           echo "A SECURITY DEFINER function runs as its owner: if the function and the tables it"
