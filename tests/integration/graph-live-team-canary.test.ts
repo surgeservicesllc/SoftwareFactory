@@ -11,6 +11,7 @@ import { defineNode, validateNodeOutput } from "@/lib/graph/contracts";
 import { runGraph, type NodeExecutionResult } from "@/lib/graph/runner";
 import { DEFAULT_RETRY_POLICY } from "@/lib/graph/types";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
+import { isCapacityRefusal } from "@/lib/worker/claude-node-executor";
 import { executeClaudeThroughCli } from "@/lib/providers/claude-cli-transport";
 import { PROVIDER_RESULT_JSON_SCHEMA } from "@/lib/providers/contract";
 import type { ProviderRunRequest } from "@/lib/providers/types";
@@ -106,6 +107,14 @@ type Artifact = z.infer<typeof artifactSchema>;
  * Both stay far below the transport's ceiling, because a canary should fail
  * when the system is broken, not when a budget was set by guess.
  */
+/**
+ * Thrown when the provider refuses to fuel the canary at all. Distinct from
+ * every other failure on purpose: a session or rate limit says nothing about
+ * whether the system works, and a canary that reports it as breakage trains
+ * its readers to ignore red runs.
+ */
+class ProviderOutOfCapacity extends Error {}
+
 const SYNTHESIS_TURNS = 6;
 const INSPECTOR_TURNS = 12;
 
@@ -151,6 +160,22 @@ const VIA_PROVIDER_LAYER = "resolution" in claudeAuth;
 
 /** One real Claude execution. A new session each time — that is the isolation. */
 async function runClaude(
+  system: string,
+  task: string,
+  options: { readonly readOnly: boolean; readonly maxTurns: number },
+): Promise<Artifact> {
+  try {
+    return await runClaudeOnce(system, task, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // The same predicate the graph worker uses, so "not now" means the same
+    // thing in both places rather than being re-guessed here.
+    if (isCapacityRefusal(message)) throw new ProviderOutOfCapacity(message);
+    throw error;
+  }
+}
+
+async function runClaudeOnce(
   system: string,
   task: string,
   options: { readonly readOnly: boolean; readonly maxTurns: number },
@@ -270,7 +295,7 @@ const validate = (target: CompiledNode, output: unknown) => {
 };
 
 describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero API tokens", () => {
-  it("fans out, synthesizes, and verifies with a fresh context", async () => {
+  it("fans out, synthesizes, and verifies with a fresh context", async (ctx) => {
     const graph = buildGraph();
     expect(graph.maxParallelism).toBe(INSPECTORS.length);
 
@@ -288,10 +313,18 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
     // Proves structurally that nothing the implementers saw reached the verifier.
     let verifierPrompt = "";
 
-    const result = await runGraph(
-      graph,
-      { ...DEFAULT_GRAPH_BUDGET, maxNodes: 10, maxConcurrentNodes: INSPECTORS.length },
-      {
+    // A canary answers one question: is the system broken? A provider that
+    // withholds capacity — a session or rate limit — does not answer it
+    // either way, and reporting that as a red run tells whoever reads CI
+    // that something is wrong with the code when nothing is. This is not a
+    // disabled test: the run is attempted in full, and only a refusal that
+    // names itself converts the verdict into an explicit "no verdict".
+    let result: Awaited<ReturnType<typeof runGraph>>;
+    try {
+      result = await runGraph(
+        graph,
+        { ...DEFAULT_GRAPH_BUDGET, maxNodes: 10, maxConcurrentNodes: INSPECTORS.length },
+        {
         executeNode: async (target: CompiledNode): Promise<NodeExecutionResult> => {
           inFlight += 1;
           widestBatch = Math.max(widestBatch, inFlight);
@@ -338,7 +371,19 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
         },
         validateOutput: validate,
       },
-    );
+      );
+    } catch (error) {
+      if (error instanceof ProviderOutOfCapacity) {
+        // No verdict, stated as such. Skipping here is not a disabled test:
+        // the run was attempted in full and the provider declined to fuel it,
+        // so the honest report is that this proves nothing either way.
+        ctx.skip(
+          `The provider withheld capacity, so this canary rendered no verdict: ${error.message}`,
+        );
+        return;
+      }
+      throw error;
+    }
 
     // 1. The run completed and accounted for every node.
     expect(result.outcome).toBe("COMPLETED");
