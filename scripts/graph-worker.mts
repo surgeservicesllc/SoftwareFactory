@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
+import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
 import { compileClaimedGraph, parseClaimedGraph, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
@@ -92,7 +93,21 @@ async function main() {
     });
 
     const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt, inputs) => {
-      const outcome = await executor(node, attempt, inputs);
+      // Dispatch by declared executor. A NONE-tier node never touches the
+      // model, and work this worker cannot honestly perform fails with the
+      // reason instead of being quietly routed to the CLI.
+      const outcome = node.executor === "DETERMINISTIC"
+        ? executeDeterministicNode(node, inputs)
+        : node.executor === "ANCHOR"
+          ? {
+              status: "FAILED" as const,
+              retryable: false,
+              error:
+                `Anchor node ${node.nodeKey} needs real command execution (tests, probes), `
+                + "which the read-only analysis worker does not wire. Anchor evidence belongs "
+                + "to the Phase 1C workspace path.",
+            }
+          : await executor(node, attempt, inputs);
       if (outcome.status === "FAILED") {
         // The database keeps the error on the node_run; the log keeps it
         // where a person reading the drain can see it without a query.
