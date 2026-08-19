@@ -3,7 +3,11 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 117 migration
+**The current total is 19**, named in the list below — as measured. One further migration,
+`20260816001600_phase2c_resource_reservations`, was added locally *after* that probe run and is
+also unhosted, so the next probe should return twenty. It is deliberately not appended to the
+list below: that list is a measurement, and adding an unmeasured version to it would turn
+evidence into assertion. The repository total is 118 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

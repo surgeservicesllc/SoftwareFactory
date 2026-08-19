@@ -26,12 +26,18 @@ const API_KEY = "sk-ant-api03-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 function expectFailure(environment: Record<string, string | undefined>, code: string) {
   try {
     resolveClaudeAuth(environment);
-    throw new Error(`Expected ${code} but resolution succeeded.`);
   } catch (error) {
-    expect(error).toBeInstanceOf(ClaudeAuthError);
-    expect((error as ClaudeAuthError).code).toBe(code);
-    return error as ClaudeAuthError;
+    // Re-thrown rather than asserted against, so an unexpected error type
+    // surfaces as itself instead of as a confusing instanceof failure.
+    if (!(error instanceof ClaudeAuthError)) throw error;
+    expect(error.code).toBe(code);
+    return error;
   }
+  // Outside the try on purpose. Thrown inside it, this sentinel was caught by
+  // its own catch, and a resolution that wrongly succeeded reported "expected
+  // Error to be an instance of ClaudeAuthError" -- true, useless, and pointing
+  // at the wrong thing. The test failed either way; the message never arrived.
+  throw new Error(`Expected ${code} but resolution succeeded.`);
 }
 
 describe("choosing a mode", () => {

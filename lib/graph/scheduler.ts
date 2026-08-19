@@ -95,6 +95,13 @@ export function tick(
       continue;
     }
 
+    // Already blocked is already decided. BLOCKED is only reachable through a
+    // dependency that failed, was cancelled, or was itself blocked, and none of
+    // those can un-happen — so re-deciding it every tick would re-report the
+    // same node forever, and a caller writing an event per blocked node would
+    // write one on every tick rather than once.
+    if (current === "BLOCKED") continue;
+
     const deps = dependenciesOf(node.nodeId, edges);
 
     if (node.toleratesPartialInputs === true && deps.length > 0) {
@@ -118,14 +125,31 @@ export function tick(
         continue;
       }
     } else {
+      // BLOCKED counts as fatal, not merely unmet.
+      //
+      // Without it, blocking stopped after one hop: in a -> b -> c with a
+      // FAILED, b was blocked and c sat PENDING forever, because c's only
+      // dependency was BLOCKED rather than FAILED. The graph then never
+      // reported `complete` and reported `stalled` instead — which claims
+      // something is wrong, when a failure had simply made a subtree
+      // unreachable, the most ordinary outcome there is. Blocking spreads one
+      // hop per tick, reaching a fixpoint the way the rest of this function
+      // does. The tolerant branch above already treats BLOCKED as settled, so
+      // the two agree about what a blocked dependency means.
       const fatal = deps.find((dep) => {
         const depState = stateOf(dep);
-        return depState === "FAILED" || depState === "CANCELLED";
+        return depState === "FAILED" || depState === "CANCELLED" || depState === "BLOCKED";
       });
       if (fatal) {
+        const fatalState = stateOf(fatal);
         blocked.push({
           nodeId: node.nodeId,
-          because: `Dependency ${fatal} is ${stateOf(fatal)}.`,
+          because: fatalState === "BLOCKED"
+            // Named differently so a reader can tell the origin of a failure
+            // from the nodes downstream of it, which is the difference between
+            // one thing to investigate and twenty.
+            ? `Dependency ${fatal} is blocked, so this cannot run either.`
+            : `Dependency ${fatal} is ${fatalState}.`,
         });
         continue;
       }
@@ -166,8 +190,16 @@ export function tick(
   const terminalCount = nodes.filter((node) => isTerminal(stateOf(node.nodeId))).length;
   const blockedCount = nodes.filter((node) => stateOf(node.nodeId) === "BLOCKED").length;
   const complete = terminalCount + blockedCount === nodes.length;
+  // Blocking something is progress, so a tick that blocks is not a stall. While
+  // a failure propagates down a chain there are ticks that start nothing and
+  // defer nothing, and calling those stalled would raise an alarm about a graph
+  // that is shutting down exactly as designed.
   const stalled =
-    !complete && start.length === 0 && state.running.size === 0 && deferred.length === 0;
+    !complete
+    && start.length === 0
+    && state.running.size === 0
+    && deferred.length === 0
+    && blocked.length === 0;
 
   return { start, blocked, deferred, complete, stalled };
 }

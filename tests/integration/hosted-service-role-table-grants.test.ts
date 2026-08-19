@@ -123,6 +123,8 @@ const publicTables = [
   "resource_assignments",
   "resource_breaker_events",
   "resource_breakers",
+  "resource_rate_events",
+  "resource_reservations",
   "rollback_operations",
   "scheduling_decisions",
   "synthetic_journeys",

@@ -2470,12 +2470,17 @@ Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` Â
 
 ### Genuinely open, and why
 
-- **Nothing here is persisted.** All three are pure functions; the caller owns the
-  reservation set and the rate window, so a process restart forgets both. The plan rows
-  say **COMPLETE (in-process; not yet persisted)** rather than COMPLETE, deliberately.
-  Making them durable is the next real unit of work in this workstream, and the pattern
-  to reuse is the `operations_events` one (`for update skip locked`, unique dedupe keys,
-  bounded attempts) rather than a second invention.
+- **Persistence now exists but is not adopted.** Migration `20260815000700` adds
+  `resource_reservations` and `resource_rate_events`, and `acquire_resource_reservation`
+  checks and takes a slot under an advisory lock in one statement â€” closing the failure
+  no TypeScript could reach, where two processes each hold their own reservation list and
+  each takes the same last slot. `lib/resources/reservation-store.ts` calls it and
+  **fails closed**, unlike `store.ts`: an unreadable breaker means "no observed failures"
+  and work proceeds, but unreadable *usage* means "unknown", and admitting on unknown
+  deletes the limit during exactly the incident it exists for. What is left: the
+  migration is **unhosted** (one of nine), and **no live path calls it** â€” `dispatch`
+  still routes against an in-memory set, which is right within one tick and bounds
+  nothing across processes. Wiring that is the next unit of work.
 - **Nothing calls `dispatch` yet.** It is reachable and tested but not on the 1C claim
   path, for the reason recorded in `CURRENT_STATE.md`: that path is hosted and live,
   nothing executes regardless, and changing it now buys no behaviour while risking
@@ -2493,6 +2498,26 @@ Closes every agent-actionable row left in `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` Â
    `20260814002300`, with `scripts/hosted-schema-audit.mts` reporting 0 outstanding and
    0 indeterminate. **8** migrations are unapplied to hosted: `20260814002400`,
    `20260814002500`, and the six Phase 2E files. Owner action, runbook unchanged.
+
+### Found by the end-to-end audit, left as a judgement call
+
+- **`lib/supabase/browser.ts` has no callers.** `createSupabaseBrowserClient` is exported
+  and imported by nothing; the console components use `isBrowserSupabaseConfigured` from
+  `browser-config.ts` and fetch through API routes instead. Not deleted, deliberately:
+  it is ambiguous whether this is dead by accident or reserved for client-side use,
+  `tests/integration/supabase-auth-routes.contract.test.ts` enumerates the file in its
+  no-service-role-credential check, and several agents work this repository in parallel,
+  so a unilateral delete is the kind of change that collides. Decide it, then act.
+
+The rest of the audit found nothing, which is worth recording so the next agent does not
+repeat it: every API route enforces authorization through a shared helper
+(`requireActiveOrganization`, `operationsContext`, `tenantRpc*`, `requireGitHubUser`,
+`requireAuthenticatedUser`, or webhook signature verification); every public table has RLS
+**and** FORCE RLS; no SECURITY DEFINER function is missing `set search_path`; the only
+function granted to `anon` is the public newsletter signup; `read_provider_credential` is
+service-role-only and returns ciphertext useless without a key deliberately absent from the
+database. No `.only`, no empty catch blocks, no floating promises, no `console.log` in
+shipped code, no duplicate migration version prefixes.
 
 ### Owner-only, not agent-actionable
 
