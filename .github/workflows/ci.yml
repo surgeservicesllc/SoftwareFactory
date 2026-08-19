@@ -113,11 +113,25 @@ jobs:
         # loop so the job budget stays for the tests.
         timeout-minutes: 14
         run: |
+          # `timeout` kills the npx wrapper, but a sudo'd apt-get child
+          # survives it and keeps the dpkg lock — run 32285303899's second
+          # and third attempts died instantly on "could not get lock ...
+          # held by process 2807" left by the first. Between attempts, kill
+          # any orphaned apt/dpkg, wait for the locks to free, and repair
+          # half-configured packages, so a retry is a real retry.
           for attempt in 1 2 3; do
             if timeout 240 npx playwright install --with-deps chromium; then
               exit 0
             fi
-            echo "Install attempt ${attempt} failed or hung; retrying."
+            echo "Install attempt ${attempt} failed or hung; clearing stale apt state and retrying."
+            sudo killall -q apt-get apt dpkg 2>/dev/null || true
+            for i in $(seq 1 30); do
+              if ! sudo fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+            sudo dpkg --configure -a 2>/dev/null || true
           done
           echo "Chromium could not be installed after 3 bounded attempts."
           exit 1
