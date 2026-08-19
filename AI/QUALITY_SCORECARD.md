@@ -1,6 +1,21 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-19
+
+**Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
+boundary (migration `20260819000100`), the worker
+(`scripts/graph-worker.mts`), edge data flow, capacity-refusal voiding, and
+the one-time re-plant (`20260819000200`) are locally certified —
+`tests/integration/graph-worker-execution.behavior.test.ts` (9 cases against
+the full migrated chain, including measured parallel fan-out and both
+convergence caps) and `tests/unit/claude-node-executor.test.ts` (8 cases) —
+and hosted-behaviorally observed as far as the provider allowed: production
+worker runs 32208699123 / 32208975669 / 32209893742 demonstrate claim,
+parallel dispatch, containment, honest closure, and bounded re-claim on the
+live database. **No node has yet succeeded in production**: every attempt so
+far met an infrastructure fault or the subscription session limit. That
+claim is withheld until a drain log shows real node successes and the
+graph's artifacts exist in production rows.
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to

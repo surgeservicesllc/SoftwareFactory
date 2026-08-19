@@ -23,7 +23,25 @@ that account's credential slot (`/api/bots/connect/provision`,
 at once. Per-posting execution preferences (model override + work effort,
 migration `20260817001100`, hosted) surface on each posting card. No
 execution-authority change anywhere in this surface: assignment remains
-routing intent, graphs record PLANNED work, and the page says so.
+routing intent, and the page says what actually runs.
+
+**Addendum, 2026-08-19 (graphs execute now — ADR-092):** recorded graphs no
+longer dead-end at PLANNED. The graph executor worker
+(`scripts/graph-worker.mts` + `.github/workflows/graph-worker.yml`, manual
+dispatch; schedule gated on `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED`) claims
+them through the service-role boundary of migration `20260819000100`
+(`claim_planned_graph` → atomic RUNNING run + PENDING node_runs + whole
+projection; `record_node_state_as_worker`; `record_graph_artifact_as_worker`;
+`complete_graph_run_as_worker`), recompiles them through the console's own
+compiler, and runs nodes in parallel up to the graph's budget through the
+subscription transport — read-only analysis tools only, models tiered per
+node. Edges carry data (each node's prompt receives its upstreams' outputs,
+missing inputs demand stated incompleteness), failure is contained (siblings
+finish, dependents SKIPPED, runs close PARTIAL/FAILED honestly), failed-only
+graphs are re-claimable up to three FAILED runs, and provider capacity
+refusals void the run as CANCELLED (uncounted, total ceiling 10) and stop
+the drain. Applied and exercised on production: runs 32208699123,
+32208975669, 32209893742 each drove the loop one real defect further.
 
 **Addendum, 2026-08-16 (per-account usage evidence):** migration
 `20260816001500_ai_account_usage_observations` adds append-only provider-usage
