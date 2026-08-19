@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import type { GraphRunStore } from "@/lib/worker/graph-run";
 
 /**
@@ -26,6 +27,10 @@ export class SupabaseGraphStore implements GraphRunStore {
   async claimPlannedGraph(): Promise<unknown | null> {
     const { data, error } = await this.client.rpc("claim_planned_graph", {
       p_worker_id: this.workerId,
+      // Declared, not defaulted: the claim skips graphs whose nodes need an
+      // executor this worker does not provide, so those graphs keep their
+      // budget for a worker that can run them.
+      p_supported_executors: [...WORKER_SUPPORTED_EXECUTORS],
     });
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;

@@ -57,7 +57,7 @@ describe("Phase 2C resource persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260819000900_record_verification_as_worker.sql");
+    expect(migrationFiles.at(-1)).toBe("20260819001000_claim_by_executor_capability.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }

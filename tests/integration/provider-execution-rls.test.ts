@@ -120,7 +120,7 @@ describe("Phase 2A provider execution layer", () => {
     const migrationFiles = (await readdir(migrationsRoot))
       .filter((file) => /^\d+.*\.sql$/.test(file))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260819000900_record_verification_as_worker.sql");
+    expect(migrationFiles.at(-1)).toBe("20260819001000_claim_by_executor_capability.sql");
     for (const migrationFile of migrationFiles) {
       await db.exec(await source(`supabase/migrations/${migrationFile}`));
     }
