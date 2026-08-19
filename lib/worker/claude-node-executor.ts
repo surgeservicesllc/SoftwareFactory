@@ -29,6 +29,16 @@ export type NodeExecutorOptions = Readonly<{
 
 const DEFAULT_MODEL = "claude-opus-5";
 
+/**
+ * Turns a graph node may spend finding, reading, and answering.
+ *
+ * Measured from production drains rather than guessed: at eight, four of five
+ * inspectors exhausted the budget mid-exploration on every attempt. Exported
+ * so a test can prove the transport's ceiling actually honours it — a declared
+ * budget silently clamped is a change that looks made and is not.
+ */
+export const GRAPH_NODE_MAX_TURNS = 24;
+
 /** Cheaper models for repetitive extraction; the strongest for synthesis. */
 export function defaultModelForNode(node: CompiledNode): string {
   if (node.modelTier === "ECONOMY") return "claude-haiku-4-5";
@@ -123,12 +133,11 @@ export function buildClaudeNodeExecutor(
         {
           workingDirectory: options.workingDirectory,
           allowedTools: ["Read", "Glob", "Grep"],
-          // Measured, not guessed: the first live drain (run 32228988434)
-          // exhausted 8 turns on nearly every inspector — a node that must
-          // actually read a repository needs room to read it — while the one
-          // success fit comfortably once its exploration happened to be
-          // efficient. The node's own timeoutMs remains the hard stop.
-          maxTurns: options.maxTurns ?? 24,
+          // The node's own timeoutMs remains the hard stop; this bounds the
+          // exploration inside it. The transport clamps to its own ceiling,
+          // which is why GRAPH_NODE_MAX_TURNS is pinned against that ceiling
+          // in tests rather than merely declared here.
+          maxTurns: options.maxTurns ?? GRAPH_NODE_MAX_TURNS,
         },
       );
 

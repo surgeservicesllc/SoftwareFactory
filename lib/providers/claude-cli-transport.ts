@@ -117,13 +117,21 @@ const DEFAULT_MAX_TURNS = 1;
 /**
  * The hard ceiling on a declared turn budget.
  *
- * Eight is enough for a node that must find, read and answer, and small enough
- * that a runaway loop is bounded by something other than hope. A caller asking
- * for more gets eight, silently -- clamping rather than throwing, because a
- * provider call failing over a budget request would turn a cost preference into
- * an outage.
+ * Eight was a guess, and production disproved it: across drain runs
+ * 32228988434, 32230345648 and 32254860997, four of five graph inspectors
+ * exhausted eight turns on every attempt while doing exactly the work they
+ * were asked to do — find the relevant files, read them, answer. Only the
+ * narrowest node fit. Worse, the clamp was silent, so raising the executor's
+ * request to 24 changed nothing and looked correct while doing so.
+ *
+ * Twenty-four is the measured envelope, and it stays a ceiling: a caller
+ * asking for more still gets clamped rather than refused, because a provider
+ * call failing over a budget request would turn a cost preference into an
+ * outage. What must not recur is a caller declaring a budget this ceiling
+ * quietly discards — `tests/unit/claude-node-executor.test.ts` pins the graph
+ * executor's declared turns against this constant so the two cannot drift.
  */
-const MAX_TURNS_CEILING = 8;
+const MAX_TURNS_CEILING = 24;
 
 export interface ClaudeCliTransportOptions {
   /** Working directory the read-only tools are scoped to. */

@@ -13,6 +13,7 @@ import type { CompiledNode } from "@/lib/graph/compiler";
 import {
   buildClaudeNodeExecutor,
   defaultModelForNode,
+  GRAPH_NODE_MAX_TURNS,
   isCapacityRefusal,
 } from "@/lib/worker/claude-node-executor";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
@@ -84,7 +85,7 @@ describe("buildClaudeNodeExecutor", () => {
     // The measured turn envelope (run 32228988434 exhausted the old 8) and
     // the read-only tool surface travel with every call.
     expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({
-      maxTurns: 24,
+      maxTurns: GRAPH_NODE_MAX_TURNS,
       allowedTools: ["Read", "Glob", "Grep"],
     });
     const task = capturedTask();
