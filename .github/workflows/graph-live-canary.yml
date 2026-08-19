@@ -38,7 +38,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.233
 
       # No ANTHROPIC_API_KEY is supplied. The subscription path refuses to start
       # if one is present, so this cannot quietly become a billed run.

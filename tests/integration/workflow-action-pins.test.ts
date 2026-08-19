@@ -45,4 +45,31 @@ describe("workflow action pinning", () => {
 
     expect(floating).toEqual([]);
   });
+  it("installs the Claude CLI at one pinned version everywhere", async () => {
+    // The CLI is the execution engine for every credential-bearing lane. An
+    // unpinned install means a new release changes behavior mid-run — a red
+    // canary that looks like a regression, or worse, output-shape drift the
+    // transport's schema enforcement then reports as provider failure. Round
+    // 16 found three workflows on latest while two pinned 2.1.233; whatever
+    // the version is, it must be one version, stated, everywhere.
+    const files = (await readdir(workflowsDirectory)).filter(
+      (file) => file.endsWith(".yml") || file.endsWith(".yaml"),
+    );
+
+    const versions = new Set<string>();
+    const unpinned: string[] = [];
+    for (const file of files) {
+      const source = await readFile(resolve(workflowsDirectory, file), "utf8");
+      for (const match of source.matchAll(/@anthropic-ai\/claude-code(@\S+)?/g)) {
+        if (!match[1]) {
+          unpinned.push(file);
+        } else {
+          versions.add(match[1]);
+        }
+      }
+    }
+
+    expect(unpinned).toEqual([]);
+    expect(versions.size).toBeLessThanOrEqual(1);
+  });
 });

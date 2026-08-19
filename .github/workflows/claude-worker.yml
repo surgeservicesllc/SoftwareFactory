@@ -26,7 +26,7 @@ jobs:
           node-version: 22.x
 
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.233
 
       - name: Verify Claude Code
         run: claude --version
