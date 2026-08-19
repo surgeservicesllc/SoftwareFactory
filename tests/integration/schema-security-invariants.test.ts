@@ -296,6 +296,10 @@ describe("SECURITY DEFINER functions", () => {
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
+      // The reviewing half of the executor: a node whose job is judging other
+      // nodes' work writes its verdict, lens, and evidence where a person can
+      // audit it. Same self-verification refusal as the member function.
+      "record_verification_as_worker",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
       // Moves a never-started run's planned base to the observed live head.

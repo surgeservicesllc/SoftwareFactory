@@ -6,6 +6,8 @@ import { defineNode } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
+import type { VerificationLens, VerificationVerdict } from "@/lib/graph/verification";
+import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
  * From a claimed graph to a finished, persisted run.
@@ -216,6 +218,18 @@ export type GraphRunStore = {
     payload: unknown,
     nodeRunId?: string | null,
   ) => Promise<void>;
+  /**
+   * A reviewing node's verdict about one subject it consumed. Optional so a
+   * store written before verification existed still satisfies this contract
+   * rather than failing a run over a capability it never had.
+   */
+  readonly recordVerification?: (
+    subjectNodeRunId: string,
+    lens: VerificationLens,
+    verdict: VerificationVerdict,
+    evidence: readonly string[],
+    verifierProvider: string | null,
+  ) => Promise<void>;
   readonly completeRun: (
     graphRunId: string,
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
@@ -310,6 +324,27 @@ export async function runClaimedGraph(
             latencyMs: outcome.latencyMs,
           });
           await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
+
+          // A reviewing node has just judged its inputs. Recording that as a
+          // verification — of which subject, under which lens, with the
+          // evidence it cited — is what makes the judgement auditable later.
+          // It is derived from the answer already given, never a second call:
+          // asking again would pay twice for one opinion.
+          const lens = verificationLensFor(node);
+          if (lens && store.recordVerification) {
+            const derived = deriveVerdict(outcome.output);
+            if (derived) {
+              for (const dependency of incoming.get(node.nodeKey) ?? []) {
+                const subject = nodeRunIds.get(dependency);
+                // Only subjects that actually produced something can be
+                // judged; a dependency that never answered was not reviewed.
+                if (!subject || !completedOutputs.has(dependency)) continue;
+                await store.recordVerification(
+                  subject, lens, derived.verdict, derived.evidence, outcome.provider ?? null,
+                );
+              }
+            }
+          }
         } else if (
           !outcome.retryable
           || attempt >= (compiled.nodes.find((n) => n.nodeKey === node.nodeKey)?.maxAttempts ?? 1)
