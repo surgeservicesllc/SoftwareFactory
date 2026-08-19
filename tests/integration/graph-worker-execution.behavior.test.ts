@@ -229,6 +229,11 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       seenInputs.set(node.nodeKey, inputs);
       await new Promise((tick) => setTimeout(tick, 15));
       inFlight -= 1;
+      // inspect_a reports as a deterministic execution: the provider check
+      // must admit the worker's honest attribution for reduce-style nodes.
+      if (node.nodeKey === "inspect_a") {
+        return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "deterministic" };
+      }
       return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic", model: "claude-opus-5" };
     };
 
@@ -573,5 +578,52 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(claimed.graph.nodes).toHaveLength(4);
     expect(claimed.graph.edges).toHaveLength(3);
     await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
+  });
+
+  it("lists graph runs to members with node truth and artifact counts", async () => {
+    type ListedRun = {
+      goal: string;
+      state: string;
+      nodes: Array<{ node_key: string; state: string; provider: string | null; error_message: string | null }>;
+      artifact_counts: Record<string, number>;
+    };
+
+    await asOwner(db);
+    const listed = await db.query<ListedRun>(
+      "select * from public.list_graph_runs($1::uuid, 50)",
+      [organizationId],
+    );
+    await reset(db);
+
+    // Every run this suite created is visible; the completed diamond carries
+    // exactly what the worker recorded — including the deterministic
+    // attribution the widened provider check now admits, and the artifacts.
+    const diamond = listed.rows.find((row) => row.goal === "Run the diamond to completion");
+    expect(diamond).toBeDefined();
+    expect(diamond?.state).toBe("COMPLETED");
+    expect(diamond?.nodes).toHaveLength(4);
+    expect(diamond?.nodes.find((n) => n.node_key === "inspect_a")?.provider).toBe("deterministic");
+    expect(diamond?.artifact_counts).toEqual({ RAW: 4 });
+
+    // A failed node's error travels verbatim.
+    const contained = listed.rows.find((row) => row.goal === "Survive one failed inspector");
+    expect(contained?.nodes.find((n) => n.node_key === "inspect_b")?.error_message)
+      .toBe("The area could not be read.");
+
+    // The read is for members and nobody else: the worker role is revoked,
+    // and a stranger's session is refused by the membership check.
+    await asServiceRole(db);
+    await expect(
+      db.query("select * from public.list_graph_runs($1::uuid, 5)", [organizationId]),
+    ).rejects.toThrow(/permission denied/);
+    await reset(db);
+
+    await db.exec("insert into auth.users (id) values ('99999999-0000-4000-8000-0000000000d1')");
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", ["99999999-0000-4000-8000-0000000000d1"]);
+    await db.exec("set role authenticated");
+    await expect(
+      db.query("select * from public.list_graph_runs($1::uuid, 5)", [organizationId]),
+    ).rejects.toThrow(/membership/);
+    await reset(db);
   });
 });

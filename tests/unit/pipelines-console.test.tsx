@@ -115,6 +115,64 @@ describe("PipelinesConsole", () => {
     expect(screen.getByRole("link", { name: "Workflows" })).toHaveAttribute("href", "/solutions/workflows");
   });
 
+  it("renders recorded graph runs with node truth on the Graph runs view", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=graphs"));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/graphs/runs") {
+        return jsonResponse({ runs: [
+          {
+            graphRunId: "r1",
+            graphId: "g1",
+            goal: "Checks the things that break on the first real day",
+            topology: "DIAMOND",
+            riskLevel: "green",
+            projectId: "p1",
+            state: "PARTIAL",
+            hadPartialInput: true,
+            startedAt: "2026-08-19T03:00:00.000Z",
+            completedAt: "2026-08-19T03:05:00.000Z",
+            nodes: [
+              { node_key: "config", executor: "MODEL", capability: "review", state: "COMPLETED", provider: "anthropic", model: "claude-opus-5", latency_ms: 42_000, error_message: null },
+              { node_key: "reduce", executor: "DETERMINISTIC", capability: "extraction", state: "COMPLETED", provider: "deterministic", model: null, latency_ms: 3, error_message: null },
+              { node_key: "rollback", executor: "MODEL", capability: "review", state: "FAILED", provider: "anthropic", model: "claude-opus-5", latency_ms: 9_000, error_message: "The area could not be read." },
+            ],
+            artifactCounts: { RAW: 2 },
+          },
+        ] });
+      }
+      return jsonResponse({ commands: [] });
+    }));
+
+    render(<PipelinesConsole templates={templates} />);
+
+    expect(await screen.findByText("Checks the things that break on the first real day")).toBeInTheDocument();
+    expect(screen.getByText("PARTIAL")).toBeInTheDocument();
+    // Node truth verbatim: states, the deterministic attribution, the error.
+    expect(screen.getByText("reduce")).toBeInTheDocument();
+    expect(screen.getByText("deterministic")).toBeInTheDocument();
+    expect(screen.getByText("The area could not be read.")).toBeInTheDocument();
+    expect(screen.getByText(/Inputs were incomplete/)).toBeInTheDocument();
+    expect(screen.getByText(/2 RAW/)).toBeInTheDocument();
+  });
+
+  it("names the next step when no graph run exists yet", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=graphs"));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/graphs/runs") return jsonResponse({ runs: [] });
+      return jsonResponse({ commands: [] });
+    }));
+
+    render(<PipelinesConsole templates={templates} />);
+
+    expect(await screen.findByText("No graph runs yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open templates/i })).toHaveAttribute(
+      "href",
+      "/solutions/pipelines?view=templates",
+    );
+  });
+
   it("sends an empty workspace to the composer and gates a signed-out visitor", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [] })));
     const { unmount } = render(<PipelinesConsole templates={templates} />);

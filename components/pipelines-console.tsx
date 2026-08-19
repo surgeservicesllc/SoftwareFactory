@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { formatDateTime } from "@/lib/format/date";
 import { commandProgress } from "@/components/commands-console";
+import { GraphRunsPanel } from "@/components/graph-runs-panel";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -104,7 +105,9 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
     ? "all"
     : searchParams.get("view") === "templates"
       ? "templates"
-      : "active";
+      : searchParams.get("view") === "graphs"
+        ? "graphs"
+        : "active";
   const [state, setState] = useState<State>("loading");
   const [commands, setCommands] = useState<CommandView[]>([]);
   const [message, setMessage] = useState("");
@@ -161,6 +164,7 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
           { key: "active", label: "Active", href: "/solutions/pipelines" },
           { key: "all", label: "All Pipelines", href: "/solutions/pipelines?view=all" },
           { key: "templates", label: "Templates", href: "/solutions/pipelines?view=templates" },
+          { key: "graphs", label: "Graph runs", href: "/solutions/pipelines?view=graphs" },
         ] as const).map((tab) => (
           <Link
             key={tab.key}
@@ -178,7 +182,7 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
         ))}
       </nav>
 
-      {view !== "templates" ? (
+      {view !== "templates" && view !== "graphs" ? (
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <Card className="p-4">
             <p className="text-sm text-faint">Active now</p>
@@ -207,6 +211,8 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
 
       {view === "templates" ? (
         <PipelineTemplatesManager builtIns={templates} />
+      ) : view === "graphs" ? (
+        <GraphRunsPanel />
       ) : (
         <PipelineList
           commands={view === "active" ? active : commands}
