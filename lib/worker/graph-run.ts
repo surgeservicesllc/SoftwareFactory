@@ -175,6 +175,7 @@ export type GraphRunStore = {
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
     hadPartialInput: boolean,
     detail?: string | null,
+    usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
   ) => Promise<void>;
 };
 
@@ -333,6 +334,7 @@ export async function runClaimedGraph(
     capacityVoided
       ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
       : result.incompleteness,
+    { tokensUsed: result.spend.tokensUsed, costMicros: result.spend.costMicros },
   );
 
   return {

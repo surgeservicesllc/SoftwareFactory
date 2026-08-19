@@ -142,6 +142,11 @@ export function buildClaudeNodeExecutor(
         provider: "anthropic",
         model,
         latencyMs: Date.now() - startedAt,
+        // The transport reports real usage; discarding it would let the
+        // graph's token budget never bind. Cost stays unstated — the
+        // subscription is not per-token billed, and an invented price would
+        // be budgeted against.
+        tokensUsed: execution.inputTokens + execution.outputTokens,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "The node execution failed.";

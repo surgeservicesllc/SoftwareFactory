@@ -70,12 +70,15 @@ export class SupabaseGraphStore implements GraphRunStore {
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
     hadPartialInput: boolean,
     _detail?: string | null,
+    usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
   ): Promise<void> {
     const { error } = await this.client.rpc("complete_graph_run_as_worker", {
       p_worker_id: this.workerId,
       p_graph_run_id: graphRunId,
       p_state: state,
       p_had_partial_input: hadPartialInput,
+      p_tokens_used: usage?.tokensUsed ?? null,
+      p_cost_micros: usage?.costMicros ?? null,
       p_budget_action: state === "BUDGET_STOPPED" ? "STOP_GRACEFULLY" : null,
     });
     if (error) throw new Error(`Closing the graph run failed: ${error.message ?? "unknown error"}`);

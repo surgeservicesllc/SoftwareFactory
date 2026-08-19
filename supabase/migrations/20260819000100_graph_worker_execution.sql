@@ -55,8 +55,53 @@ as $$
 declare
   v_graph public.graphs;
   v_run_id uuid;
+  v_stale record;
 begin
   perform public.assert_graph_worker_id(p_worker_id);
+
+  /*
+   * Reclaim abandonment first. A worker that died mid-run leaves its run
+   * RUNNING forever, and an in-flight run keeps its graph out of the queue
+   * — a permanent, silent loss. A run whose row and node rows have ALL been
+   * silent for over two hours (the worker's own ceiling is one hour) did
+   * not survive its worker: it closes FAILED with an event naming the
+   * reclaim, its unfinished nodes close CANCELLED with the reason on the
+   * row, and the graph re-enters the ordinary convergence rules — FAILED
+   * counts toward the cap, so a graph that keeps killing workers still
+   * retires.
+   */
+  for v_stale in
+    select r.id, r.organization_id
+      from public.graph_runs r
+     where r.state = 'RUNNING'
+       and r.updated_at < now() - interval '2 hours'
+       and not exists (
+         select 1 from public.node_runs nr
+          where nr.graph_run_id = r.id
+            and nr.updated_at >= now() - interval '2 hours'
+       )
+  loop
+    update public.graph_runs
+       set state = 'FAILED', completed_at = now(), updated_at = now()
+     where id = v_stale.id and state = 'RUNNING';
+    if not found then
+      continue; -- another claimer reclaimed it between the select and here
+    end if;
+
+    update public.node_runs
+       set state = 'CANCELLED',
+           blocked_reason = 'The worker running this graph stopped reporting; the run was reclaimed.',
+           completed_at = now(),
+           updated_at = now()
+     where graph_run_id = v_stale.id
+       and state in ('PENDING', 'READY', 'RUNNING', 'VERIFYING', 'BLOCKED');
+
+    insert into public.graph_events (organization_id, graph_run_id, event_type, detail)
+    values (
+      v_stale.organization_id, v_stale.id, 'run_failed',
+      format('Reclaimed by worker %s: the run had been silent for over two hours and its worker is presumed dead.', p_worker_id)
+    );
+  end loop;
 
   /*
    * Claimable: never run, or every previous run FAILED or CANCELLED.

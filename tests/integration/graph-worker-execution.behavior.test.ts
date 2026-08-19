@@ -82,11 +82,11 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
       );
       await reset(db);
     },
-    async completeRun(graphRunId, state, hadPartialInput) {
+    async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
       await asServiceRole(db);
       await db.query(
-        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4)",
-        [workerId, graphRunId, state, hadPartialInput],
+        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6)",
+        [workerId, graphRunId, state, hadPartialInput, usage?.tokensUsed ?? null, usage?.costMicros ?? null],
       );
       await reset(db);
     },
@@ -234,7 +234,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       if (node.nodeKey === "inspect_a") {
         return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "deterministic" };
       }
-      return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic", model: "claude-opus-5" };
+      return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic", model: "claude-opus-5", tokensUsed: 150 };
     };
 
     const summary = await runClaimedGraph(
@@ -265,10 +265,14 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     );
     expect(nodeStates.rows).toEqual([{ state: "COMPLETED", count: 4 }]);
 
-    const run = await db.query<{ state: string; had_partial_input: boolean }>(
-      "select state, had_partial_input from public.graph_runs where graph_id = $1", [graphId],
+    const run = await db.query<{ state: string; had_partial_input: boolean; tokens_used: number | string | null }>(
+      "select state, had_partial_input, tokens_used from public.graph_runs where graph_id = $1", [graphId],
     );
-    expect(run.rows[0]).toEqual({ state: "COMPLETED", had_partial_input: false });
+    expect(run.rows[0].state).toBe("COMPLETED");
+    expect(run.rows[0].had_partial_input).toBe(false);
+    // Three model nodes reported 150 tokens each; the run's stored usage is
+    // their sum, so the token budget has something real to bind against.
+    expect(Number(run.rows[0].tokens_used)).toBe(450);
 
     const artifacts = await db.query<{ count: number }>(
       `select count(*)::int as count from public.graph_artifacts a
@@ -528,6 +532,73 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(tenth.graph.graph_id).toBe(graphId);
     await store.completeRun(tenth.graph.graph_run_id, "CANCELLED", true);
 
+    expect(await claim()).toBeNull();
+  });
+
+  it("reclaims a run whose worker died, and leaves live runs alone", async () => {
+    const graphId = await createDiamondGraph("Survive a dead worker");
+    const abandoned = parseClaimedGraph(await claim());
+    expect(abandoned.ok).toBe(true);
+    if (!abandoned.ok) return;
+
+    // The worker dies here: nothing ever reports again. Backdate every row
+    // past the two-hour silence threshold.
+    await reset(db);
+    await db.query(
+      "update public.graph_runs set updated_at = now() - interval '3 hours' where id = $1",
+      [abandoned.graph.graph_run_id],
+    );
+    await db.query(
+      "update public.node_runs set updated_at = now() - interval '3 hours' where graph_run_id = $1",
+      [abandoned.graph.graph_run_id],
+    );
+
+    // The next claim sweeps the abandoned run and then claims the graph
+    // again — the reclaim closed it FAILED, which is a retryable history.
+    const reclaimed = parseClaimedGraph(await claim());
+    expect(reclaimed.ok).toBe(true);
+    if (!reclaimed.ok) return;
+    expect(reclaimed.graph.graph_id).toBe(graphId);
+    expect(reclaimed.graph.graph_run_id).not.toBe(abandoned.graph.graph_run_id);
+
+    const oldRun = await db.query<{ state: string; completed_at: string | null }>(
+      "select state, completed_at from public.graph_runs where id = $1",
+      [abandoned.graph.graph_run_id],
+    );
+    expect(oldRun.rows[0].state).toBe("FAILED");
+    expect(oldRun.rows[0].completed_at).not.toBeNull();
+
+    const oldNodes = await db.query<{ state: string; blocked_reason: string | null; count: number }>(
+      `select state, blocked_reason, count(*)::int as count from public.node_runs
+        where graph_run_id = $1 group by state, blocked_reason`,
+      [abandoned.graph.graph_run_id],
+    );
+    expect(oldNodes.rows).toEqual([
+      {
+        state: "CANCELLED",
+        blocked_reason: "The worker running this graph stopped reporting; the run was reclaimed.",
+        count: 4,
+      },
+    ]);
+
+    const event = await db.query<{ count: number }>(
+      `select count(*)::int as count from public.graph_events
+        where graph_run_id = $1 and event_type = 'run_failed' and detail like 'Reclaimed by worker%'`,
+      [abandoned.graph.graph_run_id],
+    );
+    expect(event.rows[0].count).toBe(1);
+
+    // The very first test's run is genuinely in flight — recent rows — and
+    // the sweep must not have touched it.
+    const liveRun = await db.query<{ state: string }>(
+      `select r.state from public.graph_runs r
+        join public.graphs g on g.id = r.graph_id
+       where g.goal = 'Audit three areas and synthesize'`,
+    );
+    expect(liveRun.rows).toEqual([{ state: "RUNNING" }]);
+
+    // Close the retry with an answer so the queue ends this test empty.
+    await pgliteStore(db, "graph-worker-test").completeRun(reclaimed.graph.graph_run_id, "PARTIAL", true);
     expect(await claim()).toBeNull();
   });
 
