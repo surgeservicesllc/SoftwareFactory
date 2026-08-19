@@ -29,10 +29,12 @@ routing intent, and the page says what actually runs.
 longer dead-end at PLANNED. The graph executor worker
 (`scripts/graph-worker.mts` + `.github/workflows/graph-worker.yml`, manual
 dispatch; schedule gated on `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED`) claims
-them through the service-role boundary of migration `20260819000100`
-(`claim_planned_graph` → atomic RUNNING run + PENDING node_runs + whole
-projection; `record_node_state_as_worker`; `record_graph_artifact_as_worker`;
-`complete_graph_run_as_worker`), recompiles them through the console's own
+them through the service-role boundary of migrations `20260819000100` and
+`20260819001000` (`claim_planned_graph(worker_id, supported_executors)` →
+atomic RUNNING run + PENDING node_runs + whole projection, skipping any graph
+whose nodes need an executor the caller does not declare — ADR-093;
+`record_node_state_as_worker`; `record_graph_artifact_as_worker`;
+`complete_graph_run_as_worker`; `record_verification_as_worker`), recompiles them through the console's own
 compiler, and runs nodes in parallel up to the graph's budget through the
 subscription transport — read-only analysis tools only, models tiered per
 node. Edges carry data (each node's prompt receives its upstreams' outputs,
