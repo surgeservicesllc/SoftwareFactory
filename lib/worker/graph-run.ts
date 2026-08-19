@@ -31,6 +31,9 @@ const claimedNodeSchema = z.object({
   timeout_ms: z.number().int().positive(),
   max_attempts: z.number().int().positive(),
   allow_provider_fallback: z.boolean(),
+  // .catch(false): a projection from before the column existed simply has
+  // no tolerance, which is exactly what false says.
+  tolerates_partial_inputs: z.boolean().catch(false),
   input_schema: z.unknown().nullish(),
   output_schema: z.unknown().nullish(),
   reads: z.array(resourceSchema).nullish(),
@@ -118,6 +121,7 @@ export function compileClaimedGraph(claim: ClaimedGraph):
       risk: riskFrom(node.risk_level),
       timeoutMs: node.timeout_ms,
       retry: { ...DEFAULT_RETRY_POLICY, maxAttempts: node.max_attempts },
+      toleratesPartialInputs: node.tolerates_partial_inputs,
     }),
   );
 

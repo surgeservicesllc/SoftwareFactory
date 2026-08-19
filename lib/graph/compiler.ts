@@ -61,6 +61,7 @@ export type CompiledNode = {
   readonly allowProviderFallback: boolean;
   readonly reads: NodeContract["reads"];
   readonly writes: NodeContract["writes"];
+  readonly toleratesPartialInputs: boolean;
 };
 
 export type CompileResult =
@@ -179,6 +180,7 @@ export function compileGraph(input: CompileInput): CompileResult {
         allowProviderFallback: node.retry.allowProviderFallback,
         reads: node.reads,
         writes: node.writes,
+        toleratesPartialInputs: node.toleratesPartialInputs === true,
       })),
       edges: decision.analysis.edges,
       removedEdges: decision.analysis.removed,

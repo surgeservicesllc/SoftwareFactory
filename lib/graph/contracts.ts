@@ -98,6 +98,16 @@ export type NodeContract = {
   readonly retry: RetryPolicy;
   /** Node-level ceiling; the graph budget still applies on top. */
   readonly maxConcurrency?: number;
+  /**
+   * A tolerant fan-in runs once every dependency has settled, with whatever
+   * inputs actually completed — instead of being blocked by the first failed
+   * upstream. It still refuses to run on nothing, and its executor receives
+   * the missing set so the output states its own incompleteness. Off by
+   * default: an implementation step genuinely needs its inputs; tolerance is
+   * for synthesis and reporting, where a partial view stated as partial
+   * beats no view at all.
+   */
+  readonly toleratesPartialInputs?: boolean;
 };
 
 export function modelTierFor(contract: NodeContract): ModelTier {

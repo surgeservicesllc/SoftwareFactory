@@ -28,6 +28,7 @@ function node(
     timeoutMs: 60_000,
     maxAttempts: 2,
     allowProviderFallback: true,
+    toleratesPartialInputs: false,
     reads: options.reads ?? [],
     writes: options.writes ?? [],
   } as CompiledNode;

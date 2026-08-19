@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 113 migration
+**The current total is 19**, named in the list below. The repository total is 114 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -71,8 +71,15 @@ therefore closes capacity-voided runs as CANCELLED (retryable, uncounted,
 with a total-run ceiling of 10), and `20260819000200_replant_exhausted_graph`
 re-plants one copy of the owner's exhausted first-day readiness graph (fixed
 id, so replays are no-ops forever) for the capacity-aware worker to claim
-after the limit resets. Both re-apply through the same replay-safe
-`scope=broker-functions` path. Earlier revisions of this
+after the limit resets. Worker run `32211229999` then production-verified
+the capacity semantics end to end: the re-planted graph was claimed, every
+refusal was classified, the run closed CANCELLED, and the drain stopped —
+the graph keeps its chances. `20260819000300_tolerant_fan_in` adds the
+per-node `tolerates_partial_inputs` bit (guarded ALTER) and re-declares
+`create_graph_from_plan` to persist it, so declared fan-ins run with
+whatever inputs completed and state their own incompleteness. All of these
+re-apply through the same replay-safe `scope=broker-functions` path.
+Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 

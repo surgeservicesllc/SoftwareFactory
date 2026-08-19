@@ -145,6 +145,7 @@ export async function runGraph(
   const schedulerNodes = graph.nodes.map((node) => ({
     nodeId: node.nodeKey,
     writes: node.writes,
+    toleratesPartialInputs: node.toleratesPartialInputs,
   }));
 
   let state: GraphState = initialState(

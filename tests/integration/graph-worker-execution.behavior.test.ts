@@ -317,6 +317,70 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(run.rows[0].had_partial_input).toBe(true);
   });
 
+  it("runs a tolerant fan-in with the surviving inputs, stated as partial", async () => {
+    // The same diamond, but synthesize declares tolerance: one failed
+    // inspector must not cost the synthesis of the other two.
+    const tolerantNodes = JSON.stringify(
+      (JSON.parse(DIAMOND_NODES) as Array<Record<string, unknown>>).map((node) =>
+        node.node_key === "synthesize" ? { ...node, tolerates_partial_inputs: true } : node,
+      ),
+    );
+    const graphId = await createDiamondGraph("Synthesize what survives", false, tolerantNodes);
+
+    const parsed = parseClaimedGraph(await claim());
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    // The declaration survives the whole persistence round trip.
+    expect(parsed.graph.nodes.find((n) => n.node_key === "synthesize")?.tolerates_partial_inputs).toBe(true);
+    const compiled = compileClaimedGraph(parsed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    let synthesisInputs: NodeInputs | undefined;
+    const executor = async (node: { nodeKey: string }, _attempt: number, inputs: NodeInputs): Promise<NodeExecutionResult> => {
+      if (node.nodeKey === "inspect_b") {
+        return { status: "FAILED", error: "The area could not be read.", retryable: false };
+      }
+      if (node.nodeKey === "synthesize") synthesisInputs = inputs;
+      return { status: "SUCCEEDED", output: { node: node.nodeKey } };
+    };
+
+    const summary = await runClaimedGraph(
+      parsed.graph, compiled.graph, pgliteStore(db, "graph-worker-test"), executor,
+    );
+
+    // The synthesis ran on what arrived, and knew exactly what was missing.
+    expect(synthesisInputs).toEqual({
+      outputs: {
+        inspect_a: { node: "inspect_a" },
+        inspect_c: { node: "inspect_c" },
+      },
+      missing: ["inspect_b"],
+    });
+    expect(summary.nodesSucceeded).toBe(3);
+    expect(summary.nodesFailed).toBe(1);
+    // Run-level honesty is untouched: an input failed, so the run is
+    // PARTIAL — a partial view stated as partial, never COMPLETED.
+    expect(summary.finalState).toBe("PARTIAL");
+
+    const states = await db.query<{ node_key: string; state: string }>(
+      `select n.node_key, nr.state from public.node_runs nr
+        join public.graph_runs gr on gr.id = nr.graph_run_id
+        join public.graph_nodes n on n.id = nr.node_id
+       where gr.graph_id = $1 order by n.node_key`, [graphId],
+    );
+    expect(states.rows).toEqual([
+      { node_key: "inspect_a", state: "COMPLETED" },
+      { node_key: "inspect_b", state: "FAILED" },
+      { node_key: "inspect_c", state: "COMPLETED" },
+      { node_key: "synthesize", state: "COMPLETED" },
+    ]);
+    const run = await db.query<{ state: string; had_partial_input: boolean }>(
+      "select state, had_partial_input from public.graph_runs where graph_id = $1", [graphId],
+    );
+    expect(run.rows[0]).toEqual({ state: "PARTIAL", had_partial_input: true });
+  });
+
   it("keeps terminal states final on both nodes and runs", async () => {
     await createDiamondGraph("Terminal protection");
     const parsed = parseClaimedGraph(await claim());

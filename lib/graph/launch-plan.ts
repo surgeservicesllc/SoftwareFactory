@@ -29,6 +29,7 @@ export type PlanNodePayload = {
   readonly executor: string;
   readonly capability: string;
   readonly model_tier: string;
+  readonly tolerates_partial_inputs: boolean;
   readonly input_schema: Record<string, unknown>;
   readonly output_schema: Record<string, unknown>;
   readonly reads: readonly { kind: string; id: string }[];
@@ -109,6 +110,7 @@ export function buildLaunchPlan(
         executor: node.executor,
         capability: node.capability,
         model_tier: node.modelTier,
+        tolerates_partial_inputs: node.toleratesPartialInputs,
         // The contracts live in the engine's Zod schemas rather than in the
         // database. Sending `{}` records that a contract exists without
         // pretending the database can enforce it — a serialized Zod schema that

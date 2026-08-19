@@ -25,13 +25,13 @@ export const runtime = "nodejs";
  *
  * ## It creates, it does not execute
  *
- * `create_graph_from_plan` writes the graph and its nodes and edges.
- * `start_graph_run` opens a run row. **Neither dispatches a node**, and this
- * route deliberately does not start one: no executor is wired to the graph
- * runner, so a run created here would sit at `PENDING` and a caller could
- * reasonably read that as work in progress. Creating the plan is the honest
- * boundary, and starting it is a separate decision for whoever wires the
- * executor.
+ * `create_graph_from_plan` writes the graph and its nodes and edges, and
+ * this route deliberately starts nothing itself. Execution belongs to the
+ * graph executor worker (`scripts/graph-worker.mts`, migration
+ * `20260819000100`): it claims recorded graphs, creates the run, and drives
+ * the nodes through the subscription transport when it is dispatched.
+ * Creating the plan is this route's honest boundary; the claim is the
+ * worker's.
  *
  * ## Why it must be an authenticated session
  *
@@ -145,8 +145,9 @@ export async function POST(request: Request) {
       // Said plainly, because a created graph looks like a started one to anyone
       // who does not know the difference.
       state: "PLANNED",
-      note: "The graph is recorded. No node has been dispatched: no executor is "
-        + "connected to the graph runner, so nothing will run until one is.",
+      note: "The graph is recorded. No node has been dispatched yet: the graph "
+        + "executor worker claims recorded graphs when it runs, and until a "
+        + "dispatch with the subscription credential picks this one up it stays planned.",
     });
   } catch (error) {
     return operationsFailure(error, "graph_launch_failed", "The graph could not be created.");
