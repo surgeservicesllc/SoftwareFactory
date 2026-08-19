@@ -67,7 +67,7 @@ export class SupabaseGraphStore implements GraphRunStore {
 
   async completeRun(
     graphRunId: string,
-    state: "COMPLETED" | "PARTIAL" | "FAILED" | "BUDGET_STOPPED",
+    state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
     hadPartialInput: boolean,
     _detail?: string | null,
   ): Promise<void> {

@@ -39,6 +39,12 @@ export type NodeExecutionResult =
       readonly error: string;
       /** Whether trying a different provider could plausibly help. */
       readonly retryable: boolean;
+      /**
+       * True when the provider refused to fuel the attempt at all — a session
+       * or rate limit, not a wrong answer. Callers use this to stop spending
+       * attempts on a credential that is exhausted rather than mistaken.
+       */
+      readonly capacityWithheld?: boolean;
       readonly provider?: string;
       readonly model?: string;
       readonly latencyMs?: number;

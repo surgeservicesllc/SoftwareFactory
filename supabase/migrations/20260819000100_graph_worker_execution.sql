@@ -59,22 +59,28 @@ begin
   perform public.assert_graph_worker_id(p_worker_id);
 
   /*
-   * Claimable: never run, or every previous run FAILED — an infrastructure
-   * failure (a missing CLI, an unreachable provider) should be retryable
-   * without a person re-planning the graph. Bounded at three total attempts
-   * so a graph that keeps failing converges to a durable FAILED history
-   * instead of consuming every scheduled drain forever. A COMPLETED,
-   * PARTIAL, CANCELLED, BUDGET_STOPPED, or in-flight run keeps its graph
-   * out of the queue: those are answers, not infrastructure faults.
+   * Claimable: never run, or every previous run FAILED or CANCELLED.
+   * An infrastructure failure (a missing CLI, an unreachable provider)
+   * should be retryable without a person re-planning the graph, and a
+   * CANCELLED run — the worker's record that the provider withheld capacity
+   * (a session or rate limit) and the run never truly executed — must not
+   * spend the graph's chances. So the convergence bound counts only FAILED
+   * runs: three genuine failed executions retire the graph to a durable
+   * FAILED history. A hard ceiling on total runs keeps a long capacity
+   * outage from accumulating unbounded CANCELLED rows. A COMPLETED,
+   * PARTIAL, BUDGET_STOPPED, or in-flight run keeps its graph out of the
+   * queue: those are answers, not infrastructure faults.
    */
   select g.* into v_graph
     from public.graphs g
    where g.requires_owner_approval = false
      and not exists (
        select 1 from public.graph_runs r
-        where r.graph_id = g.id and r.state <> 'FAILED'
+        where r.graph_id = g.id and r.state not in ('FAILED', 'CANCELLED')
      )
-     and (select count(*) from public.graph_runs r where r.graph_id = g.id) < 3
+     and (select count(*) from public.graph_runs r
+           where r.graph_id = g.id and r.state = 'FAILED') < 3
+     and (select count(*) from public.graph_runs r where r.graph_id = g.id) < 10
    order by g.created_at
    for update skip locked
    limit 1;
@@ -298,6 +304,11 @@ begin
   end if;
   if v_run.state in ('COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED', 'BUDGET_STOPPED') then
     raise exception 'run_already_terminal' using errcode = '22023';
+  end if;
+
+  -- A closure must actually close: PLANNED or RUNNING is not an ending.
+  if p_state not in ('COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED', 'BUDGET_STOPPED') then
+    raise exception 'not_a_terminal_state' using errcode = '22023';
   end if;
 
   if p_had_partial_input and p_state = 'COMPLETED' then

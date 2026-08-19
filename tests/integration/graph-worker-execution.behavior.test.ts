@@ -13,6 +13,7 @@ import {
   parseClaimedGraph,
   runClaimedGraph,
   type GraphRunStore,
+  type NodeInputs,
 } from "@/lib/worker/graph-run";
 
 /**
@@ -32,8 +33,11 @@ import {
  *     siblings COMPLETE, and the run closes PARTIAL — never COMPLETED.
  *   - Terminal states are final on both nodes and runs.
  *   - A graph whose only runs FAILED is re-claimable (infrastructure faults
- *     retry without re-planning), bounded at three total attempts; runs that
+ *     retry without re-planning), bounded at three failed attempts; runs that
  *     reached an answer — COMPLETED, PARTIAL — keep their graph closed.
+ *   - Edges carry data: a fan-in node receives its upstreams' actual outputs.
+ *   - A run refused entirely by provider capacity closes CANCELLED — void,
+ *     not a spent chance — and a hard ceiling on total runs still converges.
  */
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -105,13 +109,17 @@ const DIAMOND_EDGES = JSON.stringify([
 describe("the graph executor boundary", { timeout: 180_000 }, () => {
   let db: PGlite;
 
-  async function createDiamondGraph(goal: string, requiresApproval = false): Promise<string> {
+  async function createDiamondGraph(
+    goal: string,
+    requiresApproval = false,
+    nodesJson: string = DIAMOND_NODES,
+  ): Promise<string> {
     await asOwner(db);
     const created = await db.query<{ create_graph_from_plan: string }>(
       `select public.create_graph_from_plan(
          $1::uuid, $2::uuid, $3, 'DIAMOND'::public.graph_topology, '[]'::jsonb,
          'green'::public.risk_level, $4, $5::jsonb, $6::jsonb, '{}'::jsonb)`,
-      [organizationId, projectId, goal, requiresApproval, DIAMOND_NODES, DIAMOND_EDGES],
+      [organizationId, projectId, goal, requiresApproval, nodesJson, DIAMOND_EDGES],
     );
     await reset(db);
     return created.rows[0].create_graph_from_plan;
@@ -213,10 +221,12 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const executed: string[] = [];
-    const executor = async (node: { nodeKey: string }): Promise<NodeExecutionResult> => {
+    const seenInputs = new Map<string, NodeInputs>();
+    const executor = async (node: { nodeKey: string }, _attempt: number, inputs: NodeInputs): Promise<NodeExecutionResult> => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       executed.push(node.nodeKey);
+      seenInputs.set(node.nodeKey, inputs);
       await new Promise((tick) => setTimeout(tick, 15));
       inFlight -= 1;
       return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic", model: "claude-opus-5" };
@@ -232,6 +242,16 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(maxInFlight).toBeGreaterThanOrEqual(3);
     // Synthesis runs only after its inputs: it is the last execution.
     expect(executed[executed.length - 1]).toBe("synthesize");
+    // Edges carry data: the fan-in received its upstreams' actual outputs.
+    expect(seenInputs.get("synthesize")).toEqual({
+      outputs: {
+        inspect_a: { node: "inspect_a" },
+        inspect_b: { node: "inspect_b" },
+        inspect_c: { node: "inspect_c" },
+      },
+      missing: [],
+    });
+    expect(seenInputs.get("inspect_a")).toEqual({ outputs: {}, missing: [] });
 
     const nodeStates = await db.query<{ state: string; count: number }>(
       `select nr.state, count(*)::int as count from public.node_runs nr
@@ -354,5 +374,140 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // for good. This claim also proves the earlier COMPLETED, PARTIAL, and
     // in-flight graphs never re-entered it — FAILED-only is the sole way back.
     expect(await claim()).toBeNull();
+  });
+
+  it("voids a capacity-refused run as CANCELLED without spending a chance", async () => {
+    // max_attempts 3 on purpose: a capacity refusal is non-retryable on its
+    // first attempt, and the node_run must still be recorded FAILED right
+    // then — not stranded RUNNING until an attempt counter it will never
+    // reach.
+    const retryCapableNodes = JSON.stringify(
+      (JSON.parse(DIAMOND_NODES) as Array<Record<string, unknown>>)
+        .map((node) => ({ ...node, max_attempts: 3 })),
+    );
+    const graphId = await createDiamondGraph("Survive a provider session limit", false, retryCapableNodes);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const compiled = compileClaimedGraph(first.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    // Every attempt is refused the way a session limit refuses: nothing ran,
+    // nothing can run, and retrying seconds later would not change that.
+    const refused = async (): Promise<NodeExecutionResult> => ({
+      status: "FAILED",
+      error: "Claude Code returned an error result: You've hit your session limit",
+      retryable: false,
+      capacityWithheld: true,
+    });
+
+    const summary = await runClaimedGraph(first.graph, compiled.graph, store, refused);
+    expect(summary.finalState).toBe("CANCELLED");
+    expect(summary.capacityWithheld).toBe(true);
+    expect(summary.nodesSucceeded).toBe(0);
+
+    // Node truth is preserved — the refused attempts are FAILED node_runs —
+    // while the run itself records that it never truly executed.
+    const run = await db.query<{ state: string }>(
+      "select state from public.graph_runs where id = $1", [first.graph.graph_run_id],
+    );
+    expect(run.rows[0].state).toBe("CANCELLED");
+    const nodeStates = await db.query<{ state: string; count: number }>(
+      `select nr.state, count(*)::int as count from public.node_runs nr
+        where nr.graph_run_id = $1 group by nr.state order by nr.state`,
+      [first.graph.graph_run_id],
+    );
+    expect(nodeStates.rows).toEqual([
+      { state: "FAILED", count: 3 },
+      { state: "SKIPPED", count: 1 },
+    ]);
+
+    // A CANCELLED run is not a spent chance: the graph is claimable again.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.graph.graph_id).toBe(graphId);
+
+    // Close the retry with a real answer so the queue ends this test empty.
+    await store.completeRun(second.graph.graph_run_id, "PARTIAL", true);
+    expect(await claim()).toBeNull();
+  });
+
+  it("stops re-claiming at the total-run ceiling even when every run was CANCELLED", async () => {
+    const graphId = await createDiamondGraph("A very long capacity outage");
+    const store = pgliteStore(db, "graph-worker-test");
+
+    // Nine voided runs, as a long outage under a scheduled worker would
+    // accumulate them. Written as the schema owner: the worker role itself
+    // holds no table DML at all — its only doorway is the definer functions,
+    // which the previous test's permission behavior already relies on.
+    await reset(db);
+    await db.query(
+      `insert into public.graph_runs (organization_id, graph_id, state, started_at, completed_at, created_by)
+       select $1::uuid, $2::uuid, 'CANCELLED', now(), now(), $3::uuid
+         from generate_series(1, 9)`,
+      [organizationId, graphId, ownerId],
+    );
+
+    // Run ten exists once this claim succeeds; the ceiling then holds.
+    const tenth = parseClaimedGraph(await claim());
+    expect(tenth.ok).toBe(true);
+    if (!tenth.ok) return;
+    expect(tenth.graph.graph_id).toBe(graphId);
+    await store.completeRun(tenth.graph.graph_run_id, "CANCELLED", true);
+
+    expect(await claim()).toBeNull();
+  });
+
+  it("re-plants one exhausted graph, exactly once, through the seed migration", async () => {
+    // The chain in beforeAll already ran this file against an empty database
+    // (a no-op). Re-running it now — the hosted apply's own replay shape —
+    // finds the graph the re-claim test retired with three FAILED runs and
+    // copies it as one fresh, claimable graph with a fixed id.
+    const replantedId = "ad0e5f2c-9b1d-4e3a-8c47-51b06f7d3e91";
+    const seedFile = "20260819000200_replant_exhausted_graph.sql";
+    const seedSql = await readFile(resolve(migrationsDirectory, seedFile), "utf8");
+
+    await reset(db);
+    await db.exec(seedSql);
+
+    const copy = await db.query<{ goal: string; created_by: string; requires_owner_approval: boolean }>(
+      "select goal, created_by, requires_owner_approval from public.graphs where id = $1",
+      [replantedId],
+    );
+    expect(copy.rows).toHaveLength(1);
+    expect(copy.rows[0].goal).toBe("Retry an infrastructure failure");
+    expect(copy.rows[0].created_by).toBe(ownerId);
+    expect(copy.rows[0].requires_owner_approval).toBe(false);
+
+    const shape = await db.query<{ nodes: number; edges: number; budgets: number; runs: number }>(
+      `select
+         (select count(*)::int from public.graph_nodes where graph_id = $1) as nodes,
+         (select count(*)::int from public.graph_edges where graph_id = $1) as edges,
+         (select count(*)::int from public.graph_budgets where graph_id = $1) as budgets,
+         (select count(*)::int from public.graph_runs where graph_id = $1) as runs`,
+      [replantedId],
+    );
+    expect(shape.rows[0]).toEqual({ nodes: 4, edges: 3, budgets: 1, runs: 0 });
+
+    // Replay: the fixed id is the guard, so a second application changes
+    // nothing — no second copy, ever.
+    await db.exec(seedSql);
+    const graphsWithGoal = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.graphs where goal = 'Retry an infrastructure failure'",
+    );
+    expect(graphsWithGoal.rows[0].count).toBe(2); // the retired original + one copy
+
+    // The copy is genuinely claimable, and the projection is whole.
+    const claimed = parseClaimedGraph(await claim());
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.graph.graph_id).toBe(replantedId);
+    expect(claimed.graph.nodes).toHaveLength(4);
+    expect(claimed.graph.edges).toHaveLength(3);
+    await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
   });
 });
