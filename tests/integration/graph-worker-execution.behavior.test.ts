@@ -274,12 +274,18 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // their sum, so the token budget has something real to bind against.
     expect(Number(run.rows[0].tokens_used)).toBe(450);
 
-    const artifacts = await db.query<{ count: number }>(
-      `select count(*)::int as count from public.graph_artifacts a
+    // Artifacts are labelled by what they are, not all RAW: the three
+    // inspectors produce evidence, the synthesis produces a derived view.
+    // A reviewer auditing this run can tell the two apart.
+    const artifacts = await db.query<{ kind: string; count: number }>(
+      `select a.kind::text as kind, count(*)::int as count from public.graph_artifacts a
         join public.graph_runs gr on gr.id = a.graph_run_id
-       where gr.graph_id = $1 and a.kind = 'RAW'`, [graphId],
+       where gr.graph_id = $1 group by a.kind order by a.kind`, [graphId],
     );
-    expect(artifacts.rows[0].count).toBe(4);
+    expect(artifacts.rows).toEqual([
+      { kind: "RAW", count: 3 },
+      { kind: "SYNTHESIS", count: 1 },
+    ]);
   });
 
   it("contains a failed branch: siblings finish, dependents are skipped, the run is PARTIAL", async () => {
@@ -674,7 +680,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(diamond?.state).toBe("COMPLETED");
     expect(diamond?.nodes).toHaveLength(4);
     expect(diamond?.nodes.find((n) => n.node_key === "inspect_a")?.provider).toBe("deterministic");
-    expect(diamond?.artifact_counts).toEqual({ RAW: 4 });
+    expect(diamond?.artifact_counts).toEqual({ RAW: 3, SYNTHESIS: 1 });
 
     // A failed node's error travels verbatim.
     const contained = listed.rows.find((row) => row.goal === "Survive one failed inspector");

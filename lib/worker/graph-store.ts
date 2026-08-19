@@ -51,7 +51,7 @@ export class SupabaseGraphStore implements GraphRunStore {
 
   async recordArtifact(
     graphRunId: string,
-    kind: "RAW" | "REDUCED" | "SYNTHESIS",
+    kind: "RAW" | "REDUCED" | "SYNTHESIS" | "ANCHOR",
     payload: unknown,
     nodeRunId?: string | null,
   ): Promise<void> {
