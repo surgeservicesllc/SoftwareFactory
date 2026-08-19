@@ -1,3 +1,8 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { migrationTables, type MigrationTables } from "@/lib/supabase/migration-tables";
+
 /**
  * Report which migrations have actually reached hosted, by asking the database
  * rather than the ledger.
@@ -48,22 +53,24 @@
  * report calls that out rather than leaving the reader to notice.
  */
 
-type Expectation = {
-  readonly migration: string;
-  readonly tables: readonly string[];
-};
-
 /**
- * Tables created by migrations added after the last confirmed ledger position
- * (`20260814000200`). Grouped by migration so the report names what to apply
- * rather than only what is missing.
+ * Every migration in the repository, paired with the tables it creates.
+ *
+ * This list used to be four migrations written out by hand. The repository
+ * passed a hundred migrations while that list stood still, so the audit's
+ * closing "0 outstanding" was a statement about four files and read as a
+ * statement about the schema. It is derived now, and migrations that create no
+ * table are reported as unprobeable rather than quietly dropped -- a migration
+ * this script cannot ask about must not look like one that passed.
  */
-const EXPECTATIONS: readonly Expectation[] = [
-  { migration: "20260814000210_phase2c_resource_persistence", tables: ["resource_breakers", "resource_breaker_events", "resource_assignments"] },
-  { migration: "20260814001200_phase2b_task_graph_and_handoffs", tables: ["agent_handoffs", "task_work_locks"] },
-  { migration: "20260814000100_graph_engineering", tables: ["graphs", "graph_runs", "node_runs", "work_locks", "graph_events"] },
-  { migration: "20260814002200_graph_anchors", tables: ["graph_anchors", "node_run_claims", "claim_anchors", "claim_acceptable_anchors"] },
-];
+function readExpectations(): readonly MigrationTables[] {
+  const directory = resolve(import.meta.dirname, "../supabase/migrations");
+  const files = readdirSync(directory)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => ({ name, sql: readFileSync(join(directory, name), "utf8") }));
+  return migrationTables(files);
+}
 
 /** A table from a migration known to be applied, to prove the probe itself works. */
 const CONTROL_TABLE = "projects";
@@ -185,10 +192,31 @@ async function main(): Promise<void> {
   let applied = 0;
   let missing = 0;
   let unknown = 0;
+  const unprobeable: string[] = [];
 
-  for (const expectation of EXPECTATIONS) {
+  const expectations = readExpectations();
+  // One probe per distinct table, not one per mention. Several migrations
+  // create the same table under `if not exists`, and re-asking would slow the
+  // audit without changing an answer.
+  const seen = new Map<string, Promise<boolean | null>>();
+  const probe = (table: string): Promise<boolean | null> => {
+    const pending = seen.get(table) ?? tableExists(baseUrl, key, table);
+    seen.set(table, pending);
+    return pending;
+  };
+
+  for (const expectation of expectations) {
+    if (expectation.tables.length === 0) {
+      // A migration that only creates functions, policies, grants or data has
+      // nothing this probe can ask PostgREST about. Counting it as applied
+      // would be a guess; omitting it would hide that the audit is silent
+      // about most of the directory.
+      unprobeable.push(expectation.migration);
+      continue;
+    }
+
     const results = await Promise.all(
-      expectation.tables.map(async (table) => ({ table, exists: await tableExists(baseUrl, key, table) })),
+      expectation.tables.map(async (table) => ({ table, exists: await probe(table) })),
     );
 
     const present = results.filter((r) => r.exists === true).map((r) => r.table);
@@ -217,7 +245,21 @@ async function main(): Promise<void> {
     if (indeterminate.length > 0) console.log(`                   could not determine: ${indeterminate.join(", ")}`);
   }
 
-  console.log(`\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate.`);
+  console.log(
+    `\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate, `
+    + `${unprobeable.length} not probeable by table existence `
+    + `(of ${expectations.length} migrations in the repository).`,
+  );
+  if (unprobeable.length > 0) {
+    // Named, not just counted: "this audit says nothing about these" is the
+    // part a reader is most likely to assume away.
+    console.log(
+      "\nThese migrations create no table, so this probe cannot speak to them at all. "
+      + "Their presence must be checked another way (scripts/hosted-state-report.sql, or "
+      + "calling the function they define):\n  "
+      + unprobeable.join("\n  "),
+    );
+  }
 
   if (missing > 0) {
     console.log(

@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { describeDrainOutcome } from "@/lib/graph/drain-report";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
@@ -55,6 +56,7 @@ async function main() {
 
   process.stdout.write(`SoftwareFactory graph worker ${workerId} is ready.\n`);
 
+  let graphsRun = 0;
   do {
     const claim = await store.claimPlannedGraph();
     if (claim === null) {
@@ -93,6 +95,7 @@ async function main() {
       continue;
     }
 
+    graphsRun += 1;
     process.stdout.write(
       `Running graph ${parsed.graph.graph_id} (${compiled.graph.nodes.length} nodes, `
       + `max parallelism ${compiled.graph.maxParallelism}): ${parsed.graph.goal}\n`,
@@ -152,6 +155,7 @@ async function main() {
     if (once) break;
   } while (!stopping);
 
+  process.stdout.write(`${describeDrainOutcome(graphsRun)}\n`);
   process.stdout.write("SoftwareFactory graph worker is done.\n");
 }
 
