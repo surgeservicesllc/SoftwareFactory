@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   captureUsageForAccounts,
   parseAnthropicUsage,
+  PROBE_CLIENT_VERSION,
   probeAccountUsage,
   probeAnthropicUsage,
   type UsageRecorder,
@@ -85,6 +86,12 @@ describe("probeAnthropicUsage", () => {
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string>;
       expect(headers.authorization).toBe("Bearer sk-ant-oat01-example");
+      // The full client identity, not just the token. Four consecutive 403s
+      // (2026-08-19 17:56-18:07Z) carried a valid bearer; the one difference
+      // from the real client's request was these headers.
+      expect(headers["user-agent"]).toBe(`claude-code/${PROBE_CLIENT_VERSION}`);
+      expect(headers["anthropic-beta"]).toBe("oauth-2025-04-20");
+      expect(headers["content-type"]).toBe("application/json");
       return jsonResponse(200, { five_hour: { utilization: 50 } });
     }) as unknown as typeof fetch;
 

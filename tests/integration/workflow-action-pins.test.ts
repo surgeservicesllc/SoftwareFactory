@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { PROBE_CLIENT_VERSION } from "@/lib/worker/usage-probe";
+
 /**
  * Every third-party action a workflow runs must be pinned to a full commit
  * SHA, not a floating tag.
@@ -71,5 +73,8 @@ describe("workflow action pinning", () => {
 
     expect(unpinned).toEqual([]);
     expect(versions.size).toBeLessThanOrEqual(1);
+    // The usage probe presents this same client's identity to the provider's
+    // usage endpoint; the version it names must be the version that runs.
+    expect([...versions]).toEqual([`@${PROBE_CLIENT_VERSION}`]);
   });
 });
