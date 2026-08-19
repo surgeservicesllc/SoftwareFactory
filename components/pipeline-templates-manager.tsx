@@ -553,8 +553,9 @@ function TemplateUseDialog({
       <h2 className="text-lg font-semibold text-foreground">Use {templateName}</h2>
       <p className="mt-1 text-sm text-muted">
         This plans a graph from the template against a project and records it — nodes, edges, and
-        budget — through the same write boundary the engine uses. Nothing is dispatched: execution
-        starts only when a worker claims work.
+        budget — through the same write boundary the engine uses. The graph executor worker claims
+        recorded graphs and runs their nodes in parallel up to the graph&apos;s own budget; until a
+        worker with the subscription credential picks this one up, it stays planned.
       </p>
       <div className="mt-4">
         {/*

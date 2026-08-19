@@ -240,6 +240,13 @@ describe("SECURITY DEFINER functions", () => {
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
       "claim_phase1c_run",
+      // The graph executor's four capabilities, mirroring the Phase 1C
+      // pattern: claim an unrun graph atomically (run + node_runs + the whole
+      // projection in one call), transition nodes under the same
+      // terminal-states-are-final rule the member path enforces, append
+      // artifacts, and close the run — where incomplete input can never be
+      // recorded as COMPLETED. No credential material crosses any of them.
+      "claim_planned_graph",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
       // and `read_` returns ciphertext that is useless without
@@ -248,6 +255,7 @@ describe("SECURITY DEFINER functions", () => {
       "claim_provider_connect_session",
       "complete_ai_auth_session",
       "complete_github_change_request",
+      "complete_graph_run_as_worker",
       "complete_phase1c_run",
       "disconnect_github_connection",
       "expire_ai_auth_sessions",
@@ -284,6 +292,8 @@ describe("SECURITY DEFINER functions", () => {
       // an account the worker just probed. Insert-only into an append-only
       // table; the definer function revalidates the account/organization pair.
       "record_ai_account_usage",
+      "record_graph_artifact_as_worker",
+      "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",
