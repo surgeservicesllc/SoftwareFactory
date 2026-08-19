@@ -2,6 +2,10 @@ name: CI
 
 on:
   pull_request:
+  # Required for the merge queue: it builds a candidate commit and waits for the
+  # required checks to report against *that* commit, so without this trigger
+  # every queued pull request blocks forever.
+  merge_group:
   push:
     branches:
       - main
@@ -18,6 +22,11 @@ permissions:
 # branch makes the older run's answer worthless. Main pushes get a per-commit
 # group so each commit is verified on its own and nothing pre-empts it.
 concurrency:
+  # Merge-queue safe as written: for a merge_group event the first condition is
+  # false, so the group keys on `github.ref`, and a queued candidate runs on its
+  # own `refs/heads/gh-readonly-queue/...` ref. It never shares a group with a
+  # pull-request run or with another queue entry, so nothing can cancel it and
+  # no extra condition is needed here.
   group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 

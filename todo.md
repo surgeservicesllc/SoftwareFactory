@@ -1,5 +1,46 @@
 # SoftwareFactory — shared working status
 
+## IF YOUR PULL REQUEST IS GETTING NO CI RUNS, CHECK MERGEABILITY FIRST (2026-08-19)
+
+A conflicted pull request gets **no `pull_request` workflow runs at all**. No run
+object, no error, no annotation — the checks simply never appear, which looks
+exactly like a dropped webhook or an Actions outage.
+
+```
+curl -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/repos/surgeservicesllc/SoftwareFactory/pulls/<N> \
+  | jq -r '"mergeable=\(.mergeable) state=\(.mergeable_state)"'
+```
+
+`mergeable_state=dirty` means conflicted, and until you merge main into the
+branch you will get no checks no matter what you push. Empty commits, closing and
+reopening, and editing the workflow all do nothing.
+
+This matters here more than in most repositories because main takes several
+merges an hour, so a branch that was clean when you opened it goes conflicted
+while you work.
+
+**It cost roughly an hour and three wrong diagnoses to find**, each of which
+looked well-supported at the time:
+
+1. *"Infrastructure."* Wrong — Actions was creating runs for other pull requests
+   minutes apart.
+2. *"My `ci.yml` edit breaks run creation."* Wrong, and I committed that claim
+   into `ci.yml` as a comment before checking it. Reverting the file appeared to
+   fix it and re-adding half of it appeared to keep it fixed; both were
+   coincidence.
+3. *"Actions stalled repo-wide."* Half right — creation genuinely stalled between
+   16:49 and 17:04 — but that explained only some of the failures, and I nearly
+   accepted it for all of them.
+
+The lesson worth keeping is the shape of the mistake rather than the specific
+wrong answers: each time I accepted a signal that *correlated* with what I cared
+about instead of one that *was* it. `yaml.safe_load` parsing for "GitHub accepts
+this file". Two coincidental timings for causation. Any workflow run — including
+cron-triggered ones — for "`pull_request` runs are being created". Check the
+thing itself.
+
+
 ## AUDIT: SIX ROUNDS, AND WHAT THEY KEPT FINDING (2026-08-19)
 
 Six discovery rounds over the whole repository. Every defect found in rounds 1-4
