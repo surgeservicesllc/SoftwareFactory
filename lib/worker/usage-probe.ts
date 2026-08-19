@@ -128,27 +128,63 @@ export function parseAnthropicUsage(payload: unknown): UsageProbeResult {
 const ANTHROPIC_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const PROBE_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a 429's Retry-After is worth waiting for before giving up on this
+ * pass. The sweep runs again within minutes, so a long instruction is honored
+ * by *leaving*, not by holding the worker hostage to one account's probe.
+ */
+const RETRY_AFTER_CEILING_MS = 10_000;
+
+/** Parse a Retry-After header: delta-seconds or an HTTP date. Null when absent or unreadable. */
+function retryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const date = new Date(header).getTime();
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
 export async function probeAnthropicUsage(
   token: string,
   fetchImpl: typeof fetch = fetch,
+  sleep: (ms: number) => Promise<void> = (ms) =>
+    new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
 ): Promise<UsageProbeResult> {
   let response: Response;
-  try {
-    response = await fetchImpl(ANTHROPIC_USAGE_URL, {
-      method: "GET",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "anthropic-beta": "oauth-2025-04-20",
-        accept: "application/json",
-      },
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-  } catch {
-    return {
-      status: "unavailable",
-      windows: [],
-      detail: reason("The usage endpoint could not be reached."),
-    };
+  let retried = false;
+  for (;;) {
+    try {
+      response = await fetchImpl(ANTHROPIC_USAGE_URL, {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "anthropic-beta": "oauth-2025-04-20",
+          accept: "application/json",
+        },
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+    } catch {
+      return {
+        status: "unavailable",
+        windows: [],
+        detail: reason("The usage endpoint could not be reached."),
+      };
+    }
+
+    // 429 is the endpoint pacing its callers, not a verdict on anything. It
+    // asks a question — "when may you retry?" — and the header answers it, so
+    // one bounded retry inside the same pass usually turns the observation
+    // back into numbers. A wait beyond the ceiling belongs to the next sweep.
+    if (response.status === 429 && !retried) {
+      const wait = retryAfterMs(response.headers.get("retry-after"));
+      if (wait !== null && wait <= RETRY_AFTER_CEILING_MS) {
+        retried = true;
+        await sleep(wait);
+        continue;
+      }
+    }
+    break;
   }
 
   if (!response.ok) {
@@ -173,7 +209,12 @@ export async function probeAnthropicUsage(
           ? `The provider refused the stored credential (HTTP ${response.status}).`
           : response.status === 403
             ? "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected."
-            : `The usage endpoint answered HTTP ${response.status}.`,
+            : response.status === 429
+              // Rate limiting is about the probe's own request pacing — the
+              // account is untouched, and saying only "HTTP 429" left an
+              // owner reading it as the account being broken.
+              ? "The provider rate-limited the usage probe (HTTP 429); the account itself is unaffected, and the next sweep retries."
+              : `The usage endpoint answered HTTP ${response.status}.`,
       ),
     };
   }

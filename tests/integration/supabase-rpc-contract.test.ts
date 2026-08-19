@@ -39,6 +39,61 @@ interface RpcCallSite {
   readonly hasSpread: boolean;
 }
 
+/**
+ * Remove comments from an RPC argument object before its keys are read.
+ *
+ * A comment above an argument is ordinary — it is where the reason for passing
+ * a particular value belongs — and comment prose contains commas. The splitter
+ * below breaks the object on top-level commas, so an unstripped comment splits
+ * mid-sentence and the key that follows it lands in the middle of a segment
+ * where the key regex cannot see it. That reads as "this call omits the
+ * argument" when the call passes it, and worse, hides a misspelled key from the
+ * mismatch check: prose is not code and must not be parsed as code.
+ *
+ * String literals are tracked so that a `//` inside a value — a URL, say — is
+ * left alone. Escapes are honoured; template-literal interpolation is not
+ * entered, which is enough for argument objects.
+ */
+function stripComments(body: string): string {
+  let output = "";
+  let quote: string | null = null;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index] as string;
+
+    if (quote) {
+      output += character;
+      if (character === "\\") {
+        index += 1;
+        output += body[index] ?? "";
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === "`") {
+      quote = character;
+      output += character;
+      continue;
+    }
+
+    if (character === "/" && body[index + 1] === "/") {
+      while (index < body.length && body[index] !== "\n") index += 1;
+      output += "\n";
+      continue;
+    }
+
+    if (character === "/" && body[index + 1] === "*") {
+      const close = body.indexOf("*/", index + 2);
+      index = close === -1 ? body.length : close + 1;
+      continue;
+    }
+
+    output += character;
+  }
+  return output;
+}
+
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
@@ -91,7 +146,7 @@ function extractRpcCalls(file: string, source: string): RpcCallSite[] {
       }
     }
 
-    const body = source.slice(index + 1, end);
+    const body = stripComments(source.slice(index + 1, end));
     // Top-level keys only: a nested object's keys are values, not arguments.
     const parameterNames: string[] = [];
     let spread = false;

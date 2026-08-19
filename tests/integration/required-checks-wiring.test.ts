@@ -35,9 +35,38 @@ beforeAll(async () => {
   worker = await readFile(resolve(repositoryRoot, ".github/workflows/codex-worker.yml"), "utf8");
 });
 
-/** Job-level `name:` values — two-space indented under a job key. */
+/**
+ * Job-level `name:` values, with a one-dimensional matrix expanded.
+ *
+ * GitHub reports one check per matrix combination, named by substituting the
+ * matrix value into the job's `name:`. Reading the template literally would
+ * make the worker's list look wrong for a sharded job and — worse — would let
+ * a shard count change without anything noticing that a required check no
+ * longer exists. The e2e job is sharded, so the expansion is the contract.
+ */
 function ciJobNames(source: string): string[] {
-  return [...source.matchAll(/^ {4}name: (.+)$/gm)].map((match) => match[1].trim());
+  const names: string[] = [];
+  // Split on job keys (two-space indent) so a matrix belongs to its own job.
+  const blocks = source.split(/^ {2}(?=[A-Za-z_][A-Za-z0-9_-]*:$)/m);
+  for (const block of blocks) {
+    const name = /^ {4}name: (.+)$/m.exec(block)?.[1]?.trim();
+    if (!name) continue;
+
+    const variable = /\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/.exec(name);
+    if (!variable) {
+      names.push(name);
+      continue;
+    }
+
+    const values = /^ {8}[A-Za-z_][A-Za-z0-9_]*: \[(.+)\]$/m.exec(block)?.[1];
+    if (!values) {
+      throw new Error(`${name} interpolates matrix.${variable[1]} but no matrix values were found`);
+    }
+    for (const value of values.split(",").map((entry) => entry.trim().replace(/^["']|["']$/g, ""))) {
+      names.push(name.replace(variable[0], value));
+    }
+  }
+  return names;
 }
 
 function requiredChecks(source: string): string[] {
@@ -106,5 +135,59 @@ describe("required check wiring", () => {
     for (const name of requiredChecks(worker)) {
       expect(fixtures).toContain(name);
     }
+  });
+});
+
+describe("CI verdicts on main", () => {
+  /**
+   * A merge that cancels the previous merge's CI leaves main unverified.
+   *
+   * `cancel-in-progress` is correct for a pull-request ref: a newer push to the
+   * same branch makes the older run's answer worthless. It is wrong for pushes
+   * to main, where each commit is a distinct thing to verify and the older run
+   * is the only proof that the commit before it was good. With a shared group,
+   * a burst of merges leaves a trail of `cancelled` runs — runs 32272713212 and
+   * 32216103242 were both cancelled that way — and a cancelled run is
+   * indistinguishable from a suite that never ran.
+   *
+   * This is a guard on the shape of the answer, not on how it is spelled: any
+   * config that keys pushes by commit and refuses to pre-empt them passes.
+   */
+  it("gives every commit on main its own concurrency group", () => {
+    const group = /^ {2}group: (.+)$/m.exec(ci)?.[1] ?? "";
+
+    expect(group, "ci.yml must declare a concurrency group").not.toBe("");
+    // github.ref is identical for every push to main; github.sha is not.
+    expect(group).toContain("github.sha");
+    expect(group).toContain("push");
+  });
+
+  it("never pre-empts an in-progress run for a push", () => {
+    const cancel = /^ {2}cancel-in-progress: (.+)$/m.exec(ci)?.[1]?.trim() ?? "";
+
+    expect(cancel, "ci.yml must declare cancel-in-progress").not.toBe("");
+    // A bare `true` cancels main's own verification; the value has to be an
+    // expression that excludes pushes.
+    expect(cancel).not.toBe("true");
+    expect(cancel).toMatch(/github\.event_name/);
+    expect(cancel).toContain("push");
+  });
+  it("runs as many Playwright shards as the matrix declares", () => {
+    // `--shard=i/n`: the denominator is written separately from the matrix, so
+    // adding a fourth shard without changing it leaves shard 4 of 3, and
+    // Playwright refuses. Getting it wrong the other way — four matrix values
+    // against `/3` — is worse: three jobs re-run the same third of the suite
+    // and a third of the tests never run at all, with three green checks.
+    const shardValues = /^ {8}shard: \[(.+)\]$/m.exec(ci)?.[1];
+    expect(shardValues, "ci.yml must declare the shard matrix").toBeDefined();
+    const declared = (shardValues as string).split(",").length;
+
+    const denominator = /--shard=\$\{\{ matrix\.shard \}\}\/(\d+)/.exec(ci)?.[1];
+    expect(denominator, "ci.yml must run playwright with --shard").toBeDefined();
+
+    expect(Number(denominator)).toBe(declared);
+    // And the job name says the same number, so the check names a reader sees
+    // match the split that actually ran.
+    expect(ci).toContain(`name: Browser and accessibility tests \${{ matrix.shard }}/${declared}`);
   });
 });

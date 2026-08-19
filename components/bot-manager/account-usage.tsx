@@ -24,6 +24,16 @@ export type AccountUsageView = {
   status: string;
   windows: AccountUsageWindow[];
   detail: string | null;
+  /**
+   * The last observation whose probe returned real numbers, when the latest
+   * one did not. One rate-limited probe (HTTP 429, 2026-08-19) used to erase
+   * the measurement from the page and leave an amber failure line beside a
+   * green Connected badge — the account was fine and looked broken.
+   */
+  lastMeasured?: {
+    observedAt: string;
+    windows: AccountUsageWindow[];
+  } | null;
 };
 
 function formatShortTime(iso: string): string {
@@ -57,9 +67,32 @@ export function AccountUsage({ usage }: { usage: AccountUsageView | undefined })
   }
 
   if (usage.status !== "measured" || usage.windows.length === 0) {
+    const lastMeasured = usage.lastMeasured;
+    if (lastMeasured && lastMeasured.windows.length > 0) {
+      // The numbers are real and carry their own timestamp; the failed newer
+      // probe is named below them rather than allowed to erase them. The
+      // account's health is the badge's statement, not this line's.
+      return (
+        <div className="mt-2 space-y-1.5">
+          {lastMeasured.windows.map((window) => (
+            <UsageWindowRow key={window.key} window={window} />
+          ))}
+          <p className="text-xs text-[var(--text-faint)]">
+            Provider-reported usage, as of {formatShortTime(lastMeasured.observedAt)}.
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            The newer probe ({observed}) could not refresh this
+            {usage.detail ? `: ${usage.detail}` : "."}
+          </p>
+        </div>
+      );
+    }
+    // No measurement has ever succeeded. Still a statement about the probe,
+    // not the account — a failed usage reading demotes nothing, so it renders
+    // as information rather than as the alarm the amber tone implied.
     return (
-      <p className="mt-1.5 text-xs text-amber-600">
-        Usage unavailable {observed}
+      <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+        Usage not measured yet ({observed})
         {usage.detail ? ` — ${usage.detail}` : "."}
       </p>
     );
@@ -68,32 +101,38 @@ export function AccountUsage({ usage }: { usage: AccountUsageView | undefined })
   return (
     <div className="mt-2 space-y-1.5">
       {usage.windows.map((window) => (
-        <div key={window.key} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <span className="w-36 shrink-0 text-xs text-[var(--text-muted)]">{window.label}</span>
-          <div
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={window.usedPercent}
-            aria-label={`${window.label} usage`}
-            className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--surface-inset)]"
-          >
-            <div
-              className={cn("h-full rounded-full", barTone(window.usedPercent))}
-              style={{ width: `${Math.min(100, Math.max(0, window.usedPercent))}%` }}
-            />
-          </div>
-          <span className="text-xs font-medium tabular-nums text-[var(--text)]">
-            {window.usedPercent}% used
-          </span>
-          {window.resetsAt ? (
-            <span className="text-xs text-[var(--text-faint)]">
-              resets {formatShortTime(window.resetsAt)}
-            </span>
-          ) : null}
-        </div>
+        <UsageWindowRow key={window.key} window={window} />
       ))}
       <p className="text-xs text-[var(--text-faint)]">Provider-reported usage, {observed}.</p>
+    </div>
+  );
+}
+
+function UsageWindowRow({ window }: { window: AccountUsageWindow }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <span className="w-36 shrink-0 text-xs text-[var(--text-muted)]">{window.label}</span>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={window.usedPercent}
+        aria-label={`${window.label} usage`}
+        className="h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-[var(--surface-inset)]"
+      >
+        <div
+          className={cn("h-full rounded-full", barTone(window.usedPercent))}
+          style={{ width: `${Math.min(100, Math.max(0, window.usedPercent))}%` }}
+        />
+      </div>
+      <span className="text-xs font-medium tabular-nums text-[var(--text)]">
+        {window.usedPercent}% used
+      </span>
+      {window.resetsAt ? (
+        <span className="text-xs text-[var(--text-faint)]">
+          resets {formatShortTime(window.resetsAt)}
+        </span>
+      ) : null}
     </div>
   );
 }

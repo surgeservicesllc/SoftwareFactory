@@ -16,18 +16,36 @@ import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
 
+type UsageWindowRow = {
+  window_key: string;
+  label: string;
+  used_percent: number;
+  resets_at?: string | null;
+};
+
 type UsageRow = {
   usage_account_id: string;
   usage_observed_at: string;
   usage_status: string;
-  usage_windows: Array<{
-    window_key: string;
-    label: string;
-    used_percent: number;
-    resets_at?: string | null;
-  }>;
+  usage_windows: UsageWindowRow[];
   usage_detail: string | null;
+  /**
+   * The last observation whose probe actually returned numbers, carried
+   * separately so one failed probe cannot erase them from the console.
+   * Absent on a database that predates migration 20260819001100.
+   */
+  usage_measured_at?: string | null;
+  usage_measured_windows?: UsageWindowRow[] | null;
 };
+
+function mapWindows(windows: UsageWindowRow[] | null | undefined) {
+  return (windows ?? []).map((window) => ({
+    key: window.window_key,
+    label: window.label,
+    usedPercent: window.used_percent,
+    resetsAt: window.resets_at ?? null,
+  }));
+}
 
 export async function GET() {
   try {
@@ -50,13 +68,14 @@ export async function GET() {
         accountId: row.usage_account_id,
         observedAt: row.usage_observed_at,
         status: row.usage_status,
-        windows: (row.usage_windows ?? []).map((window) => ({
-          key: window.window_key,
-          label: window.label,
-          usedPercent: window.used_percent,
-          resetsAt: window.resets_at ?? null,
-        })),
+        windows: mapWindows(row.usage_windows),
         detail: row.usage_detail,
+        lastMeasured: row.usage_measured_at
+          ? {
+            observedAt: row.usage_measured_at,
+            windows: mapWindows(row.usage_measured_windows),
+          }
+          : null,
       })),
     });
   } catch (error) {

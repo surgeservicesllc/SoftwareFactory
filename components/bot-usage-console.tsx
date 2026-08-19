@@ -36,8 +36,16 @@ type State = "loading" | "signed-out" | "ready" | "error";
 function headroom(usage: AccountUsageView | undefined):
   | { label: string; tone: "safe" | "warning" | "danger" }
   | null {
-  if (!usage || usage.status !== "measured" || usage.windows.length === 0) return null;
-  const highest = Math.max(...usage.windows.map((window) => window.usedPercent));
+  if (!usage) return null;
+  // The latest measurement, wherever it lives: a failed newer probe carries
+  // the last real numbers in `lastMeasured`, and a label computed from those
+  // is truthful because the panel below shows the same numbers with their
+  // own timestamp. No measurement anywhere means no label, never a guess.
+  const windows = usage.status === "measured" && usage.windows.length > 0
+    ? usage.windows
+    : usage.lastMeasured?.windows ?? [];
+  if (windows.length === 0) return null;
+  const highest = Math.max(...windows.map((window) => window.usedPercent));
   if (highest >= 90) return { label: "Low headroom", tone: "danger" };
   if (highest >= 75) return { label: "Moderate", tone: "warning" };
   return { label: "Healthy", tone: "safe" };

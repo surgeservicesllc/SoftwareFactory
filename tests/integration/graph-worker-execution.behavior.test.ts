@@ -8,6 +8,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { NodeExecutionResult } from "@/lib/graph/runner";
+import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import {
   compileClaimedGraph,
   parseClaimedGraph,
@@ -121,23 +122,27 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     goal: string,
     requiresApproval = false,
     nodesJson: string = DIAMOND_NODES,
+    edgesJson: string = DIAMOND_EDGES,
   ): Promise<string> {
     await asOwner(db);
     const created = await db.query<{ create_graph_from_plan: string }>(
       `select public.create_graph_from_plan(
          $1::uuid, $2::uuid, $3, 'DIAMOND'::public.graph_topology, '[]'::jsonb,
          'green'::public.risk_level, $4, $5::jsonb, $6::jsonb, '{}'::jsonb)`,
-      [organizationId, projectId, goal, requiresApproval, nodesJson, DIAMOND_EDGES],
+      [organizationId, projectId, goal, requiresApproval, nodesJson, edgesJson],
     );
     await reset(db);
     return created.rows[0].create_graph_from_plan;
   }
 
-  async function claim(workerId = "graph-worker-test"): Promise<unknown> {
+  async function claim(
+    workerId = "graph-worker-test",
+    supported: readonly string[] = WORKER_SUPPORTED_EXECUTORS,
+  ): Promise<unknown> {
     await asServiceRole(db);
     const claimed = await db.query<{ claim_planned_graph: unknown }>(
-      "select public.claim_planned_graph($1)",
-      [workerId],
+      "select public.claim_planned_graph($1, $2::text[])",
+      [workerId, supported],
     );
     await reset(db);
     return claimed.rows[0].claim_planned_graph;
@@ -889,5 +894,74 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(claimed.graph.nodes.find((n) => n.node_key === "inspect_a")?.timeout_ms).toBe(480_000);
     expect(claimed.graph.nodes.find((n) => n.node_key === "synthesize")?.tolerates_partial_inputs).toBe(true);
     await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
+  });
+  it("leaves a graph alone when it needs an executor this worker does not provide", async () => {
+    // Two shipped templates contain ANCHOR nodes — run the tests, attempt the
+    // reproduction. The analysis worker has no workspace and cannot do that.
+    // Before executor matching it claimed such a graph anyway, failed the
+    // anchor, blocked everything below it, and spent one of the graph's three
+    // chances to say something it already knew before claiming.
+    const anchorNodes = JSON.stringify([
+      { node_key: "integrate", job: "Integrate the branches", executor: "DETERMINISTIC", capability: "extraction", max_attempts: 1 },
+      { node_key: "verify", job: "Run the tests and record the result", executor: "ANCHOR", capability: "qa", max_attempts: 1 },
+    ]);
+    const anchorEdges = JSON.stringify([
+      { from_node_key: "integrate", to_node_key: "verify", reason: "DATA", detail: "verification runs on the integrated tree" },
+    ]);
+    const anchorGraphId = await createDiamondGraph("Build it and prove it with tests", false, anchorNodes, anchorEdges);
+
+    // Drain everything else this suite left claimable, so the queue is empty
+    // except for the anchor graph. Each claim is closed PARTIAL, which retires
+    // it. The drain also proves the anchor graph is never among them.
+    const claimedIds: string[] = [];
+    for (let i = 0; i < 20; i += 1) {
+      const parsed = parseClaimedGraph(await claim());
+      if (!parsed.ok) break;
+      claimedIds.push(parsed.graph.graph_id);
+      await pgliteStore(db, "graph-worker-test").completeRun(parsed.graph.graph_run_id, "PARTIAL", false);
+    }
+    expect(claimedIds).not.toContain(anchorGraphId);
+
+    // The queue is empty now, and the anchor graph is the only thing left in
+    // it — so a null claim is a refusal of this graph, not an empty queue.
+    const waiting = await db.query<{ id: string }>(
+      `select g.id from public.graphs g
+        where g.requires_owner_approval = false
+          and not exists (select 1 from public.graph_runs r
+                where r.graph_id = g.id and r.state not in ('FAILED', 'CANCELLED'))
+          and (select count(*) from public.graph_runs r
+                where r.graph_id = g.id and r.state = 'FAILED') < 3
+          and (select count(*) from public.graph_runs r where r.graph_id = g.id) < 10`,
+      [],
+    );
+    expect(waiting.rows.map((row) => row.id)).toEqual([anchorGraphId]);
+
+    expect(await claim()).toBeNull();
+
+    // No run was created, so the graph did not spend a chance and nothing is
+    // recorded as a failure that never executed.
+    const runs = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.graph_runs where graph_id = $1",
+      [anchorGraphId],
+    );
+    expect(runs.rows[0].count).toBe(0);
+
+    // A worker that can run anchors gets it — the graph was waiting, not lost.
+    const claimed = parseClaimedGraph(await claim("anchor-capable-worker", ["MODEL", "DETERMINISTIC", "ANCHOR"]));
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.graph.graph_id).toBe(anchorGraphId);
+    await pgliteStore(db, "anchor-capable-worker").completeRun(claimed.graph.graph_run_id, "PARTIAL", false);
+  });
+
+  it("refuses a claim from a worker that declares no executors at all", async () => {
+    // An empty set would match every graph under `<> all (...)`, which is the
+    // opposite of the intent: a worker that declares nothing must claim
+    // nothing, and saying so loudly beats claiming everything quietly.
+    await asServiceRole(db);
+    await expect(
+      db.query("select public.claim_planned_graph($1, $2::text[])", ["graph-worker-test", []]),
+    ).rejects.toThrow(/at least one executor/);
+    await reset(db);
   });
 });

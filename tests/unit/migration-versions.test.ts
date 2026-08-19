@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -38,5 +38,54 @@ describe("migration versions", () => {
   it("all carry a fourteen-digit version the tooling can read", () => {
     const malformed = files.filter((file) => !/^\d{14}_[a-z0-9_]+\.sql$/.test(file));
     expect(malformed, malformed.join(", ")).toEqual([]);
+  });
+});
+
+/**
+ * A function defined by more than one replayed migration must be dropped
+ * before each definition.
+ *
+ * `scope=broker-functions` re-runs every listed file in order, every time.
+ * That is deliberate — it makes the apply idempotent — but it means an
+ * earlier file redefining a function a later file has since widened will try
+ * to narrow it back, and Postgres refuses to change an existing function's
+ * return type. Apply run 32272188607 died exactly there, halfway through,
+ * leaving a security migration unapplied behind it.
+ */
+describe("replayed migrations", () => {
+  const workflow = readFileSync(
+    resolve(import.meta.dirname, "../../.github/workflows/apply-hosted-migrations.yml"),
+    "utf8",
+  );
+  const migrationsDir = resolve(import.meta.dirname, "../../supabase/migrations");
+  const replayed = [...workflow.matchAll(/supabase\/migrations\/(\S+\.sql)/g)].map((m) => m[1]);
+
+  it("drop a function first wherever two of them define the same one", () => {
+    const definitions = new Map<string, string[]>();
+    const bodies = new Map<string, string>();
+    for (const file of new Set(replayed)) {
+      let body: string;
+      try {
+        body = readFileSync(resolve(migrationsDir, file), "utf8");
+      } catch {
+        continue;
+      }
+      bodies.set(file, body);
+      for (const match of body.matchAll(/create or replace function public\.(\w+)\s*\(/g)) {
+        definitions.set(match[1], [...(definitions.get(match[1]) ?? []), file]);
+      }
+    }
+
+    const unguarded: string[] = [];
+    for (const [fn, files] of definitions) {
+      if (files.length < 2) continue;
+      for (const file of files) {
+        const body = bodies.get(file) ?? "";
+        if (!new RegExp(`drop function if exists public\\.${fn}\\b`).test(body)) {
+          unguarded.push(`${file} redefines ${fn} without dropping it first`);
+        }
+      }
+    }
+    expect(unguarded, unguarded.join("; ")).toEqual([]);
   });
 });

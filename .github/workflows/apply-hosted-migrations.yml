@@ -26,7 +26,7 @@ on:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
           applies only the idempotent broker migrations
-          (20260816000400 through 20260819000900) and records them in history;
+          (20260816000400 through 20260819001100) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
           "probe" changes nothing at all and just reports which objects already
@@ -195,7 +195,9 @@ jobs:
             supabase/migrations/20260819000600_tolerant_fan_ins_for_planted_copy.sql \
             supabase/migrations/20260819000700_bot_credential_ref_privileged_parity.sql \
             supabase/migrations/20260819000800_list_graph_run_verifications.sql \
-            supabase/migrations/20260819000900_record_verification_as_worker.sql
+            supabase/migrations/20260819000900_record_verification_as_worker.sql \
+            supabase/migrations/20260819001000_claim_by_executor_capability.sql \
+            supabase/migrations/20260819001100_usage_survives_a_rate_limited_probe.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -241,6 +243,8 @@ jobs:
           repair 20260819000700
           repair 20260819000800
           repair 20260819000900
+          repair 20260819001000
+          repair 20260819001100
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
@@ -326,6 +330,21 @@ jobs:
              order by expected.version;"
           echo "present = t: the DDL is live, so repair the history row rather than re-running the file."
           echo "present = f: that migration has genuinely not run."
+          echo ""
+          echo "The ADR-036 credential denylist, checked directly rather than through the ledger."
+          echo "Version 20260819000700 was recorded once while a DIFFERENT file's DDL ran under"
+          echo "that number (see AI/HOSTED_APPLY_RUNBOOK.md), so its history row proves nothing."
+          echo "This asks the constraint itself, and names every privileged reference it covers."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select conname,
+                   (strpos(pg_get_constraintdef(oid), 'SUPABASE_SECRET_KEY') > 0
+                    and strpos(pg_get_constraintdef(oid), 'SUPABASE_ACCESS_TOKEN') > 0
+                    and strpos(pg_get_constraintdef(oid), 'VERCEL_OIDC_TOKEN') > 0
+                    and strpos(pg_get_constraintdef(oid), 'POSTGRES_URL') > 0
+                    and strpos(pg_get_constraintdef(oid), 'GITHUB_CLIENT_ID') > 0) as covers_all_five_added
+              from pg_constraint
+             where conname = 'bots_credential_ref_not_privileged';"
+          echo "no row = the constraint is absent; covers_all_five_added = f means the parity fix has not run."
           echo ""
           echo "Ownership and grants for the AI-account section, which is where a 42501 comes from."
           echo "A SECURITY DEFINER function runs as its owner: if the function and the tables it"
