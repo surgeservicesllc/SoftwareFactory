@@ -217,6 +217,24 @@ export async function probeAnthropicUsage(
     // back to "needs sign-in again". A refusal to state usage is evidence
     // about usage, not about the sign-in.
     const rejected = response.status === 401;
+    // 403 is durable for this credential type, and the evidence says so: the
+    // same token runs CLI inference successfully while every usage probe —
+    // valid bearer, the client's own headers — is declined. `claude
+    // setup-token` mints an inference-scoped worker token; the usage endpoint
+    // belongs to the fuller interactive sign-in. That is a property of the
+    // connection, not a transient fault, so it records as `unsupported`: the
+    // truthful "this cannot be measured here", rendered calmly, instead of a
+    // failure the next sweep pretends it might cure.
+    if (response.status === 403) {
+      return {
+        status: "unsupported",
+        windows: [],
+        detail: reason(
+          "The provider declines usage reads for this connection (HTTP 403) while the same credential runs inference. "
+          + "Headless worker tokens carry inference scope only; usage needs the fuller interactive sign-in.",
+        ),
+      };
+    }
     return {
       status: "unavailable",
       windows: [],
@@ -224,9 +242,7 @@ export async function probeAnthropicUsage(
       detail: reason(
         rejected
           ? `The provider refused the stored credential (HTTP ${response.status}).`
-          : response.status === 403
-            ? "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected."
-            : response.status === 429
+          : response.status === 429
               // Rate limiting is about the probe's own request pacing — the
               // account is untouched, and saying only "HTTP 429" left an
               // owner reading it as the account being broken.
@@ -366,6 +382,16 @@ export async function captureUsageForAccounts(
   options?: Readonly<{
     fetchImpl?: typeof fetch;
     open?: (sealed: string, context: { organizationId: string; purpose: string }) => string;
+    /**
+     * Accounts whose usage is durably unmeasurable this worker's lifetime.
+     * A 403 scope refusal does not change until the credential does, so a
+     * lingering worker re-recording it every five minutes is 288 identical
+     * evidence rows a day. The caller owns the set; this pass skips accounts
+     * already in it and adds the ones that answer `unsupported`. A fresh
+     * worker starts with an empty set, so policy changes are still noticed
+     * within one handover.
+     */
+    unmeasurable?: Set<string>;
   }>,
 ): Promise<UsageCaptureResult> {
   const open = options?.open
@@ -378,6 +404,10 @@ export async function captureUsageForAccounts(
   let demoted = 0;
 
   for (const account of await source.listAccountsForVerification()) {
+    if (options?.unmeasurable?.has(account.accountId)) {
+      unsupported += 1;
+      continue;
+    }
     try {
       let result: UsageProbeResult;
       const sealed = await source.readStoredCredential(account.organizationId, account.purpose);
@@ -430,7 +460,10 @@ export async function captureUsageForAccounts(
 
       if (result.status === "measured") measured += 1;
       else if (result.status === "unavailable") unavailable += 1;
-      else unsupported += 1;
+      else {
+        unsupported += 1;
+        options?.unmeasurable?.add(account.accountId);
+      }
     } catch {
       errors += 1;
     }

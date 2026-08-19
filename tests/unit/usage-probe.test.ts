@@ -126,16 +126,18 @@ describe("probeAnthropicUsage", () => {
       .toBe(true);
 
     // 403 is the provider declining THIS ENDPOINT for a credential it
-    // authenticated — scope, plan, or gating. Treating it as a dead
-    // credential looped the hosted deployment: every successful reconnect
-    // was demoted straight back by the next sweep.
+    // authenticated. Treating it as a dead credential looped the hosted
+    // deployment: every successful reconnect was demoted straight back by
+    // the next sweep. And it is durable — live probes with the client's own
+    // headers were declined all afternoon while the same token ran
+    // inference — so it records as `unsupported` (not measurable for this
+    // connection), never as a transient failure the next sweep might cure.
     const declined = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch;
     const declinedResult = await probeAnthropicUsage("sk-ant-oat01-example", declined);
     expect(declinedResult.credentialRejected).toBeFalsy();
-    expect(declinedResult.status).toBe("unavailable");
-    expect(declinedResult.detail).toBe(
-      "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected.",
-    );
+    expect(declinedResult.status).toBe("unsupported");
+    expect(declinedResult.detail).toContain("declines usage reads for this connection (HTTP 403)");
+    expect(declinedResult.detail).toContain("inference scope only");
 
     // Everything else is the endpoint having a bad day. Treating these as
     // credential evidence would disconnect a healthy account on a blip.
@@ -322,9 +324,43 @@ describe("captureUsageForAccounts", () => {
 
     expect(result.demoted).toBe(0);
     expect(demotions).toHaveLength(0);
-    // The refusal to answer is still recorded honestly, as usage evidence.
-    expect(calls[0]?.status).toBe("unavailable");
-    expect(calls[0]?.detail).toContain("declined the usage probe (HTTP 403)");
+    // The refusal to answer is still recorded honestly — as the durable
+    // "not measurable for this connection", not a transient failure.
+    expect(calls[0]?.status).toBe("unsupported");
+    expect(calls[0]?.detail).toContain("declines usage reads for this connection (HTTP 403)");
+  });
+
+  it("stops re-asking within one worker after the provider declines usage durably", async () => {
+    // A 403 scope refusal holds for the credential's lifetime. A lingering
+    // worker probing it every five minutes would append 288 identical
+    // evidence rows a day; the memo makes the durable answer stick for this
+    // worker's window while a fresh worker still re-checks once.
+    const { recorder, calls } = recorderSpy();
+    let probes = 0;
+    const unmeasurable = new Set<string>();
+    const options = {
+      fetchImpl: (async () => {
+        probes += 1;
+        return new Response("no", { status: 403 });
+      }) as unknown as typeof fetch,
+      open: () => "sk-ant-oat01-example",
+      unmeasurable,
+    };
+    const source = {
+      listAccountsForVerification: async () => [account],
+      readStoredCredential: async () => "sealed-envelope",
+    };
+
+    const first = await captureUsageForAccounts(source, recorder, options);
+    expect(first.unsupported).toBe(1);
+    expect(probes).toBe(1);
+    expect(unmeasurable.has(account.accountId)).toBe(true);
+
+    const second = await captureUsageForAccounts(source, recorder, options);
+    // Still counted truthfully, but neither probed nor re-recorded.
+    expect(second.unsupported).toBe(1);
+    expect(probes).toBe(1);
+    expect(calls).toHaveLength(1);
   });
 
   it("does not demote an account over a provider outage", async () => {

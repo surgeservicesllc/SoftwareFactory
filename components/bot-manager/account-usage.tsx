@@ -59,9 +59,14 @@ export function AccountUsage({ usage }: { usage: AccountUsageView | undefined })
   const observed = `as of ${formatShortTime(usage.observedAt)}`;
 
   if (usage.status === "unsupported") {
+    // The recorded reason when there is one: "the provider declines usage
+    // reads for this connection" is a different, more useful fact than the
+    // generic "not measurable yet", and it is the provider's own answer.
     return (
       <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-        Usage is not measurable for this provider yet ({observed}).
+        {usage.detail
+          ? `Usage is not measurable for this connection (${observed}) — ${usage.detail}`
+          : `Usage is not measurable for this provider yet (${observed}).`}
       </p>
     );
   }
