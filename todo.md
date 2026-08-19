@@ -304,6 +304,53 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+Rounds 12-13 — the day's cadence audited itself, and the owner's page told the truth again:
+
+- **Main's CI verdict was `cancelled`, not `success`, for most of the day.**
+  The concurrency group keyed pushes by `github.ref` — identical for every
+  commit on main — with cancel-in-progress true, so each merge killed the
+  verification of the merge before it (runs 32272713212, 32216103242).
+  Pushes now get a per-commit group and are never pre-empted; PR refs keep
+  the supersede. Two guards pin the shape, not the spelling. (#267)
+- **The probe asked the constraint itself**: scope=probe now queries
+  pg_constraint directly for bots_credential_ref_not_privileged, because the
+  20260819000700 ledger row proves nothing. Measured verdict:
+  covers_all_five_added = t — the ADR-036 parity fix is genuinely live. (#266)
+- **The worker claimed graphs it structurally cannot run.** feature_build
+  and the incident template carry ANCHOR nodes (run the tests, attempt the
+  reproduction); the analysis worker failed them after claiming, blocking
+  everything downstream and spending one of three chances saying what was
+  knowable pre-claim. claim_planned_graph now takes the caller's declared
+  executors (required, no default; empty set raises) and skips unrunnable
+  graphs — they stay PLANNED, budget intact. The template cards say so
+  before a person records such a graph. ADR-093. (#269, #272)
+- The guard that reviewed that change was itself blind: the RPC-contract
+  parser split argument objects on commas without stripping comments, so a
+  comma in comment prose hid the key that followed — a false "omits the
+  argument" one way and a hidden misspelled key the other. String-aware
+  stripping now. (#269)
+- **The browser suite outgrew its ceiling mid-day** — killed at 1582/1605,
+  forty seconds from green. Sharded 3x535 (verified with --list) instead of
+  raising the ceiling a third time; required checks, merge-readiness
+  fixtures, and a matrix-expanding guard all move together, plus a guard
+  pinning the --shard denominator to the matrix length. First sharded run
+  then found the NEXT weak joint: two shards hung 19 minutes in apt-get
+  update inside playwright install. The install step is now bounded per
+  attempt (timeout 240, 3 tries) with its own ceiling. (#270, #272)
+- **Owner report: amber "Usage unavailable … HTTP 429" beside a green
+  Connected badge.** Four layers each told a small truth composing into a
+  lie: the probe recorded a bare status code; the projection returned only
+  the newest observation, erasing the last real numbers; the component
+  painted every non-measured row amber; and the broker's push trigger
+  multiplied startup probes by the day's merge cadence — the probable cause
+  of the 429 itself. Fixed at every layer: bounded Retry-After retry +
+  truthful 429 wording; migration 20260819001100 carries the latest measured
+  observation alongside the latest one; the console keeps real numbers on
+  screen under their own timestamp and renders probe failures as muted
+  information (account health is the badge's statement); push-handover runs
+  skip the startup probe. Applied to production in run 32279867500.
+  ADR-094. (#271)
+
 Rounds 9-11 — what checking the WHOLE found that checking the parts did not:
 
 - Verification gates were schema-and-engine only. graph_verifications,
