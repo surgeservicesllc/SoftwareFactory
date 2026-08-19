@@ -2,7 +2,30 @@
 
 Last updated: 2026-08-19
 
-## Newest (2026-08-19 ~17:15Z): the day's own cadence audited, and the Bot Manager tells the truth again (ADR-093, ADR-094)
+## Newest (2026-08-19 ~18:05Z): all five inspectors succeeded in production; one node from a COMPLETED run
+
+The 17:50Z window delivered the strongest evidence yet, then ran dry:
+
+- **Drain 32283900970, graph run `4d3f44a7-…`: 6 of 7 — every MODEL
+  inspector succeeded in parallel** through the CLI (24-turn/480s envelope),
+  the deterministic reduce folded their findings, and the run closed PARTIAL
+  naming its one failure: the report synthesis, refused capacity (the fresh
+  window had also just paid for the canary's five nodes; resets 22:50Z).
+- **Live canary 32283945714 fully green**: "fans out, synthesizes, and
+  verifies with a fresh context", 176.6s, zero API tokens — no capacity
+  skip, no turn-budget failure.
+- Migration `20260819001200` plants one fixed-id copy
+  (`c9d4f1e8-7a52-4b3c-9e16-4f8a2d5c7b91`) cloned verbatim from the
+  PARTIAL-retired copy, for a **solo** dispatch after 22:50Z (no canary in
+  the same window) to convert 6/7 into the COMPLETED all-seven proof.
+- The auth-broker's post-reset usage sweep still recorded `1 unavailable`
+  (counts only in the log); the probe now prints the last five usage
+  observations' status+detail (constraint-guaranteed secret-free), so the
+  next probe run reads WHY without a database console. Rounds 15-16 also
+  pinned every workflow action to a reviewed SHA and the Claude CLI to one
+  version everywhere, both guarded by tests.
+
+## Prior (2026-08-19 ~17:15Z): the day's own cadence audited, and the Bot Manager tells the truth again (ADR-093, ADR-094)
 
 Applied to production through apply runs 32277018759 (…001000) and
 32279867500 (…001100); ledger confirmed both. Highlights, in the order the

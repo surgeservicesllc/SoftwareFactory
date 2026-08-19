@@ -895,6 +895,54 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(claimed.graph.nodes.find((n) => n.node_key === "synthesize")?.tolerates_partial_inputs).toBe(true);
     await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
   });
+
+  it("re-plants a third copy from the PARTIAL-retired second, exactly once", async () => {
+    // Production run 4d3f44a7 closed the second copy PARTIAL with six of
+    // seven nodes succeeded — an answer, which retires the graph — while the
+    // one failure was the report node refused capacity. The third seed clones
+    // that copy by its known id (a PARTIAL source is deliberately outside the
+    // exhausted-source criteria the earlier seeds use), verbatim envelopes.
+    const sourceId = "b7e2a9d4-3c61-4f8e-9a05-2d84c1f6b730";
+    const replantedId = "c9d4f1e8-7a52-4b3c-9e16-4f8a2d5c7b91";
+    const seedFile = "20260819001200_replant_for_the_complete_run.sql";
+    const seedSql = await readFile(resolve(migrationsDirectory, seedFile), "utf8");
+
+    // The previous test closed the source's run PARTIAL, so it is retired
+    // and this seed's guard (runs exist, none open) is satisfied.
+    await reset(db);
+    await db.exec(seedSql);
+
+    const nodes = await db.query<{ node_key: string; timeout_ms: number; tolerates_partial_inputs: boolean }>(
+      "select node_key, timeout_ms, tolerates_partial_inputs from public.graph_nodes where graph_id = $1 order by node_key",
+      [replantedId],
+    );
+    expect(nodes.rows).toHaveLength(4);
+    // Envelopes copy verbatim from the tuned source: measured timeouts and
+    // the tolerant fan-in both survive the clone.
+    expect(nodes.rows.find((n) => n.node_key === "inspect_a")?.timeout_ms).toBe(480_000);
+    expect(nodes.rows.find((n) => n.node_key === "synthesize")?.tolerates_partial_inputs).toBe(true);
+
+    // Replay: no second copy, ever.
+    await db.exec(seedSql);
+    const copies = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.graphs where id = $1", [replantedId],
+    );
+    expect(copies.rows[0].count).toBe(1);
+
+    // Claimable by the analysis worker, and cleanly retired for later tests.
+    const claimed = parseClaimedGraph(await claim());
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.graph.graph_id).toBe(replantedId);
+    await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
+
+    // The source stays retired: cloning must not have reopened it.
+    const sourceRuns = await db.query<{ state: string }>(
+      "select state::text as state from public.graph_runs r join public.graphs g on g.id = r.graph_id where g.id = $1",
+      [sourceId],
+    );
+    expect(sourceRuns.rows.every((row) => ["PARTIAL", "FAILED", "CANCELLED", "COMPLETED"].includes(row.state))).toBe(true);
+  });
   it("leaves a graph alone when it needs an executor this worker does not provide", async () => {
     // Two shipped templates contain ANCHOR nodes — run the tests, attempt the
     // reproduction. The analysis worker has no workspace and cannot do that.

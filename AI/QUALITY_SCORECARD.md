@@ -21,12 +21,21 @@ timeout). **The full chain has now executed end to end in production**: drain ru
 `32254860997`, graph run `ca347ab9-…` — an inspector completed through the
 CLI, the deterministic reduce folded its findings in code, and the report
 synthesis completed from the reduce output, with no node left undispatched
-and the incompleteness stated. The remaining claim — a run where *every*
-inspector succeeds — is still withheld: four failed on a transport turn
-ceiling that silently clamped the declared budget, now raised to the
-measured 24 and pinned by test; migration `20260819000500` plants the
-copy that next dispatch runs with the corrected envelope. CI on main is
-fully green on the merged state (run `32216103242`, 1605 browser tests).
+and the incompleteness stated. **Every inspector has now
+succeeded in production**: post-reset drain run `32283900970`, graph run
+`4d3f44a7-…` — all five MODEL inspectors completed in parallel through the
+CLI with the corrected 24-turn/eight-minute envelope, the deterministic
+reduce folded their findings, and the run closed PARTIAL naming its one
+failure: the report synthesis, refused capacity minutes after the window
+opened (the same window had just paid for the live canary's five nodes).
+The live canary itself is green end to end — run `32283945714`, "fans out,
+synthesizes, and verifies with a fresh context", 176.6s, zero API tokens —
+so fan-out, synthesis, and fresh-context verification each have live
+proof. The one still-withheld claim is a single COMPLETED all-seven run;
+migration `20260819001200` plants the copy the 22:50Z window's dispatch
+runs alone, so the report node is not competing with a canary for fuel.
+CI on main is green on the merged state with the browser suite sharded
+3×535 (runs on `05f0749` and `c02a275`).
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to
