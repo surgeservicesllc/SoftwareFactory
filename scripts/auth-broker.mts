@@ -153,7 +153,17 @@ async function main() {
       );
     }
   };
-  await captureUsage();
+  // A push-triggered run is a handover: its predecessor probed usage at most
+  // five minutes ago (its own startup or idle cadence), and today's merge
+  // trains queue a successor per merge. Probing again on each handover is how
+  // the endpoint got hammered into answering HTTP 429 on 2026-08-19 — a burst
+  // of identical reads carrying no new information. The idle cadence below
+  // reaches the first capture within ~5 minutes, which is the same freshness
+  // the predecessor was already providing. Dispatch, schedule, and manual
+  // runs still probe immediately: for those there is no predecessor to trust.
+  if (process.env.GITHUB_EVENT_NAME !== "push") {
+    await captureUsage();
+  }
 
   const deadline = Date.now() + env.SOFTWAREFACTORY_AUTH_BROKER_DEADLINE_MS;
   const dependencies = productionAuthBrokerDependencies(store);
