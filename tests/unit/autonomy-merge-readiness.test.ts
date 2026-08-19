@@ -16,10 +16,20 @@ function request(overrides: Partial<MergeReadinessRequest> = {}): MergeReadiness
     approved: true,
     mergeability: "clean",
     pullRequestOpen: true,
-    requiredChecks: ["Lint, typecheck, test, and build", "Browser and accessibility tests"],
+    // The browser suite is sharded, so it reports three checks rather than
+    // one. A shard that never reports is an unreported required check, which
+    // is what this helper exists to model.
+    requiredChecks: [
+      "Lint, typecheck, test, and build",
+      "Browser and accessibility tests 1/3",
+      "Browser and accessibility tests 2/3",
+      "Browser and accessibility tests 3/3",
+    ],
     checks: [
       { name: "Lint, typecheck, test, and build", status: "passed" },
-      { name: "Browser and accessibility tests", status: "passed" },
+      { name: "Browser and accessibility tests 1/3", status: "passed" },
+      { name: "Browser and accessibility tests 2/3", status: "passed" },
+      { name: "Browser and accessibility tests 3/3", status: "passed" },
     ],
     // The property under test in most cases is everything *except* the missing
     // executor, so it is connected by default here and asserted separately.
@@ -111,7 +121,9 @@ describe("required checks are never inferred as satisfied", () => {
       request({
         checks: [
           { name: "Lint, typecheck, test, and build", status: "failed" },
-          { name: "Browser and accessibility tests", status: "passed" },
+          { name: "Browser and accessibility tests 1/3", status: "passed" },
+          { name: "Browser and accessibility tests 2/3", status: "passed" },
+          { name: "Browser and accessibility tests 3/3", status: "passed" },
         ],
       }),
     );
@@ -124,7 +136,9 @@ describe("required checks are never inferred as satisfied", () => {
       request({
         checks: [
           { name: "Lint, typecheck, test, and build", status: "pending" },
-          { name: "Browser and accessibility tests", status: "passed" },
+          { name: "Browser and accessibility tests 1/3", status: "passed" },
+          { name: "Browser and accessibility tests 2/3", status: "passed" },
+          { name: "Browser and accessibility tests 3/3", status: "passed" },
         ],
       }),
     );
@@ -137,7 +151,9 @@ describe("required checks are never inferred as satisfied", () => {
       request({
         checks: [
           { name: "Lint, typecheck, test, and build", status: "passed" },
-          { name: "Browser and accessibility tests", status: "passed" },
+          { name: "Browser and accessibility tests 1/3", status: "passed" },
+          { name: "Browser and accessibility tests 2/3", status: "passed" },
+          { name: "Browser and accessibility tests 3/3", status: "passed" },
           { name: "Optional preview comment", status: "failed" },
         ],
       }),

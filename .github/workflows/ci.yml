@@ -57,14 +57,25 @@ jobs:
         run: npm run build
 
   e2e:
-    name: Browser and accessibility tests
+    # Sharded, as the 30-minute ceiling's own comment said to do when the job
+    # reached it. Run 32273981419 was killed at test 1582 of 1605 — steady
+    # progress at two seconds a test, roughly forty seconds from finishing.
+    # Raising the ceiling a third time (14 min -> 20 -> 30) would buy one more
+    # release of page growth and then cost another red main.
+    #
+    # Playwright splits the whole suite across the shards, so wall time is a
+    # third of the total rather than the total, and stays that way as pages are
+    # added. Each shard's own ceiling is generous on purpose: the number to
+    # watch is a shard's real duration, and a shard that approaches twelve
+    # minutes means it is time for a fourth shard, not a bigger number here.
+    name: Browser and accessibility tests ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
-    # The suite reached 1605 tests and was cancelled at test 1538 by the old
-    # 20-minute ceiling (run 32213327241, attempt 2) — steady progress, not a
-    # hang, ~96% done. The last green day's suite fit in 14 minutes; this is
-    # growth, and the ceiling grows with it. If the job approaches THIS limit,
-    # shard the Playwright projects instead of raising it again.
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      # One slow shard must not hide a genuine failure in another.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       CI: true
       NEXT_TELEMETRY_DISABLED: 1
@@ -87,4 +98,4 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: npm run test:e2e
+        run: npx playwright test --shard=${{ matrix.shard }}/3
