@@ -191,6 +191,72 @@ describe("DAG scheduler", () => {
     expect(settled.complete).toBe(true);
   });
 
+  it("lets a tolerant fan-in run once every input settles, with what completed", () => {
+    const a = node("a");
+    const b = node("b");
+    const s = node("s", {
+      dependsOn: ["a", "b"],
+      capability: "synthesis",
+      toleratesPartialInputs: true,
+    });
+    const { edges } = analyzeDependencies(
+      [a, b, s],
+      [{ from: "a", to: "s" }, { from: "b", to: "s" }],
+    );
+
+    let state = initialState([a, b, s]);
+    state = transition(state, "a", "COMPLETED");
+    state = transition(state, "b", "FAILED");
+
+    const decision = tick([a, b, s], edges, state, { maxConcurrent: 4 });
+    // The failed input does not cost the synthesis of the surviving one.
+    expect(decision.start).toEqual(["s"]);
+    expect(decision.blocked).toEqual([]);
+  });
+
+  it("holds a tolerant fan-in while any input is still in flight", () => {
+    const a = node("a");
+    const b = node("b");
+    const s = node("s", { dependsOn: ["a", "b"], toleratesPartialInputs: true });
+    const { edges } = analyzeDependencies(
+      [a, b, s],
+      [{ from: "a", to: "s" }, { from: "b", to: "s" }],
+    );
+
+    let state = initialState([a, b, s]);
+    state = transition(state, "a", "COMPLETED");
+    state = transition(state, "b", "RUNNING");
+
+    const decision = tick([a, b, s], edges, state, { maxConcurrent: 4 });
+    // Tolerance is for settled absence, not impatience: b may still answer.
+    expect(decision.start).toEqual([]);
+    expect(decision.blocked).toEqual([]);
+  });
+
+  it("still blocks a tolerant fan-in when nothing completed at all", () => {
+    const a = node("a");
+    const b = node("b");
+    const s = node("s", { dependsOn: ["a", "b"], toleratesPartialInputs: true });
+    const { edges } = analyzeDependencies(
+      [a, b, s],
+      [{ from: "a", to: "s" }, { from: "b", to: "s" }],
+    );
+
+    let state = initialState([a, b, s]);
+    state = transition(state, "a", "FAILED");
+    state = transition(state, "b", "FAILED");
+
+    const decision = tick([a, b, s], edges, state, { maxConcurrent: 4 });
+    // A synthesis with zero inputs would be invented, not synthesised.
+    expect(decision.start).toEqual([]);
+    expect(decision.blocked).toEqual([
+      {
+        nodeId: "s",
+        because: "Every dependency failed or was cancelled; a tolerant fan-in still needs at least one completed input.",
+      },
+    ]);
+  });
+
   it("reports completion only when every node reached a terminal or blocked state", () => {
     const nodes = [node("a"), node("b")];
     let state = initialState(nodes);

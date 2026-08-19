@@ -64,6 +64,14 @@ type RunRow = {
   provider?: string | null;
   model?: string | null;
   branch_name?: string | null;
+  // Optional because it postdates the rest of the row: `20260817000300` added
+  // it, and a database that predates that migration must still render a
+  // readable list rather than a broken one. It falls back to "unreviewed".
+  // (Applied on hosted — measured 2026-08-18, AI/HOSTED_APPLY_RUNBOOK.md.)
+  review_status?: string | null;
+  // Same reasoning, from `20260817001000`. An absent column is not evidence
+  // that a run is archived. (Also applied on hosted, same measurement.)
+  archived_at?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -86,6 +94,8 @@ export async function GET(request: Request) {
           provider: row.provider ?? null,
           model: row.model ?? null,
           branch: row.branch_name ?? null,
+          reviewStatus: row.review_status ?? "unreviewed",
+          archivedAt: row.archived_at ?? null,
           project: row.project_id
             ? { id: row.project_id, name: row.project_name ?? "Project" }
             : null,

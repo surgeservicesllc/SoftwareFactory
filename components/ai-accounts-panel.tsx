@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, KeyRound, Loader2, Pencil, RefreshCw, Trash2, Unplug } from "lucide-react";
+import {
+  Check,
+  KeyRound,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  Unplug,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
@@ -8,6 +17,10 @@ import {
   AccountUsage,
   type AccountUsageView,
 } from "@/components/bot-manager/account-usage";
+import {
+  accountCanBackABot,
+  accountNeedsSignInAgain,
+} from "@/lib/bots/accounts";
 import { cn } from "@/lib/cn";
 
 /**
@@ -46,9 +59,31 @@ const STATUS_LABELS: Readonly<Record<string, { label: string; tone: string }>> =
 export function AiAccountsPanel({
   canManage,
   onChanged,
+  /**
+   * Turn the chosen accounts into bots.
+   *
+   * The panel owns the selection because that is where the rows are; it does
+   * not own provisioning, which is owner-authorized work the Bot Manager
+   * already performs through `/api/bots/connect/provision`. Passing the
+   * accounts up keeps one authorization path rather than a second copy here.
+   */
+  onCreateBots,
+  /**
+   * The selection, raised.
+   *
+   * The panel still owns the control and the highlight; a caller that can act
+   * on the choice — the AI Factory, which knows the project — needs to see it,
+   * and two components each keeping their own copy of "what is selected" is
+   * how the button and the list come to disagree.
+   */
+  selectedIds,
+  onSelectedChange,
 }: {
   canManage: boolean;
   onChanged: () => Promise<void> | void;
+  onCreateBots?: (accounts: readonly { id: string; provider: string }[]) => Promise<void> | void;
+  selectedIds?: readonly string[];
+  onSelectedChange?: (ids: readonly string[]) => void;
 }) {
   const [accounts, setAccounts] = useState<AccountView[]>([]);
   const [usageByAccount, setUsageByAccount] = useState<Record<string, AccountUsageView>>({});
@@ -61,6 +96,15 @@ export function AiAccountsPanel({
   const [editName, setEditName] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  // One or many. A set rather than a single id, because the whole point of
+  // the control is acting on several accounts at once.
+  const [ownSelectedIds, setOwnSelectedIds] = useState<readonly string[]>([]);
+  const [creatingBots, setCreatingBots] = useState(false);
+  const selected = selectedIds ?? ownSelectedIds;
+  const setSelected = (next: readonly string[]) => {
+    if (onSelectedChange) onSelectedChange(next);
+    else setOwnSelectedIds(next);
+  };
   // Refresh is evidence, not optimism: the map holds each account's request
   // time, and the marker clears only when the worker's re-verification moves
   // `lastVerifiedAt` past it (or a quiet three minutes expires the wait).
@@ -239,6 +283,38 @@ export function AiAccountsPanel({
     }
   }, [load, onChanged]);
 
+  const selectedAccounts = accounts.filter((account) => selected.includes(account.id));
+  const connectableSelection = selectedAccounts.filter(
+    (account) => accountCanBackABot(account.status),
+  );
+  const selectableCount = connectableSelection.length;
+  const staleSelection = connectableSelection.filter(
+    (account) => accountNeedsSignInAgain(account.status),
+  ).length;
+
+  function toggleSelected(accountId: string) {
+    setSelected(
+      selected.includes(accountId)
+        ? selected.filter((id) => id !== accountId)
+        : [...selected, accountId],
+    );
+  }
+
+  async function createBotsFromSelection() {
+    if (!onCreateBots || connectableSelection.length === 0) return;
+    setCreatingBots(true);
+    setNotice("");
+    try {
+      await onCreateBots(connectableSelection.map((account) => ({
+        id: account.id,
+        provider: account.provider,
+      })));
+      setSelected([]);
+    } finally {
+      setCreatingBots(false);
+    }
+  }
+
   if (accounts.length === 0) return null;
 
   return (
@@ -269,6 +345,63 @@ export function AiAccountsPanel({
         </div>
       ) : null}
 
+      {selected.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+            {/*
+              Two different facts, kept apart. "Cannot back a bot" is about
+              credential material and is final until something changes;
+              "needs signing in again" is about the last verification and does
+              not stop a bot being created — it only means the work waits. The
+              old copy said the second when it meant the first, so a workspace
+              whose accounts had all 403'd was told nothing could be created.
+            */}
+            <p className="text-sm text-[var(--text)]">
+              {selected.length} selected
+              {selectableCount === selected.length
+                ? ""
+                : ` · ${selected.length - selectableCount} cannot back a bot yet`}
+            </p>
+            {staleSelection > 0 ? (
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                {staleSelection === 1
+                  ? "One needs signing in again: its bot is created and assigned, but will not run until you reconnect."
+                  : `${staleSelection} need signing in again: their bots are created and assigned, but will not run until you reconnect.`}
+              </p>
+            ) : null}
+          </div>
+          {onCreateBots && canManage ? (
+            <button
+              type="button"
+              disabled={creatingBots || selectableCount === 0}
+              onClick={() => void createBotsFromSelection()}
+              className="btn btn-primary btn-sm"
+            >
+              {creatingBots ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="size-3.5" aria-hidden="true" />
+              )}
+              {/*
+                Never "Create 0 bots". A disabled button whose label counts
+                nothing reads as broken rather than as unavailable; naming the
+                reason is what makes it the second.
+              */}
+              {selectableCount === 0
+                ? "None can create a bot"
+                : selectableCount === 1 ? "Create 1 bot" : `Create ${selectableCount} bots`}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setSelected([])}
+            className="btn btn-secondary btn-sm"
+          >
+            Clear selection
+          </button>
+        </div>
+      ) : null}
+
       <ul className="mt-3 space-y-2">
         {accounts.map((account) => {
           const status = STATUS_LABELS[account.status]
@@ -276,12 +409,32 @@ export function AiAccountsPanel({
           return (
             <li
               key={account.id}
-              className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2"
+              /*
+               * A column, not one wrapping row.
+               *
+               * The design puts the name and the SELECT control on the first
+               * line, the account's own facts under it, and the state badge at
+               * the head of the action row where it explains the buttons
+               * beside it. As a single wrapping flex row the badge landed
+               * wherever the name's length left it, which on a narrow panel
+               * was between the name and the buttons it describes.
+               */
+              className={cn(
+                "rounded-lg border px-3 py-2 transition-colors",
+                selected.includes(account.id)
+                  ? "border-[var(--accent-border)] bg-[var(--accent-surface)]"
+                  : "border-[var(--border)] bg-[var(--surface-raised)]",
+              )}
             >
+              <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 {editingId === account.id ? (
                   <form
-                    className="flex items-center gap-2"
+                    // Wraps, and the field shares the row rather than claiming
+                    // a fixed 224px. At 320px the input plus Save plus Cancel
+                    // did not fit, and a non-wrapping row put Cancel off the
+                    // edge — so the way out of a rename was unreachable.
+                    className="flex flex-wrap items-center gap-2"
                     onSubmit={(event) => {
                       event.preventDefault();
                       void rename(account);
@@ -296,7 +449,7 @@ export function AiAccountsPanel({
                       onChange={(event) => setEditName(event.target.value)}
                       maxLength={80}
                       autoFocus
-                      className="w-56 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
+                      className="min-w-0 flex-1 basis-40 rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] px-2 py-1 text-sm text-[var(--text)]"
                     />
                     <button
                       type="submit"
@@ -319,8 +472,14 @@ export function AiAccountsPanel({
                     </button>
                   </form>
                 ) : (
-                  <p className="flex items-center gap-1.5 truncate text-sm font-medium text-[var(--text)]">
-                    {account.displayName}
+                  // `truncate` belongs on the name, not on the row. On the row
+                  // it sets `white-space: nowrap` and `overflow: hidden` for the
+                  // whole flex container, so a long account name pushed the
+                  // rename button past the edge and the container clipped it —
+                  // the control was on the page and unreachable. The name
+                  // truncates now; the button holds its size.
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--text)]">
+                    <span className="min-w-0 truncate">{account.displayName}</span>
                     {canManage ? (
                       <button
                         type="button"
@@ -329,7 +488,7 @@ export function AiAccountsPanel({
                           setEditName(account.displayName);
                           setEditingId(account.id);
                         }}
-                        className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
+                        className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text)]"
                       >
                         <Pencil className="size-3.5" aria-hidden="true" />
                       </button>
@@ -357,6 +516,38 @@ export function AiAccountsPanel({
                   <AccountUsage usage={usageByAccount[account.id]} />
                 ) : null}
               </div>
+              {canManage ? (
+                <button
+                  type="button"
+                  aria-pressed={selected.includes(account.id)}
+                  /*
+                   * The name lives in `aria-label`, not in an `sr-only` span.
+                   * A hidden text node carrying the account's name makes the
+                   * name appear twice in the accessible tree — and, more
+                   * practically, twice to anything matching on text.
+                   */
+                  aria-label={`Select ${account.displayName}`}
+                  onClick={() => toggleSelected(account.id)}
+                  className={cn(
+                    "shrink-0 rounded-lg border px-4 py-2 text-sm font-bold uppercase tracking-wide transition-colors",
+                    selected.includes(account.id)
+                      ? "border-[var(--accent-border)] bg-[var(--accent)] text-[var(--accent-ink)]"
+                      : "border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)]",
+                  )}
+                >
+                  {selected.includes(account.id) ? (
+                    <span className="flex items-center gap-1.5">
+                      <Check className="size-3.5" aria-hidden="true" />
+                      Selected
+                    </span>
+                  ) : (
+                    "Select"
+                  )}
+                </button>
+              ) : null}
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className={cn(
                   "shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold",
@@ -366,7 +557,12 @@ export function AiAccountsPanel({
                 {status.label}
               </span>
               {canManage ? (
-                <div className="flex shrink-0 gap-2">
+                // Wraps rather than refusing to shrink. An account in a bad
+                // state offers Refresh, Reconnect, Disconnect and Remove at
+                // once, and `shrink-0` on a non-wrapping row ran that set off
+                // the right edge of the panel on a phone — the last button was
+                // simply unreachable, which is how a stuck account stays stuck.
+                <div className="flex flex-wrap items-center gap-2">
                   {account.status === "connected" || account.status === "needs_reauth" ? (
                     <button
                       type="button"
@@ -453,6 +649,7 @@ export function AiAccountsPanel({
                   )}
                 </div>
               ) : null}
+              </div>
             </li>
           );
         })}

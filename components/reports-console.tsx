@@ -1,7 +1,7 @@
 "use client";
 
-import { ScrollText } from "lucide-react";
-import { Children } from "react";
+import { Archive, Loader2, ScrollText, Trash2, Undo2 } from "lucide-react";
+import { Children, useState } from "react";
 
 import {
   ControlPlaneDetail,
@@ -54,8 +54,188 @@ export function ReportsConsole() {
   );
   const detail = useControlPlaneDetail<ReportDetail>("reports", "report");
 
+  // Archiving and deleting act from the list, because the list is where a
+  // person decides a report has served its purpose.
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [deleting, setDeleting] = useState<Report | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [clearing, setClearing] = useState(false);
+  const [clearReason, setClearReason] = useState("");
+
+  async function setArchived(report: Report, archived: boolean) {
+    setBusyId(report.id);
+    setMessage("");
+    setFailed(false);
+    try {
+      const response = await fetch(`/api/reports/${encodeURIComponent(report.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          archived,
+          reason: archived ? "Archived from the Reports page." : undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The report could not be updated.");
+      setMessage(archived ? "Report archived." : "Report restored.");
+      reload();
+    } catch (error) {
+      setFailed(true);
+      setMessage(error instanceof Error ? error.message : "The report could not be updated.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteReport(report: Report) {
+    setBusyId(report.id);
+    setMessage("");
+    setFailed(false);
+    try {
+      const response = await fetch(`/api/reports/${encodeURIComponent(report.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: deleteReason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The report could not be deleted.");
+      setMessage("Report deleted.");
+      setDeleting(null);
+      setDeleteReason("");
+      reload();
+    } catch (error) {
+      setFailed(true);
+      setMessage(error instanceof Error ? error.message : "The report could not be deleted.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function clearArchived() {
+    setBusyId("clear");
+    setMessage("");
+    setFailed(false);
+    try {
+      const response = await fetch("/api/reports/clear-archived", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: clearReason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        cleared?: { deleted: number; kept: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "Archived reports could not be cleared.");
+      const cleared = body.cleared ?? { deleted: 0, kept: 0 };
+      // Says what stayed as well as what went; a bare count would hide a refusal.
+      setMessage(cleared.kept > 0
+        ? `Deleted ${cleared.deleted}. ${cleared.kept} were kept because they were refused.`
+        : `Deleted ${cleared.deleted} archived ${cleared.deleted === 1 ? "report" : "reports"}.`);
+      setClearing(false);
+      setClearReason("");
+      reload();
+    } catch (error) {
+      setFailed(true);
+      setMessage(error instanceof Error ? error.message : "Archived reports could not be cleared.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {message ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${failed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {message}
+        </p>
+      ) : null}
+      {state.kind === "ready" && state.items.some((report) => report.status === "archived") ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {clearing ? (
+            <>
+              <input
+                type="text"
+                className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                maxLength={400}
+                value={clearReason}
+                onChange={(event) => setClearReason(event.target.value)}
+                placeholder="Why clear the archived reports"
+                aria-label="Reason for clearing archived reports"
+              />
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                disabled={busyId !== null || clearReason.trim().length < 10}
+                onClick={() => void clearArchived()}
+              >
+                {busyId === "clear"
+                  ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  : <Trash2 className="size-4" aria-hidden="true" />}
+                Delete all archived
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setClearing(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setClearing(true); setMessage(""); }}>
+              <Trash2 className="size-4" aria-hidden="true" />
+              Clear archived reports
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {deleting ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Delete ${deleting.title}`}
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-lg">
+            <h2 className="text-lg font-semibold text-foreground">Delete this report</h2>
+            <p className="mt-1 text-sm text-muted">{deleting.title}</p>
+            <p className="mt-2 text-xs text-muted">
+              The report is removed. The deletion is recorded in the activity trail first, so the
+              account of it survives — but the report itself does not, and the runs and pull
+              requests it summarised are untouched. To keep it and take it out of the way, archive
+              it instead.
+            </p>
+            <label className="mt-4 flex flex-col gap-1">
+              <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
+              <input
+                type="text"
+                className="rounded border border-line bg-surface px-3 py-2 text-sm"
+                maxLength={400}
+                value={deleteReason}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                placeholder="Why this report is being removed"
+              />
+            </label>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                disabled={busyId !== null || deleteReason.trim().length < 10}
+                onClick={() => void deleteReport(deleting)}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Delete permanently
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <TenantListShell
         state={state}
         reload={reload}
@@ -65,7 +245,9 @@ export function ReportsConsole() {
         signedOutDescription="Reports belong to your workspace."
         returnPath="/solutions/reports"
         emptyTitle="No reports yet"
-        emptyDescription="Structured reports appear only after durable command, run, validation, pull-request, or CI evidence exists."
+        emptyDescription="Reports summarize work that actually happened — requests, runs, checks and pull requests. The first one appears after a bot completes a piece of work."
+        emptyActionHref="/solutions/bot-manager"
+        emptyActionLabel="Give a bot something to do"
       >
         {(reports) => (
           <ul className="divide-y divide-[var(--border)]">
@@ -87,6 +269,32 @@ export function ReportsConsole() {
                     <StatusBadge tone={statusTone(report.status)}>{report.status.replace(/_/g, " ")}</StatusBadge>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => void detail.open(report.id)}>
                       Open report
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={busyId === report.id}
+                      aria-label={report.status === "archived"
+                        ? `Restore ${report.title}`
+                        : `Archive ${report.title}`}
+                      onClick={() => void setArchived(report, report.status !== "archived")}
+                    >
+                      {busyId === report.id
+                        ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        : report.status === "archived"
+                          ? <Undo2 className="size-4" aria-hidden="true" />
+                          : <Archive className="size-4" aria-hidden="true" />}
+                      {report.status === "archived" ? "Restore" : "Archive"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId === report.id}
+                      aria-label={`Delete ${report.title}`}
+                      onClick={() => { setDeleting(report); setDeleteReason(""); setMessage(""); }}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -130,7 +338,7 @@ export function ReportsConsole() {
               </section>
             ))}
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Deterministic validation" empty="No validation evidence is recorded.">
                 {(report.validations ?? []).map((validation, index) => (
                   <li key={`${validation.attempt}-${validation.round}-${validation.name}-${index}`} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -153,7 +361,7 @@ export function ReportsConsole() {
               </ReportSection>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Changed files" empty="No changed-file evidence is recorded.">
                 {(report.changedFiles ?? []).map((file) => (
                   <li key={file} className="break-all py-2 font-mono text-xs text-foreground">{file}</li>
@@ -177,7 +385,7 @@ export function ReportsConsole() {
               </section>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Findings" empty="No findings are recorded.">
                 {(report.findings ?? []).map((finding, index) => (
                   <li key={finding.id ?? `${index}-${finding.title}`} className="py-2 text-sm">
@@ -202,7 +410,7 @@ export function ReportsConsole() {
               </ReportSection>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <ReportSection title="Linked runs" empty="No run is linked to this report.">
                 {(report.runs ?? []).map((run) => (
                   <li key={run.id} className="flex items-center justify-between gap-3 py-2 text-sm">

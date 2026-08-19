@@ -2,6 +2,47 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-17 (AI Factory guided journey):** `/solutions/ai-factory`
+("AI Factory" in the left navigation under Overview) is the owner's guided
+end-to-end path — Connect Repository → Create Project → Configure Pipeline →
+Connect Bots → Assign Bots → Configure Bot Settings → Issue a Command → Watch
+It Ship. Step completion is **derived from live records** (installations,
+projects, connected accounts, assignments and their configuration, commands),
+never from stored wizard state, so progress survives refresh by construction
+and cannot disagree with the rest of the console. Every step's option opens
+the **real existing control as an overlay** over the page (ConnectionsConsole,
+AddProjectForm — extracted to `components/add-project-form.tsx` and shared
+with the Projects dashboard — PipelineTemplatesManager with built-ins compiled
+server-side, BotManagerHome, the per-project ProjectBots roster, and
+CommandComposer); closing an overlay re-reads the journey, and the controls
+that know their completion close themselves. The Assign Bots wizard also
+links Bot Manager accounts directly: connected AI accounts with no bot yet
+are offered in the Select step, and linking provisions a bot per account at
+that account's credential slot (`/api/bots/connect/provision`,
+`additional:true`), re-reads the roster, and selects the new bots — multiple
+at once. Per-posting execution preferences (model override + work effort,
+migration `20260817001100`, hosted) surface on each posting card. No
+execution-authority change anywhere in this surface: assignment remains
+routing intent, and the page says what actually runs.
+
+**Addendum, 2026-08-19 (graphs execute now — ADR-092):** recorded graphs no
+longer dead-end at PLANNED. The graph executor worker
+(`scripts/graph-worker.mts` + `.github/workflows/graph-worker.yml`, manual
+dispatch; schedule gated on `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED`) claims
+them through the service-role boundary of migration `20260819000100`
+(`claim_planned_graph` → atomic RUNNING run + PENDING node_runs + whole
+projection; `record_node_state_as_worker`; `record_graph_artifact_as_worker`;
+`complete_graph_run_as_worker`), recompiles them through the console's own
+compiler, and runs nodes in parallel up to the graph's budget through the
+subscription transport — read-only analysis tools only, models tiered per
+node. Edges carry data (each node's prompt receives its upstreams' outputs,
+missing inputs demand stated incompleteness), failure is contained (siblings
+finish, dependents SKIPPED, runs close PARTIAL/FAILED honestly), failed-only
+graphs are re-claimable up to three FAILED runs, and provider capacity
+refusals void the run as CANCELLED (uncounted, total ceiling 10) and stop
+the drain. Applied and exercised on production: runs 32208699123,
+32208975669, 32209893742 each drove the loop one real defect further.
+
 **Addendum, 2026-08-16 (per-account usage evidence):** migration
 `20260816001500_ai_account_usage_observations` adds append-only provider-usage
 evidence per AI account (RLS+FORCE, zero direct table access, worker-only
@@ -30,8 +71,9 @@ evidence. `PUT`/`DELETE /api/projects/[projectId]/repository` exposes them behin
 same-origin plus owner/admin checks, and the Connections console gains a per-project
 repository picker with truthful no-installation / zero-repository / load-failure states.
 `connect_github_project` (creation-time binding) is untouched; no RLS, grant matrix,
-or execution-authority change. The migration is **unhosted** — the runbook's outstanding
-set is now 33 ending at `20260816001400`. Verified locally by
+or execution-authority change. The migration was **unhosted** when this was written;
+`20260816001400` is on the hosted ledger as of the 2026-08-18 measurement, and the
+"outstanding set of 33 ending at ..." framing is superseded by that correction. Verified locally by
 `tests/integration/project-repository-picker.behavior.test.ts`,
 `tests/unit/project-repository-route.test.ts`, and the extended Connections console suite.
 
@@ -40,8 +82,9 @@ adds `ai_accounts` (provider sign-ins as first-class identities; no secrets — 
 vault purpose linkage), `ai_auth_sessions` (the broker state machine a worker drives
 through the provider's real login), and nullable `bots.ai_account_id`. RLS+FORCE with
 zero direct table access; all transitions via definer functions that write activity
-events. Local and CI-verified; **unhosted** — the runbook's outstanding set is now 20
-ending at `20260816000100`. No execution authority changes. The broker API, worker auth
+events. Local and CI-verified; recorded as **unhosted** when this was written. The
+2026-08-18 measurement finds `20260816000100` still absent from the ledger while the
+broker connect flow works live against production — unledgered DDL, not missing schema. No execution authority changes. The broker API, worker auth
 runner, and UI are not built yet; the connect-command flow remains the live path.
 
 Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution; the credential is **configured** and the worker is **LIVE**, polling every ~5 minutes (see correction below) — a live canary awaits one owner-submitted command
@@ -54,6 +97,40 @@ Overall status: **The protected hosted-database sequence completed on exact proj
 2. **The hosted migration ledger is ahead of the documented `20260813001400` position.** The owner's SQL Editor attempt to insert ledger version `20260813001500` failed with `duplicate key value violates unique constraint "schema_migrations_pkey"` — that version is already applied on hosted. The Supabase GitHub integration (the "Supabase Preview" check on PRs, plus `supabase/config.toml` in-tree) is the probable applier on merge to `main`. The exact hosted position is unknown from any agent environment; the owner query in `todo.md` → External Blockers resolves it. Until then, every claim below about "unhosted" migrations after `20260813001400` is an upper bound, not a fact.
 
 **Correction, 2026-08-16 (live production evidence):** the integration-as-applier claim above holds only up to a point. Migrations through `20260816000300` are provably applied on hosted (the broker connect flow works live), but `20260816000400`/`20260816000500` from PR #142 (merged 16:26Z) are provably NOT applied: production Remove returns PostgREST `PGRST202` (function `remove_ai_account` unknown) at 16:36Z and again at 16:51Z, and worker run `31958640122` printed an empty session projection 400ms before claiming a real session — the projection RPC errored, meaning `inspect_ai_auth_sessions` is missing too. **The Supabase GitHub integration cannot be relied on to apply migrations on merge.** The sanctioned applier is `.github/workflows/apply-hosted-migrations.yml`, which now also works with `SUPABASE_DB_PASSWORD` alone (the live `SUPABASE_ACCESS_TOKEN` secret is malformed — not `sbp_…`-shaped — per apply runs `31957275938`/`31959913171`).
+
+**Correction, 2026-08-18 (the hosted ledger, measured end to end):** every
+count above and below this line that describes the hosted position is
+superseded. Probe run `32103778884` (`scope=probe`, read-only) printed the full
+local-vs-remote ledger, and the shape it printed is one no earlier statement
+allowed for: **the hosted ledger is not a contiguous prefix of the local
+files.** It is missing nineteen versions in the middle —
+`20260814002500`–`002600`, `20260815000200`–`000600`, `20260815000800`–`001600`,
+`20260816000100`–`000300` — while carrying every row above them, including the
+entire `20260817` range. So sentences of the form "the ledger ends at X,
+everything after X is outstanding" are not merely out of date; the model behind
+them is wrong, and every apply decision taken from one has been wrong.
+
+Three consequences worth stating plainly:
+
+1. `20260817000700_bot_assignment_configuration` **is applied on production**.
+   The Assign Bots wizard's configuration columns and `assign_bots_to_project`
+   exist there. This file, `todo.md` and the runbook previously said the
+   opposite.
+2. `20260816000100`–`000300` are ledger-absent, yet the 2026-08-16 correction
+   above records the broker connect flow working live against production. Both
+   observations stand: the DDL is live and the history row is not. The same run
+   confirms it structurally — 19 of 19 probed objects present, including
+   `scheduling_decisions` and `projects.engineering_priority`, both owned by
+   `20260815000200`, which has no ledger row.
+3. Part of the remaining gap is therefore **bookkeeping over DDL that already
+   ran**, where the correct action is `migration repair --status applied`, not
+   re-running the file. `AI/HOSTED_APPLY_RUNBOOK.md` carries the nineteen-row
+   table, the marker object that settles each one, and the procedure.
+
+No mutating scope was run. `AGENTS.md` puts RED actions behind explicit owner
+approval in Phase 1 and the runbook requires a fresh exact approval per apply,
+so the repair-versus-apply decision is written down for the owner rather than
+taken.
 
 **Superseded 2026-08-16 19:47Z — the live GitHub path changed.** The prior Phase 1B identifiers (candidate App `4582606` installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, project `b1f23696-437e-4d89-b55f-d7a949980e8f`, primary rollback installation `153445938`) are historical: they were bound to a workspace the owner's current login cannot reach, which surfaced as an empty Connections list plus the cross-tenant refusal on every reconnect. The owner uninstalled the primary GitHub App and reconnected fresh: the live path is now a new installation `#154236235` (primary App, repository access Selected → exactly `surgeservicesllc/SoftwareFactory`), bound to the owner's live workspace — owner-verified Connected with the repository listed at 19:47Z. The candidate App "Surge SoftwareFactory Next" remains installed on GitHub with its stale binding (inert; optional cleanup). GitHub Support ticket `#4660724` about the old primary installation's webhook defect is moot for the live path.
 
@@ -112,7 +189,7 @@ which rests on the unchanged `for update ... skip locked`.
 
 Still open: goal 9 names Phase 2D, which does not exist in this repository; goal 17 asks the 1C
 agent-level exclusion and the 2B lock tables to become one mechanism; goal 35 needs the hosted
-apply, now 35 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
+apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 
 ## Published Phase 2A provider layer
 
@@ -129,6 +206,7 @@ apply, now 35 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 
 - Next.js 16.3 App Router, React 19.2, TypeScript strict mode, Tailwind CSS 4, server-first Auth/tenant/provider boundaries, and caller-session Supabase RLS reads.
 - The whole control plane is served under `/solutions` from `app/(portal)/`; the former `app/(console)/` group is gone. Twelve routes build there, each rendering the marketing global navigation above the console shell. Permanent redirects cover every former top-level path and its subpaths, and the GitHub return-path allowlist moved with them. `/solutions` is `noindex`, disallowed in `robots.txt`, and absent from the sitemap, which now lists marketing routes only. Each console page carries its own title so a tab no longer reads as the public home page.
+- The console sidebar column begins with the menu (ADR-090): it carries no wordmark, removed on owner instruction on 2026-08-17. The rail is chosen by viewport width (1024-1279 rails), and from 1280 a retract control at the foot of the column lets a person choose (ADR-091) — offered only on devices with a hovering fine pointer, which is how "Windows or macOS" is asked reliably, with the choice stored under `softwarefactory:sidebar-compact`. It follows the owner's 2026-08-17 design (ADR-077): top-level destinations — Overview, Projects, Pipelines, Bots, Runs, Reports, Integrations, Settings, Watch, Advanced — with collapsible subpage groups that open expanded, plus a Quick actions section (New Project, Give a bot work, Import Repository — a fourth, View Documentation, linked out to the marketing `/resources` pages and was removed by owner request on 2026-08-17). Every entry links a real page or page section; the design's subpages with no backing capability (Secrets, per-user project lists, Members/Teams/Permissions/Billing, pipeline Active/Schedules/Archived) are deliberately absent. Projects gained an Archived view (`/solutions/projects?filter=archived`, opt-in `?status=archived` on `GET /api/projects`), with unarchive pointed at the portfolio page's owner controls. `/solutions/myprojects` (owner design, 2026-08-17) renders the same live project records as collapsible rows — first row open, chevron per project — expanding into the exported `ProjectInspector`, with Import Repository / New Project page actions landing on the existing controls. `/solutions/projects` is the "All Projects" dashboard (same design set): live stat cards, All Projects / My Projects / Archived tabs, a paginated projects table with last-run and success-rate columns computed from `/api/runs` (only succeeded/failed carry a verdict) and an Open link to the portfolio detail page, plus a right rail with the by-status breakdown and the `/api/activity` feed; the add-project form stays anchored below. `GET /api/projects` exposes `updatedAt`. `/solutions/bot-usage` (same design set) lists every AI account with its latest recorded usage observation — the shared `AccountUsage` percent bars with provider reset times, derived headroom bands, connected/average-weekly summary cards, and a manager-only Refresh wired to the broker wake — with the design's plan/billing, date-range, and history affordances absent for lack of a backing model. Edit/delete controls follow ADR-078: project name/description edit (`update_project_details`, migration `20260817000100`, `PATCH /api/projects/[projectId]`, dialogs on the table and inspector), archive/unarchive in place with reasons, bot retire on the roster — while runs, activity events, and audit records remain immutable and templates are edited as code. `/solutions/pipelines` (owner pipeline goal, round 1) renders the lifecycle over saved commands — Active (worker-advanced human stages with owner-attention counts), All Pipelines (history with outcomes and durations), Templates (the graph engine's versioned templates, server-compiled topology facts, deep previews on Workflows) — with the audit and round plan tracked in `todo.md`.
 - Supabase sign-up/sign-in/magic-link/sign-out/callback/onboarding, organization membership, and active-organization selection.
 - GitHub App installation start/callback, short-lived repository-ID-scoped installation tokens, bounded repository reads, signed/idempotent/redacted webhooks, transaction-serialized project linking by stable repository UUID, and an isolated branch + commit + draft-PR-only file-change flow.
 - Every interactive GitHub route is bound to the caller's exact active organization. Revoked or insufficient-permission token creation is persisted best-effort as connection loss; rate-limit errors do not falsely revoke the connection.
@@ -190,7 +268,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - **Concurrency is now bounded rather than specified.** `lib/resources/capacity.ts` limits concurrent runs per worker, per provider, and per project, and every refusal names *which* limit refused — told "the project is full" when one worker is the real constraint, an operator raises the wrong number. It is applied in `assignWorker` as an eligibility gate beside capability and risk, never as a score weight, so cost or preference cannot outvote it. Reservations carry an expiry and expired ones stop counting, so a worker that dies does not strand its slot until someone notices.
 - **The scheduler and the manager are joined.** `lib/resources/dispatch.ts` routes a whole tick of startable nodes: `lib/graph/scheduler.ts` says which nodes may start, `assignWorker` says who runs each. It is not a loop over the single-node decision — reservations are threaded forward through the batch, because routing every node against the reservations live at the *start* of the tick lets two nodes released together take the same last slot. Dispatch order is decided (risk, then stated priority, then nodeId) rather than inherited from the scheduler's emission order, since when capacity binds the order decides who waits. A node held back by a full fleet is `DEFERRED` and re-offered; a node no worker can ever satisfy is `UNROUTABLE` and is not, so the scheduler cannot spin on impossible work.
 - **Rate is accounted separately from concurrency, because they are different questions.** `lib/resources/rate-limits.ts` counts requests and tokens over a sliding per-provider window and gates `assignWorker` alongside capability and capacity. Concurrency asks whether a slot is free; rate asks whether too much has happened recently — six concurrent slots filled by two-second calls is 180 requests a minute while never showing more than six in flight, so one limit does not imply the other. A rate refusal carries `retryAfterMs` and a capacity refusal deliberately does not: a window clears at a computable time, whereas nobody can say when another run will finish. Token budgets are checked against a caller-supplied estimate, and usage marks when it includes estimates rather than measurements — the same refusal to launder a prediction into a number that the history module already applies to success rates.
-- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch remain pure functions, but the *decision* is no longer only in a process: migration `20260815000700` adds `resource_reservations` and `resource_rate_events`, and `acquire_resource_reservation` checks and takes a slot under an advisory lock in one statement. That closes the failure no TypeScript could — two processes each holding their own reservation list, each seeing one free slot, each taking it. `lib/resources/reservation-store.ts` is the caller, and it deliberately **fails closed** where `store.ts` fails open: an unreadable breaker means "no observed failures" and work proceeds, but unreadable *usage* means "unknown", and admitting on unknown deletes the limit during exactly the incident it exists for. **Still not adopted:** the migration is unhosted and no live path calls it — `dispatch` continues to route against an in-memory set, which is correct within one tick and bounds nothing across processes. Rate accounting is persisted the same way and carries the same caveat: durable and proven, but unhosted and uncalled. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
+- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
 
 ## Durable worker implementation
 
@@ -333,7 +411,7 @@ Measured directly rather than inferred from a merge succeeding.
 
 - Two migrations shared the version prefix `20260814000300` (`agentos_isolation_model` and `declare_model_characteristics`). Supabase's ledger keys on the numeric prefix, so `supabase db push` would have hit a primary-key collision in `supabase_migrations.schema_migrations` and left the hosted schema **half-applied**. Neither file was hosted, so the fix carried no ledger consequence: `declare_model_characteristics` was renumbered to `20260814000250`, after the `20260814000200` migration whose columns it depends on and before the AgentOS chain.
 - `tests/integration/migration-version-uniqueness.test.ts` now prevents recurrence. This had happened twice, both times from separate agents choosing the same timestamp in parallel.
-- **35 migrations remain unhosted.** The hosted ledger holds 65 rows and matches local exactly and contiguously through `20260814002300` (owner-measured 2026-08-16, then listed in full by workflow run `31960618697`). Everything after that version is outstanding. Two rows — `20260816000400` and `20260816000500` — were applied surgically above that prefix and so sit above it with a gap; they are still counted as outstanding, with the runbook carrying the reconciliation. **There is also unledgered DDL drift:** production demonstrably runs schema from migrations that have no ledger rows, so a full `db push` would replay non-idempotent DDL and fail. `AI/HOSTED_APPLY_RUNBOOK.md` is the authority and says how to reconcile; applying is owner-gated and needs Supabase credentials no agent environment holds. This paragraph and the one under "Phase 2B graph engineering" once disagreed with each other — 15 against 29, both wrong — which is why `tests/integration/hosted-runbook-counts.test.ts` now derives the number for this file too rather than trusting prose.
+- **Nineteen versions are absent from the hosted ledger**, measured 2026-08-18 by probe run `32103778884` — not the 15 this bullet claimed, and not a tail: the gap is in the middle of the sequence (see the 2026-08-18 correction near the top of this file). `AI/HOSTED_APPLY_RUNBOOK.md` names all nineteen with the marker object that decides, per version, whether the correct action is a history repair or a real apply. Both are owner-gated and need Supabase credentials that exist in no agent environment.
 
 ## Schema and wiring guarantees now enforced continuously
 

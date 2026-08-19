@@ -63,6 +63,20 @@ export interface ProjectRow {
   readonly healthStatus: ProjectHealth;
   readonly autonomousMode: boolean;
   readonly maximumAutonomousRisk: RiskLevel;
+  /**
+   * Identity and scheduling fields the project detail page edits.
+   *
+   * Optional because they were added after this aggregate: a caller that has
+   * not widened its select keeps working, and every one of them lands as null
+   * or false rather than as a fabricated default.
+   */
+  readonly description?: string | null;
+  readonly defaultBranch?: string | null;
+  readonly productionUrl?: string | null;
+  readonly engineeringPriority?: number | null;
+  readonly strategicFocus?: boolean | null;
+  readonly engineeringPaused?: boolean | null;
+  readonly engineeringPauseReason?: string | null;
 }
 
 /** A `{project_id, status}` row from any of the counted tables. */
@@ -111,6 +125,15 @@ export interface PortfolioProject {
   /** True when something about this project needs a person. */
   readonly ownerAttention: boolean;
   readonly attentionReasons: readonly string[];
+  /** Editable identity, carried so the detail page can show and change it. */
+  readonly description: string | null;
+  readonly defaultBranch: string | null;
+  readonly productionUrl: string | null;
+  /** P0 (0) through P3 (3). Null when the column could not be read. */
+  readonly engineeringPriority: number | null;
+  readonly strategicFocus: boolean;
+  readonly engineeringPaused: boolean;
+  readonly engineeringPauseReason: string | null;
 }
 
 export interface PortfolioView {
@@ -198,6 +221,17 @@ export function buildPortfolio(sources: PortfolioSources): PortfolioView {
       connectionHealth,
       ownerAttention: attentionReasons.length > 0,
       attentionReasons: Object.freeze(attentionReasons),
+      description: project.description ?? null,
+      defaultBranch: project.defaultBranch ?? null,
+      productionUrl: project.productionUrl ?? null,
+      // Null rather than a default tier: an unread column is not evidence that
+      // the project is P2, and the console renders it as Unknown.
+      engineeringPriority: typeof project.engineeringPriority === "number"
+        ? project.engineeringPriority
+        : null,
+      strategicFocus: project.strategicFocus === true,
+      engineeringPaused: project.engineeringPaused === true,
+      engineeringPauseReason: project.engineeringPauseReason ?? null,
     });
   });
 

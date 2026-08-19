@@ -86,7 +86,7 @@ describe("verify before store", () => {
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
         from: () => ({
-          select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+          select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }),
         }),
         rpc: register,
       },

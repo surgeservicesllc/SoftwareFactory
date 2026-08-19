@@ -18,6 +18,7 @@ function stubSources(sources: {
   connections?: unknown;
   worker?: unknown;
   commands?: unknown;
+  accounts?: unknown;
 }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -27,6 +28,7 @@ function stubSources(sources: {
     if (url === "/api/github/connections") return jsonResponse(sources.connections ?? { connections: [] });
     if (url === "/api/worker/status") return jsonResponse(sources.worker ?? { worker: { connectionStatus: "not_connected" } });
     if (url === "/api/commands") return jsonResponse(sources.commands ?? { commands: [] });
+    if (url === "/api/ai-accounts") return jsonResponse(sources.accounts ?? { accounts: [] });
     throw new Error(`Unexpected fetch: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -77,7 +79,7 @@ describe("GettingStarted", () => {
 
     render(<GettingStarted authenticated />);
 
-    await screen.findByText("0 of 4 done");
+    await screen.findByText("0 of 5 done");
     const connect = screen.getByText("Connect GitHub").closest("li")!;
     expect(within(connect).getByRole("link")).toHaveAttribute("href", "/solutions/connections");
     const project = screen.getByText("Add a project").closest("li")!;
@@ -93,7 +95,7 @@ describe("GettingStarted", () => {
 
     render(<GettingStarted authenticated />);
 
-    await screen.findByText("2 of 4 done");
+    await screen.findByText("2 of 5 done");
     // The worker and goal steps stay open until their own signals arrive.
     const worker = screen.getByText("Check your AI worker").closest("li")!;
     expect(within(worker).getByRole("link")).toHaveTextContent("Open Bot Manager");
@@ -104,7 +106,35 @@ describe("GettingStarted", () => {
 
     render(<GettingStarted authenticated />);
 
-    await screen.findByText("1 of 4 done");
+    await screen.findByText("1 of 5 done");
+  });
+
+  it("tracks signing in a provider account as its own step, not the worker's", async () => {
+    // A running worker with no account connected used to leave the longest
+    // part of setup - signing in to Claude or Codex - unmentioned anywhere in
+    // the guide, while a green worker suggested there was nothing left to do.
+    stubSources({ worker: { worker: { connectionStatus: "connected" } } });
+    const { unmount } = render(<GettingStarted authenticated />);
+
+    await screen.findByText("1 of 5 done");
+    const account = screen.getByText("Connect an AI account").closest("li")!;
+    expect(within(account).getByRole("link")).toHaveAttribute("href", "/solutions/bot-manager");
+    expect(within(account).getByRole("link")).toHaveTextContent("Connect an account");
+    unmount();
+
+    // A connected account ticks its own step, and only its own.
+    vi.unstubAllGlobals();
+    stubSources({ accounts: { accounts: [{ status: "connected" }] } });
+    render(<GettingStarted authenticated />);
+    await screen.findByText("1 of 5 done");
+  });
+
+  it("does not count a disconnected account as connected", async () => {
+    stubSources({ accounts: { accounts: [{ status: "needs_reauth" }, { status: "disconnected" }] } });
+
+    render(<GettingStarted authenticated />);
+
+    await screen.findByText("0 of 5 done");
   });
 
   it("collapses to a single give-a-goal call to action once everything is connected", async () => {
@@ -113,6 +143,9 @@ describe("GettingStarted", () => {
       connections: { connections: [{ status: "connected" }] },
       worker: { worker: { connectionStatus: "connected" } },
       commands: { commands: [{ id: "command-1" }] },
+      // "Ready" now genuinely requires a signed-in provider account: a Factory
+      // with no Claude or Codex account cannot do the work it promises.
+      accounts: { accounts: [{ status: "connected" }] },
     });
 
     render(<GettingStarted authenticated />);
@@ -131,6 +164,7 @@ describe("GettingStarted", () => {
       if (url === "/api/github/connections") return jsonResponse({ connections: [{ status: "connected" }] });
       if (url === "/api/worker/status") return jsonResponse({ error: { message: "worker unavailable" } }, 500);
       if (url === "/api/commands") return jsonResponse({ commands: [] });
+      if (url === "/api/ai-accounts") return jsonResponse({ accounts: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -138,7 +172,7 @@ describe("GettingStarted", () => {
     render(<GettingStarted authenticated />);
 
     // GitHub + project still register; the worker step is simply left unchecked.
-    await screen.findByText("2 of 4 done");
+    await screen.findByText("2 of 5 done");
     expect(screen.getByRole("heading", { name: "Get started" })).toBeInTheDocument();
   });
 
@@ -150,6 +184,7 @@ describe("GettingStarted", () => {
       if (url === "/api/github/connections") return jsonResponse({ connections: [{ status: "connected" }] });
       if (url === "/api/worker/status") return jsonResponse({ worker: { connectionStatus: "connected" } });
       if (url === "/api/commands") return jsonResponse({ commands: hasGoal ? [{ id: "c-1" }] : [] });
+      if (url === "/api/ai-accounts") return jsonResponse({ accounts: [{ status: "connected" }] });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -157,7 +192,7 @@ describe("GettingStarted", () => {
 
     render(<GettingStarted authenticated />);
 
-    await screen.findByText("3 of 4 done");
+    await screen.findByText("4 of 5 done");
     hasGoal = true;
     await user.click(screen.getByRole("button", { name: /refresh setup status/i }));
 

@@ -37,7 +37,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-[#161d2a] bg-[#070a0f]">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div className="max-w-sm">
             <div className="flex items-center gap-3">
               <span className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-[#2d3550] bg-gradient-to-br from-[#161a2e] to-[#0e1120]">
@@ -62,12 +62,19 @@ export function SiteFooter() {
               <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#7f8c9e]">
                 {column.heading}
               </h2>
-              <ul className="mt-4 space-y-2.5">
+              {/*
+                `space-y-2.5` around a 16px-tall text link left a 16px tap
+                target on every marketing page — well under the 24px minimum,
+                and the inline-prose exemption does not cover a stacked
+                navigation list. The padding is what makes the target, so it
+                sits on the link rather than on the row.
+              */}
+              <ul className="mt-3 space-y-0.5">
                 {column.links.map((link) => (
                   <li key={`${column.heading}-${link.label}`}>
                     <Link
                       href={link.href}
-                      className="text-sm text-[#93a0b2] transition-colors hover:text-white"
+                      className="inline-flex min-h-11 items-center py-1 text-sm text-[#93a0b2] transition-colors hover:text-white"
                     >
                       {link.label}
                     </Link>

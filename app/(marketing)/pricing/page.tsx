@@ -27,7 +27,7 @@ export default async function PricingPage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-14">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
           <div>
             <h1 className="text-balance text-[36px] font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-[46px]">
               {page?.headline}{" "}
@@ -49,7 +49,7 @@ export default async function PricingPage() {
           {pillars.length ? (
             <SurfacePanel className="p-5 sm:p-6">
               <h2 className="text-sm font-semibold text-white">Everything you need to build</h2>
-              <ul className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-5">
+              <ul className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
                 {pillars.map((pillar) => (
                   <li key={pillar.title} className="text-center">
                     <IconTile
@@ -59,7 +59,7 @@ export default async function PricingPage() {
                       className="mx-auto"
                     />
                     <h3 className="mt-3 text-xs font-semibold text-white">{pillar.title}</h3>
-                    <p className="mt-1 text-xs leading-4 text-[#7f8c9e]">{pillar.body}</p>
+                    <p className="mt-1 text-xs leading-4 text-balance break-words text-[#7f8c9e]">{pillar.body}</p>
                   </li>
                 ))}
               </ul>
@@ -73,7 +73,7 @@ export default async function PricingPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-10">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
           <PricingPlans plans={content.plans} />
 
           <aside className="space-y-4">

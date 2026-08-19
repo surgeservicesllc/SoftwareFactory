@@ -212,6 +212,16 @@
     border: 1px solid var(--border-strong);
     background: var(--surface-inset);
     color: var(--text);
+    /*
+     * `w-full` alone does not stop a control widening its parent.
+     *
+     * A form control's min-content width is intrinsic — for a select it is the
+     * widest option — and an auto-sized flex or grid track takes that as its
+     * minimum, so `width: 100%` resolves against a parent the control itself
+     * made wider. `min-width: 0` lets it shrink, so `w-full` finally means the
+     * parent's width rather than the content's.
+     */
+    min-width: 0;
   }
 
   .input::placeholder {

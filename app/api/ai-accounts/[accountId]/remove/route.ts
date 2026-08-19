@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { botFabricErrorResponse } from "@/lib/bots/route";
-import { jsonNoStore } from "@/lib/server/http";
+import { databaseErrorResponse, jsonNoStore } from "@/lib/server/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -41,19 +41,25 @@ export async function POST(
       p_ai_account_id: accountId,
     });
     if (error) {
-      // The code (never the message) names the class of failure — a missing
-      // function on a not-yet-migrated database reads PGRST202, an
-      // authorization refusal reads 42501 — without leaking schema detail.
-      return jsonNoStore(
-        {
-          error: {
-            code: "remove_failed",
-            message: "The account could not be removed.",
-            detail: (error as { code?: string }).code ?? "unknown",
-          },
-        },
-        { status: 403 },
-      );
+      /*
+       * The database's own sentence, not just its SQLSTATE.
+       *
+       * This used to answer every failure with "The account could not be
+       * removed." plus a bare code, on the reasoning that a message might leak
+       * schema detail. In practice it leaked the opposite: an owner saw
+       * "(42501)" and had no way to tell an authorization refusal — whose
+       * message is a sentence this repository wrote, "owner or admin role is
+       * required to remove an AI account" — from a missing privilege on a
+       * table, which says which table. Both are 42501, and the difference is
+       * the whole diagnosis.
+       *
+       * `databaseErrorResponse` is the shared policy for exactly this. It
+       * already classifies 42501 as client-safe and maps it to 403, and it
+       * still refuses to pass through the message of any code it does not
+       * recognise — so a missing function or an unexpected fault stays
+       * generic, which is what the original caution was actually about.
+       */
+      return databaseErrorResponse(error);
     }
 
     return jsonNoStore({ removed: data === true });

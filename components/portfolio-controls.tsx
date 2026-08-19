@@ -97,10 +97,17 @@ export function PortfolioControls() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-xs text-muted">
+          {/*
+            `min-w-0` on the label and `w-full` on the control, because a
+            select's min-content width is its widest option — and these options
+            are project names, which nobody bounds. One long name pushed this
+            row past the right edge of a 320px screen. `w-full` alone does not
+            help: it sets the preferred width, not the minimum.
+          */}
+          <label className="flex min-w-0 flex-col gap-1 text-xs text-muted">
             Project
             <select
-              className="rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
+              className="w-full min-w-0 rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
             >
@@ -112,10 +119,10 @@ export function PortfolioControls() {
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs text-muted">
+          <label className="flex min-w-0 flex-col gap-1 text-xs text-muted">
             Priority
             <select
-              className="rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
+              className="w-full min-w-0 rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
               value={priority}
               onChange={(event) => setPriority(event.target.value)}
             >
@@ -126,10 +133,10 @@ export function PortfolioControls() {
             </select>
           </label>
 
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted">
+          <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 text-xs text-muted">
             Reason
             <input
-              className="rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
+              className="w-full min-w-0 rounded border border-edge bg-transparent px-2 py-1 text-sm text-foreground"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               placeholder="Recorded in the activity trail"

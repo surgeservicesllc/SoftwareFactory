@@ -1,6 +1,7 @@
 import "server-only";
 
 import { findBotProvider } from "@/lib/bots/catalog";
+import { isClientSafeDatabaseErrorCode } from "@/lib/server/http";
 
 /**
  * Auto-provision a ready default bot the moment a provider is connected.
@@ -24,15 +25,13 @@ import { findBotProvider } from "@/lib/bots/catalog";
  *   itself succeeded and the person can always add a bot by hand.
  */
 
-type ProviderBotRow = { id: string; provider: string };
+type ProviderBotRow = { id: string; provider: string; name: string };
 
 type ProvisioningClient = {
   from: (table: string) => {
     select: (columns: string) => {
       eq: (column: string, value: string) => {
-        eq: (column: string, value: string) => {
-          limit: (count: number) => PromiseLike<{ data: unknown; error: unknown }>;
-        };
+        limit: (count: number) => PromiseLike<{ data: unknown; error: unknown }>;
       };
     };
   };
@@ -40,7 +39,7 @@ type ProvisioningClient = {
     name: string,
     args: Record<string, unknown>,
   ) => {
-    single: () => PromiseLike<{ data: unknown; error: { message?: string } | null }>;
+    single: () => PromiseLike<{ data: unknown; error: { message?: string; code?: string } | null }>;
   };
 };
 
@@ -90,26 +89,40 @@ export async function ensureProviderBot(
   try {
     const client = clientLike as ProvisioningClient;
 
-    // Bounded but wide enough to number additional bots correctly; the
-    // single-bot path only asks whether any row exists at all.
+    /*
+     * Names are unique per ORGANIZATION while bots were being counted per
+     * PROVIDER, so the old `label N` numbering collided the moment a bot was
+     * deleted, renamed, or shared a label across providers — and the 23505
+     * was swallowed into a silent "skipped" the console answered 200 for.
+     * Read every name in the organization and pick the first genuinely free
+     * one instead of predicting.
+     */
     const existing = await client
       .from("bots")
-      .select("id,provider")
+      .select("id,provider,name")
       .eq("organization_id", organizationId)
-      .eq("provider", providerId)
-      .limit(50);
+      .limit(200);
     if (existing.error) {
       return { outcome: "skipped", reason: "Existing bots could not be read." };
     }
-    const existingCount = ((existing.data as ProviderBotRow[] | null) ?? []).length;
-    if (existingCount > 0 && !options.additional) {
+    const rows = (existing.data as ProviderBotRow[] | null) ?? [];
+    const providerCount = rows.filter((row) => row.provider === providerId).length;
+    if (providerCount > 0 && !options.additional) {
       return { outcome: "exists" };
+    }
+    const taken = new Set(rows.map((row) => row.name));
+    let name = provider.label;
+    for (let n = 2; taken.has(name); n += 1) {
+      if (n > 200) {
+        return { outcome: "skipped", reason: "No free bot name is left for this provider." };
+      }
+      name = `${provider.label} ${n}`;
     }
 
     const { data, error } = await client
       .rpc("register_bot", {
         p_organization_id: organizationId,
-        p_name: existingCount > 0 ? `${provider.label} ${existingCount + 1}` : provider.label,
+        p_name: name,
         p_provider: providerId,
         p_model: provider.suggestedModels[0] ?? provider.label,
         p_credential_ref: options.credentialRef !== undefined
@@ -121,7 +134,7 @@ export async function ensureProviderBot(
       .single();
 
     if (error) {
-      return { outcome: "skipped", reason: "A default bot was not created automatically." };
+      return { outcome: "skipped", reason: registerRefusalReason(error) };
     }
 
     const row = data as { id?: string } | null;
@@ -131,4 +144,19 @@ export async function ensureProviderBot(
   } catch {
     return { outcome: "skipped", reason: "A default bot was not created automatically." };
   }
+}
+
+/**
+ * The database's own sentence for the codes the shared policy has vetted as
+ * client-safe; a code alone otherwise. Every one of these reasons reaches
+ * the person who clicked Create Bot — "skipped" used to swallow the whole
+ * story, and the console celebrated a bot that was never created.
+ */
+function registerRefusalReason(error: { message?: string; code?: string }): string {
+  if (error.code && isClientSafeDatabaseErrorCode(error.code) && error.message) {
+    return `The bot could not be created: ${error.message}.`;
+  }
+  return error.code
+    ? `The bot could not be created (database code ${error.code}).`
+    : "A default bot was not created automatically.";
 }

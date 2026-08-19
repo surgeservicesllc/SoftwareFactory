@@ -75,7 +75,7 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
         ) : null}
       </div>
 
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const tone = resolveAccent(plan.accent);
           const cardFeatures = plan.features.filter((feature) => feature.label);
@@ -149,7 +149,61 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
       </ul>
 
       {rows.length ? (
-        <SurfacePanel className="overflow-hidden">
+        <>
+          {/*
+            One block per plan, below the width where a comparison grid stops
+            being readable.
+
+            The grid was a 720px-minimum table in a horizontal scroller, which
+            is unusable on a 320px screen even when the scrolling works — and it
+            did not: a table's min-width propagates into the root's scroll width
+            regardless of the scroller clamping it, so the whole page scrolled
+            sideways. Stacking is what the content actually wants here, and it
+            carries the same rows, values and included/excluded marks, so
+            nothing is hidden from a small screen.
+          */}
+          <div className="space-y-4 md:hidden">
+            {plans.map((plan) => (
+              <SurfacePanel key={plan.slug} className="p-5">
+                <h3 className={cn("text-sm font-semibold", resolveAccent(plan.accent).text)}>
+                  {plan.name}
+                </h3>
+                <dl className="mt-3 space-y-2">
+                  {rows.map((row) => {
+                    const cell = matrixCell(plan, row);
+                    return (
+                      <div
+                        key={`${plan.slug}-${row}`}
+                        className="flex items-start justify-between gap-3 border-b border-[#151c28] pb-2 last:border-b-0 last:pb-0"
+                      >
+                        <dt className="min-w-0 text-xs leading-5 text-[#c1cbd8]">{row}</dt>
+                        <dd className="shrink-0 text-xs leading-5">
+                          {cell.value ? (
+                            <span className="text-[#c1cbd8]">{cell.value}</span>
+                          ) : cell.included ? (
+                            <>
+                              <Check
+                                className={cn("size-4", resolveAccent(plan.accent).text)}
+                                aria-hidden="true"
+                              />
+                              <span className="sr-only">Included</span>
+                            </>
+                          ) : (
+                            <>
+                              <Minus className="size-4 text-[#3d4a5c]" aria-hidden="true" />
+                              <span className="sr-only">Not included</span>
+                            </>
+                          )}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </SurfacePanel>
+            ))}
+          </div>
+
+          <SurfacePanel className="hidden overflow-hidden md:block">
           {/* Focusable so the comparison can be scrolled without a pointer. */}
           <div
             className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7c5cff]"
@@ -214,7 +268,8 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
               </tbody>
             </table>
           </div>
-        </SurfacePanel>
+          </SurfacePanel>
+        </>
       ) : null}
     </div>
   );

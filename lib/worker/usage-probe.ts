@@ -34,6 +34,17 @@ export type UsageProbeResult = Readonly<{
   status: "measured" | "unavailable" | "unsupported";
   windows: readonly UsageWindow[];
   detail?: string;
+  /**
+   * The provider answered that it will not accept this credential at all.
+   *
+   * Deliberately separate from `status`, which is the stored observation
+   * vocabulary and stays three values wide. This one is not stored: it is the
+   * signal that the account itself is no longer usable, and only a provider
+   * saying so out loud sets it. A timeout, a 500, or an unparseable body are
+   * all `unavailable` without it, because none of them is evidence about the
+   * credential.
+   */
+  credentialRejected?: boolean;
 }>;
 
 /** Bounded, secret-free failure text; the database shape-checks it again. */
@@ -142,13 +153,27 @@ export async function probeAnthropicUsage(
 
   if (!response.ok) {
     // The status class only — nothing the provider said travels further.
+    //
+    // 401 is the provider saying this credential is no longer valid — expired
+    // or revoked — and that verdict is worth a demotion. 403 is the provider
+    // declining THIS ENDPOINT for a credential it authenticated: scope, plan,
+    // or gating. Treating 403 as a dead credential produced an unbreakable
+    // loop on the hosted deployment — the owner reconnected (the broker log
+    // shows session after session ending connected), the sweep probed usage,
+    // the fresh token answered 403 here, and the account was demoted straight
+    // back to "needs sign-in again". A refusal to state usage is evidence
+    // about usage, not about the sign-in.
+    const rejected = response.status === 401;
     return {
       status: "unavailable",
       windows: [],
+      credentialRejected: rejected,
       detail: reason(
-        response.status === 401 || response.status === 403
+        rejected
           ? `The provider refused the stored credential (HTTP ${response.status}).`
-          : `The usage endpoint answered HTTP ${response.status}.`,
+          : response.status === 403
+            ? "The provider declined the usage probe (HTTP 403); usage stays unknown, and the sign-in itself is unaffected."
+            : `The usage endpoint answered HTTP ${response.status}.`,
       ),
     };
   }
@@ -201,6 +226,19 @@ export type UsageCaptureSource = Readonly<{
     purpose: string;
   }>>>;
   readStoredCredential: (organizationId: string, purpose: string) => Promise<string | null>;
+  /**
+   * Demotes an account the provider has refused.
+   *
+   * Optional so existing callers keep working, but its absence is what the
+   * Bot Manager was showing before this existed: a permanently orange "the
+   * provider refused the stored credential" line beside a green Connected
+   * badge, because the only component that actually talks to the provider had
+   * no way to say so. The verification sweep cannot find this on its own — it
+   * checks the credential's *shape*, which an expired token still passes.
+   */
+  markAccountNeedsReauth?: (
+    organizationId: string, accountId: string, reason: string,
+  ) => Promise<boolean>;
 }>;
 
 export type UsageRecorder = Readonly<{
@@ -254,6 +292,8 @@ export type UsageCaptureResult = Readonly<{
   unavailable: number;
   unsupported: number;
   errors: number;
+  /** Accounts demoted because the provider refused their credential. */
+  demoted: number;
 }>;
 
 /**
@@ -277,6 +317,7 @@ export async function captureUsageForAccounts(
   let unavailable = 0;
   let unsupported = 0;
   let errors = 0;
+  let demoted = 0;
 
   for (const account of await source.listAccountsForVerification()) {
     try {
@@ -315,6 +356,20 @@ export async function captureUsageForAccounts(
         windows: result.windows,
         detail: result.detail,
       });
+
+      // A refused credential is the provider's own verdict, and it outranks the
+      // shape check that keeps the account marked connected. Recording it and
+      // leaving the badge green is how the console ended up asserting
+      // "Connected" beside "the provider refused the stored credential".
+      if (result.credentialRejected && source.markAccountNeedsReauth) {
+        const demotedNow = await source.markAccountNeedsReauth(
+          account.organizationId,
+          account.accountId,
+          result.detail ?? "The provider refused the stored credential.",
+        );
+        if (demotedNow) demoted += 1;
+      }
+
       if (result.status === "measured") measured += 1;
       else if (result.status === "unavailable") unavailable += 1;
       else unsupported += 1;
@@ -323,5 +378,5 @@ export async function captureUsageForAccounts(
     }
   }
 
-  return { measured, unavailable, unsupported, errors };
+  return { measured, unavailable, unsupported, errors, demoted };
 }

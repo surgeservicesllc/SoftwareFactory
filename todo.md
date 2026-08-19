@@ -1,10 +1,1294 @@
 # SoftwareFactory — shared working status
 
+## RESPONSIVE + NAVIGATION: WHERE THIS LANDED (2026-08-18)
+
+Coverage is now derived rather than asserted, which is the part that had been
+missing every time this was called incomplete.
+
+`tests/integration/responsive-coverage.contract.test.ts` computes two claims:
+every `page.tsx` under `app/` is in a width sweep, and every component under
+`components/` is reachable from something that measures it. Reachability is
+transitive, so a component has to be *rendered* by a measured surface rather
+than listed — adding a page or a component without coverage fails the build.
+
+`tests/harness/` mounts 35 real component surfaces in a real browser at
+320/375/390/430/768/1024/1280/1440, because the console resolves its tenant on
+the server and the route sweep only ever reaches the "not configured" gate.
+`tests/integration/supabase-wiring.contract.test.ts` traces all 109 API routes
+to the Supabase boundary and refuses seeded records.
+
+### Defects this found, all of which had reached production
+
+- A bare `grid` cannot shrink: its implicit column is `auto`, minimum
+  min-content. 37 files; one long project name made a console 498px wide
+  inside 320px.
+- `w-full` does not stop a form control widening its parent — a select's
+  min-content is its widest option. Fixed once on the `.input` token.
+- Six copies of a date formatter, none guarding an unparseable value.
+  `Intl.format(new Date(bad))` throws, and a throw in render blanks the page.
+  Now one safe formatter in `lib/format/date.ts`.
+- Button rows that did not wrap: Disconnect on an account, Cancel in two
+  forms — you could open a form and not get out of it on a phone.
+- `truncate` on a flex row rather than its text, clipping the control beside it.
+
+### The navigation, against the owner's reference
+
+Carried from it: the nine top-level destinations in the reference's order,
+the mark at the top left aligned with the menu, one highlighted row per group
+with its chevron inside, New Project as a button, and the closing card.
+
+**Secrets** was absent on the grounds that nothing backed it. That stopped
+being true when the provider credential vault landed
+(`20260814002500`/`002600`); it now points at `settings#providers`, where
+credentials are actually connected and rotated.
+
+**Watch and Advanced** are kept although the reference does not show them.
+They hold Operations, Activity, Files, Agents, Resources, AgentOS and
+Autonomy — all real pages. Matching the image exactly would delete the only
+route to them, and "do not remove functionality" is not a rule the picture
+overrides. Pinned by a test so it reads as a decision rather than drift.
+
+### The two production blockers
+
+**Eight `href: "#"` marketing links — fixed.** Each resource now has a page at
+`/resources/<slug>` showing what the library holds and saying plainly that the
+piece itself is not written yet. Inventing an article to fill the page would
+have been worse than the dead link. Unknown slugs 404 rather than rendering an
+empty body with a 200, which is what `dynamicParams = false` is for.
+
+**Unhosted migrations — measured, and smaller and stranger than stated.**
+This entry previously ended "the assign wizard's configuration fields have no
+columns on production." That is false, and the correction matters more than
+the entry did.
+
+Probe run `32103778884` (`scope=probe`, read-only — the three apply steps were
+skipped and the log shows it) printed the hosted ledger. It is **not a
+contiguous prefix** of the local files, which is the premise every earlier
+count rested on. Nineteen versions are missing from the middle
+(`20260814002500`–`002600`, most of `20260815`, `20260816000100`–`000300`),
+while every row of the `20260817` range sits above them — including
+`20260817000700_bot_assignment_configuration`. **The assign wizard's
+configuration columns and `assign_bots_to_project` are live on production.**
+
+And the ledger still understates the schema: the same run's object probe
+returned 19 of 19 present, among them `scheduling_decisions`,
+`provider_capacity_limits` and `projects.engineering_priority` — all owned by
+`20260815000200`, which has no ledger row. So part of the remaining gap is
+bookkeeping over DDL that already ran, and the fix there is
+`migration repair --status applied <version>`, not re-running the file.
+
+Which of the nineteen are which is now answerable in one read-only run: the
+probe names the marker object each of them introduces and prints a `present`
+boolean per version, so a genuinely missing object shows as `f` instead of
+being invisible. `AI/HOSTED_APPLY_RUNBOOK.md` carries the table and the
+repair-versus-apply procedure, and a guard test keeps the runbook's list, the
+workflow's probe and the migration directory in agreement.
+
+**Not run: the mutating scopes.** `AGENTS.md` puts RED actions behind explicit
+owner approval in Phase 1 and the runbook requires a fresh exact approval per
+apply, so `scope=all` / `broker-functions` / `project-controls` remain an owner
+decision. Only the probe was run. What is already proven about the set is that
+it applies: every integration test execs all 109 migration files in order
+against real PostgreSQL.
+
+---
+
+## GRAPH-ENGINEERED EXECUTION: THE PLANNED-GRAPH DEAD END IS WIRED (2026-08-19)
+
+Owner goal: transform linear/queue-based execution into a graph-engineered
+system. Audit first — the map before the change:
+
+  UI (pipelines Templates → Use) → POST /api/graphs → create_graph_from_plan
+  → graphs/graph_nodes/graph_edges/node_contracts/graph_budgets … DEAD END
+  (every graph stayed PLANNED). Engine (lib/graph, 26 modules: compiler,
+  scheduler, runner, fan-in, budgets, provider-bridge, verification) complete
+  and live-proven by the Phase 2B canary — three parallel Claude nodes +
+  synthesis + fresh-context verifier over the subscription credential — but
+  the canary builds its graph in code and persists nothing. The DB run
+  lifecycle (start_graph_run/record_node_state/complete_graph_run) is
+  member-gated on auth.uid(), unreachable from a service-role worker. The
+  Phase 1C worker executes COMMANDS linearly and knows nothing of graphs.
+
+The missing wire, built by extension (no duplicate systems):
+
+- Migration `20260819000100_graph_worker_execution`: the worker-facing half
+  of the write boundary, service_role-only, Phase 1C-style —
+  `claim_planned_graph` (atomic: FOR UPDATE SKIP LOCKED oldest unrun
+  non-approval-gated graph → RUNNING run + PENDING node_runs + event +
+  complete jsonb projection of nodes/contracts/edges/budget in ONE call),
+  `record_node_state_as_worker`, `record_graph_artifact_as_worker`,
+  `complete_graph_run_as_worker`. Same truth rules as the member half:
+  terminal states final, partial input can never read COMPLETED.
+- `lib/worker/graph-run.ts` (pure): parse the claim → recompile through the
+  SAME compiler the console previews with (dependsOn recovered from stored
+  edges — an edge exists only because downstream consumes upstream) →
+  runGraph with injected executor + injected store; blocked/pending nodes
+  closed SKIPPED after the run so every node is accounted for.
+- `lib/worker/graph-store.ts`: the four RPCs over service-role supabase-js.
+- `lib/worker/claude-node-executor.ts`: one bounded job per node through
+  executeClaudeThroughCli (the canary's proven subscription path), read-only
+  tools, model tiered by node (ECONOMY→haiku, extraction→sonnet, else opus).
+  File-writing nodes stay with Phase 1C's isolation discipline — stated, not
+  hidden.
+- `scripts/graph-worker.mts` (--once/--drain/loop) +
+  `.github/workflows/graph-worker.yml` (manual dispatch; schedule gated on
+  SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED; subscription credential; no API
+  key can leak in).
+
+Verified against the real migrated schema
+(tests/integration/graph-worker-execution.behavior.test.ts, 6 tests):
+atomic claim with whole projection + second-claimer-finds-nothing +
+approval-gated graphs wait; the diamond executes with MEASURED parallel
+fan-out (maxInFlight >= 3) and synthesis last; real RPC persistence (node_runs
+all COMPLETED, run COMPLETED, 4 RAW artifacts); one failed inspector is
+CONTAINED (siblings COMPLETED, dependent SKIPPED, run PARTIAL with
+had_partial_input); terminal protection on nodes and runs; bounded re-claim
+(a failed-only graph is claimable again with a fresh run, capped at three
+total runs; answered graphs never re-enter the queue). Templates-manager
+copy updated to name the executor honestly.
+
+Driven against production: migration applied (run 32208528984), first
+worker dispatches claimed both real graphs and closed them honestly FAILED
+— run 32208699123 died at import (server-only marker → shim, PR #237),
+run 32208975669 dispatched all nodes in parallel but the CLI was missing
+(install pinned + node-failure logging, PR #238). The convergence gap that
+left those graphs dead — only never-run graphs were claimable — is closed
+by PR #239: failed-only graphs re-enter the queue for at most three total
+runs, so an infrastructure fix makes the next dispatch execute them for
+real instead of a person re-planning.
+
+Round 3, from worker run 32209893742 (the re-claim's own production proof:
+both graphs re-claimed to their caps, every node failing on a REAL provider
+answer — "You've hit your session limit · resets 7:30am (UTC)"):
+
+- Edges now carry data in the worker path. `runClaimedGraph` hands each
+  node its upstreams' actual outputs plus an explicit missing list, and the
+  executor folds them into the prompt (bounded, labeled truncation; missing
+  inputs demand stated incompleteness). Before this, a synthesis node ran
+  blind — the exact silent-quality failure the goal bans.
+- Capacity refusals are classified, not spent. A session/rate-limit failure
+  is non-retryable within the run (`isCapacityRefusal`), a run in which
+  nothing succeeded and every failure was a refusal closes CANCELLED (void,
+  with an honest detail), and the drain STOPS instead of burning the queue
+  against an exhausted credential. `claim_planned_graph` treats CANCELLED
+  as retryable-but-uncounted: the three-attempt convergence bound counts
+  only FAILED runs, under a hard total-run ceiling of 10.
+- A non-retryable node failure is recorded FAILED at once (previously a
+  node with attempts remaining could strand its node_run RUNNING forever),
+  and `complete_graph_run_as_worker` refuses non-terminal "closures".
+- `20260819000200_replant_exhausted_graph` re-plants ONE copy (fixed id,
+  replays no-op forever) of the owner's first-day readiness graph, whose
+  three chances were all consumed by infrastructure faults now fixed —
+  so the capacity-aware worker has something real to claim after the
+  session limit resets at 7:30am UTC.
+
+Round 3 production verification (worker run 32211229999): the re-planted
+graph was claimed, every session-limit refusal was classified (one attempt
+per node, not two), the run closed CANCELLED with the honest detail, and
+the drain stopped with "graphs keep their chances for a dispatch the
+provider will fuel". The graph holds 0 FAILED / 1 CANCELLED of 10. A
+send_later check-in at 07:40 UTC dispatches the worker after the reset.
+
+Round 4 — tolerant fan-in (goal rule 14, the last engine-rule gap):
+
+- `NodeContract.toleratesPartialInputs` (opt-in): the scheduler readies a
+  tolerant fan-in once every dependency has SETTLED (terminal or blocked)
+  with at least one COMPLETED input, instead of blocking on the first
+  failure — the surviving branches' work is synthesized, stated as
+  partial. A tolerant node with zero completed inputs is still blocked:
+  a synthesis with no inputs would be invented, not synthesised. Run-level
+  honesty unchanged: the run still closes PARTIAL when any input failed.
+- Migration `20260819000300_tolerant_fan_in`: guarded graph_nodes column +
+  create_graph_from_plan persists it; claim projection (20260819000100)
+  carries it; worker treats absence as false.
+- Templates: aggregating capabilities (extraction/synthesis/reporting)
+  with dependencies default to tolerant; implementation/QA/review keep the
+  strict rule. Explicit per-node override available.
+- Truthfulness: POST /api/graphs' "no executor is connected" note predated
+  the worker and is corrected.
+- Tests: scheduler tolerance triple (runs with what completed / waits for
+  in-flight / blocks on nothing-completed), tolerant-diamond behavior test
+  through the real chain (synthesize COMPLETED with missing list, run
+  PARTIAL), full graph suite 10/10, all 12 tail-pin chain suites green on
+  the 114-migration chain. Applied to production by run 32212056032.
+
+Round 4b — executors dispatch by declaration, not by assumption:
+
+- The worker sent EVERY node to the CLI, DETERMINISTIC (model tier NONE)
+  included — the first-day template's reduce node would have spent a
+  subscription turn on work code does perfectly. `executeDeterministicNode`
+  routes reduce nodes through the engine's own reducers (dedupe first
+  occurrence wins, severity-ranked, stable), with honesty in-band:
+  malformed rows counted, unreducible inputs named, missing inputs listed.
+  A DETERMINISTIC node with nothing reducible fails plainly and without
+  retry (deterministic means deterministic). ANCHOR nodes (test runs,
+  probes) fail with the reason they need the Phase 1C workspace path —
+  never quietly routed to a model.
+- Deferred deliberately: output-schema enforcement (validateOutput +
+  transport outputFormat) waits until the first real production run proves
+  live output shapes, then tightens; enforcing now could fail the first
+  live nodes on a shape the prompt merely suggests.
+
+Round 5 — graph runs become visible (nothing read graph_runs/node_runs/
+graph_artifacts; results landed in tables no human saw):
+
+- Migration `20260819000400_list_graph_runs`: member-facing definer read
+  (membership-checked, authenticated only, service_role revoked) returning
+  each run with per-node truth (state/provider/model/latency/error
+  verbatim) and artifact counts. Also widens node_runs' provider check to
+  admit 'deterministic' — caught before production: the old check would
+  have failed the first deterministic COMPLETED record.
+- GET /api/graphs/runs (no derivation) + a "Graph runs" view on the
+  pipelines console: state-badged rows, expandable per-node tables,
+  incompleteness stated when the database says so, empty state naming the
+  next step. The Use-template dialog's success line now links straight to
+  it. PRs #243 (executor dispatch), #244 (visibility).
+- Known limitation recorded: a stored DISCOVERY_GRAPH executes as its
+  recorded DAG — the worker does not add rounds mid-run; bounded discovery
+  stays engine-side (canary-proven) until stored-graph discovery is a
+  designed increment.
+
+Round 7 — the first real production node success, and the turn ceiling
+(worker run 32228988434, post-reset live proof):
+
+- Graph run e51c57a5: **the rollback inspector genuinely completed through
+  the CLI in production** — 1 of 7 contributed, RAW artifact recorded, run
+  closed PARTIAL (an answer; the graph retired honestly). The re-claim loop
+  also proved itself live: claim → all-turn-limit FAILED (counted, 1 of 3)
+  → immediate re-claim → the partial success.
+- Every other failure was "Reached maximum number of turns (8)" — the
+  executor's ceiling, not the work. Fixed by measurement: 24 turns, and
+  MODEL template nodes now carry an eight-minute timeout instead of the
+  three-minute default that boxed the old ceiling in.
+- buildLaunchPlan never passed timeout_ms/max_attempts — every planned
+  graph silently got database defaults regardless of contract. The payload
+  now carries the compiled envelope, pinned by a launch-plan test.
+- `20260819000500_replant_with_room_to_work`: one final fixed-id copy of
+  the first-day graph, planned with the measured envelope, for the next
+  dispatch to drive to a full COMPLETED. CI on main also went fully green
+  (run 32216103242, 1605 browser tests) after PR #248 raised the outgrown
+  e2e ceiling.
+
+Round 6 — durability and accounting (PR #246):
+
+- Dead workers no longer strand graphs. claim_planned_graph sweeps
+  abandonment before claiming: a RUNNING run silent for over two hours
+  (run row AND every node row; the worker's own ceiling is one hour)
+  closes FAILED with a reclaim event, unfinished nodes close CANCELLED
+  with the reason on the row, and the graph re-enters the convergence
+  rules. Concurrency-safe; a genuinely live run is untouched (tested).
+- Token usage reaches the budget: the transport's inputTokens/outputTokens
+  now travel on each success, the runner sums them, and the run closure
+  records tokens_used — so max_tokens has something real to bind against.
+  Cost stays unstated: the subscription is not per-token billed, and an
+  invented price would be budgeted against.
+
+Remaining blockers requiring external services/credentials: executing real
+nodes needs the graph-worker workflow dispatched (or its schedule variable
+set) with the existing subscription secret; file-WRITING graph nodes are
+future work through the Phase 1C workspace path.
+
+## AGENTS SELECTABILITY, REDONE SERVER-SIDE AND PROVEN (2026-08-18 23:5xZ)
+
+The owner reported the first round incomplete. The button-dependent seed was
+the weakness: selection still hinged on a person finding the control and
+eight client requests all succeeding. Redone decisively: migration
+`20260818000200_seed_standard_model_catalogue` seeds the eight standard
+models per organization server-side (attributed to the earliest
+owner/admin, ON CONFLICT DO NOTHING — replay-safe and coexists with
+console-seeded rows). Applied to production by run 32199155823; probe run
+32199285229 then measured the live database: **both organizations hold 8
+enabled model configurations (11 and 12 agents), and
+`set_agent_provider_assignment` as the impersonated owner succeeded —
+anthropic / claude-fable-5 (rolled back)**. Every select on
+/solutions/agents now offers the real models with zero setup, and each
+choice persists to Supabase. Behavior test applies the chain, re-runs the
+seed file against a later-created org (the hosted re-apply shape), asserts
+8 enabled rows, replay no-op, and a successful assignment. PR #233.
+
+## AGENTS PAGE: EVERY AGENT SELECTABLE (2026-08-18, second session)
+
+The owner's goal: make any or all agents selectable at /solutions/agents.
+The whole selection chain already existed and was Supabase-wired end to end —
+per-agent select → POST /api/agents/[id]/assignment →
+`set_agent_provider_assignment` (owner/admin, activity-evented, hosted since
+the 20260813 range) — but the RPC only accepts **enabled catalogue
+configurations** (`provider_model_configurations`), and a fresh organization
+has an empty catalogue. So every select offered exactly one row, "Automatic
+routing", and the way out lived unexplained on the settings page.
+
+Fix, no migration needed: `lib/providers/standard-catalogue.ts` derives the
+standard model list from the bot catalog's per-provider suggested models
+(one source of truth; display names spelled where the schema demands one),
+and the Agents page's assignment boundary now offers **Enable the standard
+model catalogue** exactly when the catalogue has no enabled models and the
+viewer can manage — one click seeds all 8 through the same
+`/api/providers/models` upsert the settings page uses (idempotent), reloads,
+and every agent's select becomes a real choice persisted to Supabase.
+Refusals are counted and named, never celebrated. Boundary copy names the
+dead end when it exists. 1 new unit test (provider-surfaces: 11) walking
+empty catalogue → seed → 8 upserts → options present. Also fixed
+bot-connect-key-route's client mock, which still modelled the pre-#228
+two-eq read chain.
+
+## CREATE BOT MADE NOTHING, SAID NOTHING — FIXED (2026-08-18, second session)
+
+The owner finished the connect flow, the success screen said Ready, Create My
+First Bot was clicked — zero bots, zero words. Probe run 32192344287 proves
+`register_bot` itself works on production (created as the impersonated owner,
+rolled back; the org holds 0 bot rows), so the failure lived entirely in the
+layers above it, each of which ate part of the truth:
+
+1. `/api/bots/connect/provision` answers 200 for "made one", "already had
+   one", AND "the database refused" (ensureProviderBot swallows every error
+   into `skipped` — by design, so auto-provision never fails a connection).
+   Every caller checked only `response.ok` and celebrated. Now the skip's
+   reason travels (the database's own sentence for vetted codes), and every
+   caller — provisionBot, createBotsForAccounts, addSelectionToProject, the
+   fabric console's connect finish, the assign wizard's linking — treats an
+   unprovisioned answer as the failure it is.
+2. Bot names are unique per ORGANIZATION; the auto-name was numbered by a
+   per-PROVIDER count, so deletions/renames/cross-provider squats made
+   "Label N" collide (23505 → silent 200). Names are now picked from the
+   names actually taken.
+3. `botNotice` rendered only inside modal stages; the selection bar's flows
+   run with none open, so even a carried reason had nowhere to appear. A
+   page-level role=status line now renders under the accounts panel.
+
+PR #228, merged ed19a61, live on production (~15s). Tests: bot-provisioning
+10 (free-name + vetted-sentence), bot-manager-home 21 (skipped-200 shows its
+sentence).
+
+## REMOVE AND RECONNECT: ROOT CAUSES MEASURED AND FIXED (2026-08-18, second session)
+
+**Remove.** The re-aimed probe (run 32188102707) impersonated the real owner of
+the organization that actually holds the accounts and got the answer no
+catalogue query could: `can_manage_organization: t`, then
+`remove_ai_account as owner: 42501 usage observations are append-only`. The
+account delete cascades into `ai_account_usage_observations` (FK `on delete
+cascade` from 20260816001500), and that table's own append-only trigger
+refuses the cascaded delete. The two declarations contradict each other; every
+account with recorded usage — every real account within minutes — was
+unremovable. Fix: migration `20260818000100_removable_accounts_keep_usage_evidence`
+drops the cascade and keeps the trigger; usage evidence is history and now
+survives removal, like activity events. The removal integration test gained
+the missing state (an account WITH usage rows) — triggers fire for superusers
+too, so PGlite reproduces the hosted 42501 exactly without the fix.
+
+**Reconnect.** The broker log (run 32183453093) shows session after session
+ending `status=connected` — reconnect always worked. What made it LOOK broken:
+the usage sweep treats 403 from Anthropic's usage endpoint as
+`credentialRejected` and demotes the account, so every successful reconnect
+bounced straight back to "Needs sign-in again" on the next sweep. 403 is the
+provider declining THAT ENDPOINT for a credential it authenticated (scope,
+plan, gating); dead credentials answer 401. Fix in `lib/worker/usage-probe.ts`:
+only 401 demotes; 403 records "The provider declined the usage probe (HTTP
+403); usage stays unknown, and the sign-in itself is unaffected." After one
+more reconnect per demoted account, they go green and stay green.
+
+Follow-up noted, not done: a needs_reauth account's Refresh marker can only
+expire (mark_ai_account_verified touches connected rows only), so the panel
+shows "the refresh has not completed yet" for a sweep that did complete —
+cosmetic once the demote loop is gone.
+
+## "THE ACCOUNT COULD NOT BE REMOVED. (42501)" (2026-08-18)
+
+A SQLSTATE and no words. `42501` is `insufficient_privilege`, and it covers two
+completely different problems: an authorization refusal, whose message is a
+sentence this repository wrote — "owner or admin role is required to remove an
+AI account" — and a missing privilege on a table, which names the table.
+Telling them apart is the entire diagnosis, and the route was discarding the
+only thing that could.
+
+**Every mutation in this section did the same.** Remove, Disconnect, the
+session read and its cancel all answered with a house sentence and, at best, a
+bare code. They now go through `databaseErrorResponse`, which is the shared
+policy and already the right one: it passes the database's own message for the
+codes it has vetted as client-safe (`22023`, `23502`, `23514`, `42501`,
+`40001`, `55000`, `P0002`) and stays generic for everything else — so an
+unrecognised fault still says nothing, which is what the original caution was
+actually about. Rename keeps its one friendly translation, because `23505` is
+*not* on that list and a raw unique-violation names a constraint.
+
+**The function itself is correct.** `remove_ai_account` was exercised against
+the real migrated schema in the four states production actually holds, and all
+four pass: a disconnected account whose credential is already gone, a second
+removal of something already removed (answers false rather than raising), a
+member (42501 with that sentence), and an outsider's organization id. Only the
+happy path had been covered, so the state most likely to be removed was
+untested.
+
+So the hosted failure is not the logic — it is a privilege difference on that
+database. A `SECURITY DEFINER` function runs as its owner, and if the function
+and the tables it writes were applied by different roles, the function can lack
+privileges on them. The `scope=probe` step now prints the owner of every
+function and table in this section, whether each function is definer, and
+whether `authenticated` may execute it; every function should share one owner
+with every table. With the route fixed, the next attempt also names the cause
+on screen instead of "(42501)".
+
+### The rest of the section, audited
+
+`tests/integration/bots-section-wiring.contract.test.ts` extracts every
+`/api/...` path the five Bots components call — thirty of them — and resolves
+each against the route files on disk, matching `${...}` segments to `[param]`
+directories the way Next does. A path typed into a template literal has no
+compiler behind it: rename a segment and the button still renders, still
+clicks, and answers 404, which the console reports as the generic failure for
+whatever it was trying to do. Renaming one path to a route that does not exist
+fails the test and names it.
+
+---
+
+## THE CONSOLE WAS ENFORCING A RULE THE SERVER DOES NOT HAVE (2026-08-18)
+
+The owner's screenshot is the whole bug report: four accounts, three of which
+had refused their stored credential with HTTP 403, one disconnected, and no
+bots. The bar read "2 selected · 0 can create a bot", the button read "None can
+create a bot", the team section was empty so there was nothing else to select,
+and **Add Bots never appeared**. The journey simply stopped.
+
+It stopped on a rule the console invented. A bot's readiness is resolved by
+`evaluateBotReadiness`, which asks whether the **credential resolves on the
+server** and nothing else — the same test `POST /api/projects/:id/bots` applies
+before assigning. And `mark_ai_account_needs_reauth` writes only `status` and
+`last_error`; it does not touch the vault. So an account whose last
+verification came back 403 still holds its credential, and a bot referencing
+that slot is `ready` by the server's own definition. The console was refusing
+to offer what the server would have accepted.
+
+`lib/bots/accounts.ts` now holds the rule in one place: an account can back a
+bot when it is `connected` **or** `needs_reauth`; `pending`, `disconnected` and
+`revoked` cannot, because those have no credential material — and an unknown
+status is treated as unusable rather than guessed at.
+
+Two facts that had been conflated are now separate, because they call for
+different actions:
+
+- **Cannot back a bot** — final until something changes, counted against the
+  offer, and the reason named ("not signed in yet", "its credential was
+  removed", "its credential was revoked").
+- **Needs signing in again** — does not stop anything being created or
+  assigned; it means the work waits. Said as its own line: "their bots are
+  created and assigned, but will not run until you reconnect."
+
+`bot-manager-stalled` is the screenshot as a harness case — four stale
+accounts, no bots — and its browser check asserts the workspace has a way
+forward from exactly that state. Reverting the rule to `connected` alone fails
+one browser check and four unit tests.
+
+### One more thing this explains
+
+The intermittent single vitest failure in the combined gate was a live
+`next dev` rewriting `.next/dev/types` while `tsc` read it. Next re-adds that
+path to `tsconfig.json`'s `include` on every build, so it cannot be excluded —
+the operational rule is simply not to run the typecheck while a dev server is
+up.
+
+---
+
+## CONNECT BOTS FINISHES THE STEP IT IS PART OF (2026-08-18)
+
+Inside the AI Factory, Connect Bots could only connect. The selection made
+there had nowhere to go: finishing meant closing the overlay and starting the
+assign step over from a project picker the page had already filled in.
+
+The journey now hands the step its project, and the panel gains **Add Bots** —
+one press for the whole chain:
+
+1. every selected account that is connected but has no bot gets one,
+2. the bots that appeared between two reads of `/api/bots` are identified by id
+   — the provision endpoint answers "made one" or "already had one" rather than
+   naming a row, and deriving an id from the account would be a guess that
+   assigns the wrong bot,
+3. those plus any directly selected bots land on the project in one atomic
+   assign,
+4. `onFinished` returns the caller to the journey.
+
+The role the assignment requires is chosen in the same row rather than in a
+second dialog, since the only thing the standalone dialog still had to ask for
+was the project.
+
+**Two labels that were lying.** "Create 0 bots" — a disabled button whose count
+is zero reads as broken rather than as unavailable; it now names the reason.
+And the bulk bar's "Add to project" at a selection of one was the same string
+as every row's own button, two identical controls doing different things; the
+bar always counts.
+
+Selecting an account that needs signing in again deliberately does **not** count
+towards the offer, so Add Bots never promises what the next request would
+refuse — pinned by the browser check, which selects such an account first and
+asserts the row stays absent.
+
+---
+
+## CONNECT BOTS, REDRAWN TO THE OWNER'S IMAGE, WITH ONE-OR-MANY SELECTION (2026-08-18)
+
+**The account row is a column now, not one wrapping flex row.** The design puts
+the name and its SELECT control on the first line, the account's own facts
+under it, and the state badge at the head of the action row where it explains
+the buttons beside it. As a single wrapping row the badge landed wherever the
+name's length left it — on a narrow panel, between the name and the buttons it
+describes.
+
+**SELECT, and it means one or many.** Selecting is a set, not a radio: every
+account row and every bot row carries the control, pressed state is
+`aria-pressed` rather than colour alone, and a bar above the list states the
+count with the action that applies to it.
+
+- **Accounts → bots.** "Create N bots" provisions one bot per selected account,
+  sequentially, because `ensureProviderBot` decides whether the organization
+  already has a bot for a provider and four simultaneous requests would each
+  read "none yet" before any of them wrote. A second account on the same
+  provider passes `additional`, so it gets its own bot rather than being told
+  one exists. Accounts that cannot back a bot are counted separately and named
+  — "3 selected · 2 can create a bot, the rest need signing in again" — so the
+  button's number is never a mystery.
+- **Bots → a project.** "Add N to a project" sends the whole selection in one
+  request, because `assign_bots_to_project` is atomic: together is the
+  difference between "these five are on the project" and "three are, work out
+  which two are not". The single-bot button stays for the common case.
+
+The name lives in each control's `aria-label` rather than an `sr-only` span: a
+hidden text node carrying the account's name puts that name in the accessible
+tree twice, and in anything matching on text twice as well.
+
+---
+
+## CONNECT BOTS: WHY IT WAS UNUSABLE, AND THE ROUTE ONTO A PROJECT (2026-08-18)
+
+**Create Bot offered to add a fifth account.** It called
+`provisionBot(connectedAccounts[0].provider)` and, when nothing was connected,
+silently fell through to the *add an account* chooser. The owner's screenshot
+shows four accounts, every one of them needing to sign in again — so pressing
+"Create Bot" opened "Add AI Account" and explained nothing. It now asks which
+account should back the bot, lists only the ones that can, and when none can
+says so with the number of accounts and where Reconnect is. With no account at
+all it still offers the chooser, which is the right answer to a different
+question.
+
+**A bot on the roster had no way onto a project.** Assignment lived only in the
+project page's wizard, so someone looking at their bots was told, in effect, to
+start again from somewhere else. Each row now carries **Add to project**: pick
+a project and a role, and it posts through the same
+`POST /api/projects/:id/bots` the wizard uses — readiness resolved server-side,
+least-privilege defaults, and the server's own refusal repeated rather than a
+generic failure. Missing prerequisites are named (no projects, no roles) with a
+link, instead of an empty dropdown beside a dead button.
+
+**The tile stopped wrapping mid-phrase.** "0 of 4 Connected" broke across three
+lines on a phone and doubled the card's height. The count is the value and
+"Connected" is a line beneath it.
+
+### What the harness had been hiding
+
+`canManage` never reached it: `/api/ai-accounts` returned accounts and no
+permission flag, so the Bot Manager rendered **read-only** in every layout
+check. Add AI Account, Create Bot, rename, remove and the new Add to project
+were all absent from the width sweep. Supplying the flag the route actually
+returns turned three checks red immediately — the bot roster carried `truncate`
+on the *row* rather than the name, so a long bot name pushed its rename and
+remove buttons past the edge and the row clipped them: on the page and
+unreachable at 320 and 375. The accounts panel had been fixed for exactly this
+and carries a comment saying so; the roster copy had it the wrong way round,
+and no test could see it while the fixture rendered the roster read-only.
+
+---
+
+## THREE WAYS A PLAYWRIGHT ACTION COULD HANG (2026-08-18, fixed)
+
+Adding the sidebar collapse toggle turned 86 browser checks red, and none of
+them were about the sidebar. Playwright's default `actionTimeout` is 0 —
+unbounded — so any locator action on an element that is not there consumes the
+whole test budget and then reports as a timeout with no bearing on the cause.
+It bit three times in one sitting:
+
+- `locator.textContent()` in the interactive sweep, on a control index that an
+  earlier click had removed. Latent since that sweep was written; the collapse
+  toggle is simply the first control whose click deletes the controls after it.
+- `locator.click()` on a drawer scrim that the drawer itself covers, so the
+  click could never be delivered.
+- The same click again, after the scrim and the X inside the drawer turned out
+  to share the accessible name "Close console navigation" — two elements for
+  one name, one of them unclickable.
+
+`actionTimeout: 10_000` now bounds all of them, well under the 45s test
+timeout, so each fails at the line that caused it. The sweep also re-reads the
+live control count before addressing an index, the scrim became a click-away
+(`aria-hidden`, `tabIndex={-1}`) rather than a second control with the same
+name, and the drawer interaction in the page suite retries the *click* rather
+than polling an assertion — a click that lands before hydration attaches the
+handler does nothing at all, and only the heaviest console page was slow enough
+to show it.
+
+---
+
+
+
+Adding the sidebar collapse toggle turned 86 browser checks red, and none of
+them were about the sidebar. `locator.textContent()` takes no timeout from this
+config — Playwright's default action timeout is unbounded — so reading a
+control that an earlier click removed waits until the *test* times out at 90s.
+Every `survives its own controls at 1280px` case then failed with "the page
+closed", which is the teardown rather than the cause.
+
+The flaw was latent from the day that sweep was written; the collapse toggle is
+simply the first control whose click deletes the controls after it. It now
+re-reads the live count before addressing an index and bounds the label read to
+a second, so a shrinking list ends the sweep instead of stalling it. Thirty-five
+cases that had been hanging now finish in thirty-nine seconds.
+
+---
+
+## TWO HAMBURGERS, ONE PHONE (2026-08-18, from the owner's screenshots)
+
+The red box in the third screenshot is the console's own mobile bar, and the
+problem it frames is that the page has a second menu button in the bar above
+it. The console renders the global header *and* its own drawer, so a phone
+showed two identical hamburger icons in two stacked bars, distinguishable only
+by accessible names nobody sees, and 137px of chrome before any content.
+
+The console's button is the one that stays — it opens the navigation the page
+is about. The global header suppresses its own on console pages, and its
+destinations move into the console drawer under a "Site" heading, so nothing
+that was reachable stops being reachable. Pinned by a test that counts the
+menu buttons on `/solutions` at 390px and then opens the drawer to confirm
+Platform and Pricing are still one tap away; mutation-checked by removing the
+suppression, which reports "Expected: 1, Received: 2".
+
+### The other two screenshots
+
+Both show production, which is behind `main`, and both are already fixed
+there. The "AI Accounts 0 Connected" tile above a list headed "AI accounts 4"
+now reads "n of m Connected" and carries a comment naming that contradiction as
+the reason. The Configure Pipeline dialog's **Use** is a real flow, not a
+label: it reads the workspace's projects, refuses honestly when there are none
+(with a link to create one rather than an empty dropdown beside a dead button),
+and posts to `/api/graphs` with the project and template to record a planned
+graph through the engine's own write boundary — reporting the topology and node
+count it actually produced. **Clone** copies a built-in into an editable
+workspace template. Nothing on that dialog is a mock.
+
+---
+
+## THE THREE NAVIGATION REQUIREMENTS THAT WERE STILL UNMET (2026-08-18)
+
+Re-read against the brief rather than against the last summary. Three items
+were still not done, and each is now measured rather than asserted.
+
+**"When a caret is opened, reveal its submenu smoothly."** The chevron rotated
+with a transition; the submenu itself was `{expanded ? <ul> : null}` — an
+instant mount. It now animates on a grid track from `0fr` to `1fr`, which
+reaches exactly the submenu's own height without anybody measuring it and
+without a hard-coded number that goes stale the first time a subpage is added.
+`invisible` rides alongside the clipping, because `overflow-hidden` hides links
+from the eye and not from the keyboard: without it, tabbing through a collapsed
+navigation walks destinations nobody can see.
+
+**"Desktop: compact collapsible sidebar."** There was no way to collapse it.
+The column was a fixed `w-64` at `xl` and hidden below it, so a 1280px laptop
+gave up 256px permanently. There is now a rail: a toggle at the top of the
+column, icons with `sr-only` labels (an icon-only link with no accessible name
+is an unlabelled link, and `title` alone does not reliably reach a screen
+reader), and groups rendering as their own link rather than growing a flyout
+with nowhere to go but over the content.
+
+**"The main content area must automatically shift/recalculate available
+width."** The width lived twice — `w-64` on the column, `xl:pl-64` on the main —
+two values with no way to disagree loudly. It is one custom property now, so
+the content's available width is derived from the column's rather than kept in
+step by hand.
+
+**"Tablet: reduce sidebar footprint intelligently."** There were two tiers, not
+three: the column existed from 1280px up and everything below it got the
+phone's drawer, so a landscape tablet had no standing navigation on a screen
+with room for it. From 1024px the column is now present as the rail; from
+1280px the person's own choice decides. Below 1024 the drawer is still right,
+and still what renders.
+
+The preference is read through `useSyncExternalStore` with a server snapshot
+rather than `localStorage` in an effect: reading storage during render hydrates
+into a mismatch, and the effect-plus-`setState` workaround is a render the
+person sees at the wrong width — React's own lint rule rejects it. A `storage`
+listener comes free, so a second tab does not disagree about a preference set
+once.
+
+Both new tests were mutation-checked: dropping `invisible` fails the tab-order
+test, and pinning `xl:pl-64` back onto the main fails the reflow test with "the
+column narrowed but the content kept its old left padding".
+
+---
+
+## THE LAYOUT SUITE WAS MEASURING ALMOST NOTHING (2026-08-18, fixed)
+
+Found by attacking the suite rather than reading it: a deliberate defect was
+put into the assign wizard and the whole width sweep stayed green. Pulling that
+thread turned up four independent reasons, each sufficient on its own, and
+every one of them had been silently in effect.
+
+**1. The harness served a build from hours ago.** Playwright's harness entry is
+`harness:build && harness:serve` — `vite preview`, which serves a compiled
+artifact — and `reuseExistingServer` is on outside CI. So the first local run
+built the bundle and every run afterwards reused that server and skipped the
+build. A preview started at 02:18 answered every request for the rest of the
+session; components edited after that were measured in their old form. CI was
+never affected (`reuseExistingServer` is false there), which is why it
+survived: it only misleads the machine drawing the conclusions. Now
+`reuseExistingServer: false` on that entry. A dev server was tried first and
+reverted — it compiles per request, which took this suite from ten minutes to
+over twenty-five; one build per run is the cheaper half of the trade.
+
+**2. Nothing inside a dialog was measured.** `overflowing()` returns early when
+the document fits, and a dialog is `position: fixed` — it never widens the
+document however wide its contents get. Over-wide content makes the *overlay*
+scroll sideways instead, which every check either skipped or counted as
+legitimate reach. Eight components render dialogs; none had horizontal
+coverage. `sidewaysScroll()` now measures the overlay itself, which keeps a
+deliberate inner scroller legitimate — a wide table with its own `overflow-x`
+absorbs its overflow and the overlay never grows.
+
+**3. Every gate-consulting console was rendering its signed-out state.** Seven
+components call `isBrowserSupabaseConfigured()`, and `useTenantList` returns
+signed-out when it says no. Vite's build shims `process.env` to `{}`, so it
+said no for every case — and this suite, built precisely because an earlier
+populated sweep turned out to be measuring gates, was measuring gates. The
+vacuity moved rather than went away, and nothing failed when it did. The
+harness now defines those values.
+
+**4. Unserved endpoints answered 200 with no keys.** The fixture server ended
+in `return json({})`. Components believed it: `AgentsConsole` read
+`/api/providers`, got `{}`, entered its ready state and threw on
+`payload.providers.map`, so the case rendered nothing at all while the sweep
+reported it fitting at every width. `ReportsConsole` threw the same way on
+`report.type` — the reports fixture used `kind`, `projectId` and `projectName`,
+none of which that route returns, and nobody noticed because the console was
+showing a gate and never read the fixture. Unserved now answers 503 and names
+the URL, and thirteen endpoints gained fixtures shaped like their routes.
+
+### What the honest suite then found
+
+`portfolio-controls` overflowed a 320px screen and kept overflowing to 430px:
+its Project `<select>` lists project names, and a select's min-content width is
+its widest option. Same root cause as the earlier `.input` fix, which this file
+missed by using raw classes rather than the token. Fixed here and on the three
+other unguarded selects, since an option list that is short today can hold a
+long name tomorrow.
+
+### A fifth, in the route sweep
+
+`responsive.spec.ts` walks all thirty-four routes inside one test with the
+default 45s timeout, against `next dev` — which compiles a route the first time
+it is asked for. That fits only when the server is already warm, and locally it
+always was, because `reuseExistingServer` kept one alive between runs. Against a
+cold server the sweep times out mid-walk and reports `net::ERR_ABORTED; maybe
+frame was detached?`, which reads like a layout failure and is a stopwatch. Ten
+of these appeared the moment the stale servers were cleared. The sweep now sets
+a timeout scaled to the route count; a warm run still finishes in about twenty
+seconds and exits early.
+
+### What now prevents each from returning
+
+- `tests/integration/responsive-coverage.contract.test.ts` fails if the harness
+  webServer both serves a build and permits reuse. Either half alone is fine;
+  the combination is what lies.
+- Every case asserts it renders no sign-in gate heading — matched on the
+  heading, because the guided journey's own step description reads "Sign in to
+  Claude or Codex…" and is content, not a gate.
+- Every case asserts it read no endpoint the harness cannot answer. An error
+  card is the same shape of lie as a gate: a few centred words that fit every
+  width.
+- `open()` collects page errors, so a case that throws during mount fails with
+  the exception instead of a bare "#root is empty" after a 15s timeout.
+- The portfolio fixture is built by calling the route's own pure aggregator
+  rather than transcribing its output, so it cannot drift out of shape the way
+  the reports one had.
+
+---
+
+## RESPONSIVE COVERAGE: WHAT IS AND IS NOT MEASURED (2026-08-18)
+
+An attempt to sweep the console's *populated* layouts at all eight widths was
+written and then deleted, because it did not test what it claimed.
+
+The console pages resolve their tenant on the **server**. Without Supabase
+configured for the browser suite they render "Projects are unavailable —
+Supabase is not configured for this environment" and never mount the client
+components, so intercepting the browser's `/api/*` reads changes nothing: the
+fetches never happen. The sweep passed at every width without laying out a
+single row. A test that green-lights an empty gate while claiming to measure a
+populated table is worse than no test.
+
+**Measured today:** every route's chrome and empty/gated state at
+320/375/390/430/768/1024/1280/1440; the console drawer and every navigation
+caret, opened one at a time and all together; the marketing pages fully
+populated (they need no session); dialogs on signed-out console pages.
+
+**Not measured:** any console layout that only exists once there are rows —
+the projects table with data, the bot roster, the assign wizard's three steps,
+the Connect Bots panel. These have component tests (behaviour, in jsdom, no
+layout) but no width coverage.
+
+**What would close it,** in preference order:
+1. A seeded Supabase project for the browser suite, so the server renders rows.
+2. Playwright component testing, which mounts the real components in a real
+   browser without needing a server session. No config exists for it yet.
+
+Both are real work rather than an oversight. Until one exists, defects inside
+populated console layouts are found by hand — which is how the three fixed on
+2026-08-18 were found, from owner screenshots.
+
+---
+
+## PROJECT-WIDE RESPONSIVE AUDIT (2026-08-17)
+
+Every route measured at 320/375/390/430/768/1024/1280/1440, plus an
+interaction sweep: console drawer, every navigation caret opened one at a time
+and all together, collapse-and-return, site nav drawer, pricing cadence toggle,
+resources search, and disclosures on five console pages.
+
+Starting point: 79 findings. Ending point: 0 overflow, 0 nested scrollbars,
+0 load failures, 0 interaction findings.
+
+### Fixed
+
+- [x] **`/pricing` scrolled the whole page sideways on every mobile width.** A
+  720px-minimum table inside a horizontal scroller still inflates the root's
+  scroll width, and the table was unusable at 320px even when the scrolling
+  worked. Now a stacked block per plan below `md`, carrying the same rows,
+  values and included marks; the table returns from `md` up.
+- [x] **Text painting over its neighbour** on `/platform` and `/` (six columns
+  at 1280) and `/pricing` (five at 640) — grids one breakpoint too tight for
+  the words in them. Six only from `2xl`, five from `lg`, and the connector
+  arrows moved to the breakpoint their row starts at.
+- [x] **The newsletter field was 18px tall on a phone.** `flex-1` is
+  `flex: 1 1 0%` along the container's main axis, and the container is a column
+  below `sm` — so it governed the *height* and overrode `h-11`. Now `sm:flex-1`.
+- [x] **Footer navigation links were the height of their own text** on every
+  marketing page. The inline-prose exemption does not cover a stacked list.
+- [x] **Resource cards had a 15px tap target** on a card hundreds of pixels
+  tall; the link is stretched over the card now.
+- [x] Topic and role links in the resources sidebar, same defect, same fix.
+- [x] The overflow detector in `tests/e2e/responsive.spec.ts` blamed the wrong
+  element — anything inside a scroller is past the viewport by design, and it
+  sorted to the top of the report. It now skips contained elements, and the
+  sweep covers all 29 routes rather than five.
+
+### Found, not fixed — needs an owner decision
+
+- [ ] Eight entries in `lib/marketing/content.ts` carry `href: "#"`, so the
+  featured resource cards are links that go nowhere. There is no
+  `/resources/[slug]` page for them to point at, so the destination has to be
+  decided rather than guessed. Removing the link was tried and reverted: an
+  existing contract test asserts these render as links.
+
+### Not defects
+
+24 remaining tap-target readings are three links inside sentences ("Sign in",
+"Create one", "Sign in first"). WCAG 2.2 SC 2.5.8 exempts inline targets whose
+size is constrained by the line-height of the text around them.
+
+---
+
+## GLOBAL NAVIGATION REBUILD (2026-08-17, owner reference image)
+
+Owner goal: rebuild the global navigation to match the reference image as
+closely as technically possible, fixed once at the architecture level so every
+applicable page inherits it.
+
+### Done
+
+- [x] `components/brand-mark.tsx` — the mark existed twice, drawn differently
+  in the header and in the console sidebar, so the same page could show two
+  logos that disagreed about their own colours. Both now render one component.
+- [x] Header rebuilt against the reference: hexagon-with-AI mark instead of the
+  gear tile, FACTORY in the lime the console already uses as its accent, the
+  bar full-bleed instead of a centred 1400px column (which had the logo sitting
+  280px in from the left edge), and the account cluster as the image shows it —
+  two-line super-admin chip, truncated address, gradient Open Console, Sign out.
+- [x] `lib/navigation.ts` untouched: the entries and their order
+  (Dashboard, Projects, Runs, Activity, Admin, Platform, Features, Pricing,
+  Resources, About) already matched the reference exactly.
+- [x] `app/auth/layout.tsx` — `/auth/sign-in`, `/auth/sign-up` and
+  `/auth/onboarding` sit outside both route groups and inherited only the root
+  layout, so they rendered **no header at all**. They now render the same one.
+- [x] The "every page has the global navigation" contract is asserted for every
+  route in `tests/e2e/pages.spec.ts`, not for the two that were broken, so a
+  future route group cannot become the next exception. Removing the auth layout
+  fails both auth routes.
+
+### Deliberate departures from the image
+
+- The super-admin chip breaks over two lines by width, not a `<br>`: a hard
+  break splits the accessible name into two text nodes, so a screen reader
+  stops hearing one phrase.
+- Open Console keeps its label on one line. The reference wraps it, but that
+  reads as a squeeze at that viewport rather than an intent.
+- The mark takes `min-w-0`, not `shrink-0`. Written the other way it refused to
+  give at 320px and pushed the account controls off the right edge — caught by
+  the responsive sweep. The glyph holds its size; the words truncate.
+- `/offline` keeps no header: it is the one page the service worker caches, so
+  it must not depend on a server-resolved session.
+
+---
+
+## MULTI-BOT PROJECT ASSIGNMENT (2026-08-17, active goal)
+
+Owner goal: assign several connected bots to ONE project, configure each
+independently, define responsibilities and permissions, work in parallel,
+monitor, and manage afterwards. UI -> API -> database -> orchestration, wired
+end to end. No mock UI.
+
+Starting point: `bot_assignments` already carried bot/project/role and
+`assign_bot` moved one bot at a time. What was missing was everything that
+makes several bots on one project different from one bot repeated.
+
+### Done
+
+- [x] Migration `20260817000500_bot_assignment_configuration.sql` — per-posting
+  configuration (preset, responsibilities, instructions, repository access,
+  branch strategy, PR open/merge, pipeline access, environment access, tools,
+  approval, concurrency, priority), plus `assign_bots_to_project` (atomic
+  multi-bot) and `update_bot_assignment_configuration`.
+  Two structural rules, not advisory:
+  **authority is nested** (`bot_assignments_authority_nested`: open needs
+  repository write, merge needs open) and **elevated authority keeps its human**
+  (`bot_assignments_elevated_requires_approval`: merge or production forces
+  `requires_human_approval`), matching `policies/AUTO_MERGE_POLICY.md`.
+  Defaults are least privilege. Verified against real PostgreSQL (PGlite) in
+  `tests/integration/bot-assignment-configuration.behavior.test.ts` — 33 cases,
+  three mutations confirmed non-vacuous.
+- [x] `lib/bots/assignment-config.ts` — shared browser-safe vocabulary: the
+  seven presets (Developer, Reviewer, Tester, Security, DevOps, Research,
+  Documentation), zod bounds, elevated-permission detection, and row
+  round-tripping that reads an unknown or absent stored value as the *narrow*
+  option so an older assignment cannot gain authority by being displayed.
+- [x] `POST/GET /api/projects/[projectId]/bots` and
+  `PATCH/DELETE /api/projects/[projectId]/bots/[assignmentId]`. Connectedness is
+  resolved server-side from the credential overlay, never from anything the
+  browser sent; one unconnected bot refuses the whole selection.
+- [x] Assign wizard in `components/project-bots.tsx` — Select (search,
+  multi-select, Select All, health, usage, workload, "this moves it off
+  Mobile App"), Configure (presets + every field, per bot), Review (permissions,
+  estimated concurrency, elevated-permission acknowledgement), Confirm. Plus the
+  roster with pause/resume/configure/remove. Rendered from both the project
+  inspector and the project detail page.
+- [x] `lib/bots/assignment-routing.ts` — the configuration now *decides*
+  something: permission is an eligibility gate evaluated before ordering (so
+  priority can never outvote a missing permission), capacity is a second gate,
+  every refusal is a named code, and `dispatchWorkAcrossBots` threads capacity
+  and path claims forward through a batch so two bots cannot be handed the same
+  slot or the same file.
+
+### Still open
+
+- [ ] The routing module has no production caller yet. Phase 1C claim is hosted
+  and live but nothing executes, so wiring it now buys no behavior; it is
+  covered by tests and ready for the claim path.
+- [x] Migration `20260817000500` — and the rest of the `20260817` range,
+  `20260817000700` included — is **on hosted**, measured by probe run
+  `32103778884` on 2026-08-18. The wizard's configuration columns exist in
+  production. The earlier "unhosted" claim came from a ledger high-water mark
+  that does not describe this ledger; see `AI/HOSTED_APPLY_RUNBOOK.md`.
+- [ ] Playwright coverage of the wizard at mobile/tablet/desktop widths.
+
+---
+
 ## PRODUCTION-READINESS AUDIT LOOP (2026-08-16 20:25Z, active goal)
 
 Owner goal: autonomously test/audit/fix/verify EVERY feature until
 production-ready; todo.md is the source of truth; loop until a full sweep
 finds zero actionable defects.
+
+### Frictionless UX sweep (2026-08-17, owner goal)
+
+Evidence base: the owner's own questions this session - "what am I
+adding here", "where is the readout", "how to tell if this is running",
+"how can I choose which bot(s) per project" - each marked a page that
+was truthful and a dead end.
+
+- [x] #187 empty pages name their next step (TenantListShell gains an
+  optional action; Runs/Reports/Backlog/Autonomy wired, jargon rewritten)
+- [x] #188 failed work appears on the dashboard with its reason
+- [x] #189 a saved request says what is happening to it, and links to Runs
+- [x] #190 a set-up project leads to "Give this project work", carrying
+  the project into the composer
+- [x] Unwired-control sweep: every button in components/ has a handler or
+  is a submit; no dead controls found
+- [x] Nav sweep: all 16 sidebar links and every static href resolve
+- [x] #192 the setup guide names connecting an AI account - previously
+  absent, while "Check your AI worker" (Actions worker status) could tick
+  green with zero accounts connected. "Your Factory is ready" now requires
+  a genuinely connected account.
+- [x] Raw-identifier sweep: status text is underscore-normalized, not raw
+  enums; no jargon leaks found beyond the ones rewritten in #187/#189
+- [x] Touch targets: .btn 40px / .btn-sm 36px / .input 40px - above the
+  WCAG 2.2 24px minimum; axe passes on every route at three viewports
+
+### Navigation subpages (2026-08-17, owner goal + follow-up images)
+
+Owner design: subpage groups under the sidebar destinations, plus quick
+actions. Contract held throughout (ADR-077): every entry links a real
+page or anchored section; aspirational subpages are not rendered.
+
+- [x] Collapsible groups, default-expanded: Projects (All Projects,
+  Archived), Pipelines (Templates, Backlog), Bots (Connect Bot #connect,
+  My Bots, Bot Activity), Settings (General, Bots & Integrations
+  #providers), Watch (Operations, Activity), Advanced (5 consoles).
+  Labels renamed: Overview / Bots / Integrations. Quick actions: New
+  Project (#add-project), Give a bot work, Import Repository, View
+  Documentation. Administration section unchanged for super admins.
+- [x] Archived made real: GET /api/projects accepts opt-in
+  ?status=archived (default still excludes archived); projects console
+  reads ?filter=archived via useSearchParams (page wrapped in Suspense,
+  files-page idiom); archived rows render as records with "Unarchive on
+  Portfolio"; empty state says nothing is archived. archive_project /
+  unarchive_project RPCs existed since 20260815000700.
+- [x] NOT rendered, no backing surface: Secrets, My Projects / Shared
+  with Me / Starred, pipeline Active / All / Schedules / Archived,
+  Members / Teams / Permissions / Billing. Templates IS the workflows
+  page (compiled graph templates), so that label is now the truthful one.
+- [x] Gates: unit 2948+15 green (new collapse/order/archived tests),
+  eslint 0, tsc clean, production build exit 0, Playwright console+pages
+  72/72 across 3 viewports (30-label reachability contract).
+- [x] Merged #194 (b57cea1); production verified live: all new labels
+  serving on /solutions, archived route 200.
+### AI FACTORY (owner goal 2026-08-17, /loop active — reference image)
+
+Round 1 (this merge):
+- [x] /solutions/ai-factory + "AI Factory" nav entry under Overview
+  (redirect contract, pins, pages.spec, 35-label reachability). Guided
+  8-step journey — Connect Repository → Create Project → Pipeline Ready
+  → Connect Bots → Assign Bots → Configure Bot Settings → Issue a
+  Command → Watch It Ship — with completion DERIVED from live records
+  (installations, projects, accounts, assignments incl. configured
+  count, commands), so progress survives refresh by construction; each
+  step deep-links the real flow (composer carries ?project=). Command
+  execution section shows recent commands with worker-advanced stages.
+  Integrated services (GitHub live count, Vercel-on-merge, Supabase) +
+  Observability links — only real services listed. Mobile-first
+  vertical stepper. 4 unit tests.
+- [x] Owner add-on: per-posting Model (Fable 5/Opus 5/... from the
+  provider's suggested list, or bot default) + Work Effort
+  (low/medium/high/max) — migration 20260817000900
+  (bot_assignments.model bounded identifier + work_effort check,
+  set_bot_assignment_execution owner/admin RPC, audit event), PATCH
+  /api/bot-assignments/[id] extended, selects on each PostingCard in
+  the project roster (steps 6/7 surface), serialized through
+  lib/bots/service. 1 new unit test.
+- [x] Round 2 (stop-hook directive: "one seamless guided workflow", not
+  deep links): every step now opens its REAL control in place, as an
+  accordion — Connect Repository embeds ConnectionsConsole; Create
+  Project embeds AddProjectForm (extracted from ProjectsConsole into
+  components/add-project-form.tsx, identical markup, both surfaces
+  share it); Configure Pipeline embeds PipelineTemplatesManager with
+  built-ins compiled server-side by the page (editable stages, Use →
+  POST /api/graphs); Connect Bots embeds BotManagerHome (Add AI
+  Account/Create Bot flows); Assign + Configure embed the per-project
+  ProjectBots roster (Select→Configure→Review wizard, role,
+  responsibilities, repository access, Model, Work Effort) behind a
+  project picker when >1; Issue a Command embeds CommandComposer
+  (onSaved refreshes derivation); Watch It Ship's body is the live
+  command list with worker-advanced stages. Current step auto-opens
+  ("follow the journey"); clicking any header opens that step; a
+  desktop horizontal number band (reference's connector strip) jumps +
+  scrolls. Completion still derived from live records only. 5 unit
+  tests (auto-open assertion, embedded-control mount on header click,
+  live-evidence body). Gates: tsc, eslint 0 warnings, vitest 3170,
+  build, Playwright 171.
+- [x] Round 3 (owner goal 2026-08-17 23:2xZ): options open as OVERLAYS
+  over the page instead of jumping — StepOverlay (same shell idiom as
+  the console's other dialogs: fixed inset, top-aligned scrollable
+  panel, X, backdrop mousedown, Escape), one per step, opened from the
+  row action button or the desktop number band, aria-haspopup=dialog
+  announced. Nothing opens uninvited. Closing ALWAYS re-reads the
+  journey (closeOverlay = setOpenStep(null) + load), and the controls
+  that know their completion close themselves: AddProjectForm
+  onCreated + CommandComposer onSaved → closeOverlay — selection made,
+  back on the page with it showing. 6 unit tests incl. "returns to the
+  journey on its own once the overlay's control completes".
+  responsive.spec: +/solutions/ai-factory route; flaky nav-group test
+  stabilized (retrying toBeVisible before the non-retrying count()).
+- [x] Round 4 (owner goal 2026-08-17 23:3xZ): the Assign Bots pop-up
+  links the Bot Manager's accounts, multiple at once. ProjectBots
+  reads /api/ai-accounts (best-effort); the wizard's Select step gains
+  "From your Bot Manager": connected accounts with no bot yet (matched
+  by credential variable — account credentialPurpose slot ↔ bot
+  credentialRef over the provider's subscription variable), tick any
+  number → Link N bots → POST /api/bots/connect/provision per account
+  at ITS slot (additional:true), roster re-read, the new bots selected
+  automatically, ready for Configure. Empty state now links the Bot
+  Manager page by name. ProjectBot type gained credentialRef (already
+  serialized). 1 new unit test (two accounts → two slot-correct
+  provisions → "2 bots selected").
+- [ ] Round 5+: full journey re-test from a fresh workspace against
+  production, breakpoint sweep beyond the e2e viewports.
+
+### Template CRUD (owner goal 2026-08-17)
+
+- [x] Migration 20260817000700: create/update/delete_pipeline_template
+  over the EXISTING graph_templates table (RLS + member SELECT since the
+  graph engine landed; these are its first write path) — owner/admin,
+  bounded audit-areas definition (1-12 areas, unique ids, no secrets),
+  version bump per edit, pipeline_template.* activity events, delete
+  keeps planned graphs (template_id SET NULL).
+- [x] One builder, no divergence: auditTemplate exported; custom
+  templates build + compile through the exact built-in path
+  (lib/graph/custom-templates.ts); the API refuses a definition the
+  compiler refuses (422 with the compiler's own errors) so every stored
+  template stays runnable.
+- [x] /api/pipeline-templates GET/POST + [id] PATCH/DELETE; built-in
+  slugs reserved (409). /api/graphs POST now accepts custom slugs —
+  loads the row, rebuilds, same launch plan, same truthful
+  PLANNED-not-dispatched note.
+- [x] Templates tab → PipelineTemplatesManager: Your templates (Use /
+  Edit / Delete with in-place confirm) + Built-in templates (Use /
+  Clone; edited as code, stated in place) + New-template editor (key,
+  name, summary, category, capability, 1-12 area rows) + Use dialog
+  (project picker → real POST /api/graphs, result repeats the
+  endpoint's honesty). 4 manager unit tests + console test updated.
+- [x] Pins ×12 → 000700; allowlist+repairs; runbook 105/41. Hosted
+  apply pending post-merge.
+
+### Safety page fully wired (owner goal 2026-08-17 — ADR-080)
+
+- [x] Migration 20260817000600: the Phase 1D scaffold gives way to
+  owner-gated operations — set_autonomy_kill_switch (release needs a
+  reason), set_organization_autonomy_controls (partial), member-scoped
+  read; immutable autonomy.* activity events per transition. Survives
+  as DB refusals: RED ceiling never (both scopes, constraint+trigger+
+  RPC), born fail-closed, owner-only (admins excluded).
+- [x] /api/autonomy/controls GET/POST; SafetyControls rewritten live —
+  real switches for the owner (kill switch with in-place reason flow,
+  autonomous mode, GREEN/YELLOW ceiling picker with RED labeled "Never
+  automatic", all nine action toggles), read-only for members,
+  fail-closed signed out; per-row "switched on, held off: <cause>"
+  honesty (kill switch / mode off / capability missing for merge+deploy
+  which record intent only). Static "Kill switch ON" badges removed
+  from Settings + Autonomy headers (would now be able to lie).
+- [x] phase1d behavior suite: "nothing was relaxed" → "the
+  owner-operated contract" — 44 green incl. owner release/re-engage
+  with 2 audit events, owner enable+revert, RED refusals, born
+  fail-closed. 5 rewritten SafetyControls unit tests.
+- [x] Pins ×12 → 000600; allowlist+repairs through 000600; runbook
+  104/40. Hosted apply pending post-merge.
+
+### Runs clear/delete (owner goal 2026-08-17)
+
+A sibling session shipped per-run review + owner-only deletion (#201,
+migrations 000200/000300/000400 — reason-required, live-lease/queued
+refused, evidence detach opt-in, deletion audit-recorded before it
+happens). This session completed the goal:
+- [x] Clear ALL finished runs: delete_finished_agent_runs (migration
+  20260817000500) loops the SAME per-run guarded path, counting what it
+  refused (kept_for_evidence / kept_for_activity) — never forcing.
+  POST /api/runs/clear-finished; Runs page gains a reason-carrying
+  confirm naming what is untouched (queued/running) and what survives
+  (audit trail; PR/deployment/test-run rows unless keep-and-unlink).
+- [x] Hosted-apply logistics for the WHOLE 2026-08-17 set: 000200-000500
+  joined the surgical allowlist + repairs (000300/000400 made
+  replay-safe first — add column if not exists, drop-constraint-before-
+  add, create index if not exists — the 001500 precedent); tail pins ×12
+  → 000500; runbook 103/39. Without the apply, production's run
+  edit/delete/clear controls receive function-missing refusals.
+- [ ] Trigger hosted apply post-merge and verify.
+
+### PIPELINE SYSTEM (owner goal 2026-08-17, /loop active)
+
+AUDIT (round 1, verified against code):
+- COMPLETE: graph engine (26 modules — compiler, scheduler, launch-plan
+  topology SINGLE/LOOP/DAG/DIAMOND/DISCOVERY, locks, fan-out/in,
+  discovery, budgets, verification) + persistence (graph_templates,
+  graphs, graph_runs, node_runs, artifacts, handoffs, verifications,
+  work_locks; create_graph_from_plan RPC); 14 versioned code templates
+  covering 12/13 of the owner's list (no Database Migration template);
+  command lifecycle with verified intake, RED approval gate, worker
+  claim leases, stale-base replan, cancel/retry, draft-PR-only output;
+  real anchors already exist for CI (GitHub checks), deploy (Vercel on
+  merge), risk (GREEN/YELLOW/RED + kill switch), monitoring
+  (operations/activity/reports).
+- PARTIAL: pipeline experience — round 1 ships /solutions/pipelines
+  (Active / All / Templates over live commands + server-compiled
+  templates); commands list API carries no branch/PR linkage yet, so
+  stages beyond Complete (PR, CI, PREVIEW, VALIDATE) are not stitched
+  into the row; simple-mode confirmation (template/team/stages preview
+  before Start) not yet in the composer.
+- MISSING: stage-level pipeline persistence (PENDING/READY/RUNNING/...
+  vocabulary per stage), advanced-mode visual builder, failure-route
+  configuration, schedules, Database Migration template, graph-node
+  executor (graphs API truthfully says PLANNED-only: "no executor is
+  connected to the graph runner" — the Phase 1C worker executes
+  commands, not graph nodes).
+- BROKEN: nothing found; every unconnected surface names itself.
+
+- [x] Round 1: /solutions/pipelines — Active (live stages from the
+  worker-advanced command status: Intake / Waiting for your approval /
+  Planning / Building / Complete / Failed / Cancelled; owner-attention
+  count; elapsed + duration), All Pipelines (history + outcomes),
+  Templates (versioned, compiled topology facts; deep previews link to
+  Workflows — one engine, no duplication). Nav Pipelines group → Active,
+  All Pipelines, Templates, Backlog (37-label contract); /pipelines
+  redirect; pages.spec route; 15s live re-read; 5 unit tests.
+- [x] Round 2: Database Migration template (auditTemplate, 5 areas —
+  forward-only/replay-safe, RLS, grants, consumers, ledger; completes
+  the owner's 13); simple-mode confirmation in the composer — a
+  "Pipeline" card appears once goal+project are set naming Project,
+  Requested risk, Suggested template (suggestTemplateForGoal keyword
+  matcher over GRAPH_TEMPLATES, labeled informational — the worker
+  executes the goal as written), and the real stages (RED → stops at
+  approval), linking to Pipelines. 4 new tests (matcher precedence,
+  fallback).
+- [ ] Round 3+: PR/CI/deploy evidence joined per pipeline run (needs
+  branch/PR in list_commands or a detail RPC), stage-state persistence
+  (PENDING/READY/... vocabulary), failure-route configuration,
+  schedules, graph executor bridge, advanced-mode builder.
+
+- [x] Edit/delete everywhere (owner goal, 2026-08-17 — ADR-078):
+  Projects editable (update_project_details, migration 20260817000100,
+  PATCH /api/projects/[id]; Edit dialogs on the All Projects table +
+  inspector) and archivable/unarchivable in place (reason-carrying
+  dialogs + Unarchive button on the Archived view, existing RPCs). Bots
+  removable from the roster (retire_bot; confirm-in-place naming what is
+  released vs kept) alongside the existing rename. Accounts already had
+  rename/disconnect/remove; runs keep cancel/retry. REFUSED: edit/delete
+  of runs, activity events, audit records (immutability contract), hard
+  project delete, template forms (templates are code). Tail pins ×11 +
+  hosted-apply allowlist moved to 20260817000100; hosted apply pending
+  post-merge; 6 new unit tests.
+- [x] Bot Usage page (owner mockup, same day): /solutions/bot-usage
+  renders per-account provider-subscription windows from the REAL
+  observation store (ADR-076) — reuses AccountUsage (percent bars +
+  provider reset times; every absence named), headroom bands derived
+  from the same thresholds the bars color by, summary cards (bots
+  connected + average week_all_models across measured bots), Refresh
+  wired to POST /api/ai-accounts/refresh (managers only), View details →
+  Bot Manager, 30s re-read. Mock's plan/billing footer, date-range
+  picker, history tabs ABSENT (observations are latest-per-account; no
+  billing model). Nav Bots group gains Bot Usage (33-label contract);
+  /bot-usage redirect added; pages.spec covers the route; 4 unit tests.
+- [x] All Projects dashboard (owner mockup, same day): /solutions/projects
+  is now the organize/overview posture — stat cards (total / active% /
+  authorized repositories / connected, all counted from the live reads,
+  no trend deltas: no historical snapshots exist), tabs (All Projects |
+  My Projects | Archived; Starred/Shared absent, no model), a projects
+  table (repository+branch, status badges, last run + success rate from
+  /api/runs where only succeeded/failed carry a verdict, updated_at now
+  exposed by GET /api/projects, Open → /solutions/portfolio/{id}),
+  10/page pagination with truthful "Showing X to Y of N", right rail
+  (projects-by-status incl. archived count via the opt-in read + recent
+  activity from /api/activity?limit=8, best-effort with named absence).
+  Page header follows the mock ("All Projects", Import Repository / New
+  Project); add-project form still anchored below the table. The
+  inspector-evidence unit tests moved to MyProjectsConsole, where the
+  inspector now lives inline; 3 new dashboard tests. pages.spec heading
+  pin → "All Projects".
+- [x] My Projects (owner mockup, same day): /solutions/myprojects renders
+  every project as a chevron-collapsible row (first open by default)
+  expanding into the SAME ProjectInspector the Projects page uses (now
+  exported, one source of truth); page actions Import Repository / New
+  Project land on existing controls; nav Projects group gains My Projects
+  (31-label contract); pages.spec covers the route; 3 new unit tests
+  (multi-project expand/fold, empty→add-project, signed-out gate).
+  Shared with Me / Starred still have no backing model and stay absent.
 
 ### Audit backlog (loop working set)
 

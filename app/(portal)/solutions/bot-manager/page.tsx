@@ -24,7 +24,11 @@ export default function BotManagerPage() {
         description="Build your AI engineering team. Connect your AI accounts, create specialized bots, and put them to work."
       />
 
-      <BotManagerHome />
+      {/* The navigation's "Connect Bot" subpage lands here: this section
+          carries the Add AI Account flow and the connect cards. */}
+      <div id="connect" className="scroll-mt-24">
+        <BotManagerHome />
+      </div>
 
       {/*
         The goal box stays on the primary surface: "what do you want done?"
@@ -55,7 +59,7 @@ export default function BotManagerPage() {
 
           <BotFabricConsole />
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <GraphExecutionSummary templateKey="code_review" />
 
             <div className="space-y-4">

@@ -2,7 +2,7 @@ import { LockKeyhole } from "lucide-react";
 
 import { ProviderSettings } from "@/components/provider-settings";
 import { SafetyControls } from "@/components/safety-controls";
-import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
+import { Card, PageHeader, SectionTitle } from "@/components/ui";
 
 export const metadata = {
   title: "Safety",
@@ -20,19 +20,24 @@ const protectedThings = [
 export default function SettingsPage() {
   return (
     <>
+      {/* No static kill-switch badge here: the live, owner-operable control
+          at the top of SafetyControls states the real position. */}
       <PageHeader
         title="Safety"
         description="What SoftwareFactory is allowed to do, and what always needs you."
-        action={<StatusBadge tone="danger">Kill switch ON</StatusBadge>}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Card className="p-5 sm:p-6">
             <SafetyControls />
           </Card>
 
-          <ProviderSettings />
+          {/* The navigation's "Bots & Integrations" subpage lands here: AI
+              provider configuration is the settings surface that exists. */}
+          <div id="providers" className="scroll-mt-24">
+            <ProviderSettings />
+          </div>
         </div>
 
         <div className="space-y-4">

@@ -1,3 +1,4 @@
+import type { AssignmentConfig } from "@/lib/bots/assignment-config";
 import type { BotReadiness } from "@/lib/bots/readiness";
 import type { RiskLevel } from "@/lib/risk";
 
@@ -28,6 +29,12 @@ export type SerializedBot = {
   /** Readiness recomputed from current server configuration, exposing drift. */
   currentReadiness: BotReadiness;
   currentReadinessDetail: string;
+  /**
+   * The provider sign-in behind this bot, when it has one. Carried so the
+   * assign wizard can show that account's recorded session and weekly usage
+   * beside the bot, rather than asking someone to cross-reference two pages.
+   */
+  aiAccountId: string | null;
   createdAt: string;
 };
 
@@ -51,6 +58,16 @@ export type SerializedAssignment = {
   status: "active" | "paused" | "released";
   assignedAt: string;
   releasedAt: string | null;
+  /** Per-posting model override; null means the bot's own default model. */
+  model: string | null;
+  /** How hard this posting should think: low, medium, high, or max. */
+  workEffort: string;
+  /**
+   * What this bot may do on this project. Present on every assignment: a row
+   * written before the configuration columns existed reads as least privilege
+   * rather than as an absent field the console has to guess about.
+   */
+  config: AssignmentConfig;
 };
 
 export type SerializedProject = {

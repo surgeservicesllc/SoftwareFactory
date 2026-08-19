@@ -24,6 +24,7 @@ function node(key: string, writes: ResourceRef[] = []): CompiledNode {
     timeoutMs: 60_000,
     maxAttempts: 2,
     allowProviderFallback: true,
+    toleratesPartialInputs: false,
     reads: [],
     writes,
   } as CompiledNode;

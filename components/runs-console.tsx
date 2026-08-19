@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Archive, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Children, useState } from "react";
 
 import {
@@ -26,6 +26,8 @@ type Run = {
   project?: { id: string; name: string } | null;
   task: { id: string; title: string } | null;
   agent: { id: string; name: string } | null;
+  reviewStatus?: ReviewStatus;
+  archivedAt?: string | null;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -60,6 +62,10 @@ type RunDetail = Run & {
   cancellationRequestedAt?: string | null;
   cancellable?: boolean;
   retryable?: boolean;
+  reviewStatus?: ReviewStatus;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  deletable?: boolean;
   summary?: string | null;
   blocker?: string | null;
   errorMessage?: string | null;
@@ -72,6 +78,27 @@ type RunDetail = Run & {
   pullRequest?: { number: number; title?: string; state?: string; draft?: boolean; url?: string | null } | null;
   checks?: RunCheck[];
   ci?: { status?: string; conclusion?: string | null; checks?: RunCheck[] } | null;
+};
+
+/**
+ * The one part of a run a person may change.
+ *
+ * Everything else on this page is evidence of something that happened —
+ * provider, model, timings, usage, artifacts — and is deliberately read-only.
+ * The panel below says so out loud rather than showing greyed-out fields and
+ * leaving the reader to guess whether editing is broken or forbidden.
+ */
+const REVIEW_STATUSES = [
+  "unreviewed", "acknowledged", "investigating", "resolved", "ignored",
+] as const;
+type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+const REVIEW_LABELS: Readonly<Record<ReviewStatus, string>> = {
+  acknowledged: "Acknowledged",
+  ignored: "Ignored",
+  investigating: "Investigating",
+  resolved: "Resolved",
+  unreviewed: "Unreviewed",
 };
 
 function statusTone(status: string) {
@@ -139,12 +166,44 @@ export function RunsConsole() {
   const [cancelMessage, setCancelMessage] = useState("");
   const [retryState, setRetryState] = useState<"idle" | "pending" | "error">("idle");
   const [retryMessage, setRetryMessage] = useState("");
+  const [reviewState, setReviewState] = useState<"idle" | "pending" | "error">("idle");
+  const [reviewMessage, setReviewMessage] = useState("");
+  // Null means "not editing this run yet", so the form shows the persisted
+  // values rather than a draft left over from the previously opened run.
+  const [reviewDraft, setReviewDraft] = useState<{ note: string; status: ReviewStatus } | null>(null);
+  const [deleteState, setDeleteState] = useState<"idle" | "confirming" | "pending" | "error">("idle");
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  // Clearing all finished runs is its own flow with its own consequence copy,
+  // kept separate from the single-run delete so neither interferes.
+  const [clearState, setClearState] = useState<"idle" | "confirming" | "pending">("idle");
+  const [clearReason, setClearReason] = useState("");
+  const [clearDetach, setClearDetach] = useState(false);
+  const [clearMessage, setClearMessage] = useState("");
+  const [clearFailed, setClearFailed] = useState(false);
+  // Row-level archive and delete. Acting on a run should not require opening
+  // it: the list is where a person decides a run is dealt with.
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [rowMessage, setRowMessage] = useState("");
+  const [rowFailed, setRowFailed] = useState(false);
+  const [deletingRow, setDeletingRow] = useState<Run | null>(null);
+  const [rowDeleteReason, setRowDeleteReason] = useState("");
+  const [rowDetach, setRowDetach] = useState(false);
+  const [detachEvidence, setDetachEvidence] = useState(false);
 
   function openRun(runId: string) {
     setCancelState("idle");
     setCancelMessage("");
     setRetryState("idle");
     setRetryMessage("");
+    setReviewState("idle");
+    setReviewMessage("");
+    setReviewDraft(null);
+    setDeleteState("idle");
+    setDeleteMessage("");
+    setDeleteReason("");
+    // Destructive options never carry over from the last run that was open.
+    setDetachEvidence(false);
     void detail.open(runId);
   }
 
@@ -192,8 +251,329 @@ export function RunsConsole() {
     }
   }
 
+  async function saveReview(runId: string, status: ReviewStatus, note: string) {
+    setReviewState("pending");
+    setReviewMessage("");
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewStatus: status,
+          ...(note.trim() ? { reviewNote: note.trim() } : {}),
+        }),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The review could not be saved.");
+      setReviewState("idle");
+      setReviewMessage("Review saved.");
+      setReviewDraft(null);
+      await Promise.all([detail.open(runId), Promise.resolve(reload())]);
+    } catch (error) {
+      setReviewState("error");
+      setReviewMessage(error instanceof Error ? error.message : "The review could not be saved.");
+    }
+  }
+
+  async function archiveRun(run: Run, archived: boolean) {
+    setRowBusy(run.id);
+    setRowMessage("");
+    setRowFailed(false);
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          archived,
+          reason: archived ? "Archived from the Runs page." : undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be archived.");
+      setRowMessage(archived ? "Run archived." : "Run restored to the list.");
+      reload();
+    } catch (error) {
+      setRowFailed(true);
+      setRowMessage(error instanceof Error ? error.message : "The run could not be archived.");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function deleteRunFromList(run: Run) {
+    setRowBusy(run.id);
+    setRowMessage("");
+    setRowFailed(false);
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detachEvidence: rowDetach, reason: rowDeleteReason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        detached?: { deployments: number; pullRequests: number; testRuns: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be deleted.");
+      const unlinked = body.detached
+        ? body.detached.pullRequests + body.detached.deployments + body.detached.testRuns
+        : 0;
+      // Says what else moved: a bare "deleted" would hide that a pull request
+      // or deployment was unlinked in the same operation.
+      setRowMessage(unlinked > 0
+        ? `Run deleted. ${unlinked} linked record${unlinked === 1 ? " was" : "s were"} kept and unlinked.`
+        : "Run deleted.");
+      setDeletingRow(null);
+      setRowDeleteReason("");
+      setRowDetach(false);
+      reload();
+    } catch (error) {
+      setRowFailed(true);
+      setRowMessage(error instanceof Error ? error.message : "The run could not be deleted.");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function clearFinishedRuns() {
+    setClearState("pending");
+    setClearMessage("");
+    setClearFailed(false);
+    try {
+      const response = await fetch("/api/runs/clear-finished", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: clearReason.trim(), detachEvidence: clearDetach }),
+      });
+      const body = (await response.json()) as {
+        deletedCount?: number;
+        keptForEvidence?: number;
+        keptForActivity?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "Finished runs could not be cleared.");
+      const deleted = body.deletedCount ?? 0;
+      const keptEvidence = body.keptForEvidence ?? 0;
+      const parts = [
+        `${deleted} run${deleted === 1 ? "" : "s"} cleared.`,
+        keptEvidence > 0
+          ? `${keptEvidence} kept because their work produced pull requests, deployments, or test runs — clear them individually with keep-and-unlink if you mean it.`
+          : null,
+      ].filter(Boolean);
+      setClearState("idle");
+      setClearReason("");
+      setClearDetach(false);
+      setClearMessage(parts.join(" "));
+      reload();
+    } catch (error) {
+      setClearState("idle");
+      setClearFailed(true);
+      setClearMessage(error instanceof Error ? error.message : "Finished runs could not be cleared.");
+    }
+  }
+
+  async function deleteRun(runId: string) {
+    setDeleteState("pending");
+    setDeleteMessage("");
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detachEvidence, reason: deleteReason.trim() }),
+      });
+      const body = (await response.json()) as {
+        deleted?: { artifacts: number; events: number; validations: number };
+        detached?: { deployments: number; pullRequests: number; testRuns: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(body.error?.message ?? "The run could not be deleted.");
+      // Say what else moved. A bare "deleted" would hide that pull requests or
+      // deployments were unlinked in the same operation.
+      const detached = body.detached;
+      const unlinked = detached
+        ? detached.pullRequests + detached.deployments + detached.testRuns
+        : 0;
+      detail.close();
+      setDeleteState("idle");
+      setDeleteReason("");
+      setDetachEvidence(false);
+      setDeleteMessage(
+        unlinked > 0
+          ? `Run deleted. ${unlinked} linked record${unlinked === 1 ? " was" : "s were"} kept and unlinked.`
+          : "Run deleted.",
+      );
+      reload();
+    } catch (error) {
+      setDeleteState("error");
+      setDeleteMessage(error instanceof Error ? error.message : "The run could not be deleted.");
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {deleteMessage && deleteState !== "confirming" ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${deleteState === "error" ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {deleteMessage}
+        </p>
+      ) : null}
+      {rowMessage ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${rowFailed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {rowMessage}
+        </p>
+      ) : null}
+
+      {deletingRow ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Delete run ${deletingRow.id}`}
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-5 shadow-lg">
+            <h2 className="text-lg font-semibold text-foreground">Delete this run</h2>
+            <p className="mt-1 text-sm text-muted">
+              {deletingRow.task?.title ?? "Untitled work"}
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Removes the run and its own events, artifacts and validations. The deletion is
+              recorded in the activity trail first, so the account of it survives. Nothing outside
+              this database is touched. To keep a run and simply take it out of the list, archive
+              it instead.
+            </p>
+            <div className="mt-4 flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
+                <input
+                  type="text"
+                  className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
+                  maxLength={400}
+                  value={rowDeleteReason}
+                  onChange={(event) => setRowDeleteReason(event.target.value)}
+                  placeholder="Why this run is being removed"
+                />
+              </label>
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={rowDetach}
+                  onChange={(event) => setRowDetach(event.target.checked)}
+                />
+                <span>
+                  Keep and unlink any pull request, deployment or test run this run produced.
+                  Without this, a run that produced one of those is refused rather than silently
+                  orphaning it.
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={rowBusy !== null || rowDeleteReason.trim().length < 10}
+                  onClick={() => void deleteRunFromList(deletingRow)}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete permanently
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setDeletingRow(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {clearMessage && clearState === "idle" ? (
+        <p
+          className={`rounded-lg border p-3 text-sm ${clearFailed ? "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]" : "border-[var(--info-border)] bg-[var(--info-surface)] text-[var(--info)]"}`}
+          aria-live="polite"
+        >
+          {clearMessage}
+        </p>
+      ) : null}
+      {state.kind === "ready" && state.items.length > 0 && clearState === "idle" ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setClearMessage("");
+              setClearState("confirming");
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+            Clear finished runs
+          </button>
+        </div>
+      ) : null}
+      {clearState !== "idle" ? (
+        <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-4">
+          <p className="text-sm font-semibold text-foreground">Clear every finished run?</p>
+          <p className="mt-1 text-sm text-muted">
+            Every succeeded, failed, and cancelled run is deleted through the same owner-only,
+            per-run rules — queued and running work is untouched, each deletion is recorded in the
+            audit trail before it happens, and runs whose work produced pull requests, deployments,
+            or test runs are kept unless you choose to keep-and-unlink those records instead.
+          </p>
+          <div className="mt-3">
+            <label htmlFor="clear-runs-reason" className="field-label">Why clear them?</label>
+            <input
+              id="clear-runs-reason"
+              value={clearReason}
+              onChange={(event) => setClearReason(event.target.value)}
+              minLength={10}
+              maxLength={400}
+              className="input"
+              placeholder="Clearing the history before the next audit round"
+            />
+            <span className="field-hint">At least 10 characters; recorded with every deletion.</span>
+          </div>
+          <label className="mt-3 flex items-start gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={clearDetach}
+              onChange={(event) => setClearDetach(event.target.checked)}
+              className="mt-0.5"
+            />
+            Also clear runs with linked pull requests, deployments, or test runs — those records are
+            kept and unlinked. Nothing on GitHub or Vercel is touched either way.
+          </label>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void clearFinishedRuns()}
+              disabled={clearState === "pending" || clearReason.trim().length < 10}
+              className="btn btn-primary btn-sm"
+            >
+              {clearState === "pending" ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 className="size-4" aria-hidden="true" />
+              )}
+              Clear finished runs
+            </button>
+            <button
+              type="button"
+              onClick={() => setClearState("idle")}
+              disabled={clearState === "pending"}
+              className="btn btn-secondary btn-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       <TenantListShell
         state={state}
         reload={reload}
@@ -203,7 +583,13 @@ export function RunsConsole() {
         signedOutDescription="Run history belongs to your workspace."
         returnPath="/solutions/runs"
         emptyTitle="Nothing has run yet"
-        emptyDescription="A connected worker creates a durable run here after the orchestrator resolves a command to one exact repository."
+        /* The old copy explained the architecture ("the orchestrator resolves
+           a command to one exact repository") to a reader who wanted to know
+           where their work went. This says what a run is and where one comes
+           from, and the button is the answer to "so what do I do?". */
+        emptyDescription="A run is one piece of work a bot carried out, with its evidence. Ask a bot for something in Bot Manager and its run appears here."
+        emptyActionHref="/solutions/bot-manager"
+        emptyActionLabel="Give a bot something to do"
       >
         {(runs) => (
           <div className="divide-y divide-[var(--border)]">
@@ -235,9 +621,47 @@ export function RunsConsole() {
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
                         <StatusBadge tone={statusTone(run.status)}>{runStatusLabel(run.status)}</StatusBadge>
+                        {/* Shown only once someone has triaged it. A badge
+                            reading "Unreviewed" on every row would be noise on
+                            the common case and bury the reviewed ones. */}
+                        {run.reviewStatus && run.reviewStatus !== "unreviewed" ? (
+                          <StatusBadge tone="neutral">{REVIEW_LABELS[run.reviewStatus]}</StatusBadge>
+                        ) : null}
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
                           View run
+                        </button>
+                        {/* Archiving is offered only once a run has finished:
+                            hiding work still in flight would hide the thing
+                            most worth watching, and the database refuses it. */}
+                        {["succeeded", "failed", "cancelled"].includes(run.status) ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={rowBusy === run.id}
+                            aria-label={run.archivedAt ? `Restore run ${run.id}` : `Archive run ${run.id}`}
+                            onClick={() => void archiveRun(run, !run.archivedAt)}
+                          >
+                            {rowBusy === run.id
+                              ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                              : <Archive className="size-4" aria-hidden="true" />}
+                            {run.archivedAt ? "Restore" : "Archive"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          disabled={rowBusy === run.id}
+                          aria-label={`Delete run ${run.id}`}
+                          onClick={() => {
+                            setDeletingRow(run);
+                            setRowDeleteReason("");
+                            setRowDetach(false);
+                            setRowMessage("");
+                          }}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Delete
                         </button>
                       </div>
                     </li>
@@ -322,6 +746,170 @@ export function RunsConsole() {
                 </p>
               ) : null}
 
+              <section className="rounded-lg border border-line p-4" aria-labelledby={`review-${run.id}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 id={`review-${run.id}`} className="text-sm font-semibold text-foreground">
+                    Review
+                  </h3>
+                  <p className="text-xs text-muted">
+                    {run.reviewedAt
+                      ? `Last reviewed ${formatDateTime(run.reviewedAt)}`
+                      : "Not reviewed yet"}
+                  </p>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  The status and note below are the editable part of a run. Everything
+                  else on this page records what actually happened — provider, model,
+                  timings, files, checks — and is read-only so the console cannot state
+                  something the factory did not do.
+                </p>
+
+                <div className="mt-3 flex flex-col gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Status</span>
+                    <select
+                      className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
+                      value={reviewDraft?.status ?? run.reviewStatus ?? "unreviewed"}
+                      onChange={(event) => setReviewDraft({
+                        note: reviewDraft?.note ?? run.reviewNote ?? "",
+                        status: event.target.value as ReviewStatus,
+                      })}
+                    >
+                      {REVIEW_STATUSES.map((status) => (
+                        <option key={status} value={status}>{REVIEW_LABELS[status]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Note</span>
+                    <textarea
+                      className="min-h-20 rounded border border-line bg-surface px-3 py-2 text-sm"
+                      maxLength={2000}
+                      placeholder="What was decided about this run, and why."
+                      value={reviewDraft?.note ?? run.reviewNote ?? ""}
+                      onChange={(event) => setReviewDraft({
+                        note: event.target.value,
+                        status: reviewDraft?.status ?? run.reviewStatus ?? "unreviewed",
+                      })}
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={reviewState === "pending" || reviewDraft === null}
+                      onClick={() => void saveReview(
+                        run.id,
+                        reviewDraft?.status ?? run.reviewStatus ?? "unreviewed",
+                        reviewDraft?.note ?? "",
+                      )}
+                    >
+                      {reviewState === "pending"
+                        ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        : <Save className="size-4" aria-hidden="true" />}
+                      Save review
+                    </button>
+                    {reviewDraft !== null ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setReviewDraft(null)}
+                      >
+                        Discard changes
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {reviewMessage ? (
+                    <p
+                      className={`text-sm ${reviewState === "error" ? "text-[var(--danger)]" : "text-muted"}`}
+                      aria-live="polite"
+                    >
+                      {reviewMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+
+              {run.deletable ? (
+                <section className="rounded-lg border border-[var(--danger-border)] p-4" aria-labelledby={`delete-${run.id}`}>
+                  <h3 id={`delete-${run.id}`} className="text-sm font-semibold text-[var(--danger)]">
+                    Delete this run
+                  </h3>
+                  <p className="mt-1 text-xs text-muted">
+                    Removes the run and its own events, artifacts and validations. The
+                    deletion itself is recorded in the activity trail first, so the
+                    account of it survives. Nothing outside this database is touched: a
+                    pull request on GitHub stays exactly as it is.
+                  </p>
+
+                  {deleteState === "confirming" ? (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs text-muted">Reason (required, at least ten characters)</span>
+                        <input
+                          type="text"
+                          className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
+                          maxLength={400}
+                          value={deleteReason}
+                          onChange={(event) => setDeleteReason(event.target.value)}
+                          placeholder="Why this run is being removed"
+                        />
+                      </label>
+                      <label className="flex items-start gap-2 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={detachEvidence}
+                          onChange={(event) => setDetachEvidence(event.target.checked)}
+                        />
+                        <span>
+                          Keep and unlink any pull request, deployment or test run this
+                          run produced. Without this, a run that produced one of those is
+                          refused rather than silently orphaning it.
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          disabled={deleteState !== "confirming" || deleteReason.trim().length < 10}
+                          onClick={() => void deleteRun(run.id)}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Delete permanently
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setDeleteState("idle"); setDeleteMessage(""); }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm mt-3"
+                      disabled={deleteState === "pending"}
+                      onClick={() => { setDeleteState("confirming"); setDeleteMessage(""); }}
+                    >
+                      {deleteState === "pending"
+                        ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        : <Trash2 className="size-4" aria-hidden="true" />}
+                      Delete run
+                    </button>
+                  )}
+
+                  {deleteMessage && deleteState === "error" ? (
+                    <p className="mt-2 text-sm text-[var(--danger)]" aria-live="polite">{deleteMessage}</p>
+                  ) : null}
+                </section>
+              ) : null}
+
               <DetailFacts facts={[
                 { label: "Project", value: run.project?.name ?? "—" },
                 { label: "Agent", value: run.agent ? `${run.agent.name}${run.agent.role ? ` · ${run.agent.role}` : ""}` : "—" },
@@ -358,7 +946,7 @@ export function RunsConsole() {
                 ))}
               </EvidenceSection>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <EvidenceSection title="Validation" empty="No validation evidence has been recorded.">
                   {(run.validations ?? []).map((validation, index) => (
                     <li key={validation.id ?? `${validation.name}-${index}`} className="flex items-start justify-between gap-3 py-2 text-sm">
@@ -380,7 +968,7 @@ export function RunsConsole() {
                 </EvidenceSection>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <EvidenceSection title="Commits" empty="No commit evidence has been recorded.">
                   {(run.commits ?? []).map((commit) => (
                     <li key={commit.sha} className="py-2 text-sm">
@@ -428,7 +1016,7 @@ function RunRoutingEvidence({ run }: { run: RunDetail }) {
       </div>
       {run.provider ? (
         <>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="card-inset min-w-0 p-3">
               <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">Selected provider</dt>
               <dd className="mt-1 break-words text-sm text-foreground">{providerDisplayName(run.provider)}</dd>
@@ -455,7 +1043,7 @@ function RunRoutingEvidence({ run }: { run: RunDetail }) {
                 ))}
               </ul>
               {run.routing.candidates.length ? (
-                <ul className="grid gap-2 sm:grid-cols-2" aria-label="Provider routing candidates">
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Provider routing candidates">
                   {run.routing.candidates.map((candidate) => (
                     <li key={`${candidate.provider}-${candidate.model ?? "default"}`} className="card-inset min-w-0 p-3 text-sm">
                       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">

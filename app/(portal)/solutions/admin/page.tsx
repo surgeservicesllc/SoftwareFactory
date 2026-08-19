@@ -59,13 +59,13 @@ export default async function AdminPage() {
         action={<StatusBadge tone="safe">Super admin</StatusBadge>}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5 sm:p-6">
           <SectionTitle
             title="Your session"
             description="Verified against Supabase on this request, not read from a cookie."
           />
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <dt className="label mb-1">Signed in as</dt>
               <dd className="truncate text-sm text-foreground">{viewer.email}</dd>
@@ -115,7 +115,7 @@ export default async function AdminPage() {
           title="What this role does not bypass"
           description="Being a super administrator changes what you can see. It does not change what the system is allowed to do on its own."
         />
-        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+        <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {[
             "Autonomous Mode stays OFF",
             "The global kill switch stays ON",

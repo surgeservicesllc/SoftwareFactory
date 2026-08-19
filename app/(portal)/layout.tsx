@@ -44,7 +44,13 @@ export default async function PortalLayout({
 
   return (
     <div style={shellOffset}>
-      <SiteHeader viewer={viewer} />
+      {/*
+        No menu button here: the console shell below renders its own drawer,
+        and two hamburgers in two stacked bars is what a phone showed. The
+        drawer lists this header's destinations under "Site", so nothing that
+        was reachable stops being reachable.
+      */}
+      <SiteHeader viewer={viewer} showMobileMenu={false} />
       <AppShell viewer={viewer}>{children}</AppShell>
     </div>
   );

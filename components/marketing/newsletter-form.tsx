@@ -59,7 +59,12 @@ export function NewsletterForm({ source = "resources" }: { source?: string }) {
           placeholder="Enter your email address"
           autoComplete="email"
           maxLength={254}
-          className="h-11 min-w-0 flex-1 rounded-xl border border-[#2b3547] bg-[#0a0f18] px-4 text-sm text-[#dce2e8] placeholder:text-[#5c6878] focus:border-[#5d6bff] focus:outline-none"
+          // `flex-1` is `flex: 1 1 0%` along the container's main axis. This
+          // container is a column below `sm`, so on a phone that axis was the
+          // height: `flex-1` overrode `h-11` and collapsed the field to the
+          // 18px of its own text. It only means "share the row" from `sm` up,
+          // which is the only place the container is a row.
+          className="h-11 min-w-0 rounded-xl border border-[#2b3547] bg-[#0a0f18] px-4 text-sm text-[#dce2e8] placeholder:text-[#5c6878] focus:border-[#5d6bff] focus:outline-none sm:flex-1"
         />
         <button
           type="submit"

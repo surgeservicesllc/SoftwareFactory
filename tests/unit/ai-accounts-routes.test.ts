@@ -36,6 +36,8 @@ const { POST: postCode } = await import("@/app/api/ai-accounts/sessions/[session
 const { POST: cancel } = await import("@/app/api/ai-accounts/sessions/[sessionId]/cancel/route");
 const { POST: disconnect } = await import("@/app/api/ai-accounts/[accountId]/disconnect/route");
 const { POST: refresh } = await import("@/app/api/ai-accounts/refresh/route");
+const { POST: removeAccount } = await import("@/app/api/ai-accounts/[accountId]/remove/route");
+const { POST: renameAccount } = await import("@/app/api/ai-accounts/[accountId]/rename/route");
 
 const organizationId = "11111111-2222-4333-8444-555555555555";
 const accountId = "22222222-3333-4444-8555-666666666666";
@@ -415,6 +417,78 @@ describe("session cancel and account disconnect", () => {
       p_organization_id: organizationId,
       p_ai_account_id: accountId,
     });
+  });
+
+  it("repeats the database's reason for a refusal instead of a bare code", async () => {
+    /*
+     * The report this pins. An owner pressed Remove and the console said
+     * "The account could not be removed. (42501)" — a SQLSTATE and nothing
+     * else. 42501 covers both an authorization refusal, whose message is a
+     * sentence this repository wrote, and a missing privilege on a table,
+     * which names the table; telling them apart is the whole diagnosis, and
+     * the route was discarding the only thing that could.
+     */
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "owner or admin role is required to remove an AI account" },
+    });
+    const response = await removeAccount(
+      post(`/api/ai-accounts/${accountId}/remove`),
+      { params: Promise.resolve({ accountId }) },
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { message: "owner or admin role is required to remove an AI account" },
+    });
+  });
+
+  it("still says nothing about a code the shared policy has not vetted", async () => {
+    // The original caution was right about this half: an unrecognised fault
+    // must not hand its message to a browser.
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "XX000", message: "internal detail nobody outside should read" },
+    });
+    const response = await removeAccount(
+      post(`/api/ai-accounts/${accountId}/remove`),
+      { params: Promise.resolve({ accountId }) },
+    );
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error?: { message?: string } };
+    expect(body.error?.message).not.toContain("internal detail");
+  });
+
+  it("removes through the bot-detaching function", async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    const response = await removeAccount(
+      post(`/api/ai-accounts/${accountId}/remove`),
+      { params: Promise.resolve({ accountId }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ removed: true });
+    expect(rpc).toHaveBeenCalledWith("remove_ai_account", {
+      p_organization_id: organizationId,
+      p_ai_account_id: accountId,
+    });
+  });
+
+  it("translates a name collision rather than passing the constraint out", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: 'duplicate key value violates unique constraint "ai_accounts_name_key"' },
+    });
+    const response = await renameAccount(
+      new Request(`https://factory.test/api/ai-accounts/${accountId}/rename`, {
+        method: "POST",
+        headers: { origin: "https://factory.test", "content-type": "application/json" },
+        body: JSON.stringify({ name: "Taken" }),
+      }),
+      { params: Promise.resolve({ accountId }) },
+    );
+    expect(response.status).toBe(409);
+    const body = await response.json() as { error?: { message?: string } };
+    expect(body.error?.message).toBe("Another account already uses that name.");
+    expect(body.error?.message).not.toContain("unique constraint");
   });
 
   it("refuses a member for both", async () => {

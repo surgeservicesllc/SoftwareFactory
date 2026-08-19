@@ -11,6 +11,7 @@ import type {
 } from "@/components/provider-status-panel";
 import { TenantListShell, formatDateTime, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
+import { STANDARD_MODEL_CATALOGUE } from "@/lib/providers/standard-catalogue";
 
 type Agent = {
   id: string;
@@ -150,6 +151,7 @@ export function AgentsConsole() {
   const providerCatalog = useAgentProviderCatalog(state.kind === "ready");
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   const [rosterPending, setRosterPending] = useState(false);
+  const [seedingCatalogue, setSeedingCatalogue] = useState(false);
   const [feedback, setFeedback] = useState<AssignmentFeedback>(null);
 
   const providerPayload = providerCatalog.state.kind === "ready"
@@ -186,6 +188,61 @@ export function AgentsConsole() {
     } finally {
       setRosterPending(false);
     }
+  }
+
+  /**
+   * Seed the organization's model catalogue with the standard models, through
+   * the same endpoint the settings page uses — upserts, so running it twice
+   * changes nothing. This is what turns the per-agent select from a single
+   * "Automatic routing" row into a real choice: the assignment RPC only
+   * accepts enabled catalogue configurations, and a fresh organization has
+   * none. Failures are counted and named, never celebrated.
+   */
+  async function enableStandardCatalogue() {
+    setSeedingCatalogue(true);
+    setFeedback(null);
+    let enabled = 0;
+    let firstRefusal = "";
+    for (const entry of STANDARD_MODEL_CATALOGUE) {
+      try {
+        const response = await fetch("/api/providers/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: entry.provider,
+            model: entry.model,
+            displayName: entry.displayName,
+            capabilities: [...entry.capabilities],
+            enabled: true,
+          }),
+        });
+        const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+        if (!response.ok) {
+          throw new Error(body.error?.message ?? `${entry.displayName} could not be enabled.`);
+        }
+        enabled += 1;
+      } catch (error) {
+        if (!firstRefusal) {
+          firstRefusal = error instanceof Error && error.message
+            ? error.message
+            : "A model could not be enabled.";
+        }
+      }
+    }
+    const failedCount = STANDARD_MODEL_CATALOGUE.length - enabled;
+    setFeedback(
+      failedCount === 0
+        ? {
+          kind: "success",
+          message: `${enabled} standard models are enabled. Every agent below is now selectable.`,
+        }
+        : {
+          kind: "error",
+          message: `${enabled} enabled, ${failedCount} failed. ${firstRefusal}`,
+        },
+    );
+    await providerCatalog.reload();
+    setSeedingCatalogue(false);
   }
 
   async function assignProvider(agent: Agent, value: string) {
@@ -247,6 +304,9 @@ export function AgentsConsole() {
           canManage={canManageAssignments}
           feedback={feedback}
           onRetry={() => void providerCatalog.reload()}
+          offerStandardCatalogue={canManageAssignments && assignableModels.length === 0}
+          seeding={seedingCatalogue}
+          onEnableStandardCatalogue={() => void enableStandardCatalogue()}
         />
       ) : null}
 
@@ -279,7 +339,7 @@ export function AgentsConsole() {
                 </ul>
               </section>
 
-              <ul className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+              <ul className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
                 {agents.map((agent) => (
                   <li key={agent.id} className="card-inset flex flex-col p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -375,7 +435,7 @@ export function AgentsConsole() {
               { label: "Active runs", value: String(agent.currentRuns?.length ?? agent.runCounts?.running ?? 0) },
             ]} />
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <AgentSection title="Responsibilities" empty="No responsibilities have been recorded.">
                 {(agent.responsibilities ?? agent.capabilities ?? []).map((item) => <li key={item} className="py-2 text-sm text-muted">{item}</li>)}
               </AgentSection>
@@ -416,11 +476,17 @@ function ProviderAssignmentBoundary({
   canManage,
   feedback,
   onRetry,
+  offerStandardCatalogue,
+  seeding,
+  onEnableStandardCatalogue,
 }: {
   catalog: ProviderCatalogState;
   canManage: boolean;
   feedback: AssignmentFeedback;
   onRetry: () => void;
+  offerStandardCatalogue: boolean;
+  seeding: boolean;
+  onEnableStandardCatalogue: () => void;
 }) {
   const roleKnown = catalog.kind === "ready" && Boolean(catalog.payload.organization?.role);
 
@@ -484,11 +550,29 @@ function ProviderAssignmentBoundary({
       <p className="mt-3 flex items-start gap-2 text-sm text-muted">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
         {canManage
-          ? "You can assign enabled catalogue models or return any agent to automatic per-run routing."
+          ? offerStandardCatalogue
+            ? "No models are enabled yet, so every select below offers only automatic routing. Enable the standard catalogue to make each agent selectable."
+            : "You can assign enabled catalogue models or return any agent to automatic per-run routing."
           : roleKnown
             ? "Assignments are read-only for this workspace role. An owner or administrator can change them."
             : "Assignment controls stay unavailable until manager access and the bounded provider catalogue are verified."}
       </p>
+
+      {catalog.kind === "ready" && offerStandardCatalogue ? (
+        /* The way out of the dead end, on the page that has it. Seeding is
+           catalogue metadata through the same endpoint the settings page
+           uses — it claims no provider connection and enables no execution,
+           and the boundary text above this button says exactly that. */
+        <button
+          type="button"
+          onClick={onEnableStandardCatalogue}
+          disabled={seeding}
+          className="btn btn-primary btn-sm mt-3"
+        >
+          {seeding ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          Enable the standard model catalogue
+        </button>
+      ) : null}
 
       {feedback ? (
         <p

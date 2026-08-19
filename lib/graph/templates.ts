@@ -38,6 +38,8 @@ export type TemplateNode = {
   readonly writes?: readonly ResourceRef[];
   /** Structured output is the default; a node opts into prose explicitly. */
   readonly prose?: boolean;
+  /** Override the capability-derived fan-in tolerance (see below). */
+  readonly toleratesPartialInputs?: boolean;
 };
 
 export type GraphTemplate = {
@@ -99,6 +101,21 @@ function schemaFor(node: TemplateNode): z.ZodTypeAny {
   }
 }
 
+/**
+ * Capabilities that aggregate other nodes' outputs. Their fan-ins tolerate
+ * missing or failed inputs by default (§14): a reduce of nineteen findings
+ * sets, or a synthesis of two surviving reviews, stated as partial, beats
+ * losing the surviving work to the one branch that failed. Implementation,
+ * QA, and review nodes keep the strict rule — they genuinely need their
+ * inputs. A single-dependency node behaves identically either way, since a
+ * tolerant fan-in still requires at least one completed input.
+ */
+const AGGREGATING_CAPABILITIES: ReadonlySet<NodeCapability> = new Set([
+  "extraction",
+  "synthesis",
+  "reporting",
+]);
+
 /** Turn a template's declarative nodes into full contracts the compiler accepts. */
 export function templateNodeContracts(template: GraphTemplate): readonly NodeContract[] {
   return template.nodes.map((node) =>
@@ -115,6 +132,14 @@ export function templateNodeContracts(template: GraphTemplate): readonly NodeCon
       reads: node.reads ?? [],
       writes: node.writes ?? [],
       risk: template.risk,
+      toleratesPartialInputs:
+        node.toleratesPartialInputs
+        ?? (AGGREGATING_CAPABILITIES.has(node.capability) && (node.dependsOn ?? []).length > 0),
+      // A MODEL inspector must actually read the repository before it may
+      // answer; the first live drain measured 8 turns and 3 minutes as too
+      // small an envelope. Deterministic and anchor nodes keep the tight
+      // default — code either finishes fast or is wrong.
+      ...(node.executor === "MODEL" ? { timeoutMs: 480_000 } : {}),
     }),
   );
 }
@@ -128,7 +153,9 @@ const file = (id: string): ResourceRef => ({ kind: "file", id });
  * have none — this is the shape the fake-edge test exists to protect. Only the
  * reduce step waits.
  */
-function auditTemplate(input: {
+/** Exported so custom (database-stored) templates build through the exact
+ * same shape as the built-ins — one builder, no divergence. */
+export function auditTemplate(input: {
   key: string;
   name: string;
   summary: string;
@@ -225,6 +252,19 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       { id: "definers", job: "Check every SECURITY DEFINER function re-validates its caller." },
     ],
     capability: "security_review",
+  }),
+  auditTemplate({
+    key: "database_migration",
+    name: "Database Migration",
+    summary:
+      "A schema change as an operation: forward-only, replay-safe, RLS intact, recorded in the ledger, with the read paths it feeds verified.",
+    areas: [
+      { id: "forward", job: "Check the migration is forward-only and replay-safe: if-not-exists guards, no down path, no renumbering of applied history." },
+      { id: "rls", job: "Check every new or altered table keeps RLS and FORCE RLS with tenant-scoped policies and no browser write grants." },
+      { id: "grants", job: "Check function and table grants: security definers re-validate their caller, and anon gains nothing." },
+      { id: "consumers", job: "Check the API routes and views reading the changed schema still return their contract." },
+      { id: "ledger", job: "Check the change is recorded end to end: tail pins, apply allowlists, and runbook counts move together." },
+    ],
   }),
   auditTemplate({
     key: "bug_sweep",

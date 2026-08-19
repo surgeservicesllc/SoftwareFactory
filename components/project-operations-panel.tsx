@@ -61,7 +61,24 @@ export function ProjectOperationsPanel({ projectId }: { projectId: string }) {
     );
   }
 
-  if (state === "unavailable" || !operations) {
+  // Every field this panel reads is checked, not just the envelope. A response
+  // that parsed as JSON but arrived without `project`, `incidents` or
+  // `monitors` — an older deploy, a partially degraded read — used to reach
+  // `operations.project.healthState` and throw, and because this panel renders
+  // inside the project rows on My Projects, that one undefined took the whole
+  // page down to a blank screen. Unavailable is the honest rendering of a
+  // payload this cannot read, and it costs one panel instead of the page.
+  if (
+    state === "unavailable"
+    || !operations
+    || !operations.project
+    || !operations.releaseAuthority
+    || !Array.isArray(operations.releaseAuthority.blockers)
+    || !Array.isArray(operations.incidents)
+    || !Array.isArray(operations.monitors)
+    || !Array.isArray(operations.repairs)
+    || !Array.isArray(operations.rollbacks)
+  ) {
     return (
       <p className="mt-5 rounded-lg border border-line px-3 py-2.5 text-sm text-muted">
         Production status is unavailable for this project.
@@ -99,7 +116,7 @@ export function ProjectOperationsPanel({ projectId }: { projectId: string }) {
         {operations.project.healthReason ?? "No health evidence has been recorded yet."}
       </p>
 
-      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-4">
         <div className="flex justify-between gap-2 rounded border border-line px-3 py-2">
           <dt className="text-muted">Monitors</dt>
           <dd className="tabular text-foreground">{connectedMonitors}</dd>

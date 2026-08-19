@@ -1,24 +1,38 @@
 "use client";
 
 import {
+  Activity,
   AlertTriangle,
+  Archive,
+  ArrowRight,
+  Bot,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDotDashed,
   ExternalLink,
+  FolderKanban,
   FolderTree,
   GitBranch,
   GitCommitHorizontal,
   GitFork,
   GitPullRequestArrow,
   Loader2,
-  Plus,
+  Pencil,
+  PlugZap,
   RefreshCw,
+  X,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatDateTime } from "@/lib/format/date";
+import { AddProjectForm } from "@/components/add-project-form";
+import { ProjectBots } from "@/components/project-bots";
 import { ProjectOperationsPanel } from "@/components/project-operations-panel";
+import { ProjectRepository } from "@/components/project-repository";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -34,7 +48,7 @@ type Repository = {
   lastSyncedAt?: string | null;
 };
 
-type Connection = {
+export type Connection = {
   id: string;
   name?: string;
   status: "connected" | "not_connected";
@@ -44,7 +58,7 @@ type Connection = {
   repositories: Repository[];
 };
 
-type Project = {
+export type Project = {
   id: string;
   name: string;
   description: string | null;
@@ -55,8 +69,23 @@ type Project = {
   healthStatus: string;
   autonomousMode: boolean;
   maximumAutonomousRisk: string;
+  updatedAt?: string | null;
   connectionId: string | null;
   connectionStatus: "connected" | "not_connected";
+};
+
+/** The slice of a run this page needs: whose it is, how it ended, and when. */
+type RunSummary = {
+  id: string;
+  status: string;
+  createdAt: string;
+  project: { id: string; name: string } | null;
+};
+
+type ActivityItem = {
+  id: string;
+  description: string;
+  occurredAt: string;
 };
 
 type Branch = { name: string; sha: string; protected: boolean };
@@ -97,21 +126,35 @@ const emptyInspector: InspectorData = {
 };
 
 export function ProjectsConsole() {
+  const searchParams = useSearchParams();
+  // The navigation's Archived subpage is this same console with the filter
+  // flipped: the read is opt-in on the API too, so nothing archived leaks
+  // into the default view.
+  const showArchived = searchParams.get("filter") === "archived";
   const [state, setState] = useState<State>("loading");
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [connectionId, setConnectionId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
-  const [saving, setSaving] = useState(false);
+  // Dashboard evidence, all best-effort: runs feed the Last-run and
+  // Success-rate columns, activity feeds the rail, and the archived count
+  // completes the by-status breakdown. Any of them failing degrades its own
+  // surface to an honest absence rather than blocking the page.
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[] | null>(null);
+  const [archivedCount, setArchivedCount] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
+  // Edit and archive are dialogs so the table row states exactly what will
+  // happen before it does; unarchive acts in place on the archived view.
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [archiving, setArchiving] = useState<Project | null>(null);
+  const [unarchivingId, setUnarchivingId] = useState("");
+  const [unarchiveError, setUnarchiveError] = useState("");
 
   const load = useCallback(async () => {
     setState("loading");
     try {
       const [projectsResponse, connectionsResponse] = await Promise.all([
-        fetch("/api/projects", { cache: "no-store" }),
+        fetch(showArchived ? "/api/projects?status=archived" : "/api/projects", { cache: "no-store" }),
         fetch("/api/github/connections", { cache: "no-store" }),
       ]);
       if (projectsResponse.status === 401 || connectionsResponse.status === 401) {
@@ -128,75 +171,68 @@ export function ProjectsConsole() {
       if (!connectionsResponse.ok) throw new Error(connectionsBody.error?.message ?? "GitHub connections could not be loaded.");
       setProjects(projectsBody.projects ?? []);
       setConnections(connectionsBody.connections ?? []);
+      setPage(0);
+
+      if (!showArchived) {
+        const [runsResult, activityResult, archivedResult] = await Promise.allSettled([
+          fetch("/api/runs", { cache: "no-store" }),
+          fetch("/api/activity?limit=8", { cache: "no-store" }),
+          fetch("/api/projects?status=archived", { cache: "no-store" }),
+        ]);
+        if (runsResult.status === "fulfilled" && runsResult.value.ok) {
+          const body = (await runsResult.value.json().catch(() => ({}))) as { runs?: RunSummary[] };
+          setRuns(body.runs ?? []);
+        } else {
+          setRuns([]);
+        }
+        if (activityResult.status === "fulfilled" && activityResult.value.ok) {
+          const body = (await activityResult.value.json().catch(() => ({}))) as { events?: ActivityItem[] };
+          setActivity(body.events ?? []);
+        } else {
+          setActivity(null);
+        }
+        if (archivedResult.status === "fulfilled" && archivedResult.value.ok) {
+          const body = (await archivedResult.value.json().catch(() => ({}))) as { projects?: unknown[] };
+          setArchivedCount(body.projects ? body.projects.length : null);
+        } else {
+          setArchivedCount(null);
+        }
+      }
       setState("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Projects could not be loaded.");
       setState("error");
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const unarchive = useCallback(async (projectId: string) => {
+    setUnarchivingId(projectId);
+    setUnarchiveError("");
+    try {
+      const response = await fetch("/api/portfolio/controls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unarchive", projectId }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be unarchived.");
+      await load();
+    } catch (error) {
+      setUnarchiveError(error instanceof Error ? error.message : "The project could not be unarchived.");
+    } finally {
+      setUnarchivingId("");
+    }
+  }, [load]);
+
   const connectedConnections = useMemo(
     () => connections.filter((connection) => connection.status === "connected" && connection.account && connection.installation && !connection.installation.suspendedAt),
     [connections],
   );
-  const activeConnectionId = connectionId || connectedConnections[0]?.id || "";
-  const selectedConnection = connectedConnections.find((connection) => connection.id === activeConnectionId) ?? connectedConnections[0];
-  const availableRepositories = useMemo(
-    () => selectedConnection?.repositories.filter((repository) => repository.selected && !repository.archived && !repository.disabled) ?? [],
-    [selectedConnection],
-  );
-  const unconnectedRepositories = useMemo(
-    () => availableRepositories.filter((repository) => !projects.some((project) => project.githubRepositoryId === repository.id)),
-    [availableRepositories, projects],
-  );
-  const selectedRepository = unconnectedRepositories.find((repository) => String(repository.id) === repositoryId) ?? unconnectedRepositories[0];
-
-  useEffect(() => {
-    if (!selectedRepository || !selectedConnection) return;
-    const repository = selectedRepository.fullName.split("/")[1];
-    if (!repository) return;
-    const timer = window.setTimeout(() => {
-      setRepositoryId(String(selectedRepository.id));
-      setName((current) => current || repository);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [selectedConnection, selectedRepository]);
-
-  async function createProject(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedConnection || !selectedRepository) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionId: selectedConnection.id,
-          repositoryId: selectedRepository.id,
-          name,
-          description,
-          defaultBranch: selectedRepository.defaultBranch,
-        }),
-      });
-      const body = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be added.");
-      setMessage(`${name} is connected. Its live GitHub data is below.`);
-      setName("");
-      setDescription("");
-      setRepositoryId("");
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The project could not be added.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (state === "loading") {
     return (
@@ -209,125 +245,324 @@ export function ProjectsConsole() {
   if (state === "setup") return <BlockedState icon={FolderTree} title="Finish setting up" description="Create or choose a workspace before linking a repository." href="/solutions/connections" label="Open connections" />;
   if (state === "error") return <BlockedState icon={FolderTree} title="Projects are unavailable" description={message || "Your projects could not be loaded."} href="/solutions/connections" label="Check connections" />;
 
+  if (showArchived) {
+    // Archived projects are records, not workspaces: no live GitHub inspector,
+    // no add form. Archiving deletes nothing, and unarchiving is an owner
+    // control on the portfolio page — both facts stated rather than implied.
+    return (
+      <div className="space-y-4">
+        <ProjectTabs active="archived" />
+        {projects.map((project) => (
+          <Card key={project.id} className="p-5 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold text-foreground">{project.name}</h2>
+                  <StatusBadge tone="neutral">Archived</StatusBadge>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {project.githubRepository ?? "No repository linked"} · {project.defaultBranch}
+                </p>
+                {project.description ? <p className="mt-2 text-sm text-muted">{project.description}</p> : null}
+                <p className="mt-3 text-sm text-muted">
+                  Every run, report, and activity record this project produced is kept.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void unarchive(project.id)}
+                disabled={unarchivingId === project.id}
+                className="btn btn-secondary btn-sm sm:shrink-0"
+              >
+                {unarchivingId === project.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Archive className="size-4" aria-hidden="true" />
+                )}
+                Unarchive
+              </button>
+            </div>
+          </Card>
+        ))}
+        {unarchiveError ? (
+          <p className="text-sm text-[var(--danger)]" aria-live="polite">{unarchiveError}</p>
+        ) : null}
+        {!projects.length ? (
+          <Card className="p-5 sm:p-6">
+            <SectionTitle
+              title="No archived projects"
+              description="Archiving stops new work on a project while keeping every run, report, and activity record. Nothing is archived right now."
+            />
+            <Link href="/solutions/projects" className="btn btn-secondary btn-sm mt-4">
+              <FolderTree className="size-4" aria-hidden="true" />
+              View all projects
+            </Link>
+          </Card>
+        ) : null}
+      </div>
+    );
+  }
+
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(projects.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleProjects = projects.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const activeCount = projects.filter((project) => project.status === "active").length;
+  const connectedCount = projects.filter((project) => project.connectionStatus === "connected").length;
+  const repositoryCount = connectedConnections.reduce(
+    (sum, connection) => sum
+      + connection.repositories.filter((repository) => repository.selected && !repository.archived && !repository.disabled).length,
+    0,
+  );
+  const statusBreakdown = [
+    { label: "Active", count: activeCount, dotClassName: "bg-[var(--accent)]" },
+    { label: "Paused", count: projects.filter((project) => project.status === "paused").length, dotClassName: "bg-[var(--warning)]" },
+    { label: "Draft", count: projects.filter((project) => project.status === "draft").length, dotClassName: "bg-[var(--border)]" },
+    ...(archivedCount !== null
+      ? [{ label: "Archived", count: archivedCount, dotClassName: "bg-[var(--text-muted)]" }]
+      : []),
+  ];
+
   return (
     <div className="space-y-4">
-      {projects.map((project) => (
-        <ProjectInspector
-          key={project.id}
-          project={project}
-          connection={connections.find((item) => item.id === project.connectionId) ?? null}
+      {editing ? (
+        <ProjectEditDialog
+          project={editing}
+          onClose={() => setEditing(null)}
+          onSaved={load}
         />
-      ))}
-
-      {!connectedConnections.length ? (
-        <BlockedState
-          icon={GitFork}
-          title="Connect GitHub first"
-          description="A repository becomes a project only after you have authorized GitHub."
-          href="/solutions/connections"
-          label="Connect GitHub"
+      ) : null}
+      {archiving ? (
+        <ProjectArchiveDialog
+          project={archiving}
+          onClose={() => setArchiving(null)}
+          onArchived={load}
         />
-      ) : unconnectedRepositories.length || !projects.length ? (
-        <Card className="p-5 sm:p-6">
-          <SectionTitle
-            title="Add a project"
-            description="Pick one of the repositories you authorized. The branch comes straight from GitHub."
-          />
+      ) : null}
 
-          <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
-            {/* One connected account is the common case, and a picker with a
-                single option is a dead control. The repository list below
-                already names the owner (owner/repo), so nothing is lost. */}
-            {connectedConnections.length > 1 ? (
-              <div>
-                <label htmlFor="project-connection" className="field-label">GitHub account</label>
-                <select
-                  id="project-connection"
-                  value={activeConnectionId}
-                  onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
-                  className="input"
+      <ProjectTabs active="all" />
+
+      {/* Every number here is counted from the two live reads above; there
+          are no trend deltas because no historical snapshots exist to
+          compute them from. */}
+      {projects.length ? (
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard icon={FolderKanban} label="Total projects" value={String(projects.length)} detail={archivedCount ? `+ ${archivedCount} archived` : "excluding archived"} />
+          <StatCard icon={CheckCircle2} label="Active" value={String(activeCount)} detail={`${Math.round((activeCount / projects.length) * 100)}% of total`} />
+          <StatCard icon={GitFork} label="Repositories" value={String(repositoryCount)} detail="authorized on GitHub" />
+          <StatCard icon={PlugZap} label="Connected" value={String(connectedCount)} detail={`of ${projects.length} project${projects.length === 1 ? "" : "s"}`} />
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
+      {projects.length ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line">
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Project</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Repository</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Status</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Last run</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Success rate</th>
+                  <th scope="col" className="px-4 py-3 font-medium text-faint">Updated</th>
+                  <th scope="col" className="px-4 py-3"><span className="sr-only">Open</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {visibleProjects.map((project) => {
+                  const facts = projectRunFacts(runs, project.id);
+                  return (
+                    <tr key={project.id}>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-foreground">{project.name}</p>
+                        {project.description ? (
+                          <p className="mt-0.5 max-w-56 truncate text-muted" title={project.description}>{project.description}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-muted">
+                        <p className="max-w-56 truncate">{project.githubRepository ?? "None linked"}</p>
+                        <p className="mt-0.5 text-xs text-faint">{project.defaultBranch}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <StatusBadge
+                            tone={project.status === "active" ? "safe" : project.status === "paused" ? "warning" : "neutral"}
+                            dot={false}
+                          >
+                            {formatStatusWord(project.status)}
+                          </StatusBadge>
+                          {project.connectionStatus !== "connected" ? (
+                            <StatusBadge tone="danger" dot={false}>Not Connected</StatusBadge>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {facts.latest ? (
+                          <>
+                            <span
+                              className={cn(
+                                "font-medium",
+                                facts.latest.status === "succeeded"
+                                  ? "text-accent"
+                                  : facts.latest.status === "failed"
+                                    ? "text-[var(--danger)]"
+                                    : "text-muted",
+                              )}
+                            >
+                              {formatStatusWord(facts.latest.status)}
+                            </span>
+                            <p className="mt-0.5 text-xs text-faint">{formatDate(facts.latest.createdAt)}</p>
+                          </>
+                        ) : (
+                          <span className="text-faint">No runs yet</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {facts.successRate !== null ? (
+                          <div>
+                            <span className="font-semibold text-foreground">{facts.successRate}%</span>
+                            <span className="ml-1 text-xs text-faint">
+                              of {facts.finished} finished
+                            </span>
+                            <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-surface-raised">
+                              <div className="h-full rounded-full bg-accent" style={{ width: `${facts.successRate}%` }} aria-hidden="true" />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-faint">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted">
+                        {project.updatedAt ? formatDate(project.updatedAt) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(project)}
+                            aria-label={`Edit ${project.name}`}
+                            className="btn btn-secondary btn-sm size-8 px-0"
+                          >
+                            <Pencil className="size-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setArchiving(project)}
+                            aria-label={`Archive ${project.name}`}
+                            className="btn btn-secondary btn-sm size-8 px-0"
+                          >
+                            <Archive className="size-4" aria-hidden="true" />
+                          </button>
+                          <Link href={`/solutions/portfolio/${project.id}`} className="btn btn-secondary btn-sm">
+                            Open
+                            <ArrowRight className="size-4" aria-hidden="true" />
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm text-muted">
+            <p>
+              Showing {currentPage * pageSize + 1} to {Math.min(projects.length, (currentPage + 1) * pageSize)} of {projects.length} project{projects.length === 1 ? "" : "s"}
+            </p>
+            {pageCount > 1 ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage === 0}
+                  className="btn btn-secondary btn-sm"
+                  aria-label="Previous page"
                 >
-                  {connectedConnections.map((connection) => (
-                    <option key={connection.id} value={connection.id}>
-                      {connection.account?.login ?? connection.name ?? "GitHub"}
-                    </option>
-                  ))}
-                </select>
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </button>
+                <span className="tabular">{currentPage + 1} / {pageCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+                  disabled={currentPage >= pageCount - 1}
+                  className="btn btn-secondary btn-sm"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </button>
               </div>
             ) : null}
-
-            <div>
-              <label htmlFor="project-repository" className="field-label">Repository</label>
-              <select
-                id="project-repository"
-                value={repositoryId}
-                onChange={(event) => {
-                  setRepositoryId(event.target.value);
-                  const repo = unconnectedRepositories.find((item) => String(item.id) === event.target.value);
-                  setName(repo?.fullName.split("/")[1] ?? "");
-                }}
-                className="input"
-              >
-                {unconnectedRepositories.map((repository) => (
-                  <option key={repository.id} value={repository.id}>{repository.fullName}</option>
-                ))}
-              </select>
-              <span className="field-hint">
-                Branch: {selectedRepository?.defaultBranch ?? "—"} (set by GitHub)
-              </span>
-            </div>
-
-            <div>
-              <label htmlFor="project-name" className="field-label">Name it</label>
-              <input
-                id="project-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                minLength={1}
-                maxLength={160}
-                className="input"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="project-description" className="field-label">
-                What is it? <span className="font-normal text-faint">(optional)</span>
-              </label>
-              <input
-                id="project-description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                maxLength={2000}
-                className="input"
-                placeholder="Customer-facing web app"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <button type="submit" disabled={saving || !selectedRepository || !name.trim()} className="btn btn-primary">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                Add project
-              </button>
-              <p className="mt-3 text-sm text-muted">
-                New projects start with everything automatic switched off.
-              </p>
-            </div>
-          </form>
-
-          {message ? <p className="mt-4 text-sm text-[var(--warning)]" aria-live="polite">{message}</p> : null}
+          </div>
         </Card>
-      ) : (
-        <p className="text-sm text-muted">Every repository you authorized is already a project.</p>
-      )}
+      ) : null}
+
+      {/* The identical control the AI Factory journey embeds — extracted so
+          both surfaces share one form, one create call, one set of refusals. */}
+      <AddProjectForm id="add-project" onCreated={load} />
+        </div>
+
+        <div className="min-w-0 space-y-4">
+          <Card className="p-5">
+            <SectionTitle title="Projects by status" />
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {statusBreakdown.map((row) => (
+                <li key={row.label} className="flex items-center gap-2.5">
+                  <span className={cn("size-2 shrink-0 rounded-full", row.dotClassName)} aria-hidden="true" />
+                  <span className="flex-1 text-muted">{row.label}</span>
+                  <span className="tabular font-semibold text-foreground">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-2">
+              <SectionTitle title="Recent activity" />
+              <Link href="/solutions/activity" className="text-sm font-medium text-accent">View all</Link>
+            </div>
+            {activity === null ? (
+              <p className="mt-3 text-sm text-faint">Activity is unavailable right now.</p>
+            ) : activity.length === 0 ? (
+              <p className="mt-3 text-sm text-faint">No activity recorded yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-[var(--border)]">
+                {activity.map((item) => (
+                  <li key={item.id} className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                    <Activity className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground">{item.description}</p>
+                      <p className="mt-0.5 text-xs text-faint">{formatDate(item.occurredAt)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
-function ProjectInspector({ project, connection }: { project: Project; connection: Connection | null }) {
+export function ProjectInspector({
+  project,
+  connection,
+  connections,
+  onChanged,
+}: {
+  project: Project;
+  connection: Connection | null;
+  connections: Connection[];
+  onChanged: () => Promise<void> | void;
+}) {
   const [data, setData] = useState<InspectorData>(emptyInspector);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [editingSelf, setEditingSelf] = useState(false);
+  const [archivingSelf, setArchivingSelf] = useState(false);
   const repository = connection?.repositories.find((item) => item.id === project.githubRepositoryId);
   const isConnected = project.connectionStatus === "connected"
     && connection?.status === "connected"
@@ -450,7 +685,19 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
           </div>
           <div className="flex flex-wrap gap-2 sm:shrink-0">
             {isConnected ? (
-              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-primary btn-sm">
+              /* Setting a project up ends with nothing to do with it. This is
+                 the next step a person actually wants — and it carries the
+                 project, so Bot Manager opens already pointed at it. */
+              <Link
+                href={`/solutions/bot-manager?project=${project.id}`}
+                className="btn btn-primary btn-sm"
+              >
+                <Bot className="size-4" aria-hidden="true" />
+                Give this project work
+              </Link>
+            ) : null}
+            {isConnected ? (
+              <Link href={`/solutions/files?project=${project.id}`} className="btn btn-secondary btn-sm">
                 <FolderTree className="size-4" aria-hidden="true" />
                 Browse files
               </Link>
@@ -467,10 +714,33 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
               {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Refresh
             </button>
+            <button type="button" onClick={() => setEditingSelf(true)} className="btn btn-secondary btn-sm">
+              <Pencil className="size-4" aria-hidden="true" />
+              Edit
+            </button>
+            <button type="button" onClick={() => setArchivingSelf(true)} className="btn btn-secondary btn-sm">
+              <Archive className="size-4" aria-hidden="true" />
+              Archive
+            </button>
           </div>
         </div>
 
-        <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {editingSelf ? (
+          <ProjectEditDialog
+            project={project}
+            onClose={() => setEditingSelf(false)}
+            onSaved={onChanged}
+          />
+        ) : null}
+        {archivingSelf ? (
+          <ProjectArchiveDialog
+            project={project}
+            onClose={() => setArchivingSelf(false)}
+            onArchived={onChanged}
+          />
+        ) : null}
+
+        <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Visibility" value={repository ? (repository.private ? "Private" : "Public") : "Unavailable"} />
           <Stat label="Last synchronized" value={lastSynced ? formatDate(lastSynced) : "Never"} />
           <Stat label="Latest commit" value={latestCommit ? shortSha(latestCommit.sha) : loading ? "…" : "—"} detail={latestCommit?.message.split("\n")[0]} />
@@ -544,13 +814,279 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
       {isConnected && data.checkRuns.length ? (
         <div className="border-t border-line p-5">
           <p className="label">Checks on {project.defaultBranch}</p>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {data.checkRuns.map((check) => <CheckItem key={check.id} check={check} />)}
           </ul>
         </div>
       ) : null}
+
+      {/* What this project develops, and who develops it, both belong with
+          the project rather than on other pages: the repository picker first
+          shipped only on Connections, and assignments only in a diagnostics
+          drawer. */}
+      <ProjectRepository
+        projectId={project.id}
+        projectName={project.name}
+        currentRepository={project.githubRepository}
+        currentRepositoryId={project.githubRepositoryId}
+        connections={connections}
+        onChanged={onChanged}
+      />
+
+      <ProjectBots projectId={project.id} projectName={project.name} />
     </Card>
   );
+}
+
+/**
+ * The design's view switcher. All Projects and Archived are this console's
+ * two real filters; My Projects is its sibling page. The design's Starred tab
+ * has no starring model behind it and is deliberately absent.
+ */
+function ProjectTabs({ active }: { active: "all" | "archived" }) {
+  const tabs = [
+    { key: "all", label: "All Projects", href: "/solutions/projects" },
+    { key: "mine", label: "My Projects", href: "/solutions/myprojects" },
+    { key: "archived", label: "Archived", href: "/solutions/projects?filter=archived" },
+  ] as const;
+  return (
+    <nav aria-label="Project views" className="flex flex-wrap gap-1 border-b border-line">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.key}
+          href={tab.href}
+          aria-current={tab.key === active ? "page" : undefined}
+          className={cn(
+            "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            tab.key === active
+              ? "border-[var(--accent)] text-foreground"
+              : "border-transparent text-muted hover:text-foreground",
+          )}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function DialogShell({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      <div className="relative w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn btn-secondary btn-sm absolute right-4 top-4 size-9 px-0"
+          aria-label="Close"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Name and description, bounded exactly like the create form. */
+export function ProjectEditDialog({
+  project,
+  onClose,
+  onSaved,
+}: {
+  project: Project;
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be updated.");
+      onClose();
+      await onSaved();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "The project could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DialogShell label={`Edit ${project.name}`} onClose={onClose}>
+      <h2 className="text-lg font-semibold text-foreground">Edit project</h2>
+      <p className="mt-1 text-sm text-muted">
+        The repository link, history, and status stay exactly as they are.
+      </p>
+      <form onSubmit={save} className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="edit-project-name" className="field-label">Name</label>
+          <input
+            id="edit-project-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            minLength={1}
+            maxLength={160}
+            className="input"
+          />
+        </div>
+        <div>
+          <label htmlFor="edit-project-description" className="field-label">
+            Description <span className="font-normal text-faint">(optional)</span>
+          </label>
+          <input
+            id="edit-project-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={2000}
+            className="input"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || !name.trim()} className="btn btn-primary btn-sm">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
+            Save changes
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        {error ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
+      </form>
+    </DialogShell>
+  );
+}
+
+/**
+ * Archive is the delete that keeps history: the database requires a reason,
+ * and the dialog says what survives before anything happens.
+ */
+export function ProjectArchiveDialog({
+  project,
+  onClose,
+  onArchived,
+}: {
+  project: Project;
+  onClose: () => void;
+  onArchived: () => Promise<void> | void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function archive(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/portfolio/controls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive", projectId: project.id, reason: reason.trim() }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be archived.");
+      onClose();
+      await onArchived();
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : "The project could not be archived.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DialogShell label={`Archive ${project.name}`} onClose={onClose}>
+      <h2 className="text-lg font-semibold text-foreground">Archive {project.name}</h2>
+      <p className="mt-1 text-sm text-muted">
+        Archiving stops new work. Every run, report, and activity record is kept, and you can
+        unarchive it from the Archived view at any time. Nothing is deleted.
+      </p>
+      <form onSubmit={archive} className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="archive-project-reason" className="field-label">Why archive it?</label>
+          <input
+            id="archive-project-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            required
+            minLength={1}
+            maxLength={500}
+            className="input"
+            placeholder="Superseded by the new repository"
+          />
+          <span className="field-hint">Recorded in the audit trail with the transition.</span>
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || !reason.trim()} className="btn btn-primary btn-sm">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
+            Archive project
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        {error ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
+      </form>
+    </DialogShell>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail }: { icon: typeof FolderKanban; label: string; value: string; detail?: string }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 shrink-0 text-faint" aria-hidden="true" />
+        <p className="text-sm text-faint">{label}</p>
+      </div>
+      <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
+      {detail ? <p className="mt-0.5 text-xs text-faint">{detail}</p> : null}
+    </Card>
+  );
+}
+
+/**
+ * Last run and success rate for one project, from the live runs list. Only
+ * succeeded and failed carry a verdict; queued, running, and cancelled runs
+ * are excluded from the rate the same way cancelled checks are excluded from
+ * "failing" — no verdict is not a verdict.
+ */
+function projectRunFacts(runs: RunSummary[], projectId: string) {
+  const own = runs.filter((run) => run.project?.id === projectId);
+  const latest = own.reduce<RunSummary | null>(
+    (best, run) => (!best || Date.parse(run.createdAt) > Date.parse(best.createdAt) ? run : best),
+    null,
+  );
+  const succeeded = own.filter((run) => run.status === "succeeded").length;
+  const failed = own.filter((run) => run.status === "failed").length;
+  const finished = succeeded + failed;
+  return {
+    latest,
+    finished,
+    successRate: finished ? Math.round((succeeded / finished) * 100) : null,
+  };
+}
+
+function formatStatusWord(value: string) {
+  const spaced = value.replaceAll("_", " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function Stat({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail?: string; tone?: "neutral" | "safe" | "warning" | "danger" }) {
@@ -679,4 +1215,5 @@ function formatMergeability(value: PullRequest["mergeability"]) {
   if (value === "conflicting") return "Conflicting";
   return "Unknown";
 }
-function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+/** Shared, and safe: an unparseable time renders a dash, not a thrown page. */
+const formatDate = formatDateTime;

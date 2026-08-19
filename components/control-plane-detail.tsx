@@ -97,7 +97,7 @@ export function ControlPlaneDetail<Item>({
 
 export function DetailFacts({ facts }: { facts: Array<{ label: string; value: React.ReactNode }> }) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {facts.map((fact) => (
         <div key={fact.label} className="card-inset min-w-0 p-3">
           <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-faint">{fact.label}</dt>

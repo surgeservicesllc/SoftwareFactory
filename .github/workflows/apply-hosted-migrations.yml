@@ -26,14 +26,19 @@ on:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
           applies only the idempotent broker migrations
-          (20260816000400 through 001500) and records them in history —
-          the surgical path when the full push is blocked by ledger drift.
+          (20260816000400 through 20260819000600) and records them in history;
+          "project-controls" applies the 20260815 range plus the two run-review
+          files, which is what the project detail page and the Runs page need;
+          "probe" changes nothing at all and just reports which objects already
+          exist, because the ledger has proven to understate the live schema.
         required: false
         default: all
         type: choice
         options:
           - all
           - broker-functions
+          - project-controls
+          - probe
 
 permissions:
   contents: read
@@ -168,7 +173,26 @@ jobs:
             supabase/migrations/20260816001200_device_flow_verifying.sql \
             supabase/migrations/20260816001300_replan_never_started_run.sql \
             supabase/migrations/20260816001400_project_repository_picker.sql \
-            supabase/migrations/20260816001500_ai_account_usage_observations.sql
+            supabase/migrations/20260816001500_ai_account_usage_observations.sql \
+            supabase/migrations/20260817000100_project_edit_details.sql \
+            supabase/migrations/20260817000200_run_review_activity_types.sql \
+            supabase/migrations/20260817000300_run_review_and_deletion.sql \
+            supabase/migrations/20260817000400_task_work_lock_leases.sql \
+            supabase/migrations/20260817000500_clear_all_finished_runs.sql \
+            supabase/migrations/20260817000600_owner_operated_safety_controls.sql \
+            supabase/migrations/20260817000700_bot_assignment_configuration.sql \
+            supabase/migrations/20260817000800_custom_pipeline_templates.sql \
+            supabase/migrations/20260817000900_run_and_report_lifecycle_types.sql \
+            supabase/migrations/20260817001000_archive_runs_and_clear_reports.sql \
+            supabase/migrations/20260817001100_assignment_model_and_effort.sql \
+            supabase/migrations/20260818000100_removable_accounts_keep_usage_evidence.sql \
+            supabase/migrations/20260818000200_seed_standard_model_catalogue.sql \
+            supabase/migrations/20260819000100_graph_worker_execution.sql \
+            supabase/migrations/20260819000200_replant_exhausted_graph.sql \
+            supabase/migrations/20260819000300_tolerant_fan_in.sql \
+            supabase/migrations/20260819000400_list_graph_runs.sql \
+            supabase/migrations/20260819000500_replant_with_room_to_work.sql \
+            supabase/migrations/20260819000600_tolerant_fan_ins_for_planted_copy.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -192,16 +216,463 @@ jobs:
           repair 20260816001300
           repair 20260816001400
           repair 20260816001500
+          repair 20260817000100
+          repair 20260817000200
+          repair 20260817000300
+          repair 20260817000400
+          repair 20260817000500
+          repair 20260817000600
+          repair 20260817000700
+          repair 20260817000800
+          repair 20260817000900
+          repair 20260817001000
+          repair 20260817001100
+          repair 20260818000100
+          repair 20260818000200
+          repair 20260819000100
+          repair 20260819000200
+          repair 20260819000300
+          repair 20260819000400
+          repair 20260819000500
+          repair 20260819000600
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Broker function migrations applied, recorded, and the API schema cache reloaded."
 
+      - name: Report what the database already has (scope=probe)
+        # Read-only, and the only honest basis for an apply decision.
+        #
+        # Run 32068091179 proved the ledger understates production: it listed
+        # the whole 20260815 range as unapplied, and applying it found the enum
+        # labels and organizations.maximum_concurrent_runs already present —
+        # live DDL with no history row. Run 32103778884 then proved the ledger
+        # is not even a contiguous prefix: it is missing 19 versions in the
+        # middle while carrying every row of the 20260817 range above them.
+        #
+        # The first query is the one that decides what to do. It names the
+        # marker object each ledger-absent migration introduces and prints a
+        # `present` boolean per version, so an absent object is visible as `f`
+        # rather than as a row that simply never appears — the flaw in the
+        # older query, which listed only what existed and so could not tell
+        # "missing" apart from "not asked about".
+        #
+        # present = t  ->  the DDL is live; repair the history row, do not re-run the file.
+        # present = f  ->  the file has genuinely not run; applying it is real DDL.
+        #
+        # Two of the nineteen only replace an existing function, so existence
+        # proves nothing about them. Those are probed by a substring of the
+        # function body that the migration introduced.
+        if: ${{ inputs.scope == 'probe' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            with expected(version, kind, object, marker) as (values
+              ('20260814002500', 'table',    'provider_credentials',                 null),
+              ('20260814002600', 'function', 'store_provider_credential',            null),
+              ('20260815000200', 'table',    'scheduling_decisions',                 null),
+              ('20260815000300', 'function', 'portfolio_capacity_verdict',           null),
+              ('20260815000400', 'body',     'plan_phase1c_task_and_run',            'agent.project_id = new.project_id'),
+              ('20260815000500', 'function', 'breaker_cooldown_seconds',             null),
+              ('20260815000600', 'function', 'portfolio_scheduling_queue',           null),
+              ('20260815000800', 'body',     'generate_operations_report',           'phase1e-operations-v2'),
+              ('20260815000900', 'function', 'refuse_project_deletion',              null),
+              ('20260815001000', 'function', 'declare_cross_project_dependency',     null),
+              ('20260815001100', 'table',    'connection_routing_decisions',         null),
+              ('20260815001200', 'table',    'improvement_ledger',                   null),
+              ('20260815001300', 'function', 'capture_improvement_baseline',         null),
+              ('20260815001400', 'function', 'audit_factory_health',                 null),
+              ('20260815001500', 'function', 'detect_factory_improvements',          null),
+              ('20260815001600', 'function', 'propose_improvements_from_detections', null),
+              ('20260816000100', 'table',    'ai_accounts',                          null),
+              ('20260816000200', 'function', 'list_ai_accounts_for_verification',    null),
+              ('20260816000300', 'function', 'find_open_ai_auth_session',            null)
+            )
+            select expected.version,
+                   expected.kind,
+                   expected.object,
+                   case expected.kind
+                     when 'table' then exists (
+                       select 1 from pg_class relation
+                         join pg_namespace space on space.oid = relation.relnamespace
+                        where space.nspname = 'public'
+                          and relation.relkind = 'r'
+                          and relation.relname = expected.object)
+                     when 'function' then exists (
+                       select 1 from pg_proc routine
+                         join pg_namespace space on space.oid = routine.pronamespace
+                        where space.nspname = 'public'
+                          and routine.proname = expected.object)
+                     else exists (
+                       select 1 from pg_proc routine
+                         join pg_namespace space on space.oid = routine.pronamespace
+                        where space.nspname = 'public'
+                          and routine.proname = expected.object
+                          and strpos(pg_get_functiondef(routine.oid), expected.marker) > 0)
+                   end as present
+              from expected
+             order by expected.version;"
+          echo "present = t: the DDL is live, so repair the history row rather than re-running the file."
+          echo "present = f: that migration has genuinely not run."
+          echo ""
+          echo "Ownership and grants for the AI-account section, which is where a 42501 comes from."
+          echo "A SECURITY DEFINER function runs as its owner: if the function and the tables it"
+          echo "writes were applied by different roles, the function can lack privileges on them"
+          echo "and the console reports 'permission denied for table ...' as a bare 42501."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select 'function' as kind,
+                   routine.proname as name,
+                   pg_get_userbyid(routine.proowner) as owner,
+                   routine.prosecdef as security_definer,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in (
+                 'remove_ai_account','disconnect_ai_account','rename_ai_account',
+                 'create_ai_account','can_manage_organization','has_organization_role')
+            union all
+            select 'table',
+                   relation.relname,
+                   pg_get_userbyid(relation.relowner),
+                   relation.relrowsecurity and relation.relforcerowsecurity,
+                   null
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relkind = 'r'
+               and relation.relname in (
+                 'ai_accounts','ai_auth_sessions','provider_credentials',
+                 'activity_events','bots')
+            order by 1, 2;"
+          echo "For a table row the boolean column is FORCE row level security, not execute."
+          echo "Every function above should share one owner with every table above."
+          echo ""
+          echo "Does the owner bypass RLS, and can a definer function write an audit row at all?"
+          echo "FORCE row level security subjects the table owner to its own policies, and only a"
+          echo "superuser or a BYPASSRLS role escapes that. activity_events carries exactly one"
+          echo "policy and it is SELECT, so an owner that does not bypass cannot insert an audit"
+          echo "row - which is the last statement of remove_ai_account, and a 42501."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select rolname, rolsuper, rolbypassrls
+              from pg_roles
+             where rolname in ('postgres', 'authenticated', 'service_role')
+             order by rolname;"
+          cat > /tmp/audit-write-probe.sql <<'PROBE_SQL'
+          do $probe$
+          declare
+            v_org uuid;
+          begin
+            select id into v_org from public.organizations limit 1;
+            if v_org is null then
+              raise notice 'no organization to write a probe row against';
+              return;
+            end if;
+            begin
+              insert into public.activity_events
+                (organization_id, event_type, entity_type, description)
+              values (v_org, 'ai_account.changed', 'ai_account', 'probe row, deleted immediately');
+              delete from public.activity_events where description = 'probe row, deleted immediately';
+              raise notice 'activity_events insert as %: OK, probe row deleted', current_user;
+            exception when others then
+              raise notice 'activity_events insert as %: % %', current_user, sqlstate, sqlerrm;
+            end;
+          end
+          $probe$;
+          PROBE_SQL
+          psql "$DB_URL" -q -f /tmp/audit-write-probe.sql
+          echo ""
+          echo "And the call itself, as the owner would make it, inside a transaction that is"
+          echo "rolled back whatever happens. This reports the SQLSTATE and message the console"
+          echo "receives, which is the one fact none of the queries above can produce."
+          cat > /tmp/remove-account-probe.sql <<'REMOVE_SQL'
+          begin;
+          do $probe$
+          declare
+            v_org uuid;
+            v_owner uuid;
+            v_account uuid;
+            v_result boolean;
+            v_uid uuid;
+            v_can boolean;
+            v_member record;
+          begin
+            /*
+             * The first attempt picked the earliest owner membership and found
+             * an organization with no accounts at all — the definitive call
+             * never ran. Start from the accounts instead: the organization that
+             * holds one, joined to an owner OF THAT organization, is the exact
+             * shape the console's failing request has.
+             */
+            select a.organization_id, m.user_id, a.id
+              into v_org, v_owner, v_account
+              from public.ai_accounts a
+              join public.organization_members m
+                on m.organization_id = a.organization_id and m.role = 'owner'
+             order by a.created_at
+             limit 1;
+            if v_account is null then
+              raise notice 'no AI account with an owner membership anywhere — nothing to test';
+              return;
+            end if;
+            raise notice 'testing org % account % as user %', v_org, v_account, v_owner;
+
+            for v_member in
+              select m.user_id, m.role from public.organization_members m
+               where m.organization_id = v_org order by m.created_at
+            loop
+              raise notice '  member % role %', v_member.user_id, v_member.role;
+            end loop;
+
+            perform set_config('request.jwt.claim.sub', v_owner::text, true);
+            perform set_config('request.jwt.claims',
+              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
+            set local role authenticated;
+
+            /* Whether the identity plumbing itself resolves under this role is
+               half the diagnosis: a NULL here means the probe's JWT emulation
+               (not production) is what any refusal below is measuring. */
+            begin
+              select auth.uid() into v_uid;
+              raise notice 'auth.uid() under authenticated: %', coalesce(v_uid::text, 'NULL');
+            exception when others then
+              raise notice 'auth.uid() raised: % %', sqlstate, sqlerrm;
+            end;
+            begin
+              select public.can_manage_organization(v_org) into v_can;
+              raise notice 'can_manage_organization: %', v_can;
+            exception when others then
+              raise notice 'can_manage_organization raised: % %', sqlstate, sqlerrm;
+            end;
+
+            begin
+              select public.remove_ai_account(v_org, v_account) into v_result;
+              raise notice 'remove_ai_account as owner: returned % (rolled back)', v_result;
+            exception when others then
+              raise notice 'remove_ai_account as owner: % %', sqlstate, sqlerrm;
+            end;
+            reset role;
+          end
+          $probe$;
+          rollback;
+          REMOVE_SQL
+          psql "$DB_URL" -q -f /tmp/remove-account-probe.sql
+          echo ""
+          echo "Bot creation, the same way: the console's Create Bot ends at register_bot"
+          echo "through ensureProviderBot, which swallows every database error into a"
+          echo "'skipped' the route answers 200 for. This calls register_bot as the owner"
+          echo "and reports what actually happens, rolled back either way."
+          cat > /tmp/register-bot-probe.sql <<'BOT_SQL'
+          begin;
+          do $probe$
+          declare
+            v_org uuid;
+            v_owner uuid;
+            v_row record;
+            v_count integer;
+          begin
+            select a.organization_id, m.user_id
+              into v_org, v_owner
+              from public.ai_accounts a
+              join public.organization_members m
+                on m.organization_id = a.organization_id and m.role = 'owner'
+             order by a.created_at
+             limit 1;
+            if v_org is null then
+              raise notice 'no organization with accounts to test bot creation in';
+              return;
+            end if;
+
+            select count(*) into v_count from public.bots b where b.organization_id = v_org;
+            raise notice 'org % holds % bot rows', v_org, v_count;
+
+            perform set_config('request.jwt.claim.sub', v_owner::text, true);
+            perform set_config('request.jwt.claims',
+              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
+            set local role authenticated;
+
+            begin
+              select * into v_row from public.register_bot(
+                v_org, 'Probe Bot', 'anthropic'::public.bot_provider, 'claude-opus-5',
+                'SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN', null,
+                'Probe row, rolled back with this transaction.'
+              );
+              raise notice 'register_bot as owner: created % (rolled back)', v_row.id;
+            exception when others then
+              raise notice 'register_bot as owner: % %', sqlstate, sqlerrm;
+            end;
+            reset role;
+          end
+          $probe$;
+          rollback;
+          BOT_SQL
+          psql "$DB_URL" -q -f /tmp/register-bot-probe.sql
+          echo ""
+          echo "The Agents page's chain: per organization, how many logical agents and"
+          echo "enabled model configurations exist, and whether assigning one to an agent"
+          echo "works as the owner — rolled back either way."
+          cat > /tmp/agent-assignment-probe.sql <<'AGENT_SQL'
+          begin;
+          do $probe$
+          declare
+            v_org uuid;
+            v_owner uuid;
+            v_agent uuid;
+            v_model text;
+            v_row record;
+            v_counts record;
+          begin
+            for v_counts in
+              select o.id,
+                     (select count(*) from public.agents a where a.organization_id = o.id) as agents,
+                     (select count(*) from public.provider_model_configurations c
+                       where c.organization_id = o.id and c.enabled) as enabled_models
+                from public.organizations o
+               order by o.created_at
+            loop
+              raise notice 'org % holds % agents, % enabled model configurations',
+                v_counts.id, v_counts.agents, v_counts.enabled_models;
+            end loop;
+
+            select a.organization_id, a.id, m.user_id
+              into v_org, v_agent, v_owner
+              from public.agents a
+              join public.organization_members m
+                on m.organization_id = a.organization_id and m.role = 'owner'
+             order by a.created_at
+             limit 1;
+            if v_agent is null then
+              raise notice 'no agent with an owner membership anywhere - nothing to test';
+              return;
+            end if;
+            select c.model into v_model
+              from public.provider_model_configurations c
+             where c.organization_id = v_org
+               and c.provider = 'anthropic'::public.connection_provider
+               and c.enabled
+             order by c.model
+             limit 1;
+            if v_model is null then
+              raise notice 'org % has no enabled anthropic model to assign', v_org;
+              return;
+            end if;
+
+            perform set_config('request.jwt.claim.sub', v_owner::text, true);
+            perform set_config('request.jwt.claims',
+              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
+            set local role authenticated;
+            begin
+              select * into v_row from public.set_agent_provider_assignment(v_agent, 'anthropic', v_model);
+              raise notice 'set_agent_provider_assignment as owner: agent % now % / % (rolled back)',
+                v_row.id, v_row.provider, v_row.model;
+            exception when others then
+              raise notice 'set_agent_provider_assignment as owner: % %', sqlstate, sqlerrm;
+            end;
+            reset role;
+          end
+          $probe$;
+          rollback;
+          AGENT_SQL
+          psql "$DB_URL" -q -f /tmp/agent-assignment-probe.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select 'column' as kind, table_name || '.' || column_name as object
+              from information_schema.columns
+             where table_schema = 'public'
+               and (table_name, column_name) in (
+                 ('projects','engineering_priority'), ('projects','strategic_focus'),
+                 ('projects','engineering_paused'), ('projects','engineering_pause_reason'),
+                 ('projects','maximum_concurrent_runs'),
+                 ('organizations','maximum_concurrent_runs'),
+                 ('agent_runs','review_status'), ('agent_runs','review_note'))
+            union all
+            select 'table', c.relname from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+               and c.relname in ('scheduling_decisions','provider_capacity_limits')
+            union all
+            select 'function', p.proname from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in (
+                 'archive_project','unarchive_project','update_project_details',
+                 'set_project_engineering_priority','set_project_engineering_pause',
+                 'focus_portfolio_engineering','set_portfolio_capacity_limits',
+                 'update_agent_run_review','delete_agent_run')
+            order by 1, 2;"
+
+      - name: Apply the project control migrations surgically (scope=project-controls)
+        # The 20260815 range plus the two run-review files: everything the
+        # project detail page's priority, focus, stop and cancel controls need,
+        # and the Runs page's review and delete.
+        #
+        # Exactly the three files run 32068262957's probe showed missing, and
+        # no others.
+        #
+        # The probe is why this list is short. The ledger says the whole
+        # 20260815 range is outstanding; the database says otherwise — every
+        # project scheduling column, and set_project_engineering_pause,
+        # set_project_engineering_priority, focus_portfolio_engineering,
+        # set_portfolio_capacity_limits and update_project_details, are already
+        # live. Applying that range re-runs DDL for objects that exist, which
+        # is exactly how run 32068091179 failed.
+        #
+        # Missing, and therefore here: archive_project and unarchive_project —
+        # the project detail page's cancel and restore — the run review and
+        # deletion pair, and run archiving with the report lifecycle. Every file
+        # is idempotent: enum additions are `add value if not exists`, functions
+        # are `create or replace`, and the two column-adding files use
+        # `add column if not exists` with their constraints dropped before they
+        # are added.
+        #
+        # 20260817001000 also drops and recreates list_agent_runs to add
+        # p_include_archived. The parameter has a default, so the existing
+        # two-argument call sites keep working through the swap.
+        if: ${{ inputs.scope == 'project-controls' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          # Each file is applied and immediately recorded, so an interruption
+          # leaves a ledger that is behind rather than one that lies.
+          for FILE in \
+            supabase/migrations/20260815000700_project_archive_operation.sql \
+            supabase/migrations/20260817000200_run_review_activity_types.sql \
+            supabase/migrations/20260817000300_run_review_and_deletion.sql \
+            supabase/migrations/20260817000900_run_and_report_lifecycle_types.sql \
+            supabase/migrations/20260817001000_archive_runs_and_clear_reports.sql
+          do
+            VERSION=$(basename "$FILE" | cut -d_ -f1)
+            echo "Applying ${FILE}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+            repair "$VERSION"
+          done
+
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
         # in a non-interactive shell it is simply unread.
-        if: ${{ inputs.scope != 'broker-functions' }}
+        # Named rather than "everything except broker-functions". The negative
+        # form meant every scope added later fell through into a full
+        # production push: run 32068262957 asked only for a read-only probe and
+        # reached this step anyway. `db push` refused to act — it stops rather
+        # than insert migrations before the remote's last one — so nothing was
+        # applied, but the guard was one CLI safety check away from mattering.
+        if: ${{ inputs.scope == 'all' }}
         run: |
           if [ "$MODE" = "token" ]; then
             echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"

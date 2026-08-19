@@ -3,13 +3,155 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 35**, listed in the measured section below. The repository total is 99 migration
-files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
-outstanding. (Newest two: `20260816001400_project_repository_picker` — the Connections console's
-per-project repository picker, two definer functions only — and `20260816001500_ai_account_usage_observations`
-— the Bot Manager's usage evidence, ADR-076; until it is applied, production records no usage
-observations and the panel truthfully says "no usage recorded yet".) (The guard test derives both numbers from the migration directory and this document's
-stated position, and fails when they drift.)
+**The current total is 19**, named in the list below — as measured. One further migration,
+`20260816001600_phase2c_resource_reservations`, was added locally *after* that probe run and is
+also unhosted, so the next probe should return twenty. It is deliberately not appended to the
+list below: that list is a measurement, and adding an unmeasured version to it would turn
+evidence into assertion. The repository total is 118 migration
+files. Those two numbers no longer stand in the old relationship, and the reason matters: the
+hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
+rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
+false, and every apply decision made from one has been wrong.
+(The guard test derives the repository total from the migration directory, checks that each
+version named below is a real file, and checks that the probe in
+`.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
+probe cannot drift apart.)
+
+## The ledger, measured — 2026-08-18 05:40Z, run `32103778884` (`scope=probe`, read-only)
+
+This supersedes every count and every high-water mark stated below it. The run mutated nothing:
+the three apply steps were skipped by their `if:` conditions, and the log shows it.
+
+**Absent from the hosted ledger — 19 versions:**
+
+| Version | Migration | Marker object the probe asks about |
+|---|---|---|
+| `20260814002500` | provider_credential_vault | table `provider_credentials` |
+| `20260814002600` | store_provider_credential | function `store_provider_credential` |
+| `20260815000200` | phase2e_portfolio_scheduling | table `scheduling_decisions` |
+| `20260815000300` | phase2e_portfolio_scheduler | function `portfolio_capacity_verdict` |
+| `20260815000400` | phase2e_project_scoped_agents | body of `plan_phase1c_task_and_run` |
+| `20260815000500` | phase2e_breaker_aware_scheduling | function `breaker_cooldown_seconds` |
+| `20260815000600` | phase2e_portfolio_visibility | function `portfolio_scheduling_queue` |
+| `20260815000800` | report_per_project_view | body of `generate_operations_report` |
+| `20260815000900` | guard_project_deletion | function `refuse_project_deletion` |
+| `20260815001000` | cross_project_dependencies | function `declare_cross_project_dependency` |
+| `20260815001100` | connection_routing_decisions | table `connection_routing_decisions` |
+| `20260815001200` | improvement_ledger | table `improvement_ledger` |
+| `20260815001300` | improvement_measurement | function `capture_improvement_baseline` |
+| `20260815001400` | factory_self_audit | function `audit_factory_health` |
+| `20260815001500` | factory_detectors | function `detect_factory_improvements` |
+| `20260815001600` | detector_intake | function `propose_improvements_from_detections` |
+| `20260816000100` | ai_accounts_auth_broker | table `ai_accounts` |
+| `20260816000200` | ai_account_verification | function `list_ai_accounts_for_verification` |
+| `20260816000300` | resume_ai_auth_session | function `find_open_ai_auth_session` |
+
+**Present in the hosted ledger:** every other local version, including the whole
+`20260817` range — `000100` through `001100`. So the run-review controls, the owner-operated
+safety controls, `20260817000700_bot_assignment_configuration` (the Assign Bots wizard's
+configuration columns and `assign_bots_to_project`), the custom pipeline templates and the
+per-posting model/effort override are **applied on production**.
+`20260818000100_removable_accounts_keep_usage_evidence` (drops the usage table's
+account cascade so `remove_ai_account` stops dying against the append-only
+trigger — probe run 32188102707's 42501) was applied by `scope=broker-functions`
+run `32191182958` and verified by probe run `32191381794` (the rolled-back
+removal returned `t`). `20260818000200_seed_standard_model_catalogue` (the per-organization
+standard model catalogue) was applied by run `32199155823` and measured by
+probe run `32199285229` — both organizations hold 8 enabled model
+configurations, and a rolled-back `set_agent_provider_assignment` as the
+impersonated owner succeeded. `20260819000100_graph_worker_execution` (the
+graph executor's service-role claim/persist boundary: `claim_planned_graph`,
+`record_node_state_as_worker`, `record_graph_artifact_as_worker`,
+`complete_graph_run_as_worker` — all create-or-replace plus grants,
+idempotent) was applied by `scope=broker-functions` run `32208528984` and
+exercised by the first two real worker dispatches (runs `32208699123`,
+`32208975669` — claims, parallel dispatch, containment, and honest FAILED
+closes all recorded on production). Its bounded re-claim revision (applied by
+run `32209731806`) was then production-proven by worker run `32209893742`:
+both failed-only graphs were re-claimed to their three-run cap, and every
+node failed on a real provider answer — a session limit — which exposed that
+capacity refusals were spending convergence attempts. The current revision
+therefore closes capacity-voided runs as CANCELLED (retryable, uncounted,
+with a total-run ceiling of 10), and `20260819000200_replant_exhausted_graph`
+re-plants one copy of the owner's exhausted first-day readiness graph (fixed
+id, so replays are no-ops forever) for the capacity-aware worker to claim
+after the limit resets. Worker run `32211229999` then production-verified
+the capacity semantics end to end: the re-planted graph was claimed, every
+refusal was classified, the run closed CANCELLED, and the drain stopped —
+the graph keeps its chances. `20260819000300_tolerant_fan_in` adds the
+per-node `tolerates_partial_inputs` bit (guarded ALTER) and re-declares
+`create_graph_from_plan` to persist it (applied by run `32212056032`);
+`20260819000400_list_graph_runs` adds the member-facing run read and widens
+the node provider check for deterministic attributions (applied by run
+`32212821411`); the stale-run reclaim revision of `20260819000100` was
+applied by run `32213217318`. The post-reset live-proof dispatch (worker
+run `32228988434`) then recorded **the first real production node
+success**: on graph run `e51c57a5-…` the rollback inspector completed
+through the CLI with its artifact, the run closed PARTIAL, and every other
+failure was the worker's old 8-turn ceiling — fixed in code (24 turns) —
+which is why `20260819000500_replant_with_room_to_work` re-plants one final
+fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
+All of these re-apply through the same replay-safe `scope=broker-functions`
+path. Earlier revisions of this
+document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
+high-water mark and is withdrawn.
+
+**And the ledger still understates the schema.** The same run's object probe returned 19 of 19
+present, among them `scheduling_decisions`, `provider_capacity_limits`,
+`projects.engineering_priority`, `projects.strategic_focus` and
+`set_project_engineering_priority` — all owned by `20260815000200`, which has no ledger row. That
+is unledgered DDL: live schema with no history behind it.
+
+### What follows from that
+
+- The gap is, at least in part, **bookkeeping rather than missing schema**. Where the probe shows
+  a marker present, the correct action is `migration repair --status applied <version>` — record
+  the history that is already true. Re-running the file would be the wrong move.
+- Where the probe shows a marker **absent**, that file genuinely has not run and applying it is
+  real DDL against production.
+- The probe now reports one row per absent version with a `present` boolean, so it distinguishes
+  "absent" from "never asked". The older query printed only what existed, which is why the two
+  cases looked alike.
+- **Nobody has run the mutating scopes on the strength of this measurement.** Only `scope=probe`
+  was run. `AGENTS.md` puts RED actions behind explicit owner approval in Phase 1, and the
+  approval section below requires a fresh exact approval per apply — so the repair-versus-apply
+  decision above is written down for the owner, not acted on.
+
+### The next run, for whoever executes it
+
+1. `scope=probe` again — it now covers all 19 and prints `f` for anything truly missing.
+2. For each version whose marker came back `t`: `migration repair --status applied <version>`.
+3. For each version whose marker came back `f`: apply that file, then record it.
+
+
+> ## Probe before you apply — 2026-08-17 20:5xZ (supersedes every count below as a basis for action)
+>
+> **The ledger understates the live schema, and every apply decision made from
+> it alone has been wrong.** Two runs settled this:
+>
+> - Run `32068091179` applied the `20260815` range the ledger called
+>   outstanding, and stopped at the second file: the enum labels and
+>   `organizations.maximum_concurrent_runs` already existed. Nothing was
+>   damaged — the failing statement was an `ALTER TABLE`, which is atomic — but
+>   the premise was false.
+> - Run `32068262957` ran the new read-only `scope=probe` and printed what
+>   actually exists. Of the objects the project controls need, **13 of 19 were
+>   already live** while the ledger listed their whole range as unapplied.
+>
+> The method that works is therefore: **`scope=probe` first, apply only what it
+> reports missing, and record each file as it lands.** Run `32068584897` did
+> exactly that for the six genuinely absent objects — `archive_project`,
+> `unarchive_project`, `update_agent_run_review`, `delete_agent_run`, and the
+> two `agent_runs.review_*` columns — and a confirming probe (`32068654691`)
+> shows 19 of 19 present.
+>
+> A full `db push` still cannot be used: it refuses outright, because local
+> files sort before the remote's last migration. That refusal is the CLI
+> protecting production, not a problem to route around with `--include-all`.
+>
+> The counts in the sections below remain a true description of the *ledger*.
+> They are not a description of the database, and should not be used to decide
+> what to apply.
 
 > ## Measured live, 2026-08-16 17:07Z — the first full listing (supersedes every earlier measure)
 >
@@ -89,23 +231,6 @@ and none of them is reading this paragraph. `tests/integration/hosted-runbook-co
 derives both from the migration directory and fails when they drift, so the next person to add a
 migration is told to update this sentence rather than discovering later that it lied. The tables
 below are not machine-checked and can still fall behind the totals.
-
-> ## Reconciled against hosted, 2026-08-15 — this supersedes every count below
->
-> The ledger was repaired and reconciled. `20260814000210` had been applied only
-> partially — far enough to create `resource_breakers`, which is why re-running it raised
-> `42P07` instead of doing nothing — and `scripts/repair-20260814000210.sql` completed it
-> idempotently. `scripts/hosted-ledger-record-verified.sql` then recorded only those
-> versions whose every object was verified present.
->
-> **The ledger now holds 65 rows and ends at `20260814002300`.** `scripts/hosted-schema-audit.mts`
-> reports **0 outstanding and 0 indeterminate** against it. **Nine** migrations are unapplied:
-> `20260814002400`, `20260814002500`, the six Phase 2E files `20260815000100`-`20260815000600`,
-> and `20260815000700_phase2c_resource_reservations.sql`.
->
-> The tables below that list individual migrations as unhosted were written against the older
-> ledger positions. Most of what they name is now applied. Re-list before trusting any of them —
-> which is the advice this runbook has given twice and been right about twice.
 
 > ## Measured against hosted, 2026-08-14 21:00Z — this section supersedes the table below
 >

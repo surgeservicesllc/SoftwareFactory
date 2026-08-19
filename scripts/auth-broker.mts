@@ -136,12 +136,20 @@ async function main() {
     const usage = await captureUsageForAccounts(store, usageRecorder).catch((error) => {
       const message = error instanceof Error ? error.message : "unexpected error";
       process.stdout.write(`Usage sweep skipped: ${message}\n`);
-      return { measured: 0, unavailable: 0, unsupported: 0, errors: 0 };
+      return { demoted: 0, errors: 0, measured: 0, unavailable: 0, unsupported: 0 };
     });
     if (usage.measured + usage.unavailable + usage.unsupported + usage.errors > 0) {
       process.stdout.write(
         `Usage sweep: ${usage.measured} measured, ${usage.unavailable} unavailable, `
         + `${usage.unsupported} unsupported, ${usage.errors} record error(s).\n`,
+      );
+    }
+    // Demotions are the sweep's only side effect on account state, so they are
+    // reported separately rather than buried in the counts above.
+    if (usage.demoted > 0) {
+      process.stdout.write(
+        `Usage sweep demoted ${usage.demoted} account(s) to needs_reauth: the provider `
+        + `refused their stored credential.\n`,
       );
     }
   };

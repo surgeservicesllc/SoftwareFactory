@@ -30,7 +30,7 @@ export default async function PlatformPage() {
   return (
     <>
       <MarketingSection className="pt-10 sm:pt-14">
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div>
             {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
             <h1 className="mt-5 text-balance text-[38px] font-bold leading-[1.06] tracking-[-0.04em] text-white sm:text-[52px]">
@@ -85,7 +85,7 @@ export default async function PlatformPage() {
           <h2 className="text-center text-[22px] font-semibold tracking-[-0.03em] text-white sm:text-[26px]">
             The AI Software Factory Platform
           </h2>
-          <ol className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <ol className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             {lifecycle.map((stage, index) => (
               <li key={stage.title} className="relative">
                 <div className="h-full rounded-2xl border border-[#1e2839] bg-[#0a0f1a] p-4">
@@ -97,7 +97,7 @@ export default async function PlatformPage() {
                 </div>
                 {index < lifecycle.length - 1 ? (
                   <span
-                    className="absolute -right-3 top-1/2 hidden -translate-y-1/2 text-[#33405a] xl:block"
+                    className="absolute -right-3 top-1/2 hidden -translate-y-1/2 text-[#33405a] 2xl:block"
                     aria-hidden="true"
                   >
                     <ArrowRight className="size-4" />
@@ -114,7 +114,7 @@ export default async function PlatformPage() {
           Built on a Secure, Scalable Foundation
         </h2>
         <SurfacePanel className="mt-6 p-6 sm:p-8">
-          <ul className="grid gap-8 sm:grid-cols-2 xl:grid-cols-6">
+          <ul className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             {foundation.map((item) => (
               <li key={item.title}>
                 <span className={resolveAccent(item.accent).text}>

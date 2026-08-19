@@ -52,3 +52,6 @@ supabase/.temp/
 next-env.d.ts
 
 .vercel
+# Rebuilt on every Playwright run (`harness:build`); never reused, because a
+# reused preview serves a build from whenever it started. See ADR-082.
+tests/harness/dist/

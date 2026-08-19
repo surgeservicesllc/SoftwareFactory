@@ -318,7 +318,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
           </button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Projects monitored"
             value={summary ? String(summary.connectedMonitors) : "—"}
@@ -395,7 +395,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
                     {project.ownerAttentionRequired ? <StatusBadge tone="danger">Owner attention</StatusBadge> : null}
                   </div>
                 </div>
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                   <div className="flex justify-between gap-2 rounded border border-line px-3 py-2">
                     <dt className="text-muted">Connected monitors</dt>
                     <dd className="tabular text-foreground">{project.connectedMonitors}</dd>
@@ -541,7 +541,7 @@ export function OperationsConsole({ authenticated }: { authenticated: boolean })
         )}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="p-5">
           <SectionTitle
             title="Monitors"

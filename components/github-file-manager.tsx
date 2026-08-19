@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { formatDateTime } from "@/lib/format/date";
 import { BlockedState, Card, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -671,7 +672,8 @@ function sortEntries(entries: TreeEntry[]) {
     return left.name.localeCompare(right.name);
   });
 }
-function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+/** Shared, and safe: an unparseable time renders a dash, not a thrown page. */
+const formatDate = formatDateTime;
 
 export function githubSaveIntentFingerprint(intent: {
   baseBranch: string;

@@ -419,7 +419,7 @@ function FleetBoard({
           <StatusBadge tone="neutral">{bench.length} available</StatusBadge>
         </div>
         {bench.length ? (
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {bench.map((bot) => (
               <BenchCard
                 key={bot.id}
@@ -437,7 +437,7 @@ function FleetBoard({
         )}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {fabric.projects.map((project) => (
           <ProjectColumn
             key={project.id}
@@ -470,7 +470,7 @@ function BenchCard({
   return (
     <article className="rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4">
       <BotIdentity bot={bot} />
-      <div className="mt-4 grid gap-2">
+      <div className="mt-4 grid grid-cols-1 gap-2">
         <Field label="Project" htmlFor={`bench-project-${bot.id}`}>
           <select
             id={`bench-project-${bot.id}`}
@@ -612,7 +612,7 @@ function PostingCard({
         </StatusBadge>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Field label="Move to project" htmlFor={`move-${assignment.id}`}>
           <select
             id={`move-${assignment.id}`}
@@ -1371,7 +1371,7 @@ function BotDirectory({
 
         {draft && provider ? (
           <form
-            className="mt-5 grid gap-4 md:grid-cols-2"
+            className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2"
             onSubmit={(event) => {
               event.preventDefault();
               void mutate(
@@ -1530,7 +1530,7 @@ function BotDirectory({
                 <ShieldCheck className="size-4 text-[var(--accent)]" aria-hidden="true" />
                 Registration stores metadata and a secret reference only.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setDraft(null)} className="btn btn-secondary btn-sm">
                   Cancel
                 </button>
@@ -1582,7 +1582,7 @@ function BotRow({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <BotIdentity bot={bot} />
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
             <Metric label="Credential reference" value={bot.credentialRef ?? "None"} mono />
             <Metric
               label="Secret present on server"
@@ -1730,7 +1730,7 @@ function RoleWorkshop({
           </button>
         </div>
 
-        <ul className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {BOT_ROLE_TEMPLATES.map((template) => {
             const adopted = adoptedSlugs.has(template.slug);
             return (
@@ -1783,7 +1783,7 @@ function RoleWorkshop({
             {draft.roleId ? "Edit role" : "Create a role"}
           </h2>
           <form
-            className="mt-5 grid gap-4 md:grid-cols-2"
+            className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2"
             onSubmit={(event) => {
               event.preventDefault();
               saveDraft(draft, `${draft.name.trim()} saved.`);
@@ -1870,7 +1870,7 @@ function RoleWorkshop({
                 className="input"
               />
             </Field>
-            <div className="flex justify-end gap-2 md:col-span-2">
+            <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
               <button type="button" onClick={() => setDraft(null)} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
@@ -2205,16 +2205,21 @@ function SubscriptionQuickConnect({
           additional,
         }),
       });
-      const body = (await response.json()) as { outcome?: string };
+      const body = (await response.json()) as { outcome?: string; reason?: string };
       if (!response.ok) throw new Error();
+      // "skipped" arrives as a 200 with a reason; a phase that says ready
+      // over it is how a finished sign-in ended with no bot and no sentence.
+      if (body.outcome === "skipped") throw new Error(body.reason);
       setReadyBots((count) => count + (body.outcome === "created" ? 1 : 0));
       setConnectedSlots((count) => Math.max(count, slot + 1));
       await onReady();
       setPhase("ready");
-    } catch {
+    } catch (error) {
       setDetail(
-        "You are signed in, but the bot could not be added automatically. "
-        + "The credential is stored — add a bot manually and it will read Ready.",
+        error instanceof Error && error.message
+          ? `You are signed in, but the bot could not be added: ${error.message}`
+          : "You are signed in, but the bot could not be added automatically. "
+            + "The credential is stored — add a bot manually and it will read Ready.",
       );
       setPhase("failed");
     }
@@ -2442,7 +2447,7 @@ function FirstConnectPrompt({
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
           Sign in once and your first bot is ready. No key, no variable name.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SubscriptionQuickConnect providerId="anthropic" purpose="claude" onReady={onFleetChanged} />
           <SubscriptionQuickConnect providerId="openai" purpose="codex" onReady={onFleetChanged} />
         </div>

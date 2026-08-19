@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Layout harness</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      Next inlines `process.env.NEXT_PUBLIC_*` at build time; nothing does that
+      here, so a component reading one threw `process is not defined` and the
+      case rendered an error boundary instead of a layout. The exact values the
+      components branch on are pinned in vite.config.ts; this object is the
+      floor underneath them, so an unlisted read is `undefined` rather than a
+      crash. No real credential belongs here or is needed — the harness answers
+      every request from fixtures.
+    -->
+    <script>
+      window.process = { env: { NODE_ENV: "development" } };
+    </script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

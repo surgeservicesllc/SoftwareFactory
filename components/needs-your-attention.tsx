@@ -8,6 +8,12 @@ import { Card, StatusBadge } from "@/components/ui";
 import { isBrowserSupabaseConfigured } from "@/lib/supabase/browser-config";
 
 type CommandRow = { id: string; prompt: string; risk: string; status: string };
+type RunRow = {
+  id: string;
+  status: string;
+  errorMessage?: string | null;
+  task?: { title?: string | null } | null;
+};
 type ConnectionRow = { id: string; name: string; status: string; statusReason: string | null };
 type IncidentRow = {
   id: string;
@@ -64,11 +70,12 @@ export function NeedsYourAttention({ authenticated }: { authenticated: boolean }
     }
 
     async function load() {
-      const [commandsBody, connectionsBody, workerBody, operationsBody] = await Promise.all([
+      const [commandsBody, connectionsBody, workerBody, operationsBody, runsBody] = await Promise.all([
         readJson<{ commands?: CommandRow[] }>("/api/commands"),
         readJson<{ connections?: ConnectionRow[] }>("/api/github/connections"),
         readJson<{ worker?: { connectionStatus?: string } }>("/api/worker/status"),
         readJson<{ incidents?: IncidentRow[] }>("/api/operations/overview"),
+        readJson<{ runs?: RunRow[] }>("/api/runs"),
       ]);
       if (!active) return;
 
@@ -124,6 +131,36 @@ export function NeedsYourAttention({ authenticated }: { authenticated: boolean }
           what: `GitHub connection "${connection.name}" needs attention`,
           why: connection.statusReason
             ?? "Projects on this connection cannot receive new work until it is restored.",
+        });
+      }
+
+      // Work that failed is the item this area most owes a person. Watching
+      // the owner on 2026-08-16, a command failed three times and the console
+      // said nothing anywhere they were looking: they learned it by asking.
+      // A failure is finished, unattended, and theirs to decide about — retry
+      // or change the request — which is exactly what belongs here.
+      const failedRuns = (runsBody?.runs ?? []).filter((run) => run.status === "failed");
+      if (failedRuns.length === 1) {
+        const run = failedRuns[0]!;
+        found.push({
+          action: "Open Runs",
+          href: "/solutions/runs",
+          id: `run-${run.id}`,
+          tone: "danger",
+          what: `Work failed: ${run.task?.title ?? "an untitled request"}`,
+          // The server already sanitizes this message; showing it saves the
+          // trip into the run just to learn the one thing that matters.
+          why: run.errorMessage
+            ?? "The run stopped before finishing. Its evidence is kept, and it can be retried.",
+        });
+      } else if (failedRuns.length > 1) {
+        found.push({
+          action: "Open Runs",
+          href: "/solutions/runs",
+          id: "runs-failed",
+          tone: "danger",
+          what: `${failedRuns.length} runs failed`,
+          why: "Each keeps its evidence and can be retried from the Runs page.",
         });
       }
 

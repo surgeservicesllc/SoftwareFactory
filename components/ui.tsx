@@ -86,8 +86,9 @@ export function PageHeader({
 export function Card({
   children,
   className,
-}: Readonly<{ children: React.ReactNode; className?: string }>) {
-  return <section className={cn("card", className)}>{children}</section>;
+  id,
+}: Readonly<{ children: React.ReactNode; className?: string; id?: string }>) {
+  return <section id={id} className={cn("card", className)}>{children}</section>;
 }
 
 export function SectionTitle({

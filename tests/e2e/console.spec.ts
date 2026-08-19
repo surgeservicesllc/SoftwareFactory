@@ -1,18 +1,44 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+// The owner's 2026-08-17 structure: top-level destinations with subpage
+// groups that open expanded, then the quick actions. Every entry must stay a
+// real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
-  "Dashboard",
+  "Overview",
+  "AI Factory",
   "Projects",
-  "Bot Manager",
-  "Files",
-  "Agents",
+  "All Projects",
+  "My Projects",
+  "Archived",
+  "Pipelines",
+  "Active",
+  "All Pipelines",
+  "Templates",
   "Backlog",
+  "Bots",
+  "Connect Bot",
+  "My Bots",
+  "Bot Usage",
+  "Bot Activity",
   "Runs",
   "Reports",
-  "Connections",
-  "Activity",
+  "Integrations",
   "Settings",
+  "General",
+  "Bots & Integrations",
+  "Watch",
+  "Operations",
+  "Activity",
+  "Advanced",
+  "Files",
+  "Agents",
+  "Resources",
+  "AgentOS",
+  "Autonomy",
+  "New Project",
+  "Give a bot work",
+  "Import Repository",
 ] as const;
 
 const CONSOLE_ROUTE = "/solutions/projects";
@@ -84,6 +110,15 @@ test("exposes every console destination through accessible navigation", async ({
 
   const navigation = page.getByRole("navigation", { name: /console/i });
   await expect(navigation).toBeVisible();
+
+  // Groups arrive closed, so every destination is reachable rather than
+  // listed. Opening them all is what "reachable" means here — the assertion
+  // below is unchanged, and a destination that no chevron reveals still fails.
+  for (let opened = 0; opened < 20; opened += 1) {
+    const next = navigation.getByRole("button", { name: /expand .* subpages/i }).first();
+    if (await next.count() === 0) break;
+    await next.click();
+  }
 
   for (const destination of consoleNavigation) {
     await expect(

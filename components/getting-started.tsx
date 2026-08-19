@@ -34,6 +34,7 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
   const [state, setState] = useState<State>(() => (canLoad ? "loading" : "signed-out"));
   const [githubConnected, setGithubConnected] = useState(false);
   const [projectConnected, setProjectConnected] = useState(false);
+  const [accountConnected, setAccountConnected] = useState(false);
   const [workerReady, setWorkerReady] = useState(false);
   const [goalGiven, setGoalGiven] = useState(false);
 
@@ -78,6 +79,21 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
         // Leave the GitHub signal as the project-derived value.
       }
 
+      // Signing in a provider account is its own step, and the worker's
+      // connection is not a substitute: a running worker with no account
+      // connected would tick a box the person has not done. This reads the
+      // accounts directly.
+      let account = false;
+      try {
+        const accountsResponse = await fetch("/api/ai-accounts", { cache: "no-store" });
+        if (accountsResponse.ok) {
+          const body = (await accountsResponse.json()) as { accounts?: { status?: string }[] };
+          account = (body.accounts ?? []).some((entry) => entry.status === "connected");
+        }
+      } catch {
+        // No account signal leaves the step unchecked, never errors the guide.
+      }
+
       let worker = false;
       try {
         const workerResponse = await fetch("/api/worker/status", { cache: "no-store" });
@@ -101,6 +117,7 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
       }
 
       setGithubConnected(anyGithub);
+      setAccountConnected(account);
       setProjectConnected(connectedProject);
       setWorkerReady(worker);
       setGoalGiven(goal);
@@ -126,6 +143,17 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
         done: githubConnected,
       },
       {
+        // The step that used to be missing entirely. Connecting Claude or
+        // Codex is what makes a bot possible, and it is the longest part of
+        // first-run setup — leaving it out of the guide meant the one screen
+        // that explains the journey never mentioned it.
+        title: "Connect an AI account",
+        description: "Sign in to Claude or Codex with the account you already use. No API key needed.",
+        href: "/solutions/bot-manager",
+        action: "Connect an account",
+        done: accountConnected,
+      },
+      {
         title: "Add a project",
         description: "Link a repository so the Factory has somewhere to plan, build, and open pull requests.",
         href: "/solutions/projects",
@@ -134,7 +162,7 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
       },
       {
         title: "Check your AI worker",
-        description: "Confirm a Claude or Codex worker is connected and ready to pick up work.",
+        description: "Confirm a worker is connected and ready to pick up the work your bots are given.",
         href: "/solutions/bot-manager",
         action: "Open Bot Manager",
         done: workerReady,
@@ -147,7 +175,7 @@ export function GettingStarted({ authenticated }: { authenticated: boolean }) {
         done: goalGiven,
       },
     ],
-    [githubConnected, projectConnected, workerReady, goalGiven],
+    [githubConnected, accountConnected, projectConnected, workerReady, goalGiven],
   );
 
   const firstOpen = steps.findIndex((step) => !step.done);

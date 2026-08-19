@@ -104,38 +104,62 @@ export function tick(
 
     const deps = dependenciesOf(node.nodeId, edges);
 
-    // BLOCKED counts as fatal, not merely unmet.
-    //
-    // Without it, blocking stopped after one hop: in A -> B -> C with A failed,
-    // B was blocked and C sat PENDING forever, because C's only dependency was
-    // BLOCKED rather than FAILED. The graph then never reported `complete`, and
-    // reported `stalled` instead — which claims something is wrong, when in
-    // fact a failure had simply made a subtree unreachable, the most ordinary
-    // outcome there is. Blocking propagates one hop per tick, reaching a
-    // fixpoint the same way the rest of this function does.
-    const fatal = deps.find((dep) => {
-      const depState = stateOf(dep);
-      return depState === "FAILED" || depState === "CANCELLED" || depState === "BLOCKED";
-    });
-    if (fatal) {
-      const fatalState = stateOf(fatal);
-      blocked.push({
-        nodeId: node.nodeId,
-        because: fatalState === "BLOCKED"
-          // Named differently so a reader can tell the origin of a failure from
-          // the nodes downstream of it, which is the difference between one
-          // thing to investigate and twenty.
-          ? `Dependency ${fatal} is blocked, so this cannot run either.`
-          : `Dependency ${fatal} is ${fatalState}.`,
+    if (node.toleratesPartialInputs === true && deps.length > 0) {
+      // A tolerant fan-in (§14) waits until every dependency has settled —
+      // completed, failed, cancelled, skipped, or blocked in its own right —
+      // then runs with whatever actually completed. Its executor receives
+      // the missing set, so the output states its own incompleteness. It
+      // still refuses to run on nothing: a synthesis with zero surviving
+      // inputs would be invented, not synthesised.
+      const settled = deps.every((dep) => {
+        const depState = stateOf(dep);
+        return isTerminal(depState) || depState === "BLOCKED";
       });
-      continue;
-    }
+      if (!settled) continue;
+      const anyInput = deps.some((dep) => stateOf(dep) === "COMPLETED");
+      if (!anyInput) {
+        blocked.push({
+          nodeId: node.nodeId,
+          because: "Every dependency failed or was cancelled; a tolerant fan-in still needs at least one completed input.",
+        });
+        continue;
+      }
+    } else {
+      // BLOCKED counts as fatal, not merely unmet.
+      //
+      // Without it, blocking stopped after one hop: in a -> b -> c with a
+      // FAILED, b was blocked and c sat PENDING forever, because c's only
+      // dependency was BLOCKED rather than FAILED. The graph then never
+      // reported `complete` and reported `stalled` instead — which claims
+      // something is wrong, when a failure had simply made a subtree
+      // unreachable, the most ordinary outcome there is. Blocking spreads one
+      // hop per tick, reaching a fixpoint the way the rest of this function
+      // does. The tolerant branch above already treats BLOCKED as settled, so
+      // the two agree about what a blocked dependency means.
+      const fatal = deps.find((dep) => {
+        const depState = stateOf(dep);
+        return depState === "FAILED" || depState === "CANCELLED" || depState === "BLOCKED";
+      });
+      if (fatal) {
+        const fatalState = stateOf(fatal);
+        blocked.push({
+          nodeId: node.nodeId,
+          because: fatalState === "BLOCKED"
+            // Named differently so a reader can tell the origin of a failure
+            // from the nodes downstream of it, which is the difference between
+            // one thing to investigate and twenty.
+            ? `Dependency ${fatal} is blocked, so this cannot run either.`
+            : `Dependency ${fatal} is ${fatalState}.`,
+        });
+        continue;
+      }
 
-    const unmet = deps.filter((dep) => {
-      const depState = stateOf(dep);
-      return depState !== "COMPLETED" && depState !== "SKIPPED";
-    });
-    if (unmet.length > 0) continue;
+      const unmet = deps.filter((dep) => {
+        const depState = stateOf(dep);
+        return depState !== "COMPLETED" && depState !== "SKIPPED";
+      });
+      if (unmet.length > 0) continue;
+    }
 
     if (slots <= 0) {
       deferred.push({

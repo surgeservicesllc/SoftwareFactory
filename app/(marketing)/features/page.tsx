@@ -49,7 +49,7 @@ export default async function FeaturesPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-10">
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {pillars.map((pillar) => (
             <li key={pillar.title}>
               <SurfacePanel className="h-full p-5 transition-colors hover:border-[#33405a]">
@@ -67,7 +67,7 @@ export default async function FeaturesPage() {
           title="Capabilities across the whole lifecycle"
           description="Each stage brings its own agents, checks and evidence. Nothing advances without a record of what happened."
         />
-        <ul className="mt-6 grid gap-4 lg:grid-cols-2">
+        <ul className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {lifecycle.map((stage, index) => (
             <li key={stage.title}>
               <SurfacePanel className="flex h-full gap-4 p-5">
@@ -96,7 +96,7 @@ export default async function FeaturesPage() {
           description="Security, data, integrations and scale are platform properties, not add-ons you assemble later."
         />
         <SurfacePanel className="mt-6 p-6 sm:p-8">
-          <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {foundation.map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span

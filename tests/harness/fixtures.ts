@@ -1,0 +1,824 @@
+/**
+ * The shapes the production routes return, with the awkward values a real
+ * workspace contains: a name long enough to force a wrapping decision, a bot
+ * that cannot be assigned, an account stuck needing another sign-in.
+ *
+ * Comfortable fixtures are why populated layouts pass review and then break on
+ * a phone, so these are deliberately the difficult ones.
+ */
+
+export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
+export const ROLE_ID = "55555555-5555-4555-8555-555555555551";
+
+export const LEAST_PRIVILEGE = {
+  preset: null,
+  responsibilities: [] as string[],
+  instructions: null,
+  repositoryAccess: "read" as const,
+  branchStrategy: "per_task_branch" as const,
+  canOpenPullRequest: false,
+  canMergePullRequest: false,
+  pipelineAccess: "none" as const,
+  environmentAccess: "none" as const,
+  tools: [] as string[],
+  requiresHumanApproval: true,
+  maxConcurrentTasks: 1,
+  priority: 2,
+};
+
+function bot(id: string, name: string, ready: boolean) {
+  return {
+    id,
+    name,
+    provider: "anthropic",
+    providerLabel: "Claude",
+    providerVendor: "Anthropic",
+    model: "claude-opus-5-20260101-with-a-long-identifier",
+    currentReadiness: ready ? "ready" : "not_connected",
+    readinessLabel: ready ? "Ready to assign" : "Needs credential",
+    readinessTone: ready ? "safe" : "warning",
+    aiAccountId: null,
+    assignable: ready,
+    blockedReason: ready ? null : "ANTHROPIC_API_KEY is not set on this server.",
+    alreadyOnThisProject: false,
+    currentProjectId: null,
+    currentProjectName: null,
+    currentRoleId: null,
+    workload: 0,
+  };
+}
+
+export const PROJECTS = [
+  {
+    id: PROJECT_ID,
+    name: "E-Commerce Platform",
+    description: "Storefront, checkout and fulfilment.",
+    status: "active",
+    githubRepository: "surgeservicesllc/ecommerce-platform",
+    githubRepositoryId: "9001",
+    healthStatus: "healthy",
+    createdAt: "2026-08-01T10:00:00.000Z",
+    updatedAt: "2026-08-17T10:00:00.000Z",
+  },
+  {
+    id: "22222222-2222-4222-8222-222222222222",
+    // Long enough to force a real wrapping decision in a narrow table cell.
+    name: "Internal Tools and Operations Automation Platform",
+    description: "The long-named one, on purpose.",
+    status: "active",
+    githubRepository: "surgeservicesllc/internal-tools",
+    githubRepositoryId: "9002",
+    healthStatus: "degraded",
+    createdAt: "2026-07-11T10:00:00.000Z",
+    updatedAt: "2026-08-16T10:00:00.000Z",
+  },
+];
+
+export const ROLES = [
+  { id: ROLE_ID, name: "Developer", slug: "developer", summary: "Builds and ships changes." },
+  { id: "55555555-5555-4555-8555-555555555552", name: "Security", slug: "security", summary: "Reviews" },
+  { id: "55555555-5555-4555-8555-555555555553", name: "Tester", slug: "tester", summary: "Tests" },
+];
+
+export const PROJECT_BOTS_ROSTER = {
+  canManage: true,
+  roles: ROLES,
+  assigned: [
+    {
+      id: "66666666-6666-4666-8666-666666666661",
+      botId: "bot-1",
+      roleId: ROLE_ID,
+      status: "active" as const,
+      assignedAt: "2026-08-17T10:00:00.000Z",
+      config: {
+        ...LEAST_PRIVILEGE,
+        repositoryAccess: "write" as const,
+        canOpenPullRequest: true,
+        pipelineAccess: "all" as const,
+        maxConcurrentTasks: 3,
+        priority: 1,
+        responsibilities: ["Implement features", "Fix defects", "Open pull requests"],
+      },
+      bot: bot("bot-1", "Code Master With A Long Bot Name", true),
+      role: ROLES[0],
+    },
+    {
+      id: "66666666-6666-4666-8666-666666666662",
+      botId: "bot-2",
+      roleId: ROLES[1].id,
+      status: "paused" as const,
+      assignedAt: "2026-08-16T10:00:00.000Z",
+      config: { ...LEAST_PRIVILEGE, pipelineAccess: "assigned" as const, priority: 0 },
+      bot: bot("bot-2", "Security Guardian", true),
+      role: ROLES[1],
+    },
+  ],
+  available: [
+    bot("bot-1", "Code Master With A Long Bot Name", true),
+    bot("bot-3", "Test Engineer", true),
+    bot("bot-4", "Docs Writer", true),
+    bot("bot-5", "Offline Bot", false),
+  ],
+};
+
+export const AI_ACCOUNTS = [
+  {
+    id: "77777777-7777-4777-8777-777777777771",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude Blackstone Production Subscription",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-17T09:20:19.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-777777777772",
+    provider: "openai",
+    providerLabel: "Codex",
+    displayName: "Codex Daniel",
+    status: "connected",
+    lastVerifiedAt: "2026-08-17T09:33:47.000Z",
+    lastError: null,
+  },
+];
+
+/**
+ * The owner's screenshot, as data: four accounts, none freshly verified, and
+ * no bots at all. Three refused their stored credential (HTTP 403) and one has
+ * been disconnected — the state in which the console previously offered no way
+ * forward and said only "None can create a bot".
+ */
+export const STALE_AI_ACCOUNTS = [
+  {
+    id: "77777777-7777-4777-8777-77777777777a",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude Blackstone",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-18T07:05:22.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777b",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude NWV",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-17T20:11:24.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777c",
+    provider: "anthropic",
+    providerLabel: "Claude",
+    displayName: "Claude Bubaly",
+    status: "needs_reauth",
+    lastVerifiedAt: "2026-08-17T20:11:24.000Z",
+    lastError: "The provider refused the stored credential (HTTP 403).",
+  },
+  {
+    id: "77777777-7777-4777-8777-77777777777d",
+    provider: "openai",
+    providerLabel: "Codex",
+    displayName: "Codex Daniel",
+    status: "disconnected",
+    lastVerifiedAt: "2026-08-16T15:51:14.000Z",
+    lastError: null,
+  },
+];
+
+/* ------------------------------------------------ the remaining consoles */
+
+const LONG_TITLE =
+  "Reconcile the hosted migration ledger against the repository and repair drift";
+
+export const RUNS = [
+  {
+    id: "aaaaaaaa-1111-4111-8111-111111111111",
+    status: "failed",
+    conclusion: "provider_startup_failed",
+    agentName: "Orchestrator",
+    agentRole: "orchestrator",
+    projectId: PROJECT_ID,
+    projectName: "E-Commerce Platform",
+    provider: "openai",
+    model: "gpt-5.3-codex-with-a-long-identifier",
+    title: LONG_TITLE,
+    startedAt: "2026-08-16T09:00:00.000Z",
+    finishedAt: "2026-08-16T09:04:00.000Z",
+    createdAt: "2026-08-16T09:00:00.000Z",
+    updatedAt: "2026-08-16T09:04:00.000Z",
+    attempt: 1,
+    maxAttempts: 2,
+    riskLevel: "GREEN",
+    branch: "factory/aaaaaaaa-reconcile-the-hosted-migration-ledger",
+    baseSha: "0c662a24393f682073e6002c5aff9339292226d8",
+  },
+  {
+    id: "aaaaaaaa-2222-4222-8222-222222222222",
+    status: "queued",
+    conclusion: null,
+    agentName: "QA",
+    agentRole: "qa",
+    projectId: PROJECT_ID,
+    projectName: "E-Commerce Platform",
+    provider: "anthropic",
+    model: "claude-opus-5",
+    title: "Add coverage for the assignment configuration",
+    startedAt: null,
+    finishedAt: null,
+    createdAt: "2026-08-17T09:00:00.000Z",
+    updatedAt: "2026-08-17T09:00:00.000Z",
+    attempt: 0,
+    maxAttempts: 2,
+    riskLevel: "GREEN",
+    branch: null,
+    baseSha: null,
+  },
+];
+
+/*
+ * Shaped like `GET /api/reports` actually answers, key for key.
+ *
+ * It previously carried `kind`, `projectId` and `projectName` — none of which
+ * that route returns. `ReportsConsole` reads `report.type`, so it threw on
+ * `undefined.replace` and rendered nothing; the mismatch went unnoticed
+ * because the console was showing a signed-out gate and never read the
+ * fixture at all. A fixture that does not match its route measures a screen
+ * no user can reach.
+ */
+export const REPORTS = [
+  {
+    id: "bbbbbbbb-1111-4111-8111-111111111111",
+    type: "ceo_summary",
+    status: "published",
+    title: LONG_TITLE,
+    summary: "One paragraph that is deliberately long enough to wrap on a phone screen.",
+    periodStart: "2026-08-15T00:00:00.000Z",
+    periodEnd: "2026-08-16T00:00:00.000Z",
+    publishedAt: "2026-08-16T10:00:00.000Z",
+    createdAt: "2026-08-16T10:00:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    generatedBy: { id: "cccccccc-1111-4111-8111-111111111111", name: "Orchestrator" },
+  },
+];
+
+/** `GET /api/providers`, which the Agents console reads for its status row. */
+export const PROVIDER_STATUS = {
+  executionEnabled: false,
+  providers: [
+    {
+      provider: "openai",
+      label: "OpenAI",
+      state: "not_configured" as const,
+      stateLabel: "Not Connected",
+      detail: "No provider credential is configured in this environment.",
+      checkedAt: "2026-08-18T05:00:00.000Z",
+      latencyMs: null,
+      defaultModel: null,
+      configuredModels: [],
+      environmentVariableNames: [],
+    },
+  ],
+};
+
+/** `GET /api/worker/status`, read by the guided journey. */
+export const WORKER_STATUS = {
+  connectionStatus: "disconnected",
+  label: "Not Connected",
+  detail: "No worker has registered in this environment.",
+};
+
+/** `GET /api/commands`, read by the guided journey and the pipelines console. */
+export const COMMANDS = [
+  {
+    id: "dddddddd-1111-4111-8111-111111111111",
+    prompt: LONG_TITLE,
+    risk: "GREEN",
+    status: "succeeded",
+    submittedAt: "2026-08-16T09:00:00.000Z",
+    completedAt: "2026-08-16T09:42:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+  },
+];
+
+export const AGENTS = [
+  {
+    id: "cccccccc-1111-4111-8111-111111111111",
+    name: "Orchestrator",
+    role: "orchestrator",
+    status: "idle",
+    description: "Plans the work and hands it out.",
+    capabilities: ["planning", "routing"],
+    createdAt: "2026-08-01T10:00:00.000Z",
+  },
+  {
+    id: "cccccccc-2222-4222-8222-222222222222",
+    name: "Security",
+    role: "security",
+    status: "idle",
+    description: "Reviews changes for unsafe patterns.",
+    capabilities: ["security"],
+    createdAt: "2026-08-01T10:00:00.000Z",
+  },
+];
+
+export const ACTIVITY = [
+  {
+    id: "dddddddd-1111-4111-8111-111111111111",
+    occurredAt: "2026-08-17T10:00:00.000Z",
+    eventType: "bot.assigned",
+    description:
+      "Bot assigned to project with its configuration. Assignment is routing intent, not execution.",
+    actor: { id: null, displayName: "surgeservicesllc", source: "softwarefactory" as const },
+    entity: { id: "66666666-6666-4666-8666-666666666661", type: "bot_assignment" },
+    evidence: {
+      action: "assigned",
+      conclusion: null,
+      resources: [{ id: PROJECT_ID, type: "project" }],
+      source: "softwarefactory" as const,
+      stateTransition: null,
+      status: null,
+    },
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+  },
+];
+
+export const CONNECTIONS = [
+  {
+    id: "eeeeeeee-1111-4111-8111-111111111111",
+    provider: "github",
+    status: "connected",
+    externalAccountLogin: "surgeservicesllc",
+    installationId: "154236235",
+    repositorySelection: "selected",
+    repositories: [
+      { id: "9001", fullName: "surgeservicesllc/SoftwareFactory", defaultBranch: "main" },
+    ],
+    createdAt: "2026-08-16T19:47:00.000Z",
+    lastSyncedAt: "2026-08-17T10:00:00.000Z",
+  },
+];
+
+/** Built-in pipeline templates, in the shape the pipelines console takes. */
+export const TEMPLATES = [
+  {
+    key: "production-readiness",
+    name: "Production Readiness",
+    category: "audit",
+    summary:
+      "Checks the things that break on the first real day: configuration, migrations, error handling, observability and rollback.",
+    version: 1,
+    topology: "diamond",
+    nodeCount: 7,
+    maxParallelism: 5,
+    compiles: true,
+  },
+  {
+    key: "security-audit",
+    name: "Security Audit",
+    category: "audit",
+    summary: "Looks for unsafe patterns, dependency risk and exposed material.",
+    version: 1,
+    topology: "fan-out",
+    nodeCount: 5,
+    maxParallelism: 4,
+    compiles: true,
+  },
+];
+
+/**
+ * The workflows console takes a richer summary than the pipelines one: each
+ * template carries its compiled preview and any errors from compiling it.
+ * Two shapes, two fixtures — reusing the wrong one crashed the page on
+ * `compileErrors.map`, which is the fixture being wrong rather than the
+ * component being fragile.
+ */
+export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
+  key: template.key,
+  name: template.name,
+  category: template.category,
+  summary: template.summary,
+  version: template.version,
+  preview: null,
+  compileErrors: [] as string[],
+}));
+
+/*
+ * The consoles below read their own endpoints, and until these existed the
+ * harness answered every one of them with a 200 and no keys. Ten cases
+ * therefore rendered an error card — a few centred words that fit every width
+ * and reach every control, so the sweep passed them unconditionally while
+ * measuring none of their real layout.
+ *
+ * The portfolio payload is built by the same pure aggregator the route uses
+ * rather than transcribed from it, so it cannot drift from the shape the
+ * browser actually receives. The rest are written against their route's
+ * response, key for key.
+ */
+
+export const PORTFOLIO_SOURCES = {
+  projects: [
+    {
+      id: PROJECT_ID,
+      name: "E-Commerce Platform",
+      status: "active" as const,
+      githubRepository: "acme/storefront",
+      healthStatus: "healthy" as const,
+      autonomousMode: false,
+      maximumAutonomousRisk: "GREEN" as const,
+      description: "Checkout, catalogue and fulfilment for the storefront.",
+      defaultBranch: "main",
+      productionUrl: "https://example.invalid",
+      engineeringPriority: 1,
+      strategicFocus: true,
+      engineeringPaused: false,
+      engineeringPauseReason: null,
+    },
+    {
+      id: "11111111-2222-4222-8222-222222222222",
+      name: LONG_TITLE,
+      status: "paused" as const,
+      githubRepository: null,
+      healthStatus: "degraded" as const,
+      autonomousMode: false,
+      maximumAutonomousRisk: "GREEN" as const,
+      description: null,
+      defaultBranch: null,
+      productionUrl: null,
+      engineeringPriority: 3,
+      strategicFocus: false,
+      engineeringPaused: true,
+      engineeringPauseReason: "Waiting on the owner to confirm the migration window.",
+    },
+  ],
+  commands: [{ projectId: PROJECT_ID, status: "succeeded" }],
+  runs: [{ projectId: PROJECT_ID, status: "running" }],
+  tasks: [{ projectId: PROJECT_ID, status: "in_progress" }],
+  incidents: [],
+  changeRequests: [{ projectId: PROJECT_ID, status: "completed" }],
+  deployments: [],
+  connections: [{ projectId: PROJECT_ID, status: "connected", provider: "github" }],
+};
+
+export const PORTFOLIO_SCHEDULING = {
+  capacity: {
+    activeRuns: 2,
+    emergencyQueued: 0,
+    emergencyReserved: 1,
+    fairnessPromotionSeconds: 900,
+    focusedProjects: 1,
+    openBreakers: 0,
+    ordinaryCeiling: 4,
+    organizationLimit: 5,
+    pausedProjects: 1,
+    queuedRuns: 3,
+    workerCapacity: 4,
+    workerCount: 1,
+    workerLeases: 2,
+  },
+  projects: [
+    {
+      activeRuns: 2,
+      engineeringPaused: false,
+      engineeringPauseReason: null,
+      engineeringPriority: 1,
+      maximumConcurrentRuns: 3,
+      projectId: PROJECT_ID,
+      projectName: "E-Commerce Platform",
+      queuedRuns: 1,
+      strategicFocus: true,
+    },
+  ],
+  queue: [
+    {
+      blockedReason: null,
+      effectivePriority: 1,
+      emergency: false,
+      projectName: "E-Commerce Platform",
+      projectPriority: 1,
+      queuePosition: 1,
+      runId: "eeeeeeee-1111-4111-8111-111111111111",
+      runStatus: "queued",
+      strategicFocus: true,
+      taskTitle: LONG_TITLE,
+      waitingSeconds: 240,
+    },
+  ],
+  unavailable: [] as string[],
+};
+
+/** `GET /api/operations/overview`, read by Operations and Needs Your Attention. */
+export const OPERATIONS_OVERVIEW = {
+  activeOrganizationId: "10000000-0000-4000-8000-000000000001",
+  role: "owner",
+  // Every executor is off in this phase, and the console says so in place.
+  executionAllowed: false,
+  deploymentExecutor: "not_connected",
+  rollbackExecutor: "not_connected",
+  repairWorker: "not_connected",
+  summary: {
+    projectsTotal: 2,
+    projectsHealthy: 1,
+    projectsDegraded: 1,
+    projectsCritical: 0,
+    projectsUnknown: 0,
+    projectsPaused: 1,
+    projectsFrozen: 0,
+    openIncidents: 1,
+    openSev1: 0,
+    openSev2: 1,
+    incidentsResolved24h: 2,
+    failedDeployments24h: 0,
+    rollbacks24h: 0,
+    failedRollbacks24h: 0,
+    repairsOpen: 1,
+    ownerAttention: 1,
+    connectedMonitors: 0,
+    pendingEvents: 0,
+  },
+  projects: [
+    {
+      id: PROJECT_ID,
+      name: "E-Commerce Platform",
+      status: "active",
+      healthState: "healthy",
+      healthReason: null,
+      healthComputedAt: "2026-08-18T05:00:00.000Z",
+      releasesFrozen: false,
+      operationsStopped: false,
+      ownerAttentionRequired: false,
+      connectedMonitors: 0,
+      openIncidents: 0,
+    },
+    {
+      id: "11111111-2222-4222-8222-222222222222",
+      name: LONG_TITLE,
+      status: "paused",
+      healthState: "degraded",
+      healthReason: "A checkout journey has been failing since the last release.",
+      healthComputedAt: "2026-08-18T05:00:00.000Z",
+      releasesFrozen: true,
+      operationsStopped: false,
+      ownerAttentionRequired: true,
+      connectedMonitors: 0,
+      openIncidents: 1,
+    },
+  ],
+  incidents: [
+    {
+      id: "ffffffff-1111-4111-8111-111111111111",
+      projectId: "11111111-2222-4222-8222-222222222222",
+      projectName: LONG_TITLE,
+      title: LONG_TITLE,
+      severity: "sev2",
+      status: "open",
+      source: "manual",
+      symptoms: "Checkout returns a 500 for a subset of carts.",
+      impact: "Some customers cannot complete an order.",
+      occurrenceCount: 3,
+      detectedAt: "2026-08-18T04:00:00.000Z",
+      lastSignalAt: "2026-08-18T04:50:00.000Z",
+      resolvedAt: null,
+      ownerAttentionRequired: true,
+      rootCause: null,
+      correctiveAction: null,
+      autoCreated: false,
+    },
+  ],
+  monitors: [],
+  auditEvents: [
+    {
+      id: "ffffffff-2222-4222-8222-222222222222",
+      projectId: PROJECT_ID,
+      kind: "project.updated",
+      entityType: "project",
+      entityId: PROJECT_ID,
+      summary: "Default branch changed to main.",
+      createdAt: "2026-08-18T03:00:00.000Z",
+    },
+  ],
+  journeys: [],
+  providers: [],
+};
+
+/** `GET /api/resources/overview`, read by the resource manager. */
+export const RESOURCES_OVERVIEW = {
+  policyVersion: "phase2c-resources-v1",
+  capabilities: [],
+  executionState: "not_connected",
+  executionLabel: "Not Connected",
+  executionReason:
+    "No provider run has executed, so no routing decision has ever been recorded against real work.",
+  breakers: [
+    {
+      target: "openai",
+      state: "closed",
+      fault: null,
+      faultExplanation: null,
+      consecutiveFaults: 0,
+      openedAt: null,
+      cooldownMs: null,
+      reason: null,
+      updatedAt: "2026-08-18T05:00:00.000Z",
+    },
+  ],
+  transitions: [],
+  assignments: [],
+};
+
+/** The five reads behind `/solutions/agentos`, one populated row each. */
+export const AGENTOS_GRANTS = [
+  {
+    agentId: "cccccccc-1111-4111-8111-111111111111",
+    agentName: "Orchestrator",
+    configured: true,
+    inboxAccess: "read_write",
+    runnerPreference: "container",
+    environment: { name: "default", networking: "restricted", allowedHostCount: 3 },
+    counts: {
+      mcpConnections: 2,
+      skills: 4,
+      repos: 1,
+      filesystemGrants: 2,
+      collaborators: 1,
+    },
+  },
+];
+
+export const AGENTOS_MESSAGES = [
+  {
+    id: "aaaaaaaa-9111-4111-8111-111111111111",
+    author: "agent",
+    kind: "question",
+    status: "open",
+    body: LONG_TITLE,
+    choices: ["Keep the current behaviour", "Change it and open a pull request"],
+    selectedChoice: null,
+    answerBody: null,
+    agentName: "Orchestrator",
+    agentRunId: "eeeeeeee-1111-4111-8111-111111111111",
+    createdAt: "2026-08-18T04:00:00.000Z",
+    answeredAt: null,
+  },
+];
+
+export const AGENTOS_GOALS = [
+  {
+    id: "aaaaaaaa-9222-4222-8222-222222222222",
+    title: LONG_TITLE,
+    status: "running",
+    projectName: "E-Commerce Platform",
+    definitionOfDone: { total: 4, satisfied: 2 },
+    spend: { capUsd: 25, spentUsd: 4, uncappedAcknowledged: false },
+    maxDurationMinutes: 120,
+    stuckThreshold: 3,
+    iterations: 6,
+    stoppedReason: null,
+    createdAt: "2026-08-18T03:00:00.000Z",
+  },
+];
+
+export const AGENTOS_CHAINS = [
+  {
+    id: "aaaaaaaa-9333-4333-8333-333333333333",
+    title: LONG_TITLE,
+    templateName: "Feature delivery",
+    projectName: "E-Commerce Platform",
+    progress: { total: 5, done: 2 },
+    currentStep: { name: "Implement", state: "running", approvalGate: false },
+    createdAt: "2026-08-18T03:30:00.000Z",
+  },
+];
+
+export const AGENTOS_TRIGGERS = [
+  {
+    id: "aaaaaaaa-9444-4444-8444-444444444444",
+    name: "storefront-push",
+    displayName: "Storefront push",
+    agentName: "Orchestrator",
+    projectName: "E-Commerce Platform",
+    enabled: false,
+    // Whether a secret exists, never the secret.
+    secretConfigured: true,
+    deliveries: { total: 12, accepted: 11, rejected: 1 },
+    lastReceivedAt: "2026-08-17T21:00:00.000Z",
+  },
+];
+
+/** `GET /api/autonomy/status` and `/decisions`, read by the Autonomy console. */
+export const AUTONOMY_STATUS = [
+  {
+    projectId: PROJECT_ID,
+    projectName: "E-Commerce Platform",
+    autonomousMode: false,
+    riskCeiling: "green",
+    riskCeilingSource: "organization",
+    killSwitchActive: true,
+    releaseFrozen: false,
+    executorConnected: false,
+    actions: { enabled: 0, total: 9 },
+    decisionsRecorded: 1,
+    lastDecisionAt: "2026-08-18T04:00:00.000Z",
+  },
+];
+
+export const AUTONOMY_DECISIONS = [
+  {
+    id: "aaaaaaaa-9555-4555-8555-555555555555",
+    projectName: "E-Commerce Platform",
+    action: "merge",
+    decision: "refused",
+    risk: "yellow",
+    riskEscalated: true,
+    headSha: "0123456789abcdef0123456789abcdef01234567",
+    blockers: ["EXECUTOR_NOT_CONNECTED", "KILL_SWITCH_ACTIVE"],
+    reachedStage: "authority",
+    policyVersion: "phase1d-autonomy-v1",
+    hadAuthor: true,
+    hadApprover: false,
+    independentApproval: false,
+    decidedAt: "2026-08-18T04:00:00.000Z",
+  },
+];
+
+/** `GET /api/autonomy/controls`, read by the Safety page. */
+export const AUTONOMY_CONTROLS = {
+  killSwitchActive: true,
+  controls: {
+    autonomousMode: false,
+    maximumAutonomousRisk: "GREEN",
+    actions: {
+      plan: false,
+      code: false,
+      test: false,
+      repair: false,
+      review: false,
+      approve: false,
+      merge: false,
+      deploy: false,
+      rollback: false,
+    },
+  },
+  canOperate: true,
+};
+
+/** `GET /api/operations/projects/[projectId]`, read by My Projects. */
+export const PROJECT_OPERATIONS = {
+  executionAllowed: false,
+  deploymentExecutor: "not_connected",
+  rollbackExecutor: "not_connected",
+  repairWorker: "not_connected",
+  project: {
+    id: PROJECT_ID,
+    name: "E-Commerce Platform",
+    status: "active",
+    healthState: "healthy",
+    healthReason: null,
+    healthComputedAt: "2026-08-18T05:00:00.000Z",
+    releasesFrozen: false,
+    operationsStopped: false,
+    ownerAttentionRequired: false,
+  },
+  releaseAuthority: { allowed: false, blockers: ["EXECUTOR_NOT_CONNECTED"] },
+  healthHistory: [
+    {
+      id: "aaaaaaaa-9666-4666-8666-666666666666",
+      state: "healthy",
+      previousState: "degraded",
+      reason: "The failing checkout journey recovered.",
+      computedAt: "2026-08-18T05:00:00.000Z",
+    },
+  ],
+  incidents: [],
+  monitors: [],
+  freezes: [],
+  rollbacks: [],
+  repairs: [],
+};
+
+/** `GET /api/resources/models`, the declaration table under the resource manager. */
+export const RESOURCE_MODELS = {
+  models: [
+    {
+      provider: "openai",
+      model: "gpt-5.3-codex",
+      enabled: true,
+      strengthTier: "strong",
+      contextLimitTokens: 400_000,
+      fullyDeclared: true,
+    },
+    {
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      enabled: false,
+      strengthTier: null,
+      contextLimitTokens: null,
+      fullyDeclared: false,
+    },
+  ],
+  undeclared: [{ provider: "anthropic", model: "claude-sonnet-4-5" }],
+  note:
+    "An undeclared model cannot take work that requires a strong model, and cannot be shown to"
+    + " fit any context. Routing will refuse it until both values are declared.",
+};

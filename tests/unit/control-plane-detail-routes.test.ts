@@ -80,6 +80,14 @@ const detailFixtures = {
     pullRequest: null,
     checks: [],
     ci: { checks: [] },
+    // The editable layer. Present here because this fixture is the current
+    // projection contract; the schema defaults them so a hosted database that
+    // has not yet applied 20260815001000 still parses, which the "hosted
+    // 130014 projection" test below covers.
+    reviewStatus: "unreviewed",
+    reviewNote: null,
+    reviewedAt: null,
+    deletable: false,
   },
   task: {
     id: entityId,

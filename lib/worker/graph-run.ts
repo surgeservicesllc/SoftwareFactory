@@ -1,0 +1,348 @@
+import { z } from "zod";
+
+import { compileGraph, type CompiledGraph, type CompiledNode } from "@/lib/graph/compiler";
+import type { GraphBudget } from "@/lib/graph/budgets";
+import { defineNode } from "@/lib/graph/contracts";
+import type { ProposedEdge } from "@/lib/graph/dependencies";
+import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
+import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
+
+/**
+ * From a claimed graph to a finished, persisted run.
+ *
+ * `claim_planned_graph` hands the worker everything in one projection — run,
+ * budget, nodes with contracts and node_run ids, edges — so this module can
+ * be pure: it parses that projection, compiles it back through the same
+ * compiler the console previews with, and drives the engine's runner with an
+ * injected executor, persisting every node transition through an injected
+ * store. No hidden context crosses the boundary; the projection IS the edge.
+ */
+
+const resourceSchema = z.object({ kind: z.string(), id: z.string() });
+
+const claimedNodeSchema = z.object({
+  node_run_id: z.string().uuid(),
+  node_key: z.string().min(1),
+  job: z.string().min(1),
+  executor: z.enum(["DETERMINISTIC", "MODEL", "ANCHOR"]),
+  capability: z.string().min(1),
+  model_tier: z.string().nullish(),
+  risk_level: z.string().nullish(),
+  timeout_ms: z.number().int().positive(),
+  max_attempts: z.number().int().positive(),
+  allow_provider_fallback: z.boolean(),
+  // .catch(false): a projection from before the column existed simply has
+  // no tolerance, which is exactly what false says.
+  tolerates_partial_inputs: z.boolean().catch(false),
+  input_schema: z.unknown().nullish(),
+  output_schema: z.unknown().nullish(),
+  reads: z.array(resourceSchema).nullish(),
+  writes: z.array(resourceSchema).nullish(),
+  acceptance_criteria: z.unknown().nullish(),
+});
+
+const claimedEdgeSchema = z.object({
+  from_node_key: z.string().min(1),
+  to_node_key: z.string().min(1),
+  reason: z.string().nullish(),
+  detail: z.string().nullish(),
+});
+
+const claimedGraphSchema = z.object({
+  graph_run_id: z.string().uuid(),
+  graph_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  goal: z.string().min(1),
+  topology: z.string(),
+  risk_level: z.string(),
+  budget: z.object({
+    max_nodes: z.number().int().positive().catch(50),
+    max_concurrent_nodes: z.number().int().positive().catch(8),
+    max_duration_ms: z.number().int().positive().catch(1_800_000),
+    max_retries: z.number().int().nonnegative().catch(10),
+    max_discovery_rounds: z.number().int().nonnegative().catch(5),
+    max_tokens: z.number().int().positive().nullish(),
+    max_cost_micros: z.number().int().positive().nullish(),
+  }).nullish(),
+  nodes: z.array(claimedNodeSchema).min(1),
+  edges: z.array(claimedEdgeSchema),
+});
+
+export type ClaimedGraph = z.infer<typeof claimedGraphSchema>;
+
+export function parseClaimedGraph(claim: unknown):
+  | { readonly ok: true; readonly graph: ClaimedGraph }
+  | { readonly ok: false; readonly detail: string } {
+  const parsed = claimedGraphSchema.safeParse(claim);
+  if (!parsed.success) {
+    return { ok: false, detail: `The claim projection is not usable: ${parsed.error.issues[0]?.message ?? "unknown shape"}.` };
+  }
+  return { ok: true, graph: parsed.data };
+}
+
+const RISKS = new Set(["GREEN", "YELLOW", "RED"]);
+
+function riskFrom(value: string | null | undefined): "GREEN" | "YELLOW" | "RED" {
+  const upper = (value ?? "GREEN").toUpperCase();
+  return (RISKS.has(upper) ? upper : "GREEN") as "GREEN" | "YELLOW" | "RED";
+}
+
+/**
+ * Recompile the stored rows through the same compiler the console previews
+ * with. Dependencies are recovered from the stored edges — an edge exists
+ * only because a downstream node consumes upstream output, so `dependsOn`
+ * is exactly the set of incoming edges.
+ */
+export function compileClaimedGraph(claim: ClaimedGraph):
+  | { readonly ok: true; readonly graph: CompiledGraph }
+  | { readonly ok: false; readonly detail: string } {
+  const dependsOn = new Map<string, string[]>();
+  for (const edge of claim.edges) {
+    const into = dependsOn.get(edge.to_node_key) ?? [];
+    into.push(edge.from_node_key);
+    dependsOn.set(edge.to_node_key, into);
+  }
+
+  const nodes = claim.nodes.map((node) =>
+    defineNode({
+      nodeId: node.node_key,
+      job: node.job,
+      executor: node.executor,
+      capability: node.capability as Parameters<typeof defineNode>[0]["capability"],
+      inputSchema: z.unknown(),
+      // Output validation for worker-executed nodes is the provider's
+      // structured-output contract; the stored jsonb schema is display
+      // metadata here, not a second validator pretending to be one.
+      outputSchema: z.unknown(),
+      dependsOn: dependsOn.get(node.node_key) ?? [],
+      reads: (node.reads ?? []) as readonly ResourceRef[],
+      writes: (node.writes ?? []) as readonly ResourceRef[],
+      risk: riskFrom(node.risk_level),
+      timeoutMs: node.timeout_ms,
+      retry: { ...DEFAULT_RETRY_POLICY, maxAttempts: node.max_attempts },
+      toleratesPartialInputs: node.tolerates_partial_inputs,
+    }),
+  );
+
+  const proposedEdges: ProposedEdge[] = claim.edges.map((edge) => ({
+    from: edge.from_node_key,
+    to: edge.to_node_key,
+  }));
+
+  const compiled = compileGraph({
+    goal: claim.goal,
+    nodes,
+    proposedEdges,
+    risk: riskFrom(claim.risk_level),
+  });
+  if (!compiled.ok) {
+    const first = compiled.errors[0];
+    return { ok: false, detail: `The stored graph no longer compiles: ${first?.detail ?? first?.code ?? "unknown error"}.` };
+  }
+  return { ok: true, graph: compiled.graph };
+}
+
+export function budgetFromClaim(claim: ClaimedGraph): GraphBudget {
+  const budget = claim.budget;
+  return {
+    maxNodes: budget?.max_nodes ?? 50,
+    maxConcurrentNodes: budget?.max_concurrent_nodes ?? 8,
+    maxDurationMs: budget?.max_duration_ms ?? 1_800_000,
+    maxRetries: budget?.max_retries ?? 10,
+    maxDiscoveryRounds: budget?.max_discovery_rounds ?? 5,
+    maxTokens: budget?.max_tokens ?? undefined,
+    maxCostMicros: budget?.max_cost_micros ?? undefined,
+  };
+}
+
+/** The persistence the runner needs, injected so this module stays pure. */
+export type GraphRunStore = {
+  readonly recordNodeState: (
+    nodeRunId: string,
+    state: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "SKIPPED",
+    detail?: string | null,
+    execution?: { provider?: string; model?: string; latencyMs?: number },
+  ) => Promise<void>;
+  readonly recordArtifact: (
+    graphRunId: string,
+    kind: "RAW" | "REDUCED" | "SYNTHESIS",
+    payload: unknown,
+    nodeRunId?: string | null,
+  ) => Promise<void>;
+  readonly completeRun: (
+    graphRunId: string,
+    state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
+    hadPartialInput: boolean,
+    detail?: string | null,
+    usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
+  ) => Promise<void>;
+};
+
+export type GraphRunSummary = {
+  readonly outcome: RunResult["outcome"];
+  readonly finalState: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED";
+  readonly nodesSucceeded: number;
+  readonly nodesFailed: number;
+  readonly incompleteness: string | null;
+  /**
+   * True when the run produced nothing because the provider refused every
+   * attempt (session/rate limit). The run closed CANCELLED — void, not a
+   * consumed chance — and the caller should stop draining rather than burn
+   * further graphs against a credential that will refuse them too.
+   */
+  readonly capacityWithheld: boolean;
+};
+
+/**
+ * What a node's incoming edges delivered. An edge is a data dependency, so
+ * the executor receives the actual upstream outputs — not just the fact that
+ * they exist — and an explicit list of dependencies that contributed nothing,
+ * so a fan-in can state its own incompleteness instead of running blind.
+ */
+export type NodeInputs = Readonly<{
+  readonly outputs: Readonly<Record<string, unknown>>;
+  readonly missing: readonly string[];
+}>;
+
+/**
+ * Drive one claimed graph to a persisted conclusion.
+ *
+ * Failure containment lives in the engine (a failed node blocks only its
+ * dependents; independent branches keep running) — this layer's job is to
+ * make every transition durable and to close the run with the same honesty
+ * rules the member path enforces: a run that lost inputs is PARTIAL, never
+ * COMPLETED.
+ */
+export async function runClaimedGraph(
+  claim: ClaimedGraph,
+  compiled: CompiledGraph,
+  store: GraphRunStore,
+  executeNode: (node: CompiledNode, attempt: number, inputs: NodeInputs) => Promise<NodeExecutionResult>,
+): Promise<GraphRunSummary> {
+  const nodeRunIds = new Map(claim.nodes.map((node) => [node.node_key, node.node_run_id]));
+  const started = Date.now();
+
+  // Incoming edges per node: the data each node is owed by its upstreams.
+  const incoming = new Map<string, string[]>();
+  for (const edge of claim.edges) {
+    const into = incoming.get(edge.to_node_key) ?? [];
+    into.push(edge.from_node_key);
+    incoming.set(edge.to_node_key, into);
+  }
+  const completedOutputs = new Map<string, unknown>();
+
+  // Final-attempt failures, split by kind: a run whose every failure was a
+  // capacity refusal never truly executed and must not spend a chance.
+  let finalFailures = 0;
+  let capacityFinalFailures = 0;
+
+  const result = await runGraph(compiled, budgetFromClaim(claim), {
+    executeNode: async (node, attempt) => {
+      const nodeRunId = nodeRunIds.get(node.nodeKey);
+      if (nodeRunId && attempt === 1) {
+        await store.recordNodeState(nodeRunId, "RUNNING");
+      }
+      const outputs: Record<string, unknown> = {};
+      const missing: string[] = [];
+      for (const dependency of incoming.get(node.nodeKey) ?? []) {
+        if (completedOutputs.has(dependency)) {
+          outputs[dependency] = completedOutputs.get(dependency);
+        } else {
+          missing.push(dependency);
+        }
+      }
+      const outcome = await executeNode(node, attempt, { outputs, missing });
+      if (outcome.status === "SUCCEEDED") {
+        completedOutputs.set(node.nodeKey, outcome.output);
+      }
+      if (nodeRunId) {
+        if (outcome.status === "SUCCEEDED") {
+          await store.recordNodeState(nodeRunId, "COMPLETED", null, {
+            provider: outcome.provider,
+            model: outcome.model,
+            latencyMs: outcome.latencyMs,
+          });
+          await store.recordArtifact(claim.graph_run_id, "RAW", outcome.output, nodeRunId);
+        } else if (
+          !outcome.retryable
+          || attempt >= (compiled.nodes.find((n) => n.nodeKey === node.nodeKey)?.maxAttempts ?? 1)
+        ) {
+          // Only the final attempt's failure is terminal; a retry in flight
+          // is still a RUNNING node, and marking it FAILED early would make
+          // the recovery invisible. A non-retryable failure IS the final
+          // attempt, whatever the attempt counter says.
+          finalFailures += 1;
+          if (outcome.capacityWithheld === true) capacityFinalFailures += 1;
+          await store.recordNodeState(nodeRunId, "FAILED", outcome.error, {
+            provider: outcome.provider,
+            model: outcome.model,
+            latencyMs: outcome.latencyMs,
+          });
+        }
+      }
+      return outcome;
+    },
+    elapsedMs: () => Date.now() - started,
+  });
+
+  // Nodes the engine never dispatched (blocked by failed dependencies,
+  // budget stops) are closed as SKIPPED so the run accounts for every node —
+  // fan-in honesty made durable.
+  for (const [nodeKey, nodeState] of result.states) {
+    const nodeRunId = nodeRunIds.get(nodeKey);
+    if (!nodeRunId) continue;
+    if (nodeState === "PENDING" || nodeState === "READY" || nodeState === "BLOCKED") {
+      await store.recordNodeState(
+        nodeRunId,
+        "SKIPPED",
+        "Never dispatched: an upstream dependency failed or the budget stopped the run.",
+      );
+    }
+  }
+
+  let failed = 0;
+  let succeeded = 0;
+  for (const state of result.states.values()) {
+    if (state === "COMPLETED") succeeded += 1;
+    if (state === "FAILED") failed += 1;
+  }
+
+  // A run in which nothing succeeded and every terminal failure was a
+  // provider capacity refusal never truly executed: it closes CANCELLED so
+  // the graph keeps its chances for a worker the provider will actually
+  // fuel. If anything succeeded, the run is a real (partial) answer and is
+  // judged as one.
+  const capacityVoided = succeeded === 0
+    && finalFailures > 0
+    && capacityFinalFailures === finalFailures;
+
+  const finalState: GraphRunSummary["finalState"] = capacityVoided
+    ? "CANCELLED"
+    : result.outcome === "COMPLETED"
+      ? "COMPLETED"
+      : result.outcome === "FAILED"
+        ? "FAILED"
+        : result.outcome === "BUDGET_STOPPED"
+          ? "BUDGET_STOPPED"
+          : "PARTIAL";
+
+  await store.completeRun(
+    claim.graph_run_id,
+    finalState,
+    result.incompleteness !== null,
+    capacityVoided
+      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
+      : result.incompleteness,
+    { tokensUsed: result.spend.tokensUsed, costMicros: result.spend.costMicros },
+  );
+
+  return {
+    outcome: result.outcome,
+    finalState,
+    nodesSucceeded: succeeded,
+    nodesFailed: failed,
+    incompleteness: result.incompleteness,
+    capacityWithheld: capacityVoided,
+  };
+}

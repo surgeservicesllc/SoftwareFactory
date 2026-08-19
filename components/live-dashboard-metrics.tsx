@@ -111,7 +111,7 @@ export function LiveDashboardMetrics({ authenticated }: { authenticated: boolean
             </button>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <MetricCard
             label="Connected projects"
             value={state === "ready" ? String(connectedCount) : "—"}

@@ -69,6 +69,10 @@ describe("live tenant consoles", () => {
     expect(await screen.findByText("Nothing has run yet")).toBeInTheDocument();
     // The empty state must not be dressed up as data.
     expect(screen.queryByText(/Demo Data/i)).not.toBeInTheDocument();
+    // An empty page that only describes its emptiness is a dead end: it names
+    // the step that fills it, and links there.
+    expect(screen.getByRole("link", { name: /give a bot something to do/i }))
+      .toHaveAttribute("href", "/solutions/bot-manager");
   });
 
   it("surfaces the server's message when the read fails", async () => {

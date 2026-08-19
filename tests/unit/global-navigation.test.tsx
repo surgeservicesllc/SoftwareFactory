@@ -33,13 +33,21 @@ describe("globalNavigation", () => {
     expect(hrefs.filter((href) => href === "/solutions")).toHaveLength(1);
   });
 
-  it("adds the console destinations once signed in", () => {
+  it("replaces the marketing pages with the console destinations once signed in", () => {
     const items = globalNavigation({ signedIn: true });
     const hrefs = items.map((item) => item.href);
 
     for (const item of SIGNED_IN_NAV) expect(hrefs).toContain(item.href);
-    for (const item of PUBLIC_NAV) expect(hrefs).toContain(item.href);
     expect(hrefs).not.toContain("/solutions/admin");
+
+    // Signing in swaps the vocabulary rather than concatenating two of them.
+    // The header used to read Dashboard, Projects, Runs, Activity, Admin,
+    // Platform, Features, Pricing, Resources, About -- the second half selling
+    // the product to someone already inside it.
+    for (const item of PUBLIC_NAV) {
+      if (item.href === "/solutions") continue; // Dashboard is the same route.
+      expect(hrefs).not.toContain(item.href);
+    }
   });
 
   it("adds Admin only for a super administrator", () => {
@@ -94,5 +102,70 @@ describe("SiteHeader", () => {
   it("falls back to the email when no display name is set", () => {
     render(<SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />);
     expect(screen.getByText("person@example.org")).toBeInTheDocument();
+  });
+
+  it("orders the signed-in navigation the way the owner's design does", () => {
+    // Console destinations, then Admin, and nothing else. The marketing pages
+    // used to trail this list; they sold the product to someone already inside
+    // it and pushed the console links away from the account area.
+    render(
+      <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
+    );
+
+    expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Dashboard",
+      "Projects",
+      "Runs",
+      "Activity",
+      "Admin",
+    ]);
+  });
+
+  it("marks the current destination and underlines only that one", () => {
+    render(<SiteHeader viewer={{ signedIn: false }} />);
+
+    const current = primaryNav()
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+
+    // The mock pathname is "/", which is no navigation entry, so nothing is
+    // current. An always-current first item would look right and be wrong.
+    expect(current).toHaveLength(0);
+  });
+});
+
+describe("the brand mark", () => {
+  it("is one labelled link, so the lockup is not spelled out line by line", () => {
+    render(<SiteHeader />);
+
+    const brand = screen.getAllByRole("link", { name: /ai software factory home/i });
+    expect(brand.length).toBeGreaterThan(0);
+    expect(brand[0]).toHaveAttribute("href", "/");
+  });
+
+  it("is drawn in one place, and nowhere else keeps a copy", async () => {
+    /*
+     * Two hand-drawn copies is how one product ends up with two logos that
+     * disagree about their own colours on the same page.
+     *
+     * This used to also require the console shell to import `BrandMark`. It no
+     * longer renders a mark at all (ADR-090), so that half asserted a caller
+     * rather than the rule. The rule is the path data: whoever draws the mark
+     * imports the component, and no file inlines the artwork — which is what
+     * has to hold if the sidebar ever carries one again.
+     */
+    const shell = await import("@/components/app-shell");
+    expect(shell).toBeDefined();
+
+    const source = await import("node:fs/promises");
+    const header = await source.readFile("components/marketing/site-header.tsx", "utf8");
+    const sidebar = await source.readFile("components/app-shell.tsx", "utf8");
+
+    expect(header).toContain("@/components/brand-mark");
+    // The console column renders no mark; what matters is that it has not
+    // grown a private one.
+    expect(sidebar).not.toContain("@/components/brand-mark");
+    expect(header).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
+    expect(sidebar).not.toContain("M20 1.5 37 11v22L20 42.5 3 33V11z");
   });
 });

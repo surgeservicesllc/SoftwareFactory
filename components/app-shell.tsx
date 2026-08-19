@@ -4,17 +4,24 @@ import {
   Activity,
   Bot,
   Boxes,
+  ChevronDown,
   CircleGauge,
   ClipboardList,
   Cpu,
   FileText,
   FolderKanban,
+  FolderOpen,
   Gauge,
   Fingerprint,
   GitBranch,
   HeartPulse,
+  KeyRound,
+  type LucideIcon,
   Menu,
+  PanelLeft,
   PlugZap,
+  Plus,
+  Rocket,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -23,10 +30,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
+import { globalNavigation } from "@/lib/navigation";
 
 /**
  * The console shell renders for signed-out visitors too — individual pages
@@ -49,99 +57,421 @@ const superAdminGroup = {
 } as const;
 
 /**
- * Grouped by how an owner actually moves through the product, not by which
- * phase built each console. The ungrouped block at the top is the daily path
- * in journey order — see what's happening, give a goal, manage projects,
- * follow the work, read the summary. "Watch" is production monitoring.
- * "Advanced" holds the technical consoles: every one keeps its full function
- * (nothing is removed for simplicity), but none of them is required to run
- * the factory day to day, so they no longer crowd the primary path.
+ * Owner-ordered structure (2026-08-17): top-level destinations with
+ * expandable subpage groups, mirroring the provided design. Labels follow
+ * that design — Overview, Bots, Integrations — while every href stays a real,
+ * existing page; the design's subpages with no backing capability (per-user
+ * project lists, a secrets store) are deliberately absent rather than linked
+ * to nothing.
  *
  * Every destination reads live tenant records; an empty page says it is
  * empty rather than showing illustrative rows.
  */
-const navigationGroups = [
+type NavigationItem = { label: string; href: string; icon: LucideIcon };
+type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] };
+
+const navigationEntries: readonly NavigationEntry[] = [
+  { label: "Overview", href: "/solutions", icon: CircleGauge },
+  // The guided end-to-end journey over the live flows (owner order,
+  // 2026-08-17): sits directly under Overview.
+  { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
   {
-    heading: null,
-    items: [
-      { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
-      { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
-      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
-      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+    label: "Projects",
+    href: "/solutions/projects",
+    icon: FolderKanban,
+    subpages: [
+      { label: "All Projects", href: "/solutions/projects", icon: FolderKanban },
+      // The portfolio as collapsible rows; same live records, reached from a
+      // list-first posture. Shared with Me / Starred still have no backing
+      // model and stay absent.
+      { label: "My Projects", href: "/solutions/myprojects", icon: FolderOpen },
+      { label: "Archived", href: "/solutions/projects?filter=archived", icon: ClipboardList },
     ],
   },
   {
-    heading: "Watch",
-    items: [
+    label: "Pipelines",
+    href: "/solutions/pipelines",
+    icon: Workflow,
+    subpages: [
+      // Active and All are live lifecycle views over saved commands; the
+      // workflows page carries each template's full compiled preview. The
+      // design's Schedules subpage has no scheduler model yet and stays out.
+      { label: "Active", href: "/solutions/pipelines", icon: HeartPulse },
+      { label: "All Pipelines", href: "/solutions/pipelines?view=all", icon: Workflow },
+      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
+      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Bots",
+    href: "/solutions/bot-manager",
+    icon: Bot,
+    subpages: [
+      { label: "Connect Bot", href: "/solutions/bot-manager#connect", icon: Plus },
+      { label: "My Bots", href: "/solutions/bot-manager", icon: Bot },
+      // Recorded provider-subscription windows per account (ADR-076).
+      { label: "Bot Usage", href: "/solutions/bot-usage", icon: Gauge },
+      // Bot work lands in the activity feed; the same page also sits under
+      // Watch, which is deliberate — both readings are true.
+      { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+  { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+  { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
+  /*
+   * The reference lists Secrets, and an earlier revision left it out on the
+   * grounds that nothing backed it. That was true then and is not now: the
+   * provider credential vault (migrations `20260814002500`/`002600`) stores
+   * sealed material, and the settings page's `#providers` section is where an
+   * owner connects and rotates it. The entry points at the surface that
+   * actually manages secrets rather than at a page invented to justify it.
+   */
+  { label: "Secrets", href: "/solutions/settings#providers", icon: KeyRound },
+  {
+    label: "Settings",
+    href: "/solutions/settings",
+    icon: Settings,
+    subpages: [
+      { label: "General", href: "/solutions/settings", icon: Settings },
+      // Provider configuration lives on the settings page; the anchor lands
+      // there. Members/Teams/Permissions/Billing from the design have no
+      // backing surfaces yet and are deliberately absent.
+      { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
+    ],
+  },
+  {
+    label: "Watch",
+    href: "/solutions/operations",
+    icon: HeartPulse,
+    subpages: [
       { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
       { label: "Activity", href: "/solutions/activity", icon: Activity },
     ],
   },
   {
-    heading: "Advanced",
-    items: [
+    label: "Advanced",
+    href: "/solutions/files",
+    icon: Boxes,
+    subpages: [
       { label: "Files", href: "/solutions/files", icon: FileText },
-      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
       { label: "Autonomy", href: "/solutions/autonomy", icon: Gauge },
     ],
   },
-  {
-    heading: "Setup",
-    items: [
-      { label: "Connections", href: "/solutions/connections", icon: PlugZap },
-      { label: "Settings", href: "/solutions/settings", icon: Settings },
-    ],
-  },
 ] as const;
+
+/**
+ * The shortcuts under the navigation, from the same design. Each one lands on
+ * a real control that starts work: the add-project form, the composer, and
+ * repository authorization.
+ *
+ * A "View Documentation" shortcut sat here and was removed by owner request
+ * (2026-08-17). It pointed at `/resources` on the marketing site — the only
+ * entry in this list that left the console rather than doing something in it,
+ * and reading is not a quick action. The marketing pages are unchanged and
+ * still reachable from the public navigation.
+ */
+/** The one action the design gives a button of its own. */
+const primaryAction: NavigationItem = {
+  label: "New Project",
+  href: "/solutions/projects#add-project",
+  icon: Plus,
+};
+
+const quickActions: readonly NavigationItem[] = [
+  { label: "Give a bot work", href: "/solutions/bot-manager", icon: Bot },
+  { label: "Import Repository", href: "/solutions/connections", icon: GitBranch },
+] as const;
+
+/**
+ * Active-state from the pathname alone. Hrefs carrying a query string (filter
+ * views of a page) are never marked current — the page itself states which
+ * filter it is showing — so the plain view's link stays the single current
+ * marker for that path.
+ */
+function isActiveHref(pathname: string, href: string) {
+  if (href.includes("?") || href.includes("#")) return false;
+  return href === "/solutions" ? pathname === href : pathname.startsWith(href);
+}
+
+function NavigationLink({
+  item,
+  active,
+  nested = false,
+  onNavigate,
+  /**
+   * True when an enclosing row already paints the state.
+   *
+   * A group's row is the link plus its chevron, and the owner's reference
+   * highlights the whole row as one block. Painting the background here as
+   * well would draw a pill that stops before the chevron — two controls where
+   * the design shows one.
+   */
+  inRow = false,
+  /**
+   * The collapsed rail: the glyph alone, the label still announced.
+   *
+   * `sr-only` rather than dropping the text, because an icon-only link with no
+   * accessible name is an unlabelled link — and `title` alone does not
+   * reliably reach a screen reader.
+   */
+  compact = false,
+}: {
+  item: NavigationItem;
+  active: boolean;
+  nested?: boolean;
+  onNavigate?: () => void;
+  inRow?: boolean;
+  compact?: boolean;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      title={compact ? item.label : undefined}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-10 items-center rounded-lg text-sm font-medium transition-colors",
+        compact ? "justify-center px-0" : "gap-3 px-3",
+        !compact && nested && "min-h-9 pl-9 text-[13px]",
+        inRow
+          ? cn("flex-1", active ? "text-[var(--accent-text)]" : "text-muted")
+          : active
+            ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
+            : "text-muted hover:bg-surface-raised hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+      <span className={compact ? "sr-only" : undefined}>{item.label}</span>
+    </Link>
+  );
+}
 
 function Navigation({
   onNavigate,
   isSuperAdmin = false,
+  compact = false,
 }: {
   onNavigate?: () => void;
   isSuperAdmin?: boolean;
+  compact?: boolean;
 }) {
   const pathname = usePathname();
-  const groups = isSuperAdmin ? [...navigationGroups, superAdminGroup] : navigationGroups;
+  /*
+   * Closed by default, with one exception that keeps the two requirements from
+   * contradicting each other: the group containing the current page opens
+   * itself. "Start collapsed" is about not dumping every destination on
+   * arrival; "preserve active-page highlighting" is about always being able to
+   * see where you are. Collapsing the group you are standing in would satisfy
+   * the first by breaking the second.
+   *
+   * An explicit toggle always wins over that default, so a person who folds the
+   * group they are in keeps it folded.
+   */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string, isOpen: boolean) =>
+    setOverrides((current) => ({ ...current, [label]: !isOpen }));
 
   // Named "Console" rather than "Primary": on /solutions the marketing global
   // navigation is also on the page, and two landmarks sharing an accessible
   // name give screen-reader users no way to tell them apart.
   return (
     <nav aria-label="Console" className="flex-1 space-y-6">
-      {groups.map((group, groupIndex) => (
-        <div key={group.heading ?? `group-${groupIndex}`}>
-          {group.heading ? <p className="label mb-2 px-3">{group.heading}</p> : null}
+      <ul className="space-y-0.5">
+        {navigationEntries.map((entry) => {
+          const subpages = entry.subpages ?? [];
+          const entryActive = isActiveHref(pathname, entry.href)
+            || subpages.some((subpage) => isActiveHref(pathname, subpage.href));
+          if (subpages.length === 0 || compact) {
+            /*
+             * The rail carries destinations, not disclosure. A chevron there
+             * would open a submenu with nowhere to go but over the content —
+             * which is the one thing the layout must never do — so a group in
+             * the rail is its own link, and its highlight still shows when a
+             * subpage is the current page. Expanding the rail brings the
+             * chevrons back.
+             */
+            return (
+              <li key={entry.label}>
+                <NavigationLink
+                  item={entry}
+                  active={entryActive}
+                  onNavigate={onNavigate}
+                  compact={compact}
+                />
+              </li>
+            );
+          }
+          const containsCurrentPage = subpages.some(
+            (subpage) => isActiveHref(pathname, subpage.href),
+          ) || isActiveHref(pathname, entry.href);
+          const expanded = overrides[entry.label] ?? containsCurrentPage;
+          return (
+            <li key={entry.label}>
+              {/*
+                One row, one highlight. The reference shows a group's label and
+                its chevron inside a single block; painting only the link left a
+                pill that stopped short of the chevron and read as two separate
+                controls sharing a line.
+              */}
+              <div
+                className={cn(
+                  "flex items-center rounded-lg pr-1 transition-colors",
+                  entryActive
+                    ? "bg-[var(--accent-surface)]"
+                    : "hover:bg-surface-raised",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <NavigationLink item={entry} active={entryActive} onNavigate={onNavigate} inRow />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(entry.label, expanded)}
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} subpages`}
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                    entryActive ? "text-[var(--accent-text)]" : "text-muted hover:text-foreground",
+                  )}
+                >
+                  <ChevronDown
+                    className={cn("size-4 transition-transform", !expanded && "-rotate-90")}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+              {/*
+                A grid row that animates from 0fr to 1fr.
+                
+                Height cannot be transitioned from `auto`, and hard-coding one
+                would be a number that goes stale the first time a subpage is
+                added. A collapsed grid track does the same job and stays
+                correct: the submenu animates to exactly its own height. It is
+                `invisible` while closed so its links leave the tab order —
+                `overflow-hidden` alone hides them from the eye but not from
+                the keyboard. Motion is dropped entirely for anyone who asked
+                for that.
+              */}
+              <div
+                /*
+                 * Hidden by attribute, not only by paint.
+                 *
+                 * The animation needs the submenu to stay mounted, and a
+                 * mounted-but-clipped list is still in the accessibility tree
+                 * and still tabbable. `inert` removes it from both; the
+                 * `aria-hidden` beside it says the same thing to anything that
+                 * does not implement `inert` yet, and to a test environment
+                 * with no stylesheet — where `invisible` is just a class name
+                 * and every collapsed destination would otherwise read as
+                 * present.
+                 */
+                inert={!expanded}
+                aria-hidden={expanded ? undefined : "true"}
+                className={cn(
+                  "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                  expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                )}
+              >
+                <ul
+                  className={cn(
+                    "overflow-hidden",
+                    expanded ? "mt-0.5 space-y-0.5" : "invisible",
+                  )}
+                >
+                  {subpages.map((subpage) => (
+                    <li key={subpage.label}>
+                      <NavigationLink
+                        item={subpage}
+                        nested
+                        active={isActiveHref(pathname, subpage.href)}
+                        onNavigate={onNavigate}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {isSuperAdmin ? (
+        <div>
+          {compact ? null : <p className="label mb-2 px-3">{superAdminGroup.heading}</p>}
           <ul className="space-y-0.5">
-            {group.items.map(({ label, href, icon: Icon }) => {
-              const isActive = href === "/solutions" ? pathname === href : pathname.startsWith(href);
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-[var(--accent-surface)] text-[var(--accent-text)]"
-                        : "text-muted hover:bg-surface-raised hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
+            {superAdminGroup.items.map((item) => (
+              <li key={item.href}>
+                <NavigationLink
+                  item={item}
+                  active={isActiveHref(pathname, item.href)}
+                  onNavigate={onNavigate}
+                  compact={compact}
+                />
+              </li>
+            ))}
           </ul>
         </div>
-      ))}
+      ) : null}
+
+      {/*
+        The owner's design leads this section with New Project as a button
+        rather than one more link in a list — it is the action people come to
+        the sidebar to take, and a row of identical links gives it no more
+        weight than "Import Repository".
+      */}
+      <div className="space-y-3">
+        <Link
+          href={primaryAction.href}
+          onClick={onNavigate}
+          title={compact ? primaryAction.label : undefined}
+          className={cn(
+            "btn btn-secondary flex min-h-11 w-full items-center justify-center",
+            compact ? "px-0" : "gap-2",
+          )}
+        >
+          <Plus className="size-4 shrink-0" aria-hidden="true" />
+          <span className={compact ? "sr-only" : undefined}>{primaryAction.label}</span>
+        </Link>
+
+        <div>
+          {compact ? null : <p className="label mb-2 px-3">Quick actions</p>}
+          <ul className="space-y-0.5">
+            {quickActions.map((action) => (
+              <li key={action.label}>
+                <NavigationLink
+                  item={action}
+                  active={false}
+                  onNavigate={onNavigate}
+                  compact={compact}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/*
+          The design closes the column with this card. It states what the
+          product is for rather than reporting anything, so it carries no
+          numbers — a panel that looked like a readout but was decorative
+          would be exactly what AGENTS.md forbids.
+        */}
+        {compact ? null : (
+          <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
+              <Rocket className="size-4 shrink-0" aria-hidden="true" />
+              Automate. Build. Ship.
+            </p>
+            <p className="mt-1.5 text-[13px] leading-5 text-muted">
+              Let AI handle the repetitive work so you can focus on what matters.
+            </p>
+          </div>
+        )}
+      </div>
     </nav>
   );
 }
@@ -149,16 +479,66 @@ function Navigation({
 function Sidebar({
   onNavigate,
   viewer,
+  compact = false,
+  onToggleCompact,
+  /**
+   * The site's own destinations, listed at the foot of the drawer.
+   *
+   * Only the drawer: on a wide screen the global header is on the page and
+   * these links are already visible in it. On a phone that header hides its
+   * menu button so there is one hamburger rather than two, which means this
+   * list is the only route to Platform, Pricing and the rest — so it is not
+   * decoration, it is what makes suppressing the other button safe.
+   */
+  siteLinks,
 }: {
   onNavigate?: () => void;
   viewer: ShellViewer;
+  compact?: boolean;
+  /**
+   * Absent wherever retracting is not on offer: the mobile drawer, which
+   * closes rather than narrows, and any device without a hovering pointer.
+   */
+  onToggleCompact?: () => void;
+  siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
+  /*
+   * The navigation starts at the top of the column, and the retract control
+   * ends it.
+   *
+   * Two blocks used to sit above the menu and both were removed by owner
+   * request (2026-08-17): a wordmark, which the site header one row above
+   * already renders, and this toggle. The toggle was then asked for again, on
+   * pointer devices — so it is back, at the foot of the column rather than the
+   * head of it. That is the whole reason for the position: the instruction
+   * that removed it was about the space above the menu, and returning it there
+   * would undo the thing that was actually wanted.
+   */
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
-      {/* No brand here. The marketing global navigation renders directly above
-          this shell and already carries it, so a second logo one row down was
-          the same identity twice with nothing to distinguish them. */}
-      <Navigation onNavigate={onNavigate} isSuperAdmin={viewer.isSuperAdmin} />
+    <div className={cn("flex h-full flex-col overflow-y-auto py-5", compact ? "px-2" : "px-3")}>
+      <Navigation
+        onNavigate={onNavigate}
+        isSuperAdmin={viewer.isSuperAdmin}
+        compact={compact}
+      />
+      {siteLinks?.length ? (
+        <div className="mt-6">
+          <p className="label mb-2 px-3">Site</p>
+          <ul className="space-y-0.5">
+            {siteLinks.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  onClick={onNavigate}
+                  className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">
           <p className="label mb-1">Signed in</p>
@@ -184,15 +564,146 @@ function Sidebar({
           </Link>
         </div>
       )}
-      <div className="mt-6 flex items-start gap-2.5 rounded-lg border border-line px-3 py-3 text-sm text-muted">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-        <p>
-          Safety lock on. SoftwareFactory can read your repository and open draft pull requests. It
-          cannot merge, deploy, or run anything on its own.
-        </p>
-      </div>
+
+      {onToggleCompact ? (
+        <div className="mt-4 border-t border-line pt-3">
+          {/*
+            The name changes with the state, so it always says what the click
+            will do rather than what the column currently is; `aria-pressed`
+            carries the state itself.
+          */}
+          <button
+            type="button"
+            onClick={onToggleCompact}
+            aria-pressed={compact}
+            title={compact ? "Expand navigation" : "Collapse navigation"}
+            className={cn(
+              "flex min-h-9 w-full items-center rounded-lg text-sm font-medium text-muted",
+              "transition-colors hover:bg-surface-raised hover:text-foreground",
+              compact ? "justify-center px-0" : "gap-2 px-3",
+            )}
+          >
+            <PanelLeft
+              className={cn("size-4 shrink-0 transition-transform", compact && "rotate-180")}
+              aria-hidden="true"
+            />
+            <span className={compact ? "sr-only" : undefined}>
+              {compact ? "Expand navigation" : "Collapse navigation"}
+            </span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/*
+ * Three tiers, not two.
+ *
+ * The persistent column used to exist only from 1280px up, so everything below
+ * it — including a landscape tablet — got the phone's drawer and no standing
+ * navigation at all. That is not "reduce the sidebar footprint"; it is the
+ * mobile treatment applied to a screen with room to spare. From 1024px the
+ * column is present as the rail, and from 1280px the person's own choice
+ * decides. Read as a store for the same reason the preference is: a media
+ * query has no server answer, and guessing at one during render hydrates into
+ * a mismatch.
+ */
+const COMPACT_STORAGE_KEY = "softwarefactory:sidebar-compact";
+
+/*
+ * The retract preference is an external store, so it is read as one.
+ *
+ * `localStorage` does not exist on the server, and a component that reads it
+ * during render hydrates into a mismatch. Reading it in an effect and calling
+ * `setState` is the usual workaround and is worse: it is a render the person
+ * sees at the wrong width. A store with a server snapshot says the same thing
+ * without either problem, and the `storage` listener means a second tab does
+ * not disagree with the first about a choice made once.
+ */
+const compactListeners = new Set<() => void>();
+
+function subscribeToCompact(listener: () => void) {
+  compactListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    compactListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function readCompact() {
+  try {
+    return window.localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
+  } catch {
+    // A blocked or full storage is not a reason to fail to render a page.
+    return false;
+  }
+}
+
+function writeCompact(next: boolean) {
+  try {
+    window.localStorage.setItem(COMPACT_STORAGE_KEY, next ? "1" : "0");
+  } catch {
+    // Same: the preference is a convenience, never a precondition.
+  }
+  for (const listener of compactListeners) listener();
+}
+
+/*
+ * "On a Windows or macOS device", asked as a capability rather than a name.
+ *
+ * The owner wants the column to retract on a computer and not on a phone or
+ * tablet, and the honest way to ask that is how the device is driven, not what
+ * it is called. Reading the platform out of the user agent gets this wrong in
+ * both directions: iPadOS reports `MacIntel` in `navigator.platform`, so a
+ * tablet would be served the desktop control, and `navigator.userAgentData` is
+ * Chromium-only, so Safari and Firefox on the very machines this is for would
+ * fall to a string that browsers have been freezing for years.
+ *
+ * A pointer that hovers is what Windows and macOS have and what touch devices
+ * do not, so it is the same question with a reliable answer — and it keeps
+ * Linux and ChromeOS desktops working, which naming two platforms would have
+ * broken for no reason anyone wanted.
+ */
+const POINTER_DESKTOP_QUERY = "(hover: hover) and (pointer: fine)";
+
+function subscribeToPointerDesktop(listener: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(POINTER_DESKTOP_QUERY);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function readPointerDesktop() {
+  /*
+   * Unlike the width query, the safe answer here is "no".
+   *
+   * The widest tier is the right fallback for a layout, because the fullest
+   * navigation is never the wrong thing to show. A control is different: an
+   * environment that cannot say how it is driven should not be handed a
+   * desktop affordance on the chance that it is one.
+   */
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(POINTER_DESKTOP_QUERY).matches;
+}
+
+const EXPANDABLE_QUERY = "(min-width: 1280px)";
+
+function subscribeToExpandable(listener: () => void) {
+  // jsdom has no `matchMedia`, and a shell that throws on render there would
+  // take every component test down with it.
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(EXPANDABLE_QUERY);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function readExpandable() {
+  // An environment that cannot answer the query gets the widest tier: the
+  // fallback should be the fullest navigation, never the most reduced one.
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia(EXPANDABLE_QUERY).matches;
 }
 
 export function AppShell({
@@ -200,6 +711,27 @@ export function AppShell({
   viewer = SIGNED_OUT_VIEWER,
 }: Readonly<{ children: React.ReactNode; viewer?: ShellViewer }>) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const expandable = useSyncExternalStore(subscribeToExpandable, readExpandable, () => true);
+  const pointerDesktop = useSyncExternalStore(
+    subscribeToPointerDesktop,
+    readPointerDesktop,
+    () => false,
+  );
+  const chosenCompact = useSyncExternalStore(subscribeToCompact, readCompact, () => false);
+  /*
+   * Two reasons the column can be a rail, and only one of them is a choice.
+   *
+   * Between 1024 and 1279 the rail is the only form that fits beside content,
+   * so the width decides and the person does not get a say. From 1280 there is
+   * room for either, and on a pointer device they choose.
+   *
+   * The stored preference is read through `canRetract` rather than on its own:
+   * someone who retracts the column on a desktop and later opens the same
+   * account on a tablet would otherwise arrive at a rail with no control to
+   * widen it, because the control is the thing that device does not get.
+   */
+  const canRetract = expandable && pointerDesktop;
+  const compact = !expandable || (canRetract && chosenCompact);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -209,7 +741,20 @@ export function AppShell({
   }, [mobileOpen]);
 
   return (
-    <div className="min-h-screen">
+    /*
+     * One number, declared once, read by both the column and the content.
+     *
+     * The width lived twice — `w-64` on the aside and `xl:pl-64` on the main —
+     * so narrowing the sidebar meant editing two values that had no way to
+     * disagree loudly. As a custom property the content's available width is
+     * derived from the column's actual width rather than kept in step with it
+     * by hand, which is what "recalculate the usable space" has to mean if it
+     * is to survive the next change to either.
+     */
+    <div
+      className="min-h-screen"
+      style={{ "--sidebar-w": compact ? "4rem" : "16rem" } as React.CSSProperties}
+    >
       <a
         href="#main-content"
         className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-[var(--accent-ink)] transition-transform focus:translate-y-0"
@@ -217,8 +762,17 @@ export function AppShell({
         Skip to content
       </a>
 
-      <aside className="fixed bottom-0 left-0 top-[var(--shell-top,0px)] z-40 hidden w-64 border-r border-line bg-surface xl:block">
-        <Sidebar viewer={viewer} />
+      <aside
+        className={cn(
+          "fixed bottom-0 left-0 top-[var(--shell-top,0px)] z-40 hidden border-r border-line bg-surface lg:block",
+          "w-[var(--sidebar-w)] transition-[width] duration-200 ease-out motion-reduce:transition-none",
+        )}
+      >
+        <Sidebar
+          viewer={viewer}
+          compact={compact}
+          onToggleCompact={canRetract ? () => writeCompact(!compact) : undefined}
+        />
       </aside>
 
       {/*
@@ -236,7 +790,7 @@ export function AppShell({
         so the chip restated it one row down and cost a full row of height on
         the narrowest screens for nothing.
       */}
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 xl:hidden">
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -249,12 +803,21 @@ export function AppShell({
       </header>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 xl:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/*
+            A click-away, not a control. It carried the same accessible name
+            as the X inside the drawer, so "Close console navigation" matched
+            two elements — the scrim, which the drawer covers on the left and
+            which therefore cannot always receive a click, and the button
+            people actually mean. `aria-hidden` with `tabIndex={-1}` keeps the
+            behaviour and leaves exactly one named way to close.
+          */}
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close console navigation"
+            aria-hidden="true"
+            tabIndex={-1}
           />
           <aside className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] border-r border-line bg-surface">
             <button
@@ -265,12 +828,25 @@ export function AppShell({
             >
               <X className="size-4" aria-hidden="true" />
             </button>
-            <Sidebar onNavigate={() => setMobileOpen(false)} viewer={viewer} />
+            <Sidebar
+              onNavigate={() => setMobileOpen(false)}
+              viewer={viewer}
+              siteLinks={globalNavigation({
+                signedIn: viewer.signedIn,
+                isSuperAdmin: viewer.isSuperAdmin,
+              })}
+            />
           </aside>
         </div>
       ) : null}
 
-      <main id="main-content" className="min-h-screen pt-16 xl:pl-64 xl:pt-0">
+      <main
+        id="main-content"
+        className={cn(
+          "min-h-screen pt-16 lg:pl-[var(--sidebar-w)] lg:pt-0",
+          "transition-[padding] duration-200 ease-out motion-reduce:transition-none",
+        )}
+      >
         <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>

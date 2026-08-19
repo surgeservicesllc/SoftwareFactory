@@ -1,9 +1,11 @@
 /**
  * Global navigation, as a function of who is looking.
  *
- * Signed out, the header advertises the product. Signed in, it becomes a way
- * to get back into the work, so the console destinations join the public ones
- * and the calls to action turn into an account area.
+ * Signed out, the header advertises the product. Signed in, it stops
+ * advertising: the marketing pages drop out entirely and the header becomes a
+ * way back into the work. Someone who already has an account does not need to
+ * be sold the product on every screen, and those five links were pushing the
+ * console destinations and the account area apart for no one's benefit.
  *
  * This module is deliberately free of `server-only`: both the server layouts
  * and the client header import it, and it holds no secret — the entries are
@@ -17,11 +19,15 @@ export type NavItem = {
 };
 
 /**
- * Public pages, always present.
+ * Public pages, shown to a signed-out visitor.
  *
  * `Solutions` is the console entry point the public site hands off to, so it
  * belongs here rather than only in the signed-in set — dropping it would leave
  * a signed-out visitor no way to reach the dashboard from the navigation.
+ *
+ * These are marketing destinations. They remain reachable by URL and from the
+ * footer once signed in; they are simply not global navigation for someone who
+ * has already arrived.
  */
 export const PUBLIC_NAV: readonly NavItem[] = [
   { label: "Platform", href: "/platform" },
@@ -52,8 +58,14 @@ export const SUPER_ADMIN_NAV: readonly NavItem[] = [{ label: "Admin", href: "/so
 /**
  * The global navigation for a viewer.
  *
- * Signed in, the console entries lead so the work comes before the marketing
- * pages; signed out, only the public pages exist.
+ * Signed out: the public pages, and nothing else.
+ * Signed in: the console destinations, and nothing else.
+ *
+ * The signed-in set is deliberately not "console entries plus whatever public
+ * pages are left over". That produced a header carrying two unrelated
+ * vocabularies at once — Dashboard, Projects, Runs, Activity, Admin, then
+ * Platform, Features, Pricing, Resources, About — where the second half sells
+ * the product to someone already using it.
  */
 export function globalNavigation(options: {
   signedIn: boolean;
@@ -61,11 +73,5 @@ export function globalNavigation(options: {
 }): readonly NavItem[] {
   if (!options.signedIn) return PUBLIC_NAV;
 
-  const consoleEntries = [
-    ...SIGNED_IN_NAV,
-    ...(options.isSuperAdmin ? SUPER_ADMIN_NAV : []),
-  ];
-  const claimed = new Set(consoleEntries.map((entry) => entry.href));
-
-  return [...consoleEntries, ...PUBLIC_NAV.filter((entry) => !claimed.has(entry.href))];
+  return [...SIGNED_IN_NAV, ...(options.isSuperAdmin ? SUPER_ADMIN_NAV : [])];
 }
