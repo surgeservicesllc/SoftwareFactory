@@ -116,7 +116,7 @@ describe("Phase 2C reservation persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260819000700_bot_credential_ref_privileged_parity.sql");
+    expect(migrationFiles.at(-1)).toBe("20260819000800_list_graph_run_verifications.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
