@@ -91,7 +91,15 @@ async function main() {
       workingDirectory: process.cwd(),
     });
 
-    const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, executor);
+    const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt) => {
+      const outcome = await executor(node, attempt);
+      if (outcome.status === "FAILED") {
+        // The database keeps the error on the node_run; the log keeps it
+        // where a person reading the drain can see it without a query.
+        process.stderr.write(`node ${node.nodeKey} attempt ${attempt} failed: ${outcome.error.slice(0, 400)}\n`);
+      }
+      return outcome;
+    });
     process.stdout.write(
       `Graph run ${parsed.graph.graph_run_id} finished ${summary.finalState}: `
       + `${summary.nodesSucceeded} succeeded, ${summary.nodesFailed} failed`
