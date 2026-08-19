@@ -28,6 +28,15 @@ type GraphRunNode = {
   error_message: string | null;
 };
 
+type GraphVerification = {
+  subject_node_key: string;
+  lens: string;
+  verdict: string;
+  evidence: unknown;
+  verifier_provider: string | null;
+  shared_worker_context: boolean;
+};
+
 type GraphRunView = {
   graphRunId: string;
   graphId: string;
@@ -39,6 +48,10 @@ type GraphRunView = {
   completedAt: string | null;
   nodes: GraphRunNode[];
   artifactCounts: Record<string, number>;
+  // Optional on purpose: this is JSON off the network, and a response from
+  // a deployment that predates verifications must render a run rather than
+  // blanking the whole view on a missing key.
+  verifications?: GraphVerification[];
 };
 
 type State = "loading" | "signed-out" | "setup" | "error" | "ready";
@@ -70,6 +83,20 @@ function nodeTone(state: string): "safe" | "info" | "warning" | "danger" | "neut
       return "danger";
     case "SKIPPED":
       return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function verdictTone(verdict: string): "safe" | "info" | "warning" | "danger" | "neutral" {
+  switch (verdict) {
+    case "PASS":
+      return "safe";
+    case "WARN":
+      return "warning";
+    case "REJECT":
+    case "BLOCK":
+      return "danger";
     default:
       return "neutral";
   }
@@ -154,10 +181,11 @@ export function GraphRunsPanel() {
       <ul className="divide-y divide-[var(--border)]">
         {runs.map((run) => {
           const byState = new Map<string, number>();
-          for (const node of run.nodes) {
+          for (const node of run.nodes ?? []) {
             byState.set(node.state, (byState.get(node.state) ?? 0) + 1);
           }
-          const artifactTotal = Object.values(run.artifactCounts).reduce((sum, count) => sum + count, 0);
+          const artifactTotal = Object.values(run.artifactCounts ?? {}).reduce((sum, count) => sum + count, 0);
+          const verifications = run.verifications ?? [];
           return (
             <li key={run.graphRunId} className="p-4 sm:p-5">
               <details>
@@ -177,6 +205,28 @@ export function GraphRunsPanel() {
                       ? ` · ${artifactTotal} artifact${artifactTotal === 1 ? "" : "s"} (${Object.entries(run.artifactCounts).map(([kind, count]) => `${count} ${kind}`).join(", ")})`
                       : " · No artifacts recorded."}
                   </p>
+                  {verifications.length > 0 ? (
+                    <div className="rounded-lg border border-line p-3">
+                      <p className="text-xs font-medium text-foreground">Verifications</p>
+                      <ul className="mt-2 space-y-1.5">
+                        {verifications.map((verification, index) => (
+                          <li key={`${verification.subject_node_key}-${index}`} className="flex flex-wrap items-center gap-2 text-xs">
+                            <StatusBadge tone={verdictTone(verification.verdict)} dot={false}>
+                              {verification.verdict}
+                            </StatusBadge>
+                            <span className="text-foreground">{verification.subject_node_key}</span>
+                            <span className="text-faint">{verification.lens}</span>
+                            {Array.isArray(verification.evidence) && verification.evidence.length > 0 ? (
+                              <span className="text-muted">{verification.evidence.map(String).join("; ")}</span>
+                            ) : null}
+                            {verification.shared_worker_context ? (
+                              <span className="text-[var(--warning)]">verifier shared the subject&apos;s context</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[36rem] text-left text-xs">
                       <thead>
@@ -190,7 +240,7 @@ export function GraphRunsPanel() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--border)]">
-                        {run.nodes.map((node) => (
+                        {(run.nodes ?? []).map((node) => (
                           <tr key={node.node_key}>
                             <td className="py-1.5 pr-3 font-medium text-foreground">{node.node_key}</td>
                             <td className="py-1.5 pr-3"><StatusBadge tone={nodeTone(node.state)} dot={false}>{node.state}</StatusBadge></td>
