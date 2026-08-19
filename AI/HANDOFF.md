@@ -1,6 +1,26 @@
 # Handoff
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
+
+## Newest (2026-08-19 ~03:10Z): graphs execute — the worker boundary is live on production (ADR-092)
+
+The planned-graph dead end is wired. Migration `20260819000100` (claim /
+node-state / artifact / closure as service-role definer functions), the
+executor worker (`scripts/graph-worker.mts`, `graph-worker.yml`), the
+`server-only` shim, and the pinned CLI install are all merged (PRs #236-#240)
+and applied to production. Three real dispatches each surfaced and fixed one
+defect: run 32208699123 (import — shim), run 32208975669 (missing CLI —
+pinned install), run 32209893742 (a session limit burned every remaining
+re-claim chance in seconds — capacity refusals now void runs as CANCELLED,
+uncounted, and stop the drain). Edges now carry data into node prompts, and
+migration `20260819000200` re-planted one fixed-id copy of the owner's
+first-day readiness graph so the next dispatch after the session limit
+resets (7:30am UTC) has real work. What remains for the live proof: dispatch
+`graph-worker.yml` after the reset and read the drain log for node
+successes; the worker's schedule stays off until the repo variable
+`SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED` is set. File-writing nodes remain
+deliberately with the Phase 1C path. The owner's standing merge cadence for
+this goal: merge immediately, verify on production, keep looping.
 
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 
