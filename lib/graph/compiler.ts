@@ -84,6 +84,29 @@ export type CompileInput = {
   readonly resolvedWriteConflicts?: readonly string[];
 };
 
+/**
+ * The wall clock a graph could legitimately need, from its own contracts.
+ *
+ * Every node may spend its declared timeout on every attempt, and the
+ * critical path spends them in sequence. A graph duration budget below this
+ * number stops honest work mid-run and reports BUDGET_STOPPED, which reads
+ * as overspending when it was really under-allowing — exactly what happened
+ * when node envelopes were raised to eight minutes while the default graph
+ * budget stayed at the thirty that suited three-minute nodes.
+ *
+ * Deliberately a worst case, not an estimate: a budget is a ceiling, and a
+ * ceiling derived from optimism is the kind that gets hit.
+ */
+export function minimumGraphDurationMs(
+  graph: Pick<CompiledGraph, "nodes" | "sequentialDepth">,
+): number {
+  const slowestAttemptChain = graph.nodes.reduce(
+    (worst, node) => Math.max(worst, node.timeoutMs * node.maxAttempts),
+    0,
+  );
+  return Math.max(1, graph.sequentialDepth) * slowestAttemptChain;
+}
+
 export function compileGraph(input: CompileInput): CompileResult {
   const errors: CompileError[] = [];
 

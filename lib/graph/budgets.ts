@@ -27,7 +27,16 @@ export type GraphBudget = {
 export const DEFAULT_GRAPH_BUDGET: GraphBudget = Object.freeze({
   maxNodes: 50,
   maxConcurrentNodes: 8,
-  maxDurationMs: 30 * 60_000,
+  // Ninety, not thirty. A MODEL node may spend eight minutes per attempt and
+  // may attempt twice, so the deepest shipped template (feature_build, five
+  // sequential stages) can legitimately need eighty. Thirty was set when
+  // nodes had a three-minute envelope and survived the envelope being
+  // raised — which would have stopped honest work and reported it as
+  // overspending. `minimumGraphDurationMs` computes what a compiled graph
+  // actually needs, and `tests/unit/graph-budget-fit.test.ts` holds every
+  // shipped template against this number, so raising a node envelope without
+  // revisiting this fails a suite instead of a production run.
+  maxDurationMs: 90 * 60_000,
   maxRetries: 10,
   maxDiscoveryRounds: 5,
 });
