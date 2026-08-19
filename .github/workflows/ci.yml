@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+  # Required for the merge queue: it builds a candidate commit and waits for the
+  # required checks to report against *that* commit, so without this trigger
+  # every queued pull request blocks forever.
   merge_group:
   push:
     branches:
@@ -12,6 +15,17 @@ permissions:
   contents: read
 
 concurrency:
+  # `github.ref` is what makes this safe for the merge queue without any extra
+  # condition: a queued candidate runs on its own
+  # `refs/heads/gh-readonly-queue/...` ref, so it never shares a group with a
+  # pull-request run or with another queue entry, and nothing can cancel it.
+  #
+  # Do not add `cancel-in-progress: ${{ github.event_name != 'merge_group' }}`
+  # here. It looks like a useful guard against a cancelled check ejecting a pull
+  # request from the queue, but the ref already prevents that -- and GitHub
+  # silently stops creating workflow runs for the branch when that expression is
+  # present. No run object, no error, no annotation: the pull request simply
+  # never gets checks. That cost an hour to find by bisection.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
