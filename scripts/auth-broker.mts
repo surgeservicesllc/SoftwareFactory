@@ -132,8 +132,14 @@ async function main() {
     url: env.NEXT_PUBLIC_SUPABASE_URL,
     serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   });
+  // Accounts the provider has said it will not serve usage for (scope
+  // refusal). Durable for a credential's lifetime, so remembered for this
+  // worker's window; the next worker re-checks once.
+  const unmeasurableAccounts = new Set<string>();
   const captureUsage = async () => {
-    const usage = await captureUsageForAccounts(store, usageRecorder).catch((error) => {
+    const usage = await captureUsageForAccounts(store, usageRecorder, {
+      unmeasurable: unmeasurableAccounts,
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : "unexpected error";
       process.stdout.write(`Usage sweep skipped: ${message}\n`);
       return { demoted: 0, errors: 0, measured: 0, unavailable: 0, unsupported: 0 };

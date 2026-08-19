@@ -97,4 +97,24 @@ describe("AccountUsage", () => {
     rerender(<AccountUsage usage={view({ status: "unsupported", windows: [] })} />);
     expect(screen.getByText(/not measurable for this provider yet/)).toBeInTheDocument();
   });
+
+  it("shows the provider's own reason when usage is unmeasurable for this connection", () => {
+    // The live case: a headless worker token runs inference but the usage
+    // endpoint declines it (HTTP 403, scope). The provider's answer is a
+    // durable property of the connection and reads as information, not alarm.
+    render(
+      <AccountUsage
+        usage={view({
+          status: "unsupported",
+          windows: [],
+          detail:
+            "The provider declines usage reads for this connection (HTTP 403) while the same credential runs inference. Headless worker tokens carry inference scope only; usage needs the fuller interactive sign-in.",
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/not measurable for this connection/)).toBeInTheDocument();
+    expect(screen.getByText(/inference scope only/)).toBeInTheDocument();
+    expect(document.querySelector(".text-amber-600")).toBeNull();
+  });
 });

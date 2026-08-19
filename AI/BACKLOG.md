@@ -2,6 +2,18 @@
 
 Last triaged: 2026-08-13
 
+## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
+
+- [ ] Design the interactive-login connect path: seal the claude.ai OAuth
+  token (scopes `user:profile` + `user:inference` + sessions) instead of the
+  inference-only `claude setup-token` output, with refresh-token handling and
+  expiry-driven re-auth. This is the only route to measured usage bars — the
+  provider's usage endpoint declines inference-scoped worker tokens (HTTP
+  403, measured 2026-08-19 across 10+ probes with the client's own headers).
+- [ ] Until then the Bot Manager states the truth per ADR-095: Connected,
+  fully operational for running bots, usage not measurable for this
+  connection type. Do not weaken that wording to imply a transient failure.
+
 ## Project repository picker (2026-08-16)
 
 - [x] Add `set_project_github_repository` and `unlink_project_github_repository`
