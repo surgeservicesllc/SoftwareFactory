@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
-import { compileClaimedGraph, parseClaimedGraph, runClaimedGraph } from "@/lib/worker/graph-run";
+import { compileClaimedGraph, parseClaimedGraph, repositoryMismatch, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
 /**
@@ -69,6 +69,19 @@ async function main() {
       const runId = (claim as { graph_run_id?: string }).graph_run_id;
       process.stderr.write(`Claimed graph is unusable: ${parsed.detail}\n`);
       if (runId) await store.completeRun(runId, "FAILED", false, parsed.detail);
+      continue;
+    }
+
+    // A read-only analysis worker reads the tree it is checked out on. If the
+    // graph's project is bound to a different repository, running it anyway
+    // would produce confident findings about the wrong codebase and file them
+    // under this project — a wrong answer that looks exactly like a right one.
+    // A project with no repository linked has nothing to contradict, so it
+    // proceeds; only a definite mismatch stops here.
+    const mismatch = repositoryMismatch(parsed.graph.project_repository, process.env.GITHUB_REPOSITORY);
+    if (mismatch) {
+      process.stderr.write(`${mismatch}\n`);
+      await store.completeRun(parsed.graph.graph_run_id, "FAILED", false, mismatch);
       continue;
     }
 

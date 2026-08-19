@@ -184,6 +184,10 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(parsed.graph.nodes).toHaveLength(4);
     expect(parsed.graph.edges).toHaveLength(3);
     expect(parsed.graph.budget?.max_concurrent_nodes).toBe(8);
+    // The project's repository travels with the claim, so the worker can
+    // refuse to analyse a tree that is not the one this project is bound to.
+    // This fixture links none, which reads as null rather than as a mismatch.
+    expect(parsed.graph.project_repository ?? null).toBeNull();
 
     // The claim is the run: RUNNING with every node PENDING, evented.
     const runs = await db.query<{ state: string }>(
@@ -702,6 +706,27 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       db.query("select * from public.list_graph_runs($1::uuid, 5)", [organizationId]),
     ).rejects.toThrow(/membership/);
     await reset(db);
+  });
+
+  it("reports the project's linked repository in the claim projection", async () => {
+    // Linking a repository must reach the worker: null and "acme/other" are
+    // different situations, and only the projection can tell them apart.
+    await reset(db);
+    await db.query(
+      "update public.projects set github_repository = $2 where id = $1",
+      [projectId, "surgeservicesllc/SoftwareFactory"],
+    );
+    const graphId = await createDiamondGraph("Analyse the bound repository");
+
+    const parsed = parseClaimedGraph(await claim());
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.graph.graph_id).toBe(graphId);
+    expect(parsed.graph.project_repository).toBe("surgeservicesllc/SoftwareFactory");
+
+    await pgliteStore(db, "graph-worker-test").completeRun(parsed.graph.graph_run_id, "PARTIAL", true);
+    await reset(db);
+    await db.query("update public.projects set github_repository = null where id = $1", [projectId]);
   });
 
   it("re-plants a second copy with the measured envelope, exactly once", async () => {

@@ -157,6 +157,18 @@ begin
     'goal', v_graph.goal,
     'topology', v_graph.topology,
     'risk_level', v_graph.risk_level,
+    -- The repository this graph's project is bound to. A read-only analysis
+    -- worker reads whatever tree it is checked out on, so without this the
+    -- projection cannot tell it whether that tree is the right one — and a
+    -- graph planned for another project would come back with confident
+    -- findings about the wrong repository. Null when the project has no
+    -- repository linked, which is a different situation from a mismatch.
+    'project_repository', (
+      select p.github_repository
+        from public.projects p
+       where p.id = v_graph.project_id
+         and p.organization_id = v_graph.organization_id
+    ),
     'budget', (
       select to_jsonb(b) - 'id' - 'organization_id' - 'graph_id'
         from public.graph_budgets b
