@@ -129,6 +129,21 @@ const ANTHROPIC_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const PROBE_TIMEOUT_MS = 15_000;
 
 /**
+ * The client version this probe presents, exported so the workflow-pin guard
+ * can hold it equal to the CLI version every worker installs.
+ *
+ * The endpoint gates on client identity: four consecutive probes on
+ * 2026-08-19 (17:56-18:07Z) were answered 403 while carrying a valid bearer
+ * token, and the one request-shape difference from the real client was the
+ * User-Agent — node's fetch sends none of its own. The probe holds the very
+ * credential that client minted for the owner's subscription, so it presents
+ * that client's identity at the version the workers actually run, read from
+ * the CLI bundle (`{"Content-Type","User-Agent",...auth}` around its
+ * `/api/oauth/usage` call) rather than guessed.
+ */
+export const PROBE_CLIENT_VERSION = "2.1.233";
+
+/**
  * How long a 429's Retry-After is worth waiting for before giving up on this
  * pass. The sweep runs again within minutes, so a long instruction is honored
  * by *leaving*, not by holding the worker hostage to one account's probe.
@@ -160,6 +175,8 @@ export async function probeAnthropicUsage(
         headers: {
           authorization: `Bearer ${token}`,
           "anthropic-beta": "oauth-2025-04-20",
+          "content-type": "application/json",
+          "user-agent": `claude-code/${PROBE_CLIENT_VERSION}`,
           accept: "application/json",
         },
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
