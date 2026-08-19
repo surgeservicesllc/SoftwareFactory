@@ -69,7 +69,7 @@ describe("isCapacityRefusal", () => {
 
 describe("buildClaudeNodeExecutor", () => {
   it("folds upstream outputs and missing inputs into the task prompt", async () => {
-    executeMock.mockResolvedValue({ text: '{"ok":true}' });
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 1200, outputTokens: 300 });
     const executor = buildClaudeNodeExecutor(auth, options);
 
     const result = await executor(node, 1, {
@@ -78,6 +78,9 @@ describe("buildClaudeNodeExecutor", () => {
     });
 
     expect(result.status).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    // Real usage travels with the result so the graph's token budget can bind.
+    expect(result.tokensUsed).toBe(1500);
     const task = capturedTask();
     expect(task).toContain("Synthesize the three inspections");
     expect(task).toContain('Input from upstream node "inspect_a"');
@@ -87,7 +90,7 @@ describe("buildClaudeNodeExecutor", () => {
   });
 
   it("sends the bare job when the node has no incoming edges", async () => {
-    executeMock.mockResolvedValue({ text: "plain answer" });
+    executeMock.mockResolvedValue({ text: "plain answer", inputTokens: 100, outputTokens: 20 });
     const executor = buildClaudeNodeExecutor(auth, options);
 
     await executor(node, 1, { outputs: {}, missing: [] });
