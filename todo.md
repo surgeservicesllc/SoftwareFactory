@@ -248,6 +248,20 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+Round 6 — durability and accounting (PR #246):
+
+- Dead workers no longer strand graphs. claim_planned_graph sweeps
+  abandonment before claiming: a RUNNING run silent for over two hours
+  (run row AND every node row; the worker's own ceiling is one hour)
+  closes FAILED with a reclaim event, unfinished nodes close CANCELLED
+  with the reason on the row, and the graph re-enters the convergence
+  rules. Concurrency-safe; a genuinely live run is untouched (tested).
+- Token usage reaches the budget: the transport's inputTokens/outputTokens
+  now travel on each success, the runner sums them, and the run closure
+  records tokens_used — so max_tokens has something real to bind against.
+  Cost stays unstated: the subscription is not per-token billed, and an
+  invented price would be budgeted against.
+
 Remaining blockers requiring external services/credentials: executing real
 nodes needs the graph-worker workflow dispatched (or its schedule variable
 set) with the existing subscription secret; file-WRITING graph nodes are
