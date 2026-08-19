@@ -1,14 +1,88 @@
 # Applying the unhosted migrations
 
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
+Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-This exists because the owner actions were previously described loosely — including by me, as
-"three unhosted migrations", which undercounted.
+**The current total is 35**, listed in the measured section below. The repository total is 99 migration
+files; the hosted ledger's measured high-water mark is `20260814002300`, so everything after it is
+outstanding. (Newest two: `20260816001400_project_repository_picker` — the Connections console's
+per-project repository picker, two definer functions only — and `20260816001500_ai_account_usage_observations`
+— the Bot Manager's usage evidence, ADR-076; until it is applied, production records no usage
+observations and the panel truthfully says "no usage recorded yet".) (The guard test derives both numbers from the migration directory and this document's
+stated position, and fails when they drift.)
 
-**The current total is 9**. The repository total is 73 migration files; the hosted ledger
-ends at `20260814002300`, so everything after it is in this document. See the
-2026-08-15 measurement block below — the ledger moved a long way and most of the tables
-further down are now history rather than instructions.
+> ## Measured live, 2026-08-16 17:07Z — the first full listing (supersedes every earlier measure)
+>
+> Workflow run `31960618697` (`apply-hosted-migrations.yml`, `scope=broker-functions`, password-only
+> pooler connection) printed the complete local-vs-remote ledger. The facts, correcting the earlier
+> count-only interpretation below:
+>
+> - The remote ledger matches local **exactly and contiguously through `20260814002300`** — 64 rows.
+> - The one remote-only row was **`20260814000200`** (the pre-split name of `000210`/`000220`/`000250`,
+>   all three of which remote records) — **not** `20260814002000`; `20260814000100` was already
+>   correctly recorded. The run reverted the stale `000200` row (history only, no DDL).
+> - The run then surgically applied and recorded **`20260816000400`** and **`20260816000500`**
+>   (both purely `create or replace function` + grants), because production Remove was failing
+>   with `PGRST202` on the missing `remove_ai_account`. These two rows now sit above the
+>   contiguous prefix with a gap — the position pin below stays at `20260814002300` and the
+>   outstanding count keeps counting them, with this note as the reconciliation.
+> - **DDL drift, unledgered:** production demonstrably runs schema from migrations that have no
+>   ledger rows — the credential vault (`20260814002400`–`002600`) and the broker
+>   (`20260816000100`–`000300`) all work live. Something applied their DDL without recording
+>   history. A future full `db push` would therefore replay non-idempotent DDL and fail;
+>   reconcile by probing each outstanding migration's objects and `migration repair --status
+>   applied` the ones already live, before any full push.
+>
+> ## Measured against hosted, 2026-08-16 (owner SQL, count-only — detail corrected above)
+>
+> The owner ran, in the production project's SQL Editor:
+> `select count(*), max(version) from supabase_migrations.schema_migrations;`
+> → **count 65, max `20260814002300`** (screenshot evidence, 2026-08-16).
+>
+> **The count arithmetic confirms the `20260814002000` derivation at the bottom of this
+> document.** The repository holds exactly **64** files at or before `20260814002300`; hosted
+> holds **65** rows. The one extra hosted row is `20260814002000_graph_engineering` — applied
+> under that version, then renamed locally to `20260814000100` — precisely the remote-only
+> version that makes the Supabase integration's comparison fail on every merge and blocks
+> every apply path. It is a ledger-bookkeeping problem, not missing schema: the graph
+> engineering DDL is present on hosted.
+>
+> ### Owner order of operations (repair first, then push)
+>
+> ```bash
+> supabase link --project-ref qpuofpmagrmyamahqwxw
+> supabase migration list        # confirm: remote shows 20260814002000, not 20260814000100
+> # History repair only — no DDL runs:
+> supabase migration repair --status reverted 20260814002000
+> supabase migration repair --status applied  20260814000100
+> supabase migration list        # re-list; the comparison error should be gone
+> supabase db push               # applies the 24 outstanding below, in order
+> ```
+>
+> If `migration list` shows anything other than the predicted state, stop and re-derive —
+> do not force the repair.
+>
+> ### The 24 outstanding, in apply order
+>
+> `20260814002400_connection_registry_multi_account` · `20260814002500_provider_credential_vault`
+> · `20260814002600_store_provider_credential` · `20260815000100`–`20260815000600` (Phase 2E
+> scheduling, six files) · `20260815000700_project_archive_operation` ·
+> `20260815000800_report_per_project_view` · `20260815000900_guard_project_deletion` ·
+> `20260815001000_cross_project_dependencies` · `20260815001100_connection_routing_decisions` ·
+> `20260815001200_improvement_ledger` · `20260815001300_improvement_measurement` ·
+> `20260815001400_factory_self_audit` · `20260815001500_factory_detectors` ·
+> `20260815001600_detector_intake` · `20260816000100_ai_accounts_auth_broker`
+> · `20260816000200_ai_account_verification` · `20260816000300_resume_ai_auth_session` · `20260816000400_inspect_ai_auth_sessions` · `20260816000500_remove_ai_account`
+>
+> Each is described, with its verifying suite, in the per-section tables below. None grants
+> execution authority or new `service_role` table privileges. **Before pushing**, note the 2E
+> capacity defaults (portfolio ceiling 4, 1 reserved, 2 per project, 1 per worker) take effect
+> on apply — raise them first with `set_portfolio_capacity_limits` if the factory should run
+> wider. After pushing, re-run the post-apply checks listed in the rehearsal section.
+>
+> The historical position `20260813001400` and the 2026-08-14 measurement (45 rows /
+> `20260814000200`) below are retained as history; the measured position above is the one
+> to trust.
 
 These two numbers have gone stale three times, because several agents add migrations in parallel
 and none of them is reading this paragraph. `tests/integration/hosted-runbook-counts.test.ts` now
@@ -240,9 +314,10 @@ Order matters only in that `000600` needs `000500`, `000900` needs the tables be
 
 ## Added 2026-08-15 — Phase 2E portfolio scheduling
 
-Four further migrations, verified together by
-`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` (13 tests, two competing
-projects, real claims through `claim_phase1c_run`).
+The portfolio migrations, verified together by
+`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` (two competing
+projects, real claims through `claim_phase1c_run`; the suite pins the migration tail,
+so it cannot pass without having applied every row below).
 
 | Migration | What it adds | Verified by |
 |---|---|---|
@@ -252,6 +327,22 @@ projects, real claims through `claim_phase1c_run`).
 | `20260815000400_phase2e_project_scoped_agents` | One logical agent per role per project, so two projects can run the same role at once | `phase2e-portfolio-scheduling.behavior` |
 | `20260815000500_phase2e_breaker_aware_scheduling` | The cooldown rule in SQL, and selection that consults the 2C circuit breakers it already stored | `phase2e-portfolio-scheduling.behavior`, `breaker-cooldown-parity` |
 | `20260815000600_phase2e_portfolio_visibility` | Three browser projections: the queue in scheduler order with reasons, portfolio capacity, per-project scheduling state | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000700_project_archive_operation` | `archive_project`/`unarchive_project`: owner-only, reason required, immutable events, deletes nothing; the claim path's `status = 'active'` filter is what stops new work | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000800_report_per_project_view` | The daily report gains a bounded per-project array (worst health first, archived included); policy version `phase1e-operations-v2` | `phase2e-portfolio-scheduling.behavior` |
+| `20260815000900_guard_project_deletion` | An instructive BEFORE DELETE refusal naming the structural rule: every project's append-only activity trail already restricts deletion from its first recorded moment | `phase2e-portfolio-scheduling.behavior` |
+| `20260815001000_cross_project_dependencies` | `declare_cross_project_dependency`/`release_cross_project_dependency`: owner-only, reason required, events in both projects, cycle-refusing; edges land in `task_dependencies`, which the claim gate already respects. Carries `submit_command` forward so replays ignore declared cross-project edges | `phase2e-portfolio-scheduling.behavior` |
+| `20260815001100_connection_routing_decisions` | Append-only `connection_routing_decisions` + `record_connection_routing_decision`: the Identity Router's selections and refusals become durable, member-readable evidence with every rejected candidate and its named reason | `connection-registry` |
+| `20260815001200_improvement_ledger` | Append-only `improvement_ledger` + four recorder functions: Phase 3's proposal/decision/implementation/evaluation lifecycle, refusing proposals without baselines, shortcuts past acceptance, re-decisions, and second evaluations | `improvement-ledger.behavior` |
+| `20260815001300_improvement_measurement` | `capture_improvement_baseline` (fourteen-day telemetry window, unmeasured sources named rather than zeroed) + `evaluate_improvement_from_telemetry` (fixed direction table, derived outcome, refuses to guess when nothing compares) | `improvement-ledger.behavior` |
+| `20260815001400_factory_self_audit` | `audit_factory_health`: eight telemetry domains read as evidence, each scored by a stated rule or reported unmeasured with a reason; overall score over measured domains only, with confidence and abstention | `improvement-ledger.behavior` |
+| `20260815001500_factory_detectors` | `detect_factory_improvements`: five detectors with stated evidence floors — recurring fingerprints, flaky test kinds, sub-second model nodes, failing provider pairs, and a debt inventory — abstaining by name below their floors | `improvement-ledger.behavior` |
+| `20260815001600_detector_intake` | `propose_improvements_from_detections`: findings become owner-decidable ledger proposals with machine-captured baselines and metric-named predictions; open questions are never re-proposed, rejections may be re-raised, and nothing is auto-accepted | `improvement-ledger.behavior` |
+| `20260816000100_ai_accounts_auth_broker` | `ai_accounts` (provider sign-ins as first-class identities, no secrets stored) + `ai_auth_sessions` (the broker state machine a worker drives through the provider's real login: pending→initializing→awaiting_user→authenticated→verifying→connected, with failed/expired/revoked terminals) + nullable `bots.ai_account_id`; RLS+FORCE with no direct table access for any role, definer-function transitions, activity events throughout | `ai-accounts-auth-broker.behavior` |
+| `20260816000200_ai_account_verification` | `list_ai_accounts_for_verification` + `mark_ai_account_verified`: the sweep's two hands — enumerate connected subscription accounts, record a shape-level pass as `last_verified_at` (no event; a routine pass is a timestamp, not a transition); demotion stays with `mark_ai_account_needs_reauth` | `ai-accounts-auth-broker.behavior` |
+| `20260816000300_resume_ai_auth_session` | `find_open_ai_auth_session`: the open session an account already has, so a page refresh resumes the sign-in instead of superseding it (authenticated, member-checked, projection excludes the sealed code) | `ai-accounts-auth-broker.behavior` |
+| `20260816000400_inspect_ai_auth_sessions` | `inspect_ai_auth_sessions`: bounded read-only session-state projection for the worker's log (status/timing/linkage, never the sealed code) — the diagnosis surface after two live runs and a watching owner disagreed about whether sessions existed | `ai-accounts-auth-broker.behavior` |
+| `20260816000500_remove_ai_account` | `remove_ai_account`: stronger than disconnect — deletes the account, its credential, and its sessions; bots detach (never deleted) and read "no account attached" | `ai-accounts-auth-broker.behavior` |
+| `20260816001400_project_repository_picker` | `set_project_github_repository` + `unlink_project_github_repository`: owner/admin choice of which GitHub repository an existing project connects to. Same advisory locks as handoff and the change-reservation trigger; one non-archived project per repository with the conflicting project named in the refusal; blocks while a change reservation is pending; immutable `connection.changed` activity evidence; grants to `authenticated` only | `project-repository-picker.behavior` |
 
 What they do **not** do:
 

@@ -10,11 +10,19 @@ const SAFE_BRANCH_PATTERN = /^factory\/[a-f0-9-]{36}-[a-z0-9][a-z0-9-]{0,39}$/;
 
 export class WorkspaceError extends Error {
   readonly code: string;
+  /**
+   * The live base SHA the workspace actually observed when it refused a
+   * stale plan. Carrying the observation lets the worker re-plan a
+   * never-started run to the real head instead of dying on a base that
+   * moved before execution began.
+   */
+  readonly observedBaseSha?: string;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, observedBaseSha?: string) {
     super(message);
     this.name = "WorkspaceError";
     this.code = code;
+    this.observedBaseSha = observedBaseSha;
   }
 }
 
@@ -176,6 +184,7 @@ export class GitWorkspaceManager {
         throw new WorkspaceError(
           "stale_base_sha",
           "The repository base branch changed after the run was planned. Re-plan from the current SHA.",
+          observedSha,
         );
       }
       const existingBranch = await successfulGit(
@@ -264,7 +273,11 @@ export class GitWorkspaceManager {
         }),
       ]);
       if (remoteBase.split(/\s+/)[0]?.toLowerCase() !== job.repository.baseSha.toLowerCase()) {
-        throw new WorkspaceError("stale_base_sha", "The repository base branch changed after the run was planned.");
+        throw new WorkspaceError(
+          "stale_base_sha",
+          "The repository base branch changed after the run was planned.",
+          remoteBase.split(/\s+/)[0]?.toLowerCase(),
+        );
       }
       const remoteBranchSha = remoteBranch.split(/\s+/)[0]?.toLowerCase() || null;
       if ((job.recovery && remoteBranchSha

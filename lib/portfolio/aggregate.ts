@@ -44,6 +44,16 @@ const OPEN_TASK_STATUSES = new Set([
 // Stated as everything short of resolution. An incident that has been
 // investigated or mitigated but not resolved is still an incident.
 const OPEN_INCIDENT_STATUSES = new Set(["open", "investigating", "mitigated"]);
+// A deployment that has not reached a terminal state, including one on its way
+// back down: a rollback in flight is deployment activity, not its absence.
+const OPEN_DEPLOYMENT_STATUSES = new Set(["pending", "in_progress", "rolling_back"]);
+/**
+ * Deliberately a terminal state. A completed change request is one whose draft
+ * pull request exists — the schema enforces a PR number on completion — so this
+ * counts the factory's created draft PRs, which is what the table can truthfully
+ * say. GitHub owns merge state; claiming "open PRs" from here would be a guess.
+ */
+const DRAFT_PR_CHANGE_REQUEST_STATUSES = new Set(["completed"]);
 
 export interface ProjectRow {
   readonly id: string;
@@ -74,6 +84,8 @@ export interface PortfolioSources {
   readonly runs: readonly StatusRow[] | null;
   readonly tasks: readonly StatusRow[] | null;
   readonly incidents: readonly StatusRow[] | null;
+  readonly changeRequests: readonly StatusRow[] | null;
+  readonly deployments: readonly StatusRow[] | null;
   readonly connections: readonly ConnectionRow[] | null;
 }
 
@@ -90,6 +102,10 @@ export interface PortfolioProject {
   readonly activeRuns: number | null;
   readonly openTasks: number | null;
   readonly openIncidents: number | null;
+  /** Draft pull requests the factory has created for this project. */
+  readonly draftPullRequests: number | null;
+  /** Deployments not yet in a terminal state, rollbacks included. */
+  readonly activeDeployments: number | null;
   /** The worst connection state bound to this project. */
   readonly connectionHealth: "connected" | "degraded" | "not_connected" | "unknown";
   /** True when something about this project needs a person. */
@@ -148,6 +164,8 @@ export function buildPortfolio(sources: PortfolioSources): PortfolioView {
   if (sources.runs === null) unavailable.push("runs");
   if (sources.tasks === null) unavailable.push("tasks");
   if (sources.incidents === null) unavailable.push("incidents");
+  if (sources.changeRequests === null) unavailable.push("pull requests");
+  if (sources.deployments === null) unavailable.push("deployments");
   if (sources.connections === null) unavailable.push("connections");
 
   const projects = sources.projects.map((project): PortfolioProject => {
@@ -174,6 +192,9 @@ export function buildPortfolio(sources: PortfolioSources): PortfolioView {
       activeRuns: countFor(sources.runs, project.id, OPEN_RUN_STATUSES),
       openTasks: countFor(sources.tasks, project.id, OPEN_TASK_STATUSES),
       openIncidents,
+      draftPullRequests: countFor(
+        sources.changeRequests, project.id, DRAFT_PR_CHANGE_REQUEST_STATUSES),
+      activeDeployments: countFor(sources.deployments, project.id, OPEN_DEPLOYMENT_STATUSES),
       connectionHealth,
       ownerAttention: attentionReasons.length > 0,
       attentionReasons: Object.freeze(attentionReasons),

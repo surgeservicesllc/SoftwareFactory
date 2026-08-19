@@ -71,9 +71,9 @@ can produce today, and the goal explicitly says that is not completion.**
 | 15 | YELLOW requires enhanced gates, auto-progresses only when explicitly allowed | **PASS** | CODE/TEST: `gates.ts` YELLOW set. |
 | 16 | RED stops before protected production action | **PASS** | CODE/TEST: RED resolves owner-only, outranking controls, ceiling and approval alike. |
 | 17 | PR state/CI/risk/conflicts rechecked immediately before merge | **PASS** | CODE/TEST: `lib/autonomy/merge-readiness.ts`. A push after approval invalidates the approval; a push after verification invalidates the gates; a required check with no report blocks rather than reading as satisfied. |
-| 18 | GitHub auto-merge/merge uses supported APIs and branch protection | **PARTIAL** | CODE/TEST: `lib/autonomy/merge-executor.ts` now exists and `lib/autonomy/merge-eligibility.ts` closes the five conditions `AUTO_MERGE_POLICY.md` recorded as unimplemented (repository/branch allowlisting, size and scope limits, generated/binary detection, unresolved review threads, repository and branch in the audit record). The merge call pins the approved head SHA so GitHub closes the race server-side with a 409, and a test asserts the request body is exactly `commit_title`/`merge_method`/`sha` — nothing that could bypass branch protection. A 405 is final and never retried. **No merge has been executed**: with no allowlist configured, `parseMergeAllowlist` returns `null` and every caller reads that as "no target authorized". Proven by 32 unit tests and four mutations (dropped SHA guard, allowlist-absent-means-allow, prefix separator, skipped readiness re-check). |
+| 18 | GitHub auto-merge/merge uses supported APIs and branch protection | **PARTIAL** | CODE/TEST: `lib/autonomy/merge-executor.ts` now exists and `lib/autonomy/merge-eligibility.ts` closes the five conditions `AUTO_MERGE_POLICY.md` recorded as unimplemented (repository/branch allowlisting, size and scope limits, generated/binary detection, unresolved review threads, repository and branch in the audit record). The merge call pins the approved head SHA so GitHub closes the race server-side with a 409, and a test asserts the request body is exactly `commit_title`/`merge_method`/`sha` — nothing that could bypass branch protection. A 405 is final and never retried. **No production code calls it.** An audit of callers found `executeApprovedMerge`, `evaluateMergeEligibility` and `parseMergeAllowlist` reachable only from tests: `pipeline.ts` accepts an eligibility decision as an *input* and nothing computes one. So this is a decision module with a proven contract, not an integrated executor, and the gap is wiring rather than authorization alone. **No merge has been executed**: with no allowlist configured, `parseMergeAllowlist` returns `null` and every caller reads that as "no target authorized". Proven by 32 unit tests and four mutations (dropped SHA guard, allowlist-absent-means-allow, prefix separator, skipped readiness re-check). |
 | 19 | Vercel preview is tracked and validated | **BLOCKED** | CODE: `lib/deploy/vercel.ts` exists but is **read-only** — it lists and reads deployments and has zero write calls. It reports Not Connected without `VERCEL_TOKEN`, which is unset. |
-| 20 | Eligible approved merge reaches real production deployment | **PARTIAL** | CODE/TEST: `lib/deploy/deployment-executor.ts`. The design point: this repository deploys through Vercel's **Git integration**, so the executing action for a merge is the merge itself; POSTing a create-deployment would produce a parallel deployment not caused by the merge and not gated by branch protection. What was missing was establishing whether production got *this exact commit*, which is now `awaitProductionDeployment`. Commit identity is exact — a healthy deployment of another commit is never accepted, or a broken release could be promoted to Last Known Good on someone else's green build. `pending` is distinct from `failed`, so a build nobody waited for cannot raise an incident, and a provider read error never concludes failure. `pipeline.ts` now returns `satisfied`, `DEPLOYMENT_FAILED`, `DEPLOYMENT_PENDING` or `DEPLOYMENT_NOT_FOUND` instead of one blanket refusal. **Not proven live**: `VERCEL_TOKEN` is unset, so the executor reports Not Connected. |
+| 20 | Eligible approved merge reaches real production deployment | **PARTIAL** | CODE/TEST: `lib/deploy/deployment-executor.ts`. The design point: this repository deploys through Vercel's **Git integration**, so the executing action for a merge is the merge itself; POSTing a create-deployment would produce a parallel deployment not caused by the merge and not gated by branch protection. What was missing was establishing whether production got *this exact commit*, which is now `awaitProductionDeployment`. Commit identity is exact — a healthy deployment of another commit is never accepted, or a broken release could be promoted to Last Known Good on someone else's green build. `pending` is distinct from `failed`, so a build nobody waited for cannot raise an incident, and a provider read error never concludes failure. `pipeline.ts` now returns `satisfied`, `DEPLOYMENT_FAILED`, `DEPLOYMENT_PENDING` or `DEPLOYMENT_NOT_FOUND` instead of one blanket refusal. **No production code calls it**, the same as item 18: `awaitProductionDeployment` is reachable only from tests, and `pipeline.ts` takes a deployment result as an input that nothing produces. **Not proven live** either: `VERCEL_TOKEN` is unset, so the executor reports Not Connected. |
 | 21 | Post-deploy validation determines HEALTHY/FAILED | **PARTIAL** | CODE/TEST: `lib/autonomy/post-deploy.ts` decides what a validation record proves — attribution before check results, and missing/stale/mismatched evidence is `inconclusive`, never `passed`. The decision is complete; nothing produces a real record because 20 is absent. |
 | 22 | Failed qualifying release invokes existing rollback architecture | **PARTIAL** | CODE/TEST: `lib/operations/rollback.ts` decision path is complete and Last Known Good resolves only from a deployment whose own validation passed. Execution is absent. |
 | 23 | Last Known Good maintained only from validated healthy releases | **PASS** | CODE/TEST: enforced in the Last Known Good resolver. |
@@ -312,3 +312,32 @@ failed.
 
 `VERCEL_TOKEN` is unset, so the executor returns `not_connected` before making
 any call. Item 20 stays PARTIAL, not PASS.
+
+---
+
+## Audit addendum — what "PARTIAL" was hiding
+
+A caller audit of the executors found that `executeApprovedMerge`,
+`awaitProductionDeployment`, `evaluateMergeEligibility`, `parseMergeAllowlist`
+and `isMergeExecutorConnected` are reachable **only from their tests**. No
+production path calls any of them.
+
+`pipeline.ts` takes `mergeEligibility` and `deployment` as *inputs* and decides
+correctly from them, which is why the stage tests pass. Nothing computes those
+inputs. The modules are proven contracts; they are not integrated.
+
+Scoring them PARTIAL was defensible and incomplete. The rows now say so
+directly, because "not proven live" reads as "wired but unproven" and the truth
+is "not wired".
+
+**This is deliberately not fixed by wiring them up.** Making the pipeline
+compute a real merge eligibility and call a real merge is precisely the RED
+action `AUTO_MERGE_POLICY.md` gates behind an owner-approved allowlist and a
+disposable-repository pilot. Writing that wiring during an audit would be the
+audit granting itself the authorization the policy withholds. What the audit can
+do is stop the document implying the wiring exists, which it now does.
+
+The same caller audit found one defect that *was* a bug and is fixed: the Google
+sign-in stored a Vertex credential no reader knew about. The difference is that
+one had a user-visible broken promise — a completed sign-in that still read as
+disconnected — and no policy standing in the way of fixing it.

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+import { isSlotPurpose } from "@/lib/ai-accounts/purposes";
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
 import { generateConnectCode, isCredentialStoreConfigured } from "@/lib/server/secret-box";
@@ -29,10 +30,16 @@ import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
 
-const PURPOSES = ["claude", "codex"] as const;
-
+/**
+ * `claude_2` and friends are account slots: the same login as the base
+ * purpose, stored under a distinct purpose so several subscription accounts
+ * can be signed in simultaneously. Unbounded by requirement — `claude_47` is
+ * as valid as `claude` — the vault's purpose pattern
+ * (`^[a-z][a-z0-9_]{1,62}$`) admits them all without any schema change, and
+ * `isSlotPurpose` is the one definition of what a slot purpose looks like.
+ */
 const requestSchema = z.object({
-  purpose: z.enum(PURPOSES),
+  purpose: z.string().min(1).max(63).refine(isSlotPurpose, "Unknown sign-in purpose."),
 }).strict();
 
 /** What the operator runs. Built here so the console never assembles a command. */

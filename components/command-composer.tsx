@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
+import { ArrowUp, CheckCircle2, ChevronRight, Loader2, ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -94,6 +94,11 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   const [tasks, setTasks] = useState<TaskOption[]>([]);
   const [tasksState, setTasksState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [dependencyTaskIds, setDependencyTaskIds] = useState<string[]>([]);
+  // Simple by default: describing the outcome and picking a project is the whole
+  // job. Work type, acceptance criteria, dependencies, and the risk tier are
+  // real controls, but they all carry safe defaults — so they open on demand
+  // rather than confronting every owner every time.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const pendingIntent = useRef<PendingIntent | null>(null);
 
   function markEdited() {
@@ -243,6 +248,19 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   const dependencyOptions = tasks.filter(
     (task) => task.project?.id === projectId && !["cancelled", "failed"].includes(task.status),
   );
+  const acceptanceCount = acceptanceCriteriaFromText(acceptanceText).length;
+  const advancedSummary = [
+    commandType !== "other"
+      ? commandTypes.find((option) => option.value === commandType)?.label
+      : null,
+    riskLevel !== "GREEN" ? `${riskLevel} risk requested` : null,
+    acceptanceCount
+      ? `${acceptanceCount} acceptance criteri${acceptanceCount === 1 ? "on" : "a"}`
+      : null,
+    dependencyTaskIds.length
+      ? `${dependencyTaskIds.length} dependenc${dependencyTaskIds.length === 1 ? "y" : "ies"}`
+      : null,
+  ].filter((part): part is string => Boolean(part));
 
   return (
     <form onSubmit={submitCommand} className="card p-5 sm:p-6">
@@ -303,30 +321,54 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
             ))}
           </select>
         </div>
-
-        <div>
-          <label htmlFor="command-type" className="field-label">
-            Work type
-          </label>
-          <select
-            id="command-type"
-            value={commandType}
-            onChange={(event) => {
-              setCommandType(event.target.value as CommandType);
-              markEdited();
-            }}
-            className="input"
-          >
-            {commandTypes.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((open) => !open)}
+          aria-expanded={showAdvanced}
+          aria-controls="advanced-options"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn("size-4 transition-transform", showAdvanced && "rotate-90")}
+            aria-hidden="true"
+          />
+          Advanced options
+        </button>
+        {!showAdvanced && advancedSummary.length ? (
+          // Anything non-default chosen behind the fold stays visible when the
+          // fold is closed — hidden-but-active settings are how owners get
+          // surprised.
+          <p className="text-xs text-faint">{advancedSummary.join(" · ")}</p>
+        ) : null}
+      </div>
+
+      <div id="advanced-options" className={showAdvanced ? "space-y-5 pt-1" : undefined}>
+      {showAdvanced ? (<>
+      <div>
+        <label htmlFor="command-type" className="field-label">
+          Work type
+        </label>
+        <select
+          id="command-type"
+          value={commandType}
+          onChange={(event) => {
+            setCommandType(event.target.value as CommandType);
+            markEdited();
+          }}
+          className="input"
+        >
+          {commandTypes.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
         <label htmlFor="acceptance-criteria" className="field-label">
           Acceptance criteria <span className="font-normal text-faint">(optional, one per line; derived from work type when blank)</span>
         </label>
@@ -344,7 +386,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
         />
       </div>
 
-      <fieldset className="mt-5">
+      <fieldset>
         <legend className="field-label">Depends on existing work <span className="font-normal text-faint">(optional)</span></legend>
         <p className="mb-2 text-sm text-muted">
           Selected work must belong to this project and complete before the new run can start.
@@ -394,7 +436,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
         ) : null}
       </fieldset>
 
-      <fieldset className="mt-5">
+      <fieldset>
         <legend className="field-label">Requested minimum risk tier</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {riskOptions.map((option) => (
@@ -419,6 +461,8 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
           ))}
         </div>
       </fieldset>
+      </>) : null}
+      </div>
 
       <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p id="command-help" className="text-sm text-muted">

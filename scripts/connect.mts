@@ -35,7 +35,6 @@ interface LoginPlan {
 function clean(text: string): string {
   // Written as an explicit escape rather than a literal escape byte, which is
   // invisible in a diff. \u001B is the same character, spelled visibly.
-  // eslint-disable-next-line no-control-regex
   return text.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trim();
 }
 
@@ -111,14 +110,30 @@ function runLogin(plan: LoginPlan): Promise<string> {
   });
 }
 
+/**
+ * Account slots: `claude_2` runs the same login as `claude` but stores under
+ * its own purpose, so further subscription accounts can be signed in
+ * alongside the first — without limit. The number is only a name; the server
+ * binds the seal to the exact purpose, so a token posted for one slot can
+ * never be opened as another.
+ */
+const PURPOSE_PATTERN = /^(claude|codex)(?:_([2-9]|[1-9][0-9]{1,3}))?$/;
+
+function planFor(purposeValue: string): LoginPlan | null {
+  const match = PURPOSE_PATTERN.exec(purposeValue);
+  if (!match) return null;
+  return PLANS[match[1] as Purpose] ?? null;
+}
+
 async function main() {
-  const purpose = process.argv[2] as Purpose | undefined;
+  const purpose = process.argv[2];
   const code = readFlag("code");
   const host = readFlag("host");
+  const plan = purpose ? planFor(purpose) : null;
 
-  if (!purpose || !(purpose in PLANS) || !code || !host) {
+  if (!purpose || !plan || !code || !host) {
     process.stderr.write(
-      "Usage: tsx scripts/connect.mts <claude|codex> --code <code> --host <origin>\n"
+      "Usage: tsx scripts/connect.mts <claude|codex|claude_2|codex_2|…> --code <code> --host <origin>\n"
       + "Start a sign-in from the SoftwareFactory console to get this command.\n",
     );
     process.exitCode = 1;
@@ -141,7 +156,6 @@ async function main() {
     return;
   }
 
-  const plan = PLANS[purpose];
   process.stdout.write(`Signing in to ${plan.label}. Your browser will open.\n`);
 
   let token: string;

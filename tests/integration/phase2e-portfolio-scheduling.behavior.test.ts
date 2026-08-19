@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260815000700_phase2c_resource_reservations.sql";
+const latestMigration = "20260816001600_phase2c_resource_reservations.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -169,7 +169,12 @@ async function asWorker(db: PGlite) {
   await db.exec("set role service_role");
 }
 
-function commandParameters(project: ProjectFixture, commandType: string, agentRole: string) {
+function commandParameters(
+  project: ProjectFixture,
+  commandType: string,
+  agentRole: string,
+  dependencyTaskIds: string[] = [],
+) {
   return {
     acceptanceCriteria: ["The requested outcome is verified."],
     agentRole,
@@ -182,7 +187,7 @@ function commandParameters(project: ProjectFixture, commandType: string, agentRo
       maximumTurns: 4,
     },
     commandType,
-    dependencyTaskIds: [] as string[],
+    dependencyTaskIds,
     executionMode: "manual",
     model: "gpt-5.3-codex",
     plan: {
@@ -214,6 +219,7 @@ async function submit(
   key: string,
   commandType = "audit",
   agentRole = "qa",
+  dependencyTaskIds: string[] = [],
 ) {
   await actAs(db, ownerId);
   const { rows } = await db.query<{ command_id: string; task_id: string }>(
@@ -227,11 +233,83 @@ async function submit(
       // do with scheduling.
       `Improve the ${project.name} dashboard copy.`,
       "green",
-      JSON.stringify(commandParameters(project, commandType, agentRole)),
+      JSON.stringify(commandParameters(project, commandType, agentRole, dependencyTaskIds)),
       key,
     ],
   );
   return rows[0];
+}
+
+/**
+ * Drives a claimed run to an honest `succeeded` completion: recorded
+ * validation, branch and commit artifacts, a canonical draft-PR artifact for
+ * the run's own repository, then terminal evidence with a passing check. This
+ * is the same evidence chain the contract suite proves the worker must
+ * produce; nothing here bypasses a guard.
+ */
+async function succeed(
+  db: PGlite,
+  workerId: string,
+  run: ClaimedRun,
+  project: ProjectFixture,
+  pullNumber: number,
+) {
+  await asWorker(db);
+  const headBranch = `factory/${project.name.toLowerCase()}-cross-dep-${pullNumber}`;
+  const headSha = "c".repeat(40);
+  await db.query("select public.record_phase1c_validation($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
+    workerId, run.run_id, run.lease_token, 1, "diff-check", "git diff --check", "passed", 5, "clean",
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "branch", headBranch, null,
+    JSON.stringify({ protected: false }),
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "commit", headSha, null,
+    JSON.stringify({ branch: headBranch }),
+  ]);
+  await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
+    workerId, run.run_id, run.lease_token, "pull_request",
+    `https://github.com/${project.repository}/pull/${pullNumber}`, pullNumber,
+    JSON.stringify({ commitSha: headSha }),
+  ]);
+  await db.query(
+    "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+    [
+      workerId, run.run_id, run.lease_token, "succeeded",
+      "The prerequisite work is finished and evidenced.",
+      `provider-run-${pullNumber}`, JSON.stringify({ inputTokens: 10, outputTokens: 10 }),
+      JSON.stringify(["README.md"]),
+      JSON.stringify([{ name: "CI", status: "completed", conclusion: "success" }]),
+      null, null, false,
+    ],
+  );
+}
+
+async function declareDependency(
+  db: PGlite,
+  dependentTaskId: string,
+  prerequisiteTaskId: string,
+  reason: string | null,
+) {
+  await actAs(db, ownerId);
+  return db.query<{ dependency_id: string }>(
+    "select * from public.declare_cross_project_dependency($1::uuid,$2::uuid,$3)",
+    [dependentTaskId, prerequisiteTaskId, reason],
+  );
+}
+
+async function releaseDependency(
+  db: PGlite,
+  dependentTaskId: string,
+  prerequisiteTaskId: string,
+  reason: string | null,
+) {
+  await actAs(db, ownerId);
+  return db.query(
+    "select * from public.release_cross_project_dependency($1::uuid,$2::uuid,$3)",
+    [dependentTaskId, prerequisiteTaskId, reason],
+  );
 }
 
 async function registerWorker(db: PGlite, workerId: string, capacity = 1) {
@@ -1152,6 +1230,736 @@ describe("Phase 2E portfolio scheduling", { timeout: 180_000 }, () => {
           alpha.projectId,
         ]),
       ).rejects.toThrow(/pause reason is required/);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("connection loss degrades only the affected project", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 27, asserted as a negative test rather than inferred from
+   * the per-installation isolation Phase 1B proved. The claim path filters on
+   * `connection.status = 'connected'` and an active, unsuspended installation,
+   * so a lost connection must do exactly two things: withhold the lost
+   * project's work, and change nothing about its neighbour.
+   */
+  it("withholds the lost project's work and leaves the neighbour claimable", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+
+      await submit(db, alpha, "alpha-work", "build_feature", "backend");
+      await submit(db, beta, "beta-work", "build_feature", "backend");
+      await registerWorker(db, "loss-isolation-worker", 2);
+
+      // A server-side discovery marks alpha's connection lost.
+      await asWorker(db);
+      await db.query(
+        "select * from public.mark_github_connection_lost($1::uuid,$2::uuid,$3)",
+        [null, alpha.connectionId, "installation_revoked"],
+      );
+
+      // Beta claims; alpha's queued run is not offered to anyone.
+      const first = await claim(db, "loss-isolation-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(beta.projectId);
+
+      const second = await claim(db, "loss-isolation-worker");
+      expect(second).toBeNull();
+
+      // The withheld work is still queued — degraded, not destroyed. Recovery
+      // needs no resubmission, only a restored connection.
+      await db.exec("reset role");
+      const alphaRun = await db.query<{ status: string }>(
+        `select status::text from public.agent_runs where project_id = $1`,
+        [alpha.projectId],
+      );
+      expect(alphaRun.rows.map((row) => row.status)).toEqual(["queued"]);
+
+      // And the loss is evidence, not just state: the connection reports error.
+      const connection = await db.query<{ status: string }>(
+        `select status::text from public.connections where id = $1`,
+        [alpha.connectionId],
+      );
+      expect(connection.rows[0].status).toBe("error");
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("resumes the withheld project exactly where it was once the connection recovers", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-recovers", "build_feature", "backend");
+      await registerWorker(db, "loss-recovery-worker", 2);
+
+      await asWorker(db);
+      await db.query(
+        "select * from public.mark_github_connection_lost($1::uuid,$2::uuid,$3)",
+        [null, alpha.connectionId, "provider_authorization_failed"],
+      );
+      expect(await claim(db, "loss-recovery-worker")).toBeNull();
+
+      // Reconnection restores the connection, installation, and repository
+      // selection — the loss function de-selects repositories, and a real
+      // resync (`reconcile_github_repository_grants`) re-selects them. None of
+      // it touches the queue, so the same run becomes claimable without
+      // resubmission.
+      await db.exec("reset role");
+      await db.query(
+        `update public.connections set status = 'connected' where id = $1`,
+        [alpha.connectionId],
+      );
+      await db.query(
+        `update public.github_installations
+         set status = 'active', suspended_at = null where connection_id = $1`,
+        [alpha.connectionId],
+      );
+      await db.query(
+        `update public.github_repositories set selected = true
+         where installation_id = $1`,
+        [alpha.installationId],
+      );
+
+      const reclaimed = await claim(db, "loss-recovery-worker");
+      expect(reclaimed).not.toBeNull();
+      expect(reclaimed!.project_id).toBe(alpha.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("archive preserves history and stops new work", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 28. Archive existed only as an enum value — nothing could
+   * set it, so "archive preserves history" was unfalsifiable. Now that it is
+   * an operation, the claim is tested the only way it means anything: archive
+   * a project that has real queued work and real history, and show the work
+   * stops, the history stays, and unarchiving resumes exactly where it was.
+   */
+  it("archives, withholds, preserves, and resumes", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-history", "build_feature", "backend");
+      await submit(db, beta, "beta-open", "build_feature", "backend");
+      await registerWorker(db, "archive-worker", 2);
+
+      // A non-owner cannot archive, and the refusal names the rule.
+      await actAs(db, outsiderId);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,$2)", [
+          alpha.projectId, "tidying up",
+        ]),
+      ).rejects.toThrow(/organization owner/);
+
+      // An owner cannot archive silently.
+      await actAs(db, ownerId);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,null)", [alpha.projectId]),
+      ).rejects.toThrow(/reason is required/);
+
+      const archived = await db.query<{ status: string }>(
+        "select status::text from public.archive_project($1::uuid,$2)",
+        [alpha.projectId, "Superseded by the beta rewrite"],
+      );
+      expect(archived.rows[0].status).toBe("archived");
+
+      // New work stops: only beta's run is offered.
+      const first = await claim(db, "archive-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(beta.projectId);
+      expect(await claim(db, "archive-worker")).toBeNull();
+
+      // History stays: the queued run, its task and command keep their rows,
+      // and the archive itself is an immutable activity event with the reason.
+      await db.exec("reset role");
+      const history = await db.query<{ runs: number; tasks: number; commands: number }>(
+        `select
+           (select count(*)::int from public.agent_runs where project_id = $1) as runs,
+           (select count(*)::int from public.tasks where project_id = $1) as tasks,
+           (select count(*)::int from public.commands where project_id = $1) as commands`,
+        [alpha.projectId],
+      );
+      expect(history.rows[0]).toEqual({ runs: 1, tasks: 1, commands: 1 });
+
+      const event = await db.query<{ metadata: { reason?: string } }>(
+        `select metadata from public.activity_events
+         where project_id = $1 and event_type = 'project.archived'`,
+        [alpha.projectId],
+      );
+      expect(event.rows).toHaveLength(1);
+      expect(event.rows[0].metadata.reason).toBe("Superseded by the beta rewrite");
+
+      // Unarchive restores to active and the same queued run becomes claimable
+      // with no resubmission — the history was the work, and it survived.
+      await actAs(db, ownerId);
+      const restored = await db.query<{ status: string }>(
+        "select status::text from public.unarchive_project($1::uuid,$2)",
+        [alpha.projectId, "Beta rewrite cancelled"],
+      );
+      expect(restored.rows[0].status).toBe("active");
+
+      const reclaimed = await claim(db, "archive-worker");
+      expect(reclaimed).not.toBeNull();
+      expect(reclaimed!.project_id).toBe(alpha.projectId);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses to archive twice and to unarchive the unarchived", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await actAs(db, ownerId);
+      await expect(
+        db.query("select * from public.unarchive_project($1::uuid,null)", [alpha.projectId]),
+      ).rejects.toThrow(/not archived/);
+
+      await db.query("select * from public.archive_project($1::uuid,$2)", [
+        alpha.projectId, "First archive",
+      ]);
+      await expect(
+        db.query("select * from public.archive_project($1::uuid,$2)", [
+          alpha.projectId, "Second archive",
+        ]),
+      ).rejects.toThrow(/already archived/);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("the daily report carries the per-project view", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 26. The report was organization-wide with a health
+   * histogram and attributed risks — and a healthy project had no row
+   * anywhere, so "how is this project" had no answer for the majority. The
+   * projects array closes that, and this asserts the property that makes it
+   * a portfolio report: every project appears, healthy and archived included.
+   */
+  it("gives every project a row, with counts matching the tables", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-open", "build_feature", "backend");
+
+      await actAs(db, ownerId);
+      await db.query("select * from public.archive_project($1::uuid,$2)", [
+        beta.projectId, "Report coverage test",
+      ]);
+
+      const generated = await db.query<{ content: { policy_version: string; projects: readonly {
+        project_id: string; status: string; open_runs: number; open_tasks: number;
+      }[] } }>(
+        "select content from public.generate_operations_report($1::uuid, 24)",
+        [organizationId],
+      );
+      const content = generated.rows[0].content;
+      expect(content.policy_version).toBe("phase1e-operations-v2");
+
+      const rows = new Map(content.projects.map((row) => [row.project_id, row]));
+      // Both projects present: the healthy-and-busy one and the archived one.
+      expect(rows.size).toBe(2);
+      expect(rows.get(alpha.projectId)).toMatchObject({ open_runs: 1, open_tasks: 1 });
+      expect(rows.get(beta.projectId)).toMatchObject({ status: "archived" });
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("projects cannot be deleted, and the schema is why", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 29, resolved by discovery rather than construction. Every
+   * project is born with a 'project.created' activity event; activity_events
+   * references projects with ON DELETE RESTRICT; and the append-only trigger
+   * makes the birth record permanent. A project's audit trail is literally
+   * what makes it undeletable, from its first moment. The new trigger only
+   * *names* that rule before the constraint fires.
+   */
+  it("refuses deletion with instructions, even for the most privileged role", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await db.exec("reset role");
+
+      await expect(
+        db.query("delete from public.projects where id = $1", [alpha.projectId]),
+      ).rejects.toThrow(/archive_project/);
+
+      const survivor = await db.query<{ count: number }>(
+        "select count(*)::int as count from public.projects where id = $1",
+        [alpha.projectId],
+      );
+      expect(survivor.rows[0].count).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("holds even without the trigger, because the birth record restricts", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await db.exec("reset role");
+
+      // The direct seed insert still fired projects_audit_change: the project
+      // was born with history.
+      const birth = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.activity_events
+         where project_id = $1 and event_type = 'project.created'`,
+        [beta.projectId],
+      );
+      expect(birth.rows[0].count).toBe(1);
+
+      // Drop the instructive trigger and try again: the RESTRICT constraint
+      // is the deeper lock, and the trail itself cannot be cleared first —
+      // activity_events is append-only.
+      await db.exec("drop trigger projects_guarded_deletion on public.projects");
+      await expect(
+        db.query("delete from public.projects where id = $1", [beta.projectId]),
+      ).rejects.toThrow(/activity_events/);
+      await expect(
+        db.query("delete from public.activity_events where project_id = $1", [beta.projectId]),
+      ).rejects.toThrow(/append-only|immutable/i);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("an agent's context is exactly one project", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 31. The row returned by `claim_phase1c_run` is the entire
+   * context a worker receives — there is no second channel — so isolation is
+   * provable at that one boundary. Two claims follow: every identifier in the
+   * payload belongs to the claimed project and none to its sibling, and the
+   * lease the payload carries authorises nothing against the sibling's run.
+   * The payload's column list is pinned because any new context field is a
+   * new place a sibling could leak, and must re-answer this test's question.
+   */
+  it("hands the worker only the claimed project's identifiers, and pins the payload shape", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-context", "build_feature", "backend");
+      await submit(db, beta, "beta-context", "build_feature", "backend");
+      await registerWorker(db, "context-worker", 1);
+
+      await asWorker(db);
+      const { rows } = await db.query<Record<string, unknown>>(
+        "select * from public.claim_phase1c_run($1,$2,$3,$4)",
+        ["context-worker", "openai", "gpt-5.3-codex", 120],
+      );
+      const payload = rows[0];
+      expect(payload).toBeDefined();
+
+      // Which project won the claim is the scheduler's business, not this
+      // test's. Whichever it was, the payload must be entirely that project's.
+      const claimed = payload.project_id === alpha.projectId ? alpha : beta;
+      const sibling = claimed === alpha ? beta : alpha;
+      expect(payload.project_id).toBe(claimed.projectId);
+      expect(payload.connection_id).toBe(claimed.connectionId);
+      expect(payload.repository_id).toBe(claimed.repositoryId);
+      expect(payload.internal_installation_id).toBe(claimed.installationId);
+      expect(Number(payload.external_installation_id)).toBe(claimed.externalInstallationId);
+      expect(Number(payload.external_repository_id)).toBe(claimed.externalRepositoryId);
+      expect(payload.repository_full_name).toBe(claimed.repository);
+
+      // Nothing of the sibling leaks through any field — not its ids, not its
+      // repository, not even its name in the prompt.
+      const serialized = JSON.stringify(payload, (_key, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      );
+      for (const leaked of [
+        sibling.projectId, sibling.connectionId, sibling.repositoryId,
+        sibling.installationId, sibling.repository, sibling.name,
+        String(sibling.externalInstallationId), String(sibling.externalRepositoryId),
+      ]) {
+        expect(serialized).not.toContain(leaked);
+      }
+
+      // The worker's whole world, by column name. A field added here without
+      // updating this pin is a field nobody asked the leak question about.
+      expect(Object.keys(payload).sort()).toEqual([
+        "acceptance_criteria", "agent_id", "app_id", "attempt_number",
+        "base_branch", "base_sha", "cancellation_requested", "ci_timeout_ms",
+        "command_id", "command_type", "connection_id",
+        "external_installation_id", "external_repository_id",
+        "internal_installation_id", "lease_expires_at", "lease_token",
+        "logical_agent_role", "maximum_duration_ms", "maximum_input_tokens",
+        "maximum_output_tokens", "maximum_repair_attempts", "maximum_turns",
+        "model", "organization_id", "owner_approval_expires_at",
+        "owner_approval_id", "plan", "project_id", "prompt", "provider",
+        "recovery_head_branch", "recovery_head_sha",
+        "recovery_provider_run_reference", "recovery_pull_request_number",
+        "recovery_pull_request_url", "recovery_usage", "repository_full_name",
+        "repository_id", "requested_risk", "run_id", "task_id",
+      ]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses one project's lease against the sibling's running run", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      await submit(db, alpha, "alpha-lease", "build_feature", "backend");
+      await submit(db, beta, "beta-lease", "build_feature", "backend");
+      await registerWorker(db, "lease-worker-a", 1);
+      await registerWorker(db, "lease-worker-b", 1);
+
+      const first = await claim(db, "lease-worker-a");
+      const second = await claim(db, "lease-worker-b");
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      expect(new Set([first!.project_id, second!.project_id])).toEqual(
+        new Set([alpha.projectId, beta.projectId]),
+      );
+
+      // Worker A holds a perfectly valid lease — on its own run. Against the
+      // sibling's running run, that lease is worth nothing.
+      await asWorker(db);
+      await expect(
+        db.query(
+          "select * from public.heartbeat_phase1c_run($1,$2::uuid,$3::uuid,120)",
+          ["lease-worker-a", second!.run_id, first!.lease_token],
+        ),
+      ).rejects.toThrow(/run deadline is missing or expired/);
+      await expect(
+        db.query(
+          `select * from public.complete_phase1c_run(
+             $1,$2::uuid,$3::uuid,'failed','Cross-project completion attempt.',null,
+             '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'cross_project_attempt',
+             'This call must never succeed.',false)`,
+          ["lease-worker-a", second!.run_id, first!.lease_token],
+        ),
+      ).rejects.toThrow(/active run lease required/);
+
+      // The refusal was about identity, not both calls being broken: the
+      // sibling's run is untouched and its rightful worker can still act.
+      await db.exec("reset role");
+      const untouched = await db.query<{ lease_worker_id: string; status: string }>(
+        "select status::text, lease_worker_id from public.agent_runs where id = $1",
+        [second!.run_id],
+      );
+      expect(untouched.rows[0]).toMatchObject({
+        lease_worker_id: "lease-worker-b", status: "running",
+      });
+      await finish(db, "lease-worker-b", second!);
+
+      await db.exec("reset role");
+      const finished = await db.query<{ status: string }>(
+        "select status::text from public.agent_runs where id = $1",
+        [second!.run_id],
+      );
+      expect(finished.rows[0].status).toBe("failed");
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("cross-project work exists only through an explicit dependency", { timeout: 180_000 }, () => {
+  /**
+   * Portfolio goal 17. Half of this rule has held since Phase 1C:
+   * `submit_command` refuses dependency IDs outside the command's own project,
+   * so implicit coupling is impossible. And the claim gate joins prerequisites
+   * by organization, not project — the scheduler was always ready to respect a
+   * cross-project edge. `declare_cross_project_dependency` is the authorized
+   * doorway that can finally create one, and these tests prove the whole arc:
+   * declared coupling withholds the dependent, honest completion releases it,
+   * every dishonest declaration is refused by name, release restores the
+   * dependent without touching submission evidence, and an idempotent replay
+   * of the originating command survives a coupling declared after it.
+   */
+  it("withholds the dependent project's work until the prerequisite completes", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const prerequisite = await submit(db, alpha, "coupling-prerequisite", "build_feature", "backend");
+      const dependent = await submit(db, beta, "coupling-dependent", "build_feature", "backend");
+
+      await declareDependency(
+        db, dependent.task_id, prerequisite.task_id,
+        "Beta consumes the API Alpha is about to publish.",
+      );
+
+      // The coupling is visible from both sides, with the reason attached.
+      await db.exec("reset role");
+      const events = await db.query<{ project_id: string; metadata: { reason: string } }>(
+        `select project_id, metadata from public.activity_events
+         where event_type = 'task.cross_project_dependency_declared' order by created_at`,
+      );
+      expect(events.rows.map((row) => row.project_id).sort()).toEqual(
+        [alpha.projectId, beta.projectId].sort(),
+      );
+      for (const row of events.rows) {
+        expect(row.metadata.reason).toBe("Beta consumes the API Alpha is about to publish.");
+      }
+
+      await registerWorker(db, "coupling-worker", 2);
+
+      // Beta's run exists and is queued, but the portfolio offers only Alpha.
+      const first = await claim(db, "coupling-worker");
+      expect(first).not.toBeNull();
+      expect(first!.project_id).toBe(alpha.projectId);
+      const withheld = await claim(db, "coupling-worker");
+      expect(withheld).toBeNull();
+
+      // The prerequisite finishes honestly; the gate lifts on real evidence.
+      await succeed(db, "coupling-worker", first!, alpha, 41);
+      const released = await claim(db, "coupling-worker");
+      expect(released).not.toBeNull();
+      expect(released!.project_id).toBe(beta.projectId);
+      expect(released!.task_id).toBe(dependent.task_id);
+
+      // Declaring against already-finished work would gate nothing, and the
+      // boundary says so instead of recording a dead edge.
+      const late = await submit(db, beta, "coupling-late", "build_feature", "backend");
+      await expect(
+        declareDependency(db, late.task_id, prerequisite.task_id, "Too late to matter."),
+      ).rejects.toThrow(/already complete/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("refuses every dishonest declaration by name", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const alphaFirst = await submit(db, alpha, "refusals-alpha-1", "build_feature", "backend");
+      const alphaSecond = await submit(db, alpha, "refusals-alpha-2", "build_feature", "frontend");
+      const betaFirst = await submit(db, beta, "refusals-beta-1", "build_feature", "backend");
+
+      // No reason, no coupling.
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, null),
+      ).rejects.toThrow(/dependency reason is required/);
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, "   "),
+      ).rejects.toThrow(/dependency reason is required/);
+
+      // A task cannot wait on itself.
+      await expect(
+        declareDependency(db, betaFirst.task_id, betaFirst.task_id, "Self-referential."),
+      ).rejects.toThrow(/cannot depend on itself/);
+
+      // Same-project pairs belong to submission, and the refusal says where.
+      await expect(
+        declareDependency(db, alphaSecond.task_id, alphaFirst.task_id, "Wrong doorway."),
+      ).rejects.toThrow(/declared at submission/);
+
+      // An outsider learns nothing: not ownership, not existence.
+      await actAs(db, outsiderId);
+      await expect(
+        db.query(
+          "select * from public.declare_cross_project_dependency($1::uuid,$2::uuid,$3)",
+          [betaFirst.task_id, alphaSecond.task_id, "Not my portfolio."],
+        ),
+      ).rejects.toThrow(/task not found/);
+
+      // Duplicates are refused, not silently absorbed.
+      await declareDependency(
+        db, betaFirst.task_id, alphaSecond.task_id, "Beta waits on Alpha's frontend work.",
+      );
+      await expect(
+        declareDependency(db, betaFirst.task_id, alphaSecond.task_id, "Again."),
+      ).rejects.toThrow(/already declared/);
+
+      // The reverse edge would deadlock both projects; refused before it can.
+      await expect(
+        declareDependency(db, alphaSecond.task_id, betaFirst.task_id, "Mutual dependence."),
+      ).rejects.toThrow(/create a cycle/);
+
+      // A prerequisite that already failed will never complete, and a
+      // dependency on it would block forever. The worker fails Alpha's first
+      // task for real, then the boundary refuses it as a prerequisite.
+      await registerWorker(db, "refusals-worker", 1);
+      const claimed = await claim(db, "refusals-worker");
+      expect(claimed).not.toBeNull();
+      expect(claimed!.task_id).toBe(alphaFirst.task_id);
+      await finish(db, "refusals-worker", claimed!);
+      const late = await submit(db, beta, "refusals-beta-2", "build_feature", "frontend");
+      await expect(
+        declareDependency(db, late.task_id, alphaFirst.task_id, "Waiting on failed work."),
+      ).rejects.toThrow(/will never complete/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("releases the coupling on demand, but never touches submission evidence", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const alphaFirst = await submit(db, alpha, "release-alpha-1", "build_feature", "backend");
+      const alphaSecond = await submit(
+        db, alpha, "release-alpha-2", "build_feature", "frontend", [alphaFirst.task_id],
+      );
+      const betaFirst = await submit(db, beta, "release-beta-1", "build_feature", "backend");
+
+      await declareDependency(
+        db, betaFirst.task_id, alphaFirst.task_id, "Beta ships after Alpha's foundation.",
+      );
+
+      // Both dependents are withheld: Alpha's second task by its submission
+      // edge, Beta's task by the declared coupling. Only the prerequisite runs.
+      await registerWorker(db, "release-worker", 3);
+      const first = await claim(db, "release-worker");
+      expect(first).not.toBeNull();
+      expect(first!.task_id).toBe(alphaFirst.task_id);
+      expect(await claim(db, "release-worker")).toBeNull();
+
+      // Releasing the declared coupling frees Beta immediately — no completion
+      // required — and both projects record why.
+      await releaseDependency(
+        db, betaFirst.task_id, alphaFirst.task_id,
+        "Beta's consumer moved to the published contract; the wait is obsolete.",
+      );
+      const freed = await claim(db, "release-worker");
+      expect(freed).not.toBeNull();
+      expect(freed!.task_id).toBe(betaFirst.task_id);
+
+      await db.exec("reset role");
+      const releaseEvents = await db.query<{ project_id: string }>(
+        `select project_id from public.activity_events
+         where event_type = 'task.cross_project_dependency_released'`,
+      );
+      expect(releaseEvents.rows.map((row) => row.project_id).sort()).toEqual(
+        [alpha.projectId, beta.projectId].sort(),
+      );
+
+      // Alpha's submission edge is not this control's to release.
+      await expect(
+        releaseDependency(db, alphaSecond.task_id, alphaFirst.task_id, "Trying anyway."),
+      ).rejects.toThrow(/submission evidence/);
+      // And a coupling that does not exist is not found, not invented.
+      await expect(
+        releaseDependency(db, betaFirst.task_id, alphaFirst.task_id, "Releasing twice."),
+      ).rejects.toThrow(/dependency not found/);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps idempotent replays honest after a coupling is declared", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+      const prerequisite = await submit(db, alpha, "replay-alpha", "build_feature", "backend");
+
+      // Submission still refuses an implicit cross-project dependency with its
+      // deliberately generic error — the carried-forward body did not soften.
+      await actAs(db, ownerId);
+      await expect(
+        db.query(
+          "select command_id from public.submit_command($1,$2,$3,$4::jsonb,$5)",
+          [
+            beta.projectId, "Improve the Beta dashboard copy.", "green",
+            JSON.stringify(commandParameters(beta, "build_feature", "backend", [prerequisite.task_id])),
+            "replay-implicit",
+          ],
+        ),
+      ).rejects.toThrow(/invalid command dependencies/);
+
+      // A dependent command submitted, then coupled, then replayed with the
+      // same idempotency key: the replay succeeds, because the cross-project
+      // edge is declaration evidence, not unexplained submission evidence.
+      const dependent = await submit(db, beta, "replay-beta", "build_feature", "backend");
+      await declareDependency(
+        db, dependent.task_id, prerequisite.task_id, "Declared between submit and replay.",
+      );
+      const replayed = await submit(db, beta, "replay-beta", "build_feature", "backend");
+      expect(replayed.command_id).toBe(dependent.command_id);
+      expect(replayed.task_id).toBe(dependent.task_id);
+
+      // The declared edge survived the replay untouched.
+      await db.exec("reset role");
+      const edge = await db.query<{ count: number }>(
+        `select count(*)::int as count from public.task_dependencies
+         where task_id = $1 and depends_on_task_id = $2`,
+        [dependent.task_id, prerequisite.task_id],
+      );
+      expect(edge.rows[0].count).toBe(1);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe("a connection-specific ceiling binds one account, not the portfolio", { timeout: 180_000 }, () => {
+  /**
+   * 2D goal 31, proven at the boundary that enforces it. The verdict's
+   * connection-level branch was the one ceiling no test exercised: a
+   * `provider_capacity_limits` row naming a connection caps work bound to
+   * that connection at claim time, counted live from running runs with
+   * unexpired leases — while the neighbour project's own connection keeps
+   * working and the capped work stays queued, starting the moment the
+   * connection's slot frees.
+   */
+  it("withholds work at the connection's ceiling and releases it with capacity", async () => {
+    const db = await database();
+    try {
+      await seedPortfolio(db);
+      await setLimits(db, { emergencyReserved: 0, global: 4 });
+
+      await actAs(db, ownerId);
+      await db.query(
+        "select * from public.set_provider_capacity_limit($1::uuid,'openai',1::smallint,$2::uuid)",
+        [organizationId, alpha.connectionId],
+      );
+
+      const alphaFirst = await submit(db, alpha, "conn-ceiling-a1", "build_feature", "backend");
+      const alphaSecond = await submit(db, alpha, "conn-ceiling-a2", "build_feature", "frontend");
+      const betaFirst = await submit(db, beta, "conn-ceiling-b1", "build_feature", "backend");
+      await registerWorker(db, "conn-ceiling-worker", 3);
+
+      // Alpha's first run occupies the connection's single slot.
+      const first = await claim(db, "conn-ceiling-worker");
+      expect(first).not.toBeNull();
+      expect(first!.task_id).toBe(alphaFirst.task_id);
+
+      // Alpha's second task is older than Beta's, but its connection is at
+      // ceiling — the scheduler passes over it and hands out Beta's work.
+      const second = await claim(db, "conn-ceiling-worker");
+      expect(second).not.toBeNull();
+      expect(second!.task_id).toBe(betaFirst.task_id);
+      expect(await claim(db, "conn-ceiling-worker")).toBeNull();
+
+      // The pass-over is audited with the ceiling that caused it.
+      await db.exec("reset role");
+      const withheld = await db.query<{ reason: string }>(
+        `select reason from public.scheduling_decisions
+         where decision = 'withheld' and project_id = $1`,
+        [alpha.projectId],
+      );
+      expect(
+        withheld.rows.some((row) => row.reason.includes("Connection is at its concurrency ceiling")),
+      ).toBe(true);
+
+      // Releasing the slot releases exactly the capped work.
+      await finish(db, "conn-ceiling-worker", first!);
+      const freed = await claim(db, "conn-ceiling-worker");
+      expect(freed).not.toBeNull();
+      expect(freed!.task_id).toBe(alphaSecond.task_id);
     } finally {
       await db.close();
     }

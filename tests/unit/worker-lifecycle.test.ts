@@ -77,6 +77,7 @@ function storeFor(claimed: WorkerJob) {
     complete: vi.fn().mockResolvedValue(undefined),
     fail: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    replan: vi.fn().mockResolvedValue(true),
   } satisfies WorkerStore;
 }
 
@@ -232,6 +233,104 @@ describe("SoftwareFactoryWorker lifecycle", () => {
     expect(store.fail).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
       code: "stale_base_sha",
       retryable: false,
+    }));
+  });
+
+  it("re-plans a never-started run to the observed head and executes on it", async () => {
+    // Claim-time staleness: on a continuously merging repository the planned
+    // base is often historical before any beat claims the run (three live
+    // owner commands died this way on 2026-08-16). Nothing was built on the
+    // old base, so the run re-plans to the observed head and proceeds.
+    const claimed = job();
+    const observedHead = "c".repeat(40);
+    const workspace = await preparedWorkspace();
+    const store = storeFor(claimed);
+    const prepare = vi.fn()
+      .mockRejectedValueOnce(new WorkspaceError(
+        "stale_base_sha",
+        "The repository base branch changed after the run was planned. Re-plan from the current SHA.",
+        observedHead,
+      ))
+      .mockResolvedValue(workspace);
+    const push = vi.fn().mockResolvedValue(undefined);
+    const createOrRecoverDraft = vi.fn().mockResolvedValue({
+      number: 12,
+      url: "https://github.com/example/repository/pull/12",
+      headSha: "b".repeat(40),
+    });
+    const verifyExistingDraft = vi.fn().mockResolvedValue(undefined);
+    const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
+      store,
+      tokenProvider: { createToken: vi.fn().mockResolvedValue({ token: "installation-token", expiresAt: "2026-08-13T19:00:00.000Z" }) },
+      workspace: {
+        prepare,
+        currentHead: vi.fn().mockResolvedValue("b".repeat(40)),
+        changedFiles: vi.fn().mockResolvedValue(["src/change.ts"]),
+        commit: vi.fn().mockResolvedValue("b".repeat(40)),
+        assertImmutableCommit: vi.fn().mockResolvedValue(undefined),
+        assertRemoteBaseSha: vi.fn().mockResolvedValue(undefined),
+        push,
+      },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
+      validator: {
+        bootstrap: vi.fn().mockResolvedValue({ name: "dependency-install", command: "npm ci", status: "passed", durationMs: 1, output: "" }),
+        run: vi.fn().mockResolvedValue(passingValidation),
+      },
+      publisher: {
+        createOrRecoverDraft,
+        verifyExistingDraft,
+        waitForChecks: vi.fn().mockResolvedValue({ status: "passed", checks: [{ id: 1, name: "CI", status: "completed", conclusion: "success", url: "https://github.com/example/repository/actions/runs/1" }] }),
+      },
+    });
+
+    await expect(worker.runOnce()).resolves.toBe("processed");
+
+    expect(store.replan).toHaveBeenCalledWith(claimed, "worker-1", observedHead);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(prepare.mock.calls[1]![0].repository.baseSha).toBe(observedHead);
+    expect(store.event).toHaveBeenCalledWith(
+      expect.anything(),
+      "worker-1",
+      expect.objectContaining({ kind: "replanned_base" }),
+    );
+    expect(store.fail).not.toHaveBeenCalled();
+    expect(store.complete).toHaveBeenCalled();
+  });
+
+  it("still fails closed when the database refuses the re-plan", async () => {
+    // The guard refusing (lease lost, or a commit already exists) means the
+    // stale plan must not silently move — the original failure stands.
+    const claimed = job();
+    const store = storeFor(claimed);
+    store.replan.mockResolvedValue(false);
+    const stale = new WorkspaceError(
+      "stale_base_sha",
+      "The repository base branch changed after the run was planned. Re-plan from the current SHA.",
+      "c".repeat(40),
+    );
+    const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
+      store,
+      tokenProvider: { createToken: vi.fn().mockResolvedValue({ token: "installation-token", expiresAt: "2026-08-13T19:00:00.000Z" }) },
+      workspace: {
+        prepare: vi.fn().mockRejectedValue(stale),
+        currentHead: vi.fn(),
+        changedFiles: vi.fn().mockResolvedValue([]),
+        commit: vi.fn(),
+        assertImmutableCommit: vi.fn(),
+        assertRemoteBaseSha: vi.fn(),
+        push: vi.fn(),
+      },
+      codex: { createSession: vi.fn().mockReturnValue(codexSession()), initialPrompt: vi.fn().mockReturnValue("Do the work"), prepare: vi.fn().mockResolvedValue(undefined) },
+      validator: { bootstrap: vi.fn(), run: vi.fn() },
+      publisher: { createOrRecoverDraft: vi.fn(), verifyExistingDraft: vi.fn(), waitForChecks: vi.fn() },
+    });
+
+    await expect(worker.runOnce()).resolves.toBe("processed");
+
+    expect(store.replan).toHaveBeenCalledTimes(1);
+    expect(store.complete).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
+      code: "stale_base_sha",
     }));
   });
 

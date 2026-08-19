@@ -2,7 +2,31 @@
 
 Last triaged: 2026-08-13
 
+## Project repository picker (2026-08-16)
+
+- [x] Add `set_project_github_repository` and `unlink_project_github_repository`
+  (migration `20260816001400`): owner/admin-only, serialized with handoff and change
+  reservations, one non-archived project per repository with the conflicting project
+  named, immutable activity evidence, `authenticated`-only grants.
+- [x] Expose them at `PUT`/`DELETE /api/projects/[projectId]/repository` behind
+  same-origin and owner/admin checks; map the uniqueness race to a readable 409.
+- [x] Add the per-project repository picker to the Connections console with truthful
+  no-installation, zero-repository, and projects-load-failure states.
+- [x] Cover route authorization, the uniqueness conflict path, and unlink in unit,
+  component, and migrated-schema behavior tests.
+- [ ] Apply `20260816001400` to hosted Supabase through `AI/HOSTED_APPLY_RUNBOOK.md`;
+  until then the picker's server functions do not exist on hosted.
+
 Checked Phase 1C items distinguish implementation/configuration/release milestones from connectivity. Phase 1C is not Connected until the complete live draft-PR/CI journey has exact provider evidence.
+
+## Per-account usage evidence on the Bot Manager (2026-08-16, ADR-076)
+
+- [x] Add append-only `ai_account_usage_observations` (migration `20260816001500`) with key-allowlisted window payloads, worker-only write, member-only latest-per-account read, and zero direct table access.
+- [x] Probe Anthropic subscription usage from the auth-broker sweep (startup, ~5-minute idle cadence, and on a fresh connect), with the credential opened only inside the sweep and failures recorded as named observations that never demote an account.
+- [x] Render session/weekly usage bars with reset times, freshness, and truthful absence states on the Bot Manager's AI-accounts panel, auto-refreshing while visible.
+- [ ] Apply migration `20260816001500` to hosted Supabase (owner-gated, `AI/HOSTED_APPLY_RUNBOOK.md`) — until then production records no observations and the panel says "no usage recorded yet".
+- [ ] Prove a real usage endpoint for OpenAI/Codex subscription accounts; until then each Codex observation records `unsupported` truthfully.
+- [ ] Decide a retention policy for usage observations (append-only rows accumulate ~300/account/day at the idle cadence); pruning is an owner decision, not a delete path this phase adds.
 
 ## Phase 1D autonomous-loop decision controls (execution-inert)
 

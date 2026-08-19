@@ -235,21 +235,26 @@ export function ProjectsConsole() {
           />
 
           <form onSubmit={createProject} className="mt-5 grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="project-connection" className="field-label">GitHub account</label>
-              <select
-                id="project-connection"
-                value={activeConnectionId}
-                onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
-                className="input"
-              >
-                {connectedConnections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.account?.login ?? connection.name ?? "GitHub"}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* One connected account is the common case, and a picker with a
+                single option is a dead control. The repository list below
+                already names the owner (owner/repo), so nothing is lost. */}
+            {connectedConnections.length > 1 ? (
+              <div>
+                <label htmlFor="project-connection" className="field-label">GitHub account</label>
+                <select
+                  id="project-connection"
+                  value={activeConnectionId}
+                  onChange={(event) => { setConnectionId(event.target.value); setRepositoryId(""); setName(""); }}
+                  className="input"
+                >
+                  {connectedConnections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                      {connection.account?.login ?? connection.name ?? "GitHub"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <div>
               <label htmlFor="project-repository" className="field-label">Repository</label>
@@ -404,7 +409,7 @@ function ProjectInspector({ project, connection }: { project: Project; connectio
       if (repository?.archived) warnings.push("This repository is archived in GitHub.");
       if (repository?.disabled) warnings.push("This repository is disabled in GitHub.");
       if (!next.branches.some((item) => item.name === project.defaultBranch)) warnings.push("GitHub did not return the branch this project points at.");
-      const failingChecks = next.checkRuns.filter((check) => check.status === "completed" && !["success", "neutral", "skipped"].includes(check.conclusion ?? ""));
+      const failingChecks = next.checkRuns.filter(isAdverseCheck);
       if (failingChecks.length) warnings.push(`${failingChecks.length} check${failingChecks.length === 1 ? " is" : "s are"} failing on the main branch.`);
       const conflictingPullRequests = next.pullRequests.filter((pullRequest) => pullRequest.state === "open" && pullRequest.mergeability === "conflicting");
       if (conflictingPullRequests.length) warnings.push(`${conflictingPullRequests.length} open pull request${conflictingPullRequests.length === 1 ? " has" : "s have"} a merge conflict.`);
@@ -643,10 +648,24 @@ function WarningStrip({ text, danger = false }: { text: string; danger?: boolean
   );
 }
 
+/**
+ * Only conclusions that carry actual failure evidence count as failing. A
+ * cancelled or stale run carries no verdict — the worker queue cancels its own
+ * superseded beats by design, and labelling that "1 check is failing on the
+ * main branch" misled the owner on 2026-08-16 while every real check was
+ * green. Cancelled runs still render their literal conclusion in the detail
+ * rows; they just do not raise a failure warning.
+ */
+const ADVERSE_CHECK_CONCLUSIONS = new Set(["failure", "timed_out", "action_required", "startup_failure"]);
+
+function isAdverseCheck(check: CheckRun) {
+  return check.status === "completed" && ADVERSE_CHECK_CONCLUSIONS.has(check.conclusion ?? "");
+}
+
 function summarizeChecks(checkRuns: CheckRun[]): { label: string; tone: "neutral" | "safe" | "warning" | "danger" } {
   if (!checkRuns.length) return { label: "None", tone: "neutral" };
   if (checkRuns.some((check) => check.status !== "completed")) return { label: "Running", tone: "warning" };
-  if (checkRuns.some((check) => !["success", "neutral", "skipped"].includes(check.conclusion ?? ""))) return { label: "Failing", tone: "danger" };
+  if (checkRuns.some(isAdverseCheck)) return { label: "Failing", tone: "danger" };
   return { label: "Passing", tone: "safe" };
 }
 

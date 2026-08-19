@@ -16,6 +16,9 @@ const routes = [
   { path: "/solutions/operations", heading: "Operations" },
   { path: "/solutions/projects", heading: "Projects" },
   { path: "/solutions/portfolio", heading: "Portfolio" },
+  // A dynamic route with an id nothing owns: renders the honest missing state
+  // signed-out, which is what this suite exercises everywhere.
+  { path: "/solutions/portfolio/00000000-0000-4000-8000-00000000dead", heading: "Project detail" },
   { path: "/solutions/files", heading: "Files" },
   { path: "/solutions/bot-manager", heading: "Bot Manager" },
   { path: "/solutions/connections", heading: "Connections" },

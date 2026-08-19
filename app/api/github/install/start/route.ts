@@ -12,8 +12,10 @@ import {
 } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import {
+  buildGitHubInstallAuthorizationUrl,
   createGitHubInstallState,
   GITHUB_INSTALL_STATE_COOKIE,
+  githubInstallStateCookieOptions,
   normalizeReturnTo,
 } from "@/lib/github/state";
 import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
@@ -73,22 +75,15 @@ export async function POST(request: Request) {
     );
 
     const cookieStore = await cookies();
-    cookieStore.set(GITHUB_INSTALL_STATE_COOKIE, state.nonce, {
-      httpOnly: true,
-      maxAge: 10 * 60,
-      path: "/api/github/install",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-
-    const authorizationUrl = new URL(
-      `https://github.com/apps/${encodeURIComponent(configuration.appSlug)}/installations/new`,
+    cookieStore.set(
+      GITHUB_INSTALL_STATE_COOKIE,
+      state.nonce,
+      githubInstallStateCookieOptions(),
     );
-    authorizationUrl.searchParams.set("state", state.token);
 
     return jsonNoStore({
       appSlot: parsed.data.appSlot,
-      authorizationUrl: authorizationUrl.toString(),
+      authorizationUrl: buildGitHubInstallAuthorizationUrl(configuration.appSlug, state.token),
       expiresAt: state.expiresAt,
     });
   } catch (error) {

@@ -97,6 +97,24 @@ describe("starting a sign-in", () => {
     expect(JSON.stringify(sent)).not.toContain(code);
   });
 
+  it("accepts any numbered account slot — there is no hard-coded maximum", async () => {
+    const rpcSpy = vi.fn(
+      async (_name: string, _args: Record<string, unknown>) => ({ data: "session-id", error: null }),
+    );
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: { rpc: rpcSpy },
+    });
+
+    const response = await startConnect(startRequest({ purpose: "claude_47" }));
+
+    expect(response.status).toBe(200);
+    expect((rpcSpy.mock.calls[0]![1] as Record<string, string>).p_purpose).toBe("claude_47");
+    // `claude_1` is not a slot name — slot 1 is the bare purpose. Accepting
+    // both would give one account two credential rows.
+    expect((await startConnect(startRequest({ purpose: "claude_1" }))).status).toBe(400);
+  });
+
   it("issues a different code every time", async () => {
     const first = await (await startConnect(startRequest({ purpose: "claude" }))).json();
     const second = await (await startConnect(startRequest({ purpose: "claude" }))).json();

@@ -5,6 +5,22 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    rules: {
+      // The underscore prefix is the deliberate "present for its type, unused
+      // at runtime" convention — mock signatures in tests carry parameters so
+      // call sites type-check, and destructuring skips positions the same
+      // way. Without the pattern those legitimate carriers each need a
+      // per-line disable, which rots into unused directives.
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        args: "all",
+        argsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+      }],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

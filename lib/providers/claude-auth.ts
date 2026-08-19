@@ -31,6 +31,24 @@
  *   per-token billing from a configuration that claims to be free.
  */
 
+/**
+ * NOTE ON SUBSCRIPTION MODE — READ BEFORE RELYING ON IT.
+ *
+ * Anthropic restricted OAuth authentication to Claude Code and Claude.ai in
+ * February 2026, enforced server-side from January 2026, and using an OAuth
+ * token in a third-party application is a Consumer Terms violation. This
+ * application is a third party.
+ *
+ * Subscription mode therefore remains implemented, and remains the zero-token
+ * path, but it is **not a supported way for this software to reach Claude**.
+ * The supported path is an API key from the Console, which the console now
+ * accepts directly at /api/bots/connect/key.
+ *
+ * This is left in place rather than deleted because removing it would break a
+ * deployment that already depends on it, and because the same code serves
+ * self-hosted and Codex paths. It should not be presented to anyone as the
+ * recommended option.
+ */
 export type ClaudeAuthMode = "subscription" | "api_key";
 
 export type ClaudeAuthFailure =

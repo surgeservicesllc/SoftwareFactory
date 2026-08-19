@@ -51,6 +51,45 @@ describe("ActivityConsole", () => {
     expect(screen.getByText("applied")).toBeInTheDocument();
   });
 
+  it("aggregates the feed by project and filters on a selected facet", async () => {
+    const gatewayEvent = {
+      ...liveEvent,
+      description: "Gateway run completed",
+      id: "44444444-4444-4444-8444-444444444444",
+      project: { id: "55555555-5555-4555-8555-555555555555", name: "Gateway" },
+    };
+    const organizationEvent = {
+      ...liveEvent,
+      description: "Organization member invited",
+      id: "66666666-6666-4666-8666-666666666666",
+      project: null,
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      jsonResponse({ events: [liveEvent, gatewayEvent, organizationEvent] }),
+    ));
+    const user = userEvent.setup();
+
+    render(<ActivityConsole />);
+
+    // Every project that produced events appears as a facet with its count;
+    // events with no project get an organization-level bucket, not a guess.
+    const facets = await screen.findByRole("group", { name: "Filter activity by project" });
+    expect(facets).toHaveTextContent("All (3)");
+    expect(facets).toHaveTextContent("Application (1)");
+    expect(facets).toHaveTextContent("Gateway (1)");
+    expect(facets).toHaveTextContent("Organization (1)");
+
+    await user.click(screen.getByRole("button", { name: "Gateway (1)" }));
+    expect(screen.getByText("Gateway run completed")).toBeInTheDocument();
+    expect(screen.queryByText("GitHub pull request changed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Organization member invited")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "All (3)" }));
+    expect(screen.getByText("GitHub pull request changed")).toBeInTheDocument();
+    expect(screen.getByText("Gateway run completed")).toBeInTheDocument();
+    expect(screen.getByText("Organization member invited")).toBeInTheDocument();
+  });
+
   it("shows a truthful empty state", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ events: [] })));
 

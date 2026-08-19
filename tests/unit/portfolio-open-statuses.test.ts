@@ -58,12 +58,14 @@ describe("portfolio open-work statuses", () => {
     const sets = await openStatusSets();
     const enums: Record<string, readonly string[]> = {
       command: await enumValues("command_status"),
+      deployment: await enumValues("deployment_status"),
       incident: await enumValues("incident_status"),
       run: await enumValues("run_status"),
       task: await enumValues("task_status"),
     };
 
-    expect(Object.keys(sets).sort()).toEqual(["command", "incident", "run", "task"]);
+    expect(Object.keys(sets).sort()).toEqual(
+      ["command", "deployment", "incident", "run", "task"]);
 
     for (const [kind, statuses] of Object.entries(sets)) {
       expect(statuses.length, `${kind} set is empty`).toBeGreaterThan(0);
@@ -91,6 +93,25 @@ describe("portfolio open-work statuses", () => {
     }
   });
 
+  it("counts draft PRs only from a status the change-request table can hold", async () => {
+    // `github_change_requests.status` is a CHECK constraint, not an enum, and
+    // lives in the GitHub integration migration. The completion rule is the
+    // reason the count is truthful: a completed change request must carry a
+    // pull request number, so counting `completed` counts created draft PRs.
+    const integration = await readFile(
+      resolve(repositoryRoot, "supabase/migrations/20260812000400_github_integration.sql"),
+      "utf8",
+    );
+    const check = /status in \('reserved', 'completed', 'failed'\)/.exec(integration);
+    expect(check, "change-request status vocabulary moved; update the draft-PR count").not.toBeNull();
+
+    const source = await readFile(
+      resolve(repositoryRoot, "lib/portfolio/aggregate.ts"),
+      "utf8",
+    );
+    expect(source).toContain('DRAFT_PR_CHANGE_REQUEST_STATUSES = new Set(["completed"])');
+  });
+
   it("reports an unresolved incident as needing a person", () => {
     const project: ProjectRow = {
       autonomousMode: false,
@@ -103,8 +124,10 @@ describe("portfolio open-work statuses", () => {
     };
 
     const view = buildPortfolio({
+      changeRequests: [],
       commands: [],
       connections: [{ projectId: "project-1", provider: "github", status: "connected" }],
+      deployments: [],
       incidents: [{ projectId: "project-1", status: "investigating" }],
       projects: [project],
       runs: [],

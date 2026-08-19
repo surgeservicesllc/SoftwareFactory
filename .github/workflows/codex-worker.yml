@@ -7,6 +7,12 @@ on:
       - softwarefactory_phase1c_preflight
   schedule:
     - cron: "*/5 * * * *"
+  # Owner-ordered 2026-08-16: manual dispatch is ENABLED (it was previously
+  # withheld from this secret-bearing workflow). The job-level ref guard below
+  # limits execution to main, so a manual dispatch cannot run an unreviewed
+  # branch's job with these secrets; GitHub's throttled cron had left queued
+  # runs unclaimed for tens of minutes with no owner recourse.
+  workflow_dispatch: {}
 permissions:
   contents: read
 
@@ -17,7 +23,7 @@ concurrency:
 jobs:
   execute:
     name: Claim one durable SoftwareFactory run
-    if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' }}
+    if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 70
     env:

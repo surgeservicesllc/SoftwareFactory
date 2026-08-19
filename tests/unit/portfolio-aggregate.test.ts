@@ -26,6 +26,8 @@ function sources(overrides: Partial<PortfolioSources> = {}): PortfolioSources {
     runs: [],
     tasks: [],
     incidents: [],
+    changeRequests: [],
+    deployments: [],
     connections: [],
     ...overrides,
   };

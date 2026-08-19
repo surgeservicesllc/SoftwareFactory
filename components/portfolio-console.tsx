@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -341,7 +342,12 @@ export function PortfolioConsole() {
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-col">
-                      <span className="font-medium">{project.name}</span>
+                      <Link
+                        href={`/solutions/portfolio/${project.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {project.name}
+                      </Link>
                       <span className="text-xs text-muted">
                         {project.repository ?? "No repository bound"}
                       </span>
@@ -351,11 +357,13 @@ export function PortfolioConsole() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
                     <Count value={project.openCommands} label="Commands" />
                     <Count value={project.activeRuns} label="Active runs" />
                     <Count value={project.openTasks} label="Open tasks" />
                     <Count value={project.openIncidents} label="Incidents" />
+                    <Count value={project.draftPullRequests} label="Draft PRs" />
+                    <Count value={project.activeDeployments} label="Deploys active" />
                     <div className="flex flex-col">
                       <span className="text-xs text-muted">Health</span>
                       <span className="text-sm">{project.health}</span>

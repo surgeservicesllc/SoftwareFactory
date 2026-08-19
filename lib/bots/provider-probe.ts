@@ -122,12 +122,19 @@ async function readErrorCode(response: Response): Promise<string> {
 export async function probeProviderCredential(
   providerId: BotProviderId,
   credentialRef: string | null,
+  /**
+   * A credential that did not come from the environment — one signed in through
+   * OAuth and opened from the vault. Passed explicitly rather than merged into
+   * `process.env`, because mutating the process environment to verify one
+   * request would leak that credential into every other request on the instance.
+   */
+  explicitSecret?: string | null,
 ): Promise<ProbeResult> {
   if (!credentialRef) {
     return verdict("not_probed", "This provider needs no credential to verify.", false);
   }
 
-  const secret = (process.env[credentialRef] ?? "").trim();
+  const secret = (explicitSecret ?? process.env[credentialRef] ?? "").trim();
   if (!secret) {
     return verdict("not_configured", "No key is set for this provider yet.", false);
   }

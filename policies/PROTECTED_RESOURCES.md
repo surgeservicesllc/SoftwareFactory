@@ -59,6 +59,43 @@ The following are protected by subject matter even if repository path names chan
 - `policies/**`, `AGENTS.md`, and safety-relevant AI memory;
 - production deployment, DNS, billing, rollback, and provider-permission configuration.
 
+## Owner-frozen: the AI-account connection path (2026-08-16)
+
+The owner verified the end-to-end Claude connection live and ordered it
+protected: **no modification without a specific owner instruction.** This is
+stronger than elevated review — it is a freeze. It covers:
+
+- `lib/worker/auth-broker.ts`, `scripts/auth-broker.mts`, and
+  `.github/workflows/auth-broker.yml`;
+- the broker migrations (`20260816000100`–`20260816001200`) and their
+  functions;
+- `components/ai-account-connect.tsx`, the connect/session/code/cancel
+  routes under `app/api/ai-accounts/**`, and `lib/ai-accounts/**`
+  (including `lib/ai-accounts/device-login.ts`).
+
+Diagnosis stays allowed: reading logs, running read-only probes, and
+reporting findings. When a defect is found, the finding and a proposed fix
+go to the owner; the fix lands only on their instruction. Verified-working
+configuration at the Claude freeze (2026-08-16 ~17:00Z): main `74843ef`
+(worker release `85c4b14` lineage — Enter-as-keystroke submission,
+stale-code fail-fast, release-SHA self-handover, identity capture).
+
+**Codex extension (2026-08-16 19:06Z).** The owner verified the first live
+Codex connection ("Signed in as daniel.hughen@gmail.com", verified
+19:06:41Z) and ordered the Codex path locked down alongside Claude. The
+freeze therefore also covers, at the configuration then on main:
+
+- the Codex device-auth driver in `lib/worker/auth-broker.ts`
+  (`codex login --device-auth`, CLI pinned `@openai/codex@0.147.0`,
+  completion via `$CODEX_HOME/auth.json`, no paste-back);
+- `lib/ai-accounts/device-login.ts` (the `#sf-device-code=` fragment
+  contract between worker and console);
+- the device-code branch of `components/ai-account-connect.tsx` (big code
+  + Copy button + first-time "Device code login" guidance);
+- migrations `20260816000800`–`20260816001200` (cancel-discards-pending,
+  status read, vault-read restatement, 65536-char envelope cap,
+  awaiting_user→verifying).
+
 Documentation-only clarification may be GREEN/YELLOW, but any semantic reduction in protection is RED.
 
 ## Which of these are enforced in code

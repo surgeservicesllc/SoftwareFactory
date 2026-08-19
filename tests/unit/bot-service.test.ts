@@ -4,6 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const { loadStoredCredentialOverlay } = vi.hoisted(() => ({
+  loadStoredCredentialOverlay: vi.fn(async () => ({}) as Record<string, string>),
+}));
+vi.mock("@/lib/providers/stored-credentials", () => ({ loadStoredCredentialOverlay }));
+
 import { BotCredentialError } from "@/lib/bots/credentials";
 import {
   BotFabricForbiddenError,
@@ -67,6 +72,8 @@ function fakeClient(rows: TableRows, error: { code?: string; message?: string } 
 
 afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
+  loadStoredCredentialOverlay.mockReset();
+  loadStoredCredentialOverlay.mockResolvedValue({});
 });
 
 describe("canManageBotFabric", () => {
@@ -104,6 +111,22 @@ describe("serializeBot", () => {
     expect(bot.readiness).toBe("not_connected");
     expect(bot.providerLabel).toBe("mystery");
     expect(bot.providerVendor).toBe("Unknown vendor");
+  });
+
+  it("counts a signed-in credential present even when no environment variable is set", () => {
+    // The env var is deliberately unset. A supplied presence predicate stands
+    // in for a credential that arrived via one-click sign-in or a pasted key,
+    // and the bot must read exactly as ready as an env-configured one.
+    const bot = serializeBot(botRow, (ref) => ref === "ANTHROPIC_API_KEY");
+
+    expect(bot.credentialPresent).toBe(true);
+    expect(bot.currentReadiness).toBe("ready");
+  });
+
+  it("defaults to environment-only presence when no predicate is supplied", () => {
+    expect(serializeBot(botRow).credentialPresent).toBe(false);
+    process.env.ANTHROPIC_API_KEY = "fixture-value";
+    expect(serializeBot(botRow).credentialPresent).toBe(true);
   });
 });
 
@@ -196,6 +219,36 @@ describe("loadBotFabric", () => {
     await expect(
       loadBotFabric(fakeClient({}, { code: "42501", message: "denied" }), organizationId),
     ).rejects.toBeInstanceOf(BotFabricQueryError);
+  });
+
+  it("marks a bot ready from a vault credential with no environment variable set", async () => {
+    // The one-click sign-in and paste-key flows store credentials in the vault,
+    // not the environment. The overlay carries the same variable name, so the
+    // fleet must report the bot ready without ANTHROPIC_API_KEY ever being set.
+    loadStoredCredentialOverlay.mockResolvedValue({ ANTHROPIC_API_KEY: "opened-secret" });
+
+    const snapshot = await loadBotFabric(
+      fakeClient({ bots: [botRow], bot_roles: [], bot_assignments: [], projects: [] }),
+      organizationId,
+    );
+
+    expect(loadStoredCredentialOverlay).toHaveBeenCalledWith(organizationId);
+    expect(snapshot.bots[0]!.credentialPresent).toBe(true);
+    expect(snapshot.bots[0]!.currentReadiness).toBe("ready");
+    // The opened secret is used for presence only and never serialized.
+    expect(JSON.stringify(snapshot)).not.toContain("opened-secret");
+  });
+
+  it("still reports not-connected when neither the environment nor the vault holds it", async () => {
+    loadStoredCredentialOverlay.mockResolvedValue({ OPENAI_API_KEY: "unrelated" });
+
+    const snapshot = await loadBotFabric(
+      fakeClient({ bots: [botRow], bot_roles: [], bot_assignments: [], projects: [] }),
+      organizationId,
+    );
+
+    expect(snapshot.bots[0]!.credentialPresent).toBe(false);
+    expect(snapshot.bots[0]!.currentReadiness).toBe("not_connected");
   });
 });
 

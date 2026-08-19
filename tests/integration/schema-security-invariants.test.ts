@@ -52,6 +52,19 @@ const GITHUB_INGRESS_TABLES = [
  * "protected and never wired up" is intent, and intent has to be written down.
  */
 const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze({
+  ai_account_usage_observations:
+    "Append-only usage evidence per AI account. Reads go through the "
+    + "list_ai_account_usage member projection and the only writer is the "
+    + "worker's record_ai_account_usage definer function; a policy would open "
+    + "a second, silent path around both.",
+  ai_accounts:
+    "AI-account identities. No secret column, but every read goes through the "
+    + "list_ai_accounts projection and every mutation through a definer function "
+    + "that writes an activity event; a policy would open a second, silent path.",
+  ai_auth_sessions:
+    "Broker sign-in sessions. The sealed relay code must be impossible to read "
+    + "rather than merely restricted — only the worker's definer function returns "
+    + "it, and the browser's projection cannot name the column.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",
@@ -220,6 +233,12 @@ describe("SECURITY DEFINER functions", () => {
     expect(result.rows.map((row) => row.proname)).toEqual([
       "agentos_record_trigger_delivery",
       "append_phase1c_run_event",
+      // The auth-broker worker's eight capabilities: drive a sign-in session
+      // through the provider's real login. `read_ai_auth_relay_code` returns
+      // a sealed envelope useless without SOFTWAREFACTORY_CREDENTIAL_KEY, and
+      // `complete_` accepts only an already-sealed credential — plaintext
+      // never crosses this boundary in either direction.
+      "claim_ai_auth_session",
       "claim_phase1c_run",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
@@ -227,24 +246,61 @@ describe("SECURITY DEFINER functions", () => {
       // SOFTWAREFACTORY_CREDENTIAL_KEY, which is deliberately not in the
       // database. The server has no other privileged identity to call them with.
       "claim_provider_connect_session",
+      "complete_ai_auth_session",
       "complete_github_change_request",
       "complete_phase1c_run",
       "disconnect_github_connection",
+      "expire_ai_auth_sessions",
+      "fail_ai_auth_session",
       "fail_github_change_request",
       "fail_github_change_request_with_evidence",
       "finish_phase1c_worker",
       "heartbeat_phase1c_run",
       "heartbeat_phase1c_worker",
+      // Read-only session-state projection for the worker's log — status and
+      // timing, never the sealed relay code.
+      "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
+      // The verification sweep's two hands: enumerate connected subscription
+      // accounts, and record a shape-level pass. Demotion is the function
+      // below; a pass is a timestamp, not an event.
+      "list_ai_accounts_for_verification",
+      // Purpose names only — the unbounded-accounts overlay has to discover
+      // which slots exist before reading them; ciphertext still comes one
+      // purpose at a time through read_provider_credential.
+      "list_provider_credential_purposes",
+      "mark_ai_account_needs_reauth",
+      "mark_ai_account_verified",
+      "mark_ai_auth_session_verifying",
       "mark_github_connection_lost",
       "process_github_webhook_delivery",
+      "read_ai_auth_relay_code",
+      // Status only, never the sealed code: a worker mid-drive can notice a
+      // cancel and stop instead of blind-waiting out the relay window.
+      "read_ai_auth_session_status",
       "read_provider_credential",
       "reconcile_github_repository_grants",
+      // The usage sweep's one write: append a provider-usage observation for
+      // an account the worker just probed. Insert-only into an append-only
+      // table; the definer function revalidates the account/organization pair.
+      "record_ai_account_usage",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
+      // Moves a never-started run's planned base to the observed live head.
+      // Lease-guarded and refused once any commit exists, so pushed work can
+      // never be orphaned by a re-plan.
+      "replan_phase1c_run",
+      "report_ai_auth_login_url",
       "resolve_provider_connect_session",
+      // Which provider account signed in — display data on a completed
+      // sign-in, shape-checked against secrets, reported only by the worker.
+      "set_ai_account_provider_identity",
+      // Stores a credential obtained through an OAuth callback. Server-only:
+      // a browser must never write that table directly, or the seal would be
+      // whatever the browser sent.
+      "store_provider_credential",
       "sync_github_installation",
     ]);
   });

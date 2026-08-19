@@ -335,6 +335,17 @@ export class SupabaseWorkerStore implements WorkerStore {
     if (error) databaseFailure("Run failure", error);
   }
 
+  async replan(job: WorkerJob, workerId: string, baseSha: string): Promise<boolean> {
+    const { data, error } = await this.client.rpc("replan_phase1c_run", {
+      p_worker_id: workerId,
+      p_run_id: job.runId,
+      p_lease_token: job.worker.leaseToken,
+      p_base_sha: baseSha,
+    });
+    if (error) databaseFailure("Run replan", error);
+    return data === true;
+  }
+
   async cancel(job: WorkerJob, workerId: string, reason: string, usage: WorkerUsage = job.priorUsage) {
     const { error } = await this.client.rpc("complete_phase1c_run", {
       p_worker_id: workerId,

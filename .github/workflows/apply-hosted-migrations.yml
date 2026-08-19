@@ -1,0 +1,218 @@
+name: Apply hosted migrations
+
+# The runbook (AI/HOSTED_APPLY_RUNBOOK.md), executable: repairs the one
+# renamed ledger row, then pushes every outstanding migration to the hosted
+# Supabase project — exactly the steps the owner would type, with the ledger
+# listed before and after so the run's log is its own evidence.
+#
+# Owner-triggered only, and it refuses to run without the typed confirmation,
+# because this writes DDL to production. Secrets (Settings → Secrets and
+# variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — a personal access token (looks like sbp_0102…)
+#   SUPABASE_DB_PASSWORD   — the project database password
+# Either one alone is enough: a valid token uses the linked project flow; a
+# missing or malformed token falls back to a direct database connection
+# through the IPv4 pooler using only the password (the project's direct DB
+# hostname is IPv6-only, which GitHub-hosted runners cannot reach).
+# Never paste either secret into a chat, an issue, or a commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply" to run against the production project'
+        required: true
+      scope:
+        description: >-
+          "all" pushes every outstanding migration; "broker-functions"
+          applies only the idempotent broker migrations
+          (20260816000400 through 001500) and records them in history —
+          the surgical path when the full push is blocked by ledger drift.
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - broker-functions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Repair ledger and push migrations
+    if: ${{ inputs.confirm == 'apply' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+    steps:
+      - name: Check out the migrations
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Choose the connection
+        # Decides MODE=token (valid sbp_ token, linked flow) or MODE=dburl
+        # (password-only, through the IPv4 session pooler). The URL-encoded
+        # password and the full URL are masked explicitly: only the raw
+        # secret value is masked automatically, and this repository is
+        # public.
+        run: |
+          if [[ "$SUPABASE_ACCESS_TOKEN" =~ ^sbp_[A-Za-z0-9]{16,}$ ]]; then
+            echo "MODE=token" >> "$GITHUB_ENV"
+            echo "Using the personal access token (linked project flow)."
+          elif [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is missing or not shaped like a personal access token (they look like sbp_0102...1920; generate one at supabase.com -> Account -> Access Tokens)."
+            echo "Falling back to the direct database connection using SUPABASE_DB_PASSWORD only."
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            FOUND=""
+            for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+              URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+              echo "::add-mask::$URL"
+              if npx --yes supabase@2 migration list --db-url "$URL" >/dev/null 2>&1; then
+                echo "Reached the database through ${HOST}."
+                echo "MODE=dburl" >> "$GITHUB_ENV"
+                echo "DB_URL=$URL" >> "$GITHUB_ENV"
+                FOUND="yes"
+                break
+              fi
+            done
+            if [ -z "$FOUND" ]; then
+              echo "::error::Could not reach the database through the pooler (tried aws-0/aws-1 us-west-2). Either SUPABASE_DB_PASSWORD is wrong, or the project lives elsewhere — set a valid SUPABASE_ACCESS_TOKEN (sbp_...) to use the linked flow instead."
+              exit 1
+            fi
+          else
+            echo "::error::Neither a valid SUPABASE_ACCESS_TOKEN (sbp_...) nor SUPABASE_DB_PASSWORD is set. Add at least the database password as an Actions secret."
+            exit 1
+          fi
+
+      - name: Link the production project (token mode only)
+        if: ${{ env.MODE == 'token' }}
+        run: npx --yes supabase@2 link --project-ref "$PROJECT_REF"
+
+      - name: List the remote ledger before touching anything
+        run: |
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration list --linked
+          else
+            npx supabase migration list --db-url "$DB_URL"
+          fi
+
+      - name: Repair stale ledger rows (idempotent)
+        # Two known history-only repairs, each applied only when the live
+        # listing shows the stale row. 20260814002000 was renamed to
+        # 20260814000100; remote-only 20260814000200 is the pre-split name
+        # of 20260814000210/000220/000250, all three of which the remote
+        # ledger already records — reverting the stale row is bookkeeping,
+        # not DDL. If neither row is present, this is a no-op.
+        run: |
+          if [ "$MODE" = "token" ]; then
+            LIST=$(npx supabase migration list --linked)
+          else
+            LIST=$(npx supabase migration list --db-url "$DB_URL")
+          fi
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status "$1" "$2"
+            else
+              npx supabase migration repair --status "$1" "$2" --db-url "$DB_URL"
+            fi
+          }
+          if echo "$LIST" | grep -q "20260814002000"; then
+            echo "Repairing: 20260814002000 -> 20260814000100 (history only, no DDL)"
+            repair reverted 20260814002000
+            repair applied 20260814000100
+          else
+            echo "No 20260814002000 row found; that repair is not needed."
+          fi
+          if echo "$LIST" | grep -q '` `.*20260814000200'; then
+            echo "Reverting stale remote-only row 20260814000200 (its DDL lives on as 000210/000220/000250, all recorded)"
+            repair reverted 20260814000200
+          else
+            echo "No remote-only 20260814000200 row found; that repair is not needed."
+          fi
+
+      - name: Apply the broker function migrations surgically (scope=broker-functions)
+        # Both files are purely `create or replace function` plus grants —
+        # idempotent by construction — so applying them directly cannot
+        # disturb existing schema. psql is preinstalled on the runner, and
+        # Supabase's DDL event trigger reloads the PostgREST schema cache
+        # so the functions become callable immediately. History rows are
+        # recorded so the ledger stays truthful.
+        if: ${{ inputs.scope == 'broker-functions' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          for FILE in \
+            supabase/migrations/20260816000400_inspect_ai_auth_sessions.sql \
+            supabase/migrations/20260816000500_remove_ai_account.sql \
+            supabase/migrations/20260816000600_ai_account_identity.sql \
+            supabase/migrations/20260816000700_rename_bot.sql \
+            supabase/migrations/20260816000800_cancel_discards_pending_account.sql \
+            supabase/migrations/20260816000900_read_session_status.sql \
+            supabase/migrations/20260816001000_reapply_vault_read.sql \
+            supabase/migrations/20260816001100_vault_envelope_size.sql \
+            supabase/migrations/20260816001200_device_flow_verifying.sql \
+            supabase/migrations/20260816001300_replan_never_started_run.sql \
+            supabase/migrations/20260816001400_project_repository_picker.sql \
+            supabase/migrations/20260816001500_ai_account_usage_observations.sql
+          do
+            echo "Applying ${FILE}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          done
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          repair 20260816000400
+          repair 20260816000500
+          repair 20260816000600
+          repair 20260816000700
+          repair 20260816000800
+          repair 20260816000900
+          repair 20260816001000
+          repair 20260816001100
+          repair 20260816001200
+          repair 20260816001300
+          repair 20260816001400
+          repair 20260816001500
+          # Supabase's DDL event trigger reloads the PostgREST schema cache
+          # on its own; this explicit reload is insurance, so a browser that
+          # saw PGRST202 seconds ago cannot keep seeing it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Broker function migrations applied, recorded, and the API schema cache reloaded."
+
+      - name: Push the outstanding migrations (scope=all)
+        # The pipe answers the CLI's confirmation prompt when it asks one;
+        # in a non-interactive shell it is simply unread.
+        if: ${{ inputs.scope != 'broker-functions' }}
+        run: |
+          if [ "$MODE" = "token" ]; then
+            echo "Y" | npx supabase db push --linked -p "$SUPABASE_DB_PASSWORD"
+          else
+            echo "Y" | npx supabase db push --db-url "$DB_URL"
+          fi
+
+      - name: List the remote ledger after — the run's own evidence
+        run: |
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration list --linked
+          else
+            npx supabase migration list --db-url "$DB_URL"
+          fi

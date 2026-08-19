@@ -4,7 +4,6 @@ import {
   Activity,
   Bot,
   Boxes,
-  BriefcaseBusiness,
   CircleGauge,
   ClipboardList,
   Cpu,
@@ -50,27 +49,41 @@ const superAdminGroup = {
 } as const;
 
 /**
- * Grouped by what you are trying to do. Every destination now reads live
- * tenant records, so there is no longer a "demo only" section to separate —
- * an empty page says it is empty rather than showing illustrative rows.
+ * Grouped by how an owner actually moves through the product, not by which
+ * phase built each console. The ungrouped block at the top is the daily path
+ * in journey order — see what's happening, give a goal, manage projects,
+ * follow the work, read the summary. "Watch" is production monitoring.
+ * "Advanced" holds the technical consoles: every one keeps its full function
+ * (nothing is removed for simplicity), but none of them is required to run
+ * the factory day to day, so they no longer crowd the primary path.
+ *
+ * Every destination reads live tenant records; an empty page says it is
+ * empty rather than showing illustrative rows.
  */
 const navigationGroups = [
   {
     heading: null,
     items: [
       { label: "Dashboard", href: "/solutions", icon: CircleGauge },
-      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
       { label: "Projects", href: "/solutions/projects", icon: FolderKanban },
-      { label: "Files", href: "/solutions/files", icon: FileText },
+      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
     ],
   },
   {
-    heading: "Work",
+    heading: "Watch",
     items: [
-      { label: "Bot Manager", href: "/solutions/bot-manager", icon: Bot },
-      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
+      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
+      { label: "Activity", href: "/solutions/activity", icon: Activity },
+    ],
+  },
+  {
+    heading: "Advanced",
+    items: [
+      { label: "Files", href: "/solutions/files", icon: FileText },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
       { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
@@ -78,30 +91,13 @@ const navigationGroups = [
     ],
   },
   {
-    heading: "Evidence & setup",
+    heading: "Setup",
     items: [
-      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
-      { label: "Activity", href: "/solutions/activity", icon: Activity },
       { label: "Connections", href: "/solutions/connections", icon: PlugZap },
       { label: "Settings", href: "/solutions/settings", icon: Settings },
     ],
   },
 ] as const;
-
-function Logo() {
-  return (
-    <Link
-      href="/solutions"
-      className="flex items-center gap-2.5 rounded-lg"
-      aria-label="SoftwareFactory dashboard"
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-[var(--accent-ink)]">
-        <BriefcaseBusiness className="size-[18px]" strokeWidth={2.4} aria-hidden="true" />
-      </span>
-      <span className="font-semibold tracking-[-0.01em] text-foreground">SoftwareFactory</span>
-    </Link>
-  );
-}
 
 function Navigation({
   onNavigate,
@@ -234,20 +230,22 @@ export function AppShell({
 
         It survives on small screens because it carries the button that opens the
         navigation drawer, which has no other entry point.
+
+        The workspace chip that used to sit beside that button is gone: the
+        marketing global navigation directly above already carries the brand,
+        so the chip restated it one row down and cost a full row of height on
+        the narrowest screens for nothing.
       */}
-      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-background px-4 xl:hidden">
-        <div className="flex items-center gap-3 xl:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="btn btn-secondary size-10 px-0"
-            aria-label="Open console navigation"
-            aria-expanded={mobileOpen}
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
-          <Logo />
-        </div>
+      <header className="fixed inset-x-0 top-[var(--shell-top,0px)] z-30 flex h-16 items-center gap-3 border-b border-line bg-background px-4 xl:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="btn btn-secondary size-10 px-0"
+          aria-label="Open console navigation"
+          aria-expanded={mobileOpen}
+        >
+          <Menu className="size-5" aria-hidden="true" />
+        </button>
       </header>
 
       {mobileOpen ? (

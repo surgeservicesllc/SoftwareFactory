@@ -21,8 +21,10 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AiAccountConnect } from "@/components/ai-account-connect";
+import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { Card, StatusBadge } from "@/components/ui";
 import {
   BOT_PROVIDERS,
@@ -137,6 +139,48 @@ export function BotFabricConsole() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // The one-click sign-in returns here by redirect, landing on the default
+  // tab. Its callback stores the credential but cannot create a bot — that is
+  // owner-authorized work and the callback runs as the service role. So the
+  // console finishes the job as the authenticated owner: provision the ready
+  // default bot, refresh, and say a bot is waiting. Keeping the promise the
+  // front door makes ("sign in and add my first bot") without the callback
+  // ever holding authority it should not.
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      const params = new URLSearchParams(window.location.search);
+      const outcome = params.get("connect");
+      if (!outcome) return;
+      params.delete("connect");
+      const query = params.toString();
+      window.history.replaceState(
+        null, "", `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+      if (outcome !== "connected") {
+        setMessage(CONNECT_OUTCOMES[outcome] ?? CONNECT_OUTCOMES.failed);
+        return;
+      }
+      let provisioned = false;
+      try {
+        const response = await fetch("/api/bots/connect/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "openrouter" }),
+        });
+        if (response.ok) provisioned = ((await response.json()) as { provisioned?: boolean }).provisioned ?? false;
+      } catch {
+        // Provisioning is best-effort; the credential is already connected.
+      }
+      await load();
+      setMessage(
+        provisioned
+          ? "Signed in. A ready bot is waiting in your fleet."
+          : "Signed in. The provider is connected and ready to use.",
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
   const mutate = useCallback(
     async (
       key: string,
@@ -216,6 +260,10 @@ export function BotFabricConsole() {
     <div className="space-y-5">
       <ExecutorNotice detail={fabric.executor.detail} />
 
+      {/* Accounts are org-wide identities above the fleet; the panel renders
+          nothing until at least one exists. */}
+      <AiAccountsPanel canManage={fabric.canManage} onChanged={load} />
+
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Bot fabric sections">
         {tabs.map((entry) => (
           <button
@@ -242,12 +290,21 @@ export function BotFabricConsole() {
       </div>
 
       {message ? (
-        <p
-          className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3 text-xs text-[var(--warning)]"
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-4 py-3"
           aria-live="polite"
         >
-          {message}
-        </p>
+          <p className="text-xs text-[var(--warning)]">{message}</p>
+          {FAILED_CONNECT_MESSAGES.has(message) ? (
+            // "Start it again" is only honest advice when the button to do so
+            // is right there — the same one-click sign-in the front door uses.
+            // A real anchor, not next/link: the route handler 302s off-origin.
+            // eslint-disable-next-line @next/next/no-html-link-for-pages
+            <a href="/api/bots/connect/oauth/start" className="btn btn-secondary btn-sm shrink-0">
+              Try signing in again
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       {!fabric.canManage ? (
@@ -263,7 +320,13 @@ export function BotFabricConsole() {
         aria-labelledby={`bot-fabric-tab-${tab}`}
       >
         {tab === "fleet" ? (
-          <FleetBoard fabric={fabric} busyKey={busyKey} mutate={mutate} onOpenTab={setTab} />
+          <FleetBoard
+            fabric={fabric}
+            busyKey={busyKey}
+            mutate={mutate}
+            onOpenTab={setTab}
+            onFleetChanged={load}
+          />
         ) : null}
         {tab === "bots" ? <BotDirectory fabric={fabric} busyKey={busyKey} mutate={mutate} /> : null}
         {tab === "roles" ? <RoleWorkshop fabric={fabric} busyKey={busyKey} mutate={mutate} /> : null}
@@ -298,11 +361,13 @@ function FleetBoard({
   busyKey,
   mutate,
   onOpenTab,
+  onFleetChanged,
 }: {
   fabric: BotFabricResponse;
   busyKey: string | null;
   mutate: MutateFn;
   onOpenTab: (tab: Tab) => void;
+  onFleetChanged: () => Promise<void> | void;
 }) {
   const assignmentByBotId = useMemo(
     () => new Map(fabric.assignments.map((assignment) => [assignment.botId, assignment])),
@@ -312,12 +377,9 @@ function FleetBoard({
 
   if (!fabric.bots.length) {
     return (
-      <EmptyPrompt
-        icon={Bot}
-        title="No bots registered yet"
-        description="Register Claude, Codex, Gemini, Grok, or any OpenAI-compatible endpoint. It takes one screen."
-        actionLabel="Add your first bot"
-        onAction={() => onOpenTab("bots")}
+      <FirstConnectPrompt
+        onAddManually={() => onOpenTab("bots")}
+        onFleetChanged={onFleetChanged}
       />
     );
   }
@@ -709,6 +771,36 @@ function isProviderUsable(state: ProviderSetup) {
     || state.probeVerdict === "not_probed";
 }
 
+/**
+ * What each callback outcome means, in words rather than a code.
+ *
+ * `expired` and `invalid` are kept apart because they need different actions: a
+ * sign-in that timed out just needs starting again, while an invalid one means
+ * the callback did not match the request that started it — worth noticing.
+ */
+const CONNECT_OUTCOMES: Readonly<Record<string, string>> = Object.freeze({
+  connected: "Signed in. The provider is connected and ready to use.",
+  expired: "That sign-in took too long and expired. Start it again.",
+  invalid: "That sign-in did not match the one you started. Nothing was connected.",
+  refused: "The provider refused the sign-in. Nothing was connected.",
+  failed: "The sign-in could not be completed. Nothing was connected.",
+  no_project:
+    "That Google account has no active Cloud project, so there is nothing for Vertex AI to bill "
+    + "or run against. Create one and sign in again.",
+});
+
+/**
+ * The failed-connect notices tell the person to start again; these are the
+ * messages that must therefore carry the button that does. Derived from the
+ * message text itself so no separate state can go stale.
+ */
+const FAILED_CONNECT_MESSAGES: ReadonlySet<string> = new Set([
+  CONNECT_OUTCOMES.expired,
+  CONNECT_OUTCOMES.invalid,
+  CONNECT_OUTCOMES.refused,
+  CONNECT_OUTCOMES.failed,
+]);
+
 function useProviderSetup() {
   const [providers, setProviders] = useState<ProviderSetup[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -788,13 +880,84 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
   return (
     <div className="mt-4 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4">
       <p className="text-sm font-medium text-[var(--text)]">
-        Sign in with your {provider.vendor} subscription
+        {provider.id === "openrouter"
+          ? `Sign in with ${provider.vendor}`
+          : `Or use your ${provider.vendor} subscription instead`}
       </p>
       <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-        No key to find and nothing to paste. This bills nothing per token.
+        {provider.id === "openrouter"
+          ? "One click. No key, no terminal, no variable name."
+          : "Bills nothing per token. Anthropic restricts OAuth to its own products, "
+            + "so this is not a supported way for third-party software to reach Claude — "
+            + "prefer a key or OpenRouter above."}
       </p>
 
-      {command ? (
+      {provider.id === "anthropic" ? (
+        <div className="mt-3 rounded-lg border border-[var(--accent-border)] bg-[var(--surface)] p-3">
+          {/* Anthropic restricted its own OAuth to Claude Code and Claude.ai,
+              so "Sign in with Claude" cannot exist here. Claude runs on Vertex
+              AI though, and Google OAuth is open to third parties — so this is
+              the standard login flow reaching the intended model through a door
+              that is actually open. */}
+          <p className="text-sm font-medium text-[var(--text)]">
+            Sign in with Google
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+            Claude runs on Google Cloud&rsquo;s Vertex AI. One click, Google&rsquo;s own consent
+            screen, and Claude is connected — no key, no terminal. Billed through your Google
+            Cloud project.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/google/start" className="btn btn-primary btn-sm mt-3">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with Google
+          </a>
+        </div>
+      ) : null}
+
+      {provider.id !== "openrouter" ? (
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+          {/* The frictionless route to this same model. OpenRouter serves
+              Claude, GPT and Gemini, and it is the only provider here with a
+              third-party OAuth flow — so clicking through it is genuinely one
+              click, where the subscription path below needs a terminal. */}
+          <p className="text-sm font-medium text-[var(--text)]">
+            {provider.id === "anthropic"
+              ? `Or get ${provider.label} through OpenRouter`
+              : `Fastest: get ${provider.label} in one click`}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+            Sign in to OpenRouter and {provider.label} works immediately — no terminal, no key.
+            Usage is billed by OpenRouter per token.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/oauth/start" className="btn btn-primary btn-sm mt-3">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with OpenRouter
+          </a>
+        </div>
+      ) : null}
+
+      {provider.id === "openrouter" ? (
+        <div className="mt-3">
+          {/* One click, no terminal. OpenRouter publishes a documented OAuth
+              flow for third-party applications, so this is the only provider
+              here that can offer the sign-in everyone expects — and it fronts
+              Claude, GPT and Gemini behind one credential. */}
+          {/* A real anchor, not `next/link`: this target is a route handler
+              that issues a 302 to another origin, and a client-side navigation
+              cannot follow a cross-origin redirect. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/bots/connect/oauth/start" className="btn btn-primary btn-sm">
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Sign in with OpenRouter
+          </a>
+          <p className="mt-2 text-xs text-[var(--text-faint)]">
+            Opens OpenRouter, you approve, and you are back here. Gives you Claude, GPT and
+            Gemini through one sign-in.
+          </p>
+        </div>
+      ) : command ? (
         <div className="mt-3 space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
             Run this once. Your browser will open for {provider.vendor} to sign you in.
@@ -835,6 +998,134 @@ function SubscriptionSignIn({ provider, onDone }: { provider: ProviderSetup; onD
           {failed ? <p className="text-xs text-[var(--danger)]">{failed}</p> : null}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Paste a key, and it is connected.
+ *
+ * This replaced two steps that had nothing to do with the key: find the right
+ * environment variable name, and set it in a hosting dashboard. Anthropic
+ * restricted OAuth to its own products in February 2026, so an API key is the
+ * only supported way for software like this to reach Claude — which makes the
+ * key unavoidable and everything around it worth deleting.
+ *
+ * The field is a password input so a shoulder or a screen share does not read
+ * it, and the value is never put in component state longer than the submit.
+ */
+function PasteKey({
+  provider,
+  onConnected,
+}: {
+  provider: ProviderSetup;
+  onConnected: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState("");
+
+  // A plain container, not a form. This renders inside the register form, and
+  // a nested form is invalid HTML: the submit event bubbles to the outer
+  // handler, which registers the bot and unmounts this panel before the result
+  // of the key request can be shown.
+  const submit = (candidate = value) => {
+    const trimmed = candidate.trim();
+    if (saving || trimmed.length < 16) return;
+    setSaving(true);
+    setFailed("");
+    void fetch("/api/bots/connect/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: provider.id, key: trimmed }),
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          // The provider's own verdict, so a key that is valid but out of
+          // credit is not reported as a bad key.
+          setFailed(body?.message ?? body?.error?.message ?? "That key could not be used.");
+          return;
+        }
+        setValue("");
+        onConnected();
+      })
+      .catch(() => setFailed("That key could not be saved."))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-0 flex-1">
+          <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+            Paste your {provider.vendor} API key
+          </span>
+          <input
+            type="password"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onPaste={(event) => {
+              // Pasting a key is the whole interaction, so it is also the
+              // submit. Requiring a button press afterwards adds a step whose
+              // only purpose is confirming what the paste already said.
+              const pasted = event.clipboardData.getData("text").trim();
+              event.preventDefault();
+              setValue(pasted);
+              // `submit` decides whether this is long enough to be a key. The
+              // check lived here too, which made a test of it vacuous: both
+              // guards had to be removed before anything failed.
+              submit(pasted);
+            }}
+            onKeyDown={(event) => {
+              // Enter still connects, which a form would have given for free.
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="sk-..."
+            className="input font-mono"
+            aria-label={`${provider.vendor} API key`}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => submit()}
+          disabled={saving || value.trim().length < 16}
+          className="btn btn-primary btn-sm"
+        >
+          {saving ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Check className="size-3.5" aria-hidden="true" />
+          )}
+          Connect
+        </button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {provider.apiKeyUrl ? (
+          <a
+            href={provider.apiKeyUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-text)] hover:underline"
+          >
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+            Get a key from {provider.vendor}
+          </a>
+        ) : null}
+        <p className="text-xs text-[var(--text-faint)]">
+          Verified before it is saved, then encrypted. It is never shown again.
+        </p>
+      </div>
+
+      {failed ? (
+        <p className="mt-2 text-xs text-[var(--danger)]" role="alert">{failed}</p>
+      ) : null}
     </div>
   );
 }
@@ -899,38 +1190,29 @@ function ProviderSetupSteps({
         <p className="mt-2 text-sm text-[var(--warning)]">{provider.probeReason}</p>
       ) : null}
 
-      <ol className="mt-3 space-y-3 text-sm text-[var(--text-muted)]">
-        <li className="flex flex-wrap items-center gap-2">
-          <span className="text-[var(--text-faint)]">1.</span>
-          <span>Get a key from {provider.vendor}</span>
-          {provider.apiKeyUrl ? (
-            <a
-              href={provider.apiKeyUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="btn btn-secondary btn-sm"
-            >
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              Open key page
-            </a>
-          ) : null}
-        </li>
-        <li className="flex flex-wrap items-center gap-2">
-          <span className="text-[var(--text-faint)]">2.</span>
-          <span>Set it as this environment variable on the server</span>
-          <code className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono text-xs text-[var(--text)]">
-            {provider.credentialRef}
-          </code>
-          {provider.credentialRef ? <CopyButton value={provider.credentialRef} /> : null}
-        </li>
-      </ol>
+      {/* Collapsed by default. Three ways to connect shown at once is its own
+          friction: it turns a login into a decision. The sign-in above is the
+          answer for almost everyone, so the rest waits until asked for. */}
+      <details className="mt-3 group">
+        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--text-muted)] hover:text-white">
+          <span className="inline-flex items-center gap-1.5">
+            <ChevronDown
+              className="size-3.5 transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+            Paste a key instead
+          </span>
+        </summary>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <PasteKey provider={provider} onConnected={onRecheck} />
+      </details>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onRecheck}
           disabled={checking}
-          className="btn btn-primary btn-sm"
+          className="btn btn-secondary btn-sm"
         >
           {checking ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -940,7 +1222,7 @@ function ProviderSetupSteps({
           Check again
         </button>
         <p className="text-xs text-[var(--text-faint)]">
-          The key never passes through this page. The server reads the variable directly.
+          Already set {provider.credentialRef} as a server environment variable? That still works.
         </p>
       </div>
     </div>
@@ -961,6 +1243,26 @@ function BotDirectory({
   const [draft, setDraft] = useState<BotDraft | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { providers, checking, check } = useProviderSetup();
+  // The OAuth callback lands back here with an outcome in the query string,
+  // because a redirect is the only channel it has. Reported once and then
+  // cleared from the URL so a refresh does not repeat a stale result.
+  const [connectOutcome, setConnectOutcome] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const outcome = params.get("connect");
+      if (!outcome) return;
+      setConnectOutcome(outcome);
+      params.delete("connect");
+      const query = params.toString();
+      window.history.replaceState(
+        null, "", `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+      if (outcome === "connected") void check(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [check]);
   const provider = draft ? findBotProvider(draft.provider) : null;
   const setup = draft
     ? providers?.find((entry) => entry.id === draft.provider) ?? null
@@ -988,6 +1290,34 @@ function BotDirectory({
             </p>
           </div>
         </div>
+
+        {connectOutcome ? (
+          <div
+            className={cn(
+              "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3",
+              connectOutcome === "connected"
+                ? "border-[var(--success-border)] bg-[var(--success-surface)]"
+                : "border-[var(--warning-border)] bg-[var(--warning-surface)]",
+            )}
+            aria-live="polite"
+          >
+            <p
+              className={cn(
+                "text-xs",
+                connectOutcome === "connected" ? "text-[var(--text)]" : "text-[var(--warning)]",
+              )}
+            >
+              {CONNECT_OUTCOMES[connectOutcome] ?? CONNECT_OUTCOMES.failed}
+            </p>
+            {connectOutcome !== "connected" ? (
+              // A real anchor, not next/link: the route handler 302s off-origin.
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
+              <a href="/api/bots/connect/oauth/start" className="btn btn-secondary btn-sm shrink-0">
+                Try signing in again
+              </a>
+            ) : null}
+          </div>
+        ) : null}
 
         <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           {BOT_PROVIDERS.map((entry) => (
@@ -1070,7 +1400,8 @@ function BotDirectory({
             <div className="md:col-span-2">
               <p className="text-sm leading-5 text-[var(--text-muted)]">{provider.summary}</p>
 
-              {needsSetup && setup && (setup.id === "anthropic" || setup.id === "openai") ? (
+              {needsSetup && setup
+                && (setup.id === "anthropic" || setup.id === "openai" || setup.id === "openrouter") ? (
                 <SubscriptionSignIn provider={setup} onDone={() => void check(true)} />
               ) : null}
 
@@ -1780,6 +2111,361 @@ function EmptyPrompt({
             <ArrowRight className="size-4" aria-hidden="true" />
           </button>
         )}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * A subscription sign-in button: click, sign in with the provider's own
+ * login, end with a Ready bot.
+ *
+ * Anthropic and OpenAI have no third-party OAuth, so the sign-in itself
+ * belongs to each provider's own tool: this hands over one pre-filled
+ * command, the operator's browser opens the provider's real login
+ * (claude.ai for Claude; OpenAI's for Codex), and the credential travels
+ * once — sealed — through the claim route. The console never sees a token;
+ * it watches for the stored credential to appear and then finishes the job
+ * as the signed-in owner: a bot referencing the subscription credential,
+ * Ready for assignments. If the subscription is already connected, the
+ * button is literally one click — no terminal at all.
+ *
+ * "Add another bot" repeats the finish for as many bots as wanted — all
+ * Ready, all reading the same signed-in subscription, each distinct in the
+ * fleet.
+ */
+const QUICK_CONNECT_TEXT_CLASS: Readonly<Record<string, string>> = Object.freeze({
+  // Per-accent text color so both tiles clear contrast: Claude's terracotta
+  // carries white; Codex's mint needs dark text.
+  anthropic: "text-white",
+  openai: "text-[#0d1117]",
+});
+
+function SubscriptionQuickConnect({
+  providerId,
+  purpose,
+  onReady,
+}: {
+  providerId: "anthropic" | "openai";
+  purpose: "claude" | "codex";
+  onReady: () => Promise<void> | void;
+}) {
+  const provider = findBotProvider(providerId)!;
+  const [phase, setPhase] = useState<
+    "idle" | "starting" | "running" | "provisioning" | "ready" | "failed"
+  >("idle");
+  // The broker path: a worker runs the provider's real login and this page
+  // auto-completes. Primary for Claude; Codex's login is a localhost callback
+  // the worker cannot drive yet, so Codex keeps the command flow.
+  const [brokerActive, setBrokerActive] = useState(false);
+  const brokerFirst = providerId === "anthropic";
+  const [command, setCommand] = useState("");
+  const [detail, setDetail] = useState("");
+  const [readyBots, setReadyBots] = useState(0);
+  // Which account slot the flow is currently connecting (0-based). A ref, not
+  // state: the polling interval must always read the live value.
+  const slotRef = useRef(0);
+  const [connectedSlots, setConnectedSlots] = useState(0);
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const isSignedIn = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/bots/providers", { cache: "no-store" });
+      if (!response.ok) return false;
+      const body = (await response.json()) as {
+        providers?: { id: string; subscriptionReady?: boolean; subscriptionSlots?: boolean[] }[];
+      };
+      const entry = body.providers?.find((candidate) => candidate.id === providerId);
+      const slot = slotRef.current;
+      // Slot-aware when the response carries slots; the base flag otherwise.
+      return Boolean(entry?.subscriptionSlots?.[slot] ?? (slot === 0 && entry?.subscriptionReady));
+    } catch {
+      return false;
+    }
+  }, [providerId]);
+
+  const provision = useCallback(async (additional: boolean) => {
+    setPhase("provisioning");
+    const slot = slotRef.current;
+    try {
+      const response = await fetch("/api/bots/connect/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: providerId,
+          credential: slot === 0 ? "subscription" : `subscription_${slot + 1}`,
+          additional,
+        }),
+      });
+      const body = (await response.json()) as { outcome?: string };
+      if (!response.ok) throw new Error();
+      setReadyBots((count) => count + (body.outcome === "created" ? 1 : 0));
+      setConnectedSlots((count) => Math.max(count, slot + 1));
+      await onReady();
+      setPhase("ready");
+    } catch {
+      setDetail(
+        "You are signed in, but the bot could not be added automatically. "
+        + "The credential is stored — add a bot manually and it will read Ready.",
+      );
+      setPhase("failed");
+    }
+  }, [onReady, providerId]);
+
+  const finishIfSignedIn = useCallback(async (): Promise<boolean> => {
+    if (!(await isSignedIn())) return false;
+    stopPolling();
+    await provision(false);
+    return true;
+  }, [isSignedIn, provision, stopPolling]);
+
+  const start = useCallback(async (slot = 0) => {
+    slotRef.current = slot;
+    setPhase("starting");
+    setDetail("");
+    // Already signed in from before? Then this is genuinely one click.
+    if (await finishIfSignedIn()) return;
+    try {
+      const response = await fetch("/api/bots/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Slot 1 is the base purpose; further account slots are suffixed and
+        // sealed separately, so several accounts stay signed in at once.
+        body: JSON.stringify({ purpose: slot === 0 ? purpose : `${purpose}_${slot + 1}` }),
+      });
+      const body = (await response.json()) as {
+        command?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.command) {
+        throw new Error(body.error?.message ?? "The sign-in could not be started.");
+      }
+      setCommand(body.command);
+      setPhase("running");
+      // Watch for the sign-in to land, then finish without another click.
+      // The one-time code expires in ten minutes; polling stops with it.
+      pollRef.current = window.setInterval(() => void finishIfSignedIn(), 5000);
+      window.setTimeout(stopPolling, 10 * 60 * 1000);
+    } catch (error) {
+      setDetail(
+        error instanceof Error && error.message
+          ? error.message
+          : "The sign-in could not be started.",
+      );
+      setPhase("failed");
+    }
+  }, [finishIfSignedIn, purpose, stopPolling]);
+
+  // Which provision slot an account's credential occupies: the bare purpose
+  // is slot 0, `…_N` is slot N-1. Names only — this never sees a credential.
+  const slotForAccount = useCallback(async (accountId: string): Promise<number> => {
+    try {
+      const response = await fetch("/api/ai-accounts", { cache: "no-store" });
+      if (!response.ok) return 0;
+      const body = (await response.json()) as {
+        accounts?: { id: string; credentialPurpose?: string }[];
+      };
+      const purposeName = body.accounts?.find((entry) => entry.id === accountId)?.credentialPurpose;
+      const match = purposeName ? /_(\d+)$/.exec(purposeName) : null;
+      return match ? Number(match[1]) - 1 : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  if (brokerActive) {
+    return (
+      <AiAccountConnect
+        providerId={providerId}
+        providerLabel={provider.label}
+        onConnected={async (accountId) => {
+          slotRef.current = await slotForAccount(accountId);
+          setBrokerActive(false);
+          await provision(false);
+        }}
+        onFallback={() => {
+          setBrokerActive(false);
+          void start(connectedSlots);
+        }}
+        // The broker backend being unavailable must never cost the person a
+        // click: the command flow starts by itself, exactly as if the broker
+        // had never been offered.
+        onUnavailable={() => {
+          setBrokerActive(false);
+          void start(connectedSlots);
+        }}
+        onClose={() => setBrokerActive(false)}
+      />
+    );
+  }
+
+  if (phase === "ready") {
+    return (
+      <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4 text-left">
+        <p className="flex items-center gap-2 text-sm font-semibold text-[var(--accent-text)]">
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+          {provider.label} is connected — your {provider.label} bot is Ready for assignments.
+        </p>
+        {readyBots > 1 ? (
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {readyBots} {provider.label} bots are connected and Ready.
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void provision(true)}
+            className="btn btn-secondary btn-sm"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            Add another {provider.label} bot
+          </button>
+          {/* Never capped: accounts are unbounded by requirement, limited
+              only by configured platform capacity, which the server enforces. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (brokerFirst) setBrokerActive(true);
+              else void start(connectedSlots);
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            <KeyRound className="size-3.5" aria-hidden="true" />
+            Connect another {provider.label} account
+          </button>
+        </div>
+        {connectedSlots > 1 ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            {connectedSlots} {provider.label} accounts are signed in simultaneously.
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (phase === "running" || phase === "provisioning") {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left">
+        <p className="text-sm font-medium text-[var(--text)]">
+          Run this once — your browser opens {provider.vendor}&apos;s own sign-in:
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 font-mono text-xs text-[var(--text)]">
+            {command}
+          </code>
+          <CopyButton value={command} />
+        </div>
+        <p className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]" aria-live="polite">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          {phase === "provisioning"
+            ? `Signed in — adding your ${provider.label} bot…`
+            : "Waiting for your sign-in to finish. This completes on its own."}
+        </p>
+        {phase === "running" ? (
+          <button
+            type="button"
+            onClick={() => void finishIfSignedIn()}
+            className="btn btn-secondary btn-sm mt-2"
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            I have signed in — check now
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-left">
+      <button
+        type="button"
+        onClick={() => {
+          if (brokerFirst) setBrokerActive(true);
+          else void start();
+        }}
+        disabled={phase === "starting"}
+        style={{ backgroundColor: provider.accent, borderColor: provider.accent }}
+        className={cn(
+          "flex w-full items-center justify-center gap-3 rounded-xl border px-5 py-4 text-lg font-semibold transition-opacity hover:opacity-90 disabled:opacity-60",
+          QUICK_CONNECT_TEXT_CLASS[providerId] ?? "text-white",
+        )}
+      >
+        {phase === "starting" ? (
+          <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Sparkles className="size-5" aria-hidden="true" />
+        )}
+        {provider.label}
+      </button>
+      <p className="mt-2 text-center text-xs text-[var(--text-muted)]">
+        Sign in with your {provider.label} subscription — bills nothing per token.
+      </p>
+      {phase === "failed" ? (
+        <p className="mt-2 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-surface)] px-3 py-2 text-xs text-[var(--warning)]" aria-live="polite">
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The front door, shaped like signing into Claude or Codex.
+ *
+ * The old empty state sent a person to a provider-selection screen and a form.
+ * This leads with the Claude button — sign in with the subscription that
+ * bills nothing per token, end with a Ready bot — and keeps the one-click
+ * OpenRouter OAuth (fronting Claude, GPT and Gemini behind one credential,
+ * billed per token) right below it. Choosing a specific account by hand
+ * stays available, one step down, for the people who want it.
+ */
+function FirstConnectPrompt({
+  onAddManually,
+  onFleetChanged,
+}: {
+  onAddManually: () => void;
+  onFleetChanged: () => Promise<void> | void;
+}) {
+  return (
+    <Card className="grid min-h-64 place-items-center p-6 text-center">
+      <div className="w-full max-w-md">
+        <Sparkles className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
+        <h2 className="mt-4 text-base font-semibold text-white">Connect a bot in one click</h2>
+        <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+          Sign in once and your first bot is ready. No key, no variable name.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <SubscriptionQuickConnect providerId="anthropic" purpose="claude" onReady={onFleetChanged} />
+          <SubscriptionQuickConnect providerId="openai" purpose="codex" onReady={onFleetChanged} />
+        </div>
+        {/* A real anchor, not next/link: this route handler issues a 302 to
+            another origin, which a client-side navigation cannot follow. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/api/bots/connect/oauth/start" className="btn btn-secondary mt-4 justify-center">
+          <KeyRound className="size-4" aria-hidden="true" />
+          Sign in and add my first bot
+        </a>
+        <p className="mt-1 text-xs text-[var(--text-faint)]">
+          OpenRouter — Claude, GPT and Gemini in one click, billed per token.
+        </p>
+        <p className="mt-4 text-xs text-[var(--text-faint)]">
+          Prefer a specific account, or your own key?{" "}
+          <button
+            type="button"
+            onClick={onAddManually}
+            className="underline underline-offset-2 hover:text-[var(--text)]"
+          >
+            Add one manually
+          </button>
+        </p>
       </div>
     </Card>
   );

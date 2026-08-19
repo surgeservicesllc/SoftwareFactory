@@ -26,15 +26,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-/** The hosted ledger position the runbook is written against. */
-// Moved 2026-08-15: the repair scripts completed the half-applied
-// `20260814000210` and the ledger was reconciled to 65 rows covering all 64
-// files up to this version, with `scripts/hosted-schema-audit.mts` reporting 0
-// outstanding and 0 indeterminate. Leaving the old position here would have
-// counted already-applied migrations as outstanding, which overstates the
-// owner's remaining work rather than understating it -- still wrong, and the
-// direction that wastes an apply window on migrations that would fail as
-// duplicates.
+/**
+ * The hosted ledger position the runbook is written against — owner-measured
+ * 2026-08-16 (`select count(*), max(version) from
+ * supabase_migrations.schema_migrations` → 65 rows, max below). The one
+ * hosted row above the local file set at this position is the renamed
+ * `20260814002000_graph_engineering`, handled by the runbook's repair step.
+ *
+ * It moved here from `20260813001400` once the repair completed the
+ * half-applied `20260814000210`. Note which way the old value erred: it
+ * counted already-applied migrations as outstanding, which overstates the
+ * owner's remaining work — still wrong, and the direction that wastes an apply
+ * window on migrations that would fail as duplicates.
+ */
 const HOSTED_LEDGER_ENDS_AT = "20260814002300";
 
 let runbook = "";
