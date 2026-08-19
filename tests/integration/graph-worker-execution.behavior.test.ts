@@ -31,6 +31,9 @@ import {
  *   - One failed branch is contained: its dependents are SKIPPED, its
  *     siblings COMPLETE, and the run closes PARTIAL — never COMPLETED.
  *   - Terminal states are final on both nodes and runs.
+ *   - A graph whose only runs FAILED is re-claimable (infrastructure faults
+ *     retry without re-planning), bounded at three total attempts; runs that
+ *     reached an answer — COMPLETED, PARTIAL — keep their graph closed.
  */
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -305,7 +308,9 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     await store.recordNodeState(nodeRunId, "COMPLETED");
     await expect(store.recordNodeState(nodeRunId, "FAILED", "too late")).rejects.toThrow(/terminal/);
 
-    await store.completeRun(parsed.graph.graph_run_id, "FAILED", false);
+    // PARTIAL, not FAILED: a FAILED-only history would put this graph back
+    // in the claim queue, and this test is about finality, not retry.
+    await store.completeRun(parsed.graph.graph_run_id, "PARTIAL", true);
     await expect(store.completeRun(parsed.graph.graph_run_id, "COMPLETED", false)).rejects.toThrow(/terminal/);
 
     // The silent-failure guard: incomplete inputs may not read as COMPLETED.
@@ -315,5 +320,39 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     if (!claimed.ok) return;
     expect(claimed.graph.graph_id).toBe(another);
     await expect(store.completeRun(claimed.graph.graph_run_id, "COMPLETED", true)).rejects.toThrow(/partial/);
+  });
+
+  it("re-claims a graph whose only runs failed, and stops at three attempts", async () => {
+    const graphId = await createDiamondGraph("Retry an infrastructure failure");
+    const store = pgliteStore(db, "graph-worker-test");
+
+    // First attempt fails the way a missing CLI does: the run closes FAILED
+    // without any node reaching an answer.
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.graph.graph_id).toBe(graphId);
+    await store.completeRun(first.graph.graph_run_id, "FAILED", false);
+
+    // A failed-only graph goes back in the queue: infrastructure faults are
+    // retryable without a person re-planning the graph. The re-claim is a
+    // fresh run, not a resurrection of the failed one.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.graph.graph_id).toBe(graphId);
+    expect(second.graph.graph_run_id).not.toBe(first.graph.graph_run_id);
+    await store.completeRun(second.graph.graph_run_id, "FAILED", false);
+
+    const third = parseClaimedGraph(await claim());
+    expect(third.ok).toBe(true);
+    if (!third.ok) return;
+    expect(third.graph.graph_id).toBe(graphId);
+    await store.completeRun(third.graph.graph_run_id, "FAILED", false);
+
+    // Three failed runs is the convergence bound: the graph leaves the queue
+    // for good. This claim also proves the earlier COMPLETED, PARTIAL, and
+    // in-flight graphs never re-entered it — FAILED-only is the sole way back.
+    expect(await claim()).toBeNull();
   });
 });

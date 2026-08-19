@@ -58,10 +58,23 @@ declare
 begin
   perform public.assert_graph_worker_id(p_worker_id);
 
+  /*
+   * Claimable: never run, or every previous run FAILED — an infrastructure
+   * failure (a missing CLI, an unreachable provider) should be retryable
+   * without a person re-planning the graph. Bounded at three total attempts
+   * so a graph that keeps failing converges to a durable FAILED history
+   * instead of consuming every scheduled drain forever. A COMPLETED,
+   * PARTIAL, CANCELLED, BUDGET_STOPPED, or in-flight run keeps its graph
+   * out of the queue: those are answers, not infrastructure faults.
+   */
   select g.* into v_graph
     from public.graphs g
    where g.requires_owner_approval = false
-     and not exists (select 1 from public.graph_runs r where r.graph_id = g.id)
+     and not exists (
+       select 1 from public.graph_runs r
+        where r.graph_id = g.id and r.state <> 'FAILED'
+     )
+     and (select count(*) from public.graph_runs r where r.graph_id = g.id) < 3
    order by g.created_at
    for update skip locked
    limit 1;
