@@ -56,6 +56,9 @@ const claimedGraphSchema = z.object({
   goal: z.string().min(1),
   topology: z.string(),
   risk_level: z.string(),
+  // Null when the project has no repository linked; absent in a projection
+  // from before the column existed. Both mean "nothing to contradict".
+  project_repository: z.string().nullish(),
   budget: z.object({
     max_nodes: z.number().int().positive().catch(50),
     max_concurrent_nodes: z.number().int().positive().catch(8),
@@ -154,6 +157,29 @@ export function budgetFromClaim(claim: ClaimedGraph): GraphBudget {
     maxTokens: budget?.max_tokens ?? undefined,
     maxCostMicros: budget?.max_cost_micros ?? undefined,
   };
+}
+
+/**
+ * Whether the tree this worker is checked out on is the wrong one for a
+ * claimed graph.
+ *
+ * A read-only analysis worker reads whatever repository it was checked out
+ * on. If the graph's project is bound to a different one, running it anyway
+ * produces confident findings about the wrong codebase filed under this
+ * project — a wrong answer shaped exactly like a right one. A project with
+ * no repository linked has nothing to contradict, and a worker that cannot
+ * name its own checkout cannot claim a mismatch either; both proceed.
+ */
+export function repositoryMismatch(
+  projectRepository: string | null | undefined,
+  checkoutRepository: string | null | undefined,
+): string | null {
+  const wanted = (projectRepository ?? "").trim();
+  const checkout = (checkoutRepository ?? "").trim();
+  if (!wanted || !checkout) return null;
+  if (wanted.toLowerCase() === checkout.toLowerCase()) return null;
+  return `This graph's project is bound to ${wanted}, but the worker is checked out on ${checkout}. `
+    + "A read-only analysis of the wrong repository would be a wrong answer, so the run stops here.";
 }
 
 /**

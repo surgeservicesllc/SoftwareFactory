@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CompiledNode } from "@/lib/graph/compiler";
-import { artifactKindForNode } from "@/lib/worker/graph-run";
+import { artifactKindForNode, repositoryMismatch } from "@/lib/worker/graph-run";
 
 /**
  * An artifact's kind is the difference between evidence and a view built on
@@ -26,5 +26,25 @@ describe("artifactKindForNode", () => {
     expect(artifactKindForNode(node("ANCHOR", "qa"))).toBe("ANCHOR");
     // The anchor rule wins: a measured result is not a synthesis.
     expect(artifactKindForNode(node("ANCHOR", "synthesis"))).toBe("ANCHOR");
+  });
+});
+
+describe("repositoryMismatch", () => {
+  it("refuses a graph whose project is bound to another repository", () => {
+    const detail = repositoryMismatch("acme/other", "surgeservicesllc/SoftwareFactory");
+    expect(detail).toContain("bound to acme/other");
+    expect(detail).toContain("checked out on surgeservicesllc/SoftwareFactory");
+  });
+
+  it("accepts the same repository regardless of case", () => {
+    expect(repositoryMismatch("SurgeServicesLLC/SoftwareFactory", "surgeservicesllc/softwarefactory")).toBeNull();
+  });
+
+  it("has nothing to contradict when either side is unknown", () => {
+    // A project with no repository linked, and a worker that cannot name its
+    // own checkout, are both silence — not evidence of a mismatch.
+    expect(repositoryMismatch(null, "surgeservicesllc/SoftwareFactory")).toBeNull();
+    expect(repositoryMismatch("acme/other", undefined)).toBeNull();
+    expect(repositoryMismatch("  ", "  ")).toBeNull();
   });
 });
