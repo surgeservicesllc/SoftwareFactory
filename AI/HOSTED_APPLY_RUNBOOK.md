@@ -18,6 +18,34 @@ version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
 
+## Version collision, and one ledger row that lies — 2026-08-19 15:2xZ
+
+`20260819000700` was claimed twice. `20260819000700_bot_credential_ref_privileged_parity`
+(the ADR-036 CHECK-constraint parity fix) landed on main at 09:18Z in PR #252.
+Later the same day I added `20260819000700_record_verification_as_worker` without
+checking, from a branch that predated it, so two files carried one version.
+
+Supabase's ledger keys on the fourteen-digit version, so this is not cosmetic:
+`scope=broker-functions` runs `32267960981` and `32269079027` applied **my**
+file and then ran `repair 20260819000700`. Production therefore records version
+`20260819000700` as applied while the DDL that version now names — the security
+constraint — **has never run**. Left alone, a later `scope=all` would skip it
+forever and the denylist parity fix would silently never land.
+
+Resolution, in this order:
+
+1. The verification boundary is renumbered to `20260819000900`; the security fix
+   keeps `20260819000700`, since it had the number first.
+2. `20260819000700_bot_credential_ref_privileged_parity` is added to the
+   `scope=broker-functions` file list so it actually executes. It is
+   `drop constraint if exists` + `add constraint`, so applying it is replay-safe.
+3. `repair 20260819000900` records the renumbered file.
+
+**Do not read the pre-existing `20260819000700` ledger row as evidence that the
+constraint exists.** Confirm it directly:
+`select conname from pg_constraint where conname = 'bots_credential_ref_not_privileged'`
+and check that its definition names all fourteen privileged references.
+
 ## The ledger, measured — 2026-08-18 05:40Z, run `32103778884` (`scope=probe`, read-only)
 
 This supersedes every count and every high-water mark stated below it. The run mutated nothing:
