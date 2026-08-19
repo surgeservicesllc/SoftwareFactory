@@ -53,6 +53,16 @@ const EMPTY_SEED: EditorSeed = {
   areas: [{ id: "area_1", job: "" }],
 };
 
+/**
+ * A discovery template's shape promises rounds — discover, dedupe, verify,
+ * generate the next round — and the executor does not add them: it runs the
+ * nodes the plan recorded, once. The engine carries bounded discovery and the
+ * canary exercises it, but nothing wires it to a stored graph yet, so the
+ * label would otherwise promise behaviour the run will not perform.
+ */
+const DISCOVERY_EXECUTION_NOTE =
+  "Recorded as a discovery shape. The executor runs these nodes once — it does not add rounds mid-run — so this executes as the plan you see here.";
+
 export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
   const [custom, setCustom] = useState<CustomTemplate[] | null>(null);
   const [canManage, setCanManage] = useState(false);
@@ -144,6 +154,9 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
                   {template.nodeCount != null ? ` · ${template.nodeCount} nodes` : ""}
                   {template.maxParallelism != null ? ` · up to ${template.maxParallelism} in parallel` : ""}
                 </p>
+                {template.topology === "DISCOVERY_GRAPH" ? (
+                  <p className="mt-2 text-xs text-[var(--warning)]">{DISCOVERY_EXECUTION_NOTE}</p>
+                ) : null}
                 {template.errors?.length ? (
                   <p className="mt-2 text-xs text-[var(--danger)]">{template.errors[0]}</p>
                 ) : null}
@@ -238,6 +251,9 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
                 {template.nodeCount !== null ? ` · ${template.nodeCount} nodes` : ""}
                 {template.maxParallelism !== null ? ` · up to ${template.maxParallelism} in parallel` : ""}
               </p>
+              {template.topology === "DISCOVERY_GRAPH" ? (
+                <p className="mt-2 text-xs text-[var(--warning)]">{DISCOVERY_EXECUTION_NOTE}</p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <button
                   type="button"

@@ -21,6 +21,16 @@ const builtIns: PipelineTemplateSummary[] = [{
   nodeCount: 6,
   maxParallelism: 2,
   compiles: true,
+}, {
+  key: "incident_investigation",
+  name: "Incident Investigation",
+  category: "INVESTIGATION",
+  summary: "An open-ended search.",
+  version: 1,
+  topology: "DISCOVERY_GRAPH",
+  nodeCount: 5,
+  maxParallelism: 3,
+  compiles: true,
 }];
 
 const customTemplate = {
@@ -66,6 +76,19 @@ describe("PipelineTemplatesManager", () => {
     expect(screen.queryByRole("button", { name: "Edit Feature Build" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete Feature Build" })).not.toBeInTheDocument();
   });
+
+  it("says plainly that a discovery template executes as the plan shown", async () => {
+    // The shape promises rounds; the executor runs the recorded nodes once.
+    // Showing DISCOVERY_GRAPH without saying so would promise behaviour the
+    // run will not perform.
+    render(<PipelineTemplatesManager builtIns={builtIns} />);
+
+    const note = await screen.findByText(/does not add rounds mid-run/);
+    expect(note).toBeInTheDocument();
+    // The ordinary DAG template carries no such note.
+    expect(screen.getAllByText(/does not add rounds mid-run/)).toHaveLength(1);
+  });
+
 
   it("creates a template through the editor, sending the full areas payload", async () => {
     const posts: Array<{ url: string; body: unknown }> = [];
