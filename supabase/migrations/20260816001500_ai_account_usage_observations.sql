@@ -215,6 +215,13 @@ grant execute on function public.record_ai_account_usage(uuid, uuid, text, jsonb
 
 -- The latest observation per account, whatever its status: a fresh failure is
 -- newer truth than a stale success and must win the projection.
+-- Guarded because this file is replayed. Migration 20260819001100 widens this
+-- function's return table, and `create or replace` cannot narrow it back —
+-- Postgres refuses to change an existing function's OUT parameters. Dropping
+-- first makes the sequence replay to the same final state in any order (the
+-- same lesson apply run 32272188607 taught about list_graph_runs).
+drop function if exists public.list_ai_account_usage(uuid);
+
 create or replace function public.list_ai_account_usage(p_organization_id uuid)
 returns table (
   usage_account_id uuid,

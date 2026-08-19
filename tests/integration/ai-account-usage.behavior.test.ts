@@ -137,6 +137,8 @@ describe("ai account usage observations", { timeout: 180_000 }, () => {
       usage_status: string;
       usage_windows: unknown;
       usage_detail: string | null;
+      usage_measured_at: string | null;
+      usage_measured_windows: Array<{ window_key: string }> | null;
     }>("select * from public.list_ai_account_usage($1::uuid)", [organizationId]);
     await resetRole(db);
 
@@ -144,6 +146,40 @@ describe("ai account usage observations", { timeout: 180_000 }, () => {
     expect(listed.rows[0].usage_account_id).toBe(accountId);
     expect(listed.rows[0].usage_status).toBe("unavailable");
     expect(listed.rows[0].usage_detail).toContain("HTTP 401");
+    // The failed probe is the latest truth, but it must not erase the last
+    // real measurement: the row carries both, each under its own timestamp.
+    // This is what keeps a rate-limited sweep from blanking the Bot Manager's
+    // usage bars beside a green Connected badge.
+    expect(listed.rows[0].usage_measured_at).not.toBeNull();
+    expect(
+      (listed.rows[0].usage_measured_windows ?? []).map((window) => window.window_key),
+    ).toEqual(windows.map((window) => window.window_key));
+  });
+
+  it("carries no measurement columns for an account that has never measured", async () => {
+    // A fresh account whose first probe failed: the projection must say so
+    // without inventing a prior measurement.
+    await assumeRole(db, ownerId);
+    const freshAccount = await db.query<{ create_ai_account: string }>(
+      "select public.create_ai_account($1::uuid, 'anthropic', 'subscription', 'Fresh account', 'claude_fresh')",
+      [organizationId],
+    );
+    await resetRole(db);
+    const freshId = freshAccount.rows[0].create_ai_account;
+    await record(organizationId, freshId, "unavailable", [], "The usage endpoint could not be reached.");
+
+    await assumeRole(db, memberId);
+    const listed = await db.query<{
+      usage_account_id: string;
+      usage_measured_at: string | null;
+      usage_measured_windows: unknown;
+    }>("select * from public.list_ai_account_usage($1::uuid)", [organizationId]);
+    await resetRole(db);
+
+    const fresh = listed.rows.find((row) => row.usage_account_id === freshId);
+    expect(fresh).toBeDefined();
+    expect(fresh?.usage_measured_at).toBeNull();
+    expect(fresh?.usage_measured_windows).toBeNull();
   });
 
   it("refuses a measured observation without windows, and windows on a failure", async () => {

@@ -151,6 +151,85 @@ describe("probeAnthropicUsage", () => {
   });
 });
 
+describe("a rate-limited probe", () => {
+  // HTTP 429 is the endpoint pacing its callers — the account is untouched.
+  // The first live 429 (2026-08-19, during a push-triggered sweep burst) was
+  // recorded as a bare "The usage endpoint answered HTTP 429." and rendered
+  // as an amber failure line beside a green Connected badge, which the owner
+  // read as the account being broken.
+
+  it("honors a small Retry-After once and returns the measured numbers", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("slow down", { status: 429, headers: { "retry-after": "1" } });
+      }
+      return jsonResponse(200, { five_hour: { utilization: 12 } });
+    }) as unknown as typeof fetch;
+    const waits: number[] = [];
+    const sleep = async (ms: number) => {
+      waits.push(ms);
+    };
+
+    const result = await probeAnthropicUsage("sk-ant-oat01-example", fetchImpl, sleep);
+
+    expect(calls).toBe(2);
+    expect(waits).toEqual([1000]);
+    expect(result.status).toBe("measured");
+    expect(result.windows[0]?.used_percent).toBe(12);
+  });
+
+  it("gives up on a Retry-After beyond the ceiling and names the rate limit", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("slow down", { status: 429, headers: { "retry-after": "120" } });
+    }) as unknown as typeof fetch;
+
+    const result = await probeAnthropicUsage("sk-ant-oat01-example", fetchImpl);
+
+    // A two-minute wait belongs to the next sweep, not this pass.
+    expect(calls).toBe(1);
+    expect(result.status).toBe("unavailable");
+    expect(result.credentialRejected).toBeFalsy();
+    expect(result.detail).toBe(
+      "The provider rate-limited the usage probe (HTTP 429); the account itself is unaffected, and the next sweep retries.",
+    );
+  });
+
+  it("retries at most once even when the endpoint keeps answering 429", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("slow down", { status: 429, headers: { "retry-after": "0" } });
+    }) as unknown as typeof fetch;
+    const sleep = async () => {};
+
+    const result = await probeAnthropicUsage("sk-ant-oat01-example", fetchImpl, sleep);
+
+    expect(calls).toBe(2);
+    expect(result.status).toBe("unavailable");
+    expect(result.detail).toMatch(/rate-limited/);
+  });
+
+  it("does not wait at all when the 429 carries no Retry-After", async () => {
+    // Without an answer to "when may you retry?", a retry is a guess that
+    // burns the endpoint's patience further. Record and move on.
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("slow down", { status: 429 });
+    }) as unknown as typeof fetch;
+
+    const result = await probeAnthropicUsage("sk-ant-oat01-example", fetchImpl);
+
+    expect(calls).toBe(1);
+    expect(result.status).toBe("unavailable");
+    expect(result.detail).toMatch(/HTTP 429/);
+  });
+});
+
 describe("probeAccountUsage", () => {
   it("says unsupported for providers with no proven usage endpoint", async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
