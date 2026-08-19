@@ -15,6 +15,13 @@ alter table public.node_runs drop constraint if exists node_runs_provider_check;
 alter table public.node_runs add constraint node_runs_provider_check
   check (provider is null or provider in ('anthropic', 'openai', 'deterministic'));
 
+-- Guarded because this file is replayed. A later migration widens this
+-- function's return type, and `create or replace` cannot narrow it back —
+-- Postgres refuses to change an existing function's OUT parameters, which
+-- aborted apply run 32272188607 partway through. Dropping first makes the
+-- sequence replay to the same final state whatever order it runs in.
+drop function if exists public.list_graph_runs(uuid, integer);
+
 create or replace function public.list_graph_runs(
   p_organization_id uuid,
   p_limit integer default 20
