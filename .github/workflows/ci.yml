@@ -52,7 +52,12 @@ jobs:
   e2e:
     name: Browser and accessibility tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite reached 1605 tests and was cancelled at test 1538 by the old
+    # 20-minute ceiling (run 32213327241, attempt 2) — steady progress, not a
+    # hang, ~96% done. The last green day's suite fit in 14 minutes; this is
+    # growth, and the ceiling grows with it. If the job approaches THIS limit,
+    # shard the Playwright projects instead of raising it again.
+    timeout-minutes: 30
     env:
       CI: true
       NEXT_TELEMETRY_DISABLED: 1
