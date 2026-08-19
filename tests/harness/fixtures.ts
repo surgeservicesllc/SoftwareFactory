@@ -372,6 +372,7 @@ export const TEMPLATES = [
     topology: "diamond",
     nodeCount: 7,
     maxParallelism: 5,
+    anchorNodeCount: 0,
     compiles: true,
   },
   {
@@ -383,6 +384,7 @@ export const TEMPLATES = [
     topology: "fan-out",
     nodeCount: 5,
     maxParallelism: 4,
+    anchorNodeCount: 0,
     compiles: true,
   },
 ];

@@ -29,6 +29,7 @@ export default function AiFactoryPage() {
       topology: preview.ok ? preview.topology : null,
       nodeCount: preview.ok ? preview.nodes.length : null,
       maxParallelism: preview.ok ? preview.maxParallelism : null,
+      anchorNodeCount: preview.ok ? preview.anchorNodeCount : null,
       compiles: preview.ok,
     };
   });

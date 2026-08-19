@@ -20,6 +20,7 @@ const builtIns: PipelineTemplateSummary[] = [{
   topology: "DAG",
   nodeCount: 6,
   maxParallelism: 2,
+  anchorNodeCount: 1,
   compiles: true,
 }, {
   key: "incident_investigation",
@@ -30,6 +31,7 @@ const builtIns: PipelineTemplateSummary[] = [{
   topology: "DISCOVERY_GRAPH",
   nodeCount: 5,
   maxParallelism: 3,
+  anchorNodeCount: 0,
   compiles: true,
 }];
 
@@ -47,6 +49,7 @@ const customTemplate = {
   topology: "DIAMOND",
   nodeCount: 3,
   maxParallelism: 1,
+  anchorNodeCount: 0,
   errors: [],
 };
 
@@ -89,6 +92,21 @@ describe("PipelineTemplatesManager", () => {
     expect(screen.getAllByText(/does not add rounds mid-run/)).toHaveLength(1);
   });
 
+
+  it("tells the person choosing a template when its nodes need a workspace worker", async () => {
+    // Two shipped templates carry ANCHOR nodes — run the tests, attempt the
+    // reproduction. Since migration 20260819001000 the analysis worker does
+    // not claim such a graph at all: it waits, with its budget intact, for a
+    // worker that can run commands. Waiting is the honest state but a quiet
+    // one, so the card says it before the graph is recorded.
+    render(<PipelineTemplatesManager builtIns={builtIns} />);
+
+    const note = await screen.findByText(/needs a workspace worker/);
+    expect(note).toBeInTheDocument();
+    expect(note.textContent).toContain("this graph waits rather than running");
+    // Only the template with anchor nodes carries it.
+    expect(screen.getAllByText(/needs a workspace worker/)).toHaveLength(1);
+  });
 
   it("creates a template through the editor, sending the full areas payload", async () => {
     const posts: Array<{ url: string; body: unknown }> = [];

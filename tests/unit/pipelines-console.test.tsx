@@ -23,6 +23,7 @@ const templates: PipelineTemplateSummary[] = [
     topology: "DAG",
     nodeCount: 6,
     maxParallelism: 2,
+    anchorNodeCount: 0,
     compiles: true,
   },
 ];

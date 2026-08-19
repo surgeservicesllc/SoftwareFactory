@@ -31,6 +31,7 @@ type CustomTemplate = {
   topology?: string | null;
   nodeCount?: number | null;
   maxParallelism?: number | null;
+  anchorNodeCount?: number | null;
   errors?: string[];
 };
 
@@ -62,6 +63,21 @@ const EMPTY_SEED: EditorSeed = {
  */
 const DISCOVERY_EXECUTION_NOTE =
   "Recorded as a discovery shape. The executor runs these nodes once — it does not add rounds mid-run — so this executes as the plan you see here.";
+
+/**
+ * Anchor nodes need a workspace and real command execution — run the tests,
+ * attempt the reproduction. The graph worker is a read-only analysis lane and
+ * provides no such executor, and since migration 20260819001000 it does not
+ * claim a graph containing one at all: the graph stays planned with its budget
+ * intact, waiting for a worker that can run it. That is the honest state, but
+ * it is a quiet one, so the person choosing the template is told here rather
+ * than left watching a graph that never starts.
+ */
+function workspaceExecutionNote(anchorNodeCount: number): string {
+  return anchorNodeCount === 1
+    ? "One node here runs commands — tests or a reproduction — which needs a workspace worker. Until one is connected, this graph waits rather than running."
+    : `${anchorNodeCount} nodes here run commands — tests or a reproduction — which needs a workspace worker. Until one is connected, this graph waits rather than running.`;
+}
 
 export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
   const [custom, setCustom] = useState<CustomTemplate[] | null>(null);
@@ -156,6 +172,11 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
                 </p>
                 {template.topology === "DISCOVERY_GRAPH" ? (
                   <p className="mt-2 text-xs text-[var(--warning)]">{DISCOVERY_EXECUTION_NOTE}</p>
+                ) : null}
+                {template.anchorNodeCount ? (
+                  <p className="mt-2 text-xs text-[var(--warning)]">
+                    {workspaceExecutionNote(template.anchorNodeCount)}
+                  </p>
                 ) : null}
                 {template.errors?.length ? (
                   <p className="mt-2 text-xs text-[var(--danger)]">{template.errors[0]}</p>
@@ -253,6 +274,11 @@ export function PipelineTemplatesManager({ builtIns }: { builtIns: readonly Pipe
               </p>
               {template.topology === "DISCOVERY_GRAPH" ? (
                 <p className="mt-2 text-xs text-[var(--warning)]">{DISCOVERY_EXECUTION_NOTE}</p>
+              ) : null}
+              {template.anchorNodeCount ? (
+                <p className="mt-2 text-xs text-[var(--warning)]">
+                  {workspaceExecutionNote(template.anchorNodeCount)}
+                </p>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <button

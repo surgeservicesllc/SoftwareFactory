@@ -14,6 +14,7 @@ const BUILT_INS: PipelineTemplateSummary[] = [
     topology: "fan-out/fan-in",
     nodeCount: 8,
     maxParallelism: 4,
+    anchorNodeCount: 0,
     compiles: true,
   },
 ];

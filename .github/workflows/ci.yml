@@ -95,7 +95,23 @@ jobs:
         run: npm ci
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        # Bounded and retried, because this step hangs in the wild: on run
+        # 32277635392 two of three shards sat 19 minutes inside `apt-get
+        # update` against a stalled Ubuntu mirror and ate their whole job
+        # budget without running one test. `timeout` kills a hung attempt
+        # after four minutes (a healthy install takes ~2.5) and the retry
+        # gets a fresh mirror connection; the step ceiling backstops the
+        # loop so the job budget stays for the tests.
+        timeout-minutes: 14
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "Install attempt ${attempt} failed or hung; retrying."
+          done
+          echo "Chromium could not be installed after 3 bounded attempts."
+          exit 1
 
       - name: Run Playwright tests
         run: npx playwright test --shard=${{ matrix.shard }}/3
