@@ -38,6 +38,15 @@ const PRIVILEGED_CREDENTIAL_REFS: ReadonlySet<string> = new Set([
   "VERCEL_OIDC_TOKEN",
 ]);
 
+/**
+ * The same names, exported so the database constraint can be checked against
+ * them rather than restating them. They are two enforcement points for one
+ * rule, and they had drifted by five names before anything compared them.
+ */
+export const PRIVILEGED_CREDENTIAL_REF_NAMES: readonly string[] = Object.freeze(
+  [...PRIVILEGED_CREDENTIAL_REFS].sort(),
+);
+
 /** Conventional provider variables an operator is likely to already have set. */
 const PROVIDER_CREDENTIAL_ALTERNATES: readonly string[] = [
   "ANTHROPIC_AUTH_TOKEN",
