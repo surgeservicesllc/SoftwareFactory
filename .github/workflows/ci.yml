@@ -15,21 +15,10 @@ permissions:
   contents: read
 
 concurrency:
-  # `github.ref` is what makes this safe for the merge queue without any extra
-  # condition: a queued candidate runs on its own
-  # `refs/heads/gh-readonly-queue/...` ref, so it never shares a group with a
-  # pull-request run or with another queue entry, and nothing can cancel it.
-  #
-  # Do not make cancel-in-progress conditional on the event name. It looks like
-  # a useful guard against a cancelled check ejecting a pull request from the
-  # queue, but the ref above already prevents that, and GitHub silently stops
-  # creating workflow runs for the branch when an expression appears here. No
-  # run object, no error, no annotation: the pull request simply never gets
-  # checks, which is indistinguishable from a dropped webhook.
-  #
-  # The same is true of writing that expression inside a comment, which is how
-  # this note originally read and why it took a second bisection. Describe it in
-  # prose; do not spell the interpolation.
+  # Safe for the merge queue as it stands, with no extra condition: a queued
+  # candidate runs on its own `refs/heads/gh-readonly-queue/...` ref, so it
+  # never shares a group with a pull-request run or with another queue entry,
+  # and nothing can cancel it.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
