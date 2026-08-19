@@ -58,4 +58,8 @@ jobs:
           # The subscription credential; no ANTHROPIC_API_KEY is supplied, so
           # this cannot quietly become a billed run.
           SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
+          # The server-only marker protects Next.js client bundles; in a Node
+          # worker it would simply throw. The shim maps that one specifier to
+          # the empty module the package ships for server environments.
+          NODE_OPTIONS: --import ./scripts/server-only-shim.mjs
         run: npx tsx scripts/graph-worker.mts --drain
