@@ -2,7 +2,41 @@
 
 Last updated: 2026-08-19
 
-## Newest (2026-08-19 ~03:10Z): graphs execute — the worker boundary is live on production (ADR-092)
+## Newest (2026-08-19 ~17:15Z): the day's own cadence audited, and the Bot Manager tells the truth again (ADR-093, ADR-094)
+
+Applied to production through apply runs 32277018759 (…001000) and
+32279867500 (…001100); ledger confirmed both. Highlights, in the order the
+day found them:
+
+- **Main's CI verdict is real again**: pushes get a per-commit concurrency
+  group and are never pre-empted, so a merge no longer cancels the previous
+  merge's verification (#267). The probe now asks `pg_constraint` directly
+  and measured `covers_all_five_added = t` — the ADR-036 parity fix is
+  genuinely live (#266).
+- **The claim matches worker capability** (`20260819001000`, ADR-093): the
+  analysis worker declares DETERMINISTIC+MODEL and never claims a graph
+  containing ANCHOR nodes; such graphs stay PLANNED with budget intact, and
+  the template cards say so before recording one (#269, #272). Drain
+  32277660454 exercised the two-argument claim live: five inspectors
+  dispatched in parallel, session limit refused capacity, run closed
+  CANCELLED (void) — graph `51816274-…` still claimable for the 17:50Z
+  window.
+- **The browser suite is sharded 3×535** after being killed at 1582/1605 by
+  its own ceiling; required checks and merge-readiness fixtures moved with
+  the rename, and the install step is bounded per attempt after two shards
+  hung 19 minutes in a stalled apt mirror (#270, #272).
+- **Owner-reported Bot Manager defect fixed end to end** (ADR-094,
+  `20260819001100`): a rate-limited usage probe (HTTP 429) no longer
+  impersonates a broken account. Probe retries once within a small
+  Retry-After and records what 429 means; the projection carries the last
+  measured windows past a newer failure; the console renders probe failures
+  as muted information and keeps real numbers on screen; push-handover
+  broker runs skip the startup probe that caused the burst. The account
+  badge (Connected) is the statement of health. The next broker sweep
+  records the first observation under the new wording; numbers appear when
+  the provider window reopens (17:50Z).
+
+## Prior (2026-08-19 ~03:10Z): graphs execute — the worker boundary is live on production (ADR-092)
 
 The planned-graph dead end is wired. Migration `20260819000100` (claim /
 node-state / artifact / closure as service-role definer functions), the
