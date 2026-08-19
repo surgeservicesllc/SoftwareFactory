@@ -79,6 +79,12 @@ const AUDIT_EVIDENCE_DESTRUCTION = [
   /\b(drop|truncate)\s+table\s+[a-z_.]*\b(audit|activity_events|autonomy_decisions|operations_audit)/i,
   /\bdelete\s+from\s+[a-z_.]*\b(audit|activity_events|autonomy_decisions|operations_audit)/i,
   /\bdrop\s+trigger[^;]*append_only/i,
+  // Disabling an append-only trigger removes immutability just as dropping it
+  // does, and leaves the trigger in place to suggest otherwise. Dropping was
+  // listed and disabling was not, which is an inconsistency in this rule rather
+  // than a judgement that one is safer.
+  /\bdisable\s+trigger[^;]*append_only/i,
+  /\balter\s+table[^;]*\b(audit|activity_events|autonomy_decisions|operations_audit)[^;]*\bdisable\s+trigger\b/i,
 ];
 
 /**
@@ -91,7 +97,26 @@ const DESTRUCTIVE_SQL = [
   /\btruncate\s+table\b/i,
   /\bdelete\s+from\b(?![^;]*\bwhere\b)/i,
   /\bdisable\s+row\s+level\s+security\b/i,
+  // `no force` weakens row-level security exactly as `disable` does: it lets
+  // the table owner bypass its own policies. It was missing while `disable`
+  // was listed, so the more obscure spelling of the same act scored YELLOW --
+  // and this repository's invariant is FORCE RLS on every exposed table, so
+  // the obscure spelling is the one worth catching.
+  /\bno\s+force\s+row\s+level\s+security\b/i,
   /\bdrop\s+policy\b/i,
+];
+
+/**
+ * Grants that widen what an unauthenticated caller may do.
+ *
+ * `tests/integration/schema-security-invariants.test.ts` asserts that `anon`
+ * holds no write privilege on any table in the schema. A migration that grants
+ * one is a deliberate reversal of that invariant, and reversing an invariant is
+ * the owner's decision rather than a routine schema change.
+ */
+const ANONYMOUS_ACCESS_WIDENING = [
+  /\bgrant\b[^;]*\bto\b[^;]*\banon\b/i,
+  /\balter\s+default\s+privileges\b[^;]*\bto\b[^;]*\banon\b/i,
 ];
 
 /** Ordered most dangerous first; every matching rule contributes its factor. */
@@ -117,6 +142,12 @@ const RULES: readonly Rule[] = [
     matches: (file) =>
       (file.addedLines ?? []).some((line) => AUTHORITY_WIDENING.some((m) => m.test(line))) ||
       /(^|\/)lib\/autonomy\/controls\.ts$/.test(file.path),
+  },
+  {
+    factor: "privileged-access",
+    reason: "Grants an unauthenticated role access it does not currently hold.",
+    matches: (file) =>
+      (file.addedLines ?? []).some((line) => ANONYMOUS_ACCESS_WIDENING.some((m) => m.test(line))),
   },
   {
     factor: "destructive-production-data",
