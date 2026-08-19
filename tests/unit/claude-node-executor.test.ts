@@ -81,6 +81,12 @@ describe("buildClaudeNodeExecutor", () => {
     if (result.status !== "SUCCEEDED") return;
     // Real usage travels with the result so the graph's token budget can bind.
     expect(result.tokensUsed).toBe(1500);
+    // The measured turn envelope (run 32228988434 exhausted the old 8) and
+    // the read-only tool surface travel with every call.
+    expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({
+      maxTurns: 24,
+      allowedTools: ["Read", "Glob", "Grep"],
+    });
     const task = capturedTask();
     expect(task).toContain("Synthesize the three inspections");
     expect(task).toContain('Input from upstream node "inspect_a"');

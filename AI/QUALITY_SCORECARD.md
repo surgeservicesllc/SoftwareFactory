@@ -12,10 +12,15 @@ convergence caps) and `tests/unit/claude-node-executor.test.ts` (8 cases) —
 and hosted-behaviorally observed as far as the provider allowed: production
 worker runs 32208699123 / 32208975669 / 32209893742 demonstrate claim,
 parallel dispatch, containment, honest closure, and bounded re-claim on the
-live database. **No node has yet succeeded in production**: every attempt so
-far met an infrastructure fault or the subscription session limit. That
-claim is withheld until a drain log shows real node successes and the
-graph's artifacts exist in production rows.
+live database. **A node has now succeeded in production**: post-reset drain
+run `32228988434`, graph run `e51c57a5-…` — the rollback inspector completed
+through the CLI, its RAW artifact was recorded, and the run closed PARTIAL
+with the incompleteness stated (every other node hit the worker's old
+8-turn ceiling, since raised to 24 with an eight-minute MODEL-node
+timeout). The stronger claim — a full seven-node COMPLETED run — is still
+withheld until a drain log shows it; migration `20260819000500` plants the
+copy that next dispatch runs with the corrected envelope. CI on main is
+fully green on the merged state (run `32216103242`, 1605 browser tests).
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to

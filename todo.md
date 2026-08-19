@@ -248,6 +248,27 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+Round 7 — the first real production node success, and the turn ceiling
+(worker run 32228988434, post-reset live proof):
+
+- Graph run e51c57a5: **the rollback inspector genuinely completed through
+  the CLI in production** — 1 of 7 contributed, RAW artifact recorded, run
+  closed PARTIAL (an answer; the graph retired honestly). The re-claim loop
+  also proved itself live: claim → all-turn-limit FAILED (counted, 1 of 3)
+  → immediate re-claim → the partial success.
+- Every other failure was "Reached maximum number of turns (8)" — the
+  executor's ceiling, not the work. Fixed by measurement: 24 turns, and
+  MODEL template nodes now carry an eight-minute timeout instead of the
+  three-minute default that boxed the old ceiling in.
+- buildLaunchPlan never passed timeout_ms/max_attempts — every planned
+  graph silently got database defaults regardless of contract. The payload
+  now carries the compiled envelope, pinned by a launch-plan test.
+- `20260819000500_replant_with_room_to_work`: one final fixed-id copy of
+  the first-day graph, planned with the measured envelope, for the next
+  dispatch to drive to a full COMPLETED. CI on main also went fully green
+  (run 32216103242, 1605 browser tests) after PR #248 raised the outgrown
+  e2e ceiling.
+
 Round 6 — durability and accounting (PR #246):
 
 - Dead workers no longer strand graphs. claim_planned_graph sweeps

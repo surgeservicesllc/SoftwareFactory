@@ -157,6 +157,29 @@ describe("the graph launch payload", () => {
     expect(rows[0].risk_level).toBe(built.plan.riskLevel);
   }, 120_000);
 
+  it("persists the compiled execution envelope instead of database defaults", async () => {
+    await asMember(db);
+    const graphId = await launch("security_audit");
+
+    await asCatalogue(db);
+    const { rows } = await db.query<{ node_key: string; executor: string; timeout_ms: number; max_attempts: number }>(
+      "select node_key, executor::text as executor, timeout_ms, max_attempts from public.graph_nodes where graph_id = $1 order by node_key",
+      [graphId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      // A MODEL inspector carries the measured eight-minute envelope; code
+      // keeps the tight default. Before the payload carried these fields,
+      // the database defaults silently overrode the planner (the first live
+      // drain burned on exactly that).
+      expect({ key: row.node_key, timeout: row.timeout_ms }).toEqual({
+        key: row.node_key,
+        timeout: row.executor === "MODEL" ? 480_000 : 180_000,
+      });
+      expect(row.max_attempts).toBe(2);
+    }
+  }, 120_000);
+
   it("produces a payload every registered template can be launched with", async () => {
     await asMember(db);
     // A template that compiles but cannot be written is a template nobody can

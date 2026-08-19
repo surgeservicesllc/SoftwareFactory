@@ -15,9 +15,18 @@ re-claim chance in seconds — capacity refusals now void runs as CANCELLED,
 uncounted, and stop the drain). Edges now carry data into node prompts, and
 migration `20260819000200` re-planted one fixed-id copy of the owner's
 first-day readiness graph so the next dispatch after the session limit
-resets (7:30am UTC) has real work. What remains for the live proof: dispatch
-`graph-worker.yml` after the reset and read the drain log for node
-successes; the worker's schedule stays off until the repo variable
+resets (7:30am UTC) has real work. **The post-reset dispatch delivered the
+first real production node success** (run `32228988434`, graph run
+`e51c57a5-…`: the rollback inspector completed through the CLI, RAW
+artifact recorded, run closed PARTIAL honestly). The residual failures were
+the executor's own 8-turn ceiling — raised to 24 by measurement, with MODEL
+template nodes now carrying an eight-minute timeout, and `buildLaunchPlan`
+now passing the compiled timeout/attempts instead of letting database
+defaults override the planner. `20260819000500` plants the final fixed-id
+copy with the corrected envelope; the next dispatch should drive it to a
+full COMPLETED with a report artifact. CI on main is fully green
+(run `32216103242`) after the outgrown e2e ceiling was raised (PR #248).
+The worker's schedule stays off until the repo variable
 `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED` is set. File-writing nodes remain
 deliberately with the Phase 1C path. The owner's standing merge cadence for
 this goal: merge immediately, verify on production, keep looping.
