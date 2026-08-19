@@ -18,6 +18,7 @@ import {
   KeyRound,
   type LucideIcon,
   Menu,
+  PanelLeft,
   PlugZap,
   Plus,
   Rocket,
@@ -479,6 +480,7 @@ function Sidebar({
   onNavigate,
   viewer,
   compact = false,
+  onToggleCompact,
   /**
    * The site's own destinations, listed at the foot of the drawer.
    *
@@ -493,15 +495,24 @@ function Sidebar({
   onNavigate?: () => void;
   viewer: ShellViewer;
   compact?: boolean;
+  /**
+   * Absent wherever retracting is not on offer: the mobile drawer, which
+   * closes rather than narrows, and any device without a hovering pointer.
+   */
+  onToggleCompact?: () => void;
   siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
   /*
-   * The navigation starts at the top of the column.
+   * The navigation starts at the top of the column, and the retract control
+   * ends it.
    *
-   * Two blocks used to sit above it and both were removed by owner request
-   * (2026-08-17): a wordmark, which the site header one row above already
-   * renders, and a "Collapse navigation" toggle. Nothing replaces them — the
-   * menu is what the column is for, so it begins where they were.
+   * Two blocks used to sit above the menu and both were removed by owner
+   * request (2026-08-17): a wordmark, which the site header one row above
+   * already renders, and this toggle. The toggle was then asked for again, on
+   * pointer devices — so it is back, at the foot of the column rather than the
+   * head of it. That is the whole reason for the position: the instruction
+   * that removed it was about the space above the menu, and returning it there
+   * would undo the thing that was actually wanted.
    */
   return (
     <div className={cn("flex h-full flex-col overflow-y-auto py-5", compact ? "px-2" : "px-3")}>
@@ -553,6 +564,35 @@ function Sidebar({
           </Link>
         </div>
       )}
+
+      {onToggleCompact ? (
+        <div className="mt-4 border-t border-line pt-3">
+          {/*
+            The name changes with the state, so it always says what the click
+            will do rather than what the column currently is; `aria-pressed`
+            carries the state itself.
+          */}
+          <button
+            type="button"
+            onClick={onToggleCompact}
+            aria-pressed={compact}
+            title={compact ? "Expand navigation" : "Collapse navigation"}
+            className={cn(
+              "flex min-h-9 w-full items-center rounded-lg text-sm font-medium text-muted",
+              "transition-colors hover:bg-surface-raised hover:text-foreground",
+              compact ? "justify-center px-0" : "gap-2 px-3",
+            )}
+          >
+            <PanelLeft
+              className={cn("size-4 shrink-0 transition-transform", compact && "rotate-180")}
+              aria-hidden="true"
+            />
+            <span className={compact ? "sr-only" : undefined}>
+              {compact ? "Expand navigation" : "Collapse navigation"}
+            </span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -569,6 +609,85 @@ function Sidebar({
  * query has no server answer, and guessing at one during render hydrates into
  * a mismatch.
  */
+const COMPACT_STORAGE_KEY = "softwarefactory:sidebar-compact";
+
+/*
+ * The retract preference is an external store, so it is read as one.
+ *
+ * `localStorage` does not exist on the server, and a component that reads it
+ * during render hydrates into a mismatch. Reading it in an effect and calling
+ * `setState` is the usual workaround and is worse: it is a render the person
+ * sees at the wrong width. A store with a server snapshot says the same thing
+ * without either problem, and the `storage` listener means a second tab does
+ * not disagree with the first about a choice made once.
+ */
+const compactListeners = new Set<() => void>();
+
+function subscribeToCompact(listener: () => void) {
+  compactListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    compactListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function readCompact() {
+  try {
+    return window.localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
+  } catch {
+    // A blocked or full storage is not a reason to fail to render a page.
+    return false;
+  }
+}
+
+function writeCompact(next: boolean) {
+  try {
+    window.localStorage.setItem(COMPACT_STORAGE_KEY, next ? "1" : "0");
+  } catch {
+    // Same: the preference is a convenience, never a precondition.
+  }
+  for (const listener of compactListeners) listener();
+}
+
+/*
+ * "On a Windows or macOS device", asked as a capability rather than a name.
+ *
+ * The owner wants the column to retract on a computer and not on a phone or
+ * tablet, and the honest way to ask that is how the device is driven, not what
+ * it is called. Reading the platform out of the user agent gets this wrong in
+ * both directions: iPadOS reports `MacIntel` in `navigator.platform`, so a
+ * tablet would be served the desktop control, and `navigator.userAgentData` is
+ * Chromium-only, so Safari and Firefox on the very machines this is for would
+ * fall to a string that browsers have been freezing for years.
+ *
+ * A pointer that hovers is what Windows and macOS have and what touch devices
+ * do not, so it is the same question with a reliable answer — and it keeps
+ * Linux and ChromeOS desktops working, which naming two platforms would have
+ * broken for no reason anyone wanted.
+ */
+const POINTER_DESKTOP_QUERY = "(hover: hover) and (pointer: fine)";
+
+function subscribeToPointerDesktop(listener: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(POINTER_DESKTOP_QUERY);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+function readPointerDesktop() {
+  /*
+   * Unlike the width query, the safe answer here is "no".
+   *
+   * The widest tier is the right fallback for a layout, because the fullest
+   * navigation is never the wrong thing to show. A control is different: an
+   * environment that cannot say how it is driven should not be handed a
+   * desktop affordance on the chance that it is one.
+   */
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(POINTER_DESKTOP_QUERY).matches;
+}
+
 const EXPANDABLE_QUERY = "(min-width: 1280px)";
 
 function subscribeToExpandable(listener: () => void) {
@@ -592,17 +711,27 @@ export function AppShell({
   viewer = SIGNED_OUT_VIEWER,
 }: Readonly<{ children: React.ReactNode; viewer?: ShellViewer }>) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  /*
-   * Width alone decides the column's form now.
-   *
-   * A stored per-person preference used to widen it back on request, but its
-   * only control was the "Collapse navigation" button the owner removed, so
-   * the preference became a value nothing could set. Between 1024 and 1279
-   * the rail is still the only form that fits beside content; from 1280 the
-   * column is full width.
-   */
   const expandable = useSyncExternalStore(subscribeToExpandable, readExpandable, () => true);
-  const compact = !expandable;
+  const pointerDesktop = useSyncExternalStore(
+    subscribeToPointerDesktop,
+    readPointerDesktop,
+    () => false,
+  );
+  const chosenCompact = useSyncExternalStore(subscribeToCompact, readCompact, () => false);
+  /*
+   * Two reasons the column can be a rail, and only one of them is a choice.
+   *
+   * Between 1024 and 1279 the rail is the only form that fits beside content,
+   * so the width decides and the person does not get a say. From 1280 there is
+   * room for either, and on a pointer device they choose.
+   *
+   * The stored preference is read through `canRetract` rather than on its own:
+   * someone who retracts the column on a desktop and later opens the same
+   * account on a tablet would otherwise arrive at a rail with no control to
+   * widen it, because the control is the thing that device does not get.
+   */
+  const canRetract = expandable && pointerDesktop;
+  const compact = !expandable || (canRetract && chosenCompact);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -639,7 +768,11 @@ export function AppShell({
           "w-[var(--sidebar-w)] transition-[width] duration-200 ease-out motion-reduce:transition-none",
         )}
       >
-        <Sidebar viewer={viewer} compact={compact} />
+        <Sidebar
+          viewer={viewer}
+          compact={compact}
+          onToggleCompact={canRetract ? () => writeCompact(!compact) : undefined}
+        />
       </aside>
 
       {/*
