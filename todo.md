@@ -1,5 +1,61 @@
 # SoftwareFactory — shared working status
 
+## AUDIT: SIX ROUNDS, AND WHAT THEY KEPT FINDING (2026-08-19)
+
+Six discovery rounds over the whole repository. Every defect found in rounds 1-4
+had the same shape, and naming it is more useful than the individual fixes:
+
+**One rule, implemented twice, drifted apart.**
+
+| Where | The two copies | What drifted |
+| --- | --- | --- |
+| `lib/graph/scheduler.ts` | `tick()` against its own doc comment | BLOCKED propagated one hop, so a failure deeper than one edge left a subtree PENDING forever and reported the graph `stalled` |
+| `lib/graph/verification.ts` | `SPECIALIZED_LENSES` against every other strategy | `warnPasses` ignored, so a WARN cleared the quorum on the one strategy carrying a required security lens |
+| `AI/CURRENT_STATE.md` | Two paragraphs of one file | Hosted backlog stated as 29 and 15; it was 9 |
+| `lib/worker/redact.ts` vs `lib/server/sensitive-data.ts` | Two secret detectors | Worker missed AWS and Stripe keys — and the worker's is what gates whether a bot may commit a file |
+| `lib/bots/credentials.ts` vs the `bots` CHECK | ADR-036's "rejected by both" | Five of fourteen privileged names missing from the constraint, reachable by calling `register_bot` directly through PostgREST |
+| `lib/autonomy/diff-risk.ts` | Its own rules against each other | `no force row level security`, `grant … to anon`, and `disable trigger …_append_only` scored YELLOW while their siblings scored RED |
+
+Rounds 5 and 6 were clean, which is the convergence condition.
+
+### If you are auditing this repository, start here
+
+Grep sweeps produced almost nothing but false positives — 51, then 28, then 10
+"unguarded" API routes, all of which used a helper the pattern missed, and 22
+tables "missing FORCE RLS" that get it through a `format()`/`execute` loop.
+Every real defect came from **reading a module and comparing it to its second
+copy**. `tests/unit/secret-detector-parity.test.ts`,
+`tests/integration/secret-detector-sql-parity.behavior.test.ts` and
+`tests/unit/bot-credential-denylist-parity.test.ts` now pin three of those pairs
+so they cannot drift again.
+
+One near-miss worth repeating: `public.text_has_likely_secret` is defined by
+three migrations, and the **first** is missing a pattern the **third** adds.
+Reading the earliest definition would have produced a confident report of a gap
+closed months earlier. Take the last definition.
+
+### Checked and sound — do not spend a round re-deriving these
+
+Route authorization (every route uses a shared guard); RLS **and** FORCE RLS on
+every public table; no SECURITY DEFINER function missing `set search_path`; the
+only function granted to `anon` is the public newsletter signup;
+`read_provider_credential` is service-role-only and returns ciphertext useless
+without a key held outside the database; `npm audit` clean; no `.only`, empty
+catch, floating promise, `console.log`, TODO/FIXME, stub return or duplicate
+migration prefix in production code; 61 SQL enums compared against their
+TypeScript counterparts with no drift (risk level differs by case only, via the
+named `toDatabaseRiskLevel` converter).
+
+### Still open, and owner-gated
+
+- **ADR-036 blocks bot execution.** The bot fabric is deliberately a registry:
+  `bot_id` appears in zero execution code paths, and connecting one "would
+  require separate owner-approved activation". Wiring bots to runs is a decision
+  plus a new ADR, not an audit fix.
+- Codex quota, the GitHub App install on `bubalysupport-prog`, and recording a
+  graph through `/solutions/workflows` are unchanged owner actions.
+
+
 ## RESPONSIVE + NAVIGATION: WHERE THIS LANDED (2026-08-18)
 
 Coverage is now derived rather than asserted, which is the part that had been

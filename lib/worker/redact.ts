@@ -3,6 +3,13 @@ const credentialPatterns = [
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gi,
   /\bsk-[A-Za-z0-9_-]{20,}\b/g,
+  // Stripe and AWS. Both were in `lib/server/sensitive-data.ts` and missing
+  // here, which mattered more than the reverse: this list is what
+  // `policy-scan.ts` consults before letting a worker commit a file, and what
+  // `redactText` uses to sanitise worker output. A key shape the server
+  // refuses to store could be committed and logged in the clear.
+  /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/gi,
+  /\bAKIA[0-9A-Z]{16}\b/g,
   /\bsb_secret_[A-Za-z0-9_-]{20,}\b/gi,
   /\bvercel_[A-Za-z0-9_-]{20,}\b/gi,
   /\bBearer\s+[A-Za-z0-9._~+/-]{20,}\b/gi,

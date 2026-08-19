@@ -204,6 +204,73 @@ describe("destroying audit evidence is RED", () => {
   });
 });
 
+describe("weakening row-level security is RED however it is spelled", () => {
+  // `disable row level security` was listed and `no force row level security`
+  // was not, so the more obscure spelling of the same act scored YELLOW. This
+  // repository's invariant is FORCE RLS on every exposed table, which makes the
+  // obscure spelling the one worth catching.
+  it.each([
+    "alter table public.projects disable row level security;",
+    "alter table public.projects no force row level security;",
+    "ALTER TABLE public.projects NO FORCE ROW LEVEL SECURITY;",
+    "drop policy projects_select_members on public.projects;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("destructive-production-data");
+  });
+});
+
+describe("granting an unauthenticated role new access is RED", () => {
+  // schema-security-invariants asserts anon holds no write privilege on any
+  // table. A migration granting one reverses that invariant, and reversing an
+  // invariant is the owner's call rather than a routine schema change.
+  it.each([
+    "grant insert on table public.projects to anon;",
+    "grant all on table public.projects to anon, authenticated;",
+    "grant select, update on public.bots to anon;",
+    "alter default privileges in schema public grant select on tables to anon;",
+  ])("classifies %s as RED", (line) => {
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("privileged-access");
+  });
+
+  it("leaves an ordinary grant to authenticated alone", () => {
+    // Every migration here grants to `authenticated`. Scoring those RED would
+    // be noise, and noise is how a gate gets ignored.
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [
+        "grant execute on function public.register_bot(text) to authenticated;",
+      ]),
+    ]);
+
+    expect(assessment.level).not.toBe("RED");
+  });
+});
+
+describe("disabling an append-only trigger is RED, not only dropping one", () => {
+  it.each([
+    "alter table public.activity_events disable trigger activity_events_append_only;",
+    "alter table public.autonomy_decisions disable trigger autonomy_decisions_append_only;",
+  ])("classifies %s as RED", (line) => {
+    // Disabling removes immutability just as dropping does, and leaves the
+    // trigger in place to suggest otherwise.
+    const assessment = assessDiffRisk([
+      file("supabase/migrations/20260101000000_x.sql", [line]),
+    ]);
+
+    expect(assessment.level).toBe("RED");
+    expect(assessment.factors).toContain("destructive-production-data");
+  });
+});
+
 describe("safety-relevant AI memory is not documentation-only", () => {
   // PROTECTED_RESOURCES.md lists it among the paths requiring elevated review
   // and prohibits an automated system from weakening its own guardrails. An

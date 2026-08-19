@@ -126,3 +126,47 @@ export async function exchangeCodeForKey(
     clearTimeout(timer);
   }
 }
+
+/**
+ * What the start route stored, once it has been proven to be that.
+ *
+ * Both provider callbacks read a cookie they set themselves, so the shape
+ * "should" be right — and both parsed it and used it directly. Valid JSON is
+ * not a valid cookie: `{}` parses, and a cookie left over from an older format
+ * across a deploy parses too. The missing field then reached `stateMatches`,
+ * which throws on a non-string rather than returning false, so the route
+ * answered 500 instead of an outcome — and threw before clearing the cookie,
+ * so every retry failed identically until the TTL ran out.
+ *
+ * Returning null rather than throwing keeps the decision at the call site,
+ * where the cookie can be cleared and a named outcome returned.
+ */
+export interface PendingSignIn {
+  readonly verifier: string;
+  readonly state: string;
+  readonly organizationId: string;
+}
+
+export function readPendingSignIn(raw: string): PendingSignIn | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+
+  const candidate = parsed as Record<string, unknown>;
+  const fields = ["verifier", "state", "organizationId"] as const;
+  for (const field of fields) {
+    const value = candidate[field];
+    if (typeof value !== "string" || value.length === 0) return null;
+  }
+
+  return Object.freeze({
+    verifier: candidate.verifier as string,
+    state: candidate.state as string,
+    organizationId: candidate.organizationId as string,
+  });
+}
