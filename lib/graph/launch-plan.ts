@@ -30,6 +30,8 @@ export type PlanNodePayload = {
   readonly capability: string;
   readonly model_tier: string;
   readonly tolerates_partial_inputs: boolean;
+  readonly timeout_ms: number;
+  readonly max_attempts: number;
   readonly input_schema: Record<string, unknown>;
   readonly output_schema: Record<string, unknown>;
   readonly reads: readonly { kind: string; id: string }[];
@@ -111,6 +113,10 @@ export function buildLaunchPlan(
         capability: node.capability,
         model_tier: node.modelTier,
         tolerates_partial_inputs: node.toleratesPartialInputs,
+        // The compiled contract's execution envelope. Omitting these let the
+        // database defaults silently override what the planner decided.
+        timeout_ms: node.timeoutMs,
+        max_attempts: node.maxAttempts,
         // The contracts live in the engine's Zod schemas rather than in the
         // database. Sending `{}` records that a contract exists without
         // pretending the database can enforce it — a serialized Zod schema that

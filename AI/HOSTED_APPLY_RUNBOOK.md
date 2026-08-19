@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below. The repository total is 115 migration
+**The current total is 19**, named in the list below. The repository total is 116 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -76,10 +76,19 @@ the capacity semantics end to end: the re-planted graph was claimed, every
 refusal was classified, the run closed CANCELLED, and the drain stopped —
 the graph keeps its chances. `20260819000300_tolerant_fan_in` adds the
 per-node `tolerates_partial_inputs` bit (guarded ALTER) and re-declares
-`create_graph_from_plan` to persist it, so declared fan-ins run with
-whatever inputs completed and state their own incompleteness. All of these
-re-apply through the same replay-safe `scope=broker-functions` path.
-Earlier revisions of this
+`create_graph_from_plan` to persist it (applied by run `32212056032`);
+`20260819000400_list_graph_runs` adds the member-facing run read and widens
+the node provider check for deterministic attributions (applied by run
+`32212821411`); the stale-run reclaim revision of `20260819000100` was
+applied by run `32213217318`. The post-reset live-proof dispatch (worker
+run `32228988434`) then recorded **the first real production node
+success**: on graph run `e51c57a5-…` the rollback inspector completed
+through the CLI with its artifact, the run closed PARTIAL, and every other
+failure was the worker's old 8-turn ceiling — fixed in code (24 turns) —
+which is why `20260819000500_replant_with_room_to_work` re-plants one final
+fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
+All of these re-apply through the same replay-safe `scope=broker-functions`
+path. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 

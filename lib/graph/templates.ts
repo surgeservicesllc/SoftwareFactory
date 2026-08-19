@@ -135,6 +135,11 @@ export function templateNodeContracts(template: GraphTemplate): readonly NodeCon
       toleratesPartialInputs:
         node.toleratesPartialInputs
         ?? (AGGREGATING_CAPABILITIES.has(node.capability) && (node.dependsOn ?? []).length > 0),
+      // A MODEL inspector must actually read the repository before it may
+      // answer; the first live drain measured 8 turns and 3 minutes as too
+      // small an envelope. Deterministic and anchor nodes keep the tight
+      // default — code either finishes fast or is wrong.
+      ...(node.executor === "MODEL" ? { timeoutMs: 480_000 } : {}),
     }),
   );
 }

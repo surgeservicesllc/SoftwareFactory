@@ -697,4 +697,40 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     ).rejects.toThrow(/membership/);
     await reset(db);
   });
+
+  it("re-plants a second copy with the measured envelope, exactly once", async () => {
+    // The second seed migration: same exhausted source, a new fixed id, and
+    // the one deliberate difference — MODEL nodes carry the eight-minute
+    // timeout the first live drain proved necessary.
+    const replantedId = "b7e2a9d4-3c61-4f8e-9a05-2d84c1f6b730";
+    const seedFile = "20260819000500_replant_with_room_to_work.sql";
+    const seedSql = await readFile(resolve(migrationsDirectory, seedFile), "utf8");
+
+    await reset(db);
+    await db.exec(seedSql);
+
+    const nodes = await db.query<{ node_key: string; executor: string; timeout_ms: number }>(
+      "select node_key, executor::text as executor, timeout_ms from public.graph_nodes where graph_id = $1 order by node_key",
+      [replantedId],
+    );
+    expect(nodes.rows).toHaveLength(4);
+    for (const row of nodes.rows) {
+      expect(row.timeout_ms).toBe(row.executor === "MODEL" ? 480_000 : 180_000);
+    }
+
+    // Replay: no second copy, ever.
+    await db.exec(seedSql);
+    const copies = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.graphs where id = $1", [replantedId],
+    );
+    expect(copies.rows[0].count).toBe(1);
+
+    // Claimable, and the projection carries the raised envelope.
+    const claimed = parseClaimedGraph(await claim());
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.graph.graph_id).toBe(replantedId);
+    expect(claimed.graph.nodes.find((n) => n.node_key === "inspect_a")?.timeout_ms).toBe(480_000);
+    await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
+  });
 });

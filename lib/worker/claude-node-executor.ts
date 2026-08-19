@@ -123,7 +123,12 @@ export function buildClaudeNodeExecutor(
         {
           workingDirectory: options.workingDirectory,
           allowedTools: ["Read", "Glob", "Grep"],
-          maxTurns: options.maxTurns ?? 8,
+          // Measured, not guessed: the first live drain (run 32228988434)
+          // exhausted 8 turns on nearly every inspector — a node that must
+          // actually read a repository needs room to read it — while the one
+          // success fit comfortably once its exploration happened to be
+          // efficient. The node's own timeoutMs remains the hard stop.
+          maxTurns: options.maxTurns ?? 24,
         },
       );
 
