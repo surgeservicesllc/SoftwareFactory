@@ -95,6 +95,20 @@ const artifactSchema = z.object({
 
 type Artifact = z.infer<typeof artifactSchema>;
 
+/**
+ * Turn budgets, measured rather than guessed.
+ *
+ * Canary run 32256086443 failed with "Reached maximum number of turns (2)"
+ * on a text-only node: output here is schema-enforced, so a single
+ * structured-output retry spends the whole budget and the run dies on an
+ * opaque provider error rather than on the work. Six turns leaves room for
+ * that retry; an inspector that must find and read files gets twice that.
+ * Both stay far below the transport's ceiling, because a canary should fail
+ * when the system is broken, not when a budget was set by guess.
+ */
+const SYNTHESIS_TURNS = 6;
+const INSPECTOR_TURNS = 12;
+
 const INSPECTORS = ["inspect_migrations", "inspect_rls", "inspect_zero_token"] as const;
 
 const BRIEFS: Record<string, { readonly system: string; readonly task: string }> = {
@@ -288,7 +302,7 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
                 "You combine findings that were produced independently. Use only what you are given.",
                 "Combine these three inspection artifacts into one. Keep every distinct finding and "
                   + "do not invent any.\n\n" + JSON.stringify(inputs, null, 2),
-                { readOnly: false, maxTurns: 2 },
+                { readOnly: false, maxTurns: SYNTHESIS_TURNS },
               );
               artifacts.set(target.nodeKey, output);
               return { status: "SUCCEEDED", output, tokensUsed: 0 };
@@ -305,7 +319,7 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
               const output = await runClaude(
                 "You review a report you did not write. Judge only what is in front of you.",
                 verifierPrompt,
-                { readOnly: false, maxTurns: 2 },
+                { readOnly: false, maxTurns: SYNTHESIS_TURNS },
               );
               artifacts.set(target.nodeKey, output);
               return { status: "SUCCEEDED", output, tokensUsed: 0 };
@@ -314,7 +328,7 @@ describe.skipIf(!CANARY_ENABLED)("C live. a real graph over real Claude, zero AP
             const brief = BRIEFS[target.nodeKey];
             const output = await runClaude(brief.system, brief.task, {
               readOnly: true,
-              maxTurns: 6,
+              maxTurns: INSPECTOR_TURNS,
             });
             artifacts.set(target.nodeKey, output);
             return { status: "SUCCEEDED", output, tokensUsed: 0 };
