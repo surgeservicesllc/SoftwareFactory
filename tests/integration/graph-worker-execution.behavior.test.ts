@@ -725,12 +725,31 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     );
     expect(copies.rows[0].count).toBe(1);
 
+    // The follow-up migration applies the template default — aggregating
+    // capabilities with real dependencies tolerate partial inputs — to this
+    // copy, whose rows were cloned from pre-tolerance plans. Keyed by
+    // capability and incoming edges, not node names, so it holds for any
+    // planted shape. Entry nodes stay strict; replays find nothing to change.
+    const toleranceFile = "20260819000600_tolerant_fan_ins_for_planted_copy.sql";
+    await db.exec(await readFile(resolve(migrationsDirectory, toleranceFile), "utf8"));
+    const tolerance = await db.query<{ node_key: string; tolerates_partial_inputs: boolean }>(
+      "select node_key, tolerates_partial_inputs from public.graph_nodes where graph_id = $1 order by node_key",
+      [replantedId],
+    );
+    expect(tolerance.rows).toEqual([
+      { node_key: "inspect_a", tolerates_partial_inputs: false },
+      { node_key: "inspect_b", tolerates_partial_inputs: false },
+      { node_key: "inspect_c", tolerates_partial_inputs: false },
+      { node_key: "synthesize", tolerates_partial_inputs: true },
+    ]);
+
     // Claimable, and the projection carries the raised envelope.
     const claimed = parseClaimedGraph(await claim());
     expect(claimed.ok).toBe(true);
     if (!claimed.ok) return;
     expect(claimed.graph.graph_id).toBe(replantedId);
     expect(claimed.graph.nodes.find((n) => n.node_key === "inspect_a")?.timeout_ms).toBe(480_000);
+    expect(claimed.graph.nodes.find((n) => n.node_key === "synthesize")?.tolerates_partial_inputs).toBe(true);
     await pgliteStore(db, "graph-worker-test").completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
   });
 });
