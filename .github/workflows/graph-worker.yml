@@ -1,0 +1,61 @@
+name: Graph executor worker
+
+# Drains PLANNED graphs: claims each one, compiles it back through the
+# engine, and executes its nodes — in parallel up to the graph's budget —
+# through the subscription transport, persisting every node transition and
+# artifact to hosted Supabase. Read-only analysis nodes only; work that
+# writes files stays with the Phase 1C worker and its isolation discipline.
+#
+# Manual by default: it consumes real subscription turns and no per-token
+# API credit. The schedule stays off until the repository variable
+# SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED is set to "true".
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graph-worker
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    name: Drain planned graphs
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+
+    steps:
+      - name: Check out the reviewed worker release
+        # actions/checkout v4 (reviewed immutable commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        # actions/setup-node v4 (reviewed immutable commit)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install the locked worker runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Drain planned graphs
+        env:
+          SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: "true"
+          SOFTWAREFACTORY_WORKER_ID: graph-worker-${{ github.run_id }}-${{ github.run_attempt }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+          # The subscription credential; no ANTHROPIC_API_KEY is supplied, so
+          # this cannot quietly become a billed run.
+          SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx tsx scripts/graph-worker.mts --drain

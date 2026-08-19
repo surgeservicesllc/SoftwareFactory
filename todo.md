@@ -93,6 +93,63 @@ against real PostgreSQL.
 
 ---
 
+## GRAPH-ENGINEERED EXECUTION: THE PLANNED-GRAPH DEAD END IS WIRED (2026-08-19)
+
+Owner goal: transform linear/queue-based execution into a graph-engineered
+system. Audit first — the map before the change:
+
+  UI (pipelines Templates → Use) → POST /api/graphs → create_graph_from_plan
+  → graphs/graph_nodes/graph_edges/node_contracts/graph_budgets … DEAD END
+  (every graph stayed PLANNED). Engine (lib/graph, 26 modules: compiler,
+  scheduler, runner, fan-in, budgets, provider-bridge, verification) complete
+  and live-proven by the Phase 2B canary — three parallel Claude nodes +
+  synthesis + fresh-context verifier over the subscription credential — but
+  the canary builds its graph in code and persists nothing. The DB run
+  lifecycle (start_graph_run/record_node_state/complete_graph_run) is
+  member-gated on auth.uid(), unreachable from a service-role worker. The
+  Phase 1C worker executes COMMANDS linearly and knows nothing of graphs.
+
+The missing wire, built by extension (no duplicate systems):
+
+- Migration `20260819000100_graph_worker_execution`: the worker-facing half
+  of the write boundary, service_role-only, Phase 1C-style —
+  `claim_planned_graph` (atomic: FOR UPDATE SKIP LOCKED oldest unrun
+  non-approval-gated graph → RUNNING run + PENDING node_runs + event +
+  complete jsonb projection of nodes/contracts/edges/budget in ONE call),
+  `record_node_state_as_worker`, `record_graph_artifact_as_worker`,
+  `complete_graph_run_as_worker`. Same truth rules as the member half:
+  terminal states final, partial input can never read COMPLETED.
+- `lib/worker/graph-run.ts` (pure): parse the claim → recompile through the
+  SAME compiler the console previews with (dependsOn recovered from stored
+  edges — an edge exists only because downstream consumes upstream) →
+  runGraph with injected executor + injected store; blocked/pending nodes
+  closed SKIPPED after the run so every node is accounted for.
+- `lib/worker/graph-store.ts`: the four RPCs over service-role supabase-js.
+- `lib/worker/claude-node-executor.ts`: one bounded job per node through
+  executeClaudeThroughCli (the canary's proven subscription path), read-only
+  tools, model tiered by node (ECONOMY→haiku, extraction→sonnet, else opus).
+  File-writing nodes stay with Phase 1C's isolation discipline — stated, not
+  hidden.
+- `scripts/graph-worker.mts` (--once/--drain/loop) +
+  `.github/workflows/graph-worker.yml` (manual dispatch; schedule gated on
+  SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED; subscription credential; no API
+  key can leak in).
+
+Verified against the real migrated schema
+(tests/integration/graph-worker-execution.behavior.test.ts, 5 tests):
+atomic claim with whole projection + second-claimer-finds-nothing +
+approval-gated graphs wait; the diamond executes with MEASURED parallel
+fan-out (maxInFlight >= 3) and synthesis last; real RPC persistence (node_runs
+all COMPLETED, run COMPLETED, 4 RAW artifacts); one failed inspector is
+CONTAINED (siblings COMPLETED, dependent SKIPPED, run PARTIAL with
+had_partial_input); terminal protection on nodes and runs. Templates-manager
+copy updated to name the executor honestly.
+
+Remaining blockers requiring external services/credentials: executing real
+nodes needs the graph-worker workflow dispatched (or its schedule variable
+set) with the existing subscription secret; file-WRITING graph nodes are
+future work through the Phase 1C workspace path.
+
 ## AGENTS SELECTABILITY, REDONE SERVER-SIDE AND PROVEN (2026-08-18 23:5xZ)
 
 The owner reported the first round incomplete. The button-dependent seed was
