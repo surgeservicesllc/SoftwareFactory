@@ -108,3 +108,39 @@ describe("required check wiring", () => {
     }
   });
 });
+
+describe("CI verdicts on main", () => {
+  /**
+   * A merge that cancels the previous merge's CI leaves main unverified.
+   *
+   * `cancel-in-progress` is correct for a pull-request ref: a newer push to the
+   * same branch makes the older run's answer worthless. It is wrong for pushes
+   * to main, where each commit is a distinct thing to verify and the older run
+   * is the only proof that the commit before it was good. With a shared group,
+   * a burst of merges leaves a trail of `cancelled` runs — runs 32272713212 and
+   * 32216103242 were both cancelled that way — and a cancelled run is
+   * indistinguishable from a suite that never ran.
+   *
+   * This is a guard on the shape of the answer, not on how it is spelled: any
+   * config that keys pushes by commit and refuses to pre-empt them passes.
+   */
+  it("gives every commit on main its own concurrency group", () => {
+    const group = /^ {2}group: (.+)$/m.exec(ci)?.[1] ?? "";
+
+    expect(group, "ci.yml must declare a concurrency group").not.toBe("");
+    // github.ref is identical for every push to main; github.sha is not.
+    expect(group).toContain("github.sha");
+    expect(group).toContain("push");
+  });
+
+  it("never pre-empts an in-progress run for a push", () => {
+    const cancel = /^ {2}cancel-in-progress: (.+)$/m.exec(ci)?.[1]?.trim() ?? "";
+
+    expect(cancel, "ci.yml must declare cancel-in-progress").not.toBe("");
+    // A bare `true` cancels main's own verification; the value has to be an
+    // expression that excludes pushes.
+    expect(cancel).not.toBe("true");
+    expect(cancel).toMatch(/github\.event_name/);
+    expect(cancel).toContain("push");
+  });
+});
