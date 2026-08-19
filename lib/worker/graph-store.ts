@@ -65,6 +65,28 @@ export class SupabaseGraphStore implements GraphRunStore {
     if (error) throw new Error(`Recording a graph artifact failed: ${error.message ?? "unknown error"}`);
   }
 
+  async recordVerification(
+    subjectNodeRunId: string,
+    lens: string,
+    verdict: string,
+    evidence: readonly string[],
+    verifierProvider: string | null,
+  ): Promise<void> {
+    const { error } = await this.client.rpc("record_verification_as_worker", {
+      p_worker_id: this.workerId,
+      p_subject_node_run_id: subjectNodeRunId,
+      p_lens: lens,
+      p_verdict: verdict,
+      p_evidence: evidence,
+      p_verifier_provider: verifierProvider,
+      // Every node is a fresh session that received only its declared
+      // inputs, so the verifier genuinely shares no context with the subject.
+      // Recording it as true would be a lie that weakens every row here.
+      p_shared_worker_context: false,
+    });
+    if (error) throw new Error(`Recording a verification failed: ${error.message ?? "unknown error"}`);
+  }
+
   async completeRun(
     graphRunId: string,
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",

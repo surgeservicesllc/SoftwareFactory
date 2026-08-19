@@ -82,6 +82,14 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
       );
       await reset(db);
     },
+    async recordVerification(subjectNodeRunId, lens, verdict, evidence, verifierProvider) {
+      await asServiceRole(db);
+      await db.query(
+        "select public.record_verification_as_worker($1, $2::uuid, $3::public.verification_lens, $4::public.verification_verdict, $5::jsonb, null, $6, false)",
+        [workerId, subjectNodeRunId, lens, verdict, JSON.stringify(evidence), verifierProvider],
+      );
+      await reset(db);
+    },
     async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
       await asServiceRole(db);
       await db.query(
@@ -705,6 +713,85 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     await expect(
       db.query("select * from public.list_graph_runs($1::uuid, 5)", [organizationId]),
     ).rejects.toThrow(/membership/);
+    await reset(db);
+  });
+
+  it("records a reviewing node's verdict against every subject it consumed", async () => {
+    // A graph whose fan-in is a REVIEW node: its answer is a judgement of the
+    // inspectors' work, and that judgement has to become a durable, auditable
+    // row rather than just another artifact.
+    const reviewNodes = JSON.stringify(
+      (JSON.parse(DIAMOND_NODES) as Array<Record<string, unknown>>).map((node) =>
+        node.node_key === "synthesize"
+          ? { ...node, capability: "review", tolerates_partial_inputs: true }
+          : node,
+      ),
+    );
+    const graphId = await createDiamondGraph("Review what the inspectors found", false, reviewNodes);
+
+    const parsed = parseClaimedGraph(await claim());
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const compiled = compileClaimedGraph(parsed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    const executor = async (node: { nodeKey: string }): Promise<NodeExecutionResult> => {
+      if (node.nodeKey === "inspect_c") {
+        return { status: "FAILED", error: "The area could not be read.", retryable: false };
+      }
+      if (node.nodeKey === "synthesize") {
+        return {
+          status: "SUCCEEDED",
+          provider: "anthropic",
+          output: {
+            blocked: false,
+            findings: [{ title: "Unbounded query", severity: "high", detail: "d" }],
+          },
+        };
+      }
+      return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic" };
+    };
+
+    await runClaimedGraph(parsed.graph, compiled.graph, pgliteStore(db, "graph-worker-test"), executor);
+
+    const verifications = await db.query<{ node_key: string; lens: string; verdict: string; evidence: unknown; shared: boolean }>(
+      `select n.node_key, v.lens::text as lens, v.verdict::text as verdict, v.evidence, v.shared_worker_context as shared
+         from public.graph_verifications v
+         join public.node_runs nr on nr.id = v.subject_node_run_id
+         join public.graph_nodes n on n.id = nr.node_id
+         join public.graph_runs gr on gr.id = v.graph_run_id
+        where gr.graph_id = $1 order by n.node_key`, [graphId],
+    );
+
+    // Two subjects completed and were judged; the third failed and was not —
+    // a dependency that never answered was not reviewed, and saying it was
+    // would be the invention this derivation exists to avoid.
+    expect(verifications.rows.map((row) => row.node_key)).toEqual(["inspect_a", "inspect_b"]);
+    for (const row of verifications.rows) {
+      expect(row.lens).toBe("correctness");
+      expect(row.verdict).toBe("REJECT");
+      expect(row.evidence).toEqual(["high: Unbounded query"]);
+      // Each node is a fresh session holding only its declared inputs.
+      expect(row.shared).toBe(false);
+    }
+
+    const events = await db.query<{ count: number }>(
+      `select count(*)::int as count from public.graph_events e
+         join public.graph_runs gr on gr.id = e.graph_run_id
+        where gr.graph_id = $1 and e.event_type = 'verification_recorded'`, [graphId],
+    );
+    expect(events.rows[0].count).toBe(2);
+  });
+
+  it("refuses a worker verification that has no subject", async () => {
+    await asServiceRole(db);
+    await expect(
+      db.query(
+        "select public.record_verification_as_worker($1, $2::uuid, 'correctness', 'PASS', '[]'::jsonb)",
+        ["graph-worker-test", "00000000-0000-4000-8000-00000000dead"],
+      ),
+    ).rejects.toThrow(/node_run_not_found/);
     await reset(db);
   });
 
