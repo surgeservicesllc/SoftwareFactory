@@ -5,7 +5,7 @@ import {
   exchangeGoogleCode,
   readGoogleOAuthConfig,
 } from "@/lib/bots/google-oauth";
-import { stateMatches } from "@/lib/bots/oauth-pkce";
+import { readPendingSignIn, stateMatches } from "@/lib/bots/oauth-pkce";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
 import { sealSecret } from "@/lib/server/secret-box";
 
@@ -41,10 +41,8 @@ export async function GET(request: Request) {
   const raw = store.get(COOKIE_NAME)?.value;
   if (!raw) return back(origin, "expired");
 
-  let pending: { verifier: string; state: string; organizationId: string };
-  try {
-    pending = JSON.parse(raw);
-  } catch {
+  const pending = readPendingSignIn(raw);
+  if (!pending) {
     clear();
     return back(origin, "invalid");
   }
