@@ -124,19 +124,29 @@ export function buildClaudeNodeExecutor(
     const renderedInputs = renderInputs(inputs);
     const task = renderedInputs === null ? node.job : `${node.job}\n\n${renderedInputs}`;
 
+    // The node's declared timeout has to be enforced by somebody. The
+    // transport only mirrors the signal it is handed and starts no timer of
+    // its own, and this executor used to hand it a controller nothing ever
+    // aborted — so `timeoutMs` was a number in a contract that bounded
+    // nothing, and a hung call would hold its concurrency slot until the
+    // workflow itself was killed, leaving the run RUNNING until the
+    // two-hour reclaim swept it. The timer below is that enforcement.
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), node.timeoutMs);
+
     try {
       const execution = await executeClaudeThroughCli(
         request,
         { system, task },
-        new AbortController().signal,
+        controller.signal,
         auth,
         {
           workingDirectory: options.workingDirectory,
           allowedTools: ["Read", "Glob", "Grep"],
-          // The node's own timeoutMs remains the hard stop; this bounds the
-          // exploration inside it. The transport clamps to its own ceiling,
-          // which is why GRAPH_NODE_MAX_TURNS is pinned against that ceiling
-          // in tests rather than merely declared here.
+          // Turns bound the exploration; the deadline above bounds the wall
+          // clock. The transport clamps this to its own ceiling, which is why
+          // GRAPH_NODE_MAX_TURNS is pinned against that ceiling in tests
+          // rather than merely declared here.
           maxTurns: options.maxTurns ?? GRAPH_NODE_MAX_TURNS,
         },
       );
@@ -163,7 +173,14 @@ export function buildClaudeNodeExecutor(
         tokensUsed: execution.inputTokens + execution.outputTokens,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The node execution failed.";
+      const rawMessage = error instanceof Error ? error.message : "The node execution failed.";
+      // An abort here is this executor's own deadline, not an outside
+      // cancellation, and saying so is the difference between "someone
+      // stopped this" and "this node needs more time than it was given".
+      const timedOut = controller.signal.aborted;
+      const message = timedOut
+        ? `The node exceeded its ${Math.round(node.timeoutMs / 1000)}s timeout and was stopped.`
+        : rawMessage;
       const capacityWithheld = isCapacityRefusal(message);
       return {
         status: "FAILED",
@@ -178,6 +195,8 @@ export function buildClaudeNodeExecutor(
         model,
         latencyMs: Date.now() - startedAt,
       };
+    } finally {
+      clearTimeout(deadline);
     }
   };
 }
