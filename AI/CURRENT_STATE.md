@@ -29,9 +29,14 @@ routing intent, and the page says what actually runs.
 hosted):** the hosted schema audit had been reporting "0 applied, 0
 outstanding" from a hand-written list of four migrations while the directory
 held 124. Its expectations are derived from `supabase/migrations` now, and the
-first honest run ([32314972903](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32314972903))
-reports **26 applied, 3 outstanding**. The three whose tables PostgREST cannot
-see are `20260814000300_agentos_isolation_model` (nine `agentos_*` tables),
+audit now reads PostgREST's own description for functions as well as probing
+tables, and run
+[32316446825](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32316446825)
+reports **46 applied, 4 outstanding, 0 indeterminate, 74 not probeable**. The
+four are `20260814000300_agentos_isolation_model` (nine `agentos_*` tables),
+`20260814002500_provider_credential_vault`
+(`resolve_provider_connect_session()`, whose sibling
+`claim_provider_connect_session()` is visible), 
 `20260815001100_connection_routing_decisions`, and
 `20260816001600_phase2c_resource_reservations` (`resource_reservations`,
 `resource_rate_events`). NOT VISIBLE is not absent — a table that exists with
@@ -40,7 +45,12 @@ must run before any apply, and applying is an owner-approved action that no
 agent has taken. Meanwhile every consumer degrades honestly: the reservation
 store refuses with `ADMISSION_UNAVAILABLE` rather than admitting on unknown
 usage, `/api/agentos/grants` answers `agentos_grants_unavailable`, and
-`connection_routing_decisions` has no application consumer at all. The full
+`connection_routing_decisions` has no application consumer at all. The vault
+function had a real consequence: `POST /api/bots/connect/claim` reported the
+failed lookup as `connect_session_invalid`, telling operators with a correct
+code that their sign-in link was invalid. That path now separates a failed
+lookup (`503 connect_unavailable`) from an unmatched code, without reopening
+the code-guessing oracle the uniform failures close. The full
 component-by-component walk, with each step's evidence, is
 `AI/FACTORY_COMPONENT_AUDIT.md`.
 
