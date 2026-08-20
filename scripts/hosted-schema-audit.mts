@@ -251,9 +251,9 @@ async function main(): Promise<void> {
   console.log(`Control: \`${CONTROL_TABLE}\` — ${control.detail}. The probe reaches the database.\n`);
 
   let applied = 0;
-  let missing = 0;
   let unknown = 0;
   const unprobeable: string[] = [];
+  const outstanding: string[] = [];
 
   const expectations = readExpectations();
   // One probe per distinct table, not one per mention. Several migrations
@@ -324,12 +324,12 @@ async function main(): Promise<void> {
       applied += 1;
     } else if (present.length === 0) {
       verdict = "NOT VISIBLE";
-      missing += 1;
+      outstanding.push(`${expectation.migration} — ${absent.join(", ")}`);
     } else {
       // The worst outcome and the reason this reports per table rather than per
       // migration: a half-applied migration cannot simply be re-run.
       verdict = "PARTLY VISIBLE";
-      missing += 1;
+      outstanding.push(`${expectation.migration} — ${absent.join(", ")}`);
     }
 
     console.log(`${verdict.padEnd(18)} ${expectation.migration}`);
@@ -348,7 +348,10 @@ async function main(): Promise<void> {
     );
   }
 
-  if (missing > 0) {
+  if (outstanding.length > 0) {
+    // Repeated at the bottom because it is the actionable half, and it was
+    // scattered through a hundred lines of APPLIED above.
+    console.log(`\nOutstanding:\n  ${outstanding.join("\n  ")}`);
     console.log(
       "\nNOT VISIBLE does not mean absent. PostgREST cannot see a table that exists with no "
       + "grants on it, which is exactly what a migration that failed before its grant statements "
@@ -363,7 +366,7 @@ async function main(): Promise<void> {
   // above the unprobeable list at first, where seventy names pushed the one
   // line a reader came for off the top of the terminal.
   console.log(
-    `\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate, `
+    `\n${applied} applied, ${outstanding.length} outstanding, ${unknown} indeterminate, `
     + `${unprobeable.length} not probeable `
     + `(of ${expectations.length} migrations in the repository).`,
   );
