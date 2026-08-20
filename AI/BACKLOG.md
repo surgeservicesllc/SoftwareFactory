@@ -8,18 +8,21 @@ Last triaged: 2026-08-13
   in CHECKs), hard-gated /job-seeker page, navigation, career profile and
   preferences CRUD, scoring engine with pinned weights, behavior + unit +
   sweep coverage.
-- [ ] Increment 2: record/import jobs (manual first — honest source column),
-  score against the profile through `scoreJob`, discovery list UI with
-  breakdown/reasons/gaps, qualification against the person's threshold.
-- [ ] Increment 3: application workspace — extract requirements, generate
-  ATS resume / cover letter / answers FROM PROFILE FACTS ONLY via the graph
-  engine (MODEL nodes with verification lenses; QA lens blocks fabrication),
-  versioned documents, READY_FOR_REVIEW + approve/reject UI on the gate.
-- [ ] Increment 4: CRM kanban/table over the 11 stages, follow-up dates,
-  contacts, outreach drafts (sent stays false until a real integration).
-- [ ] Increment 5: analytics from recorded rows only; resume/document upload
-  (needs the storage-bucket ownership decision on hosted Supabase); discovery
-  import adapters (each one Not Connected until its credential exists).
+- [x] Increment 2: manual job recording with deterministic fact-only scoring
+  (evaluate.ts — reasons/gaps name their facts, exclusions veto), discovery
+  UI with breakdown, pipeline entry at the honest stage. (#284)
+- [x] Increment 3: workspace — fact-only ATS resume + cover letter builders
+  (no model in the path; the Kubernetes/Kafka test proves non-fabrication),
+  immutable versions, READY_FOR_REVIEW + Approve/Reject on the gate. (#285)
+- [x] Increment 4: counted analytics (null rates render as "—") and the
+  seven-agent job_search_pipeline graph template on the real engine. (#286)
+- [ ] Increment 5: contacts + outreach-draft UI over the existing tables
+  (sent stays false until a real send integration exists).
+- [ ] Increment 6: resume/document upload (needs the storage-bucket ownership
+  decision on hosted Supabase); discovery import adapters (each one Not
+  Connected until its credential exists); model-polished document variants
+  through the graph lane with the QA verification lens checking them against
+  the deterministic baseline.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 

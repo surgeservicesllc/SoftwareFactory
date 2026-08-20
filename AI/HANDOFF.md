@@ -2,7 +2,25 @@
 
 Last updated: 2026-08-19
 
-## Newest (2026-08-19 23:05Z): THE COMPLETE RUN — the graph goal's last live proof is delivered
+## Newest (2026-08-20 ~01:35Z): Job Seeker — four increments live (ADR-096)
+
+The owner's /job-seeker goal, increments 1-4 merged and deploying (#283,
+#284, #285, #286, #287): hard-gated page (server redirect, e2e-proven),
+eight person-scoped tables with the approval gate / dupe key / score
+integrity as CHECKs (migrations 20260820000100/000200, applied in run
+32318712493), career profile + preferences CRUD, manual job recording with
+deterministic fact-only scoring (reasons and gaps name their facts,
+exclusions veto), the eleven-stage pipeline with Approve/Reject recording
+decision evidence, fact-only ATS resume + cover letter generation with
+immutable versions, counted analytics (rates with no denominator render
+"—"), and the seven-agent job_search_pipeline graph template on the
+production-proven execution lane. Remaining (BACKLOG): contacts/outreach
+UI over the existing tables, uploads (storage-bucket decision), import
+adapters, model-polished documents through the graph lane with QA lenses.
+Watch: the width sweep initially died on the redirect route — fixed by
+measuring the gate AS a redirect (#287); confirm CI green on c68d4cc.
+
+## Prior (2026-08-19 23:05Z): THE COMPLETE RUN — the graph goal's last live proof is delivered
 
 Drain `32310917147`, graph run `1df3fd45-5501-4912-81f8-26448b865af3`:
 **COMPLETED, 7 succeeded, 0 failed**, 6m26s wall. Five MODEL inspectors in
