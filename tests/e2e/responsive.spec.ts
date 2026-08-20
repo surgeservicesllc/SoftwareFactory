@@ -50,10 +50,6 @@ const ROUTES = [
   "/solutions/runs",
   "/solutions/settings",
   "/solutions/workflows",
-  // Hard-gated: a signed-out sweep follows the redirect to /auth/sign-in,
-  // which IS this route's signed-out behavior. The signed-in layout is swept
-  // through the component harness ("job-seeker" in component-layout.spec.ts).
-  "/job-seeker",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",
@@ -152,6 +148,17 @@ for (const width of WIDTHS) {
     }
   });
 }
+
+test("the job seeker page is hard-gated behind sign-in", async ({ page }) => {
+  // Signed out, /job-seeker has no layout of its own — its whole behavior is
+  // the redirect, which is why it sits in the coverage contract's
+  // REDIRECT_ONLY set rather than the overflow loop (measuring a page that
+  // navigates away mid-measure destroyed the evaluation context on runs
+  // 96276312872/96276312910). The signed-in layout is measured at all eight
+  // widths through the component harness ("job-seeker").
+  await page.goto("/job-seeker");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fjob-seeker/);
+});
 
 test("a console page offers one menu button, not two", async ({ page }) => {
   /*
