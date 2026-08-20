@@ -11,6 +11,8 @@
 export interface MigrationTables {
   readonly migration: string;
   readonly tables: readonly string[];
+  /** Functions the migration defines, in definition order. */
+  readonly functions: readonly string[];
 }
 
 /**
@@ -34,6 +36,29 @@ export function tablesCreatedIn(sql: string): readonly string[] {
 }
 
 /**
+ * Functions a migration defines. Only `public`, for the same reason as tables:
+ * PostgREST exposes that schema and nothing else, so a `pg_temp` or internal
+ * helper would be reported permanently missing.
+ *
+ * Trigger functions are included even though no caller can reach them over
+ * REST -- deciding here which ones "should" be callable would be a second
+ * opinion about the schema, and the probe's own answer is the one that counts.
+ */
+const CREATE_FUNCTION = /create\s+(?:or\s+replace\s+)?function\s+("?)([a-z_][a-z0-9_]*)\1(?:\s*\.\s*("?)([a-z_][a-z0-9_]*)\3)?/gi;
+
+export function functionsDefinedIn(sql: string): readonly string[] {
+  const found: string[] = [];
+  for (const match of stripComments(sql).matchAll(CREATE_FUNCTION)) {
+    const [, , first, , second] = match;
+    const schema = second ? first : "public";
+    const name = second ?? first;
+    if (schema.toLowerCase() !== "public") continue;
+    if (!found.includes(name)) found.push(name);
+  }
+  return found;
+}
+
+/**
  * A `create table` inside a comment is not a table. Both comment forms appear
  * throughout these migrations, and several of them quote DDL while explaining
  * why it is *not* being run.
@@ -49,5 +74,6 @@ export function migrationTables(
   return files.map((file) => ({
     migration: file.name.replace(/\.sql$/, ""),
     tables: tablesCreatedIn(file.sql),
+    functions: functionsDefinedIn(file.sql),
   }));
 }

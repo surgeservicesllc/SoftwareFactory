@@ -75,6 +75,18 @@ function readExpectations(): readonly MigrationTables[] {
 /** A table from a migration known to be applied, to prove the probe itself works. */
 const CONTROL_TABLE = "projects";
 
+/**
+ * A function this key is known to be able to call, to prove the *function*
+ * probe works. Without it, an empty or privilege-filtered description would
+ * read as "every function is missing".
+ *
+ * `claim_planned_graph` is the strongest control available: the graph worker
+ * called it successfully against this database on 2026-08-19 22:54Z, and it is
+ * granted to `service_role` — the very role whose privileges filter the
+ * description being read.
+ */
+const CONTROL_FUNCTION = "claim_planned_graph";
+
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -166,6 +178,50 @@ async function tableExists(baseUrl: string, key: string, table: string): Promise
   return (await probeTable(baseUrl, key, table)).exists;
 }
 
+/**
+ * Which functions PostgREST will admit to, read from its own description.
+ *
+ * The point of asking this way is that it executes nothing. `POST /rpc/<name>`
+ * would answer the question too, and would also *run* the function -- against
+ * production, with service-role privileges, for functions whose whole purpose
+ * is to mutate. The OpenAPI document names every callable routine and runs
+ * none of them.
+ *
+ * **Its limit, which matters as much as its answer.** The description is
+ * filtered by privilege: a function that exists with no EXECUTE grant for this
+ * role does not appear. So a name found here is proof of presence, and a name
+ * missing here is `not visible` -- exactly the same asymmetry the table probe
+ * has, and it is reported with the same word.
+ */
+async function readCallableFunctions(baseUrl: string, key: string): Promise<ReadonlySet<string> | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/rest/v1/`, {
+      method: "GET",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/openapi+json" },
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  let document: { paths?: Record<string, unknown> };
+  try {
+    document = (await response.json()) as typeof document;
+  } catch {
+    return null;
+  }
+  const paths = document.paths;
+  if (!paths) return null;
+
+  const callable = new Set<string>();
+  for (const path of Object.keys(paths)) {
+    const match = /^\/rpc\/(.+)$/.exec(path);
+    if (match) callable.add(match[1]);
+  }
+  return callable;
+}
+
 async function main(): Promise<void> {
   const baseUrl = requireEnvironment("NEXT_PUBLIC_SUPABASE_URL").replace(/\/$/, "");
   const key = requireEnvironment("SUPABASE_SERVICE_ROLE_KEY");
@@ -205,19 +261,50 @@ async function main(): Promise<void> {
     return pending;
   };
 
+  // Read once, before the loop: one description covers every function.
+  const callable = await readCallableFunctions(baseUrl, key);
+  if (callable === null) {
+    console.log(
+      "PostgREST did not return its description, so this run can speak only to tables. "
+      + "Every function-defining migration is reported as not probeable below.\n",
+    );
+  } else if (!callable.has(CONTROL_FUNCTION)) {
+    // Same guard as the control table, for the same reason. This function is
+    // reachable in production today; if the description omits it, the
+    // description is not answering the question asked of it, and reading
+    // absences out of it would report most of the schema as missing.
+    console.error(
+      `The control function \`${CONTROL_FUNCTION}\` is absent from PostgREST's description, so `
+      + "function verdicts from it cannot be trusted. Tables are still reported.",
+    );
+  }
+  const trustFunctions = callable !== null && callable.has(CONTROL_FUNCTION);
+
   for (const expectation of expectations) {
-    if (expectation.tables.length === 0) {
-      // A migration that only creates functions, policies, grants or data has
+    const probedFunctions = trustFunctions ? expectation.functions : [];
+    if (expectation.tables.length === 0 && probedFunctions.length === 0) {
+      // A migration that only adds policies, grants, enum labels or data has
       // nothing this probe can ask PostgREST about. Counting it as applied
       // would be a guess; omitting it would hide that the audit is silent
-      // about most of the directory.
+      // about part of the directory.
       unprobeable.push(expectation.migration);
       continue;
     }
 
-    const results = await Promise.all(
+    const tableResults = await Promise.all(
       expectation.tables.map(async (table) => ({ table, exists: await probe(table) })),
     );
+    const results = [
+      ...tableResults,
+      ...probedFunctions.map((name) => ({
+        table: `${name}()`,
+        // A name in the description is proof of presence. A name absent from
+        // it is `not visible`, never `absent`: the document is filtered by
+        // EXECUTE privilege, so a function with no grant looks the same as one
+        // that was never created.
+        exists: callable!.has(name) ? true : false,
+      })),
+    ];
 
     const present = results.filter((r) => r.exists === true).map((r) => r.table);
     const absent = results.filter((r) => r.exists === false).map((r) => r.table);
@@ -247,14 +334,15 @@ async function main(): Promise<void> {
 
   console.log(
     `\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate, `
-    + `${unprobeable.length} not probeable by table existence `
+    + `${unprobeable.length} not probeable `
     + `(of ${expectations.length} migrations in the repository).`,
   );
   if (unprobeable.length > 0) {
     // Named, not just counted: "this audit says nothing about these" is the
     // part a reader is most likely to assume away.
     console.log(
-      "\nThese migrations create no table, so this probe cannot speak to them at all. "
+      "\nThese migrations create no table and no function, so this probe cannot speak to them at "
+      + "all. "
       + "Their presence must be checked another way (scripts/hosted-state-report.sql, or "
       + "calling the function they define):\n  "
       + unprobeable.join("\n  "),

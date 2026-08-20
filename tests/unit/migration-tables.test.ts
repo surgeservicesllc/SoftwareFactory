@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { migrationTables, tablesCreatedIn } from "@/lib/supabase/migration-tables";
+import { functionsDefinedIn, migrationTables, tablesCreatedIn } from "@/lib/supabase/migration-tables";
 
 const MIGRATIONS = resolve(import.meta.dirname, "../../supabase/migrations");
 
@@ -27,8 +27,23 @@ describe("reading what a migration creates", () => {
   });
 
   it("reports a migration that creates nothing rather than dropping it", () => {
-    const rows = migrationTables([{ name: "20260101000000_functions_only.sql", sql: "create function f() returns int language sql as $$ select 1 $$;" }]);
-    expect(rows).toEqual([{ migration: "20260101000000_functions_only", tables: [] }]);
+    const rows = migrationTables([{ name: "20260101000000_empty.sql", sql: "grant select on public.projects to authenticated;" }]);
+    expect(rows).toEqual([{ migration: "20260101000000_empty", tables: [], functions: [] }]);
+  });
+});
+
+describe("reading what a migration defines", () => {
+  it("finds a function with or without replace and schema", () => {
+    expect(functionsDefinedIn("create function public.f() returns int")).toEqual(["f"]);
+    expect(functionsDefinedIn("CREATE OR REPLACE FUNCTION claim_planned_graph(p text)")).toEqual(["claim_planned_graph"]);
+  });
+
+  it("ignores a function quoted in a comment", () => {
+    expect(functionsDefinedIn("-- create function public.never()")).toEqual([]);
+  });
+
+  it("names a function once however many times the migration replaces it", () => {
+    expect(functionsDefinedIn("create or replace function public.f();\ncreate or replace function public.f();")).toEqual(["f"]);
   });
 });
 
@@ -42,6 +57,15 @@ describe("against the real migration directory", () => {
     // The audit's frozen list knew four of these. The count is asserted against
     // the directory itself so it cannot fall behind again.
     expect(migrationTables(files)).toHaveLength(files.length);
+  });
+
+  it("finds the functions the executed lanes call", () => {
+    const functions = new Set(migrationTables(files).flatMap((row) => row.functions));
+    // Each of these was called against hosted on 2026-08-19: the first three by
+    // the graph drain, `submit_command` by the Phase 1C intake path.
+    for (const name of ["claim_planned_graph", "record_node_state_as_worker", "complete_graph_run_as_worker", "submit_command"]) {
+      expect(functions, `${name} is not defined by any migration`).toContain(name);
+    }
   });
 
   it("finds the tables the graph and resource lanes depend on", () => {

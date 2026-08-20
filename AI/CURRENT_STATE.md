@@ -25,6 +25,25 @@ migration `20260817001100`, hosted) surface on each posting card. No
 execution-authority change anywhere in this surface: assignment remains
 routing intent, and the page says what actually runs.
 
+**Addendum, 2026-08-20 (component audit — three migrations are outstanding on
+hosted):** the hosted schema audit had been reporting "0 applied, 0
+outstanding" from a hand-written list of four migrations while the directory
+held 124. Its expectations are derived from `supabase/migrations` now, and the
+first honest run ([32314972903](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32314972903))
+reports **26 applied, 3 outstanding**. The three whose tables PostgREST cannot
+see are `20260814000300_agentos_isolation_model` (nine `agentos_*` tables),
+`20260815001100_connection_routing_decisions`, and
+`20260816001600_phase2c_resource_reservations` (`resource_reservations`,
+`resource_rate_events`). NOT VISIBLE is not absent — a table that exists with
+no grants looks identical over REST — so `scripts/hosted-state-report.sql`
+must run before any apply, and applying is an owner-approved action that no
+agent has taken. Meanwhile every consumer degrades honestly: the reservation
+store refuses with `ADMISSION_UNAVAILABLE` rather than admitting on unknown
+usage, `/api/agentos/grants` answers `agentos_grants_unavailable`, and
+`connection_routing_decisions` has no application consumer at all. The full
+component-by-component walk, with each step's evidence, is
+`AI/FACTORY_COMPONENT_AUDIT.md`.
+
 **Addendum, 2026-08-19 (graphs execute now — ADR-092):** recorded graphs no
 longer dead-end at PLANNED. The graph executor worker
 (`scripts/graph-worker.mts` + `.github/workflows/graph-worker.yml`, manual
