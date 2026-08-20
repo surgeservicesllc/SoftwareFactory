@@ -101,8 +101,13 @@ describe("every route is swept at every supported width", () => {
      * `/sign-in` redirects and `/solutions/[id]`-shaped routes are swept with
      * a concrete id, so match the dynamic ones by their static prefix.
      */
-    /** Routes with no layout: a bare redirect has nothing to lay out. */
-    const REDIRECT_ONLY = new Set(["/sign-in"]);
+    /**
+     * Routes with no layout: a bare redirect has nothing to lay out.
+     * `/job-seeker` is hard-gated — signed out (which is how the sweep runs)
+     * its whole behavior is the redirect, asserted by its own e2e case; the
+     * signed-in layout is measured through the harness ("job-seeker").
+     */
+    const REDIRECT_ONLY = new Set(["/sign-in", "/job-seeker"]);
 
     const missing = routes.filter((route) => {
       if (REDIRECT_ONLY.has(route)) return false;
