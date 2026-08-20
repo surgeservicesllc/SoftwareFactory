@@ -57,6 +57,14 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
     if (url === "/api/job-seeker/jobs") {
       return jsonResponse({ jobs: overrides.jobs ?? [] });
     }
+    if (url === "/api/job-seeker/analytics") {
+      return jsonResponse({
+        analytics: overrides.analytics ?? {
+          jobsFound: 0, qualified: 0, applications: 0, responseRate: null,
+          interviews: 0, offers: 0, averageMatchScore: null, byTitle: [], bySource: [],
+        },
+      });
+    }
     if (url === "/api/job-seeker/profile" && (!init || init.method === undefined)) {
       return jsonResponse({ profile: overrides.profile === undefined ? PROFILE : overrides.profile });
     }
@@ -96,8 +104,8 @@ describe("JobSeekerConsole", () => {
     stubFetch({ profile: null, preferences: null });
     render(<JobSeekerConsole />);
 
-    expect(await screen.findByText("Career Profile")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /save profile/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /save profile/i })).toBeInTheDocument();
+    expect((screen.getByLabelText("Full name") as HTMLInputElement).value).toBe("");
   });
 
   it("saves the profile and confirms it", async () => {
@@ -136,6 +144,40 @@ describe("JobSeekerConsole", () => {
 
     expect(await screen.findByText("No applications yet")).toBeInTheDocument();
     expect(screen.getByText(/the database enforces the gate/i)).toBeInTheDocument();
+  });
+
+  it("computes analytics from recorded rows and refuses to invent a rate", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=analytics"));
+    stubFetch({
+      analytics: {
+        jobsFound: 4, qualified: 2, applications: 1, responseRate: null,
+        interviews: 0, offers: 0, averageMatchScore: 74,
+        byTitle: [{ title: "Staff Engineer", jobs: 3, averageScore: 81 }],
+        bySource: [{ source: "manual", count: 4 }],
+      },
+    });
+    render(<JobSeekerConsole />);
+
+    const jobsFound = (await screen.findByText("Jobs found")).parentElement as HTMLElement;
+    expect(jobsFound).toHaveTextContent("4");
+    expect(screen.getByText("74/100")).toBeInTheDocument();
+    // One application, zero responses recorded: the rate is withheld ("—"),
+    // never rendered as an invented 0%.
+    const responseRate = screen.getByText("Response rate").parentElement as HTMLElement;
+    expect(responseRate).toHaveTextContent("—");
+    expect(screen.getByText(/never an\s+estimate/i)).toBeInTheDocument();
+  });
+
+  it("names the next step when analytics has nothing recorded", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=analytics"));
+    stubFetch();
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByText("No analytics yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open job discovery/i })).toHaveAttribute(
+      "href",
+      "/job-seeker?section=discovery",
+    );
   });
 
   it("reports a load failure as an alert instead of a blank page", async () => {
