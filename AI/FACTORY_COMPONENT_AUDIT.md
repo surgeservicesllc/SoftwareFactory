@@ -35,3 +35,28 @@ to the prompt.
 | 15 | Bot connect — claim a signed-in credential from a CLI (`POST /api/bots/connect/claim`) | Traced the consumer of the one function row 10 found missing | FIXED — a live user-facing path was misreporting its own failure | The route calls `resolve_provider_connect_session`, which hosted does not expose. A `peekError` and "no session matched" both answered `connect_session_invalid`, so **every correct code was being told "that sign-in link is not valid"** — and each retry mints another code that fails identically | Split the two: a failed lookup now answers `503 connect_unavailable`, an unmatched code still answers `400 connect_session_invalid`. This does not reopen the guessing oracle the uniform failures exist to close — the new branch depends on whether the lookup works at all, never on which code was presented, and a test asserts unknown and malformed codes still answer byte-identically. The underlying absence still needs the owner-approved apply from row 10 |
 | 16 | Coverage of the audit probe itself | Four dispatches, each narrowing a false signal | FIXED, three times over | (a) The probe could only speak to tables, so it was silent about the graph lane's entire write boundary, which is functions. (b) Probing every function reported thirty fully-applied migrations as `PARTLY VISIBLE`, because PostgREST cannot list a trigger function. (c) Probing functions granted only to `authenticated` reported `find_open_ai_auth_session`, `declare_cross_project_dependency` and `agentos_resolved_agent_grants` as outstanding when the tenant boundary was simply doing its job | Read PostgREST's own OpenAPI description, which names every callable routine and executes none; exclude trigger functions; and ask only about functions granted to `service_role`, the role the audit reads as. Guarded by `CONTROL_FUNCTION = claim_planned_graph`, which the graph worker called against this database at 22:54Z, so a privilege-filtered or empty description cannot read as "everything is missing" |
 | 17 | The eight-step AI Factory journey (`/solutions/ai-factory`) | Read each step's completion derivation; probed all five endpoints it reads on production | PASS | None | Every step derives from live records, never stored wizard state. "Watch It Ship" is `status === "succeeded"` alone, so nothing in flight can mark it done. All five endpoints (`/api/github/connections`, `/api/projects`, `/api/ai-accounts`, `/api/bots`, `/api/commands`) answer 401 unauthenticated, and the page itself renders only a sign-in state with no tenant content |
+| 18 | Webhook ingress and static surfaces, live | `GET` against production | PASS | None | `/api/github/webhooks` answers 405 to a GET, so the endpoint exists and accepts only its signed POST. `robots.txt` disallows `/solutions`, `/api/`, `/auth/` and `/sign-in`; `sitemap.xml`, `manifest.webmanifest` and `/offline` all serve |
+| 19 | Durable resource reservations (`lib/resources/reservation-store.ts`, migration `20260816001600`) | Traced every importer outside the module's own tests | **Known gap, deliberately not closed today** | Nothing executing imports it. The batch dispatcher and the durable store are built, tested, and unreachable — the shape this audit exists to catch | Not wired, and the ordering is the reason: the store fails closed by design, and its table is one of the four row 10 reports as not visible on hosted. Wiring a fail-closed admission gate against a missing table would refuse every claim and stop the graph lane, which is the one execution path working today. Apply the migration first, then wire. `AI/CURRENT_STATE.md` now says this rather than describing the lane as merely "pure functions" |
+
+## Where this leaves the factory
+
+Working, with live evidence from tonight: the Claude bot job, the graph
+executor lane end to end (7 nodes to COMPLETED against hosted), the production
+request boundary and its security headers, the eight-step AI Factory journey's
+derivation, the auth broker, and the repository gate (lint, typecheck, 3431
+tests, build).
+
+Blocked on something no agent may do:
+
+1. **Four migrations outstanding on hosted** (row 10) — needs
+   `scripts/hosted-state-report.sql` to separate absent from ungranted, then an
+   owner-approved apply. One of the four is already costing a user-facing path
+   (row 15).
+2. **Codex subscription quota** until 2026-08-20 10:05 UTC — the handoff
+   canary's second leg and the Phase 1C worker's execution both wait on it
+   (row 8).
+3. **The merge-queue ruleset** is still not applied: `GET /rules/branches/main`
+   returns `[]`, so the `merge_group:` trigger merged as c02a275 has nothing to
+   respond to.
+4. **ADR-036** still blocks wiring bots to execution; that needs an owner
+   decision and a new ADR, not an agent's judgement.
