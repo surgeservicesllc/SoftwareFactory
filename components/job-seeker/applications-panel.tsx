@@ -34,10 +34,19 @@ function nextStages(stage: string, approved: boolean): string[] {
   return forward.slice(0, 2);
 }
 
+type DocumentView = {
+  id: string;
+  kind: string;
+  version: number;
+  content: string;
+  createdAt: string;
+};
+
 export function JobSeekerApplicationsPanel() {
   const [jobs, setJobs] = useState<JobView[] | null>(null);
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [documentsByApplication, setDocumentsByApplication] = useState<Record<string, DocumentView[]>>({});
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +66,40 @@ export function JobSeekerApplicationsPanel() {
     const kickoff = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(kickoff);
   }, [load]);
+
+  async function loadDocuments(applicationId: string) {
+    try {
+      const response = await fetch(`/api/job-seeker/applications/${applicationId}/documents`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = (await response.json()) as { documents?: DocumentView[] };
+      setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? [] }));
+    } catch {
+      /* The viewer simply stays closed; the next click retries. */
+    }
+  }
+
+  async function prepare(applicationId: string) {
+    setBusyId(applicationId);
+    setProblem("");
+    try {
+      const response = await fetch(`/api/job-seeker/applications/${applicationId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await response.json()) as { documents?: DocumentView[]; error?: { message?: string } };
+      if (!response.ok) {
+        setProblem(body.error?.message ?? "Documents could not be generated.");
+        return;
+      }
+      setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? [] }));
+      await load();
+    } catch {
+      setProblem("Documents could not be generated.");
+    } finally {
+      setBusyId("");
+    }
+  }
 
   async function transition(applicationId: string, body: Record<string, unknown>) {
     setBusyId(applicationId);
@@ -147,6 +190,16 @@ export function JobSeekerApplicationsPanel() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {["FOUND", "QUALIFIED", "RESUME_CREATED"].includes(application.stage) ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={busyId === application.id}
+                        onClick={() => void prepare(application.id)}
+                      >
+                        {busyId === application.id ? "Generating…" : "Prepare application"}
+                      </button>
+                    ) : null}
                     {application.stage === "READY_FOR_REVIEW" && application.approvalStatus === "pending_review" ? (
                       <>
                         <button
@@ -189,6 +242,45 @@ export function JobSeekerApplicationsPanel() {
                       </button>
                     ) : null}
                   </div>
+
+                  {!["FOUND", "QUALIFIED"].includes(application.stage) ? (
+                    <details
+                      className="mt-3"
+                      onToggle={(event) => {
+                        if ((event.target as HTMLDetailsElement).open && !documentsByApplication[application.id]) {
+                          void loadDocuments(application.id);
+                        }
+                      }}
+                    >
+                      <summary className="cursor-pointer text-sm text-[var(--text-muted)]">
+                        Generated documents
+                      </summary>
+                      <div className="mt-2 space-y-3">
+                        {(documentsByApplication[application.id] ?? []).length === 0 ? (
+                          <p className="text-sm text-[var(--text-faint)]">
+                            No documents stored yet. Prepare the application to generate the
+                            resume and cover letter from your recorded profile.
+                          </p>
+                        ) : (
+                          (documentsByApplication[application.id] ?? []).map((document) => (
+                            <div key={document.id} className="rounded-md border border-[var(--border)] p-3">
+                              <p className="text-xs font-semibold uppercase text-[var(--text-faint)]">
+                                {document.kind.replaceAll("_", " ")} · v{document.version}
+                              </p>
+                              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-[var(--text)]">
+                                {document.content}
+                              </pre>
+                            </div>
+                          ))
+                        )}
+                        <p className="text-xs text-[var(--text-faint)]">
+                          Generated from your recorded career profile only — a term you have
+                          not recorded never appears, whatever the posting asks for. Every
+                          version is stored immutably.
+                        </p>
+                      </div>
+                    </details>
+                  ) : null}
                 </Card>
               );
             })}

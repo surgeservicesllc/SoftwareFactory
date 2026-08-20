@@ -145,4 +145,39 @@ describe("JobSeekerApplicationsPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/explicit approval first/);
   });
+  it("prepares an application: generates fact-only documents and shows them versioned", async () => {
+    const posts: string[] = [];
+    // The real route advances the stage to READY_FOR_REVIEW; the stub
+    // mirrors that so the reload shows the post-generation truth.
+    let stage = "QUALIFIED";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents" && init?.method === "POST") {
+        posts.push(url);
+        stage = "READY_FOR_REVIEW";
+        return jsonResponse({
+          documents: [
+            { id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z" },
+            { id: "d2", kind: "cover_letter", version: 1, content: "Dear Acme hiring team,", createdAt: "2026-08-20T01:00:00.000Z" },
+          ],
+        }, 201);
+      }
+      if (url === "/api/job-seeker/jobs") {
+        return jsonResponse({ jobs: [{
+          ...SCORED_JOB,
+          application: { id: "a2", stage, approvalStatus: "pending_review" },
+        }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /prepare application/i }));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    expect(await screen.findByText(/resume · v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Dear Acme hiring team/)).toBeInTheDocument();
+    expect(screen.getByText(/a term you have\s+not recorded never appears/i)).toBeInTheDocument();
+  });
 });
