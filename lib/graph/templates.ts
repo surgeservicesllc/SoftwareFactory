@@ -492,6 +492,86 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       { from: "reproduce", to: "cause", reason: "VERIFICATION", detail: "A reproduction confirms or refutes the cause." },
     ],
   },
+  {
+    // The Job Seeker's seven-agent orchestration, expressed as the graph the
+    // engine actually runs: Job Hunter and Research fan out in parallel,
+    // Qualification reads the hunt, Resume and Application draft from the
+    // qualified set, QA verifies both with a fresh context (a verification
+    // lens records its verdict), and Follow-Up drafts outreach last. Every
+    // node is MODEL or DETERMINISTIC, so the read-only analysis worker can
+    // claim it; nothing here submits anything — the application tables'
+    // approval gate stays the only path to APPLIED.
+    key: "job_search_pipeline",
+    name: "Job Search Pipeline",
+    summary:
+      "The Job Seeker's agent team over one qualified role: hunt and research in parallel, qualify against the recorded profile, draft documents from verified facts, QA them with a fresh context, and prepare follow-up outreach for human review.",
+    category: "REVIEW",
+    version: 1,
+    risk: "GREEN",
+    nodes: [
+      {
+        nodeId: "job_hunter",
+        job: "From the recorded job description, extract the requirements, skills, keywords, technologies, and expectations, exactly as stated.",
+        capability: "extraction",
+        executor: "MODEL",
+      },
+      {
+        nodeId: "research",
+        job: "From the recorded posting and public statements inside the provided context only, summarize the company, team, and role; never assert facts the context does not contain.",
+        capability: "extraction",
+        executor: "MODEL",
+      },
+      {
+        nodeId: "qualification",
+        job: "Compare the extracted requirements against the recorded career profile; state matches, gaps, and the honest strength of each, citing profile facts.",
+        capability: "review",
+        executor: "MODEL",
+        dependsOn: ["job_hunter"],
+      },
+      {
+        nodeId: "resume_draft",
+        job: "Draft resume tailoring notes using ONLY facts present in the career profile; flag any posting requirement the profile cannot support instead of covering it.",
+        capability: "synthesis",
+        executor: "MODEL",
+        dependsOn: ["qualification", "research"],
+        toleratesPartialInputs: true,
+      },
+      {
+        nodeId: "application_answers",
+        job: "Draft application-question responses using ONLY facts present in the career profile, marking every question the profile cannot answer.",
+        capability: "synthesis",
+        executor: "MODEL",
+        dependsOn: ["qualification", "research"],
+        toleratesPartialInputs: true,
+      },
+      {
+        nodeId: "qa",
+        job: "Verify the drafts against the career profile: every claim must trace to a recorded fact; report any statement that does not, any unmet requirement presented as met, and any missing answer.",
+        capability: "qa",
+        executor: "MODEL",
+        dependsOn: ["resume_draft", "application_answers"],
+      },
+      {
+        nodeId: "follow_up",
+        job: "Draft personalized outreach for human review from the research summary and the QA-verified drafts; never imply anything was sent.",
+        capability: "synthesis",
+        executor: "MODEL",
+        dependsOn: ["qa", "research"],
+        toleratesPartialInputs: true,
+      },
+    ],
+    proposedEdges: [
+      { from: "job_hunter", to: "qualification", reason: "DATA", detail: "Qualification compares the extracted requirements." },
+      { from: "qualification", to: "resume_draft", reason: "DATA", detail: "Tailoring follows the stated matches and gaps." },
+      { from: "research", to: "resume_draft", reason: "DATA", detail: "Company context shapes emphasis, never content." },
+      { from: "qualification", to: "application_answers", reason: "DATA", detail: "Answers follow the stated matches and gaps." },
+      { from: "research", to: "application_answers", reason: "DATA", detail: "Company context shapes emphasis, never content." },
+      { from: "resume_draft", to: "qa", reason: "VERIFICATION", detail: "QA verifies every claim against the profile." },
+      { from: "application_answers", to: "qa", reason: "VERIFICATION", detail: "QA verifies every claim against the profile." },
+      { from: "qa", to: "follow_up", reason: "DATA", detail: "Outreach cites only QA-verified drafts." },
+      { from: "research", to: "follow_up", reason: "DATA", detail: "Outreach personalization uses the research summary." },
+    ],
+  },
 ]);
 
 export function findTemplate(key: string): GraphTemplate | null {

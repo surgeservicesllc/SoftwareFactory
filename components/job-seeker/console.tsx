@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { JobSeekerAnalyticsPanel } from "@/components/job-seeker/analytics-panel";
 import { JobSeekerApplicationsPanel } from "@/components/job-seeker/applications-panel";
 import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerPreferencesForm, type PreferencesView } from "@/components/job-seeker/preferences-form";
 import { JobSeekerProfileForm, type ProfileView } from "@/components/job-seeker/profile-form";
-import { Card, EmptyState, PageHeader } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 /**
@@ -117,12 +118,7 @@ export function JobSeekerConsole() {
       ) : section === "applications" ? (
         <JobSeekerApplicationsPanel />
       ) : (
-        <EmptyState
-          title="No analytics yet"
-          description="Once jobs are discovered and applications move, this view reports jobs found, qualified, applications, response rate, interviews, offers, and average match score — computed from your recorded pipeline, never estimated."
-          actionLabel="Start with your career profile"
-          actionHref="/job-seeker"
-        />
+        <JobSeekerAnalyticsPanel />
       )}
     </>
   );
