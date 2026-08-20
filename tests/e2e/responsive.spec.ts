@@ -50,6 +50,10 @@ const ROUTES = [
   "/solutions/runs",
   "/solutions/settings",
   "/solutions/workflows",
+  // Hard-gated: a signed-out sweep follows the redirect to /auth/sign-in,
+  // which IS this route's signed-out behavior. The signed-in layout is swept
+  // through the component harness ("job-seeker" in component-layout.spec.ts).
+  "/job-seeker",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",

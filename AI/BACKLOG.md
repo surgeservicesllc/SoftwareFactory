@@ -2,6 +2,25 @@
 
 Last triaged: 2026-08-13
 
+## Job Seeker increments (2026-08-20, ADR-096, owner goal)
+
+- [x] Increment 1: foundation schema (approval gate, dupe key, score integrity
+  in CHECKs), hard-gated /job-seeker page, navigation, career profile and
+  preferences CRUD, scoring engine with pinned weights, behavior + unit +
+  sweep coverage.
+- [ ] Increment 2: record/import jobs (manual first — honest source column),
+  score against the profile through `scoreJob`, discovery list UI with
+  breakdown/reasons/gaps, qualification against the person's threshold.
+- [ ] Increment 3: application workspace — extract requirements, generate
+  ATS resume / cover letter / answers FROM PROFILE FACTS ONLY via the graph
+  engine (MODEL nodes with verification lenses; QA lens blocks fabrication),
+  versioned documents, READY_FOR_REVIEW + approve/reject UI on the gate.
+- [ ] Increment 4: CRM kanban/table over the 11 stages, follow-up dates,
+  contacts, outreach drafts (sent stays false until a real integration).
+- [ ] Increment 5: analytics from recorded rows only; resume/document upload
+  (needs the storage-bucket ownership decision on hosted Supabase); discovery
+  import adapters (each one Not Connected until its credential exists).
+
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 
 - [ ] Design the interactive-login connect path: seal the claude.ai OAuth

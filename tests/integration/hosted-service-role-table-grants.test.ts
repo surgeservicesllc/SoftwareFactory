@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260819001200_replant_for_the_complete_run.sql";
+  "20260820000200_job_seeker_foundation.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -79,6 +79,14 @@ const publicTables = [
   "graphs",
   "improvement_ledger",
   "incidents",
+  "job_seeker_applications",
+  "job_seeker_contacts",
+  "job_seeker_documents",
+  "job_seeker_jobs",
+  "job_seeker_matches",
+  "job_seeker_outreach",
+  "job_seeker_preferences",
+  "job_seeker_profiles",
   "marketing_features",
   "marketing_logos",
   "marketing_pages",

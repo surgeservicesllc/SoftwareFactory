@@ -21,6 +21,7 @@ import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { BotUsageConsole } from "@/components/bot-usage-console";
+import { JobSeekerConsole } from "@/components/job-seeker/console";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
@@ -56,6 +57,8 @@ import {
   COMMANDS,
   CONNECTIONS,
   OPERATIONS_OVERVIEW,
+  JOB_SEEKER_PREFERENCES,
+  JOB_SEEKER_PROFILE,
   PORTFOLIO_SCHEDULING,
   PORTFOLIO_SOURCES,
   PROJECT_BOTS_ROSTER,
@@ -130,6 +133,8 @@ function serveFixtures() {
         },
       });
     }
+    if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
+    if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
     if (url.includes("/api/ai-accounts/usage")) return json({ usage: [] });
     /*
      * `canManage` matters: the Bot Manager renders read-only without it, so
@@ -209,6 +214,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   agentos: () => <InShell><AgentOsConsole /></InShell>,
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
+  "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "bot-fabric": () => <InShell><BotFabricConsole /></InShell>,
   "bot-manager": () => <InShell><BotManagerHome /></InShell>,
   /*

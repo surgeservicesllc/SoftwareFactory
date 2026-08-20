@@ -1,0 +1,139 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { JobSeekerConsole } from "@/components/job-seeker/console";
+
+const searchParams = vi.fn(() => new URLSearchParams());
+vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams() }));
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" },
+    status,
+  });
+}
+
+const PROFILE = {
+  fullName: "Daniel H",
+  email: "daniel@example.com",
+  phone: null,
+  linkedinUrl: null,
+  location: "Austin, TX",
+  summary: "Builder of factories.",
+  salaryTarget: 250000,
+  salaryCurrency: "USD",
+  workArrangement: "remote",
+  openToTravel: false,
+  openToRelocation: false,
+  employmentHistory: [
+    { organization: "Surge Services", title: "Founder", started: "2020", highlights: ["Shipped the control plane"] },
+  ],
+  education: [],
+  accomplishments: ["Shipped the graph engine"],
+  skills: ["TypeScript", "Postgres"],
+  certifications: [],
+  technologies: ["Next.js"],
+  industries: ["Software"],
+  updatedAt: "2026-08-20T00:00:00.000Z",
+};
+
+const PREFERENCES = {
+  targetTitles: ["Staff Engineer"],
+  seniority: "Staff",
+  compensationMinimum: 220000,
+  locations: ["Remote — US"],
+  workArrangements: ["remote"],
+  industries: ["Software"],
+  requiredCriteria: ["Remote-first"],
+  preferredCriteria: [],
+  exclusions: ["Crypto"],
+  qualificationThreshold: 80,
+  updatedAt: "2026-08-20T00:00:00.000Z",
+};
+
+function stubFetch(overrides: Record<string, unknown> = {}) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/job-seeker/profile" && (!init || init.method === undefined)) {
+      return jsonResponse({ profile: overrides.profile === undefined ? PROFILE : overrides.profile });
+    }
+    if (url === "/api/job-seeker/profile" && init?.method === "PUT") {
+      return jsonResponse({ profile: PROFILE });
+    }
+    if (url === "/api/job-seeker/preferences" && (!init || init.method === undefined)) {
+      return jsonResponse({ preferences: overrides.preferences === undefined ? PREFERENCES : overrides.preferences });
+    }
+    if (url === "/api/job-seeker/preferences" && init?.method === "PUT") {
+      return jsonResponse({ preferences: PREFERENCES });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }));
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  searchParams.mockReset();
+  searchParams.mockReturnValue(new URLSearchParams());
+});
+
+describe("JobSeekerConsole", () => {
+  it("loads and renders the career profile with its stored facts", async () => {
+    stubFetch();
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByDisplayValue("Daniel H")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Surge Services")).toBeInTheDocument();
+    const skills = screen.getByLabelText(/^Skills/) as HTMLTextAreaElement;
+    expect(skills.value).toBe("TypeScript\nPostgres");
+    // The truthfulness promise is on the page, not just in a document.
+    expect(screen.getByText(/nothing is ever invented to fill a gap/i)).toBeInTheDocument();
+  });
+
+  it("renders an empty profile as an editable blank form, not an error", async () => {
+    stubFetch({ profile: null, preferences: null });
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByText("Career Profile")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save profile/i })).toBeInTheDocument();
+  });
+
+  it("saves the profile and confirms it", async () => {
+    stubFetch();
+    render(<JobSeekerConsole />);
+    await screen.findByDisplayValue("Daniel H");
+
+    fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Profile saved."));
+  });
+
+  it("shows preferences with the configurable threshold on its own section", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=preferences"));
+    stubFetch();
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByDisplayValue("Staff Engineer")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("80")).toBeInTheDocument();
+    expect(screen.getByText(/Default 80/)).toBeInTheDocument();
+  });
+
+  it("tells the truth on the not-yet-built sections and names the next step", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
+    stubFetch();
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
+    expect(screen.getByText(/No source is connected yet/)).toBeInTheDocument();
+
+    searchParams.mockReturnValue(new URLSearchParams("section=applications"));
+    render(<JobSeekerConsole />);
+    expect(await screen.findByText("No applications yet")).toBeInTheDocument();
+    expect(screen.getByText(/approval gate is enforced in the database/i)).toBeInTheDocument();
+  });
+
+  it("reports a load failure as an alert instead of a blank page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 500)));
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not be loaded/i);
+  });
+});
