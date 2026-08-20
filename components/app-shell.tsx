@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   Boxes,
+  BriefcaseBusiness,
   ChevronDown,
   CircleGauge,
   ClipboardList,
@@ -116,6 +117,11 @@ const navigationEntries: readonly NavigationEntry[] = [
       { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
     ],
   },
+  // The personal job-search command center. Lives outside /solutions on
+  // purpose: it is the one hard-gated, person-scoped surface (the page
+  // redirects signed-out visitors), and its data is private to the person
+  // even within the organization.
+  { label: "Job Seeker", href: "/job-seeker", icon: BriefcaseBusiness },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   { label: "Reports", href: "/solutions/reports", icon: ScrollText },
   { label: "Integrations", href: "/solutions/connections", icon: PlugZap },

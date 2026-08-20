@@ -824,3 +824,51 @@ export const RESOURCE_MODELS = {
     "An undeclared model cannot take work that requires a strong model, and cannot be shown to"
     + " fit any context. Routing will refuse it until both values are declared.",
 };
+
+/**
+ * Job Seeker fixtures: a filled profile and preferences so the layout and
+ * accessibility sweeps exercise the real form controls, not empty shells.
+ */
+export const JOB_SEEKER_PROFILE = {
+  fullName: "Daniel H",
+  email: "daniel@example.com",
+  phone: "+1 555 0100",
+  linkedinUrl: "https://www.linkedin.com/in/example",
+  location: "Austin, TX",
+  summary: "Platform engineer who ships end to end.",
+  salaryTarget: 250000,
+  salaryCurrency: "USD",
+  workArrangement: "remote",
+  openToTravel: false,
+  openToRelocation: false,
+  employmentHistory: [
+    {
+      organization: "Surge Services",
+      title: "Founder",
+      started: "2020",
+      summary: "Built the software factory control plane.",
+      highlights: ["Shipped the graph execution engine"],
+    },
+  ],
+  education: [{ organization: "State University", title: "BSc Computer Science", started: "2012", ended: "2016" }],
+  accomplishments: ["Took a control plane from zero to production"],
+  skills: ["TypeScript", "PostgreSQL", "Next.js"],
+  certifications: [],
+  technologies: ["Supabase", "Vercel"],
+  industries: ["Software"],
+  updatedAt: "2026-08-20T00:00:00.000Z",
+};
+
+export const JOB_SEEKER_PREFERENCES = {
+  targetTitles: ["Staff Engineer", "Platform Lead"],
+  seniority: "Staff",
+  compensationMinimum: 220000,
+  locations: ["Remote — US"],
+  workArrangements: ["remote", "hybrid"],
+  industries: ["Software"],
+  requiredCriteria: ["Remote-first"],
+  preferredCriteria: ["Small team"],
+  exclusions: ["Gambling"],
+  qualificationThreshold: 80,
+  updatedAt: "2026-08-20T00:00:00.000Z",
+};

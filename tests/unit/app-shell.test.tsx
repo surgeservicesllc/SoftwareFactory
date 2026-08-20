@@ -28,6 +28,7 @@ describe("AppShell navigation", () => {
       "Projects",
       "Pipelines",
       "Bots",
+      "Job Seeker",
       "Runs",
       "Reports",
       "Integrations",

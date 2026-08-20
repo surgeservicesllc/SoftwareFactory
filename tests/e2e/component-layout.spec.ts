@@ -185,6 +185,7 @@ const CASES = [
   "agentos",
   "autonomy",
   "bot-usage",
+  "job-seeker",
   "bot-fabric",
   "bot-manager",
   "bot-manager-in-journey",
