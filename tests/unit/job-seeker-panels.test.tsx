@@ -46,6 +46,11 @@ describe("JobSeekerJobsPanel", () => {
         return jsonResponse({ job: SCORED_JOB }, 201);
       }
       if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [] });
+      if (url === "/api/job-seeker/import-sources") {
+        return jsonResponse({ sources: [
+          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings.", configured: false, requiredConfiguration: ["SOFTWAREFACTORY_GREENHOUSE_BOARDS"] },
+        ] });
+      }
       throw new Error(`Unexpected request: ${url}`);
     }));
 
@@ -71,6 +76,7 @@ describe("JobSeekerJobsPanel", () => {
         );
       }
       if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
       throw new Error(`Unexpected request: ${url}`);
     }));
 
@@ -84,7 +90,10 @@ describe("JobSeekerJobsPanel", () => {
   });
 
   it("shows the breakdown, reasons, and gaps behind a score", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ jobs: [SCORED_JOB] })));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      return jsonResponse({ jobs: [SCORED_JOB] });
+    }));
     render(<JobSeekerJobsPanel />);
 
     expect(await screen.findByText("Staff Engineer")).toBeInTheDocument();
@@ -92,6 +101,24 @@ describe("JobSeekerJobsPanel", () => {
     expect(screen.getByText("experience")).toBeInTheDocument();
     expect(screen.getByText(/names TypeScript from your profile/)).toBeInTheDocument();
     expect(screen.getByText(/No leadership evidence/)).toBeInTheDocument();
+  });
+
+  it("shows import sources as Not Connected with the exact configuration named", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/import-sources") {
+        return jsonResponse({ sources: [
+          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings.", configured: false, requiredConfiguration: ["SOFTWAREFACTORY_GREENHOUSE_BOARDS"] },
+        ] });
+      }
+      return jsonResponse({ jobs: [] });
+    }));
+
+    render(<JobSeekerJobsPanel />);
+
+    expect(await screen.findByText("Greenhouse job boards")).toBeInTheDocument();
+    expect(screen.getByText("Not Connected")).toBeInTheDocument();
+    expect(screen.getByText(/Needs: SOFTWAREFACTORY_GREENHOUSE_BOARDS/)).toBeInTheDocument();
   });
 });
 
@@ -105,6 +132,7 @@ describe("JobSeekerApplicationsPanel", () => {
         return jsonResponse({ application: { id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "approved" } });
       }
       if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
       throw new Error(`Unexpected request: ${url}`);
     }));
 
@@ -136,6 +164,7 @@ describe("JobSeekerApplicationsPanel", () => {
         );
       }
       if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
       throw new Error(`Unexpected request: ${url}`);
     }));
 

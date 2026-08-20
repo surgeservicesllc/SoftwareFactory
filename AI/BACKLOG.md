@@ -16,13 +16,25 @@ Last triaged: 2026-08-13
   immutable versions, READY_FOR_REVIEW + Approve/Reject on the gate. (#285)
 - [x] Increment 4: counted analytics (null rates render as "—") and the
   seven-agent job_search_pipeline graph template on the real engine. (#286)
-- [ ] Increment 5: contacts + outreach-draft UI over the existing tables
-  (sent stays false until a real send integration exists).
-- [ ] Increment 6: resume/document upload (needs the storage-bucket ownership
-  decision on hosted Supabase); discovery import adapters (each one Not
-  Connected until its credential exists); model-polished document variants
-  through the graph lane with the QA verification lens checking them against
-  the deterministic baseline.
+- [x] Increment 5: contacts + outreach-draft UI; drafts never claim a send.
+  (#289)
+- [x] Increment 6: resume upload in a person-scoped BYTEA table (hosted
+  storage policies are unownable from our apply path; the web tier holds no
+  service-role key), applied in run 32322900245. (#290)
+- [x] Increment 7: the goal's E2E journey test — Profile → Preferences →
+  Discover → Score → Qualify → Resume → Cover Letter → QA → Review →
+  Approve → Apply → Follow-Up → Analytics in ONE pass against the real
+  schema through the real engine functions — plus the import-adapter
+  architecture: a typed registry where `configured` flips only by detection
+  of the named variables, each adapter Not Connected on the page with its
+  exact needs listed, and an unconfigured adapter carrying no fetch
+  implementation at all.
+- [ ] Open (needs external credentials/decisions): activate an import
+  adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
+  _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
+  model-polished document variants through the job_search_pipeline graph
+  template (live and launchable from Pipelines → Templates), QA-lens-checked
+  against the deterministic baseline.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 

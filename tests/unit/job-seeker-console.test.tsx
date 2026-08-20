@@ -63,6 +63,9 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
     if (url === "/api/job-seeker/outreach") {
       return jsonResponse({ outreach: overrides.outreach ?? [] });
     }
+    if (url === "/api/job-seeker/import-sources") {
+      return jsonResponse({ sources: [] });
+    }
     if (url === "/api/job-seeker/analytics") {
       return jsonResponse({
         analytics: overrides.analytics ?? {
@@ -141,6 +144,7 @@ describe("JobSeekerConsole", () => {
     expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
     expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
     expect(screen.getByText(/Recording is manual today/)).toBeInTheDocument();
+    expect(screen.getByText(/activate only when their named/)).toBeInTheDocument();
   });
 
   it("shows the applications pipeline with the gate stated", async () => {
