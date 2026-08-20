@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { JobSeekerAnalyticsPanel } from "@/components/job-seeker/analytics-panel";
+import { JobSeekerFollowUpPanel } from "@/components/job-seeker/follow-up-panel";
 import { JobSeekerApplicationsPanel } from "@/components/job-seeker/applications-panel";
 import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerPreferencesForm, type PreferencesView } from "@/components/job-seeker/preferences-form";
@@ -23,13 +24,14 @@ import { cn } from "@/lib/cn";
  * never a mockup of one.
  */
 
-type SectionKey = "profile" | "preferences" | "discovery" | "applications" | "analytics";
+type SectionKey = "profile" | "preferences" | "discovery" | "applications" | "follow-up" | "analytics";
 
 const SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "profile", label: "Career Profile" },
   { key: "preferences", label: "Job Preferences" },
   { key: "discovery", label: "Job Discovery" },
   { key: "applications", label: "Applications" },
+  { key: "follow-up", label: "Follow-Up" },
   { key: "analytics", label: "Analytics" },
 ];
 
@@ -117,6 +119,8 @@ export function JobSeekerConsole() {
         <JobSeekerJobsPanel />
       ) : section === "applications" ? (
         <JobSeekerApplicationsPanel />
+      ) : section === "follow-up" ? (
+        <JobSeekerFollowUpPanel />
       ) : (
         <JobSeekerAnalyticsPanel />
       )}

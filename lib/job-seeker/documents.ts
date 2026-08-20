@@ -137,3 +137,40 @@ export function buildCoverLetter(profile: ProfileForDocuments, job: JobForDocume
 
   return paragraphs.join("\n\n");
 }
+
+export type ContactForOutreach = Readonly<{
+  name: string;
+  role: string | null;
+}>;
+
+/**
+ * A personalized outreach draft, for HUMAN REVIEW: factual, short, and built
+ * from the same recorded facts as everything else. It is stored as a draft;
+ * nothing in this system marks outreach as sent, because no send integration
+ * exists — the schema refuses status 'sent' without a sent_at for the same
+ * reason.
+ */
+export function buildOutreachDraft(
+  profile: ProfileForDocuments,
+  job: JobForDocuments,
+  contact: ContactForOutreach,
+): { subject: string; body: string } {
+  const keywords = matchedKeywords(profile, job).slice(0, 3);
+  const latest = profile.employmentHistory[0];
+  const lines = [
+    `Hi ${contact.name},`,
+    `I applied for the ${job.title} role at ${job.company} and wanted to reach out directly`
+    + (contact.role ? ` given your role as ${contact.role}` : "")
+    + ".",
+    (latest ? `I am currently ${latest.title} at ${latest.organization}. ` : "")
+    + (keywords.length > 0
+      ? `My recorded experience covers ${keywords.join(", ")}, which the posting calls for.`
+      : ""),
+    "If the role is still open, I would welcome a short conversation.",
+    `Best regards,\n${profile.fullName ?? ""}`.trim(),
+  ].filter((line) => line.trim().length > 0);
+  return {
+    subject: `${job.title} application — ${profile.fullName ?? "candidate"}`,
+    body: lines.join("\n\n"),
+  };
+}

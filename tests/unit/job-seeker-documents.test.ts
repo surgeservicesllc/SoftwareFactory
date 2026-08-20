@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAtsResume,
   buildCoverLetter,
+  buildOutreachDraft,
   matchedKeywords,
   type JobForDocuments,
   type ProfileForDocuments,
@@ -96,5 +97,19 @@ describe("buildCoverLetter", () => {
 
     expect(letter).not.toContain("currently");
     expect(letter).toContain("Dear Acme hiring team");
+  });
+});
+
+describe("buildOutreachDraft", () => {
+  it("writes a factual draft naming only recorded experience", () => {
+    const draft = buildOutreachDraft(profile, job, { name: "Riley Recruiter", role: "Technical Recruiter" });
+
+    expect(draft.subject).toBe("Staff Engineer application — Daniel H");
+    expect(draft.body).toContain("Hi Riley Recruiter,");
+    expect(draft.body).toContain("Founder at Surge Services");
+    expect(draft.body).toContain("TypeScript");
+    expect(draft.body).not.toContain("Kubernetes");
+    // It never claims a send, a reply, or anything that has not happened.
+    expect(draft.body.toLowerCase()).not.toContain("sent");
   });
 });
