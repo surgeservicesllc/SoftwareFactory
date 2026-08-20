@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { EVALUATION_METHOD_LABEL } from "@/lib/job-seeker/evaluate";
-import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
+import { Card, EmptyState, NotConnectedBadge, SectionTitle, StatusBadge } from "@/components/ui";
 
 /**
  * Job discovery: record postings and see their match against your recorded
@@ -60,16 +60,26 @@ export function JobSeekerJobsPanel() {
   const [location, setLocation] = useState("");
   const [workModel, setWorkModel] = useState("");
   const [description, setDescription] = useState("");
+  const [sources, setSources] = useState<Array<{
+    key: string; name: string; summary: string; configured: boolean; requiredConfiguration: string[];
+  }>>([]);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/job-seeker/jobs", { cache: "no-store" });
-      if (!response.ok) {
+      const [jobsResponse, sourcesResponse] = await Promise.all([
+        fetch("/api/job-seeker/jobs", { cache: "no-store" }),
+        fetch("/api/job-seeker/import-sources", { cache: "no-store" }),
+      ]);
+      if (!jobsResponse.ok) {
         setProblem("Recorded jobs could not be listed.");
         return;
       }
-      const body = (await response.json()) as { jobs?: JobView[] };
+      const body = (await jobsResponse.json()) as { jobs?: JobView[] };
       setJobs(body.jobs ?? []);
+      if (sourcesResponse.ok) {
+        const sourcesBody = (await sourcesResponse.json()) as { sources?: typeof sources };
+        setSources(sourcesBody.sources ?? []);
+      }
     } catch {
       setProblem("Recorded jobs could not be listed.");
     }
@@ -142,8 +152,28 @@ export function JobSeekerJobsPanel() {
         </div>
         <p className="mt-2 text-xs text-[var(--text-faint)]">{EVALUATION_METHOD_LABEL}</p>
         <p className="mt-1 text-xs text-[var(--text-faint)]">
-          Recording is manual today. Import sources appear here only when a real integration is connected.
+          Recording is manual today. The import sources below activate only when their named
+          configuration actually exists — never before.
         </p>
+
+        {sources.length > 0 ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {sources.map((adapter) => (
+              <div key={adapter.key} className="rounded-md border border-[var(--border)] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-[var(--text)]">{adapter.name}</p>
+                  {adapter.configured ? null : <NotConnectedBadge />}
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{adapter.summary}</p>
+                {!adapter.configured ? (
+                  <p className="mt-1 text-xs text-[var(--text-faint)]">
+                    Needs: {adapter.requiredConfiguration.join(", ")}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {showForm ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
