@@ -31,11 +31,14 @@ opened (the same window had just paid for the live canary's five nodes).
 The live canary itself is green end to end — run `32283945714`, "fans out,
 synthesizes, and verifies with a fresh context", 176.6s, zero API tokens —
 so fan-out, synthesis, and fresh-context verification each have live
-proof. The one still-withheld claim is a single COMPLETED all-seven run;
-migration `20260819001200` plants the copy the 22:50Z window's dispatch
-runs alone, so the report node is not competing with a canary for fuel.
-CI on main is green on the merged state with the browser suite sharded
-3×535 (runs on `05f0749` and `c02a275`).
+proof. **The complete run has now executed
+in production**: drain `32310917147`, graph run
+`1df3fd45-5501-4912-81f8-26448b865af3` — COMPLETED, 7 succeeded, 0 failed,
+in 6m26s (22:54:48-23:01:14Z): five MODEL inspectors in parallel through
+the CLI, the deterministic reduce, and the report synthesis, dispatched
+alone in a fresh provider window per the plan in `20260819001200`. No
+graph-execution claim is withheld any longer. CI on main is green on the
+merged state with the browser suite sharded 3×535.
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to

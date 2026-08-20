@@ -345,6 +345,82 @@ graph_artifacts; results landed in tables no human saw):
   stays engine-side (canary-proven) until stored-graph discovery is a
   designed increment.
 
+THE COMPLETE RUN (2026-08-19 23:01Z) — drain 32310917147, graph run
+1df3fd45-5501-4912-81f8-26448b865af3: **COMPLETED, 7 succeeded, 0 failed**,
+6m26s wall. Five MODEL inspectors in parallel through the subscription CLI,
+the deterministic reduce, the report synthesis — dispatched alone in the
+fresh 22:50Z window exactly as 20260819001200 planned, zero API tokens. No
+graph-execution claim is withheld any longer.
+
+Rounds 14-16 — each found and fixed one defect (none clean):
+
+- Round 14: ARCHITECTURE/CURRENT_STATE still described the one-argument
+  claim; aligned with the shipped five-function boundary. (#274)
+- Round 15: four workflows — three of them credential-bearing — ran actions
+  off floating v4 tags; pinned to the reviewed SHAs, guarded by
+  workflow-action-pins.test.ts. (#275)
+- Round 16: three workflows installed the Claude CLI unpinned; pinned to the
+  one version everywhere, guard extended. (#276) (The same evening also
+  produced ADR-095 — usage is a property of the connection — and the CI
+  install-retry fix #279, both from measured evidence.)
+
+Round 17 — CLEAN. Checked: the complete-run drain log (no node errors, no
+stderr, queue empty at exit); CI green on the last four main tips with the
+sharded suite and cleaned retry; the ADR-095 observation is the newest usage
+row and the only one in four hours (memo working); harness route-matching
+audit (specific-before-generic holds); no uncommitted drift beyond the
+evidence records themselves.
+
+Round 18 — CLEAN. Checked: repository gates on the tip (CI quality job =
+lint, typecheck, 3400+ vitest, build; three browser shards green); secrets
+scan of the day's full diff (fixture tokens only); zero-token rule intact
+(no ANTHROPIC_API_KEY in any worker env); RPC drift (all called functions
+defined; contract suite green in CI); migration ledger reconciled through
+20260819001200 with the version-uniqueness and replay-drop guards standing.
+
+Two consecutive clean rounds: the /loop's stop criterion is met.
+
+## Final output — graph-engineered multi-agent execution (goal closed 2026-08-19)
+
+**Topology.** Recorded graphs (nodes = bounded jobs, edges = data) compile
+through one compiler shared by console preview and worker execution.
+Executors: MODEL (subscription CLI, tiered models, read-only tools),
+DETERMINISTIC (engine reducers, no model turn), ANCHOR (workspace lane —
+deliberately not claimable by the analysis worker, stated on template
+cards). Independent nodes run concurrently (measured max parallelism 5);
+fan-ins declare partial-input tolerance; verification lenses record
+verdicts per subject with evidence. Convergence: ≤3 FAILED runs, ≤10 total,
+capacity refusals void (CANCELLED), stale-worker reclaim after 2h silence.
+
+**Changes.** ~45 PRs merged today alone (#236-#280 span): the worker
+boundary (5 SECURITY DEFINER functions), executor-capability claiming,
+tolerant fan-ins, verification recording + console visibility, data-carrying
+edges, budget/timeout/turn envelopes pinned by tests after every guessed
+number failed in production, CI verdict integrity + 3-way sharding + install
+retries, workflow action/CLI pinning, the Bot Manager usage truth chain
+(ADR-094/095), and three fixed-id re-plants ending in the complete run.
+
+**Tests.** 3,400+ vitest (unit+integration incl. PGlite full-chain behavior
+suites), 1,605 Playwright checks across three viewports, all green on main.
+
+**Verified E2E flows (production, zero API tokens).** (1) Plan → claim →
+parallel inspectors → reduce → synthesis → COMPLETED 7/7 (run 1df3fd45).
+(2) Tolerant-fan-in PARTIAL with named gaps (ca347ab9, 4d3f44a7). (3)
+Capacity-refusal voiding (4cd11dc4). (4) Live canary: fan-out + synthesis +
+fresh-context verification (32283945714). (5) Member visibility:
+list_graph_runs/verifications on the Pipelines console.
+
+**Remaining blockers (external).** Usage bars need a fuller-scoped
+interactive OAuth flow (provider declines setup-token scope — ADR-095,
+backlog). ANCHOR nodes await a workspace-capable worker. Scheduled draining
+stays owner-gated (SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED).
+
+**Production-readiness evidence.** Ledger reconciled through
+20260819001200; every apply/probe run cited in AI/HOSTED_APPLY_RUNBOOK.md;
+RLS + definer-function boundary pinned by schema-security-invariants; CI
+required checks wired to the worker's gate by test; honest terminal states
+(COMPLETED/PARTIAL/FAILED/CANCELLED) proven live in all four forms.
+
 Rounds 12-13 — the day's cadence audited itself, and the owner's page told the truth again:
 
 - **Main's CI verdict was `cancelled`, not `success`, for most of the day.**
