@@ -2,7 +2,20 @@
 
 Last updated: 2026-08-19
 
-## Newest (2026-08-19 ~18:05Z): all five inspectors succeeded in production; one node from a COMPLETED run
+## Newest (2026-08-19 23:05Z): THE COMPLETE RUN — the graph goal's last live proof is delivered
+
+Drain `32310917147`, graph run `1df3fd45-5501-4912-81f8-26448b865af3`:
+**COMPLETED, 7 succeeded, 0 failed**, 6m26s wall. Five MODEL inspectors in
+parallel through the subscription CLI, the deterministic reduce, the report
+synthesis — dispatched alone in the fresh 22:50Z window exactly as planned
+by `20260819001200`, so nothing competed for fuel. Zero API tokens. The
+scorecard withholds no graph-execution claim any longer. Also confirmed
+this window: the ADR-095 unsupported observation (18:55:40Z) is the newest
+usage row and the ONLY one in four hours — the memo ended the five-minute
+re-probe spam, and the Bot Manager states the correct status (Connected,
+usage not measurable for this connection type, reason on the card).
+
+## Prior (2026-08-19 ~18:05Z): all five inspectors succeeded in production; one node from a COMPLETED run
 
 The 17:50Z window delivered the strongest evidence yet, then ran dry:
 
