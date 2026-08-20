@@ -337,19 +337,13 @@ async function main(): Promise<void> {
     if (indeterminate.length > 0) console.log(`                   could not determine: ${indeterminate.join(", ")}`);
   }
 
-  console.log(
-    `\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate, `
-    + `${unprobeable.length} not probeable `
-    + `(of ${expectations.length} migrations in the repository).`,
-  );
   if (unprobeable.length > 0) {
     // Named, not just counted: "this audit says nothing about these" is the
     // part a reader is most likely to assume away.
     console.log(
-      "\nThese migrations create no table and no function, so this probe cannot speak to them at "
-      + "all. "
-      + "Their presence must be checked another way (scripts/hosted-state-report.sql, or "
-      + "calling the function they define):\n  "
+      "\nThese migrations define nothing this probe can ask about -- no table, and no function "
+      + "granted to the role it reads as. Their presence must be checked another way "
+      + "(scripts/hosted-state-report.sql, or calling the function they define):\n  "
       + unprobeable.join("\n  "),
     );
   }
@@ -365,6 +359,14 @@ async function main(): Promise<void> {
     );
   }
 
+  // The count goes last, under everything that qualifies it. It was printed
+  // above the unprobeable list at first, where seventy names pushed the one
+  // line a reader came for off the top of the terminal.
+  console.log(
+    `\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate, `
+    + `${unprobeable.length} not probeable `
+    + `(of ${expectations.length} migrations in the repository).`,
+  );
   // Outstanding migrations are a true finding, not a failure of the audit, so
   // this exits 0. A broken probe exits 2 above, which is the case worth failing.
   process.exit(0);
