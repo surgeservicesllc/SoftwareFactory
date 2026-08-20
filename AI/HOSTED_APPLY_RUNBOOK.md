@@ -8,7 +8,7 @@ Rebased 2026-08-16 on an owner-measured hosted position (see the section directl
 `20260819000700_bot_credential_ref_privileged_parity`, were added locally *after* that probe run
 and are also unhosted, so the next probe should return twenty-one. It is deliberately not appended to the
 list below: that list is a measurement, and adding an unmeasured version to it would turn
-evidence into assertion. The repository total is 126 migration
+evidence into assertion. The repository total is 127 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

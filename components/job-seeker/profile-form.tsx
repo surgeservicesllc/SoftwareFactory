@@ -205,6 +205,33 @@ export function JobSeekerProfileForm({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
+  const [resumeUpload, setResumeUpload] = useState<{ id: string; filename: string; byteSize: number } | null>(null);
+
+  async function uploadResume(file: File) {
+    setBusy(true);
+    setProblem("");
+    setNotice("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("kind", "resume");
+      const response = await fetch("/api/job-seeker/uploads", { method: "POST", body: form });
+      const body = (await response.json()) as {
+        upload?: { id: string; filename: string; byteSize: number };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.upload) {
+        setProblem(body.error?.message ?? "The file could not be uploaded.");
+        return;
+      }
+      setResumeUpload(body.upload);
+      setNotice(`Uploaded ${body.upload.filename} (${Math.round(body.upload.byteSize / 1024)} KB) as your current resume.`);
+    } catch {
+      setProblem("The file could not be uploaded.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -309,6 +336,25 @@ export function JobSeekerProfileForm({
             Open to relocation
           </label>
         </div>
+      </div>
+
+      <div className="mt-4">
+        <Field label="Resume file" hint="PDF, DOCX, plain text, or Markdown, up to 2 MB. Stored privately; only you can read it.">
+          <input
+            className={FIELD_CLASS}
+            type="file"
+            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void uploadResume(file);
+            }}
+          />
+        </Field>
+        {resumeUpload ? (
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Current resume: <a className="text-[var(--accent)] underline" href={`/api/job-seeker/uploads/${resumeUpload.id}`}>{resumeUpload.filename}</a>
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4">

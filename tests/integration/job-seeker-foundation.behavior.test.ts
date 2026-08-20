@@ -340,4 +340,48 @@ describe("job seeker foundation", { timeout: 180_000 }, () => {
     );
     await reset(db);
   });
+  it("stores an upload for its owner only, bounded and honestly sized", async () => {
+    await assumeUser(db, ownerId);
+    const upload = await db.query<{ id: string }>(
+      `insert into public.job_seeker_uploads
+         (organization_id, user_id, kind, filename, content_type, byte_size, data)
+       values ($1, $2, 'resume', 'resume.pdf', 'application/pdf', 4, '\\x25504446')
+       returning id`,
+      [organizationId, ownerId],
+    );
+    // A size that lies about its bytes is refused.
+    await expect(
+      db.query(
+        `insert into public.job_seeker_uploads
+           (organization_id, user_id, kind, filename, content_type, byte_size, data)
+         values ($1, $2, 'resume', 'liar.pdf', 'application/pdf', 10, '\\x2550')`,
+        [organizationId, ownerId],
+      ),
+    ).rejects.toThrow();
+    // An un-allowlisted content type is refused.
+    await expect(
+      db.query(
+        `insert into public.job_seeker_uploads
+           (organization_id, user_id, kind, filename, content_type, byte_size, data)
+         values ($1, $2, 'resume', 'app.exe', 'application/octet-stream', 4, '\\x25504446')`,
+        [organizationId, ownerId],
+      ),
+    ).rejects.toThrow();
+    // The profile points at the current resume.
+    await db.query(
+      `update public.job_seeker_profiles set resume_upload_id = $3
+        where organization_id = $1 and user_id = $2`,
+      [organizationId, ownerId, upload.rows[0].id],
+    );
+    await reset(db);
+
+    // Another member of the same organization cannot read the bytes.
+    await assumeUser(db, memberId);
+    const other = await db.query(
+      "select id from public.job_seeker_uploads where organization_id = $1",
+      [organizationId],
+    );
+    expect(other.rows).toHaveLength(0);
+    await reset(db);
+  });
 });

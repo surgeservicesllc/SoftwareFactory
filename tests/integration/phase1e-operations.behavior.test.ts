@@ -187,7 +187,7 @@ describe("Phase 1E production operations behavior", () => {
     // tables.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(122);
+    expect(rlsRows).toHaveLength(123);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
