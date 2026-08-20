@@ -2,7 +2,29 @@
 
 Last updated: 2026-08-19
 
-## Newest (2026-08-20 ~01:35Z): Job Seeker — four increments live (ADR-096)
+## Newest (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
+
+Increments 5-7 joined 1-4 (#289, #290, #291): contacts + outreach drafts
+that never claim a send; resume upload in a person-scoped BYTEA table
+(migration 20260820000300, applied in run 32322900245 — hosted storage
+policies are unownable from our apply path and the web tier holds no
+service-role key); and the goal's finishing requirement executed as ONE
+continuous test (job-seeker-journey.behavior.test.ts): Profile →
+Preferences → Discover → Score → Qualify → Resume → Cover Letter → QA →
+Review → Approve → Apply → Follow-Up → Analytics against the real schema
+through the real engine functions, with the QA contract asserted (a term
+the profile does not record never appears in a generated document) and the
+gate proven in both directions inside the journey. Import adapters exist as
+a typed registry whose `configured` flips only by detection of named
+variables — Not Connected on the page with exact needs listed, no fetch
+implementation until real. Completion score against the /goal's criteria:
+everything in-repo is done and tested (3,463 green, sharded browser CI
+green); the two open items need external inputs — an import credential
+(SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES / _LINKEDIN_*) and a
+live launch of the job_search_pipeline template from Pipelines → Templates,
+which spends the owner's provider window and is theirs to click.
+
+## Prior (2026-08-20 ~01:35Z): Job Seeker — four increments live (ADR-096)
 
 The owner's /job-seeker goal, increments 1-4 merged and deploying (#283,
 #284, #285, #286, #287): hard-gated page (server redirect, e2e-proven),
