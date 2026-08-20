@@ -57,6 +57,12 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
     if (url === "/api/job-seeker/jobs") {
       return jsonResponse({ jobs: overrides.jobs ?? [] });
     }
+    if (url === "/api/job-seeker/contacts") {
+      return jsonResponse({ contacts: overrides.contacts ?? [] });
+    }
+    if (url === "/api/job-seeker/outreach") {
+      return jsonResponse({ outreach: overrides.outreach ?? [] });
+    }
     if (url === "/api/job-seeker/analytics") {
       return jsonResponse({
         analytics: overrides.analytics ?? {
@@ -178,6 +184,15 @@ describe("JobSeekerConsole", () => {
       "href",
       "/job-seeker?section=discovery",
     );
+  });
+
+  it("keeps follow-up honest: drafts for review, never a claimed send", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=follow-up"));
+    stubFetch();
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByText("No contacts recorded yet")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is ever sent from here/)).toBeInTheDocument();
   });
 
   it("reports a load failure as an alert instead of a blank page", async () => {
