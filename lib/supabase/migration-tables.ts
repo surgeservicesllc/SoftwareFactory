@@ -44,15 +44,27 @@ export function tablesCreatedIn(sql: string): readonly string[] {
  * REST -- deciding here which ones "should" be callable would be a second
  * opinion about the schema, and the probe's own answer is the one that counts.
  */
-const CREATE_FUNCTION = /create\s+(?:or\s+replace\s+)?function\s+("?)([a-z_][a-z0-9_]*)\1(?:\s*\.\s*("?)([a-z_][a-z0-9_]*)\3)?/gi;
+const CREATE_FUNCTION = /create\s+(?:or\s+replace\s+)?function\s+("?)([a-z_][a-z0-9_]*)\1(?:\s*\.\s*("?)([a-z_][a-z0-9_]*)\3)?([\s\S]{0,4000}?)\blanguage\b/gi;
+
+/**
+ * A trigger function is never listed, because PostgREST cannot list it.
+ *
+ * The description only names routines a client could call, and a function
+ * returning `trigger` is not one. Including them turned thirty fully-applied
+ * migrations into `PARTLY VISIBLE` on the first run of this probe -- a report
+ * whose alarms are mostly false is worse than one that stays quiet, because it
+ * teaches its reader to skim past the real ones.
+ */
+const RETURNS_TRIGGER = /\breturns\s+trigger\b/i;
 
 export function functionsDefinedIn(sql: string): readonly string[] {
   const found: string[] = [];
   for (const match of stripComments(sql).matchAll(CREATE_FUNCTION)) {
-    const [, , first, , second] = match;
+    const [, , first, , second, header] = match;
     const schema = second ? first : "public";
     const name = second ?? first;
     if (schema.toLowerCase() !== "public") continue;
+    if (RETURNS_TRIGGER.test(header ?? "")) continue;
     if (!found.includes(name)) found.push(name);
   }
   return found;

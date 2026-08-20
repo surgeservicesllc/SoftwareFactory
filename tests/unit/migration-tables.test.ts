@@ -34,16 +34,26 @@ describe("reading what a migration creates", () => {
 
 describe("reading what a migration defines", () => {
   it("finds a function with or without replace and schema", () => {
-    expect(functionsDefinedIn("create function public.f() returns int")).toEqual(["f"]);
-    expect(functionsDefinedIn("CREATE OR REPLACE FUNCTION claim_planned_graph(p text)")).toEqual(["claim_planned_graph"]);
+    expect(functionsDefinedIn("create function public.f() returns int language sql")).toEqual(["f"]);
+    expect(functionsDefinedIn("CREATE OR REPLACE FUNCTION claim_planned_graph(p text) returns json language plpgsql")).toEqual(["claim_planned_graph"]);
+  });
+
+  it("leaves out trigger functions, which PostgREST can never list", () => {
+    // Including them turned thirty fully-applied migrations into PARTLY
+    // VISIBLE on the probe's first run. A report whose alarms are mostly false
+    // teaches its reader to skim past the real ones.
+    expect(functionsDefinedIn("create function public.guard() returns trigger language plpgsql")).toEqual([]);
+    expect(functionsDefinedIn("create function public.guard()\n  returns TRIGGER\n  language plpgsql")).toEqual([]);
   });
 
   it("ignores a function quoted in a comment", () => {
-    expect(functionsDefinedIn("-- create function public.never()")).toEqual([]);
+    expect(functionsDefinedIn("-- create function public.never() returns int language sql")).toEqual([]);
   });
 
   it("names a function once however many times the migration replaces it", () => {
-    expect(functionsDefinedIn("create or replace function public.f();\ncreate or replace function public.f();")).toEqual(["f"]);
+    const sql = "create or replace function public.f() returns int language sql;\n"
+      + "create or replace function public.f() returns int language sql;";
+    expect(functionsDefinedIn(sql)).toEqual(["f"]);
   });
 });
 
