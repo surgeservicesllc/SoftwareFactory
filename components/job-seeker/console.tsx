@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { JobSeekerApplicationsPanel } from "@/components/job-seeker/applications-panel";
+import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerPreferencesForm, type PreferencesView } from "@/components/job-seeker/preferences-form";
 import { JobSeekerProfileForm, type ProfileView } from "@/components/job-seeker/profile-form";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
@@ -111,19 +113,9 @@ export function JobSeekerConsole() {
       ) : section === "preferences" ? (
         <JobSeekerPreferencesForm initial={preferences} onSaved={setPreferences} />
       ) : section === "discovery" ? (
-        <EmptyState
-          title="No jobs recorded yet"
-          description="Job discovery lands here: record a posting manually with its URL, title, company, and description, or connect an import source. Discovered jobs are scored against your profile and preferences — the score is always the sum of its published parts. No source is connected yet, and this page will say so rather than show invented jobs."
-          actionLabel="Complete your career profile first"
-          actionHref="/job-seeker"
-        />
+        <JobSeekerJobsPanel />
       ) : section === "applications" ? (
-        <EmptyState
-          title="No applications yet"
-          description="Qualified jobs move through a pipeline you control: Found, Qualified, Resume Created, Ready for Review, and only after your explicit approval, Applied and beyond. The approval gate is enforced in the database — nothing can submit on your behalf by default."
-          actionLabel="Set your job preferences"
-          actionHref="/job-seeker?section=preferences"
-        />
+        <JobSeekerApplicationsPanel />
       ) : (
         <EmptyState
           title="No analytics yet"

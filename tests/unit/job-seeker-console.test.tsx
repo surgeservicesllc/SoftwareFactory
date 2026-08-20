@@ -54,6 +54,9 @@ const PREFERENCES = {
 function stubFetch(overrides: Record<string, unknown> = {}) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url === "/api/job-seeker/jobs") {
+      return jsonResponse({ jobs: overrides.jobs ?? [] });
+    }
     if (url === "/api/job-seeker/profile" && (!init || init.method === undefined)) {
       return jsonResponse({ profile: overrides.profile === undefined ? PROFILE : overrides.profile });
     }
@@ -116,18 +119,23 @@ describe("JobSeekerConsole", () => {
     expect(screen.getByText(/Default 80/)).toBeInTheDocument();
   });
 
-  it("tells the truth on the not-yet-built sections and names the next step", async () => {
+  it("shows discovery with the honest method label and manual-only sourcing", async () => {
     searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
     stubFetch();
     render(<JobSeekerConsole />);
 
     expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
-    expect(screen.getByText(/No source is connected yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording is manual today/)).toBeInTheDocument();
+  });
 
+  it("shows the applications pipeline with the gate stated", async () => {
     searchParams.mockReturnValue(new URLSearchParams("section=applications"));
+    stubFetch();
     render(<JobSeekerConsole />);
+
     expect(await screen.findByText("No applications yet")).toBeInTheDocument();
-    expect(screen.getByText(/approval gate is enforced in the database/i)).toBeInTheDocument();
+    expect(screen.getByText(/the database enforces the gate/i)).toBeInTheDocument();
   });
 
   it("reports a load failure as an alert instead of a blank page", async () => {
