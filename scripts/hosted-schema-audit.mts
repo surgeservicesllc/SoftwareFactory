@@ -192,6 +192,11 @@ async function tableExists(baseUrl: string, key: string, table: string): Promise
  * role does not appear. So a name found here is proof of presence, and a name
  * missing here is `not visible` -- exactly the same asymmetry the table probe
  * has, and it is reported with the same word.
+ *
+ * Only functions granted to `service_role` are asked about at all. Most of
+ * this schema's functions are granted to `authenticated` alone, on purpose,
+ * because they re-derive the caller from `auth.uid()`; asking a service-role
+ * view about those reported three healthy migrations as outstanding.
  */
 async function readCallableFunctions(baseUrl: string, key: string): Promise<ReadonlySet<string> | null> {
   let response: Response;

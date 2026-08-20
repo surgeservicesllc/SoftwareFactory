@@ -11,7 +11,10 @@
 export interface MigrationTables {
   readonly migration: string;
   readonly tables: readonly string[];
-  /** Functions the migration defines, in definition order. */
+  /**
+   * Functions the migration defines that a `service_role` caller could see,
+   * in definition order. See {@link migrationTables} for what is left out.
+   */
   readonly functions: readonly string[];
 }
 
@@ -79,13 +82,42 @@ function stripComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
 }
 
+/**
+ * Functions this key could see, which is not the same as functions that exist.
+ *
+ * The audit reads PostgREST's description as `service_role`, and that document
+ * is filtered by EXECUTE privilege. Most of these functions are granted to
+ * `authenticated` only — deliberately, since they re-derive the caller from
+ * `auth.uid()` — so their absence from a service-role view is the boundary
+ * working, not a missing migration. Probing them reported
+ * `find_open_ai_auth_session` and two others as outstanding when nothing was
+ * wrong with them.
+ *
+ * Grants are collected across the whole directory because a later migration
+ * routinely grants a function an earlier one defined.
+ */
+const EXECUTE_GRANT = /grant\s+execute\s+on\s+function\s+("?)([a-z_][a-z0-9_]*)\1(?:\s*\.\s*("?)([a-z_][a-z0-9_]*)\3)?\s*\([^)]*\)\s*to\s+([^;]+);/gi;
+
+function serviceRoleExecutable(files: readonly { readonly sql: string }[]): ReadonlySet<string> {
+  const granted = new Set<string>();
+  for (const file of files) {
+    for (const match of stripComments(file.sql).matchAll(EXECUTE_GRANT)) {
+      const [, , first, , second, roles] = match;
+      const name = second ?? first;
+      if (/\bservice_role\b/i.test(roles)) granted.add(name);
+    }
+  }
+  return granted;
+}
+
 /** Pairs each migration with what it creates, preserving the given order. */
 export function migrationTables(
   files: readonly { readonly name: string; readonly sql: string }[],
 ): readonly MigrationTables[] {
+  const visible = serviceRoleExecutable(files);
   return files.map((file) => ({
     migration: file.name.replace(/\.sql$/, ""),
     tables: tablesCreatedIn(file.sql),
-    functions: functionsDefinedIn(file.sql),
+    functions: functionsDefinedIn(file.sql).filter((name) => visible.has(name)),
   }));
 }

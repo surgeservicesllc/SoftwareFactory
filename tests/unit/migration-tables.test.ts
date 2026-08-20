@@ -26,6 +26,32 @@ describe("reading what a migration creates", () => {
     expect(tablesCreatedIn("create table supabase_migrations.schema_migrations (version text);")).toEqual([]);
   });
 
+  it("keeps only functions this audit's own role could see", () => {
+    // The description the audit reads is filtered by EXECUTE privilege. Most
+    // of these functions are granted to `authenticated` only -- deliberately,
+    // since they re-derive the caller from auth.uid() -- so their absence from
+    // a service-role view is the boundary working. Probing them reported three
+    // healthy migrations as outstanding.
+    const rows = migrationTables([
+      {
+        name: "20260101000000_two_functions.sql",
+        sql: "create function public.mine() returns int language sql;\n"
+          + "create function public.theirs() returns int language sql;\n"
+          + "grant execute on function public.mine(int) to service_role;\n"
+          + "grant execute on function public.theirs(int) to authenticated;",
+      },
+    ]);
+    expect(rows[0].functions).toEqual(["mine"]);
+  });
+
+  it("accepts a grant written across several lines, and one made by a later migration", () => {
+    const rows = migrationTables([
+      { name: "a.sql", sql: "create function public.late() returns int language sql;" },
+      { name: "b.sql", sql: "grant execute on function public.late(\n  uuid, text\n) to service_role;" },
+    ]);
+    expect(rows[0].functions).toEqual(["late"]);
+  });
+
   it("reports a migration that creates nothing rather than dropping it", () => {
     const rows = migrationTables([{ name: "20260101000000_empty.sql", sql: "grant select on public.projects to authenticated;" }]);
     expect(rows).toEqual([{ migration: "20260101000000_empty", tables: [], functions: [] }]);
@@ -71,9 +97,9 @@ describe("against the real migration directory", () => {
 
   it("finds the functions the executed lanes call", () => {
     const functions = new Set(migrationTables(files).flatMap((row) => row.functions));
-    // Each of these was called against hosted on 2026-08-19: the first three by
-    // the graph drain, `submit_command` by the Phase 1C intake path.
-    for (const name of ["claim_planned_graph", "record_node_state_as_worker", "complete_graph_run_as_worker", "submit_command"]) {
+    // The graph drain called each of these against hosted on 2026-08-19, and
+    // all three are granted to service_role, so the audit can ask about them.
+    for (const name of ["claim_planned_graph", "record_node_state_as_worker", "complete_graph_run_as_worker"]) {
       expect(functions, `${name} is not defined by any migration`).toContain(name);
     }
   });
