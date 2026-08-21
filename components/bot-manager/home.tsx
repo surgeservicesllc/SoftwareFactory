@@ -24,6 +24,7 @@ type AccountView = {
   id: string;
   provider: string;
   providerLabel: string;
+  credentialPurpose: string;
   displayName: string;
   status: string;
   lastError: string | null;
@@ -95,13 +96,15 @@ export function BotManagerHome({
    * the job in place — connect, create, assign — instead of sending someone to
    * a second screen to name a project the page was already holding. Absent on
    * the standalone Bot Manager, where no project is implied and the assign
-   * dialog asks.
+   * dialog asks. Pass `null` when the caller explicitly has no project yet:
+   * account and bot management stay available, but project-assignment
+   * controls are withheld rather than falling back to another project.
    */
   projectContext,
   /** Called once the selection has landed on the project, to return the caller. */
   onFinished,
 }: {
-  projectContext?: { id: string; name: string };
+  projectContext?: { id: string; name: string } | null;
   onFinished?: () => void;
 } = {}) {
   const [accounts, setAccounts] = useState<AccountView[] | null>(null);
@@ -269,6 +272,8 @@ export function BotManagerHome({
     projectId: string,
     roleId: string,
   ) => {
+    if (projectContext === null) return;
+    const targetProjectId = projectContext?.id ?? projectId;
     setAssignBusy(true);
     setBotNotice("");
     try {
@@ -278,7 +283,7 @@ export function BotManagerHome({
        * is the difference between "these five bots are on the project" and
        * "three are, and you get to work out which two are not".
        */
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/bots`, {
+      const response = await fetch(`/api/projects/${encodeURIComponent(targetProjectId)}/bots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bots: chosen.map((bot) => ({ botId: bot.id, roleId })) }),
@@ -299,17 +304,19 @@ export function BotManagerHome({
       await load();
       setStage({ kind: "closed" });
       setSelectedBotIds([]);
-      const projectName = projects.find((project) => project.id === projectId)?.name
+      const projectName = projectContext?.name
+        ?? projects.find((project) => project.id === targetProjectId)?.name
         ?? "the project";
       setBotNotice(chosen.length === 1
         ? `${chosen[0].name} is now on ${projectName}.`
         : `${chosen.length} bots are now on ${projectName}.`);
+      if (projectContext) onFinished?.();
     } catch (error) {
       setBotNotice(error instanceof Error ? error.message : "The bots could not be assigned.");
     } finally {
       setAssignBusy(false);
     }
-  }, [load, projects]);
+  }, [load, onFinished, projectContext, projects]);
 
   /**
    * One bot per selected account, in order.
@@ -322,7 +329,7 @@ export function BotManagerHome({
    * already exists.
    */
   const createBotsForAccounts = useCallback(async (
-    selected: readonly { id: string; provider: string }[],
+    selected: readonly { id: string; provider: string; credentialPurpose: string }[],
   ) => {
     setBotNotice("");
     const seen = new Set(bots.map((bot) => bot.provider));
@@ -336,7 +343,7 @@ export function BotManagerHome({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: account.provider,
-            credential: "subscription",
+            credential: account.credentialPurpose,
             additional: seen.has(account.provider),
           }),
         });
@@ -394,7 +401,7 @@ export function BotManagerHome({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider: account.provider,
-              credential: "subscription",
+              credential: account.credentialPurpose,
               additional: seen.has(account.provider),
             }),
           });
@@ -457,14 +464,21 @@ export function BotManagerHome({
     }
   }, [accounts, bots, load, onFinished, projectContext, selectedAccountIds, selectedBotIds]);
 
-  const provisionBot = useCallback(async (providerId: string) => {
+  const provisionBot = useCallback(async (
+    providerId: string,
+    credentialPurpose = "subscription",
+  ) => {
     setCreatingBot(true);
     setBotNotice("");
     try {
       const response = await fetch("/api/bots/connect/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: providerId, credential: "subscription", additional: bots.some((bot) => bot.provider === providerId) }),
+        body: JSON.stringify({
+          provider: providerId,
+          credential: credentialPurpose,
+          additional: bots.some((bot) => bot.provider === providerId),
+        }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         provisioned?: boolean;
@@ -618,7 +632,7 @@ export function BotManagerHome({
                 <button
                   type="button"
                   disabled={creatingBot}
-                  onClick={() => void provisionBot(account.provider)}
+                  onClick={() => void provisionBot(account.provider, account.credentialPurpose)}
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-left transition-colors hover:border-[var(--accent-border)] disabled:opacity-60"
                 >
                   <p className="truncate text-sm font-semibold text-[var(--text)]">
@@ -648,7 +662,7 @@ export function BotManagerHome({
       </div>,
       "Create Bot",
     );
-  } else if (stage.kind === "assign") {
+  } else if (stage.kind === "assign" && projectContext !== null) {
     /*
      * The roster's own route onto a project.
      *
@@ -660,6 +674,7 @@ export function BotManagerHome({
      * the wizard is still the way to depart from them.
      */
     const chosen = stage.bots;
+    const assignmentProjects = projectContext ? [projectContext] : projects;
     const heading = chosen.length === 1
       ? `Add ${chosen[0].name} to a project`
       : `Add ${chosen.length} bots to a project`;
@@ -669,7 +684,7 @@ export function BotManagerHome({
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          const projectId = String(data.get("projectId") ?? "");
+          const projectId = projectContext?.id ?? String(data.get("projectId") ?? "");
           const roleId = String(data.get("roleId") ?? "");
           if (projectId && roleId) void assignBotsToProject(chosen, projectId, roleId);
         }}
@@ -687,29 +702,41 @@ export function BotManagerHome({
           required. Open the project&rsquo;s Assign Bots wizard to widen any of that.
         </p>
 
-        {projects.length === 0 || roles.length === 0 ? (
+        {assignmentProjects.length === 0 || roles.length === 0 ? (
           <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
             <p className="text-sm text-[var(--text)]">
-              {projects.length === 0
+              {assignmentProjects.length === 0
                 ? "This workspace has no projects yet, and a bot is assigned to a project."
                 : "This workspace has no bot roles defined, and every assignment carries one."}
             </p>
             <a
-              href={projects.length === 0 ? "/solutions/projects#add-project" : "/solutions/agents"}
+              href={assignmentProjects.length === 0 ? "/solutions/projects#add-project" : "/solutions/agents"}
               className="btn btn-primary btn-sm mt-3"
             >
-              {projects.length === 0 ? "Create a project" : "Open roles"}
+              {assignmentProjects.length === 0 ? "Create a project" : "Open roles"}
             </a>
           </div>
         ) : (
           <>
             <div className="mt-4">
-              <label htmlFor="assign-project" className="field-label">Project</label>
-              <select id="assign-project" name="projectId" className="input w-full" required>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}</option>
-                ))}
-              </select>
+              <p className="field-label">Project</p>
+              {projectContext ? (
+                <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm font-medium text-[var(--text)]">
+                  {projectContext.name}
+                </p>
+              ) : (
+                <select
+                  id="assign-project"
+                  name="projectId"
+                  aria-label="Project"
+                  className="input w-full"
+                  required
+                >
+                  {assignmentProjects.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="mt-3">
               <label htmlFor="assign-role" className="field-label">Role</label>
@@ -889,7 +916,7 @@ export function BotManagerHome({
         <div className="mt-5 flex flex-col items-center gap-2">
           <button
             type="button"
-            onClick={() => void provisionBot(stage.providerId)}
+            onClick={() => void provisionBot(stage.providerId, account?.credentialPurpose)}
             disabled={creatingBot}
             className="btn btn-primary w-full max-w-xs"
           >
@@ -1157,7 +1184,7 @@ export function BotManagerHome({
           {bots.length > 0 ? (
             <section aria-label="Your AI team" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <h2 className="text-sm font-semibold text-[var(--text)]">Your AI Team</h2>
-              {selectedBotIds.length > 0 ? (
+              {selectedBotIds.length > 0 && projectContext === undefined ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2">
                   <p className="min-w-0 flex-1 text-sm text-[var(--text)]">
                     {selectedBotIds.length} selected
@@ -1288,7 +1315,7 @@ export function BotManagerHome({
                       <p className="text-xs text-[var(--text-muted)]">
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>
-                      {canManage ? (
+                      {canManage && projectContext !== null ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
