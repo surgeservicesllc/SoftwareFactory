@@ -42,6 +42,86 @@ type DocumentView = {
   createdAt: string;
 };
 
+const DETAIL_FIELD_CLASS =
+  "w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]";
+
+/**
+ * Notes, the submitted-application URL, and the follow-up date — the CRM
+ * half of an application. One PATCH carries all three (`follow_up` applies
+ * notes and URL alongside the date), and the saved answer comes from the
+ * server, not from local memory.
+ */
+function ApplicationDetailsEditor({
+  application,
+  busy,
+  onSave,
+}: {
+  application: { id: string; applicationUrl: string | null; notes: string | null; followUpAt: string | null };
+  busy: boolean;
+  onSave: (body: Record<string, unknown>) => Promise<void>;
+}) {
+  const [notes, setNotes] = useState(application.notes ?? "");
+  const [applicationUrl, setApplicationUrl] = useState(application.applicationUrl ?? "");
+  const [followUpAt, setFollowUpAt] = useState(
+    application.followUpAt ? application.followUpAt.slice(0, 16) : "",
+  );
+
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm text-[var(--text-muted)]">
+        Notes &amp; follow-up
+      </summary>
+      <div className="mt-2 grid gap-3">
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-[var(--text-muted)]">Notes</span>
+          <textarea
+            className={DETAIL_FIELD_CLASS}
+            rows={3}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-[var(--text-muted)]">Application URL</span>
+          <input
+            className={DETAIL_FIELD_CLASS}
+            type="url"
+            placeholder="https://…"
+            value={applicationUrl}
+            onChange={(event) => setApplicationUrl(event.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium text-[var(--text-muted)]">Follow-up date</span>
+          <input
+            className={DETAIL_FIELD_CLASS}
+            type="datetime-local"
+            value={followUpAt}
+            onChange={(event) => setFollowUpAt(event.target.value)}
+          />
+        </label>
+        <div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={busy}
+            onClick={() =>
+              void onSave({
+                action: "follow_up",
+                followUpAt: followUpAt ? new Date(followUpAt).toISOString() : null,
+                notes,
+                applicationUrl: applicationUrl.trim() || null,
+              })
+            }
+          >
+            Save details
+          </button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function JobSeekerApplicationsPanel() {
   const [jobs, setJobs] = useState<JobView[] | null>(null);
   const [problem, setProblem] = useState("");
@@ -242,6 +322,14 @@ export function JobSeekerApplicationsPanel() {
                       </button>
                     ) : null}
                   </div>
+
+                  <ApplicationDetailsEditor
+                    // Re-seeded from the server's answer after every save.
+                    key={`${application.id}:${application.notes ?? ""}:${application.applicationUrl ?? ""}:${application.followUpAt ?? ""}`}
+                    application={application}
+                    busy={busyId === application.id}
+                    onSave={(body) => transition(application.id, body)}
+                  />
 
                   {!["FOUND", "QUALIFIED"].includes(application.stage) ? (
                     <details

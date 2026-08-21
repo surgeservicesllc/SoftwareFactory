@@ -12,9 +12,14 @@ approval gate and duplicate refusal observed in the browser, and the
 anti-fabrication contract asserted on a live generated document. The run
 found and fixed three live defects the mocked suites could not see (the
 PostgREST one-to-one embed shape chief among them — the mocks had encoded
-the wrong shape). Suite counts on the merged state: 3,465 vitest green
-(2 skipped), lint and tsc clean, production build clean. The journey is
-on-demand, not in CI: providing it a stack in CI is recorded open work.
+the wrong shape). Round 2 the same day extended the journey to the whole
+capability surface (all eleven stages, reject+close, entry removal, the
+resume BYTEA download round-trip, analytics re-checked after the walk)
+and closed two more wiring gaps: the CRM details editor and the
+persistent current-resume link. Suite counts on the merged state: 3,470
+vitest green (2 skipped), lint and tsc clean, production build clean,
+extended journey green in 30.8s. The journey is on-demand, not in CI:
+providing it a stack in CI is recorded open work.
 
 **Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
 boundary (migration `20260819000100`), the worker
