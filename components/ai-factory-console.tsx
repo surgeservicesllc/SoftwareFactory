@@ -299,8 +299,40 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const { data } = state;
   const compiledBuiltIns = builtIns.filter((template) => template.compiles).length;
 
+  /**
+   * The factory being built right now.
+   *
+   * Steps 2-8 are properties of one project, so with two projects the journey
+   * has to say *which*. GitHub stays out of it: an installation is account
+   * level, so it is genuinely done for every factory once it is done for one.
+   *
+   * `null` means a new factory is being started. Nothing is deleted to get
+   * there -- the steps read empty because they are genuinely empty for a
+   * project that does not exist yet, which keeps completion derived from live
+   * records rather than from a wizard remembering it was reset.
+   */
+  // A project created during the new-factory flow is adopted by derivation
+  // rather than by an effect writing state back: it is simply the project that
+  // was not here when the flow started. That keeps this a pure read of live
+  // records, and avoids a render pass that exists only to catch up with one.
+  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
+    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
+    : null;
+
+  const activeProject = activeProjectId
+    ? data.projects.find((project) => project.id === activeProjectId) ?? null
+    : adoptedProject
+      ?? (startingNewFactory ? null : data.projects[0] ?? null);
+
+  // The roster opens on the factory the journey is showing, not on whichever
+  // project happens to be first. With two projects those differ, and the
+  // person was sent to configure one project while the step counted another,
+  // so assigning a bot in the overlay left the step's evidence unmoved.
   const rosterProject =
-    data.projects.find((project) => project.id === rosterProjectId) ?? data.projects[0] ?? null;
+    data.projects.find((project) => project.id === rosterProjectId)
+    ?? activeProject
+    ?? data.projects[0]
+    ?? null;
 
   /* The roster — assigning bots and configuring each posting's role,
      responsibilities, repository access, model, and work effort — is one
@@ -340,31 +372,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       </button>
     </div>
   );
-
-  /**
-   * The factory being built right now.
-   *
-   * Steps 2-8 are properties of one project, so with two projects the journey
-   * has to say *which*. GitHub stays out of it: an installation is account
-   * level, so it is genuinely done for every factory once it is done for one.
-   *
-   * `null` means a new factory is being started. Nothing is deleted to get
-   * there -- the steps read empty because they are genuinely empty for a
-   * project that does not exist yet, which keeps completion derived from live
-   * records rather than from a wizard remembering it was reset.
-   */
-  // A project created during the new-factory flow is adopted by derivation
-  // rather than by an effect writing state back: it is simply the project that
-  // was not here when the flow started. That keeps this a pure read of live
-  // records, and avoids a render pass that exists only to catch up with one.
-  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
-    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
-    : null;
-
-  const activeProject = activeProjectId
-    ? data.projects.find((project) => project.id === activeProjectId) ?? null
-    : adoptedProject
-      ?? (startingNewFactory ? null : data.projects[0] ?? null);
 
   /** Still choosing: the flow is open and no project has appeared for it yet. */
   const isStartingNew = startingNewFactory && activeProject === null;

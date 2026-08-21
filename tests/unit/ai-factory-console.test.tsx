@@ -216,6 +216,34 @@ describe("AiFactoryConsole", () => {
     expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
   });
 
+  it("opens the roster on the factory the journey is showing, not the first project", async () => {
+    // With two projects these differ: the roster fell back to `projects[0]`
+    // while the steps counted the active factory, so a person sent to
+    // "Assign Bots" configured one project while the step measured another.
+    stubFactory({
+      "/api/projects": {
+        projects: [
+          { id: "p1", name: "First Project" },
+          { id: "p2", name: "Second Project" },
+        ],
+      },
+      "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    // Pick the second project as the factory being built.
+    const picker = await screen.findByLabelText("Factory");
+    fireEvent.change(picker, { target: { value: "p2" } });
+
+    const assign = (await screen.findByText("Assign Bots to Project")).closest("li") as HTMLElement;
+    fireEvent.click(within(assign).getByRole("button", { name: /assign a bot|assign/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    const rosterPicker = within(dialog).getByLabelText("Project") as HTMLSelectElement;
+    expect(rosterPicker.value).toBe("p2");
+  });
+
   it("does not mark the pipeline configured just because a project exists", async () => {
     // `done` for this step was the same expression as the step above it
     // (`activeProject !== null`), so creating a project marked the pipeline
