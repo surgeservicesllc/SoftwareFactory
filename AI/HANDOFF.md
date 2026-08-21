@@ -262,20 +262,24 @@ only when at least one pipeline is selected, with the chosen names rendered on
 the page. Many can be selected; pressing a selected card again removes it. The
 graph-planning dialog Use used to open is now its own **Plan graph** button.
 
-**Outstanding owner action:** migration `20260821000300_project_pipeline_selection`
-is not on the hosted ledger. Run
-`.github/workflows/apply-hosted-migrations.yml` with `confirm=apply` and
-**`scope=pipeline-selection`** — a scope added for exactly this file, so
-reaching production does not mean re-running twenty-three unrelated migrations.
-It applies, records the ledger row, and reloads the PostgREST schema cache.
-Every statement is idempotent (`create table if not exists`,
-`create index if not exists`, `alter type ... add value if not exists`,
-`create or replace function`), and the migration adds — it alters nothing that
-already exists. The file is also in `scope=broker-functions` for a batch run. Until then the console tells the
-truth about itself rather than appearing to work: `/api/project-pipelines`
-returns `pipeline_selection_not_connected` and the Use button is disabled with
-"Not Connected — this database does not have the pipeline-selection migration
-applied yet".
+**Applied on production**, 2026-08-21 23:27Z, run `32536895799`
+(`scope=pipeline-selection`, `confirm=apply`). The run's own after-ledger
+listing prints `20260821000300 | 20260821000300` — local and remote — so the
+`project_pipelines` table and its three definer functions exist on the hosted
+project and the ledger records them. The PostgREST schema cache was reloaded in
+the same step, so a browser that had been seeing PGRST202 stops.
+
+The Not Connected path stays in the code and is not dead: it is what any
+database without this migration — a fresh preview branch, a restored snapshot —
+will report, and it is the reason a missing migration cannot present as an empty
+selection set. `/api/project-pipelines` returns
+`pipeline_selection_not_connected` there and the Use button is disabled naming
+that reason.
+
+What this run does **not** establish is behaviour observed in production: a
+ledger row proves the DDL ran, not that someone has pressed Use on the live
+site and seen the selection survive a refresh. That observation is still
+outstanding.
 
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 
