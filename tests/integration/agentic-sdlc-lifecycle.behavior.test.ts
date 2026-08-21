@@ -227,7 +227,6 @@ describe("the Agentic SDLC on the graph worker", () => {
       `select id from public.graph_nodes where graph_id = $1 and node_key = 'prd'`,
       [graphId],
     );
-    const runId = await latestRunId(db, graphId);
     const priorRunId = await latestRunId(db, graphId);
     await asWorker(db);
     const gate = await db.query<{ id: string }>(
