@@ -572,25 +572,24 @@ grant execute on function public.decide_node_gate(uuid, boolean, text) to authen
 revoke all on function public.advance_graph_iteration(uuid) from public, anon;
 grant execute on function public.advance_graph_iteration(uuid) to authenticated;
 
+
 -- ---------------------------------------------------------------------------
 -- The claim, made lifecycle-aware
 -- ---------------------------------------------------------------------------
 
--- `claim_planned_graph` gains three things and keeps everything else.
+-- Replaces the two-argument `claim_planned_graph` that 20260819001000 created.
+-- The signature matters: 20260819001000 dropped the one-argument version, so
+-- re-creating *that* would resurrect a dead overload nothing calls and leave
+-- the live function without any of this — a lifecycle that compiles, applies,
+-- and silently never reaches the worker.
 --
---   1. The node projection carries `lifecycle_stage` and `gate_kind`, and the
---      gate's decision if one has been made, so the worker can tell a node that
---      must wait from one that may proceed.
---   2. Feedback edges are excluded from the projection. They point backwards;
---      the compiler rejects every cycle and is right to, so a lifecycle whose
---      feedback edges reached it would fail to compile and never run at all.
---   3. A graph whose last run ended PARTIAL becomes claimable again once a gate
---      on it has been decided. Without this the lifecycle stops at its first
---      gate forever: PARTIAL is "an answer, not an infrastructure fault", so
---      the original predicate — correct for every other graph — keeps it out of
---      the queue permanently. A decision is new information, and it is the only
---      thing that reopens the graph.
-create or replace function public.claim_planned_graph(p_worker_id text)
+-- Everything outside the four marked changes is 20260819001000's function
+-- verbatim, because a divergence here would be a second claim policy quietly
+-- disagreeing with the first about which graphs may run.
+create or replace function public.claim_planned_graph(
+  p_worker_id text,
+  p_supported_executors text[]
+)
 returns jsonb
 language plpgsql
 security definer
@@ -603,6 +602,15 @@ declare
 begin
   perform public.assert_graph_worker_id(p_worker_id);
 
+  if p_supported_executors is null or array_length(p_supported_executors, 1) is null then
+    raise exception using
+      errcode = '22023',
+      message = 'a worker must declare at least one executor it can run';
+  end if;
+
+  -- Reclaim abandonment first; unchanged from 20260819000100. A worker that
+  -- died mid-run leaves its run RUNNING forever, and an in-flight run keeps its
+  -- graph out of the queue — a permanent, silent loss.
   for v_stale in
     select r.id, r.organization_id
       from public.graph_runs r
@@ -636,6 +644,9 @@ begin
     );
   end loop;
 
+  -- Claimable: never run, or every previous run FAILED or CANCELLED; under
+  -- three genuine failures and ten total runs; and — new here — every node's
+  -- executor is one this worker actually provides.
   select g.* into v_graph
     from public.graphs g
    where g.requires_owner_approval = false
@@ -645,9 +656,17 @@ begin
          select 1 from public.graph_runs r
           where r.graph_id = g.id and r.state not in ('FAILED', 'CANCELLED')
        )
-       -- Or: a lifecycle that stopped at a gate, and the gate has since been
-       -- decided. Nothing is in flight, and a decision has arrived that the
-       -- last run did not have.
+       /*
+        * Or: a lifecycle that stopped at a gate, and the gate has since been
+        * decided.
+        *
+        * Without this a lifecycle stops at its first gate forever. The rule
+        * above is right for every other graph — PARTIAL is an answer, not an
+        * infrastructure fault, so the graph leaves the queue — but a run that
+        * halted to ask a person is a question, and an approval is the answer
+        * arriving. Nothing is in flight, and the decision is information the
+        * last run did not have.
+        */
        or (
          g.is_lifecycle
          and not exists (
@@ -668,6 +687,11 @@ begin
      and (select count(*) from public.graph_runs r
            where r.graph_id = g.id and r.state = 'FAILED') < 3
      and (select count(*) from public.graph_runs r where r.graph_id = g.id) < 10
+     and not exists (
+       select 1 from public.graph_nodes n
+        where n.graph_id = g.id
+          and n.executor::text <> all (p_supported_executors)
+     )
    order by g.created_at
    for update skip locked
    limit 1;
@@ -716,7 +740,6 @@ begin
     'nodes', (
       select coalesce(jsonb_agg(jsonb_build_object(
         'node_run_id', nr.id,
-        'node_id', n.id,
         'node_key', n.node_key,
         'job', n.job,
         'executor', n.executor,
@@ -727,11 +750,14 @@ begin
         'max_attempts', n.max_attempts,
         'allow_provider_fallback', n.allow_provider_fallback,
         'tolerates_partial_inputs', n.tolerates_partial_inputs,
+        -- `node_id` as well as `node_run_id`: a gate is keyed to the graph
+        -- node, because the run id changes on every claim and the node id does
+        -- not. That is what lets an approval outlive the run that asked for it.
+        'node_id', n.id,
         'lifecycle_stage', n.lifecycle_stage,
         'gate_kind', n.gate_kind,
-        -- Null when no gate has ever been opened on this node. The worker
-        -- reads it to tell "stop here and ask" from "a person already said
-        -- yes, carry on".
+        -- Null when no gate has ever been opened on this node. The worker reads
+        -- it to tell "stop here and ask" from "a person already said yes".
         'gate_state', gate.state,
         'input_schema', c.input_schema,
         'output_schema', c.output_schema,
@@ -747,20 +773,24 @@ begin
     ),
     'edges', (
       select coalesce(jsonb_agg(jsonb_build_object(
-        'from_node_key', nf.node_key,
-        'to_node_key', nt.node_key,
+        'from_node_key', src.node_key,
+        'to_node_key', dst.node_key,
         'reason', e.reason,
         'detail', e.detail
-      )), '[]'::jsonb)
+      ) order by src.node_key, dst.node_key), '[]'::jsonb)
         from public.graph_edges e
-        join public.graph_nodes nf on nf.id = e.from_node_id
-        join public.graph_nodes nt on nt.id = e.to_node_id
+        join public.graph_nodes src on src.id = e.from_node_id
+        join public.graph_nodes dst on dst.id = e.to_node_id
        where e.graph_id = v_graph.id
+         -- Feedback edges point backwards. The compiler rejects every cycle and
+         -- is right to, so a lifecycle whose feedback edges reached it would
+         -- fail to compile and never run at all.
          and e.is_feedback = false
     )
   );
 end;
 $$;
 
-revoke all on function public.claim_planned_graph(text) from public, anon, authenticated;
-grant execute on function public.claim_planned_graph(text) to service_role;
+
+revoke all on function public.claim_planned_graph(text, text[]) from public, anon, authenticated;
+grant execute on function public.claim_planned_graph(text, text[]) to service_role;
