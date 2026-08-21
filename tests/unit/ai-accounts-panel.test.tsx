@@ -8,6 +8,7 @@ const connectedAccount = {
   id: "acc-1",
   provider: "anthropic",
   providerLabel: "Claude",
+  credentialPurpose: "subscription",
   displayName: "Claude account 1",
   status: "connected",
   lastVerifiedAt: "2026-08-16T12:00:00.000Z",
@@ -18,6 +19,7 @@ const reauthAccount = {
   id: "acc-2",
   provider: "anthropic",
   providerLabel: "Claude",
+  credentialPurpose: "subscription_2",
   displayName: "Claude account 2",
   status: "needs_reauth",
   lastVerifiedAt: null,
@@ -62,6 +64,29 @@ describe("AiAccountsPanel", () => {
     // Reconnect is offered exactly where it makes sense: not on a healthy
     // account, but on the one that needs signing in again.
     expect(screen.getAllByRole("button", { name: /reconnect/i })).toHaveLength(1);
+  });
+
+  it("keeps each selected account's credential purpose in the bot-creation request", async () => {
+    stubAccounts([connectedAccount, reauthAccount]);
+    const onCreateBots = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AiAccountsPanel
+        canManage
+        onChanged={() => undefined}
+        onCreateBots={onCreateBots}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /select claude account 1/i }));
+    await user.click(screen.getByRole("button", { name: /select claude account 2/i }));
+    await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
+
+    expect(onCreateBots).toHaveBeenCalledWith([
+      { id: "acc-1", provider: "anthropic", credentialPurpose: "subscription" },
+      { id: "acc-2", provider: "anthropic", credentialPurpose: "subscription_2" },
+    ]);
   });
 
   it("disconnects only after an in-place confirmation, through the credential-deleting route", async () => {

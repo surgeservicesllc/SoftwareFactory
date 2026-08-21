@@ -76,6 +76,58 @@ describe("CommandComposer", () => {
     expect(screen.queryByRole("option", { name: "Historical application" })).not.toBeInTheDocument();
   });
 
+  it("locks an embedded command to the caller's project instead of the workspace's first", async () => {
+    const project = { id: "22222222-2222-4222-8222-222222222222", name: "Second application" };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/tasks?limit=100") return jsonResponse({ tasks: [] });
+      if (String(input) === "/api/commands" && init?.method === "POST") {
+        return jsonResponse({
+          command: { id: "44444444-4444-4444-8444-444444444444" },
+          execution: { workerDispatch: "requested" },
+          orchestration: { effectiveRisk: "green", repository: "example/second" },
+          requiresOwnerApproval: false,
+        }, 202);
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<CommandComposer projectContext={project} />);
+
+    const picker = await screen.findByRole("combobox", { name: /project/i });
+    expect(picker).toHaveValue(project.id);
+    expect(picker).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/projects", expect.anything());
+
+    await user.type(screen.getByLabelText("What do you want done?"), "Audit the selected factory");
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+    expect(await screen.findByText(/is queued for example\/second as GREEN/)).toBeInTheDocument();
+
+    const commandCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input) === "/api/commands" && init?.method === "POST",
+    );
+    expect(JSON.parse(String(commandCall?.[1]?.body))).toMatchObject({ projectId: project.id });
+  });
+
+  it("does not fall back to another project while an embedded factory has none", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/tasks?limit=100") return jsonResponse({ tasks: [] });
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<CommandComposer projectContext={null} />);
+
+    const picker = await screen.findByRole("combobox", { name: /project/i });
+    expect(picker).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Create this factory's project first" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("What do you want done?"), "Do not escape this factory");
+    expect(screen.getByRole("button", { name: "Queue command" })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/projects", expect.anything());
+  });
+
   it("reuses one command idempotency key after an ambiguous submission failure", async () => {
     const projectId = "11111111-1111-4111-8111-111111111111";
     const randomUUID = vi.spyOn(globalThis.crypto, "randomUUID")

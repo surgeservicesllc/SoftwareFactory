@@ -61,6 +61,31 @@ type EditorSeed = {
   areas: Array<{ id: string; job: string }>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCustomTemplate(value: unknown): value is CustomTemplate {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.slug === "string"
+    && typeof value.name === "string"
+    && typeof value.summary === "string"
+    && typeof value.version === "number"
+    && typeof value.editable === "boolean"
+    && typeof value.compiles === "boolean";
+}
+
+function isPipelineSelection(value: unknown): value is PipelineSelection {
+  return isRecord(value)
+    && typeof value.projectId === "string"
+    && typeof value.templateKey === "string";
+}
+
+function isProjectSummary(value: unknown): value is { id: string; name: string } {
+  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string";
+}
+
 const EMPTY_SEED: EditorSeed = {
   slug: "",
   name: "",
@@ -116,6 +141,7 @@ export function PipelineTemplatesManager({
   onSelectionChanged?: () => void;
 }) {
   const [custom, setCustom] = useState<CustomTemplate[] | null>(null);
+  const [customReadFailed, setCustomReadFailed] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [notice, setNotice] = useState("");
   const [editorSeed, setEditorSeed] = useState<EditorSeed | null>(null);
@@ -124,6 +150,7 @@ export function PipelineTemplatesManager({
   const [planning, setPlanning] = useState<{ key: string; name: string } | null>(null);
 
   const [selections, setSelections] = useState<PipelineSelection[] | null>(null);
+  const [selectionsReadFailed, setSelectionsReadFailed] = useState(false);
   const [canSelect, setCanSelect] = useState(false);
   /**
    * Whether this database can record a selection at all. Distinct from
@@ -132,59 +159,65 @@ export function PipelineTemplatesManager({
    */
   const [selectionAvailable, setSelectionAvailable] = useState(true);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [projectsReadFailed, setProjectsReadFailed] = useState(false);
   const [chosenProjectId, setChosenProjectId] = useState("");
   const [togglingKey, setTogglingKey] = useState("");
   const [selectionNotice, setSelectionNotice] = useState("");
 
   const load = useCallback(async () => {
+    setCustomReadFailed(false);
     try {
       const response = await fetch("/api/pipeline-templates", { cache: "no-store" });
-      if (!response.ok) {
-        setCustom([]);
-        return;
+      if (!response.ok) throw new Error("Custom templates could not be loaded.");
+      const body = (await response.json()) as { templates?: unknown; canManage?: boolean };
+      if (!Array.isArray(body.templates) || !body.templates.every(isCustomTemplate)) {
+        throw new Error("Custom template data was invalid.");
       }
-      const body = (await response.json()) as { templates?: CustomTemplate[]; canManage?: boolean };
-      setCustom(body.templates ?? []);
+      setCustom(body.templates);
       setCanManage(Boolean(body.canManage));
     } catch {
-      setCustom([]);
+      setCanManage(false);
+      setCustomReadFailed(true);
     }
   }, []);
 
   const loadSelections = useCallback(async () => {
+    setSelectionsReadFailed(false);
+    setCanSelect(false);
     try {
       const response = await fetch("/api/project-pipelines", { cache: "no-store" });
-      if (!response.ok) {
-        setSelections([]);
-        setSelectionAvailable(false);
-        return;
-      }
+      if (!response.ok) throw new Error("Pipeline selections could not be loaded.");
       const body = (await response.json()) as {
         available?: boolean;
         canManage?: boolean;
-        pipelines?: PipelineSelection[];
+        pipelines?: unknown;
       };
-      setSelections(body.pipelines ?? []);
+      if (!Array.isArray(body.pipelines) || !body.pipelines.every(isPipelineSelection)) {
+        throw new Error("Pipeline selection data was invalid.");
+      }
+      setSelections(body.pipelines);
       setCanSelect(Boolean(body.canManage));
       setSelectionAvailable(body.available !== false);
     } catch {
-      setSelections([]);
-      setSelectionAvailable(false);
+      setSelectionsReadFailed(true);
     }
   }, []);
 
   // Only asked for when the caller did not say which project it is. A page
   // that already knows should not make a person answer twice.
   const loadProjects = useCallback(async () => {
+    setProjectsReadFailed(false);
     if (projectContext !== undefined) return;
     try {
       const response = await fetch("/api/projects", { cache: "no-store" });
-      const body = (await response.json().catch(() => ({}))) as {
-        projects?: Array<{ id: string; name: string }>;
-      };
-      setProjects(body.projects ?? []);
+      if (!response.ok) throw new Error("Projects could not be loaded.");
+      const body = (await response.json()) as { projects?: unknown };
+      if (!Array.isArray(body.projects) || !body.projects.every(isProjectSummary)) {
+        throw new Error("Project data was invalid.");
+      }
+      setProjects(body.projects);
     } catch {
-      setProjects([]);
+      setProjectsReadFailed(true);
     }
   }, [projectContext]);
 
@@ -253,7 +286,10 @@ export function PipelineTemplatesManager({
     }
   }
 
-  const selectionDisabledReason = !activeProject
+  const selectionReadsFailed = selectionsReadFailed || projectsReadFailed;
+  const selectionDisabledReason = selectionReadsFailed
+    ? "Pipeline setup is unavailable because its current selections or projects could not be verified."
+    : !activeProject
     ? "A pipeline is selected for a project, and this workspace has none yet."
     : !selectionAvailable
       ? "Not Connected — this database does not have the pipeline-selection migration applied yet, so a selection cannot be recorded."
@@ -315,12 +351,23 @@ export function PipelineTemplatesManager({
         onChooseProject={setChosenProjectId}
         projects={projectContext !== undefined ? null : projects}
         projectsLoading={projectContext === undefined && projects === null}
+        readFailed={selectionReadsFailed}
+        onRetry={() => {
+          if (selectionsReadFailed) void loadSelections();
+          if (projectsReadFailed) void loadProjects();
+        }}
         selectedCount={selectedKeys.size}
       />
 
       <section aria-label="Your templates">
         <h3 className="label">Your templates</h3>
-        {custom === null ? (
+        {customReadFailed ? (
+          <Card className="mt-2 p-4">
+            <p className="text-sm font-medium text-foreground">Custom templates are unavailable</p>
+            <p className="mt-1 text-sm text-muted">We could not verify your saved templates. No empty template list was inferred.</p>
+            <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={() => void load()}>Retry</button>
+          </Card>
+        ) : custom === null ? (
           <Card className="mt-2 grid min-h-24 place-items-center">
             <Loader2 className="size-5 animate-spin text-accent" aria-label="Loading your templates" />
           </Card>
@@ -516,7 +563,12 @@ export function PipelineTemplatesManager({
         />
       ) : null}
       {planning ? (
-        <TemplatePlanDialog templateKey={planning.key} templateName={planning.name} onClose={() => setPlanning(null)} />
+        <TemplatePlanDialog
+          templateKey={planning.key}
+          templateName={planning.name}
+          projectContext={projectContext}
+          onClose={() => setPlanning(null)}
+        />
       ) : null}
     </div>
   );
@@ -586,8 +638,10 @@ function SelectionSummary({
   disabledReason,
   notice,
   onChooseProject,
+  onRetry,
   projects,
   projectsLoading,
+  readFailed,
   selectedCount,
 }: {
   activeProject: { id: string; name: string } | null;
@@ -595,6 +649,7 @@ function SelectionSummary({
   disabledReason: string;
   notice: string;
   onChooseProject: (projectId: string) => void;
+  onRetry: () => void;
   projects: Array<{ id: string; name: string }> | null;
   /**
    * Distinct from `projects === null`: a caller that named its own project —
@@ -602,6 +657,7 @@ function SelectionSummary({
    * otherwise render as "still loading" forever.
    */
   projectsLoading: boolean;
+  readFailed: boolean;
   selectedCount: number;
 }) {
   const showPicker = projects !== null && projects.length > 1;
@@ -610,7 +666,12 @@ function SelectionSummary({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="label">Selected pipelines</h3>
-          {activeProject ? (
+          {readFailed ? (
+            <div role="alert">
+              <p className="mt-1 text-sm text-muted">Pipeline setup is unavailable because its current selections or projects could not be verified.</p>
+              <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={onRetry}>Retry</button>
+            </div>
+          ) : activeProject ? (
             <p className="mt-1 text-sm text-muted">
               {selectedCount === 0
                 ? `No pipeline selected for ${activeProject.name} yet. Press Use on a template to add one — a project can run as many as it needs.`
@@ -644,7 +705,7 @@ function SelectionSummary({
           </div>
         ) : null}
       </div>
-      {activeProject && disabledReason ? (
+      {activeProject && disabledReason && !readFailed ? (
         <p className="mt-2 text-xs text-faint">{disabledReason}</p>
       ) : null}
       {notice ? (
@@ -841,10 +902,12 @@ function TemplateEditorDialog({
 function TemplatePlanDialog({
   templateKey,
   templateName,
+  projectContext,
   onClose,
 }: {
   templateKey: string;
   templateName: string;
+  projectContext?: { id: string; name: string } | null;
   onClose: () => void;
 }) {
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
@@ -853,20 +916,41 @@ function TemplatePlanDialog({
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
 
-  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(projectContext === undefined);
+  const [projectsReadFailed, setProjectsReadFailed] = useState(false);
+  const [projectReadAttempt, setProjectReadAttempt] = useState(0);
 
   useEffect(() => {
+    if (projectContext !== undefined) {
+      const timer = window.setTimeout(() => {
+        setProjects(projectContext ? [projectContext] : []);
+        setProjectId(projectContext?.id ?? "");
+        setLoadingProjects(false);
+        setProjectsReadFailed(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
     let cancelled = false;
     void (async () => {
+      if (!cancelled) {
+        setLoadingProjects(true);
+        setProjectsReadFailed(false);
+      }
       try {
         const response = await fetch("/api/projects", { cache: "no-store" });
-        const body = (await response.json().catch(() => ({}))) as { projects?: Array<{ id: string; name: string }> };
+        if (!response.ok) throw new Error("Projects could not be loaded.");
+        const body = (await response.json()) as { projects?: unknown };
+        if (!Array.isArray(body.projects) || !body.projects.every(isProjectSummary)) {
+          throw new Error("Project data was invalid.");
+        }
         if (!cancelled) {
-          setProjects(body.projects ?? []);
-          setProjectId((body.projects ?? [])[0]?.id ?? "");
+          const nextProjects = body.projects;
+          setProjects(nextProjects);
+          setProjectId(nextProjects[0]?.id ?? "");
         }
       } catch {
-        if (!cancelled) setProjects([]);
+        if (!cancelled) setProjectsReadFailed(true);
       } finally {
         if (!cancelled) setLoadingProjects(false);
       }
@@ -874,7 +958,7 @@ function TemplatePlanDialog({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectContext, projectReadAttempt]);
 
   async function plan() {
     setBusy(true);
@@ -922,6 +1006,11 @@ function TemplatePlanDialog({
         */}
         {loadingProjects ? (
           <p className="text-sm text-muted">Reading your projects…</p>
+        ) : projectsReadFailed ? (
+          <div role="alert">
+            <p className="text-sm text-muted">Graph planning is unavailable because projects could not be verified.</p>
+            <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={() => setProjectReadAttempt((attempt) => attempt + 1)}>Retry</button>
+          </div>
         ) : projects.length === 0 ? (
           <p className="text-sm text-muted">
             A pipeline is planned against a project, and this workspace has none yet.{" "}
@@ -937,6 +1026,7 @@ function TemplatePlanDialog({
               id="use-template-project"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
+              disabled={projectContext !== undefined}
               className="input w-full"
             >
               {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
