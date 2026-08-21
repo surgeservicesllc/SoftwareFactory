@@ -392,6 +392,22 @@ test("retracting the sidebar gives its width back to the content", async ({ page
     await expect(rail.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
 
+  /*
+   * The account block becomes one working glyph.
+   *
+   * Measured in the browser rather than only in jsdom because the failure this
+   * guards against is a layout one: the panel is the widest thing in the
+   * column, and a 4rem rail that still tried to render an email address would
+   * push the content out. The overflow check below is what proves it does not,
+   * and this proves the control survived the shrinking.
+   */
+  // Scoped to the column, not the nav: the account block is a sibling of the
+  // navigation inside the aside, which is why a nav-scoped query finds nothing.
+  const signOut = aside.getByRole("button", { name: "Sign out" });
+  await expect(signOut).toBeVisible();
+  await expect(signOut).toHaveText("S");
+  await expect(aside.getByText("Signed in")).toBeHidden();
+
   expect(await overflowing(page), "the retracted rail pushed content out").toEqual([]);
   expect(await unreachable(page, "body")).toEqual([]);
 

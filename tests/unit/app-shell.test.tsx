@@ -7,7 +7,9 @@ import { AppShell } from "@/components/app-shell";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/solutions",
   // The signed-in variants render SignOutButton, which uses the router.
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // `replace` belongs here as much as the other two: sign-out calls it, and
+  // its absence only stayed invisible while no test clicked the button.
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 describe("AppShell navigation", () => {
@@ -355,6 +357,71 @@ describe("retracting the column on a pointer device", () => {
       await screen.findByRole("button", { name: /collapse navigation/i }),
     ).toHaveAttribute("aria-pressed", "false");
     expect(window.localStorage.getItem("softwarefactory:sidebar-compact")).toBe("0");
+  });
+
+  it("collapses the account panel to one working glyph", async () => {
+    /*
+     * The owner asked for the whole signed-in block to become a single "S"
+     * that still works. Both halves are asserted: the panel's reporting is
+     * gone, and what replaces it is the sign-out control itself rather than a
+     * decorative letter next to a hidden button.
+     *
+     * Found by role and accessible name, not by the letter — a button whose
+     * only text is "S" has no accessible name, and querying for "S" would
+     * pass on exactly the broken version this guards against.
+     */
+    const user = userEvent.setup();
+    stubDevice({ wide: true, pointer: true });
+    render(
+      <AppShell viewer={{ signedIn: true, email: "owner@example.org", isSuperAdmin: true }}>
+        content
+      </AppShell>,
+    );
+
+    expect(screen.getByText("Signed in")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
+
+    expect(screen.queryByText("Signed in")).toBeNull();
+    expect(screen.queryByText("owner@example.org")).toBeNull();
+    expect(screen.queryByText(/super admin/i)).toBeNull();
+
+    const glyph = await screen.findByRole("button", { name: "Sign out" });
+    expect(glyph).toHaveTextContent("S");
+    expect(glyph).toBeEnabled();
+  });
+
+  it("signs out from the glyph, so the rail's only account control works", async () => {
+    // "Functional" was the word in the request, so it is asserted by clicking:
+    // the collapsed control must reach the sign-out endpoint, not merely exist.
+    const user = userEvent.setup();
+    stubDevice({ wide: true, pointer: true });
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    render(
+      <AppShell viewer={{ signedIn: true, email: "owner@example.org" }}>content</AppShell>,
+    );
+    await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(calls).toContain("/api/auth/sign-out");
+  });
+
+  it("offers the way in as the same glyph when signed out", async () => {
+    const user = userEvent.setup();
+    stubDevice({ wide: true, pointer: true });
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    expect(screen.getByText("Signed out")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
+
+    expect(screen.queryByText("Signed out")).toBeNull();
+    const glyph = await screen.findByRole("link", { name: "Sign in" });
+    expect(glyph).toHaveTextContent("S");
+    expect(glyph).toHaveAttribute("href", "/auth/sign-in");
   });
 
   it("keeps every destination reachable while retracted", async () => {

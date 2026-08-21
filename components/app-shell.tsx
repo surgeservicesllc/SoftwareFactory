@@ -477,7 +477,40 @@ function Sidebar({
           </ul>
         </div>
       ) : null}
-      {viewer.signedIn ? (
+      {/*
+        The account panel, and the single glyph it becomes on the rail.
+
+        Collapsed, the owner asked for the whole block — the heading, the
+        address, the super-admin badge and the button — to become one "S" that
+        still works. So the rail keeps the panel's *action* and drops its
+        reporting: the address and the badge are description, and a 4rem column
+        cannot show either without truncating it into something misleading.
+        What it must not drop is the ability to leave, which is why the glyph is
+        the button rather than a decorative avatar beside a hidden one.
+
+        Signed out, the same square is the way in. One shape in one place,
+        whichever state the viewer is in, so the rail does not move its only
+        account control depending on who is looking.
+      */}
+      {compact ? (
+        <div className="mt-6 flex justify-center">
+          {viewer.signedIn ? (
+            <SignOutButton
+              compact
+              className="btn btn-secondary flex size-10 items-center justify-center rounded-lg p-0 font-mono text-sm font-bold"
+            />
+          ) : (
+            <Link
+              href="/auth/sign-in"
+              aria-label="Sign in"
+              title="Sign in"
+              className="btn btn-primary flex size-10 items-center justify-center rounded-lg p-0 font-mono text-sm font-bold"
+            >
+              S
+            </Link>
+          )}
+        </div>
+      ) : viewer.signedIn ? (
         <div className="mt-6 rounded-lg border border-line px-3 py-3">
           <p className="label mb-1">Signed in</p>
           <p className="truncate text-sm text-foreground" title={viewer.email ?? undefined}>
