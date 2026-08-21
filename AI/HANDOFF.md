@@ -66,6 +66,19 @@ on main, run 32533731639, green in 3m40s — the runner provisioned the
 stack, minted the user, built and served the production app, and the
 whole journey passed.
 
+**The production sign-in boundary is now measured, not assumed**: a probe
+of production's own `/api/auth/sign-up` answers 202 with
+`confirmationRequired: true`, so a signed-in production journey needs a
+real inbox — only the owner has one. (Two probe residues exist in hosted
+auth: `jordan.journey.b@example.org` — unconfirmed, org-less, cannot sign
+in — and possibly `jordan.journey.2026@example.com` from a first attempt
+that 503'd; the owner can delete both from Supabase Auth → Users, and
+nothing references them.) If the owner ever wants the journey run against
+production itself, either sign in and use the page, or temporarily
+disable email confirmation in hosted Auth settings and say so — the spec
+takes `JOB_SEEKER_E2E_EMAIL`/`_PASSWORD` overrides and would run as-is
+with `PLAYWRIGHT_BASE_URL=https://www.theagoras.com`.
+
 ## Prior (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
 
 Increments 5-7 joined 1-4 (#289, #290, #291): contacts + outreach drafts
