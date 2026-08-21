@@ -1,3 +1,8 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { migrationTables, type MigrationTables } from "@/lib/supabase/migration-tables";
+
 /**
  * Report which migrations have actually reached hosted, by asking the database
  * rather than the ledger.
@@ -48,25 +53,39 @@
  * report calls that out rather than leaving the reader to notice.
  */
 
-type Expectation = {
-  readonly migration: string;
-  readonly tables: readonly string[];
-};
-
 /**
- * Tables created by migrations added after the last confirmed ledger position
- * (`20260814000200`). Grouped by migration so the report names what to apply
- * rather than only what is missing.
+ * Every migration in the repository, paired with the tables it creates.
+ *
+ * This list used to be four migrations written out by hand. The repository
+ * passed a hundred migrations while that list stood still, so the audit's
+ * closing "0 outstanding" was a statement about four files and read as a
+ * statement about the schema. It is derived now, and migrations that create no
+ * table are reported as unprobeable rather than quietly dropped -- a migration
+ * this script cannot ask about must not look like one that passed.
  */
-const EXPECTATIONS: readonly Expectation[] = [
-  { migration: "20260814000210_phase2c_resource_persistence", tables: ["resource_breakers", "resource_breaker_events", "resource_assignments"] },
-  { migration: "20260814001200_phase2b_task_graph_and_handoffs", tables: ["agent_handoffs", "task_work_locks"] },
-  { migration: "20260814000100_graph_engineering", tables: ["graphs", "graph_runs", "node_runs", "work_locks", "graph_events"] },
-  { migration: "20260814002200_graph_anchors", tables: ["graph_anchors", "node_run_claims", "claim_anchors", "claim_acceptable_anchors"] },
-];
+function readExpectations(): readonly MigrationTables[] {
+  const directory = resolve(import.meta.dirname, "../supabase/migrations");
+  const files = readdirSync(directory)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => ({ name, sql: readFileSync(join(directory, name), "utf8") }));
+  return migrationTables(files);
+}
 
 /** A table from a migration known to be applied, to prove the probe itself works. */
 const CONTROL_TABLE = "projects";
+
+/**
+ * A function this key is known to be able to call, to prove the *function*
+ * probe works. Without it, an empty or privilege-filtered description would
+ * read as "every function is missing".
+ *
+ * `claim_planned_graph` is the strongest control available: the graph worker
+ * called it successfully against this database on 2026-08-19 22:54Z, and it is
+ * granted to `service_role` — the very role whose privileges filter the
+ * description being read.
+ */
+const CONTROL_FUNCTION = "claim_planned_graph";
 
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -159,6 +178,55 @@ async function tableExists(baseUrl: string, key: string, table: string): Promise
   return (await probeTable(baseUrl, key, table)).exists;
 }
 
+/**
+ * Which functions PostgREST will admit to, read from its own description.
+ *
+ * The point of asking this way is that it executes nothing. `POST /rpc/<name>`
+ * would answer the question too, and would also *run* the function -- against
+ * production, with service-role privileges, for functions whose whole purpose
+ * is to mutate. The OpenAPI document names every callable routine and runs
+ * none of them.
+ *
+ * **Its limit, which matters as much as its answer.** The description is
+ * filtered by privilege: a function that exists with no EXECUTE grant for this
+ * role does not appear. So a name found here is proof of presence, and a name
+ * missing here is `not visible` -- exactly the same asymmetry the table probe
+ * has, and it is reported with the same word.
+ *
+ * Only functions granted to `service_role` are asked about at all. Most of
+ * this schema's functions are granted to `authenticated` alone, on purpose,
+ * because they re-derive the caller from `auth.uid()`; asking a service-role
+ * view about those reported three healthy migrations as outstanding.
+ */
+async function readCallableFunctions(baseUrl: string, key: string): Promise<ReadonlySet<string> | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/rest/v1/`, {
+      method: "GET",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/openapi+json" },
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  let document: { paths?: Record<string, unknown> };
+  try {
+    document = (await response.json()) as typeof document;
+  } catch {
+    return null;
+  }
+  const paths = document.paths;
+  if (!paths) return null;
+
+  const callable = new Set<string>();
+  for (const path of Object.keys(paths)) {
+    const match = /^\/rpc\/(.+)$/.exec(path);
+    if (match) callable.add(match[1]);
+  }
+  return callable;
+}
+
 async function main(): Promise<void> {
   const baseUrl = requireEnvironment("NEXT_PUBLIC_SUPABASE_URL").replace(/\/$/, "");
   const key = requireEnvironment("SUPABASE_SERVICE_ROLE_KEY");
@@ -183,13 +251,65 @@ async function main(): Promise<void> {
   console.log(`Control: \`${CONTROL_TABLE}\` — ${control.detail}. The probe reaches the database.\n`);
 
   let applied = 0;
-  let missing = 0;
   let unknown = 0;
+  const unprobeable: string[] = [];
+  const outstanding: string[] = [];
 
-  for (const expectation of EXPECTATIONS) {
-    const results = await Promise.all(
-      expectation.tables.map(async (table) => ({ table, exists: await tableExists(baseUrl, key, table) })),
+  const expectations = readExpectations();
+  // One probe per distinct table, not one per mention. Several migrations
+  // create the same table under `if not exists`, and re-asking would slow the
+  // audit without changing an answer.
+  const seen = new Map<string, Promise<boolean | null>>();
+  const probe = (table: string): Promise<boolean | null> => {
+    const pending = seen.get(table) ?? tableExists(baseUrl, key, table);
+    seen.set(table, pending);
+    return pending;
+  };
+
+  // Read once, before the loop: one description covers every function.
+  const callable = await readCallableFunctions(baseUrl, key);
+  if (callable === null) {
+    console.log(
+      "PostgREST did not return its description, so this run can speak only to tables. "
+      + "Every function-defining migration is reported as not probeable below.\n",
     );
+  } else if (!callable.has(CONTROL_FUNCTION)) {
+    // Same guard as the control table, for the same reason. This function is
+    // reachable in production today; if the description omits it, the
+    // description is not answering the question asked of it, and reading
+    // absences out of it would report most of the schema as missing.
+    console.error(
+      `The control function \`${CONTROL_FUNCTION}\` is absent from PostgREST's description, so `
+      + "function verdicts from it cannot be trusted. Tables are still reported.",
+    );
+  }
+  const trustFunctions = callable !== null && callable.has(CONTROL_FUNCTION);
+
+  for (const expectation of expectations) {
+    const probedFunctions = trustFunctions ? expectation.functions : [];
+    if (expectation.tables.length === 0 && probedFunctions.length === 0) {
+      // A migration that only adds policies, grants, enum labels or data has
+      // nothing this probe can ask PostgREST about. Counting it as applied
+      // would be a guess; omitting it would hide that the audit is silent
+      // about part of the directory.
+      unprobeable.push(expectation.migration);
+      continue;
+    }
+
+    const tableResults = await Promise.all(
+      expectation.tables.map(async (table) => ({ table, exists: await probe(table) })),
+    );
+    const results = [
+      ...tableResults,
+      ...probedFunctions.map((name) => ({
+        table: `${name}()`,
+        // A name in the description is proof of presence. A name absent from
+        // it is `not visible`, never `absent`: the document is filtered by
+        // EXECUTE privilege, so a function with no grant looks the same as one
+        // that was never created.
+        exists: callable!.has(name) ? true : false,
+      })),
+    ];
 
     const present = results.filter((r) => r.exists === true).map((r) => r.table);
     const absent = results.filter((r) => r.exists === false).map((r) => r.table);
@@ -204,12 +324,12 @@ async function main(): Promise<void> {
       applied += 1;
     } else if (present.length === 0) {
       verdict = "NOT VISIBLE";
-      missing += 1;
+      outstanding.push(`${expectation.migration} — ${absent.join(", ")}`);
     } else {
       // The worst outcome and the reason this reports per table rather than per
       // migration: a half-applied migration cannot simply be re-run.
       verdict = "PARTLY VISIBLE";
-      missing += 1;
+      outstanding.push(`${expectation.migration} — ${absent.join(", ")}`);
     }
 
     console.log(`${verdict.padEnd(18)} ${expectation.migration}`);
@@ -217,9 +337,21 @@ async function main(): Promise<void> {
     if (indeterminate.length > 0) console.log(`                   could not determine: ${indeterminate.join(", ")}`);
   }
 
-  console.log(`\n${applied} applied, ${missing} outstanding, ${unknown} indeterminate.`);
+  if (unprobeable.length > 0) {
+    // Named, not just counted: "this audit says nothing about these" is the
+    // part a reader is most likely to assume away.
+    console.log(
+      "\nThese migrations define nothing this probe can ask about -- no table, and no function "
+      + "granted to the role it reads as. Their presence must be checked another way "
+      + "(scripts/hosted-state-report.sql, or calling the function they define):\n  "
+      + unprobeable.join("\n  "),
+    );
+  }
 
-  if (missing > 0) {
+  if (outstanding.length > 0) {
+    // Repeated at the bottom because it is the actionable half, and it was
+    // scattered through a hundred lines of APPLIED above.
+    console.log(`\nOutstanding:\n  ${outstanding.join("\n  ")}`);
     console.log(
       "\nNOT VISIBLE does not mean absent. PostgREST cannot see a table that exists with no "
       + "grants on it, which is exactly what a migration that failed before its grant statements "
@@ -230,6 +362,14 @@ async function main(): Promise<void> {
     );
   }
 
+  // The count goes last, under everything that qualifies it. It was printed
+  // above the unprobeable list at first, where seventy names pushed the one
+  // line a reader came for off the top of the terminal.
+  console.log(
+    `\n${applied} applied, ${outstanding.length} outstanding, ${unknown} indeterminate, `
+    + `${unprobeable.length} not probeable `
+    + `(of ${expectations.length} migrations in the repository).`,
+  );
   // Outstanding migrations are a true finding, not a failure of the audit, so
   // this exits 0. A broken probe exits 2 above, which is the case worth failing.
   process.exit(0);

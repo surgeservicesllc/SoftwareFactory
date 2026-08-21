@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { CodexAuthError, describeCodexAuth } from "@/lib/worker/auth";
 import { CodexSdkAdapter } from "@/lib/worker/codex";
+import { describeClaimOutcome } from "@/lib/worker/drain-report";
 import { readWorkerConfiguration, WorkerConfigurationError } from "@/lib/worker/env";
 import { GitHubAppInstallationTokenProvider, GitHubDraftPublisher } from "@/lib/worker/github";
 import { safeErrorMessage } from "@/lib/worker/redact";
@@ -52,13 +53,16 @@ async function main() {
     await store.register(configuration.workerId, "phase1c-v1");
     registered = true;
     process.stdout.write(`SoftwareFactory Codex worker ${configuration.workerId} is ready.\n`);
+    let processed = 0;
     do {
       await store.workerHeartbeat(configuration.workerId, null);
       const outcome = await worker.runOnce();
+      if (outcome === "processed") processed += 1;
       if (once) break;
       if (outcome === "idle") await sleep(configuration.pollMs);
     } while (!stopping);
     cleanExit = true;
+    process.stdout.write(`${describeClaimOutcome(processed)}\n`);
   } finally {
     if (registered) {
       await store.finish(configuration.workerId, cleanExit ? "idle" : "error");

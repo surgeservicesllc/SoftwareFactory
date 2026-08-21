@@ -86,6 +86,40 @@ export const LEAST_PRIVILEGE_CONFIG: AssignmentConfig = Object.freeze({
   priority: 2,
 });
 
+/**
+ * Whether somebody has actually configured this posting.
+ *
+ * The comparison is against {@link LEAST_PRIVILEGE_CONFIG} rather than against
+ * any single field, because that is what "configured" means here: an
+ * assignment created with no configuration at all *is* the least-privilege
+ * posting, and every departure from it is something a person chose.
+ *
+ * The AI Factory journey's "Configure Bot Settings" step used to derive this
+ * from `roleId || responsibilities.length`. Both halves were wrong: the API
+ * nests `responsibilities` under `config`, so that half read `undefined`, and
+ * `bot_assignments.role_id` is NOT NULL, so the other half was true of every
+ * assignment that could exist. The step was marked done the instant a bot was
+ * assigned, and its evidence line could only ever read "N of N configured".
+ */
+export function assignmentIsConfigured(config: AssignmentConfig): boolean {
+  const baseline = LEAST_PRIVILEGE_CONFIG;
+  return (
+    config.preset !== baseline.preset
+    || config.responsibilities.length > 0
+    || (config.instructions ?? "").trim().length > 0
+    || config.tools.length > 0
+    || config.repositoryAccess !== baseline.repositoryAccess
+    || config.branchStrategy !== baseline.branchStrategy
+    || config.canOpenPullRequest !== baseline.canOpenPullRequest
+    || config.canMergePullRequest !== baseline.canMergePullRequest
+    || config.pipelineAccess !== baseline.pipelineAccess
+    || config.environmentAccess !== baseline.environmentAccess
+    || config.requiresHumanApproval !== baseline.requiresHumanApproval
+    || config.maxConcurrentTasks !== baseline.maxConcurrentTasks
+    || config.priority !== baseline.priority
+  );
+}
+
 export const assignmentConfigSchema = z
   .object({
     preset: z

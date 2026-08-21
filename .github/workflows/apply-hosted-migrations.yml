@@ -116,6 +116,12 @@ jobs:
           fi
 
       - name: Repair stale ledger rows (idempotent)
+        # Never on a probe. `scope: probe` is documented as changing nothing at
+        # all, and it is the step an operator reaches for precisely when they
+        # do not yet trust the ledger -- but this step sits above the scope
+        # branch, so a probe could still rewrite history rows. A read-only
+        # question must not be able to edit the thing being questioned.
+        if: ${{ inputs.scope != 'probe' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name

@@ -25,6 +25,11 @@ import { PipelineTemplatesManager } from "@/components/pipeline-templates-manage
 import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
+import {
+  assignmentIsConfigured,
+  LEAST_PRIVILEGE_CONFIG,
+  type AssignmentConfig,
+} from "@/lib/bots/assignment-config";
 import { cn } from "@/lib/cn";
 
 /**
@@ -59,6 +64,16 @@ type FactoryData = {
   assignments: Array<{ projectId: string | null; configured: boolean }>;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
   pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
+  /**
+   * Whether anything actually executes a command, read from the same
+   * `/api/bots` field the bot fabric already publishes rather than restated
+   * here. A journey whose last step describes shipping must say when nothing
+   * ships; the page used to promise "every run lands as a draft pull request"
+   * while the executor was Not Connected and a submitted command sat queued.
+   */
+  executor: { connected: boolean; label: string; detail: string };
+  /** Pipeline templates this tenant recorded of its own, from Supabase. */
+  customTemplates: number;
 };
 
 type State =
@@ -157,13 +172,14 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   const load = useCallback(async () => {
     try {
-      const [connections, projects, accounts, bots, commands, pipelines] = await Promise.allSettled([
+      const [connections, projects, accounts, bots, commands, pipelines, templates] = await Promise.allSettled([
         fetch("/api/github/connections", { cache: "no-store" }),
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/ai-accounts", { cache: "no-store" }),
         fetch("/api/bots", { cache: "no-store" }),
         fetch("/api/commands", { cache: "no-store" }),
         fetch("/api/project-pipelines", { cache: "no-store" }),
+        fetch("/api/pipeline-templates", { cache: "no-store" }),
       ]);
 
       const first = connections.status === "fulfilled" ? connections.value : null;
@@ -185,6 +201,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         assignments: [],
         commands: [],
         pipelines: [],
+        executor: { connected: false, label: "Not Connected", detail: "" },
+        customTemplates: 0,
       };
 
       if (first?.ok) {
@@ -209,20 +227,37 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           bots?: unknown[];
           assignments?: Array<{
             projectId?: string | null;
-            responsibilities?: unknown[];
-            roleId?: string | null;
             status?: string;
+            config?: Partial<AssignmentConfig>;
           }>;
+          executor?: { connected?: boolean; label?: string; detail?: string };
         }>(bots.value);
+        // Absent or unreadable reads as Not Connected. The one direction this
+        // must never fail is claiming an executor that is not there.
+        data.executor = {
+          connected: body?.executor?.connected === true,
+          label: body?.executor?.label ?? "Not Connected",
+          detail: body?.executor?.detail ?? "",
+        };
         data.bots = (body?.bots ?? []).length;
         data.assignments = (body?.assignments ?? [])
           .filter((assignment) => assignment.status !== "released")
           .map((assignment) => ({
-            configured: Boolean(
-              assignment.roleId || (assignment.responsibilities ?? []).length > 0,
-            ),
+            // Read from `config`, where the API actually puts these fields, and
+            // measured against the least-privilege baseline. The previous check
+            // (`roleId || responsibilities.length`) read a field that is not on
+            // the payload and a column that is NOT NULL, so it was true of every
+            // assignment and this step could never be shown as outstanding.
+            configured: assignmentIsConfigured({
+              ...LEAST_PRIVILEGE_CONFIG,
+              ...(assignment.config ?? {}),
+            }),
             projectId: assignment.projectId ?? null,
           }));
+      }
+      if (templates.status === "fulfilled" && templates.value.ok) {
+        const body = await readJson<{ templates?: unknown[] }>(templates.value);
+        data.customTemplates = (body?.templates ?? []).length;
       }
       if (commands.status === "fulfilled" && commands.value.ok) {
         const body = await readJson<{ commands?: FactoryData["commands"] }>(commands.value);
@@ -275,8 +310,40 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const { data } = state;
   const compiledBuiltIns = builtIns.filter((template) => template.compiles).length;
 
+  /**
+   * The factory being built right now.
+   *
+   * Steps 2-8 are properties of one project, so with two projects the journey
+   * has to say *which*. GitHub stays out of it: an installation is account
+   * level, so it is genuinely done for every factory once it is done for one.
+   *
+   * `null` means a new factory is being started. Nothing is deleted to get
+   * there -- the steps read empty because they are genuinely empty for a
+   * project that does not exist yet, which keeps completion derived from live
+   * records rather than from a wizard remembering it was reset.
+   */
+  // A project created during the new-factory flow is adopted by derivation
+  // rather than by an effect writing state back: it is simply the project that
+  // was not here when the flow started. That keeps this a pure read of live
+  // records, and avoids a render pass that exists only to catch up with one.
+  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
+    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
+    : null;
+
+  const activeProject = activeProjectId
+    ? data.projects.find((project) => project.id === activeProjectId) ?? null
+    : adoptedProject
+      ?? (startingNewFactory ? null : data.projects[0] ?? null);
+
+  // The roster opens on the factory the journey is showing, not on whichever
+  // project happens to be first. With two projects those differ, and the
+  // person was sent to configure one project while the step counted another,
+  // so assigning a bot in the overlay left the step's evidence unmoved.
   const rosterProject =
-    data.projects.find((project) => project.id === rosterProjectId) ?? data.projects[0] ?? null;
+    data.projects.find((project) => project.id === rosterProjectId)
+    ?? activeProject
+    ?? data.projects[0]
+    ?? null;
 
   /* The roster — assigning bots and configuring each posting's role,
      responsibilities, repository access, model, and work effort — is one
@@ -316,31 +383,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       </button>
     </div>
   );
-
-  /**
-   * The factory being built right now.
-   *
-   * Steps 2-8 are properties of one project, so with two projects the journey
-   * has to say *which*. GitHub stays out of it: an installation is account
-   * level, so it is genuinely done for every factory once it is done for one.
-   *
-   * `null` means a new factory is being started. Nothing is deleted to get
-   * there -- the steps read empty because they are genuinely empty for a
-   * project that does not exist yet, which keeps completion derived from live
-   * records rather than from a wizard remembering it was reset.
-   */
-  // A project created during the new-factory flow is adopted by derivation
-  // rather than by an effect writing state back: it is simply the project that
-  // was not here when the flow started. That keeps this a pure read of live
-  // records, and avoids a render pass that exists only to catch up with one.
-  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
-    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
-    : null;
-
-  const activeProject = activeProjectId
-    ? data.projects.find((project) => project.id === activeProjectId) ?? null
-    : adoptedProject
-      ?? (startingNewFactory ? null : data.projects[0] ?? null);
 
   /** Still choosing: the flow is open and no project has appeared for it yet. */
   const isStartingNew = startingNewFactory && activeProject === null;
@@ -414,7 +456,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       done: scopedPipelines.length > 0,
       evidence: scopedPipelines.length > 0
         ? `${scopedPipelines.length} pipeline${scopedPipelines.length === 1 ? "" : "s"} selected: ${scopedPipelines.map((pipeline) => pipeline.name).join(", ")}`
-        : `No pipeline selected yet · ${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled, ready to use`,
+        : compiledBuiltIns === 0 && data.customTemplates === 0
+          ? "No pipeline template compiles right now"
+          : `No pipeline selected yet · ${compiledBuiltIns} built-in and ${data.customTemplates} custom template${data.customTemplates === 1 ? "" : "s"} available`,
       action: scopedPipelines.length > 0 ? "Change pipelines" : "Choose a pipeline",
       icon: Workflow,
       /*
@@ -503,7 +547,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: scopedConfigured.length > 0
         ? `${scopedConfigured.length} of ${scopedAssignments.length} assignment${scopedAssignments.length === 1 ? "" : "s"} configured`
         : scopedAssignments.length > 0
-          ? "Assignments exist; none carries a role or responsibilities yet"
+          ? "Assignments exist; every one is still on the default least-privilege settings"
           : "Assign a bot first",
       action: "Configure",
       icon: Settings2,
@@ -528,23 +572,40 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "watch",
       title: "Watch It Ship",
-      description: "Every run lands as a draft pull request with CI evidence; you review and merge.",
+      description: data.executor.connected
+        ? "Every run lands as a draft pull request with CI evidence; you review and merge."
+        : "When an executor is connected, a run lands as a draft pull request with CI evidence for you to review and merge.",
       done: hasSucceededCommand,
       evidence: hasSucceededCommand
         ? "At least one command has completed end to end"
         : data.commands.length > 0
-          ? "Work is in flight — watch it on Pipelines"
+          ? data.executor.connected
+            ? "Work is in flight — watch it on Pipelines"
+            : `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} queued; the executor is ${data.executor.label}`
           : "Nothing has run yet",
       action: "Watch execution",
       icon: Workflow,
       body: (
         <div>
-          <h4 className="text-base font-semibold text-foreground">Command execution, live</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-base font-semibold text-foreground">Command execution</h4>
+            <StatusBadge tone={data.executor.connected ? "safe" : "neutral"}>
+              {data.executor.label}
+            </StatusBadge>
+          </div>
           <p className="mt-1 text-sm text-muted">
-            Every command runs the same lifecycle: verified intake → queue → a worker claims it →
+            A command runs the same lifecycle: verified intake → queue → a worker claims it →
             isolated branch → draft pull request with CI. Merging stays yours, and production
             deploys from the merge.
           </p>
+          {data.executor.connected ? null : (
+            <p className="mt-2 text-sm text-faint">
+              {data.executor.detail
+                || "No worker executes commands in this phase."}{" "}
+              A command you submit is recorded and queued; it will not start until an executor is
+              connected.
+            </p>
+          )}
           {recent.length ? (
             <ul className="mt-4 divide-y divide-[var(--border)]">
               {recent.map((command) => {
@@ -561,7 +622,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             </ul>
           ) : (
             <p className="mt-4 text-sm text-faint">
-              No commands yet — your first one will appear here with its live stage.
+              No commands yet — your first one will appear here with its recorded stage.
             </p>
           )}
           <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm mt-4">

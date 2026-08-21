@@ -59,6 +59,35 @@ migration `20260817001100`, hosted) surface on each posting card. No
 execution-authority change anywhere in this surface: assignment remains
 routing intent, and the page says what actually runs.
 
+**Addendum, 2026-08-20 (component audit — three migrations are outstanding on
+hosted):** the hosted schema audit had been reporting "0 applied, 0
+outstanding" from a hand-written list of four migrations while the directory
+held 124. Its expectations are derived from `supabase/migrations` now, and the
+audit now reads PostgREST's own description for functions as well as probing
+tables, and run
+[32316446825](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32316446825)
+reports **46 applied, 4 outstanding, 0 indeterminate, 74 not probeable**. The
+four are `20260814000300_agentos_isolation_model` (nine `agentos_*` tables),
+`20260814002500_provider_credential_vault`
+(`resolve_provider_connect_session()`, whose sibling
+`claim_provider_connect_session()` is visible),
+`20260815001100_connection_routing_decisions`, and
+`20260816001600_phase2c_resource_reservations` (`resource_reservations`,
+`resource_rate_events`). NOT VISIBLE is not absent — a table that exists with
+no grants looks identical over REST — so `scripts/hosted-state-report.sql`
+must run before any apply, and applying is an owner-approved action that no
+agent has taken. Meanwhile every consumer degrades honestly: the reservation
+store refuses with `ADMISSION_UNAVAILABLE` rather than admitting on unknown
+usage, `/api/agentos/grants` answers `agentos_grants_unavailable`, and
+`connection_routing_decisions` has no application consumer at all. The vault
+function had a real consequence: `POST /api/bots/connect/claim` reported the
+failed lookup as `connect_session_invalid`, telling operators with a correct
+code that their sign-in link was invalid. That path now separates a failed
+lookup (`503 connect_unavailable`) from an unmatched code, without reopening
+the code-guessing oracle the uniform failures close. The full
+component-by-component walk, with each step's evidence, is
+`AI/FACTORY_COMPONENT_AUDIT.md`.
+
 **Addendum, 2026-08-19 (graphs execute now — ADR-092):** recorded graphs no
 longer dead-end at PLANNED. The graph executor worker
 (`scripts/graph-worker.mts` + `.github/workflows/graph-worker.yml`, manual
@@ -304,7 +333,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - **Concurrency is now bounded rather than specified.** `lib/resources/capacity.ts` limits concurrent runs per worker, per provider, and per project, and every refusal names *which* limit refused — told "the project is full" when one worker is the real constraint, an operator raises the wrong number. It is applied in `assignWorker` as an eligibility gate beside capability and risk, never as a score weight, so cost or preference cannot outvote it. Reservations carry an expiry and expired ones stop counting, so a worker that dies does not strand its slot until someone notices.
 - **The scheduler and the manager are joined.** `lib/resources/dispatch.ts` routes a whole tick of startable nodes: `lib/graph/scheduler.ts` says which nodes may start, `assignWorker` says who runs each. It is not a loop over the single-node decision — reservations are threaded forward through the batch, because routing every node against the reservations live at the *start* of the tick lets two nodes released together take the same last slot. Dispatch order is decided (risk, then stated priority, then nodeId) rather than inherited from the scheduler's emission order, since when capacity binds the order decides who waits. A node held back by a full fleet is `DEFERRED` and re-offered; a node no worker can ever satisfy is `UNROUTABLE` and is not, so the scheduler cannot spin on impossible work.
 - **Rate is accounted separately from concurrency, because they are different questions.** `lib/resources/rate-limits.ts` counts requests and tokens over a sliding per-provider window and gates `assignWorker` alongside capability and capacity. Concurrency asks whether a slot is free; rate asks whether too much has happened recently — six concurrent slots filled by two-second calls is 180 requests a minute while never showing more than six in flight, so one limit does not imply the other. A rate refusal carries `retryAfterMs` and a capacity refusal deliberately does not: a window clears at a computable time, whereas nobody can say when another run will finish. Token budgets are checked against a caller-supplied estimate, and usage marks when it includes estimates rather than measurements — the same refusal to launder a prediction into a number that the history module already applies to success rates.
-- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
+- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. `lib/resources/reservation-store.ts` and migration `20260816001600` exist to close exactly that, and neither is reachable from anything that executes: the store is imported only by its own tests, and its table is one of the four the hosted audit reports as not visible. The ordering matters — wiring a fail-closed admission gate against a table that is not there would refuse every claim and stop the one execution lane that works today, so the migration is applied first and the wiring follows. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
 
 ## Durable worker implementation
 

@@ -190,6 +190,34 @@ describe("claiming a sign-in", () => {
     expect(body).toMatchObject({ connected: true, purpose: "claude" });
   });
 
+  it("says the lookup is unavailable rather than calling a good code invalid", async () => {
+    // `resolve_provider_connect_session` is absent from hosted (audit run
+    // 32316446825). Reporting that as "not a valid link" sent operators to mint
+    // another code, which failed the same way.
+    rpc.mockImplementation(async (name: string) => (
+      name === "resolve_provider_connect_session"
+        ? { data: null, error: { message: "Could not find the function public.resolve_provider_connect_session" } }
+        : { data: [], error: null }
+    ));
+
+    const response = await claimConnect(claimRequest({ code, token }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: "connect_unavailable" } });
+    // The credential never reaches a claim attempt on a lookup that failed.
+    expect(rpc.mock.calls.some(([name]) => name === "claim_provider_connect_session")).toBe(false);
+  });
+
+  it("keeps that branch unreachable by choosing a code", async () => {
+    // The oracle the uniform failures close stays closed: this branch depends
+    // on the lookup working at all, never on which code was presented.
+    rpc.mockResolvedValue({ data: [], error: null });
+    const unknown = await claimConnect(claimRequest({ code, token }));
+    const malformed = await claimConnect(claimRequest({ code: "short", token }));
+    expect(unknown.status).toBe(400);
+    expect(malformed.status).toBe(400);
+    expect(JSON.stringify(await unknown.json())).toBe(JSON.stringify(await malformed.json()));
+  });
+
   it("answers identically for an unknown, expired and spent code", async () => {
     const answers: Array<{ status: number; body: string }> = [];
 

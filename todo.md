@@ -1,5 +1,42 @@
 # SoftwareFactory — shared working status
 
+## FOUR MIGRATIONS ARE OUTSTANDING ON HOSTED, AND ONE IS COSTING A USER PATH (2026-08-20)
+
+The hosted schema audit had been answering "0 outstanding" from a list of four
+migrations written by hand, while the directory held 124. It derives its
+expectations now and also reads PostgREST's description for functions, so it
+covers 50 of the 124 rather than 4. First honest answer: **46 applied, 4
+outstanding, 0 indeterminate, 74 not probeable**
+([run 32316446825](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32316446825)).
+
+- `20260814000300_agentos_isolation_model` — nine `agentos_*` tables
+- `20260814002500_provider_credential_vault` — `resolve_provider_connect_session()`
+- `20260815001100_connection_routing_decisions` — `connection_routing_decisions`
+- `20260816001600_phase2c_resource_reservations` — `resource_reservations`, `resource_rate_events`
+
+The vault one has a live cost: `POST /api/bots/connect/claim` calls that
+function first, and answered its absence with `connect_session_invalid` — so
+every **correct** sign-in code was told the link was not valid, and each retry
+minted another code that failed the same way. The route now separates a failed
+lookup (`503 connect_unavailable`) from an unmatched code, but the function is
+still missing and the flow still cannot complete.
+
+**Before applying anything**, run `scripts/hosted-state-report.sql` in the SQL
+editor. NOT VISIBLE is not absent: PostgREST cannot see a table that exists with
+no grants, which is exactly what a migration that died before its grant
+statements leaves behind, and re-running that file fails with `42P07`.
+
+Applying is an owner-approved action. No agent has taken it.
+
+Also from that walk: `lib/resources/reservation-store.ts` and the batch
+dispatcher are built, tested, and imported by nothing that executes. Do not wire
+them before the migration lands — the store fails closed, so an admission gate
+against a missing table would refuse every claim and stop the graph lane, which
+is the one execution path working today.
+
+The whole component walk, with each step's evidence, is
+`AI/FACTORY_COMPONENT_AUDIT.md`.
+
 ## IF YOUR PULL REQUEST IS GETTING NO CI RUNS, CHECK MERGEABILITY FIRST (2026-08-19)
 
 A conflicted pull request gets **no `pull_request` workflow runs at all**. No run

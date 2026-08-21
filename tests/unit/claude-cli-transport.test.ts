@@ -11,6 +11,7 @@ import {
   type ClaudeQueryFn,
   type ClaudeSdkMessage,
 } from "@/lib/providers/claude-cli-transport";
+import { ProviderError } from "@/lib/providers/errors";
 import type { ProviderRunRequest } from "@/lib/providers/types";
 import { GRAPH_NODE_MAX_TURNS } from "@/lib/worker/claude-node-executor";
 
@@ -231,6 +232,50 @@ describe("failures", () => {
         } as ClaudeSdkMessage,
       ]),
     ).rejects.toThrow(/error_max_structured_output_retries/);
+  });
+
+  it("calls a spent turn budget the same thing whether the SDK yields it or throws it", async () => {
+    // Live canary 32314191037 hit its own six-turn budget and was reported as
+    // `upstream_unavailable` -- an Anthropic outage -- because the SDK threw the
+    // exhaustion instead of yielding it as a result. The result path called the
+    // identical condition `invalid_response`, so which cause an operator saw
+    // depended on the SDK's reporting shape rather than on what happened.
+    const thrown: ClaudeQueryFn = () =>
+      (async function* (): AsyncGenerator<ClaudeSdkMessage> {
+        throw new Error("Claude Code returned an error result: Reached maximum number of turns (6)");
+      })();
+
+    const failure = await executeClaudeThroughCli(
+      REQUEST,
+      PROMPTS,
+      new AbortController().signal,
+      SUBSCRIPTION,
+      { workingDirectory: process.cwd(), queryFn: thrown },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderError);
+    expect((failure as ProviderError).code).toBe("invalid_response");
+
+    const yielded = await run([
+      { type: "result", subtype: "error_max_turns", is_error: true } as ClaudeSdkMessage,
+    ]).catch((error: unknown) => error);
+    expect((yielded as ProviderError).code).toBe("invalid_response");
+  });
+
+  it("still reports a genuine transport failure as the provider being unavailable", async () => {
+    const thrown: ClaudeQueryFn = () =>
+      (async function* (): AsyncGenerator<ClaudeSdkMessage> {
+        throw new Error("connect ECONNREFUSED");
+      })();
+
+    const failure = await executeClaudeThroughCli(
+      REQUEST,
+      PROMPTS,
+      new AbortController().signal,
+      SUBSCRIPTION,
+      { workingDirectory: process.cwd(), queryFn: thrown },
+    ).catch((error: unknown) => error);
+    expect((failure as ProviderError).code).toBe("upstream_unavailable");
   });
 
   it("reports a cancelled run as cancelled", async () => {

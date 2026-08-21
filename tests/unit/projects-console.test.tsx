@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MyProjectsConsole } from "@/components/my-projects-console";
@@ -294,6 +294,78 @@ describe("ProjectsConsole add-project form", () => {
     expect(screen.queryByLabelText("GitHub account")).not.toBeInTheDocument();
     // The name is pre-filled from the repository, so adding is one confirmation.
     await waitFor(() => expect(screen.getByLabelText("Name it")).toHaveValue("application"));
+  });
+
+  it("fills in, submits, and reports the created project", async () => {
+    // The form's whole job is this POST. The tests around it covered which
+    // pickers appear; none of them ever submitted, so the one capability the
+    // AI Factory's Create Project step depends on went unexercised.
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url === "/api/projects" && init?.method === "POST") {
+        return jsonResponse({ project: { id: "new-project", name: "Storefront Rebuild" } });
+      }
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "fake-owner", 900123)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    await waitFor(() => expect(screen.getByLabelText("Name it")).toHaveValue("application"));
+    fireEvent.change(screen.getByLabelText("Name it"), { target: { value: "Storefront Rebuild" } });
+    fireEvent.change(screen.getByLabelText(/what is it/i), {
+      target: { value: "A fake project used to exercise the form." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add project|connect/i }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.url === "/api/projects" && call.init?.method === "POST")).toBe(true);
+    });
+
+    const post = calls.find((call) => call.url === "/api/projects" && call.init?.method === "POST")!;
+    expect(JSON.parse(String(post.init?.body))).toEqual({
+      connectionId,
+      repositoryId: 900123,
+      name: "Storefront Rebuild",
+      description: "A fake project used to exercise the form.",
+      defaultBranch: "main",
+    });
+
+    // The repository is sent by its immutable GitHub id, never by the name the
+    // person typed -- the binding a prompt must not be able to choose.
+    expect(typeof JSON.parse(String(post.init?.body)).repositoryId).toBe("number");
+
+    expect(await screen.findByText(/Storefront Rebuild is connected/)).toBeInTheDocument();
+  });
+
+  it("keeps the failure on screen instead of reporting a project that was not created", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/projects" && init?.method === "POST") {
+        return jsonResponse(
+          { error: { code: "project_conflict", message: "That repository is already connected." } },
+          409,
+        );
+      }
+      if (url === "/api/projects") return jsonResponse({ projects: [] });
+      if (url === "/api/github/connections") {
+        return jsonResponse({ connections: [connection(connectionId, "fake-owner", 900123)] });
+      }
+      return jsonResponse({});
+    }));
+
+    render(<ProjectsConsole />);
+
+    await waitFor(() => expect(screen.getByLabelText("Name it")).toHaveValue("application"));
+    fireEvent.click(screen.getByRole("button", { name: /add project|connect/i }));
+
+    expect(await screen.findByText("That repository is already connected.")).toBeInTheDocument();
+    expect(screen.queryByText(/is connected\. Its live GitHub data/)).not.toBeInTheDocument();
   });
 
   it("shows the account picker only once there are two accounts to choose from", async () => {
