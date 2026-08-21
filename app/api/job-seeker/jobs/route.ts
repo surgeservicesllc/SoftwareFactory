@@ -47,16 +47,33 @@ type JobRow = {
   work_model: string | null;
   description: string | null;
   discovered_at: string;
-  job_seeker_matches: Array<{
-    score: number;
-    breakdown: Record<string, number>;
-    reasons: string[];
-    gaps: string[];
-    threshold_used: number;
-    qualified: boolean;
-  }> | null;
-  job_seeker_applications: Array<{ id: string; stage: string; approval_status: string }> | null;
+  job_seeker_matches: MatchEmbed | MatchEmbed[] | null;
+  job_seeker_applications: ApplicationEmbed | ApplicationEmbed[] | null;
 };
+
+type MatchEmbed = {
+  score: number;
+  breakdown: Record<string, number>;
+  reasons: string[];
+  gaps: string[];
+  threshold_used: number;
+  qualified: boolean;
+};
+
+type ApplicationEmbed = { id: string; stage: string; approval_status: string };
+
+/*
+ * Both embeds are one-to-one — job_seeker_matches and job_seeker_applications
+ * each carry `unique (job_id)` — so live PostgREST returns them as a single
+ * object (or null), not an array. The array shape is still accepted because
+ * shape detection follows the constraint, and a fixture or a schema cache
+ * mid-reload can present the other form. Reading only `[0]` here made every
+ * live record look unscored: the journey test caught it against the real
+ * stack.
+ */
+function firstEmbed<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
 
 const JOB_COLUMNS =
   "id, source, external_id, url, title, company, salary_text, location, work_model, "
@@ -65,8 +82,8 @@ const JOB_COLUMNS =
   + "job_seeker_applications ( id, stage, approval_status )";
 
 function toView(row: JobRow) {
-  const match = row.job_seeker_matches?.[0] ?? null;
-  const application = row.job_seeker_applications?.[0] ?? null;
+  const match = firstEmbed(row.job_seeker_matches);
+  const application = firstEmbed(row.job_seeker_applications);
   return {
     id: row.id,
     source: row.source,

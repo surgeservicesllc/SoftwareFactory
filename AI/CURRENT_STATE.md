@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-13
 
+**Addendum, 2026-08-21 (Job Seeker verified live — ADR-097):** the whole
+/job-seeker surface has now been driven in a real browser against a real
+Supabase stack (`supabase start` with the full migration chain + the
+production Next build) by `tests/e2e/job-seeker-journey.spec.ts`
+(env-guarded, `JOB_SEEKER_E2E=1`): sign-in, workspace onboarding, every
+field of every section with fake data, resume upload, record + score,
+duplicate refusal, the approval-gated pipeline to Applied, contact +
+outreach draft, analytics — with persistence proven by reload. Three live
+defects that run surfaced are fixed: the no-workspace dead end (the page
+now redirects to onboarding, onboarding honors `?next=`, and the console
+renders a workspace call-to-action on 409), live PostgREST one-to-one
+embeds arriving as objects where the jobs route expected arrays (every
+live record had shown no score), and a whole-profile 422 when an added
+history entry was left empty (now pruned client-side). Signed-out
+production verified separately: the page streams its sign-in redirect and
+every /api/job-seeker route answers 401.
+
 **Addendum, 2026-08-17 (AI Factory guided journey):** `/solutions/ai-factory`
 ("AI Factory" in the left navigation under Overview) is the owner's guided
 end-to-end path — Connect Repository → Create Project → Configure Pipeline →

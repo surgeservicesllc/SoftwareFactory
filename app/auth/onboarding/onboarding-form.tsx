@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-export function OnboardingForm() {
+export function OnboardingForm({
+  returnTo = "/solutions/projects",
+}: {
+  /** Where to land after the workspace exists. Validated by the page. */
+  returnTo?: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -39,7 +44,7 @@ export function OnboardingForm() {
         return;
       }
 
-      router.push("/solutions/projects");
+      router.push(returnTo);
       router.refresh();
     } catch {
       setError("Setup is temporarily unavailable. Try again shortly.");

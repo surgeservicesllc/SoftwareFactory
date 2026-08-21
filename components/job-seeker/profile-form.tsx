@@ -233,6 +233,23 @@ export function JobSeekerProfileForm({
     }
   }
 
+  /*
+   * An entry added and never filled in is a click, not a claim — drop it
+   * rather than letting the API reject the whole save as invalid. Entries
+   * someone started filling are kept so real mistakes still surface.
+   */
+  function pruneHistory(entries: HistoryEntry[]): HistoryEntry[] {
+    return entries.filter(
+      (entry) =>
+        entry.organization.trim().length > 0
+        || entry.title.trim().length > 0
+        || Boolean(entry.started)
+        || Boolean(entry.ended)
+        || Boolean(entry.summary)
+        || (entry.highlights?.length ?? 0) > 0,
+    );
+  }
+
   async function save() {
     setBusy(true);
     setNotice("");
@@ -252,8 +269,8 @@ export function JobSeekerProfileForm({
           workArrangement,
           openToTravel,
           openToRelocation,
-          employmentHistory: employment,
-          education,
+          employmentHistory: pruneHistory(employment),
+          education: pruneHistory(education),
           accomplishments: toList(accomplishments),
           skills: toList(skills),
           certifications: toList(certifications),

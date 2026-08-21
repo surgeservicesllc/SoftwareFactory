@@ -1,8 +1,43 @@
 # Handoff
 
-Last updated: 2026-08-19
+Last updated: 2026-08-21
 
-## Newest (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
+## Newest (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
+
+The owner's verification goal ("go through /job-seeker, fill every field
+with fake data, prove every capability, everything wired to Supabase") was
+executed as a real browser journey, not a mocked one:
+`tests/e2e/job-seeker-journey.spec.ts` (guarded by `JOB_SEEKER_E2E=1`)
+drives sign-in through real GoTrue, workspace onboarding, every profile
+field including employment/education entries and a resume upload,
+preferences, job recording + scoring, the duplicate refusal, prepare →
+review → approve → applied, contact + outreach draft, and analytics —
+against `supabase start` (the full 127-migration chain on real Postgres +
+PostgREST) with the production `next build` in front, asserting
+persistence by reload. It passes end to end (23.7s). Signed-out production
+was verified directly: `https://www.theagoras.com/job-seeker` streams the
+sign-in redirect and all `/api/job-seeker/*` endpoints answer 401.
+
+The journey caught three real defects the mocked suites could not, all
+fixed in the same change: (1) a signed-in person with **no workspace** hit
+a dead-end "could not be loaded" error — the page now redirects them to
+onboarding (which honors `?next=` and returns them), and the console
+renders a "Create your workspace" call-to-action on the 409 as the
+client-side floor; (2) **live PostgREST returns one-to-one embeds as
+objects** — `job_seeker_matches`/`job_seeker_applications` both carry
+`unique (job_id)` — while `toView` read `[0]` as if they were arrays, so
+every live record showed "Recorded." with no score and no stage;
+`firstEmbed()` now accepts both shapes (ADR-097); (3) an employment-history
+entry added and never filled made the whole profile save fail 422 — the
+form now prunes untouched entries before submit. Local-stack notes for
+re-running the journey live in the spec header; the sandbox needs
+`supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor`
+(an excluded service trips a forbidden rlimit syscall in this sandbox) and
+the wipe between runs must TRUNCATE because generated documents refuse row
+deletes by design. Gates on the merged state: lint clean, tsc clean, 3,465
+vitest green, production build, journey green.
+
+## Prior (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
 
 Increments 5-7 joined 1-4 (#289, #290, #291): contacts + outreach drafts
 that never claim a send; resume upload in a person-scoped BYTEA table
