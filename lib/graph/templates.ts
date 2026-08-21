@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { defineNode, type NodeCapability, type NodeContract } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
+import type { GateKind, SdlcStage } from "@/lib/sdlc/lifecycle";
 import type { ResourceRef, RiskLevel } from "@/lib/graph/types";
 
 /**
@@ -40,6 +41,10 @@ export type TemplateNode = {
   readonly prose?: boolean;
   /** Override the capability-derived fan-in tolerance (see below). */
   readonly toleratesPartialInputs?: boolean;
+  /** Where in the Agentic SDLC this node sits. Absent on a non-lifecycle template. */
+  readonly lifecycleStage?: SdlcStage;
+  /** The gate the node waits at once its work is done. Absent means it does not wait. */
+  readonly gate?: GateKind;
 };
 
 export type GraphTemplate = {
@@ -58,6 +63,16 @@ export type GraphTemplate = {
    * the template author already thought about.
    */
   readonly resolvedWriteConflicts?: readonly string[];
+  /**
+   * Edges that point backwards through the lifecycle.
+   *
+   * Deliberately not part of `proposedEdges`: the compiler rejects every cycle,
+   * and it is right to. A feedback edge is not a dependency — no node ever
+   * waits on one — it is the record of where a stage reports its result back
+   * to, read between iterations rather than during one. Keeping the two lists
+   * apart is what lets a lifecycle loop without the DAG becoming a lie.
+   */
+  readonly feedbackEdges?: readonly ProposedEdge[];
 };
 
 const findingsSchema = z.object({
@@ -144,6 +159,15 @@ export function templateNodeContracts(template: GraphTemplate): readonly NodeCon
   );
 }
 
+/** The stage and gate a template gave a node, if any. Read when rendering a plan. */
+export function templateStageFor(
+  template: GraphTemplate,
+  nodeKey: string,
+): { stage: SdlcStage | null; gate: GateKind | null } {
+  const node = template.nodes.find((candidate) => candidate.nodeId === nodeKey);
+  return { stage: node?.lifecycleStage ?? null, gate: node?.gate ?? null };
+}
+
 const file = (id: string): ResourceRef => ({ kind: "file", id });
 
 /**
@@ -213,6 +237,142 @@ export function auditTemplate(input: {
 }
 
 export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
+  {
+    key: "agentic_sdlc",
+    name: "Agentic SDLC",
+    category: "BUILD",
+    summary:
+      "The full lifecycle: state the goal, write the requirements, design it, build it in parallel where the files genuinely differ, review it with a reader who never saw the reasoning, prove it with evidence, deploy behind an owner's decision, then watch it and report back.",
+    version: 1,
+    risk: "YELLOW",
+    nodes: [
+      {
+        nodeId: "goal",
+        job: "State the goal as acceptance criteria that can be checked rather than admired.",
+        capability: "planning",
+        executor: "MODEL",
+        lifecycleStage: "GOAL",
+      },
+      {
+        nodeId: "prd",
+        job: "Write the requirements: scope, non-goals, and the behaviour each acceptance criterion implies.",
+        capability: "planning",
+        executor: "MODEL",
+        dependsOn: ["goal"],
+        lifecycleStage: "PRD",
+        gate: "AUTOMATIC",
+      },
+      {
+        nodeId: "architecture",
+        job: "Design the change: components, boundaries, and the decisions a reviewer would want recorded.",
+        capability: "architecture",
+        executor: "MODEL",
+        dependsOn: ["prd"],
+        lifecycleStage: "ARCHITECTURE",
+        gate: "HUMAN",
+      },
+      {
+        nodeId: "implement_server",
+        job: "Implement the server side the architecture named: routes, validation, and the database boundary.",
+        capability: "implementation",
+        executor: "MODEL",
+        dependsOn: ["architecture"],
+        writes: [file("app/api"), file("lib")],
+        lifecycleStage: "IMPLEMENTATION",
+      },
+      {
+        nodeId: "implement_client",
+        job: "Implement the interface the architecture named.",
+        capability: "implementation",
+        executor: "MODEL",
+        dependsOn: ["architecture"],
+        writes: [file("components")],
+        lifecycleStage: "IMPLEMENTATION",
+      },
+      {
+        nodeId: "implement_tests",
+        job: "Write the tests for the behaviour the requirements describe, including its failure states.",
+        capability: "qa",
+        executor: "MODEL",
+        dependsOn: ["architecture"],
+        writes: [file("tests")],
+        lifecycleStage: "IMPLEMENTATION",
+      },
+      {
+        nodeId: "integrate",
+        job: "Integrate the three branches and resolve what they share.",
+        capability: "implementation",
+        executor: "DETERMINISTIC",
+        dependsOn: ["implement_server", "implement_client", "implement_tests"],
+        lifecycleStage: "IMPLEMENTATION",
+      },
+      {
+        nodeId: "review",
+        job: "Review the integrated change without the implementation transcript.",
+        capability: "review",
+        executor: "MODEL",
+        dependsOn: ["integrate"],
+        lifecycleStage: "REVIEW",
+        gate: "AUTOMATIC",
+      },
+      {
+        nodeId: "security_review",
+        job: "Read the change for authorization, tenancy, secret handling and row security.",
+        capability: "security_review",
+        executor: "MODEL",
+        dependsOn: ["integrate"],
+        lifecycleStage: "REVIEW",
+      },
+      {
+        nodeId: "test",
+        job: "Run lint, typecheck, tests and build, and record the results as evidence rather than describing them.",
+        capability: "qa",
+        executor: "ANCHOR",
+        dependsOn: ["review", "security_review"],
+        lifecycleStage: "TEST",
+        gate: "AUTOMATIC",
+      },
+      {
+        nodeId: "deploy",
+        job: "Deploy the verified change and record what the deployment API reported.",
+        capability: "implementation",
+        executor: "ANCHOR",
+        dependsOn: ["test"],
+        lifecycleStage: "DEPLOYMENT",
+        gate: "HUMAN",
+      },
+      {
+        nodeId: "monitor",
+        job: "Observe the running system and report whether it met the acceptance criteria the goal stated.",
+        capability: "synthesis",
+        executor: "ANCHOR",
+        dependsOn: ["deploy"],
+        lifecycleStage: "MONITORING",
+      },
+    ],
+    proposedEdges: [
+      { from: "goal", to: "prd", reason: "DATA", detail: "The requirements are written from the acceptance criteria." },
+      { from: "prd", to: "architecture", reason: "DATA", detail: "The design answers the requirements." },
+      { from: "architecture", to: "implement_server", reason: "DATA", detail: "The design names the server work." },
+      { from: "architecture", to: "implement_client", reason: "DATA", detail: "The design names the interface work." },
+      { from: "architecture", to: "implement_tests", reason: "DATA", detail: "The design names the behaviour to test." },
+      { from: "implement_server", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "implement_client", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "implement_tests", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "integrate", to: "review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Review reads the integrated tree." },
+      { from: "integrate", to: "security_review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "The security read is of the integrated tree." },
+      { from: "review", to: "test", reason: "VERIFICATION", detail: "Tests run against a reviewed change." },
+      { from: "security_review", to: "test", reason: "VERIFICATION", detail: "Tests run against a change the security read cleared." },
+      { from: "test", to: "deploy", reason: "VERIFICATION", detail: "Only a change with test evidence is deployed." },
+      { from: "deploy", to: "monitor", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Monitoring observes what was deployed." },
+    ],
+    feedbackEdges: [
+      { from: "monitor", to: "goal", reason: "DATA", detail: "What the running system reported becomes the next goal." },
+      { from: "test", to: "implement_server", reason: "VERIFICATION", detail: "A failed test returns the work to implementation." },
+      { from: "review", to: "implement_server", reason: "VERIFICATION", detail: "A rejected review returns the work to implementation." },
+      { from: "architecture", to: "prd", reason: "POLICY", detail: "A rejected design returns the work to the requirements." },
+    ],
+  },
   auditTemplate({
     key: "production_readiness",
     name: "Production Readiness",

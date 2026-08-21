@@ -1,0 +1,440 @@
+// @vitest-environment node
+
+import { readdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import { buildLaunchPlan } from "@/lib/graph/launch-plan";
+import { findTemplate } from "@/lib/graph/templates";
+
+/**
+ * The lifecycle against real PostgreSQL, on the worker that already runs graphs.
+ *
+ * PGlite runs as a superuser, which bypasses row level security — so nothing
+ * here is evidence that a policy holds. What it *is* evidence for is everything
+ * a policy cannot express: that the migration applies, that the gate functions
+ * refuse what they claim to, that the claim projects what the worker needs, and
+ * above all that an approval survives the run that asked for it. The RLS
+ * assertions are the ones reading `pg_class` and `information_schema` directly,
+ * which a superuser cannot make lie.
+ */
+
+const repositoryRoot = resolve(import.meta.dirname, "../..");
+const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
+const WORKER = "graph-worker-lifecycle";
+const EXECUTORS = ["MODEL", "DETERMINISTIC", "ANCHOR"];
+
+const ownerId = "00000000-0000-4000-8000-0000000007a1";
+const memberId = "00000000-0000-4000-8000-0000000007a2";
+const organizationId = "10000000-0000-4000-8000-0000000007a1";
+const projectId = "40000000-0000-4000-8000-0000000007a1";
+
+type ClaimedNode = {
+  node_key: string;
+  node_id: string;
+  node_run_id: string;
+  lifecycle_stage: string | null;
+  gate_kind: string | null;
+  gate_state: string | null;
+};
+type Claim = {
+  graph_run_id: string;
+  is_lifecycle: boolean;
+  iteration: number;
+  max_iterations: number;
+  nodes: ClaimedNode[];
+  edges: { from_node_key: string; to_node_key: string }[];
+};
+
+async function asUser(db: PGlite, userId: string) {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', $1, false)", [userId]);
+}
+
+async function asWorker(db: PGlite) {
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claim.sub', '', false)");
+  await db.exec("set role service_role");
+}
+
+/**
+ * Close the current run the way the worker does when it halts at a gate.
+ *
+ * The claim predicate requires that nothing is in flight, which is correct: a
+ * second worker must not pick up a graph the first is still running. So a test
+ * that wants to observe the *next* claim has to close the current run first,
+ * exactly as the worker would.
+ */
+async function closeRunAsPartial(db: PGlite, graphRunId: string) {
+  await asWorker(db);
+  await db.query(
+    `select public.complete_graph_run_as_worker($1, $2, 'PARTIAL', true)`,
+    [WORKER, graphRunId],
+  );
+}
+
+/**
+ * The most recent run of the graph, read as nobody in particular.
+ *
+ * `service_role` bypasses row level security but holds no table grants at all —
+ * every worker write goes through a SECURITY DEFINER function — so a direct
+ * select while that role is set is a permission error, not a tenancy one.
+ */
+async function latestRunId(db: PGlite, graphId: string): Promise<string> {
+  await db.exec("reset role");
+  const result = await db.query<{ id: string }>(
+    `select id from public.graph_runs where graph_id = $1 order by started_at desc limit 1`,
+    [graphId],
+  );
+  return result.rows[0].id;
+}
+
+async function claim(db: PGlite): Promise<Claim | null> {
+  await asWorker(db);
+  const result = await db.query<{ c: Claim | null }>(
+    `select public.claim_planned_graph($1, $2) as c`,
+    [WORKER, EXECUTORS],
+  );
+  return result.rows[0].c;
+}
+
+describe("the Agentic SDLC on the graph worker", () => {
+  let db: PGlite;
+  let graphId: string;
+
+  beforeAll(async () => {
+    db = new PGlite({ extensions: { pgcrypto } });
+    await db.exec(`
+      create schema if not exists auth;
+      create table auth.users (
+        id uuid primary key default gen_random_uuid(),
+        raw_user_meta_data jsonb not null default '{}'::jsonb
+      );
+      create or replace function auth.uid()
+      returns uuid language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+      $$;
+      create or replace function auth.jwt()
+      returns jsonb language sql stable as $$
+        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
+      $$;
+      create role anon nologin;
+      create role authenticated nologin;
+      create role service_role nologin bypassrls;
+    `);
+
+    for (const file of (await readdir(migrationsRoot)).filter((n) => /^\d+.*\.sql$/.test(n)).sort()) {
+      await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
+    }
+
+    await db.exec(`
+      insert into auth.users (id) values ('${ownerId}'), ('${memberId}');
+      insert into public.organizations (id, name, slug, created_by) values
+        ('${organizationId}', 'Lifecycle Factory', 'lifecycle-factory', '${ownerId}');
+      insert into public.projects (id, organization_id, name, status, created_by) values
+        ('${projectId}', '${organizationId}', 'Lifecycle Project', 'active', '${ownerId}');
+    `);
+    await db.query(
+      `insert into public.organization_members (organization_id, user_id, role)
+       values ($1, $2, 'member')
+       on conflict (organization_id, user_id) do update set role = 'member'`,
+      [organizationId, memberId],
+    );
+
+    const template = findTemplate("agentic_sdlc");
+    const built = buildLaunchPlan(template!, DEFAULT_GRAPH_BUDGET);
+    if (!built.ok) throw new Error(`the SDLC template did not compile: ${built.errors.join("; ")}`);
+
+    await asUser(db, ownerId);
+    const created = await db.query<{ id: string }>(
+      `select public.create_graph_from_plan($1, $2, $3, $4::public.graph_topology, $5::jsonb,
+                $6::public.risk_level, $7, $8::jsonb, $9::jsonb, $10::jsonb) as id`,
+      [
+        organizationId, projectId, built.plan.goal, built.plan.topology,
+        JSON.stringify(built.plan.topologyReasons), built.plan.riskLevel,
+        built.plan.requiresOwnerApproval,
+        JSON.stringify(built.plan.nodes), JSON.stringify(built.plan.edges),
+        JSON.stringify(built.plan.budget),
+      ],
+    );
+    graphId = created.rows[0].id;
+  }, 240_000);
+
+  afterAll(async () => {
+    await db?.close();
+  });
+
+  it("keeps row security, force row security and read-only grants on graph_gates", async () => {
+    await db.exec("reset role");
+    const security = await db.query<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+      `select relrowsecurity, relforcerowsecurity from pg_class
+        where relnamespace = 'public'::regnamespace and relname = 'graph_gates'`,
+    );
+    expect(security.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+
+    const grants = await db.query<{ grantee: string; privilege_type: string }>(
+      `select grantee, privilege_type from information_schema.role_table_grants
+        where table_schema = 'public' and table_name = 'graph_gates'
+          and grantee in ('anon', 'authenticated')`,
+    );
+    expect(grants.rows).toEqual([{ grantee: "authenticated", privilege_type: "SELECT" }]);
+  });
+
+  it("records a stage on every node the template staged", async () => {
+    await db.exec("reset role");
+    const staged = await db.query<{ node_key: string; lifecycle_stage: string | null }>(
+      `select node_key, lifecycle_stage from public.graph_nodes where graph_id = $1`,
+      [graphId],
+    );
+    expect(staged.rows).toHaveLength(12);
+    expect(staged.rows.every((row) => row.lifecycle_stage !== null)).toBe(true);
+    expect(new Set(staged.rows.map((row) => row.lifecycle_stage))).toEqual(
+      new Set(["GOAL", "PRD", "ARCHITECTURE", "IMPLEMENTATION", "REVIEW", "TEST", "DEPLOYMENT", "MONITORING"]),
+    );
+  });
+
+  it("stores the feedback edges but withholds them from the claim", async () => {
+    await db.exec("reset role");
+    const stored = await db.query<{ is_feedback: boolean; count: string }>(
+      `select is_feedback, count(*)::text as count from public.graph_edges
+        where graph_id = $1 group by is_feedback order by is_feedback`,
+      [graphId],
+    );
+    const feedback = Number(stored.rows.find((r) => r.is_feedback === true)?.count ?? 0);
+    const forward = Number(stored.rows.find((r) => r.is_feedback === false)?.count ?? 0);
+    expect(feedback).toBe(4);
+    expect(forward).toBe(14);
+
+    const claimed = await claim(db);
+    expect(claimed).not.toBeNull();
+    // The compiler rejects cycles. A claim carrying the backward edges would
+    // produce a graph that never compiles and therefore never runs.
+    expect(claimed!.edges).toHaveLength(forward);
+    await closeRunAsPartial(db, claimed!.graph_run_id);
+  });
+
+  it("tells the worker which nodes are staged and which wait at a gate", async () => {
+    const claimed = await claim(db);
+    expect(claimed, "a closed PARTIAL run with no decided gate is not claimable again").toBeNull();
+
+    // Only a decision reopens it, so one is made here to observe the projection.
+    await db.exec("reset role");
+    const goalNode = await db.query<{ id: string }>(
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'prd'`,
+      [graphId],
+    );
+    const runId = await latestRunId(db, graphId);
+    const priorRunId = await latestRunId(db, graphId);
+    await asWorker(db);
+    const gate = await db.query<{ id: string }>(
+      `select (public.open_node_gate_as_worker($1, $2, $3, 2)).id as id`,
+      [WORKER, goalNode.rows[0].id, priorRunId],
+    );
+    await asUser(db, ownerId);
+    await db.query(`select public.decide_node_gate($1, true, 'evidence attached')`, [gate.rows[0].id]);
+
+    const reclaimed = await claim(db);
+    expect(reclaimed, "an approved gate is what makes a halted lifecycle claimable").not.toBeNull();
+    expect(reclaimed!.is_lifecycle).toBe(true);
+    expect(reclaimed!.iteration).toBe(1);
+    expect(reclaimed!.max_iterations).toBe(3);
+
+    const byKey = new Map(reclaimed!.nodes.map((node) => [node.node_key, node]));
+    expect(byKey.get("goal")?.lifecycle_stage).toBe("GOAL");
+    expect(byKey.get("goal")?.gate_kind).toBeNull();
+    expect(byKey.get("architecture")?.gate_kind).toBe("HUMAN");
+    expect(byKey.get("test")?.gate_kind).toBe("AUTOMATIC");
+    // Never opened yet, which is different from opened-and-undecided.
+    expect(byKey.get("architecture")?.gate_state).toBeNull();
+    // The node id is what a gate is keyed to; without it the worker cannot
+    // open one that outlives this run.
+    expect(byKey.get("architecture")?.node_id).toMatch(/^[0-9a-f-]{36}$/);
+    await closeRunAsPartial(db, reclaimed!.graph_run_id);
+  });
+
+  it("refuses to open a gate on a node whose plan named none", async () => {
+    await db.exec("reset role");
+    const ungated = await db.query<{ id: string }>(
+      `select id from public.graph_nodes where graph_id = $1 and gate_kind is null limit 1`,
+      [graphId],
+    );
+    const runId = await latestRunId(db, graphId);
+    await asWorker(db);
+    await expect(
+      db.query(`select public.open_node_gate_as_worker($1, $2, $3, 0)`,
+        [WORKER, ungated.rows[0].id, runId]),
+    ).rejects.toThrow(/node_has_no_gate/);
+  });
+
+  it("refuses a human gate to a plain member, and takes it from an owner", async () => {
+    await db.exec("reset role");
+    const node = await db.query<{ id: string }>(
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
+      [graphId],
+    );
+    const runId = await latestRunId(db, graphId);
+    await asWorker(db);
+    const opened = await db.query<{ id: string }>(
+      `select (public.open_node_gate_as_worker($1, $2, $3, 0)).id as id`,
+      [WORKER, node.rows[0].id, runId],
+    );
+    const gateId = opened.rows[0].id;
+
+    await asUser(db, memberId);
+    await expect(
+      db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
+    ).rejects.toThrow(/owner or admin role is required to decide a human gate/);
+
+    await asUser(db, ownerId);
+    const decided = await db.query<{ state: string }>(
+      `select (public.decide_node_gate($1, true, 'design reviewed')).state::text as state`,
+      [gateId],
+    );
+    expect(decided.rows[0].state).toBe("APPROVED");
+  });
+
+  it("carries that approval into the next run, which is the point of keying it to the node", async () => {
+    /*
+     * The whole justification for keying a gate to the graph node rather than
+     * the node run. The worker re-runs a claimed graph from the beginning, so a
+     * run-keyed gate would be new and undecided on every claim and the
+     * lifecycle could never pass its first human decision. This asserts the
+     * approval made against the *previous* run is visible on a *later* one.
+     */
+    await db.exec("reset role");
+    const before = await db.query<{ graph_run_id: string; state: string }>(
+      `select id as graph_run_id, state::text as state from public.graph_runs
+        where graph_id = $1 order by started_at desc limit 1`,
+      [graphId],
+    );
+    if (before.rows[0].state === "RUNNING") {
+      await closeRunAsPartial(db, before.rows[0].graph_run_id);
+    }
+
+    const claimed = await claim(db);
+    expect(claimed).not.toBeNull();
+    expect(claimed!.graph_run_id).not.toBe(before.rows[0].graph_run_id);
+
+    const architecture = claimed!.nodes.find((node) => node.node_key === "architecture");
+    expect(architecture?.gate_state).toBe("APPROVED");
+
+    // And a fresh node_run: the approval outlived the run, the run did not.
+    expect(architecture?.node_run_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("will not reopen a decided gate on a later claim", async () => {
+    await db.exec("reset role");
+    const node = await db.query<{ id: string }>(
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
+      [graphId],
+    );
+    const runId = await latestRunId(db, graphId);
+    await asWorker(db);
+    const reopened = await db.query<{ state: string; reason: string | null }>(
+      `select (public.open_node_gate_as_worker($1, $2, $3, 0)).state::text as state,
+              (public.open_node_gate_as_worker($1, $2, $3, 0)).reason as reason`,
+      [WORKER, node.rows[0].id, runId],
+    );
+    expect(reopened.rows[0].state).toBe("APPROVED");
+    expect(reopened.rows[0].reason).toBe("design reviewed");
+  });
+
+  it("refuses an automatic approval with no anchored evidence, but records a rejection", async () => {
+    await db.exec("reset role");
+    const node = await db.query<{ id: string }>(
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'test'`,
+      [graphId],
+    );
+    const runId = await latestRunId(db, graphId);
+    await asWorker(db);
+    const opened = await db.query<{ id: string }>(
+      `select (public.open_node_gate_as_worker($1, $2, $3, 0)).id as id`,
+      [WORKER, node.rows[0].id, runId],
+    );
+    const gateId = opened.rows[0].id;
+
+    await asUser(db, ownerId);
+    await expect(
+      db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
+    ).rejects.toThrow(/an automatic gate cannot approve without anchored evidence/);
+
+    // Refusing to approve on no evidence is not refusing to record a decision.
+    const rejected = await db.query<{ state: string }>(
+      `select (public.decide_node_gate($1, false, 'no evidence')).state::text as state`,
+      [gateId],
+    );
+    expect(rejected.rows[0].state).toBe("REJECTED");
+
+    await expect(
+      db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
+    ).rejects.toThrow(/gate_already_decided/);
+  });
+
+  it("writes an audit event for every gate decision", async () => {
+    await db.exec("reset role");
+    const events = await db.query<{ event_type: string }>(
+      `select distinct event_type::text as event_type from public.activity_events
+        where organization_id = $1 and event_type::text like 'lifecycle.%'`,
+      [organizationId],
+    );
+    const types = events.rows.map((row) => row.event_type);
+    expect(types).toContain("lifecycle.graph_created");
+    expect(types).toContain("lifecycle.gate_opened");
+    expect(types).toContain("lifecycle.gate_approved");
+    expect(types).toContain("lifecycle.gate_rejected");
+  });
+
+  it("advances the iteration to its cap and then reports that it cannot", async () => {
+    await asUser(db, ownerId);
+    for (const expected of [2, 3]) {
+      const step = await db.query<{ iteration: number; advanced: boolean }>(
+        `select iteration, advanced from public.advance_graph_iteration($1)`,
+        [graphId],
+      );
+      expect(step.rows[0]).toMatchObject({ iteration: expected, advanced: true });
+    }
+
+    const capped = await db.query<{ iteration: number; advanced: boolean }>(
+      `select iteration, advanced from public.advance_graph_iteration($1)`,
+      [graphId],
+    );
+    expect(capped.rows[0]).toMatchObject({ iteration: 3, advanced: false });
+
+    // The record of the exhaustion survives, which an exception would have
+    // rolled back along with itself.
+    const exhausted = await db.query<{ count: string }>(
+      `select count(*)::text as count from public.activity_events
+        where organization_id = $1 and event_type::text = 'lifecycle.iteration_exhausted'`,
+      [organizationId],
+    );
+    expect(Number(exhausted.rows[0].count)).toBeGreaterThan(0);
+  });
+
+  it("refuses to store a node output carrying something secret-shaped", async () => {
+    const runId = await latestRunId(db, graphId);
+    await asWorker(db);
+
+    await expect(
+      db.query(`select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb)`,
+        [WORKER, runId, JSON.stringify({ finding: "ok", api_key: "abc" })]),
+    ).rejects.toThrow(/graph_artifacts_payload_no_sensitive_data/);
+
+    // A secret-shaped value under an innocent key is caught too, which a
+    // blocklist of key names alone would wave through.
+    await expect(
+      db.query(`select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb)`,
+        [WORKER, runId,
+         JSON.stringify({ note: "found sk-abcdefghijklmnopqrstuvwxyz012345 in the config" })]),
+    ).rejects.toThrow(/graph_artifacts_payload_no_sensitive_data/);
+
+    const ordinary = await db.query<{ id: string }>(
+      `select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb) as id`,
+      [WORKER, runId, JSON.stringify({ criteria: ["the screen saves"] })],
+    );
+    expect(ordinary.rows[0].id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
