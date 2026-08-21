@@ -71,6 +71,8 @@ type FactoryData = {
    * while the executor was Not Connected and a submitted command sat queued.
    */
   executor: { connected: boolean; label: string; detail: string };
+  /** Pipeline templates this tenant recorded of its own, from Supabase. */
+  customTemplates: number;
 };
 
 type State =
@@ -169,12 +171,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   const load = useCallback(async () => {
     try {
-      const [connections, projects, accounts, bots, commands] = await Promise.allSettled([
+      const [connections, projects, accounts, bots, commands, templates] = await Promise.allSettled([
         fetch("/api/github/connections", { cache: "no-store" }),
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/ai-accounts", { cache: "no-store" }),
         fetch("/api/bots", { cache: "no-store" }),
         fetch("/api/commands", { cache: "no-store" }),
+        fetch("/api/pipeline-templates", { cache: "no-store" }),
       ]);
 
       const first = connections.status === "fulfilled" ? connections.value : null;
@@ -196,6 +199,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         assignments: [],
         commands: [],
         executor: { connected: false, label: "Not Connected", detail: "" },
+        customTemplates: 0,
       };
 
       if (first?.ok) {
@@ -247,6 +251,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             }),
             projectId: assignment.projectId ?? null,
           }));
+      }
+      if (templates.status === "fulfilled" && templates.value.ok) {
+        const body = await readJson<{ templates?: unknown[] }>(templates.value);
+        data.customTemplates = (body?.templates ?? []).length;
       }
       if (commands.status === "fulfilled" && commands.value.ok) {
         const body = await readJson<{ commands?: FactoryData["commands"] }>(commands.value);
@@ -416,8 +424,24 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "pipeline",
       title: "Configure Pipeline",
       description: "Every goal runs the same verified lifecycle. Use a built-in template, or define your own stages and record a pipeline for a project.",
-      done: activeProject !== null,
-      evidence: `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`,
+      // A project always has a working pipeline, because the built-ins compile
+      // server-side on every request -- so this is done when one of them
+      // actually compiled, not when a project exists. The old condition was
+      // `activeProject !== null`, the same expression as the step above it, so
+      // creating a project marked the pipeline configured and the step could
+      // never be outstanding. `compiledBuiltIns` can genuinely be zero: a
+      // template that stops compiling should show here rather than anywhere
+      // else.
+      // Scoped to the active factory like every step after it, *and* requires a
+      // pipeline that actually compiles -- so an empty workspace still reads
+      // zero, and a repository of templates that all stop compiling reads here
+      // rather than nowhere.
+      done: activeProject !== null && (compiledBuiltIns > 0 || data.customTemplates > 0),
+      evidence: data.customTemplates > 0
+        ? `${data.customTemplates} custom template${data.customTemplates === 1 ? "" : "s"} · ${compiledBuiltIns} built-in compiled`
+        : compiledBuiltIns > 0
+          ? `${compiledBuiltIns} built-in template${compiledBuiltIns === 1 ? "" : "s"} compiled · Intake → Planning → Building → Draft PR, with CI on every pull request`
+          : "No pipeline template compiles right now",
       action: "Configure pipeline",
       icon: Workflow,
       body: <PipelineTemplatesManager builtIns={builtIns} />,

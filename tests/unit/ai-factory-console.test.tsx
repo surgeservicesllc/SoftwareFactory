@@ -216,6 +216,36 @@ describe("AiFactoryConsole", () => {
     expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
   });
 
+  it("does not mark the pipeline configured just because a project exists", async () => {
+    // `done` for this step was the same expression as the step above it
+    // (`activeProject !== null`), so creating a project marked the pipeline
+    // configured and the step could never read as outstanding. It is derived
+    // from what actually compiles now, and from the tenant's own templates.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/pipeline-templates": { templates: [] },
+    });
+
+    render(<AiFactoryConsole builtIns={[]} />);
+
+    const pipeline = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(pipeline).getByText("No pipeline template compiles right now")).toBeInTheDocument();
+    // Create Project is the only step satisfied here; the pipeline step is not.
+    expect(await screen.findByText("1 of 8 complete")).toBeInTheDocument();
+  });
+
+  it("counts the tenant's own pipeline templates as evidence", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/pipeline-templates": { templates: [{ id: "t1", slug: "fake_review_pipeline" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const pipeline = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(pipeline).getByText(/1 custom template/)).toBeInTheDocument();
+  });
+
   it("says the executor is Not Connected rather than promising a run that cannot start", async () => {
     // The step's whole subject is shipping. With nothing to execute a command,
     // it said "Every run lands as a draft pull request" and "Work is in
