@@ -18,8 +18,11 @@ resume BYTEA download round-trip, analytics re-checked after the walk)
 and closed two more wiring gaps: the CRM details editor and the
 persistent current-resume link. Suite counts on the merged state: 3,470
 vitest green (2 skipped), lint and tsc clean, production build clean,
-extended journey green in 30.8s. The journey is on-demand, not in CI:
-providing it a stack in CI is recorded open work.
+extended journey green in 30.8s. The journey also runs in CI now:
+`.github/workflows/job-seeker-journey.yml` (dispatch + daily schedule),
+proven live by run 32533731639 — green in 3m40s on a runner that
+provisioned the stack itself. Live-wiring regressions surface within a
+day without anyone asking.
 
 **Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
 boundary (migration `20260819000100`), the worker

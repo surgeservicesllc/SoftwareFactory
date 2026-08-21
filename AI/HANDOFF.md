@@ -61,7 +61,10 @@ GoTrue's admin API, builds and serves the production app, and runs the
 JOB_SEEKER_E2E journey — so live-wiring regressions surface within a day
 instead of at the next manual run. Actions pinned to reviewed SHAs
 (pin-guard test green); no deployment, no production credentials, no
-provider usage in the lane.
+provider usage in the lane. **The lane is proven live**: first dispatch
+on main, run 32533731639, green in 3m40s — the runner provisioned the
+stack, minted the user, built and served the production app, and the
+whole journey passed.
 
 ## Prior (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
 
