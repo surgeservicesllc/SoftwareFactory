@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -37,8 +37,10 @@ async function walk(directory: string): Promise<string[]> {
 
 /** `app/(portal)/solutions/runs/page.tsx` → `/solutions/runs`. */
 function routeFor(file: string): string {
-  const relative = file.slice(resolve(repositoryRoot, "app").length).replace(/\/page\.tsx$/, "");
-  const path = relative
+  const relativePath = relative(resolve(repositoryRoot, "app"), file)
+    .replaceAll("\\", "/")
+    .replace(/(^|\/)page\.tsx$/, "");
+  const path = relativePath
     .split("/")
     .filter((segment) => segment && !/^\(.+\)$/.test(segment))
     .join("/");
@@ -86,7 +88,7 @@ async function reachableFrom(entries: string[]): Promise<Set<string>> {
 describe("every route is swept at every supported width", () => {
   it("leaves no page out of the width sweep", async () => {
     const pages = (await walk(resolve(repositoryRoot, "app")))
-      .filter((file) => file.endsWith("/page.tsx"));
+      .filter((file) => /[\\/]page\.tsx$/.test(file));
     const routes = pages.map(routeFor);
     expect(routes.length).toBeGreaterThan(20);
 
@@ -138,14 +140,14 @@ describe("every component's layout is measured in a browser", () => {
      * their components need the harness.
      */
     const fullyRenderedPages = (await walk(resolve(repositoryRoot, "app")))
-      .filter((file) => file.endsWith("/page.tsx"))
-      .filter((file) => !file.includes("/solutions/"));
+      .filter((file) => /[\\/]page\.tsx$/.test(file))
+      .filter((file) => !file.replaceAll("\\", "/").includes("/solutions/"));
 
     // Layouts render on every route in their group, so the header and footer
     // are laid out by every sweep — they are reached through a layout rather
     // than a page, which is a distinction only this walk cares about.
     const layouts = (await walk(resolve(repositoryRoot, "app")))
-      .filter((file) => file.endsWith("/layout.tsx"));
+      .filter((file) => /[\\/]layout\.tsx$/.test(file));
 
     const reachable = await reachableFrom([
       resolve(repositoryRoot, "tests/harness/main.tsx"),
@@ -168,7 +170,7 @@ describe("every component's layout is measured in a browser", () => {
 
     const unmeasured = components
       .filter((file) => !reachable.has(file))
-      .map((file) => file.slice(repositoryRoot.length + 1))
+      .map((file) => relative(repositoryRoot, file).replaceAll("\\", "/"))
       .filter((relative) => !RENDERS_NOTHING.has(relative));
 
     expect(

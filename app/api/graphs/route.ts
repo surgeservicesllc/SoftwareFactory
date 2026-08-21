@@ -1,9 +1,8 @@
 import { z } from "zod";
 
-import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
-import { findTemplate, type GraphTemplate } from "@/lib/graph/templates";
+import { budgetForTemplate, findTemplate, type GraphTemplate } from "@/lib/graph/templates";
 import {
   invalidRequest,
   operationsContext,
@@ -102,7 +101,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const built = buildLaunchPlan(template, DEFAULT_GRAPH_BUDGET);
+    /*
+     * The budget this template runs under, not the default.
+     *
+     * `budgetForTemplate` is the default with the template's own overrides
+     * applied. Passing the bare default here would record a ninety-minute
+     * ceiling for a graph that declared it needs a hundred and fifty — the
+     * guard would pass, and production would stop the run as overspending.
+     */
+    const built = buildLaunchPlan(template, budgetForTemplate(template));
     if (!built.ok) {
       // The compiler refused. That is a real answer about the template, not a
       // server fault, so it reaches the caller intact.

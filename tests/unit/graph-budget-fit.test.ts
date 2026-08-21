@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { compileGraph, minimumGraphDurationMs } from "@/lib/graph/compiler";
-import { GRAPH_TEMPLATES, templateNodeContracts } from "@/lib/graph/templates";
+import { buildLaunchPlan } from "@/lib/graph/launch-plan";
+import { budgetForTemplate, GRAPH_TEMPLATES, templateNodeContracts } from "@/lib/graph/templates";
 
 /**
  * A budget below what the work is allowed to take stops honest work and
@@ -16,8 +17,13 @@ import { GRAPH_TEMPLATES, templateNodeContracts } from "@/lib/graph/templates";
  * three-minute nodes; nothing caught it, because the two numbers lived in
  * different files and neither knew about the other.
  */
-describe("the default graph budget", () => {
+describe("the graph budget", () => {
   it("can accommodate every template it is asked to run", () => {
+    // Each template against the budget it will actually run under: the default,
+    // plus whatever it declared for itself. Holding a nine-stage lifecycle to
+    // the number that suits a five-stage build would force one of the two
+    // wrong answers — a shrunken model envelope, or a ceiling widened for
+    // every graph that never needed it.
     const tooTight: string[] = [];
     for (const template of GRAPH_TEMPLATES) {
       const compiled = compileGraph({
@@ -28,15 +34,33 @@ describe("the default graph budget", () => {
         resolvedWriteConflicts: template.resolvedWriteConflicts,
       });
       if (!compiled.ok) continue; // compilation is a different test's subject
+      const budget = budgetForTemplate(template);
       const needed = minimumGraphDurationMs(compiled.graph);
-      if (needed > DEFAULT_GRAPH_BUDGET.maxDurationMs) {
+      if (needed > budget.maxDurationMs) {
         tooTight.push(
           `${template.key} needs ${Math.round(needed / 60_000)} min `
-          + `but the budget allows ${Math.round(DEFAULT_GRAPH_BUDGET.maxDurationMs / 60_000)} min`,
+          + `but its budget allows ${Math.round(budget.maxDurationMs / 60_000)} min`,
         );
       }
     }
     expect(tooTight, tooTight.join("; ")).toEqual([]);
+  });
+
+  it("records the template's own budget, not the default, when a graph is planned", () => {
+    /*
+     * The guard above and the plan the database receives have to be the same
+     * number. Passing the bare default at the launch site would let a template
+     * declare a hundred and fifty minutes, pass this suite, and then be stopped
+     * as overspending at ninety — a green test and a broken run.
+     */
+    const lifecycle = GRAPH_TEMPLATES.find((template) => template.key === "agentic_sdlc");
+    expect(lifecycle, "the Agentic SDLC template is missing").toBeDefined();
+
+    const built = buildLaunchPlan(lifecycle!, budgetForTemplate(lifecycle!));
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.plan.budget.max_duration_ms).toBe(budgetForTemplate(lifecycle!).maxDurationMs);
+    expect(built.plan.budget.max_duration_ms).toBeGreaterThan(DEFAULT_GRAPH_BUDGET.maxDurationMs);
   });
 
   it("derives the requirement from the critical path, not the node count", () => {
@@ -60,6 +84,13 @@ describe("the worker's workflow timeout", () => {
     const declared = /timeout-minutes:\s*(\d+)/.exec(workflow);
     expect(declared, "graph-worker.yml no longer declares a job timeout").not.toBeNull();
     const workflowMs = Number(declared?.[1]) * 60_000;
-    expect(workflowMs).toBeGreaterThan(DEFAULT_GRAPH_BUDGET.maxDurationMs);
+    // Against the largest budget any template runs under, not the default: the
+    // workflow hosts whichever graph the worker claims, and a job that dies
+    // before the deepest one does leaves a run the engine still considers live.
+    const widest = GRAPH_TEMPLATES.reduce(
+      (worst, template) => Math.max(worst, budgetForTemplate(template).maxDurationMs),
+      DEFAULT_GRAPH_BUDGET.maxDurationMs,
+    );
+    expect(workflowMs).toBeGreaterThan(widest);
   });
 });

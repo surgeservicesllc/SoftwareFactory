@@ -1,8 +1,33 @@
 # Current state
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-21
 
-**Addendum, 2026-08-21 late (Job Discovery operational — ADR-098):**
+**Addendum, 2026-08-21 (Factory Briefing, ADR-104):** the Dashboard now has
+one read-only, four-lane control-plane briefing: Needs owner now, Underway,
+Recently finished, and Up next. A deterministic classifier folds the existing
+caller-member projections for tasks, runs, graph runs, the AgentOS inbox,
+operations incidents, GitHub connections, the logical agent roster, and
+worker heartbeat evidence. A task owns its linked run, so the same work cannot
+appear in two lanes; cancelled work is omitted with a count; unknown lifecycle
+values fail into an inspectable lane. All eight sources are read in parallel
+with `no-store`, per-source timeouts, batch cancellation, and stale-response
+protection. Any unavailable, malformed, or saturated source produces an
+explicit incomplete warning—an empty lane is never presented as an all-clear
+while evidence may be missing. Briefing-specific API views omit prompt-derived
+task titles, command prompts, inbox bodies and choices, graph node/artifact/
+verification details, repository details, and unrelated operations data from
+the browser response while retaining verdicts needed to fail visibly.
+Malformed verification evidence fails the graph briefing read closed. The
+coordinator label is the recorded logical
+Orchestrator role, not a claim that a new supervisor exists. Actions only
+navigate to the existing authoritative screens, which re-read and re-authorize
+state. This adapts the useful Bearings information architecture reviewed in
+FirstMate commit `738460d401b1115dab617c3859077973977615cb`; no FirstMate
+shell/session code, state files, credentials, relay, merge path, or execution
+authority was imported. No schema, RLS, workflow, provider, autonomy, or
+production change is part of this increment.
+
+**Addendum, 2026-08-21 late (Job Discovery operational — ADR-105):**
 discovery on /job-seeker now has two real ways in: manual recording and
 public-board import. Greenhouse and Lever are identifier-driven public
 adapters (their public APIs need no credential — only which board to
@@ -38,6 +63,23 @@ follow-up date) that previously had no UI, and the profile view embeds the
 current resume via `resume_upload_id` so the stored file stays visible
 across reloads instead of vanishing after the upload moment.
 
+**Addendum, 2026-08-18 (a project's selected pipelines):** Configure Pipeline
+is a step that can be worked on. `project_pipelines` (migration
+`20260821000300`, **unhosted**) records which templates a project runs — many
+per project, built-in or custom — behind RLS with FORCE RLS, every table
+privilege revoked from `anon`, `authenticated` and `service_role`, and three
+definer functions as the only path: owner/administrator
+`select_project_pipeline` and `deselect_project_pipeline` (both audit-evented
+and advisory-locked per project-and-key) and member `list_project_pipelines`.
+**Use** on a template card toggles that record through
+`/api/project-pipelines` — grey and `aria-pressed` when selected, accent when
+not — and the journey reads it back: the step is done only when at least one
+pipeline is selected, and the chosen names render on the page rather than only
+inside the overlay. Planning a real graph, which Use used to do, is now its own
+**Plan graph** button. Until the migration is applied on the hosted project the
+route reports PGRST202 as **Not Connected** and the console disables Use naming
+that reason (ADR-098).
+
 **Addendum, 2026-08-17 (AI Factory guided journey):** `/solutions/ai-factory`
 ("AI Factory" in the left navigation under Overview) is the owner's guided
 end-to-end path — Connect Repository → Create Project → Configure Pipeline →
@@ -60,6 +102,35 @@ at once. Per-posting execution preferences (model override + work effort,
 migration `20260817001100`, hosted) surface on each posting card. No
 execution-authority change anywhere in this surface: assignment remains
 routing intent, and the page says what actually runs.
+
+**Addendum, 2026-08-20 (component audit — three migrations are outstanding on
+hosted):** the hosted schema audit had been reporting "0 applied, 0
+outstanding" from a hand-written list of four migrations while the directory
+held 124. Its expectations are derived from `supabase/migrations` now, and the
+audit now reads PostgREST's own description for functions as well as probing
+tables, and run
+[32316446825](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32316446825)
+reports **46 applied, 4 outstanding, 0 indeterminate, 74 not probeable**. The
+four are `20260814000300_agentos_isolation_model` (nine `agentos_*` tables),
+`20260814002500_provider_credential_vault`
+(`resolve_provider_connect_session()`, whose sibling
+`claim_provider_connect_session()` is visible),
+`20260815001100_connection_routing_decisions`, and
+`20260816001600_phase2c_resource_reservations` (`resource_reservations`,
+`resource_rate_events`). NOT VISIBLE is not absent — a table that exists with
+no grants looks identical over REST — so `scripts/hosted-state-report.sql`
+must run before any apply, and applying is an owner-approved action that no
+agent has taken. Meanwhile every consumer degrades honestly: the reservation
+store refuses with `ADMISSION_UNAVAILABLE` rather than admitting on unknown
+usage, `/api/agentos/grants` answers `agentos_grants_unavailable`, and
+`connection_routing_decisions` has no application consumer at all. The vault
+function had a real consequence: `POST /api/bots/connect/claim` reported the
+failed lookup as `connect_session_invalid`, telling operators with a correct
+code that their sign-in link was invalid. That path now separates a failed
+lookup (`503 connect_unavailable`) from an unmatched code, without reopening
+the code-guessing oracle the uniform failures close. The full
+component-by-component walk, with each step's evidence, is
+`AI/FACTORY_COMPONENT_AUDIT.md`.
 
 **Addendum, 2026-08-19 (graphs execute now — ADR-092):** recorded graphs no
 longer dead-end at PLANNED. The graph executor worker
@@ -306,7 +377,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - **Concurrency is now bounded rather than specified.** `lib/resources/capacity.ts` limits concurrent runs per worker, per provider, and per project, and every refusal names *which* limit refused — told "the project is full" when one worker is the real constraint, an operator raises the wrong number. It is applied in `assignWorker` as an eligibility gate beside capability and risk, never as a score weight, so cost or preference cannot outvote it. Reservations carry an expiry and expired ones stop counting, so a worker that dies does not strand its slot until someone notices.
 - **The scheduler and the manager are joined.** `lib/resources/dispatch.ts` routes a whole tick of startable nodes: `lib/graph/scheduler.ts` says which nodes may start, `assignWorker` says who runs each. It is not a loop over the single-node decision — reservations are threaded forward through the batch, because routing every node against the reservations live at the *start* of the tick lets two nodes released together take the same last slot. Dispatch order is decided (risk, then stated priority, then nodeId) rather than inherited from the scheduler's emission order, since when capacity binds the order decides who waits. A node held back by a full fleet is `DEFERRED` and re-offered; a node no worker can ever satisfy is `UNROUTABLE` and is not, so the scheduler cannot spin on impossible work.
 - **Rate is accounted separately from concurrency, because they are different questions.** `lib/resources/rate-limits.ts` counts requests and tokens over a sliding per-provider window and gates `assignWorker` alongside capability and capacity. Concurrency asks whether a slot is free; rate asks whether too much has happened recently — six concurrent slots filled by two-second calls is 180 requests a minute while never showing more than six in flight, so one limit does not imply the other. A rate refusal carries `retryAfterMs` and a capacity refusal deliberately does not: a window clears at a computable time, whereas nobody can say when another run will finish. Token budgets are checked against a caller-supplied estimate, and usage marks when it includes estimates rather than measurements — the same refusal to launder a prediction into a number that the history module already applies to success rates.
-- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
+- **Not Connected / no data:** the manager is not called from the Phase 1C claim path — that path is hosted and live, nothing executes regardless, so changing it now buys no behavior and risks conflicting with concurrent agents. Capacity and dispatch are **pure functions with no persistence**: the caller owns storing reservations, so a process restart currently forgets what was held. `lib/resources/reservation-store.ts` and migration `20260816001600` exist to close exactly that, and neither is reachable from anything that executes: the store is imported only by its own tests, and its table is one of the four the hosted audit reports as not visible. The ordering matters — wiring a fail-closed admission gate against a table that is not there would refuse every claim and stop the one execution lane that works today, so the migration is applied first and the wiring follows. That is a real limit, not a rounding error, and it is why the plan records the central scheduler as complete *in-process* rather than durable. Rate accounting shares that limit: the window lives with the caller, so a restart forgets it. The budget ladder is still specified and not simulated, because it needs a worker pool that executes. `AI/PHASE_2C_IMPLEMENTATION_PLAN.md` carries the audit.
 
 ## Durable worker implementation
 
@@ -458,6 +529,30 @@ Each of these was true and unguarded — provable only by a manual run, which do
 - `tests/integration/supabase-rpc-contract.test.ts` — every `.rpc()` call site in `app`, `lib`, and `scripts` resolves against the fully migrated schema with matching argument names.
 - `tests/integration/schema-security-invariants.test.ts` — RLS and FORCE RLS on every public table across the whole chain; `service_role` table privileges limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write privilege anywhere. `newsletter_subscribers` is an allowlisted policyless table, locked shut on purpose behind the SECURITY DEFINER `subscribe_to_newsletter`.
 - `tests/integration/required-checks-wiring.test.ts` — the worker's `SOFTWAREFACTORY_REQUIRED_CHECKS` matches the `name:` of every job in `ci.yml`, in both directions. A renamed CI job would otherwise leave a live run waiting for a check that never reports.
+
+## Agentic SDLC lifecycle on the graph worker, 2026-08-21
+
+`main` shipped a background graph worker while a parallel branch was building a
+request-driven executor. The branch deleted its own and re-seated the lifecycle
+on the worker: one executor, one write path, no second claimant racing the first
+for the same run. `AI/AGENTIC_SDLC_GAP_MATRIX.md` records all 24 capabilities
+against the tree.
+
+**What exists.**
+
+- Eight stages (`lib/sdlc/lifecycle.ts`), recorded on a node rather than implied, each with the gate that guards it and whether its claim must be anchored.
+- `graph_gates` under RLS and FORCE RLS with `select` to `authenticated` and no write privilege anywhere, keyed on `node_id` so an approval outlives the run that asked for it.
+- `claim_planned_graph` projects `lifecycle_stage`, `gate_kind` and any existing decision; excludes feedback edges; and re-offers a lifecycle that halted at a gate once that gate is decided.
+- `runClaimedGraph` records a gated node's artifact, moves it to VERIFYING, opens the gate and reports it as not-completed so nothing downstream starts on an undecided result.
+- `POST /api/graph-gates/{id}/decide` — member-scoped, `auth.uid()` recorded, both database refusals passed through intact.
+- `components/graph-runs-panel.tsx` shows the stage and offers the decision inline on the node that owns it.
+
+**Migrations `20260821000100` and `20260821000200` are local only.** The hosted
+ledger does not have them, so no hosted graph carries a stage or a gate.
+
+**Not Connected, unchanged.** No node has executed against a provider. Outbound
+execution is off and no credential is configured. No lifecycle has met its
+acceptance criteria and none is claimed to have.
 
 ## Release blockers
 

@@ -102,8 +102,11 @@ type Artifact = z.infer<typeof artifactSchema>;
  * Canary run 32256086443 failed with "Reached maximum number of turns (2)"
  * on a text-only node: output here is schema-enforced, so a single
  * structured-output retry spends the whole budget and the run dies on an
- * opaque provider error rather than on the work. Six turns leaves room for
- * that retry; an inspector that must find and read files gets twice that.
+ * opaque provider error rather than on the work. Six turns was set to leave
+ * room for that retry, and canary run 32314191037 then spent all six on the
+ * same synthesis node — one retry is not the ceiling, it is just the case that
+ * had been seen. Synthesis now gets what an inspector gets, which is the
+ * largest budget either node has been observed to need with room above it.
  * Both stay far below the transport's ceiling, because a canary should fail
  * when the system is broken, not when a budget was set by guess.
  */
@@ -115,7 +118,7 @@ type Artifact = z.infer<typeof artifactSchema>;
  */
 class ProviderOutOfCapacity extends Error {}
 
-const SYNTHESIS_TURNS = 6;
+const SYNTHESIS_TURNS = 12;
 const INSPECTOR_TURNS = 12;
 
 const INSPECTORS = ["inspect_migrations", "inspect_rls", "inspect_zero_token"] as const;

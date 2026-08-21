@@ -7,6 +7,7 @@ import { ActivityConsole } from "@/components/activity-console";
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
 import { CommandComposer } from "@/components/command-composer";
+import { FactoryBriefing } from "@/components/factory-briefing";
 import { GettingStarted } from "@/components/getting-started";
 import { GraphExecutionSummary } from "@/components/graph-execution-summary";
 import { GraphLaunchControl } from "@/components/graph-launch-control";
@@ -25,6 +26,7 @@ import { JobSeekerConsole } from "@/components/job-seeker/console";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
+import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { PipelinesConsole } from "@/components/pipelines-console";
 import { PortfolioConsole } from "@/components/portfolio-console";
 import { ProviderSettings } from "@/components/provider-settings";
@@ -56,6 +58,10 @@ import {
   AUTONOMY_STATUS,
   COMMANDS,
   CONNECTIONS,
+  CUSTOM_PIPELINE_TEMPLATES,
+  FACTORY_BRIEFING_AGENTS,
+  FACTORY_BRIEFING_CONNECTIONS,
+  FACTORY_BRIEFING_RUNS,
   OPERATIONS_OVERVIEW,
   JOB_SEEKER_PREFERENCES,
   JOB_SEEKER_PROFILE,
@@ -64,6 +70,7 @@ import {
   PROJECT_BOTS_ROSTER,
   PROJECT_ID,
   PROJECT_OPERATIONS,
+  PROJECT_PIPELINES,
   PROJECTS,
   PROVIDER_STATUS,
   REPORTS,
@@ -152,10 +159,22 @@ function serveFixtures() {
         canManage: true,
       });
     }
+    if (url.includes("/api/project-pipelines")) {
+      return json({ available: true, canManage: true, pipelines: PROJECT_PIPELINES });
+    }
+    if (url.includes("/api/pipeline-templates")) {
+      return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
+    }
+    if (url.includes("/api/graphs/runs")) return json({ runs: [] });
+    if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
+    if (url.includes("/api/agents?limit=100")) return json({ agents: FACTORY_BRIEFING_AGENTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });
     if (url.includes("/api/activity")) return json({ events: ACTIVITY });
+    if (url.includes("/api/github/connections?view=briefing")) {
+      return json({ connections: FACTORY_BRIEFING_CONNECTIONS });
+    }
     if (url.includes("/api/github/connections")) return json({ connections: CONNECTIONS });
     if (url.includes("/api/projects")) return json({ projects: PROJECTS });
     if (url.includes("/api/tasks") || url.includes("/api/backlog")) return json({ tasks: [] });
@@ -242,6 +261,20 @@ const CASES: Record<string, () => React.ReactElement> = {
       />
     </InShell>
   ),
+  /*
+   * The manager with pipelines already selected. A selected card is a layout
+   * that only exists once something is selected — grey Use with a check, and
+   * a summary counting them above the grid — so it needs its own case or the
+   * sweep only ever measures the unselected one.
+   */
+  "pipeline-templates-selected": () => (
+    <InShell>
+      <PipelineTemplatesManager
+        builtIns={TEMPLATES}
+        projectContext={{ id: PROJECT_ID, name: "E-Commerce Platform" }}
+      />
+    </InShell>
+  ),
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,
@@ -261,6 +294,7 @@ const CASES: Record<string, () => React.ReactElement> = {
     </InShell>
   ),
   "dashboard-metrics": () => <InShell><LiveDashboardMetrics authenticated /></InShell>,
+  "factory-briefing": () => <InShell><FactoryBriefing authenticated /></InShell>,
   attention: () => <InShell><NeedsYourAttention authenticated /></InShell>,
   "portfolio-controls": () => <InShell><PortfolioControls /></InShell>,
   "project-detail": () => <InShell><ProjectDetailConsole projectId={PROJECT_ID} /></InShell>,

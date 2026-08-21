@@ -1,8 +1,39 @@
 # Handoff
 
 Last updated: 2026-08-21
+## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-104)
 
-## Newest (2026-08-21 ~23:45Z): Job Discovery is operational — real public-board imports (ADR-098)
+FirstMate was reviewed at exact commit
+`738460d401b1115dab617c3859077973977615cb` (MIT, Copyright 2026 Kun Chen).
+It is a single-user local Bash agent distribution, not a compatible web
+dependency, so this change reimplements only its strongest information-
+architecture invariant: one four-lane bearings view. The Dashboard's former
+fragmented attention block is replaced by Factory Briefing, which classifies
+live task/run/graph/inbox/incident/connection evidence into exactly one of
+Needs owner now, Underway, Recently finished, or Up next; reports the logical
+Orchestrator role and worker heartbeat separately; caps lists with totals; and
+names every missing, malformed, or saturated source. Linked runs are folded
+into their task. Eight parallel reads have timeouts, batch cancellation, and
+stale-response protection; briefing-specific server responses omit prompt-
+derived task titles, command prompts, inbox bodies/choices, graph node/
+artifact/verification details beyond fail-visible verdicts, repository
+details, and unrelated operations data. Malformed graph verification evidence
+fails the source read closed. All actions navigate to authoritative screens
+rather than mutating from the summary. No migration, auth/RLS boundary, worker, provider,
+autonomy setting, workflow, merge, deployment, or production resource changed.
+
+Local evidence: full ESLint and TypeScript clean; production Next build green;
+57/57 focused classifier/component/minimized-route/operations-contract tests
+green; the component browser matrix has 30 passes and 15 intentional skips in
+the non-resizable mobile project across 320–1440 px, including populated
+layout/control/axe checks and an unbroken
+maximum-length coordinator at 320 px. On the rebased combined tree, the local
+unit suite passes 2,506/2,506 after excluding two pre-existing Windows-only
+process/permission files. Database behavior suites need their configured
+stack; Linux draft-PR CI remains authoritative.
+Publish only a draft PR; do not merge or deploy from this handoff.
+
+## Newest (2026-08-21 ~23:45Z): Job Discovery is operational — real public-board imports (ADR-105)
 
 The owner's goal "make /job-seeker?section=discovery 100% operational"
 shipped as identifier-driven public imports: Greenhouse and Lever read
@@ -243,6 +274,30 @@ The worker's schedule stays off until the repo variable
 `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED` is set. File-writing nodes remain
 deliberately with the Phase 1C path. The owner's standing merge cadence for
 this goal: merge immediately, verify on production, keep looping.
+
+## Newest (2026-08-18): Use records a project's pipeline — one owner action outstanding
+
+`Configure Pipeline` on `/solutions/ai-factory` now has something to configure.
+Pressing **Use** on a template card selects it for the project the journey is
+scoped to, writes that to `project_pipelines`, and the step reads it back: done
+only when at least one pipeline is selected, with the chosen names rendered on
+the page. Many can be selected; pressing a selected card again removes it. The
+graph-planning dialog Use used to open is now its own **Plan graph** button.
+
+**Outstanding owner action:** migration `20260821000300_project_pipeline_selection`
+is not on the hosted ledger. Run
+`.github/workflows/apply-hosted-migrations.yml` with `confirm=apply` and
+**`scope=pipeline-selection`** — a scope added for exactly this file, so
+reaching production does not mean re-running twenty-three unrelated migrations.
+It applies, records the ledger row, and reloads the PostgREST schema cache.
+Every statement is idempotent (`create table if not exists`,
+`create index if not exists`, `alter type ... add value if not exists`,
+`create or replace function`), and the migration adds — it alters nothing that
+already exists. The file is also in `scope=broker-functions` for a batch run. Until then the console tells the
+truth about itself rather than appearing to work: `/api/project-pipelines`
+returns `pipeline_selection_not_connected` and the Use button is disabled with
+"Not Connected — this database does not have the pipeline-selection migration
+applied yet".
 
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 

@@ -72,6 +72,12 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Holds sealed credential envelopes. A policy would imply some role may read the "
     + "column; none may. Every table privilege is revoked from anon, authenticated and "
     + "service_role, and the only readers are definer functions.",
+  project_pipelines:
+    "Which pipeline templates a project runs. Reads go through the "
+    + "list_project_pipelines member projection and writes through the "
+    + "owner/administrator select_project_pipeline and deselect_project_pipeline "
+    + "definer functions, both of which write an activity event; a policy would "
+    + "open a second, unaudited path to the same rows.",
   provider_connect_sessions:
     "Holds sign-in code digests. Same reasoning: reading this table must be impossible "
     + "rather than merely restricted, so there is no role for a policy to describe.",
@@ -281,6 +287,11 @@ describe("SECURITY DEFINER functions", () => {
       "mark_ai_account_verified",
       "mark_ai_auth_session_verifying",
       "mark_github_connection_lost",
+      // The lifecycle's one worker write: open the gate a finished stage waits
+      // at. Keyed to the graph node, so an approval outlives the run that
+      // asked for it, and idempotent on that key — a re-claim finds the
+      // existing decision rather than manufacturing a second, undecided gate.
+      "open_node_gate_as_worker",
       "process_github_webhook_delivery",
       "read_ai_auth_relay_code",
       // Status only, never the sealed code: a worker mid-drive can notice a

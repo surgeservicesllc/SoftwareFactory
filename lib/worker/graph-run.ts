@@ -36,6 +36,20 @@ const claimedNodeSchema = z.object({
   // .catch(false): a projection from before the column existed simply has
   // no tolerance, which is exactly what false says.
   tolerates_partial_inputs: z.boolean().catch(false),
+  /*
+   * The lifecycle fields, all tolerant of a projection that predates them.
+   *
+   * `node_id` rather than only `node_run_id` because a gate is keyed to the
+   * graph node: the run id changes on every claim and the node id does not,
+   * which is what lets an approval outlive the run that asked for it.
+   */
+  node_id: z.string().uuid().nullish(),
+  lifecycle_stage: z
+    .enum(["GOAL", "PRD", "ARCHITECTURE", "IMPLEMENTATION", "REVIEW", "TEST", "DEPLOYMENT", "MONITORING"])
+    .nullish()
+    .catch(null),
+  gate_kind: z.enum(["AUTOMATIC", "HUMAN"]).nullish().catch(null),
+  gate_state: z.enum(["OPEN", "APPROVED", "REJECTED"]).nullish().catch(null),
   input_schema: z.unknown().nullish(),
   output_schema: z.unknown().nullish(),
   reads: z.array(resourceSchema).nullish(),
@@ -208,7 +222,7 @@ export function artifactKindForNode(
 export type GraphRunStore = {
   readonly recordNodeState: (
     nodeRunId: string,
-    state: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "SKIPPED",
+    state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
     execution?: { provider?: string; model?: string; latencyMs?: number },
   ) => Promise<void>;
@@ -229,6 +243,18 @@ export type GraphRunStore = {
     verdict: VerificationVerdict,
     evidence: readonly string[],
     verifierProvider: string | null,
+  ) => Promise<void>;
+  /**
+   * Open the gate a finished node waits at, and report how it stands.
+   *
+   * Optional for the same reason `recordVerification` is: a store written
+   * before gates existed still satisfies this contract rather than failing a
+   * run over a capability it never had.
+   */
+  readonly openGate?: (
+    nodeId: string,
+    graphRunId: string,
+    anchorCount: number,
   ) => Promise<void>;
   readonly completeRun: (
     graphRunId: string,
@@ -252,6 +278,11 @@ export type GraphRunSummary = {
    * further graphs against a credential that will refuse them too.
    */
   readonly capacityWithheld: boolean;
+  /**
+   * Node keys left waiting at a gate. Non-empty means the run stopped because
+   * a decision is owed, not because anything went wrong.
+   */
+  readonly awaitingGate: readonly string[];
 };
 
 /**
@@ -296,6 +327,7 @@ export async function runClaimedGraph(
   // capacity refusal never truly executed and must not spend a chance.
   let finalFailures = 0;
   let capacityFinalFailures = 0;
+  const awaitingGate: string[] = [];
 
   const result = await runGraph(compiled, budgetFromClaim(claim), {
     executeNode: async (node, attempt) => {
@@ -318,6 +350,66 @@ export async function runClaimedGraph(
       }
       if (nodeRunId) {
         if (outcome.status === "SUCCEEDED") {
+          /*
+           * A gated node does not complete on its own say-so.
+           *
+           * Its work is done and its output is recorded — that much is real and
+           * must survive — but the stage is not finished until the gate is
+           * decided. So the artifact is written first, the node goes to
+           * VERIFYING rather than COMPLETED, the gate opens, and the node is
+           * reported to the engine as not-completed so nothing downstream
+           * starts on an undecided result.
+           *
+           * `gate_state` comes from the claim, which reads the gate keyed to
+           * the graph node. APPROVED means a person already said yes on an
+           * earlier run and this one may pass straight through. REJECTED means
+           * they said no, and the node fails so its dependents block.
+           */
+          const claimed = claim.nodes.find((entry) => entry.node_key === node.nodeKey);
+          const gateKind = claimed?.gate_kind ?? null;
+          const gateState = claimed?.gate_state ?? null;
+
+          if (gateKind !== null && gateState !== "APPROVED") {
+            await store.recordArtifact(
+              claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId,
+            );
+
+            if (gateState === "REJECTED") {
+              finalFailures += 1;
+              await store.recordNodeState(
+                nodeRunId,
+                "FAILED",
+                `${claimed?.lifecycle_stage ?? "This stage"} was rejected at its gate.`,
+              );
+              return {
+                status: "FAILED",
+                error: "Rejected at its lifecycle gate.",
+                retryable: false,
+              };
+            }
+
+            await store.recordNodeState(nodeRunId, "VERIFYING", null, {
+              provider: outcome.provider,
+              model: outcome.model,
+              latencyMs: outcome.latencyMs,
+            });
+            if (claimed?.node_id && store.openGate) {
+              await store.openGate(
+                claimed.node_id,
+                claim.graph_run_id,
+                anchorsFor(node, outcome.output),
+              );
+            }
+            awaitingGate.push(node.nodeKey);
+            return {
+              status: "FAILED",
+              error: `Awaiting a ${gateKind === "HUMAN" ? "human" : "automatic"} decision at the `
+                + `${claimed?.lifecycle_stage ?? "lifecycle"} gate.`,
+              retryable: false,
+              gateHeld: true,
+            };
+          }
+
           await store.recordNodeState(nodeRunId, "COMPLETED", null, {
             provider: outcome.provider,
             model: outcome.model,
@@ -353,8 +445,12 @@ export async function runClaimedGraph(
           // is still a RUNNING node, and marking it FAILED early would make
           // the recovery invisible. A non-retryable failure IS the final
           // attempt, whatever the attempt counter says.
-          finalFailures += 1;
-          if (outcome.capacityWithheld === true) capacityFinalFailures += 1;
+          // A gate-held node reported FAILED so the engine would stop its
+          // dependents; it is not a failure and must not be counted as one.
+          if (outcome.gateHeld !== true) {
+            finalFailures += 1;
+            if (outcome.capacityWithheld === true) capacityFinalFailures += 1;
+          }
           await store.recordNodeState(nodeRunId, "FAILED", outcome.error, {
             provider: outcome.provider,
             model: outcome.model,
@@ -384,9 +480,12 @@ export async function runClaimedGraph(
 
   let failed = 0;
   let succeeded = 0;
-  for (const state of result.states.values()) {
+  for (const [nodeKey, state] of result.states) {
     if (state === "COMPLETED") succeeded += 1;
-    if (state === "FAILED") failed += 1;
+    // A gate-held node is FAILED in the engine's map because that is the only
+    // way to stop its dependents, but reporting it as a failure would tell a
+    // reader something went wrong when a decision is simply owed.
+    if (state === "FAILED" && !awaitingGate.includes(nodeKey)) failed += 1;
   }
 
   // A run in which nothing succeeded and every terminal failure was a
@@ -425,5 +524,25 @@ export async function runClaimedGraph(
     nodesFailed: failed,
     incompleteness: result.incompleteness,
     capacityWithheld: capacityVoided,
+    awaitingGate,
   };
+}
+
+/**
+ * How many non-model observations back this node's claim.
+ *
+ * Only an ANCHOR node produces evidence at all: its whole purpose is to report
+ * what something that cannot be persuaded observed. A MODEL node's output is a
+ * claim about the world, however confident, and counting it here would make
+ * the anchor rule self-satisfying — which is the exact failure the rule exists
+ * to prevent.
+ */
+export function anchorsFor(
+  node: Pick<CompiledNode, "executor">,
+  output: unknown,
+): number {
+  if (node.executor !== "ANCHOR") return 0;
+  if (Array.isArray(output)) return output.length;
+  if (output === null || output === undefined) return 0;
+  return 1;
 }
