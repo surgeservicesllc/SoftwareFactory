@@ -8,6 +8,13 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import type { NodeExecutionResult } from "@/lib/graph/runner";
+import {
+  compileClaimedGraph,
+  parseClaimedGraph,
+  runClaimedGraph,
+  type GraphRunStore,
+} from "@/lib/worker/graph-run";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { findTemplate } from "@/lib/graph/templates";
 
@@ -91,6 +98,49 @@ async function latestRunId(db: PGlite, graphId: string): Promise<string> {
     [graphId],
   );
   return result.rows[0].id;
+}
+
+/**
+ * The real worker's persistence, against this database.
+ *
+ * Every write goes through the same SECURITY DEFINER function the deployed
+ * worker calls, so a test that passes here exercises the actual boundary rather
+ * than a mock of it — including the gate opener, which is the part under test.
+ */
+function workerStore(db: PGlite): GraphRunStore {
+  return {
+    async recordNodeState(nodeRunId, state, detail, execution) {
+      await asWorker(db);
+      await db.query(
+        `select public.record_node_state_as_worker($1, $2::uuid, $3::public.graph_node_state, $4, $5, $6, $7)`,
+        [WORKER, nodeRunId, state, detail ?? null,
+         execution?.provider ?? null, execution?.model ?? null, execution?.latencyMs ?? null],
+      );
+      await db.exec("reset role");
+    },
+    async recordArtifact(graphRunId, kind, payload, nodeRunId) {
+      await asWorker(db);
+      await db.query(
+        `select public.record_graph_artifact_as_worker($1, $2::uuid, $3::public.graph_artifact_kind, $4::jsonb, $5::uuid)`,
+        [WORKER, graphRunId, kind, JSON.stringify(payload ?? {}), nodeRunId ?? null],
+      );
+      await db.exec("reset role");
+    },
+    async openGate(nodeId, graphRunId, anchorCount) {
+      await asWorker(db);
+      await db.query(`select public.open_node_gate_as_worker($1, $2::uuid, $3::uuid, $4)`,
+        [WORKER, nodeId, graphRunId, anchorCount]);
+      await db.exec("reset role");
+    },
+    async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
+      await asWorker(db);
+      await db.query(
+        `select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6)`,
+        [WORKER, graphRunId, state, hadPartialInput, usage?.tokensUsed ?? null, usage?.costMicros ?? null],
+      );
+      await db.exec("reset role");
+    },
+  };
 }
 
 async function claim(db: PGlite): Promise<Claim | null> {
@@ -411,6 +461,101 @@ describe("the Agentic SDLC on the graph worker", () => {
       [organizationId],
     );
     expect(Number(exhausted.rows[0].count)).toBeGreaterThan(0);
+  });
+
+  it("halts the real worker at the first undecided gate", async () => {
+    /*
+     * The worker itself, not a stand-in for it.
+     *
+     * Everything above tests the database's rules; this drives
+     * `runClaimedGraph` — the deployed code path — through a lifecycle and
+     * asserts where it stops. A gated node must record its output, land on
+     * VERIFYING rather than COMPLETED, open its gate, and take nothing
+     * downstream with it.
+     */
+    await db.exec("reset role");
+    const fresh = await db.query<{ id: string }>(
+      `select public.create_graph_from_plan($1, $2, 'halt at the gate', 'SEQUENTIAL'::public.graph_topology,
+                '[]'::jsonb, 'green'::public.risk_level, false, $3::jsonb, $4::jsonb, '{}'::jsonb) as id`,
+      [
+        organizationId, projectId,
+        JSON.stringify([
+          { node_key: "goal", job: "State it.", executor: "MODEL", capability: "planning",
+            lifecycle_stage: "GOAL" },
+          { node_key: "prd", job: "Write it.", executor: "MODEL", capability: "planning",
+            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC" },
+          { node_key: "architecture", job: "Design it.", executor: "MODEL", capability: "architecture",
+            lifecycle_stage: "ARCHITECTURE" },
+        ]),
+        JSON.stringify([
+          { from_node_key: "goal", to_node_key: "prd", reason: "DATA", detail: "d", is_feedback: false },
+          { from_node_key: "prd", to_node_key: "architecture", reason: "DATA", detail: "d", is_feedback: false },
+        ]),
+      ],
+    );
+    const freshGraphId = fresh.rows[0].id;
+
+    // Claim it: the SDLC graph above is exhausted, so this is the one on offer.
+    let claimed = await claim(db);
+    while (claimed !== null && !claimed.nodes.some((n) => n.node_key === "architecture")) {
+      await closeRunAsPartial(db, claimed.graph_run_id);
+      claimed = await claim(db);
+    }
+    expect(claimed, "the new lifecycle graph was never offered").not.toBeNull();
+
+    const parsed = parseClaimedGraph(claimed);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const compiled = compileClaimedGraph(parsed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    const executed: string[] = [];
+    const summary = await runClaimedGraph(
+      parsed.graph, compiled.graph, workerStore(db),
+      async (node): Promise<NodeExecutionResult> => {
+        executed.push(node.nodeKey);
+        return { status: "SUCCEEDED", output: { node: node.nodeKey }, provider: "anthropic", model: "m" };
+      },
+    );
+
+    // goal ran, prd ran and then held. architecture never started, because its
+    // dependency did not complete.
+    expect(executed).toEqual(["goal", "prd"]);
+    expect(summary.awaitingGate).toEqual(["prd"]);
+    expect(summary.finalState).toBe("PARTIAL");
+    // Held, not failed: a lifecycle waiting on a decision must not spend the
+    // graph's three chances.
+    expect(summary.nodesFailed).toBe(0);
+
+    await db.exec("reset role");
+    const states = await db.query<{ node_key: string; state: string }>(
+      `select n.node_key, r.state::text as state
+         from public.node_runs r join public.graph_nodes n on n.id = r.node_id
+        where r.graph_run_id = $1 order by n.node_key`,
+      [claimed!.graph_run_id],
+    );
+    expect(states.rows).toEqual([
+      { node_key: "architecture", state: "SKIPPED" },
+      { node_key: "goal", state: "COMPLETED" },
+      { node_key: "prd", state: "VERIFYING" },
+    ]);
+
+    // Its output survived the halt: the work was real even though the stage is
+    // not finished.
+    const artifacts = await db.query<{ count: string }>(
+      `select count(*)::text as count from public.graph_artifacts where graph_run_id = $1`,
+      [claimed!.graph_run_id],
+    );
+    expect(Number(artifacts.rows[0].count)).toBe(2);
+
+    const gate = await db.query<{ state: string; stage: string }>(
+      `select g.state::text as state, g.stage::text as stage
+         from public.graph_gates g join public.graph_nodes n on n.id = g.node_id
+        where n.graph_id = $1`,
+      [freshGraphId],
+    );
+    expect(gate.rows).toEqual([{ state: "OPEN", stage: "PRD" }]);
   });
 
   it("refuses to store a node output carrying something secret-shaped", async () => {

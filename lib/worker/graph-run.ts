@@ -480,9 +480,12 @@ export async function runClaimedGraph(
 
   let failed = 0;
   let succeeded = 0;
-  for (const state of result.states.values()) {
+  for (const [nodeKey, state] of result.states) {
     if (state === "COMPLETED") succeeded += 1;
-    if (state === "FAILED") failed += 1;
+    // A gate-held node is FAILED in the engine's map because that is the only
+    // way to stop its dependents, but reporting it as a failure would tell a
+    // reader something went wrong when a decision is simply owed.
+    if (state === "FAILED" && !awaitingGate.includes(nodeKey)) failed += 1;
   }
 
   // A run in which nothing succeeded and every terminal failure was a
