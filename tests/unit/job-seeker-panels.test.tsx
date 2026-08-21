@@ -103,12 +103,13 @@ describe("JobSeekerJobsPanel", () => {
     expect(screen.getByText(/No leadership evidence/)).toBeInTheDocument();
   });
 
-  it("shows import sources as Not Connected with the exact configuration named", async () => {
+  it("renders a public source with its import form, and a credentialed one as Not Connected", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/job-seeker/import-sources") {
         return jsonResponse({ sources: [
-          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings.", configured: false, requiredConfiguration: ["SOFTWAREFACTORY_GREENHOUSE_BOARDS"] },
+          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings — no credential needed.", mode: "public", identifierLabel: "Board token", identifierHint: "boards.greenhouse.io/{token}", configured: true, requiredConfiguration: [] },
+          { key: "linkedin", name: "LinkedIn job search", summary: "Searches LinkedIn jobs.", mode: "credentialed", identifierLabel: null, identifierHint: null, configured: false, requiredConfiguration: ["SOFTWAREFACTORY_LINKEDIN_CLIENT_ID", "SOFTWAREFACTORY_LINKEDIN_CLIENT_SECRET"] },
         ] });
       }
       return jsonResponse({ jobs: [] });
@@ -117,8 +118,68 @@ describe("JobSeekerJobsPanel", () => {
     render(<JobSeekerJobsPanel />);
 
     expect(await screen.findByText("Greenhouse job boards")).toBeInTheDocument();
+    expect(screen.getByText("Public API")).toBeInTheDocument();
+    expect(screen.getByLabelText("Board token")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import postings" })).toBeInTheDocument();
+    // The credentialed adapter stays honest: Not Connected, needs named,
+    // and no import control anywhere near it.
     expect(screen.getByText("Not Connected")).toBeInTheDocument();
-    expect(screen.getByText(/Needs: SOFTWAREFACTORY_GREENHOUSE_BOARDS/)).toBeInTheDocument();
+    expect(screen.getByText(/Needs: SOFTWAREFACTORY_LINKEDIN_CLIENT_ID/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Import postings" })).toHaveLength(1);
+  });
+
+  it("imports from a public board and reports every count honestly", async () => {
+    const posts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/import" && init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        return jsonResponse({
+          source: "greenhouse", identifier: "stripe", company: "Stripe",
+          totalAvailable: 575, considered: 40, imported: 38, duplicates: 2, skippedSensitive: 0,
+        });
+      }
+      if (url === "/api/job-seeker/import-sources") {
+        return jsonResponse({ sources: [
+          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings.", mode: "public", identifierLabel: "Board token", identifierHint: null, configured: true, requiredConfiguration: [] },
+        ] });
+      }
+      return jsonResponse({ jobs: [] });
+    }));
+
+    render(<JobSeekerJobsPanel />);
+    fireEvent.change(await screen.findByLabelText("Board token"), { target: { value: "Stripe" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import postings" }));
+
+    await waitFor(() => expect(posts).toEqual([{ source: "greenhouse", identifier: "Stripe" }]));
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Imported 38 of 40 postings from Stripe");
+    expect(status).toHaveTextContent("2 already recorded");
+    expect(status).toHaveTextContent(/lists 575 in total/);
+  });
+
+  it("surfaces a missing board as the provider's honest refusal", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/import" && init?.method === "POST") {
+        return jsonResponse(
+          { error: { code: "source_not_found", message: 'No public Greenhouse board is published at "ghost".' } },
+          404,
+        );
+      }
+      if (url === "/api/job-seeker/import-sources") {
+        return jsonResponse({ sources: [
+          { key: "greenhouse", name: "Greenhouse job boards", summary: "Reads public postings.", mode: "public", identifierLabel: "Board token", identifierHint: null, configured: true, requiredConfiguration: [] },
+        ] });
+      }
+      return jsonResponse({ jobs: [] });
+    }));
+
+    render(<JobSeekerJobsPanel />);
+    fireEvent.change(await screen.findByLabelText("Board token"), { target: { value: "ghost" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import postings" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/No public Greenhouse board is published at "ghost"/);
   });
 });
 

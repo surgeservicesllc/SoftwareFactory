@@ -2,7 +2,29 @@
 
 Last updated: 2026-08-21
 
-## Newest (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
+## Newest (2026-08-21 ~23:45Z): Job Discovery is operational — real public-board imports (ADR-098)
+
+The owner's goal "make /job-seeker?section=discovery 100% operational"
+shipped as identifier-driven public imports: Greenhouse and Lever read
+their providers' public keyless APIs, driven by a board token / site name
+the user types on the card — the env-var "credentials" those two adapters
+demanded were a misclassification, dropped. `POST /api/job-seeker/import`
+fetches up to 40 postings per request (the reply states the board's true
+total), records each through the same evaluate → job → match →
+application chain as manual entry (shared `lib/job-seeker/record.ts`),
+counts duplicates via the existing unique index, and skips-and-counts
+anything the credential scanner refuses. Job rows carry `via {source}`
+attribution. LinkedIn stays honestly Not Connected (real OAuth needed).
+Proven live end to end: the journey's new discovery phase drives the real
+Greenhouse API — a missing board's verbatim refusal, then the "stripe"
+board imported and scored (local stack: 40/40 imported rows scored and in
+the pipeline) — journey green in 32.7s. Also measured this session:
+production sign-up still answers 202 confirmationRequired even after the
+owner reported disabling confirmation — the dashboard toggle did not take
+(wrong switch or unsaved); sign-in probes stayed 403 email_not_confirmed
+through a 10-minute poll.
+
+## Prior (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
 
 The owner's verification goal ("go through /job-seeker, fill every field
 with fake data, prove every capability, everything wired to Supabase") was

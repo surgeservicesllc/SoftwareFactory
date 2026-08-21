@@ -139,9 +139,12 @@ test.describe("job seeker live journey", () => {
     // ── Discovery: record, score, duplicate-protect ────────────────────────
     await page.getByRole("link", { name: "Job Discovery" }).click();
     await expect(page.getByText(/import sources|No source|Greenhouse/i).first()).toBeVisible({ timeout: 20_000 });
-    // The registry is honest: adapters are Not Connected with needs named.
-    await expect(page.getByText("Not Connected").first()).toBeVisible();
-    await expect(page.getByText(/Needs: SOFTWAREFACTORY_GREENHOUSE_BOARDS/)).toBeVisible();
+    // The registry is honest in both directions: public-API adapters carry
+    // real import controls, and the credentialed one stays Not Connected
+    // with its needs named.
+    await expect(page.getByText("Public API").first()).toBeVisible();
+    await expect(page.getByText("Not Connected")).toBeVisible();
+    await expect(page.getByText(/Needs: SOFTWAREFACTORY_LINKEDIN_CLIENT_ID/)).toBeVisible();
 
     await page.getByRole("button", { name: /record a job/i }).click();
     await page.getByLabel("Job title").fill("Staff Engineer");
@@ -308,5 +311,32 @@ test.describe("job seeker live journey", () => {
     await expect(stat("Response rate")).toContainText("100%");
     await expect(stat("Interviews")).toContainText("1");
     await expect(stat("Offers")).toContainText("1");
+
+    // ── Discovery imports from a real public board ─────────────────────────
+    // These two checks call the live Greenhouse boards API through the real
+    // import route — the one external dependency in this journey, accepted
+    // because live import is exactly the capability under proof.
+    await page.getByRole("link", { name: "Job Discovery" }).click();
+    const greenhouseCard = page
+      .locator("div.rounded-md.border")
+      .filter({ hasText: "Greenhouse job boards" });
+    await expect(greenhouseCard).toBeVisible({ timeout: 20_000 });
+
+    // A missing board is the provider's refusal, surfaced verbatim.
+    await greenhouseCard.getByLabel("Board token").fill("this-board-does-not-exist-2026");
+    await greenhouseCard.getByRole("button", { name: /import postings/i }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: /No public Greenhouse board/ }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // A real board imports, scores, and lands in the recorded list.
+    await greenhouseCard.getByLabel("Board token").fill("stripe");
+    await greenhouseCard.getByRole("button", { name: /import postings/i }).click();
+    await expect(page.getByRole("status")).toHaveText(/Imported \d+ of \d+ postings from /, {
+      timeout: 60_000,
+    });
+    // The list now carries provider-attributed rows scored by the same
+    // engine as manual entries.
+    await expect(page.getByText(/via greenhouse/).first()).toBeVisible();
   });
 });
