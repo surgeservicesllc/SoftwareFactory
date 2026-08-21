@@ -60,14 +60,14 @@ function statedUnhosted(): number | null {
  * written down in full.
  */
 function runbookLedgerAbsent(): string[] {
-  const table = /\*\*Absent from the hosted ledger[^\n]*\n([\s\S]*?)\n\n/.exec(runbook);
+  const table = /\*\*Absent from the hosted ledger[^\n]*\r?\n([\s\S]*?)\r?\n\r?\n/.exec(runbook);
   if (!table) return [];
   return [...table[1].matchAll(/^\| `(\d{14})` \|/gm)].map((match) => match[1]);
 }
 
 /** The versions the workflow's read-only probe asks about, one row each. */
 function probedVersions(): string[] {
-  const block = /with expected\(version, kind, object, marker\) as \(values([\s\S]*?)\n\s*\)\n/
+  const block = /with expected\(version, kind, object, marker\) as \(values([\s\S]*?)\r?\n\s*\)\r?\n/
     .exec(workflow);
   if (!block) return [];
   return [...block[1].matchAll(/\('(\d{14})',/g)].map((match) => match[1]);

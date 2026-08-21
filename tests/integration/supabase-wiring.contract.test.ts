@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -98,19 +98,19 @@ async function importClosure(entry: string): Promise<Map<string, string>> {
 describe("every API route resolves to Supabase or says why not", () => {
   it("traces each route's imports to the database boundary", async () => {
     const routes = (await walk(resolve(repositoryRoot, "app/api")))
-      .filter((path) => path.endsWith("/route.ts"))
+      .filter((path) => /[\\/]route\.ts$/.test(path))
       .sort();
 
     expect(routes.length).toBeGreaterThan(50);
 
     const unwired: string[] = [];
     for (const route of routes) {
-      const relative = route.slice(repositoryRoot.length + 1);
-      if (relative in NO_TENANT_DATA) continue;
+      const relativePath = relative(repositoryRoot, route).replaceAll("\\", "/");
+      if (relativePath in NO_TENANT_DATA) continue;
 
       const closure = await importClosure(route);
       const reaches = [...closure.values()].some((source) => BOUNDARY.test(source));
-      if (!reaches) unwired.push(relative);
+      if (!reaches) unwired.push(relativePath);
     }
 
     expect(
@@ -150,7 +150,7 @@ describe("no surface invents the records it shows", () => {
        * nothing. Only a block of pure literals is a seeded list.
        */
       const referencesState = /[\w)\]]\s*\.\s*\w|\$\{|\?\./.test(match[0]);
-      if (!referencesState) suspicious.push(path.slice(repositoryRoot.length + 1));
+      if (!referencesState) suspicious.push(relative(repositoryRoot, path).replaceAll("\\", "/"));
     }
 
     expect(

@@ -51,6 +51,7 @@ const organizationId = "10000000-0000-4000-8000-00000000e001";
 const projectId = "40000000-0000-4000-8000-00000000e001";
 const goodDeploymentId = "80000000-0000-4000-8000-00000000e001";
 const badDeploymentId = "80000000-0000-4000-8000-00000000e002";
+const originalVercelToken = process.env.VERCEL_TOKEN;
 
 /** A tenant that has asked for everything, to prove the interlocks not the defaults. */
 const requestedEverything: AutonomyControls = {
@@ -98,6 +99,9 @@ describe("Phase 1D end-to-end loop journey", () => {
   }
 
   beforeAll(async () => {
+    // This journey proves the explicit Not Connected path. A developer's
+    // ambient Vercel login must not silently turn it into a live network test.
+    delete process.env.VERCEL_TOKEN;
     db = new PGlite({ extensions: { pgcrypto } });
     await db.exec(`
       create schema if not exists auth;
@@ -145,6 +149,8 @@ describe("Phase 1D end-to-end loop journey", () => {
 
   afterAll(async () => {
     await db?.close();
+    if (originalVercelToken === undefined) delete process.env.VERCEL_TOKEN;
+    else process.env.VERCEL_TOKEN = originalVercelToken;
   });
 
   it("decides a GREEN change all the way to approval, then stops at the missing executor", async () => {

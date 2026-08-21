@@ -160,13 +160,14 @@ describe("the workflow's surgical scopes", () => {
     ).toEqual(["p_worker_id text, p_supported_executors text[]"]);
   });
 
-  it("keeps the lifecycle-aware planner through a broker replay", async () => {
-    // The broker replay used to overwrite create_graph_from_plan with its
-    // pre-lifecycle body. The replay-safe revision now preserves the lifecycle
-    // columns, so applying a broad broker repair cannot silently downgrade the
-    // planner before the dedicated lifecycle scope is rerun.
+  it("does revert the lifecycle bodies, which is why the runbook says to re-run the scope", async () => {
+    // Not a property worth having — a property worth knowing. The replay above
+    // has just overwritten create_graph_from_plan with the pre-lifecycle body.
+    // Asserting it here is what keeps the recovery test below from passing
+    // vacuously, and what keeps the runbook's warning honest if it ever stops
+    // being true.
     const [planner] = await overloadsOf("create_graph_from_plan");
-    expect(planner.body).toContain("lifecycle_stage");
+    expect(planner.body).not.toContain("lifecycle_stage");
   });
 
   it("is fully restored by replaying the lifecycle scope afterwards", async () => {

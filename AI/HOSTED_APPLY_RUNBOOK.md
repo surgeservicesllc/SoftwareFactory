@@ -3,7 +3,7 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The measured list below contains 19 versions.** Four further migrations —
+**The current total is 19**, named in the list below — as measured. Four further migrations —
 `20260816001600_phase2c_resource_reservations`,
 `20260821000100_agentic_sdlc_activity_types`,
 `20260821000200_agentic_sdlc_lifecycle`, and
@@ -90,7 +90,6 @@ This supersedes every count and every high-water mark stated below it. The run m
 the three apply steps were skipped by their `if:` conditions, and the log shows it.
 
 **Absent from the hosted ledger — 19 versions:**
-
 | Version | Migration | Marker object the probe asks about |
 |---|---|---|
 | `20260814002500` | provider_credential_vault | table `provider_credentials` |
