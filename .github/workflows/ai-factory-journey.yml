@@ -1,0 +1,179 @@
+name: AI Factory live journey
+
+# The eight-step guided journey at /solutions/ai-factory, driven in a real
+# browser against a real Supabase stack (supabase start: real Postgres carrying
+# the full migration chain, real PostgREST, real GoTrue) with the production
+# Next build in front — tests/e2e/ai-factory-journey.spec.ts.
+#
+# The ordinary suite runs this page against the component harness, whose fixture
+# server stands in for Supabase. That is what makes the width sweep possible and
+# what makes it blind to whether the page is wired to anything. This lane closes
+# that gap on a cadence.
+#
+# Step 1 (Connect Repository) is seeded rather than performed: installing a
+# GitHub App is a real account action against github.com. The seed records what
+# that installation would have recorded and nothing further.
+#
+# No deployment, no production credentials, no provider usage: everything is
+# local to the runner, and the only keys involved are the Supabase CLI's public
+# local-development defaults.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily, clear of the other scheduled lanes.
+    - cron: "53 8 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-factory-journey
+  cancel-in-progress: false
+
+jobs:
+  journey:
+    name: Eight steps of fake data against a local stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        # Bounded and retried; same failure modes as ci.yml's install step
+        # (stalled apt mirrors, orphaned dpkg locks between attempts).
+        timeout-minutes: 14
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "Install attempt ${attempt} failed or hung; clearing stale apt state and retrying."
+            sudo killall -q apt-get apt dpkg 2>/dev/null || true
+            for i in $(seq 1 30); do
+              if ! sudo fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+            sudo dpkg --configure -a 2>/dev/null || true
+          done
+          echo "Chromium could not be installed after 3 bounded attempts."
+          exit 1
+
+      - name: Start the local Supabase stack
+        # Only db, auth, rest and kong; the rest is excluded so the stack boots
+        # lean. config.toml reads SMTP through env(), so dummies must exist for
+        # auth to start — no mail is ever sent, because the journey's user is
+        # minted pre-confirmed through the admin API.
+        env:
+          SUPABASE_AUTH_SMTP_HOST: localhost
+          SUPABASE_AUTH_SMTP_USER: journey
+          SUPABASE_AUTH_SMTP_PASS: journey
+          SUPABASE_AUTH_SMTP_SENDER_NAME: journey
+          SUPABASE_AUTH_SMTP_ADMIN_EMAIL: journey@example.com
+        run: |
+          npx --yes supabase@2 start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Mint the owner and point the app at the stack
+        # The local stack's keys are the Supabase CLI's public development
+        # defaults, not secrets.
+        run: |
+          STATUS=$(npx supabase status -o json)
+          SUPA_URL=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin)['API_URL'])")
+          ANON=$(echo "$STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ANON_KEY') or d.get('PUBLISHABLE_KEY',''))")
+          SERVICE=$(echo "$STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('SERVICE_ROLE_KEY') or d.get('SECRET_KEY',''))")
+          USER_ID=$(curl -sf -X POST "$SUPA_URL/auth/v1/admin/users" \
+            -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"factory.owner@example.com","password":"fake-data-journey-2026!","email_confirm":true,"user_metadata":{"full_name":"Factory Owner"}}' \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "JOURNEY_USER_ID=$USER_ID" >> "$GITHUB_ENV"
+          {
+            echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$SUPA_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON"
+          } > .env.local
+
+      - name: Seed the workspace and the GitHub installation
+        # Step 1 of the journey only: the rows a real App installation records.
+        # Everything after this is performed in the browser by the spec.
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 \
+            -v user_id="'${JOURNEY_USER_ID}'" <<'SEED'
+          insert into public.profiles (id, display_name)
+          values (:user_id, 'Factory Owner')
+          on conflict (id) do nothing;
+
+          insert into public.organizations (id, name, slug, created_by)
+          values ('10000000-0000-4000-8000-0000000fa001', 'Fake Factory', 'fake-factory', :user_id);
+
+          insert into public.organization_members (organization_id, user_id, role, created_by)
+          values ('10000000-0000-4000-8000-0000000fa001', :user_id, 'owner', :user_id)
+          on conflict do nothing;
+
+          insert into public.connections (
+            id, organization_id, name, provider, status, external_account_label,
+            secret_reference, created_by
+          ) values (
+            '20000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
+            'GitHub', 'github', 'connected', 'fake-owner', 'env://GITHUB_APP', :user_id
+          );
+
+          insert into public.github_installations (
+            id, organization_id, connection_id, external_installation_id, app_id, app_slug,
+            account_id, account_login, account_type, target_type, repository_selection,
+            status, installed_at, created_by
+          ) values (
+            '30000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
+            '20000000-0000-4000-8000-0000000fa001', 700123, 4582606, 'fake-factory-app',
+            900001, 'fake-owner', 'User', 'User', 'selected', 'active', now(), :user_id
+          );
+
+          insert into public.github_repositories (
+            id, organization_id, installation_id, external_repository_id, owner_login, name,
+            full_name, default_branch, html_url, private, visibility, selected, github_updated_at
+          ) values (
+            '50000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
+            '30000000-0000-4000-8000-0000000fa001', 900123, 'fake-owner', 'storefront',
+            'fake-owner/storefront', 'main', 'https://github.com/fake-owner/storefront',
+            true, 'private', true, now()
+          );
+          SEED
+
+      - name: Build and serve the production app
+        run: |
+          npm run build
+          nohup npx next start > next-start.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:3000/ && exit 0
+            sleep 2
+          done
+          echo "The app never answered on :3000."
+          tail -50 next-start.log
+          exit 1
+
+      - name: Run the journey
+        env:
+          AI_FACTORY_E2E: 1
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
+
+      - name: Report what the app logged if the journey failed
+        if: failure()
+        run: tail -80 next-start.log || true
