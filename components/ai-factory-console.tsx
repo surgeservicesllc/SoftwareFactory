@@ -79,6 +79,7 @@ type FactoryData = {
 type State =
   | { kind: "loading" }
   | { kind: "signed-out" }
+  | { kind: "unavailable" }
   | { kind: "setup" }
   | { kind: "ready"; data: FactoryData };
 
@@ -189,6 +190,16 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       }
       if (first && first.status === 409) {
         setState({ kind: "setup" });
+        return;
+      }
+      // Anything else that is not a readable answer is unknown, not empty.
+      // The page used to fall through to a zeroed journey: a 503 from Supabase
+      // told an owner with all eight steps done that they had none, in the same
+      // confident layout as the truth. Measured against the real route on
+      // 2026-08-21, when the reads answered 503 and the journey rendered
+      // "0 of 8 complete".
+      if (!first || !first.ok) {
+        setState({ kind: "unavailable" });
         return;
       }
 
@@ -302,6 +313,17 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   }
   if (state.kind === "signed-out") {
     return <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />;
+  }
+  if (state.kind === "unavailable") {
+    return (
+      <BlockedState
+        icon={Factory}
+        title="Your factory's state could not be read"
+        description="The journey derives every step from live records, so it shows nothing rather than showing zeros it cannot stand behind. Try again in a moment."
+        href="/solutions/ai-factory"
+        label="Try again"
+      />
+    );
   }
   if (state.kind === "setup") {
     return <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />;

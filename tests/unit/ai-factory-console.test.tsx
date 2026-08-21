@@ -370,6 +370,23 @@ describe("AiFactoryConsole", () => {
     expect(within(chips).queryByText("Bug Sweep")).not.toBeInTheDocument();
   });
 
+  it("shows nothing rather than zeros it cannot stand behind", async () => {
+    // Measured on the real route on 2026-08-21: with the reads answering 503,
+    // the page rendered the full eight-step journey with every step incomplete
+    // -- a backend blip telling an owner with all eight steps done that they
+    // had none, in exactly the layout the truth uses.
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(
+      { error: { code: "connections_unavailable", message: "GitHub connections could not be loaded." } },
+      503,
+    )));
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(await screen.findByText("Your factory's state could not be read")).toBeInTheDocument();
+    expect(screen.queryByText(/of 8 complete/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Connect Repository")).not.toBeInTheDocument();
+  });
+
   it("fails closed for a signed-out visitor", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 401)));
 
