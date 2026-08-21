@@ -94,6 +94,7 @@ describe("AiFactoryConsole", () => {
           status: "active",
           config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Ship search"] },
         }],
+        executor: { connected: true, label: "Connected", detail: "" },
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
@@ -112,7 +113,8 @@ describe("AiFactoryConsole", () => {
     fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Command execution, live")).toBeInTheDocument();
+    expect(within(dialog).getByText("Command execution")).toBeInTheDocument();
+    expect(within(dialog).getByText("Connected")).toBeInTheDocument();
     expect(within(dialog).getByText("Ship search")).toBeInTheDocument();
     expect(within(dialog).getByText("Building")).toBeInTheDocument();
   });
@@ -212,6 +214,55 @@ describe("AiFactoryConsole", () => {
 
     const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
     expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
+  });
+
+  it("says the executor is Not Connected rather than promising a run that cannot start", async () => {
+    // The step's whole subject is shipping. With nothing to execute a command,
+    // it said "Every run lands as a draft pull request" and "Work is in
+    // flight" over a command that would sit queued indefinitely.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/bots": {
+        bots: [{ id: "b1" }],
+        assignments: [],
+        executor: {
+          connected: false,
+          label: "Not Connected",
+          detail: "No worker executes them in this phase.",
+        },
+      },
+      "/api/commands": {
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
+    expect(within(watch).queryByText(/Work is in flight/)).not.toBeInTheDocument();
+    expect(within(watch).getByText(/When an executor is connected/)).toBeInTheDocument();
+
+    fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Not Connected")).toBeInTheDocument();
+    expect(within(dialog).getByText(/will not start until an executor is connected/)).toBeInTheDocument();
+  });
+
+  it("treats a missing executor field as Not Connected", async () => {
+    // Absent must never read as connected: an older payload, a partial
+    // response, or a failed read all land here.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+      "/api/commands": {
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+    const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
   });
 
   it("fails closed for a signed-out visitor", async () => {

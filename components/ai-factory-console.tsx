@@ -63,6 +63,14 @@ type FactoryData = {
   bots: number;
   assignments: Array<{ projectId: string | null; configured: boolean }>;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
+  /**
+   * Whether anything actually executes a command, read from the same
+   * `/api/bots` field the bot fabric already publishes rather than restated
+   * here. A journey whose last step describes shipping must say when nothing
+   * ships; the page used to promise "every run lands as a draft pull request"
+   * while the executor was Not Connected and a submitted command sat queued.
+   */
+  executor: { connected: boolean; label: string; detail: string };
 };
 
 type State =
@@ -187,6 +195,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         bots: 0,
         assignments: [],
         commands: [],
+        executor: { connected: false, label: "Not Connected", detail: "" },
       };
 
       if (first?.ok) {
@@ -214,7 +223,15 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             status?: string;
             config?: Partial<AssignmentConfig>;
           }>;
+          executor?: { connected?: boolean; label?: string; detail?: string };
         }>(bots.value);
+        // Absent or unreadable reads as Not Connected. The one direction this
+        // must never fail is claiming an executor that is not there.
+        data.executor = {
+          connected: body?.executor?.connected === true,
+          label: body?.executor?.label ?? "Not Connected",
+          detail: body?.executor?.detail ?? "",
+        };
         data.bots = (body?.bots ?? []).length;
         data.assignments = (body?.assignments ?? [])
           .filter((assignment) => assignment.status !== "released")
@@ -480,23 +497,40 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "watch",
       title: "Watch It Ship",
-      description: "Every run lands as a draft pull request with CI evidence; you review and merge.",
+      description: data.executor.connected
+        ? "Every run lands as a draft pull request with CI evidence; you review and merge."
+        : "When an executor is connected, a run lands as a draft pull request with CI evidence for you to review and merge.",
       done: hasSucceededCommand,
       evidence: hasSucceededCommand
         ? "At least one command has completed end to end"
         : data.commands.length > 0
-          ? "Work is in flight — watch it on Pipelines"
+          ? data.executor.connected
+            ? "Work is in flight — watch it on Pipelines"
+            : `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} queued; the executor is ${data.executor.label}`
           : "Nothing has run yet",
       action: "Watch execution",
       icon: Workflow,
       body: (
         <div>
-          <h4 className="text-base font-semibold text-foreground">Command execution, live</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-base font-semibold text-foreground">Command execution</h4>
+            <StatusBadge tone={data.executor.connected ? "safe" : "neutral"}>
+              {data.executor.label}
+            </StatusBadge>
+          </div>
           <p className="mt-1 text-sm text-muted">
-            Every command runs the same lifecycle: verified intake → queue → a worker claims it →
+            A command runs the same lifecycle: verified intake → queue → a worker claims it →
             isolated branch → draft pull request with CI. Merging stays yours, and production
             deploys from the merge.
           </p>
+          {data.executor.connected ? null : (
+            <p className="mt-2 text-sm text-faint">
+              {data.executor.detail
+                || "No worker executes commands in this phase."}{" "}
+              A command you submit is recorded and queued; it will not start until an executor is
+              connected.
+            </p>
+          )}
           {recent.length ? (
             <ul className="mt-4 divide-y divide-[var(--border)]">
               {recent.map((command) => {
@@ -513,7 +547,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             </ul>
           ) : (
             <p className="mt-4 text-sm text-faint">
-              No commands yet — your first one will appear here with its live stage.
+              No commands yet — your first one will appear here with its recorded stage.
             </p>
           )}
           <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm mt-4">
