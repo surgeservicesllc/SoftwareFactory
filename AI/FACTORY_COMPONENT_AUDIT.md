@@ -38,6 +38,42 @@ to the prompt.
 | 18 | Webhook ingress and static surfaces, live | `GET` against production | PASS | None | `/api/github/webhooks` answers 405 to a GET, so the endpoint exists and accepts only its signed POST. `robots.txt` disallows `/solutions`, `/api/`, `/auth/` and `/sign-in`; `sitemap.xml`, `manifest.webmanifest` and `/offline` all serve |
 | 19 | Durable resource reservations (`lib/resources/reservation-store.ts`, migration `20260816001600`) | Traced every importer outside the module's own tests | **Known gap, deliberately not closed today** | Nothing executing imports it. The batch dispatcher and the durable store are built, tested, and unreachable — the shape this audit exists to catch | Not wired, and the ordering is the reason: the store fails closed by design, and its table is one of the four row 10 reports as not visible on hosted. Wiring a fail-closed admission gate against a missing table would refuse every claim and stop the graph lane, which is the one execution path working today. Apply the migration first, then wire. `AI/CURRENT_STATE.md` now says this rather than describing the lane as merely "pure functions" |
 
+## Round 2 — the AI Factory journey, filled in with fake data
+
+The eight-step guided journey at `/solutions/ai-factory`, walked step by step
+against real PostgreSQL with the real migrations, every field filled with fake
+data and every write through the same SECURITY DEFINER function the browser
+reaches. `tests/integration/ai-factory-journey.behavior.test.ts` is the walk;
+it prints what it did, so a green run is readable rather than merely green.
+
+| # | Step | How it was tested | Result | Issue found | Resolution |
+|---|------|-------------------|--------|-------------|------------|
+| 20 | 1 Connect Repository | Connected GitHub connection with a selected repository | PASS | None | `done` reads `connectedInstallations`, which is real. The payload carries `selected`, so the repository count is real too |
+| 21 | 2 Create Project | `connect_github_project` with a fake repo, name and description | PASS | None | Binds by immutable external repository id, not by a name a prompt could choose. A rival tenant calling it is refused |
+| 22 | 3 Configure Pipeline | `create_pipeline_template` / `update_pipeline_template` with fake areas | **FIXED** | `done` was `activeProject !== null` — character for character the same expression as step 2, so creating a project marked the pipeline configured and the step could never be outstanding. Its evidence was a constant string naming the built-ins whether or not any compiled. The page read **nothing** from Supabase for this step | Derived from `/api/pipeline-templates` (which the journey was not fetching at all) plus what actually compiles, still scoped to the active factory so an empty workspace reads zero. A template that stops compiling now shows here rather than nowhere |
+| 23 | 4 Connect Bots | `create_ai_account` + `register_bot` with a fake subscription account | PASS | None | A credential *value* in the credential-ref field is refused by the database, not just by the form |
+| 24 | 5 Assign Bots | `save_bot_role` + `assign_bots_to_project` | PASS | None | — |
+| 25 | 6 Configure Bot Settings | `update_bot_assignment_configuration`, checked against the console's own predicate | **FIXED** | `done` was `roleId \|\| responsibilities.length`. `bot_assignments.role_id` is NOT NULL, so the first half was true of every assignment that can exist, and the API nests `responsibilities` under `config`, so the second read `undefined`. The step was done the instant a bot was assigned; its evidence could only ever read "N of N configured" | `assignmentIsConfigured` compares against `LEAST_PRIVILEGE_CONFIG`, which is what the module already says configured means: a posting created with no settings *is* least privilege, and every departure is something somebody chose |
+| 26 | 7 Issue a Command | `submit_command` with the exact parameter object the browser sends, built from the app's own plan builder | PASS | None | Idempotency key suppresses a duplicate; a destructive prompt is held for owner approval even when GREEN was requested |
+| 27 | 8 Watch It Ship | Read the command's state, and what the page tells the owner | **FIXED** | The step said "Every run lands as a draft pull request with CI evidence" and headed its panel "Command execution, live" over a command that would sit queued indefinitely. `/api/bots` has been publishing `executor.connected = false` all along; the page never read it | Reads that field and says **Not Connected** in those words. An absent or unreadable field reads as Not Connected — the one direction this must never fail is claiming an executor that is not there |
+| 28 | Tenant isolation and evidence | Same journey re-run as a rival tenant | PASS | None | Projects, bots, assignments and templates are invisible; `list_activity` returns nothing; activity events refuse deletion for every role |
+| 29 | The Create Project form itself | Filled every field and submitted | **FIXED** | Its tests covered which pickers appear and **never submitted**. The POST is the entire capability step 2 depends on | Added submit coverage asserting the exact body, that the repository goes by numeric id, and that a 409 keeps the failure on screen instead of reporting a project that was not created |
+
+Two unit fixtures had been keeping the step-6 defect green by describing rows
+the database cannot hold — an assignment with no `roleId`, and one with a
+`roleId` and no config. Both now describe real records. That is the same shape
+as the defects themselves: a check that cannot fail, and a fixture that cannot
+exist, agreeing with each other.
+
+**What could not be tested this round.** The live page at
+`www.theagoras.com/solutions/ai-factory` renders only a sign-in state to an
+unauthenticated visitor, and no credential for that tenant is available here.
+Filling the live form would also write fake data into the owner's production
+tenant, which is not an agent's call. This container has a Docker client but no
+daemon, so `supabase start` (GoTrue + PostgREST + Mailpit) cannot run either.
+Real PostgreSQL with the real migrations is what remains, and it is what every
+row above was proved against.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
