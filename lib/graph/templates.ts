@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { defineNode, type NodeCapability, type NodeContract } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
+import { DEFAULT_GRAPH_BUDGET, type GraphBudget } from "@/lib/graph/budgets";
 import type { GateKind, SdlcStage } from "@/lib/sdlc/lifecycle";
 import type { ResourceRef, RiskLevel } from "@/lib/graph/types";
 
@@ -73,7 +74,25 @@ export type GraphTemplate = {
    * apart is what lets a lifecycle loop without the DAG becoming a lie.
    */
   readonly feedbackEdges?: readonly ProposedEdge[];
+  /**
+   * What this template needs beyond the default budget.
+   *
+   * One default suited every template while they were all shallow. A lifecycle
+   * is not: nine sequential stages at the measured eight-minute model envelope
+   * need far longer than a five-stage build, and the honest fix is a per-template
+   * number rather than either widening the ceiling for every graph or shrinking
+   * an envelope that a live drain established.
+   */
+  readonly budget?: Partial<GraphBudget>;
 };
+
+/** The budget a template runs under: the default, with its own overrides. */
+export function budgetForTemplate(
+  template: Pick<GraphTemplate, "budget">,
+  base: GraphBudget = DEFAULT_GRAPH_BUDGET,
+): GraphBudget {
+  return { ...base, ...template.budget };
+}
 
 const findingsSchema = z.object({
   findings: z.array(
@@ -245,6 +264,15 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       "The full lifecycle: state the goal, write the requirements, design it, build it in parallel where the files genuinely differ, review it with a reader who never saw the reasoning, prove it with evidence, deploy behind an owner's decision, then watch it and report back.",
     version: 1,
     risk: "YELLOW",
+    /*
+     * Nine sequential stages at eight minutes an attempt, attempted twice, is
+     * 144 minutes of worst case — and the estimator applies the slowest node to
+     * every level, so this is deliberately pessimistic rather than expected.
+     * Two things it must not be answered with: shrinking the model envelope,
+     * which a live drain measured at eight minutes for a reason, or widening
+     * the default for every graph that does not need it.
+     */
+    budget: { maxDurationMs: 150 * 60_000 },
     nodes: [
       {
         nodeId: "goal",
