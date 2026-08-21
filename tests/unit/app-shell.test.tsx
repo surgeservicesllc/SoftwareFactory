@@ -36,18 +36,11 @@ describe("AppShell navigation", () => {
       "Settings",
       "Watch",
       "Advanced",
-      // Quick actions land on real controls that start work: the add-project
-      // form, the composer, and repository authorization. A "View
-      // Documentation" shortcut out to the marketing site was removed by
-      // owner request; this list is what asserts it stays gone.
-      "New Project", "Give a bot work", "Import Repository",
+      // The list ends at the navigation. The owner marked the whole action
+      // block on the live page — New Project, the Quick actions shortcuts and
+      // the promotional card — and asked for it gone, so the column is
+      // destinations and nothing else. This list is what asserts it stays gone.
     ]);
-
-    expect(within(navigation).getByText("Quick actions")).toBeInTheDocument();
-    expect(within(navigation).getByRole("link", { name: "New Project" })).toHaveAttribute(
-      "href",
-      "/solutions/projects#add-project",
-    );
   });
 
   it("resolves every subpage to a real page once its group is opened", async () => {
@@ -203,17 +196,28 @@ describe("the navigation column against the owner's reference", () => {
     expect(projects.className).not.toContain("bg-[var(--accent-surface)]");
   });
 
-  it("leads the actions with New Project as a button, then the shortcuts", () => {
-    // The reference gives New Project a button of its own rather than a fourth
-    // identical link, because it is the action people come here to take.
+  it("carries no action block beneath the navigation", () => {
+    /*
+     * Every part of what the owner marked, asserted by absence.
+     *
+     * Named individually rather than by counting children: a count passes if
+     * one of the five comes back under a different name, and the point of this
+     * test is that none of them returns. New Project is checked by role as
+     * well as by text, because it was a link styled as a button and a text
+     * query alone would miss it if it came back as a real `button`.
+     */
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
-
     const navigation = screen.getByRole("navigation", { name: "Console" });
-    const newProject = within(navigation).getByRole("link", { name: "New Project" });
 
-    expect(newProject.className).toContain("btn");
-    expect(within(navigation).getByText("Quick actions")).toBeInTheDocument();
-    expect(within(navigation).getByText(/automate\. build\. ship\./i)).toBeInTheDocument();
+    expect(within(navigation).queryByRole("link", { name: "New Project" })).toBeNull();
+    expect(within(navigation).queryByRole("button", { name: "New Project" })).toBeNull();
+    expect(within(navigation).queryByText("Quick actions")).toBeNull();
+    expect(within(navigation).queryByText("Give a bot work")).toBeNull();
+    expect(within(navigation).queryByText("Import Repository")).toBeNull();
+    expect(within(navigation).queryByText(/automate\. build\. ship\./i)).toBeNull();
+    expect(
+      within(navigation).queryByText(/let ai handle the repetitive work/i),
+    ).toBeNull();
   });
 });
 
