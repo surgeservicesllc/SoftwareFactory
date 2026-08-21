@@ -1,6 +1,31 @@
 # Current state
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-21
+
+**Addendum, 2026-08-21 (Factory Briefing, ADR-098):** the Dashboard now has
+one read-only, four-lane control-plane briefing: Needs owner now, Underway,
+Recently finished, and Up next. A deterministic classifier folds the existing
+caller-member projections for tasks, runs, graph runs, the AgentOS inbox,
+operations incidents, GitHub connections, the logical agent roster, and
+worker heartbeat evidence. A task owns its linked run, so the same work cannot
+appear in two lanes; cancelled work is omitted with a count; unknown lifecycle
+values fail into an inspectable lane. All eight sources are read in parallel
+with `no-store`, per-source timeouts, batch cancellation, and stale-response
+protection. Any unavailable, malformed, or saturated source produces an
+explicit incomplete warning—an empty lane is never presented as an all-clear
+while evidence may be missing. Briefing-specific API views omit prompt-derived
+task titles, command prompts, inbox bodies and choices, graph node/artifact/
+verification details, repository details, and unrelated operations data from
+the browser response while retaining verdicts needed to fail visibly.
+Malformed verification evidence fails the graph briefing read closed. The
+coordinator label is the recorded logical
+Orchestrator role, not a claim that a new supervisor exists. Actions only
+navigate to the existing authoritative screens, which re-read and re-authorize
+state. This adapts the useful Bearings information architecture reviewed in
+FirstMate commit `738460d401b1115dab617c3859077973977615cb`; no FirstMate
+shell/session code, state files, credentials, relay, merge path, or execution
+authority was imported. No schema, RLS, workflow, provider, autonomy, or
+production change is part of this increment.
 
 **Addendum, 2026-08-21 (Job Seeker verified live — ADR-097):** the whole
 /job-seeker surface has now been driven in a real browser against a real

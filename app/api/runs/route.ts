@@ -74,39 +74,64 @@ type RunRow = {
   archived_at?: string | null;
 };
 
+function briefingRun(row: RunRow) {
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    project: row.project_id
+      ? { id: row.project_id, name: row.project_name ?? "Project" }
+      : null,
+    task: row.task_id
+      ? { id: row.task_id }
+      : null,
+    agent: row.agent_id
+      ? { id: row.agent_id, name: row.agent_name ?? "Agent" }
+      : null,
+  };
+}
+
+function fullRun(row: RunRow) {
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    durationMs: row.started_at && row.completed_at
+      ? Math.max(0, Date.parse(row.completed_at) - Date.parse(row.started_at))
+      : null,
+    risk: row.risk_level ?? null,
+    provider: row.provider ?? null,
+    model: row.model ?? null,
+    branch: row.branch_name ?? null,
+    reviewStatus: row.review_status ?? "unreviewed",
+    archivedAt: row.archived_at ?? null,
+    project: row.project_id
+      ? { id: row.project_id, name: row.project_name ?? "Project" }
+      : null,
+    task: row.task_id
+      ? { id: row.task_id, title: row.task_title ?? "Task" }
+      : null,
+    agent: row.agent_id
+      ? { id: row.agent_id, name: row.agent_name ?? "Agent" }
+      : null,
+  };
+}
+
 export async function GET(request: Request) {
+  const briefing = new URL(request.url).searchParams.get("view") === "briefing";
+
   return tenantRpcListResponse<RunRow>({
     request,
     rpc: "list_agent_runs",
     unavailableCode: "runs_unavailable",
     unavailableMessage: "Runs could not be loaded.",
     shape: (rows) => ({
-        runs: rows.map((row) => ({
-          id: row.id,
-          status: row.status,
-          startedAt: row.started_at,
-          completedAt: row.completed_at,
-          createdAt: row.created_at,
-          durationMs: row.started_at && row.completed_at
-            ? Math.max(0, Date.parse(row.completed_at) - Date.parse(row.started_at))
-            : null,
-          risk: row.risk_level ?? null,
-          provider: row.provider ?? null,
-          model: row.model ?? null,
-          branch: row.branch_name ?? null,
-          reviewStatus: row.review_status ?? "unreviewed",
-          archivedAt: row.archived_at ?? null,
-          project: row.project_id
-            ? { id: row.project_id, name: row.project_name ?? "Project" }
-            : null,
-          task: row.task_id
-            ? { id: row.task_id, title: row.task_title ?? "Task" }
-            : null,
-          agent: row.agent_id
-            ? { id: row.agent_id, name: row.agent_name ?? "Agent" }
-            : null,
-        })),
-      }),
+      runs: rows.map((row) => briefing ? briefingRun(row) : fullRun(row)),
+    }),
   });
 }
 

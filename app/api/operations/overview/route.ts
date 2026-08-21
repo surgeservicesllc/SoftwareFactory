@@ -105,10 +105,63 @@ type JourneyRow = {
   last_observed_at: string | null;
 };
 
-export async function GET() {
+function briefingIncident(row: IncidentRow) {
+  return {
+    id: row.id,
+    projectName: row.project_name,
+    title: row.title,
+    severity: row.sev,
+    status: row.status,
+    impact: row.impact,
+    detectedAt: row.detected_at,
+    resolvedAt: row.resolved_at,
+    ownerAttentionRequired: row.owner_attention_required,
+  };
+}
+
+function fullIncident(row: IncidentRow) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    projectName: row.project_name,
+    title: row.title,
+    severity: row.sev,
+    status: row.status,
+    source: row.source,
+    symptoms: row.symptoms,
+    impact: row.impact,
+    occurrenceCount: row.occurrence_count,
+    detectedAt: row.detected_at,
+    lastSignalAt: row.last_signal_at,
+    resolvedAt: row.resolved_at,
+    ownerAttentionRequired: row.owner_attention_required,
+    rootCause: row.root_cause,
+    correctiveAction: row.corrective_action,
+    autoCreated: row.auto_created,
+  };
+}
+
+export async function GET(request?: Request) {
   try {
     const context = await operationsContext();
     const organizationId = context.activeOrganization.id;
+    const briefing = request
+      ? new URL(request.url).searchParams.get("view") === "briefing"
+      : false;
+
+    if (briefing) {
+      const incidents = await context.client.rpc("list_production_incidents", {
+        p_organization_id: organizationId,
+        p_limit: 50,
+      });
+      if (incidents.error) return databaseErrorResponse(incidents.error);
+
+      return jsonNoStore({
+        activeOrganizationId: organizationId,
+        ...OPERATIONS_EXECUTION_ENVELOPE,
+        incidents: ((incidents.data ?? []) as IncidentRow[]).map(briefingIncident),
+      });
+    }
 
     const [summary, projects, incidents, monitors, audit, journeys] = await Promise.all([
       context.client.rpc("operations_portfolio_summary", { p_organization_id: organizationId }),
@@ -164,25 +217,7 @@ export async function GET() {
         connectedMonitors: Number(row.connected_monitors),
         openIncidents: Number(row.open_incidents),
       })),
-      incidents: ((incidents.data ?? []) as IncidentRow[]).map((row) => ({
-        id: row.id,
-        projectId: row.project_id,
-        projectName: row.project_name,
-        title: row.title,
-        severity: row.sev,
-        status: row.status,
-        source: row.source,
-        symptoms: row.symptoms,
-        impact: row.impact,
-        occurrenceCount: row.occurrence_count,
-        detectedAt: row.detected_at,
-        lastSignalAt: row.last_signal_at,
-        resolvedAt: row.resolved_at,
-        ownerAttentionRequired: row.owner_attention_required,
-        rootCause: row.root_cause,
-        correctiveAction: row.corrective_action,
-        autoCreated: row.auto_created,
-      })),
+      incidents: ((incidents.data ?? []) as IncidentRow[]).map(fullIncident),
       monitors: ((monitors.data ?? []) as MonitorRow[]).map((row) => ({
         id: row.id,
         projectId: row.project_id,

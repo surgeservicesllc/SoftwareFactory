@@ -237,6 +237,47 @@ export const RUNS = [
   },
 ];
 
+/**
+ * Exact `GET /api/runs?limit=100&view=briefing` projection consumed by Factory Briefing.
+ *
+ * The general Runs console fixture above predates the safe list projection
+ * and intentionally carries its richer console fields. Keeping this endpoint-
+ * exact fixture separate prevents the briefing harness from silently testing
+ * `task`, `project`, and `agent` as missing when production always nests them.
+ */
+export const FACTORY_BRIEFING_RUNS = [
+  {
+    id: "aaaaaaaa-3111-4111-8111-111111111111",
+    status: "failed",
+    startedAt: "2026-08-20T09:00:00.000Z",
+    completedAt: "2026-08-20T09:04:00.000Z",
+    createdAt: "2026-08-20T09:00:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    task: {
+      id: "aaaaaaaa-4111-4111-8111-111111111111",
+    },
+    agent: {
+      id: "cccccccc-1111-4111-8111-111111111111",
+      name: "Orchestrator",
+    },
+  },
+  {
+    id: "aaaaaaaa-3222-4222-8222-222222222222",
+    status: "queued",
+    startedAt: null,
+    completedAt: null,
+    createdAt: "2026-08-21T09:00:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    task: {
+      id: "aaaaaaaa-4222-4222-8222-222222222222",
+    },
+    agent: {
+      id: "cccccccc-2222-4222-8222-222222222222",
+      name: "Security",
+    },
+  },
+];
+
 /*
  * Shaped like `GET /api/reports` actually answers, key for key.
  *
@@ -284,9 +325,12 @@ export const PROVIDER_STATUS = {
 
 /** `GET /api/worker/status`, read by the guided journey. */
 export const WORKER_STATUS = {
-  connectionStatus: "disconnected",
-  label: "Not Connected",
-  detail: "No worker has registered in this environment.",
+  connectionStatus: "not_connected",
+  statusLabel: "Worker Not Connected",
+  lastHeartbeatAt: null,
+  activeWorkers: 0,
+  availableWorkers: 0,
+  staleAfterSeconds: 90,
 };
 
 /** `GET /api/commands`, read by the guided journey and the pipelines console. */
@@ -320,6 +364,25 @@ export const AGENTS = [
     description: "Reviews changes for unsafe patterns.",
     capabilities: ["security"],
     createdAt: "2026-08-01T10:00:00.000Z",
+  },
+];
+
+/** Maximum accepted project-config agent name, deliberately unbroken. */
+export const MAX_LENGTH_COORDINATOR_NAME = "C".repeat(160);
+
+/** Exact `GET /api/agents?limit=100&view=briefing` projection consumed by Factory Briefing. */
+export const FACTORY_BRIEFING_AGENTS = [
+  {
+    id: "cccccccc-3111-4111-8111-111111111111",
+    name: MAX_LENGTH_COORDINATOR_NAME,
+    role: "orchestrator",
+    status: "busy",
+  },
+  {
+    id: "cccccccc-3222-4222-8222-222222222222",
+    name: "Security",
+    role: "security",
+    status: "idle",
   },
 ];
 
@@ -357,6 +420,16 @@ export const CONNECTIONS = [
     ],
     createdAt: "2026-08-16T19:47:00.000Z",
     lastSyncedAt: "2026-08-17T10:00:00.000Z",
+  },
+];
+
+/** Exact `GET /api/github/connections?view=briefing` projection consumed by Factory Briefing. */
+export const FACTORY_BRIEFING_CONNECTIONS = [
+  {
+    id: "eeeeeeee-2111-4111-8111-111111111111",
+    name: "GitHub · surgeservicesllc",
+    status: "connected",
+    statusReason: null,
   },
 ];
 

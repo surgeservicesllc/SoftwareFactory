@@ -7,6 +7,7 @@ import { ActivityConsole } from "@/components/activity-console";
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
 import { CommandComposer } from "@/components/command-composer";
+import { FactoryBriefing } from "@/components/factory-briefing";
 import { GettingStarted } from "@/components/getting-started";
 import { GraphExecutionSummary } from "@/components/graph-execution-summary";
 import { GraphLaunchControl } from "@/components/graph-launch-control";
@@ -56,6 +57,9 @@ import {
   AUTONOMY_STATUS,
   COMMANDS,
   CONNECTIONS,
+  FACTORY_BRIEFING_AGENTS,
+  FACTORY_BRIEFING_CONNECTIONS,
+  FACTORY_BRIEFING_RUNS,
   OPERATIONS_OVERVIEW,
   JOB_SEEKER_PREFERENCES,
   JOB_SEEKER_PROFILE,
@@ -152,10 +156,16 @@ function serveFixtures() {
         canManage: true,
       });
     }
+    if (url.includes("/api/graphs/runs")) return json({ runs: [] });
+    if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
+    if (url.includes("/api/agents?limit=100")) return json({ agents: FACTORY_BRIEFING_AGENTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });
     if (url.includes("/api/activity")) return json({ events: ACTIVITY });
+    if (url.includes("/api/github/connections?view=briefing")) {
+      return json({ connections: FACTORY_BRIEFING_CONNECTIONS });
+    }
     if (url.includes("/api/github/connections")) return json({ connections: CONNECTIONS });
     if (url.includes("/api/projects")) return json({ projects: PROJECTS });
     if (url.includes("/api/tasks") || url.includes("/api/backlog")) return json({ tasks: [] });
@@ -261,6 +271,7 @@ const CASES: Record<string, () => React.ReactElement> = {
     </InShell>
   ),
   "dashboard-metrics": () => <InShell><LiveDashboardMetrics authenticated /></InShell>,
+  "factory-briefing": () => <InShell><FactoryBriefing authenticated /></InShell>,
   attention: () => <InShell><NeedsYourAttention authenticated /></InShell>,
   "portfolio-controls": () => <InShell><PortfolioControls /></InShell>,
   "project-detail": () => <InShell><ProjectDetailConsole projectId={PROJECT_ID} /></InShell>,

@@ -22,27 +22,39 @@ type Row = {
 };
 
 export async function GET(request: Request) {
+  const briefing = new URL(request.url).searchParams.get("view") === "briefing";
+
   return tenantRpcListResponse<Row>({
     request,
     rpc: "agentos_list_inbox",
     unavailableCode: "agentos_inbox_unavailable",
     unavailableMessage: "The inbox could not be loaded.",
-    shape: (rows) => ({
-      messages: rows.map((row) => ({
-        id: row.id,
-        author: row.author,
-        kind: row.kind,
-        status: row.status,
-        body: row.body,
-        choices: row.choices ?? [],
-        // The resolved label, never the index.
-        selectedChoice: row.selected_choice,
-        answerBody: row.answer_body,
-        agentName: row.agent_name,
-        agentRunId: row.agent_run_id,
-        createdAt: row.created_at,
-        answeredAt: row.answered_at,
-      })),
-    }),
+    shape: (rows) => briefing
+      ? {
+          messages: rows.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            status: row.status,
+            agentName: row.agent_name,
+            createdAt: row.created_at,
+          })),
+        }
+      : {
+          messages: rows.map((row) => ({
+            id: row.id,
+            author: row.author,
+            kind: row.kind,
+            status: row.status,
+            body: row.body,
+            choices: row.choices ?? [],
+            // The resolved label, never the index.
+            selectedChoice: row.selected_choice,
+            answerBody: row.answer_body,
+            agentName: row.agent_name,
+            agentRunId: row.agent_run_id,
+            createdAt: row.created_at,
+            answeredAt: row.answered_at,
+          })),
+        },
   });
 }

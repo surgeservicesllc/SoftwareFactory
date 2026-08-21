@@ -1,6 +1,8 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { HARNESS_URL } from "../../playwright.config";
+import { MAX_LENGTH_COORDINATOR_NAME } from "../harness/fixtures";
 
 /**
  * The layouts that only exist once there are rows.
@@ -30,6 +32,15 @@ async function settled(page: import("@playwright/test").Page) {
   );
 }
 
+async function waitForFactoryBriefingReady(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("heading", { name: "Factory briefing" })).toBeVisible();
+  for (const lane of ["Needs owner now", "Underway", "Recently finished", "Up next"]) {
+    await expect(page.getByRole("region", { name: lane })).toBeVisible();
+  }
+  await expect(page.getByText(/Briefing incomplete/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+}
+
 async function open(page: import("@playwright/test").Page, layoutCase: string, width: number) {
   /*
    * A throw during mount is a failure with a name, not an empty page.
@@ -50,6 +61,12 @@ async function open(page: import("@playwright/test").Page, layoutCase: string, w
   // The components fetch their fixtures on mount; wait for real content.
   try {
     await expect(page.locator("#root")).not.toBeEmpty({ timeout: 15_000 });
+    if (layoutCase === "factory-briefing") {
+      // Its loading card also makes #root non-empty. The four lanes and
+      // enabled Refresh control are the stable ready-state contract that the
+      // width, reachability, interaction, and axe assertions must measure.
+      await waitForFactoryBriefingReady(page);
+    }
   } catch (failure) {
     if (errors.length) {
       throw new Error(
@@ -203,6 +220,7 @@ const CASES = [
   "graph-summary",
   "graph-launch",
   "dashboard-metrics",
+  "factory-briefing",
   "attention",
   "portfolio-controls",
   "project-detail",
@@ -223,6 +241,31 @@ for (const width of WIDTHS) {
     });
   }
 }
+
+for (const width of [320, 1440]) {
+  test(`factory-briefing passes axe at ${width}px`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, "factory-briefing", width);
+
+    // The component harness intentionally mounts below no page heading; the
+    // real Dashboard supplies its h1. Keep the component's h2 hierarchy and
+    // exclude only that harness-level page rule.
+    const results = await new AxeBuilder({ page })
+      .disableRules(["page-has-heading-one"])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+}
+
+test("factory-briefing keeps a max-length coordinator inside 320px", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "factory-briefing", 320);
+
+  await expect(
+    page.getByLabel("Crew status").getByText(MAX_LENGTH_COORDINATOR_NAME, { exact: false }),
+  ).toBeVisible();
+  expect(await overflowing(page), "the maximum accepted coordinator name overflowed").toEqual([]);
+});
 
 test("every recovery action on a stuck account is reachable on a phone", async ({ page, isMobile }) => {
   // The defect this pins: Refresh, Reconnect and Disconnect sat in a row that

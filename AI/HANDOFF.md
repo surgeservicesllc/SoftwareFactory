@@ -1,6 +1,37 @@
 # Handoff
 
 Last updated: 2026-08-21
+## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-098)
+
+FirstMate was reviewed at exact commit
+`738460d401b1115dab617c3859077973977615cb` (MIT, Copyright 2026 Kun Chen).
+It is a single-user local Bash agent distribution, not a compatible web
+dependency, so this change reimplements only its strongest information-
+architecture invariant: one four-lane bearings view. The Dashboard's former
+fragmented attention block is replaced by Factory Briefing, which classifies
+live task/run/graph/inbox/incident/connection evidence into exactly one of
+Needs owner now, Underway, Recently finished, or Up next; reports the logical
+Orchestrator role and worker heartbeat separately; caps lists with totals; and
+names every missing, malformed, or saturated source. Linked runs are folded
+into their task. Eight parallel reads have timeouts, batch cancellation, and
+stale-response protection; briefing-specific server responses omit prompt-
+derived task titles, command prompts, inbox bodies/choices, graph node/
+artifact/verification details beyond fail-visible verdicts, repository
+details, and unrelated operations data. Malformed graph verification evidence
+fails the source read closed. All actions navigate to authoritative screens
+rather than mutating from the summary. No migration, auth/RLS boundary, worker, provider,
+autonomy setting, workflow, merge, deployment, or production resource changed.
+
+Local evidence: full ESLint and TypeScript clean; production Next build green;
+57/57 focused classifier/component/minimized-route/operations-contract tests
+green; the component browser matrix has 30 passes and 15 intentional skips in
+the non-resizable mobile project across 320–1440 px, including populated
+layout/control/axe checks and an unbroken
+maximum-length coordinator at 320 px. On the rebased combined tree, the local
+unit suite passes 2,506/2,506 after excluding two pre-existing Windows-only
+process/permission files. Database behavior suites need their configured
+stack; Linux draft-PR CI remains authoritative.
+Publish only a draft PR; do not merge or deploy from this handoff.
 
 ## Newest (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
 

@@ -51,13 +51,26 @@ function shapeAgents(rows: AgentRow[]) {
   };
 }
 
+function shapeBriefingAgents(rows: AgentRow[]) {
+  return {
+    agents: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      status: row.status,
+    })),
+  };
+}
+
 export async function GET(request: Request) {
+  const briefing = new URL(request.url).searchParams.get("view") === "briefing";
+
   return tenantRpcListResponse<AgentRow>({
     request,
     rpc: "list_agents",
     unavailableCode: "agents_unavailable",
     unavailableMessage: "Agents could not be loaded.",
-    shape: shapeAgents,
+    shape: briefing ? shapeBriefingAgents : shapeAgents,
   });
 }
 

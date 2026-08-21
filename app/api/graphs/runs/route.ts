@@ -39,9 +39,28 @@ type GraphRunRow = {
   verifications: unknown;
 };
 
+function briefingVerifications(value: unknown): Array<{ verdict: string }> | null {
+  if (!Array.isArray(value)) return null;
+
+  const projected: Array<{ verdict: string }> = [];
+  for (const verification of value) {
+    if (
+      typeof verification !== "object"
+      || verification === null
+      || !("verdict" in verification)
+      || typeof verification.verdict !== "string"
+    ) {
+      return null;
+    }
+    projected.push({ verdict: verification.verdict });
+  }
+  return projected;
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
+    const briefing = url.searchParams.get("view") === "briefing";
     const parsed = querySchema.safeParse({ limit: url.searchParams.get("limit") ?? undefined });
     if (!parsed.success) {
       return jsonNoStore(
@@ -58,26 +77,43 @@ export async function GET(request: Request) {
     if (error) return databaseErrorResponse(error);
 
     const rows = (data ?? []) as GraphRunRow[];
+    const briefingRuns = briefing
+      ? rows.map((row) => {
+          const verifications = briefingVerifications(row.verifications);
+          if (verifications === null) {
+            throw new Error("Graph-run verification evidence is malformed.");
+          }
+          return {
+            graphRunId: row.graph_run_id,
+            goal: row.goal,
+            topology: row.topology,
+            state: row.state,
+            startedAt: row.started_at,
+            completedAt: row.completed_at,
+            verifications,
+          };
+        })
+      : null;
     return jsonNoStore({
       activeOrganizationId: activeOrganization.id,
-      runs: rows.map((row) => ({
-        graphRunId: row.graph_run_id,
-        graphId: row.graph_id,
-        goal: row.goal,
-        topology: row.topology,
-        riskLevel: row.risk_level,
-        projectId: row.project_id,
-        state: row.state,
-        hadPartialInput: row.had_partial_input,
-        startedAt: row.started_at,
-        completedAt: row.completed_at,
-        nodes: Array.isArray(row.nodes) ? row.nodes : [],
-        artifactCounts:
-          typeof row.artifact_counts === "object" && row.artifact_counts !== null
-            ? row.artifact_counts
-            : {},
-        verifications: Array.isArray(row.verifications) ? row.verifications : [],
-      })),
+      runs: briefingRuns ?? rows.map((row) => ({
+            graphRunId: row.graph_run_id,
+            graphId: row.graph_id,
+            goal: row.goal,
+            topology: row.topology,
+            riskLevel: row.risk_level,
+            projectId: row.project_id,
+            state: row.state,
+            hadPartialInput: row.had_partial_input,
+            startedAt: row.started_at,
+            completedAt: row.completed_at,
+            nodes: Array.isArray(row.nodes) ? row.nodes : [],
+            artifactCounts:
+              typeof row.artifact_counts === "object" && row.artifact_counts !== null
+                ? row.artifact_counts
+                : {},
+            verifications: Array.isArray(row.verifications) ? row.verifications : [],
+          })),
     });
   } catch (error) {
     const boundaryResponse = supabaseBoundaryErrorResponse(error);
