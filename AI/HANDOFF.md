@@ -180,6 +180,30 @@ The worker's schedule stays off until the repo variable
 deliberately with the Phase 1C path. The owner's standing merge cadence for
 this goal: merge immediately, verify on production, keep looping.
 
+## Newest (2026-08-18): Use records a project's pipeline — one owner action outstanding
+
+`Configure Pipeline` on `/solutions/ai-factory` now has something to configure.
+Pressing **Use** on a template card selects it for the project the journey is
+scoped to, writes that to `project_pipelines`, and the step reads it back: done
+only when at least one pipeline is selected, with the chosen names rendered on
+the page. Many can be selected; pressing a selected card again removes it. The
+graph-planning dialog Use used to open is now its own **Plan graph** button.
+
+**Outstanding owner action:** migration `20260821000300_project_pipeline_selection`
+is not on the hosted ledger. Run
+`.github/workflows/apply-hosted-migrations.yml` with `confirm=apply` and
+**`scope=pipeline-selection`** — a scope added for exactly this file, so
+reaching production does not mean re-running twenty-three unrelated migrations.
+It applies, records the ledger row, and reloads the PostgREST schema cache.
+Every statement is idempotent (`create table if not exists`,
+`create index if not exists`, `alter type ... add value if not exists`,
+`create or replace function`), and the migration adds — it alters nothing that
+already exists. The file is also in `scope=broker-functions` for a batch run. Until then the console tells the
+truth about itself rather than appearing to work: `/api/project-pipelines`
+returns `pipeline_selection_not_connected` and the Use button is disabled with
+"Not Connected — this database does not have the pipeline-selection migration
+applied yet".
+
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 
 Probe run `32103778884` (`.github/workflows/apply-hosted-migrations.yml`,

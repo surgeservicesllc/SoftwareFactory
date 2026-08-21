@@ -6,9 +6,11 @@ Rebased 2026-08-16 on an owner-measured hosted position (see the section directl
 **The current total is 19**, named in the list below — as measured. Two further migrations,
 `20260816001600_phase2c_resource_reservations` and
 `20260819000700_bot_credential_ref_privileged_parity`, were added locally *after* that probe run
-and are also unhosted, so the next probe should return twenty-one. It is deliberately not appended to the
-list below: that list is a measurement, and adding an unmeasured version to it would turn
-evidence into assertion. The repository total is 127 migration
+and are also unhosted, so the next probe at that point should have returned twenty-one.
+`20260821000300_project_pipeline_selection` was added later and is also unhosted, bringing the
+current expected absent count to twenty-two. None is appended to the list below: that list is a
+measurement, and adding an unmeasured version to it would turn evidence into assertion. The
+repository total is 128 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -121,7 +123,14 @@ failure was the worker's old 8-turn ceiling — fixed in code (24 turns) —
 which is why `20260819000500_replant_with_room_to_work` re-plants one final
 fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
 All of these re-apply through the same replay-safe `scope=broker-functions`
-path. Earlier revisions of this
+path. `20260821000300_project_pipeline_selection` (the `project_pipelines` table and
+its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
+functions, which is what makes the AI Factory's Use button record anything) is newer than that
+measurement and remains outstanding. `20260821000300` has its own one-file scope,
+**`scope=pipeline-selection`**, so it can reach production without re-running unrelated
+migrations; it is still in the `broker-functions` batch scope as well. Until then the Configure
+Pipeline step reads **Not Connected** in effect: `/api/project-pipelines` will return the
+database's own missing-function error rather than pretending a selection stuck. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 

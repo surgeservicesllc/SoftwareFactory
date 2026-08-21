@@ -26,9 +26,11 @@ on:
         description: >-
           "all" pushes every outstanding migration; "broker-functions"
           applies only the idempotent broker migrations
-          (20260816000400 through 20260820000300) and records them in history;
+          (20260816000400 through 20260821000300) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
+          "pipeline-selection" applies only 20260821000300, which is what makes
+          the AI Factory's Use button record a project's pipelines;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -38,6 +40,7 @@ on:
           - all
           - broker-functions
           - project-controls
+          - pipeline-selection
           - probe
 
 permissions:
@@ -147,9 +150,12 @@ jobs:
           fi
 
       - name: Apply the broker function migrations surgically (scope=broker-functions)
-        # Both files are purely `create or replace function` plus grants —
-        # idempotent by construction — so applying them directly cannot
-        # disturb existing schema. psql is preinstalled on the runner, and
+        # Every file here is idempotent by construction — `create or replace
+        # function`, `create table if not exists`, `create index if not
+        # exists`, `alter type ... add value if not exists`, and grants — so
+        # applying them directly cannot disturb existing schema. psql runs
+        # each statement autocommitted, which is what lets an enum label be
+        # added and then referenced from a function body defined below it. psql is preinstalled on the runner, and
         # Supabase's DDL event trigger reloads the PostgREST schema cache
         # so the functions become callable immediately. History rows are
         # recorded so the ledger stays truthful.
@@ -201,7 +207,8 @@ jobs:
             supabase/migrations/20260819001200_replant_for_the_complete_run.sql \
             supabase/migrations/20260820000100_job_seeker_activity_types.sql \
             supabase/migrations/20260820000200_job_seeker_foundation.sql \
-            supabase/migrations/20260820000300_job_seeker_resume_upload.sql
+            supabase/migrations/20260820000300_job_seeker_resume_upload.sql \
+            supabase/migrations/20260821000300_project_pipeline_selection.sql
           do
             echo "Applying ${FILE}"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -253,6 +260,7 @@ jobs:
           repair 20260820000100
           repair 20260820000200
           repair 20260820000300
+          repair 20260821000300
           # Supabase's DDL event trigger reloads the PostgREST schema cache
           # on its own; this explicit reload is insurance, so a browser that
           # saw PGRST202 seconds ago cannot keep seeing it.
@@ -706,6 +714,44 @@ jobs:
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
             repair "$VERSION"
           done
+
+      - name: Apply the pipeline selection migration (scope=pipeline-selection)
+        # One file, because one feature needs it and nothing else in the
+        # broker-functions list does. Running the whole of that scope to reach
+        # this would re-run twenty-three unrelated migrations, each idempotent
+        # but each a change to production nobody asked for in this run.
+        #
+        # 20260821000300 creates public.project_pipelines with RLS and FORCE
+        # RLS, revokes every table privilege from anon, authenticated and
+        # service_role, and adds select_project_pipeline,
+        # deselect_project_pipeline and list_project_pipelines. It adds; it
+        # alters nothing that exists. Every statement is idempotent —
+        # `create table if not exists`, `create index if not exists`,
+        # `alter type ... add value if not exists`, `create or replace
+        # function` — and psql runs each autocommitted, which is what lets the
+        # two new enum labels be added and then named from a function body
+        # defined below them.
+        if: ${{ inputs.scope == 'pipeline-selection' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260821000300_project_pipeline_selection.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260821000300
+          else
+            npx supabase migration repair --status applied 20260821000300 --db-url "$DB_URL"
+          fi
+          # Insurance: Supabase's DDL event trigger reloads the PostgREST
+          # schema cache on its own, but a browser that saw PGRST202 seconds
+          # ago must not keep seeing it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Pipeline selection applied and recorded; the API schema cache was reloaded."
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
