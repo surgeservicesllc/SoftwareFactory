@@ -440,6 +440,30 @@ Each of these was true and unguarded — provable only by a manual run, which do
 - `tests/integration/schema-security-invariants.test.ts` — RLS and FORCE RLS on every public table across the whole chain; `service_role` table privileges limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write privilege anywhere. `newsletter_subscribers` is an allowlisted policyless table, locked shut on purpose behind the SECURITY DEFINER `subscribe_to_newsletter`.
 - `tests/integration/required-checks-wiring.test.ts` — the worker's `SOFTWAREFACTORY_REQUIRED_CHECKS` matches the `name:` of every job in `ci.yml`, in both directions. A renamed CI job would otherwise leave a live run waiting for a check that never reports.
 
+## Agentic SDLC lifecycle on the graph worker, 2026-08-21
+
+`main` shipped a background graph worker while a parallel branch was building a
+request-driven executor. The branch deleted its own and re-seated the lifecycle
+on the worker: one executor, one write path, no second claimant racing the first
+for the same run. `AI/AGENTIC_SDLC_GAP_MATRIX.md` records all 24 capabilities
+against the tree.
+
+**What exists.**
+
+- Eight stages (`lib/sdlc/lifecycle.ts`), recorded on a node rather than implied, each with the gate that guards it and whether its claim must be anchored.
+- `graph_gates` under RLS and FORCE RLS with `select` to `authenticated` and no write privilege anywhere, keyed on `node_id` so an approval outlives the run that asked for it.
+- `claim_planned_graph` projects `lifecycle_stage`, `gate_kind` and any existing decision; excludes feedback edges; and re-offers a lifecycle that halted at a gate once that gate is decided.
+- `runClaimedGraph` records a gated node's artifact, moves it to VERIFYING, opens the gate and reports it as not-completed so nothing downstream starts on an undecided result.
+- `POST /api/graph-gates/{id}/decide` — member-scoped, `auth.uid()` recorded, both database refusals passed through intact.
+- `components/graph-runs-panel.tsx` shows the stage and offers the decision inline on the node that owns it.
+
+**Migrations `20260821000100` and `20260821000200` are local only.** The hosted
+ledger does not have them, so no hosted graph carries a stage or a gate.
+
+**Not Connected, unchanged.** No node has executed against a provider. Outbound
+execution is off and no credential is configured. No lifecycle has met its
+acceptance criteria and none is claimed to have.
+
 ## Release blockers
 
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.
