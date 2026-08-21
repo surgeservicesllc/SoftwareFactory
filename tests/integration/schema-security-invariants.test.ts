@@ -287,6 +287,11 @@ describe("SECURITY DEFINER functions", () => {
       "mark_ai_account_verified",
       "mark_ai_auth_session_verifying",
       "mark_github_connection_lost",
+      // The lifecycle's one worker write: open the gate a finished stage waits
+      // at. Keyed to the graph node, so an approval outlives the run that
+      // asked for it, and idempotent on that key — a re-claim finds the
+      // existing decision rather than manufacturing a second, undecided gate.
+      "open_node_gate_as_worker",
       "process_github_webhook_delivery",
       "read_ai_auth_relay_code",
       // Status only, never the sealed code: a worker mid-drive can notice a

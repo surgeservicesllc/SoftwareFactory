@@ -71,6 +71,7 @@ const publicTables = [
   "graph_budgets",
   "graph_edges",
   "graph_events",
+  "graph_gates",
   "graph_handoffs",
   "graph_nodes",
   "graph_runs",

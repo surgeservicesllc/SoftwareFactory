@@ -37,6 +37,9 @@ type GraphRunRow = {
   nodes: unknown;
   artifact_counts: unknown;
   verifications: unknown;
+  is_lifecycle: boolean | null;
+  iteration: number | null;
+  max_iterations: number | null;
 };
 
 export async function GET(request: Request) {
@@ -77,6 +80,11 @@ export async function GET(request: Request) {
             ? row.artifact_counts
             : {},
         verifications: Array.isArray(row.verifications) ? row.verifications : [],
+        // Reported rather than derived: a graph is a lifecycle because its plan
+        // staged its nodes, and the database is where that was decided.
+        isLifecycle: row.is_lifecycle === true,
+        iteration: row.iteration ?? 1,
+        maxIterations: row.max_iterations ?? 1,
       })),
     });
   } catch (error) {
