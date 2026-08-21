@@ -60,15 +60,24 @@ Last triaged: 2026-08-21
   three live defects it surfaced (no-workspace dead end → onboarding flow
   with `?next=`, PostgREST one-to-one embed shape in the jobs route,
   empty-history-entry 422 → client-side prune).
+- [x] Live verification round 2 (same day): the journey covers the whole
+  capability surface — all eleven stages, reject+close, entry removal,
+  resume download round-trip, analytics re-check — and two more wiring
+  gaps closed: the CRM details editor (notes / application URL /
+  follow-up date had PATCH support but no UI) and the persistent
+  current-resume link (the `resume_upload_id` pointer went unread).
 - [ ] Open (needs external credentials/decisions): activate an import
   adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
   _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
   model-polished document variants through the job_search_pipeline graph
   template (live and launchable from Pipelines → Templates), QA-lens-checked
   against the deterministic baseline.
-- [ ] Open (infrastructure): a CI lane that provisions the local Supabase
-  stack and runs the JOB_SEEKER_E2E journey on a cadence instead of on
-  demand.
+- [x] CI lane (2026-08-21): `.github/workflows/job-seeker-journey.yml` —
+  workflow_dispatch + daily schedule; provisions `supabase start` (lean
+  exclusion set) on the runner, mints the pre-confirmed journey user
+  through GoTrue's admin API, builds and serves the production app, and
+  runs the JOB_SEEKER_E2E journey. No deployment, no production
+  credentials, no provider usage.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 

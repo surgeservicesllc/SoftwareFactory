@@ -221,5 +221,92 @@ test.describe("job seeker live journey", () => {
     // "—" no-data case (zero applications) is pinned by the unit suite.
     await expect(stat("Response rate")).toContainText("0%");
     await expect(page.getByText(/never an\s+estimate/)).toBeVisible();
+
+    // ── CRM details persist: notes, submitted URL, follow-up date ──────────
+    await page.getByRole("link", { name: "Applications" }).click();
+    await expect(page.getByRole("heading", { name: "Applied · 1" })).toBeVisible({ timeout: 20_000 });
+    await page.getByText("Notes & follow-up").click();
+    await page.getByLabel("Notes").fill("Recruiter screen booked; send thank-you after.");
+    await page.getByLabel("Application URL").fill("https://jobs.meridian.example/apply/42");
+    await page.getByLabel("Follow-up date").fill("2026-09-01T09:00");
+    await page.getByRole("button", { name: "Save details" }).click();
+    // The saved answer must come back from Supabase, not component memory.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Applied · 1" })).toBeVisible({ timeout: 20_000 });
+    await page.getByText("Notes & follow-up").click();
+    await expect(page.getByLabel("Notes")).toHaveValue(/Recruiter screen booked/, { timeout: 20_000 });
+    await expect(page.getByLabel("Application URL")).toHaveValue("https://jobs.meridian.example/apply/42");
+
+    // ── The rest of the pipeline: every remaining stage, walked ────────────
+    for (const stage of ["Follow Up", "Recruiter Response", "Interview", "Final Interview", "Offer"]) {
+      await page.getByRole("button", { name: `Move to ${stage}` }).click();
+      await expect(page.getByRole("heading", { name: `${stage} · 1` })).toBeVisible({ timeout: 20_000 });
+    }
+
+    // ── A second job walks the other side of the gate: reject, then close ──
+    await page.getByRole("link", { name: "Job Discovery" }).click();
+    await page.getByRole("button", { name: /record a job/i }).click();
+    await page.getByLabel("Job title").fill("Platform Lead");
+    await page.getByLabel("Company").fill("Northwind Data");
+    await page.getByLabel("Job ID").fill("nw-7");
+    await page.getByLabel("Full description").fill(
+      "Remote platform leadership. TypeScript and PostgreSQL every day.",
+    );
+    await page.getByRole("button", { name: /record and score/i }).click();
+    await expect(page.getByRole("status")).toHaveText(/Recorded and scored \d+\/100/, { timeout: 20_000 });
+
+    await page.getByRole("link", { name: "Applications" }).click();
+    // Meridian sits at Offer, so the only Prepare button is Northwind's.
+    await page.getByRole("button", { name: /prepare application/i }).click();
+    await expect(page.getByRole("heading", { name: "Ready For Review · 1" })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByText("rejected", { exact: true })).toBeVisible({ timeout: 20_000 });
+    // A rejected application has no forward moves anywhere — the gate holds
+    // (and Meridian at Offer has none left either).
+    await expect(page.getByRole("button", { name: /move to/i })).toHaveCount(0);
+    await page
+      .locator('section[aria-label="Ready For Review"]')
+      .getByRole("button", { name: "Close" })
+      .click();
+    await expect(page.getByRole("heading", { name: "Closed · 1" })).toBeVisible({ timeout: 20_000 });
+
+    // ── Back on the profile: the stored resume is visible from load ────────
+    await page.getByRole("link", { name: "Career Profile" }).click();
+    const resumeLink = page.getByRole("link", { name: "jordan-resume.txt" });
+    await expect(resumeLink).toBeVisible({ timeout: 20_000 });
+    const resumeHref = await resumeLink.getAttribute("href");
+    const download = await page.request.get(resumeHref!);
+    expect(download.status()).toBe(200);
+    expect(await download.text()).toContain("Jordan Seeker — Staff Engineer.");
+
+    // ── Remove entry: add a throwaway entry, persist it, remove it ─────────
+    await page.getByRole("button", { name: /add employment history entry/i }).click();
+    const temp = page.locator("div.rounded-md.border").nth(1);
+    await temp.getByLabel("Organization").fill("Temp Co");
+    await temp.getByLabel("Title").fill("Temp Role");
+    await page.getByRole("button", { name: /save profile/i }).click();
+    await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
+    await page.reload();
+    // Entries render employment-first: [Surge, Temp], then education [State].
+    const tempAfterReload = page.locator("div.rounded-md.border").nth(1);
+    await expect(tempAfterReload.getByLabel("Organization")).toHaveValue("Temp Co", { timeout: 20_000 });
+    await tempAfterReload.getByRole("button", { name: /remove entry/i }).click();
+    await page.getByRole("button", { name: /save profile/i }).click();
+    await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
+    await page.reload();
+    await expect(page.getByLabel("Full name")).toHaveValue("Jordan Seeker", { timeout: 20_000 });
+    // The removal persisted: what follows Surge Services is education again.
+    await expect(page.locator("div.rounded-md.border").nth(0).getByLabel("Organization"))
+      .toHaveValue("Surge Services");
+    await expect(page.locator("div.rounded-md.border").nth(1).getByLabel("Organization"))
+      .toHaveValue("State University");
+
+    // ── Analytics again: the walked pipeline shows up as counted rows ──────
+    await page.getByRole("link", { name: "Analytics" }).click();
+    await expect(stat("Jobs found")).toContainText("2", { timeout: 20_000 });
+    await expect(stat("Applications")).toContainText("1");
+    await expect(stat("Response rate")).toContainText("100%");
+    await expect(stat("Interviews")).toContainText("1");
+    await expect(stat("Offers")).toContainText("1");
   });
 });

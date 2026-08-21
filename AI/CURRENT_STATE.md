@@ -42,7 +42,14 @@ embeds arriving as objects where the jobs route expected arrays (every
 live record had shown no score), and a whole-profile 422 when an added
 history entry was left empty (now pruned client-side). Signed-out
 production verified separately: the page streams its sign-in redirect and
-every /api/job-seeker route answers 401.
+every /api/job-seeker route answers 401. Round 2 extended the journey to
+the whole capability surface — all eleven pipeline stages walked, the
+reject+close side of the gate, history-entry removal, the resume download
+round-trip — and closed two more wiring gaps: a per-application "Notes &
+follow-up" editor now reaches the PATCH actions (notes / application URL /
+follow-up date) that previously had no UI, and the profile view embeds the
+current resume via `resume_upload_id` so the stored file stays visible
+across reloads instead of vanishing after the upload moment.
 
 **Addendum, 2026-08-18 (a project's selected pipelines):** Configure Pipeline
 is a step that can be worked on. `project_pipelines` (migration

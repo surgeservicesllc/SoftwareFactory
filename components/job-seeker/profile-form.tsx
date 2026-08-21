@@ -39,6 +39,7 @@ export type ProfileView = {
   technologies: string[];
   industries: string[];
   updatedAt: string | null;
+  resumeUpload?: { id: string; filename: string; byteSize: number } | null;
 };
 
 function toLines(list: readonly string[] | undefined): string {
@@ -205,7 +206,11 @@ export function JobSeekerProfileForm({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
-  const [resumeUpload, setResumeUpload] = useState<{ id: string; filename: string; byteSize: number } | null>(null);
+  // Seeded from the stored profile so the current resume stays visible
+  // across reloads, not only in the moment after uploading it.
+  const [resumeUpload, setResumeUpload] = useState<{ id: string; filename: string; byteSize: number } | null>(
+    initial?.resumeUpload ?? null,
+  );
 
   async function uploadResume(file: File) {
     setBusy(true);

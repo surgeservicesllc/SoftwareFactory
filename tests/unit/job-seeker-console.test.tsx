@@ -35,6 +35,7 @@ const PROFILE = {
   technologies: ["Next.js"],
   industries: ["Software"],
   updatedAt: "2026-08-20T00:00:00.000Z",
+  resumeUpload: { id: "11111111-2222-4333-8444-555555555555", filename: "daniel-cv.txt", byteSize: 2048 },
 };
 
 const PREFERENCES = {
@@ -107,6 +108,18 @@ describe("JobSeekerConsole", () => {
     expect(skills.value).toBe("TypeScript\nPostgres");
     // The truthfulness promise is on the page, not just in a document.
     expect(screen.getByText(/nothing is ever invented to fill a gap/i)).toBeInTheDocument();
+  });
+
+  it("shows the stored current resume as a link on load, not only after uploading", async () => {
+    stubFetch();
+    render(<JobSeekerConsole />);
+    await screen.findByDisplayValue("Daniel H");
+
+    const link = screen.getByRole("link", { name: "daniel-cv.txt" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/job-seeker/uploads/11111111-2222-4333-8444-555555555555",
+    );
   });
 
   it("renders an empty profile as an editable blank form, not an error", async () => {

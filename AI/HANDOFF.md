@@ -68,6 +68,32 @@ the wipe between runs must TRUNCATE because generated documents refuse row
 deletes by design. Gates on the merged state: lint clean, tsc clean, 3,465
 vitest green, production build, journey green.
 
+**Round 2 (same day, ~22:30Z): the whole capability surface, and two more
+wiring gaps closed.** The journey now also walks: CRM details (notes, the
+submitted application URL, a follow-up date — a per-card "Notes &
+follow-up" editor was ADDED, because the PATCH actions existed with no UI
+reaching them, and the jobs embed now carries those fields), every
+remaining pipeline stage (Applied → Follow Up → Recruiter Response →
+Interview → Final Interview → Offer, each proven by its group heading),
+the reject side of the gate on a second recorded job (reject → no forward
+moves anywhere → close), the stored resume made visible from load (the
+profile view now embeds resume metadata via the `resume_upload_id`
+pointer, which previously went unread — the link used to vanish on
+reload) with the BYTEA download round-tripped and its content asserted,
+history-entry removal persisted through reload, and analytics re-checked
+after the walk (2 jobs, 1 application, 100% measured response rate, 1
+interview-stage count, 1 offer). Extended journey green in 30.8s.
+
+**Round 3 (same day, ~22:45Z): the journey has a CI lane.** ADR-097's one
+open item is closed: `.github/workflows/job-seeker-journey.yml`
+(workflow_dispatch + daily 07:41 UTC) provisions the lean local Supabase
+stack on the runner, mints the pre-confirmed journey user through
+GoTrue's admin API, builds and serves the production app, and runs the
+JOB_SEEKER_E2E journey — so live-wiring regressions surface within a day
+instead of at the next manual run. Actions pinned to reviewed SHAs
+(pin-guard test green); no deployment, no production credentials, no
+provider usage in the lane.
+
 ## Prior (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
 
 Increments 5-7 joined 1-4 (#289, #290, #291): contacts + outreach drafts
