@@ -29,12 +29,21 @@ Last triaged: 2026-08-13
   of the named variables, each adapter Not Connected on the page with its
   exact needs listed, and an unconfigured adapter carrying no fetch
   implementation at all.
+- [x] Live verification (owner goal, 2026-08-21, ADR-097): the full
+  fake-data browser journey green against a real Supabase stack
+  (`tests/e2e/job-seeker-journey.spec.ts`, `JOB_SEEKER_E2E=1`); fixed the
+  three live defects it surfaced (no-workspace dead end → onboarding flow
+  with `?next=`, PostgREST one-to-one embed shape in the jobs route,
+  empty-history-entry 422 → client-side prune).
 - [ ] Open (needs external credentials/decisions): activate an import
   adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
   _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
   model-polished document variants through the job_search_pipeline graph
   template (live and launchable from Pipelines → Templates), QA-lens-checked
   against the deterministic baseline.
+- [ ] Open (infrastructure): a CI lane that provisions the local Supabase
+  stack and runs the JOB_SEEKER_E2E journey on a cadence instead of on
+  demand.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 

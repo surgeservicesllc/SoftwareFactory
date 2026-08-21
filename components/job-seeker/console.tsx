@@ -35,7 +35,7 @@ const SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "analytics", label: "Analytics" },
 ];
 
-type State = "loading" | "ready" | "error";
+type State = "loading" | "ready" | "error" | "onboarding";
 
 export function JobSeekerConsole() {
   const searchParams = useSearchParams();
@@ -56,6 +56,18 @@ export function JobSeekerConsole() {
         fetch("/api/job-seeker/preferences", { cache: "no-store" }),
       ]);
       if (!profileResponse.ok || !preferencesResponse.ok) {
+        // A person with no workspace yet gets a 409 from every job-seeker
+        // endpoint. That is a next step, not a failure — name it.
+        const failed = !profileResponse.ok ? profileResponse : preferencesResponse;
+        if (failed.status === 409) {
+          const body = (await failed.json().catch(() => null)) as
+            | { error?: { code?: string } }
+            | null;
+          if (body?.error?.code === "organization_onboarding_required") {
+            setState("onboarding");
+            return;
+          }
+        }
         setState("error");
         setMessage("Your job-seeker data could not be loaded. Reload to try again.");
         return;
@@ -110,6 +122,20 @@ export function JobSeekerConsole() {
       ) : state === "error" ? (
         <Card>
           <p role="alert" className="text-sm text-[var(--danger)]">{message}</p>
+        </Card>
+      ) : state === "onboarding" ? (
+        <Card>
+          <p className="text-sm text-[var(--text-muted)]">
+            Job Seeker stores your career profile inside a workspace, and you
+            do not have one yet. Create yours and you will land right back
+            here.
+          </p>
+          <Link
+            className="btn btn-primary mt-4 inline-flex"
+            href="/auth/onboarding?next=%2Fjob-seeker"
+          >
+            Create your workspace
+          </Link>
         </Card>
       ) : section === "profile" ? (
         <JobSeekerProfileForm initial={profile} onSaved={setProfile} />

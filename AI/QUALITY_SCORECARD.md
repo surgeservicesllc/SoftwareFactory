@@ -1,6 +1,20 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-21
+
+**Addendum, 2026-08-21 — Job Seeker, live-stack certified (ADR-097):** the
+surface's strongest evidence tier so far: one continuous browser journey
+(`tests/e2e/job-seeker-journey.spec.ts`, guarded by `JOB_SEEKER_E2E=1`)
+green against real GoTrue + PostgREST + Postgres carrying all 127
+migrations, under the production `next build` — every section filled with
+fake data, every capability exercised, persistence proven by reload, the
+approval gate and duplicate refusal observed in the browser, and the
+anti-fabrication contract asserted on a live generated document. The run
+found and fixed three live defects the mocked suites could not see (the
+PostgREST one-to-one embed shape chief among them — the mocks had encoded
+the wrong shape). Suite counts on the merged state: 3,465 vitest green
+(2 skipped), lint and tsc clean, production build clean. The journey is
+on-demand, not in CI: providing it a stack in CI is recorded open work.
 
 **Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
 boundary (migration `20260819000100`), the worker

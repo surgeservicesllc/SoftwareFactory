@@ -126,6 +126,27 @@ describe("JobSeekerConsole", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Profile saved."));
   });
 
+  it("drops an added-but-untouched history entry instead of failing the save", async () => {
+    stubFetch();
+    render(<JobSeekerConsole />);
+    await screen.findByDisplayValue("Daniel H");
+
+    fireEvent.click(screen.getByRole("button", { name: /add employment history entry/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Profile saved."));
+
+    const put = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([url, init]) => String(url) === "/api/job-seeker/profile" && (init as RequestInit)?.method === "PUT",
+    );
+    expect(put).toBeDefined();
+    const sent = JSON.parse(String((put?.[1] as RequestInit).body)) as {
+      employmentHistory: Array<{ organization: string }>;
+    };
+    // The stored entry survives; the empty click-created one is pruned.
+    expect(sent.employmentHistory).toHaveLength(1);
+    expect(sent.employmentHistory[0]?.organization).toBe("Surge Services");
+  });
+
   it("shows preferences with the configurable threshold on its own section", async () => {
     searchParams.mockReturnValue(new URLSearchParams("section=preferences"));
     stubFetch();
@@ -204,5 +225,19 @@ describe("JobSeekerConsole", () => {
     render(<JobSeekerConsole />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not be loaded/i);
+  });
+
+  it("sends a person with no workspace to onboarding instead of an error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ error: { code: "organization_onboarding_required" } }, 409),
+      ),
+    );
+    render(<JobSeekerConsole />);
+
+    const cta = await screen.findByRole("link", { name: /create your workspace/i });
+    expect(cta).toHaveAttribute("href", "/auth/onboarding?next=%2Fjob-seeker");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
