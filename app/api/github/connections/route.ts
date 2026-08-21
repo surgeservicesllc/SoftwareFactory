@@ -4,9 +4,76 @@ import { jsonNoStore } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+function connectionState(
+  connection: { status: string },
+  installation: { status: string; suspended_at: string | null } | undefined,
+) {
+  const active = connection.status === "connected"
+    && installation?.status === "active"
+    && !installation.suspended_at;
+  const connectionLost = connection.status === "error"
+    || Boolean(installation?.suspended_at)
+    || Boolean(installation && installation.status !== "active" && connection.status === "connected");
+  const statusReason = active
+    ? null
+    : installation?.suspended_at
+      ? "The GitHub App installation is suspended."
+      : connection.status === "disabled"
+        ? "This connection was disconnected in SoftwareFactory."
+        : connection.status === "error"
+          ? "GitHub access could not be verified. Reconnect or synchronize the installation."
+          : "No active GitHub App installation is available.";
+
+  return {
+    status: active ? "connected" : connectionLost ? "error" : "not_connected",
+    statusLabel: active ? "Connected" : connectionLost ? "Error" : "Not Connected",
+    statusReason,
+  };
+}
+
+export async function GET(request?: Request) {
   try {
     const { activeOrganization, supabase } = await requireGitHubUser();
+    const briefing = request
+      ? new URL(request.url).searchParams.get("view") === "briefing"
+      : false;
+
+    if (briefing) {
+      const { data: briefingConnections, error: briefingConnectionsError } = await supabase
+        .from("connections")
+        .select("id,name,organization_id,status")
+        .eq("provider", "github")
+        .eq("organization_id", activeOrganization.id)
+        .order("created_at", { ascending: true })
+        .limit(100);
+      if (briefingConnectionsError) throw briefingConnectionsError;
+
+      const connectionIds = (briefingConnections ?? []).map((connection) => connection.id);
+      if (!connectionIds.length) return jsonNoStore({ connections: [] });
+
+      const { data: briefingInstallations, error: briefingInstallationsError } = await supabase
+        .from("github_installations")
+        .select("connection_id,status,suspended_at")
+        .eq("organization_id", activeOrganization.id)
+        .in("connection_id", connectionIds);
+      if (briefingInstallationsError) throw briefingInstallationsError;
+
+      return jsonNoStore({
+        connections: briefingConnections.map((connection) => {
+          const installation = (briefingInstallations ?? []).find(
+            (candidate) => candidate.connection_id === connection.id,
+          );
+          const state = connectionState(connection, installation);
+          return {
+            id: connection.id,
+            name: connection.name,
+            status: state.status,
+            statusReason: state.statusReason,
+          };
+        }),
+      });
+    }
+
     const { data: connections, error: connectionsError } = await supabase
       .from("connections")
       .select("id,name,organization_id,status,external_account_label,last_verified_at")
@@ -41,21 +108,7 @@ export async function GET() {
         const installation = (installations ?? []).find(
           (candidate) => candidate.connection_id === connection.id,
         );
-        const active = connection.status === "connected"
-          && installation?.status === "active"
-          && !installation.suspended_at;
-        const connectionLost = connection.status === "error"
-          || Boolean(installation?.suspended_at)
-          || Boolean(installation && installation.status !== "active" && connection.status === "connected");
-        const statusReason = active
-          ? null
-          : installation?.suspended_at
-            ? "The GitHub App installation is suspended."
-            : connection.status === "disabled"
-              ? "This connection was disconnected in SoftwareFactory."
-              : connection.status === "error"
-                ? "GitHub access could not be verified. Reconnect or synchronize the installation."
-                : "No active GitHub App installation is available.";
+        const state = connectionState(connection, installation);
         return {
           account: installation
             ? {
@@ -102,9 +155,9 @@ export async function GET() {
                 visibility: repository.visibility,
               }))
             : [],
-          status: active ? "connected" : connectionLost ? "error" : "not_connected",
-          statusLabel: active ? "Connected" : connectionLost ? "Error" : "Not Connected",
-          statusReason,
+          status: state.status,
+          statusLabel: state.statusLabel,
+          statusReason: state.statusReason,
         };
       }),
     });

@@ -10,7 +10,7 @@ const harness = vi.hoisted(() => ({
   errors: {} as Record<string, { code?: string; message?: string } | null>,
   queries: [] as Array<{
     column?: string;
-    operation: "eq" | "from" | "in" | "order" | "select";
+    operation: "eq" | "from" | "in" | "limit" | "order" | "select";
     table: string;
     value?: unknown;
   }>,
@@ -47,6 +47,10 @@ function queryFor(table: string) {
     in(column: string, values: unknown[]) {
       harness.queries.push({ column, operation: "in", table, value: values });
       filters.push((row) => values.includes(row[column]));
+      return query;
+    },
+    limit(value: number) {
+      harness.queries.push({ operation: "limit", table, value });
       return query;
     },
     order(column: string, options: { ascending: boolean }) {
@@ -257,6 +261,39 @@ describe("GitHub connections route", () => {
       table: "github_repositories",
       value: ["installation-connected"],
     });
+    expectNoStore(response);
+  });
+
+  it("returns only briefing fields and skips the repository read", async () => {
+    const response = await GET(new Request(
+      "https://factory.example/api/github/connections?view=briefing",
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      connections: [{
+        id: "connection-connected",
+        name: "GitHub · example-org",
+        status: "connected",
+        statusReason: null,
+      }],
+    });
+    expect(harness.queries).toContainEqual({
+      operation: "select",
+      table: "connections",
+      value: "id,name,organization_id,status",
+    });
+    expect(harness.queries).toContainEqual({
+      operation: "select",
+      table: "github_installations",
+      value: "connection_id,status,suspended_at",
+    });
+    expect(harness.queries).toContainEqual({
+      operation: "limit",
+      table: "connections",
+      value: 100,
+    });
+    expect(harness.queries.some((query) => query.table === "github_repositories")).toBe(false);
     expectNoStore(response);
   });
 

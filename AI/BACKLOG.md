@@ -1,6 +1,31 @@
 # Backlog
 
-Last triaged: 2026-08-13
+Last triaged: 2026-08-21
+
+## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
+
+- [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`
+  and adapt its strongest safe product pattern: one bounded member briefing
+  with Needs owner now, Underway, Recently finished, and Up next lanes.
+- [x] Keep the integration read-only and tenant-scoped; use existing bounded
+  APIs, fold linked runs into tasks, disclose saturated source windows and
+  cancelled omissions, treat unknown states as inspectable, and mark partial
+  reads as incomplete rather than clear.
+- [x] Add pure classification tests, component tests, populated responsive
+  harness coverage at 320–1440 px, and populated axe coverage at phone and
+  desktop widths.
+- [ ] Consolidate the eight bounded reads behind one server-side safe
+  projection if dashboard request volume becomes material. Preserve the same
+  per-source integrity signal; a consolidation must not turn one failed
+  sub-read into an empty success.
+- [ ] Design durable keyed owner decisions and explicit analysis-versus-code
+  output contracts as separate increments before changing mission execution.
+  A true liaison, restart checkpoints, or graph-to-Phase-1C child runs require
+  their own schema, RLS, audit, lease, and authority review; none is implied by
+  the briefing.
+- [ ] Do not import FirstMate's Bash/tmux runtime, Relay/public intake,
+  ambient CLI credentials, `+yolo`/raw launch escape hatches, merge scripts,
+  or flat-file state into this multi-tenant control plane.
 
 ## Job Seeker increments (2026-08-20, ADR-096, owner goal)
 

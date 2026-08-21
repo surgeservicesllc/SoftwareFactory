@@ -1,9 +1,9 @@
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
+import { FactoryBriefing } from "@/components/factory-briefing";
 import { GettingStarted } from "@/components/getting-started";
 import { LiveDashboardMetrics } from "@/components/live-dashboard-metrics";
-import { NeedsYourAttention } from "@/components/needs-your-attention";
 import { RecentActivityCard } from "@/components/recent-activity-card";
 import { Card, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 import { WorkerStatusBadge } from "@/components/worker-status";
@@ -38,7 +38,7 @@ export default async function DashboardPage() {
         description="What is connected, what it can see, and what it is allowed to do."
       />
 
-      <NeedsYourAttention authenticated={authenticated} />
+      <FactoryBriefing authenticated={authenticated} />
 
       <div className="mb-8">
         <GettingStarted authenticated={authenticated} />

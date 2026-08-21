@@ -16,6 +16,29 @@ the wrong shape). Suite counts on the merged state: 3,465 vitest green
 (2 skipped), lint and tsc clean, production build clean. The journey is
 on-demand, not in CI: providing it a stack in CI is recorded open work.
 
+**Addendum, 2026-08-21 — Factory Briefing (ADR-104):** locally implemented
+as a read-only Dashboard projection with no schema or authority change. The
+pure classifier pins mutual exclusivity, task ownership of linked runs
+records, lifecycle precedence, deterministic priority/recency sorting, caps,
+cancelled omission, coordinator/crew counts, stale-worker escalation, and
+fail-visible unknown states. The component suite pins signed-out zero-read
+behavior, eight concurrent `no-store` GETs with no mutating method, all four
+populated lanes, GitHub-only evidence links, server-minimized briefing payloads,
+omission of prompt-derived titles, command prompts, inbox bodies, and detailed
+graph evidence beyond fail-visible verdicts; explicit unavailable/malformed/
+saturated-source integrity warnings, and expired-session handling. Reads have
+per-source timeout, batch cancellation, stale-response protection, and
+visibility-aware polling. The populated browser harness covers every width from 320 through
+1440 px and drives the component's refresh control; axe scans cover 320 and
+1440 px, and a maximum-length coordinator has an explicit 320 px overflow
+regression. Local evidence is full lint/typecheck/build green, 57/57 focused
+tests, a browser matrix with 30 passes plus 15 intentional non-resizable-
+project skips, and 2,506/2,506 unit tests on the rebased tree after excluding
+two known Windows-only process/permission files. Database behavior suites need
+their configured stack; Linux draft-PR CI remains authoritative. Production
+behavior is not claimed until an authorized deployment and live authenticated
+observation exist.
+
 **Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
 boundary (migration `20260819000100`), the worker
 (`scripts/graph-worker.mts`), edge data flow, capacity-refusal voiding, and
