@@ -47,9 +47,12 @@ Last triaged: 2026-08-13
   model-polished document variants through the job_search_pipeline graph
   template (live and launchable from Pipelines → Templates), QA-lens-checked
   against the deterministic baseline.
-- [ ] Open (infrastructure): a CI lane that provisions the local Supabase
-  stack and runs the JOB_SEEKER_E2E journey on a cadence instead of on
-  demand.
+- [x] CI lane (2026-08-21): `.github/workflows/job-seeker-journey.yml` —
+  workflow_dispatch + daily schedule; provisions `supabase start` (lean
+  exclusion set) on the runner, mints the pre-confirmed journey user
+  through GoTrue's admin API, builds and serves the production app, and
+  runs the JOB_SEEKER_E2E journey. No deployment, no production
+  credentials, no provider usage.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 
