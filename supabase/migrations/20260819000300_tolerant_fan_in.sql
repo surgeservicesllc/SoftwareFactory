@@ -26,6 +26,24 @@ alter table public.graph_nodes
 --              tolerates_partial_inputs, input_schema, output_schema,
 --              reads, writes }]
 -- p_edges:  [{ from_node_key, to_node_key, reason, detail }]
+-- Dropped before it is created because the hosted apply workflow replays whole
+-- files, and three of them define this function. `create or replace` cannot
+-- change an existing function's return type, so the day one of these versions
+-- widens the signature, every replay of an older one dies halfway through and
+-- leaves the migrations behind it unapplied — apply run 32272188607, exactly.
+-- Dropping first makes a replay in any order structurally safe.
+--
+-- It does NOT make the ORDER harmless, and that is a separate hazard worth
+-- naming: whichever replayed file runs last wins the body. Running
+-- `scope=broker-functions` after `scope=lifecycle` reinstates the pre-lifecycle
+-- body, which ignores lifecycle_stage, gate_kind and is_feedback and would
+-- silently plant lifecycle graphs with no gates. Nothing is corrupted by that —
+-- the newer body is a strict superset — but `scope=lifecycle` has to be re-run
+-- afterwards. AI/HOSTED_APPLY_RUNBOOK.md says so where an owner will read it.
+drop function if exists public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level,
+  boolean, jsonb, jsonb, jsonb);
+
 create or replace function public.create_graph_from_plan(
   p_organization_id uuid,
   p_project_id uuid,
@@ -147,3 +165,15 @@ begin
   return v_graph_id;
 end;
 $$;
+
+-- Re-granted rather than inherited. `create or replace` preserves a function's
+-- grants; the `drop` above does not, and this file no longer uses the former.
+-- Without these two statements the console's launch button answers 42501 with
+-- no other symptom — the function exists, and `authenticated` may not call it.
+revoke all on function public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level, boolean, jsonb, jsonb, jsonb
+) from public, anon;
+grant execute on function public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level, boolean, jsonb, jsonb, jsonb
+) to authenticated;
+

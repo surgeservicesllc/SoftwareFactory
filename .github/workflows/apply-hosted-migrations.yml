@@ -29,6 +29,8 @@ on:
           (20260816000400 through 20260820000300) and records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
+          "lifecycle" applies only the two Agentic SDLC files
+          (20260821000100 and 20260821000200) and records them in history;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -38,6 +40,7 @@ on:
           - all
           - broker-functions
           - project-controls
+          - lifecycle
           - probe
 
 permissions:
@@ -649,6 +652,86 @@ jobs:
                  'focus_portfolio_engineering','set_portfolio_capacity_limits',
                  'update_agent_run_review','delete_agent_run')
             order by 1, 2;"
+          echo ""
+          echo "The Agentic SDLC lifecycle (20260821000100 and 20260821000200), asked about"
+          echo "directly. These two files are newer than the measured ledger table in"
+          echo "AI/HOSTED_APPLY_RUNBOOK.md, so they are deliberately kept out of the query"
+          echo "above: that one reports a measurement, and appending an unmeasured version"
+          echo "to it would turn evidence into assertion. present = f for every row is the"
+          echo "expected reading before scope=lifecycle runs, and t for every row after."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            with lifecycle(kind, object, marker) as (values
+              ('enum',     'sdlc_stage',                  'MONITORING'),
+              ('enum',     'gate_kind',                   'HUMAN'),
+              ('enum',     'gate_state',                  'APPROVED'),
+              ('enum',     'activity_event_type',         'lifecycle.gate_approved'),
+              ('table',    'graph_gates',                 null),
+              ('column',   'graph_nodes.lifecycle_stage', null),
+              ('column',   'graphs.max_iterations',       null),
+              ('column',   'graph_edges.is_feedback',     null),
+              ('column',   'node_runs.confidence',        null),
+              ('function', 'open_node_gate_as_worker',    null),
+              ('function', 'decide_node_gate',            null),
+              ('function', 'advance_graph_iteration',     null),
+              ('body',     'claim_planned_graph',         'graph_gates'),
+              ('body',     'list_graph_runs',             'gate_anchor_count')
+            )
+            select lifecycle.kind,
+                   lifecycle.object,
+                   case lifecycle.kind
+                     when 'enum' then exists (
+                       select 1 from pg_type kind_type
+                         join pg_namespace space on space.oid = kind_type.typnamespace
+                         join pg_enum label on label.enumtypid = kind_type.oid
+                        where space.nspname = 'public'
+                          and kind_type.typname = lifecycle.object
+                          and label.enumlabel = lifecycle.marker)
+                     when 'table' then exists (
+                       select 1 from pg_class relation
+                         join pg_namespace space on space.oid = relation.relnamespace
+                        where space.nspname = 'public'
+                          and relation.relkind = 'r'
+                          and relation.relname = lifecycle.object)
+                     when 'column' then exists (
+                       select 1 from information_schema.columns
+                        where table_schema = 'public'
+                          and table_name = split_part(lifecycle.object, '.', 1)
+                          and column_name = split_part(lifecycle.object, '.', 2))
+                     when 'function' then exists (
+                       select 1 from pg_proc routine
+                         join pg_namespace space on space.oid = routine.pronamespace
+                        where space.nspname = 'public'
+                          and routine.proname = lifecycle.object)
+                     else exists (
+                       select 1 from pg_proc routine
+                         join pg_namespace space on space.oid = routine.pronamespace
+                        where space.nspname = 'public'
+                          and routine.proname = lifecycle.object
+                          and strpos(pg_get_functiondef(routine.oid), lifecycle.marker) > 0)
+                   end as present
+              from lifecycle;"
+          echo "The last two rows matter most: both files only REPLACE claim_planned_graph and"
+          echo "list_graph_runs, so their existence proves nothing. Those rows ask whether the"
+          echo "replacement body is the lifecycle-aware one."
+          echo ""
+          echo "And whether graph_gates is protected, if it exists at all. A new table without"
+          echo "row level security is an exposed table, and the ledger cannot say either way."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select relation.relname,
+                   relation.relrowsecurity as rls_enabled,
+                   relation.relforcerowsecurity as rls_forced,
+                   (select count(*) from pg_policy where polrelid = relation.oid) as policies,
+                   has_table_privilege('anon', relation.oid, 'SELECT') as anon_may_select,
+                   has_table_privilege('service_role', relation.oid, 'INSERT') as service_role_may_insert
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relname = 'graph_gates';"
+          echo "No row at all means the table is absent and 20260821000200 has not run here —"
+          echo "this asks pg_class, so a missing table is zero rows rather than an error."
+          echo "Expected once applied: rls_enabled t, rls_forced t, one SELECT policy,"
+          echo "anon_may_select f, and service_role_may_insert f — the worker writes only"
+          echo "through open_node_gate_as_worker, never through a table grant."
 
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
@@ -706,6 +789,101 @@ jobs:
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
             repair "$VERSION"
           done
+
+      - name: Apply the Agentic SDLC lifecycle surgically (scope=lifecycle)
+        # Exactly two files — 20260821000100 and 20260821000200 — and no others.
+        # Every other outstanding migration stays outstanding and separately
+        # decidable, which is the whole reason this scope exists rather than a
+        # `scope=all` that would sweep nineteen unrelated versions along with it.
+        #
+        # Replay-safe by construction, checked statement by statement: the three
+        # new enum types are created inside DO blocks that first ask pg_type; the
+        # activity labels are `add value if not exists`; every new column is
+        # `add column if not exists`; the three graphs constraints are guarded by
+        # DO blocks, because PostgreSQL has no `add constraint if not exists`;
+        # graph_gates is `create table if not exists` with its policy dropped
+        # before it is created; and the rest is `create or replace function`.
+        # list_graph_runs is the one exception and it is explicit — its return
+        # type changes, so the file drops it first with `drop function if exists`.
+        #
+        # The two files run as separate psql invocations on purpose. PostgreSQL
+        # refuses to use an enum value in the transaction that added it, so the
+        # labels in 20260821000100 must be committed before the function bodies
+        # in 20260821000200 can write them.
+        #
+        # Prerequisites, confirmed by probe run 32531787440 rather than assumed:
+        # 20260821000200 rebuilds claim_planned_graph and list_graph_runs from
+        # 20260819001000 and 20260819000800, and that whole 20260819 range is
+        # recorded on both sides of the hosted ledger.
+        if: ${{ inputs.scope == 'lifecycle' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          # Applied and recorded one at a time, so an interruption leaves a
+          # ledger that is behind rather than one that lies.
+          for FILE in \
+            supabase/migrations/20260821000100_agentic_sdlc_activity_types.sql \
+            supabase/migrations/20260821000200_agentic_sdlc_lifecycle.sql
+          do
+            VERSION=$(basename "$FILE" | cut -d_ -f1)
+            echo "Applying ${FILE}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+            repair "$VERSION"
+          done
+          # Supabase's DDL event trigger reloads the PostgREST schema cache on
+          # its own; this is insurance, so a browser that saw PGRST202 seconds
+          # ago cannot keep seeing it for decide_node_gate.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo ""
+          echo "What the run actually produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select relation.relname,
+                   relation.relrowsecurity as rls_enabled,
+                   relation.relforcerowsecurity as rls_forced,
+                   (select count(*) from pg_policy where polrelid = relation.oid) as policies,
+                   has_table_privilege('anon', relation.oid, 'SELECT') as anon_may_select,
+                   has_table_privilege('service_role', relation.oid, 'INSERT') as service_role_may_insert
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relname = 'graph_gates';"
+          echo "rls_enabled and rls_forced must both be t, anon_may_select must be f, and"
+          echo "service_role_may_insert must be f — the worker writes only through"
+          echo "open_node_gate_as_worker, never through a table grant."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select routine.proname,
+                   routine.prosecdef as security_definer,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_role_may_execute
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in (
+                 'open_node_gate_as_worker', 'decide_node_gate', 'advance_graph_iteration')
+             order by routine.proname;"
+          echo "decide_node_gate is the member-facing one: authenticated must execute it."
+          echo "open_node_gate_as_worker is the worker's: authenticated must NOT."
+          echo "Exactly one claim_planned_graph overload should exist, and it must be the"
+          echo "lifecycle-aware body — a second overload would mean the live claim is a"
+          echo "resurrected older signature that reports no gates at all."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select pg_get_function_identity_arguments(routine.oid) as signature,
+                   strpos(pg_get_functiondef(routine.oid), 'graph_gates') > 0 as knows_about_gates
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname = 'claim_planned_graph';"
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;

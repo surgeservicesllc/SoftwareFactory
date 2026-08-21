@@ -192,6 +192,24 @@ $agentic_sdlc_artifact_guard$;
 -- signature is unchanged: the new fields ride in the node and edge JSON, so
 -- every existing caller keeps working and a plan that names no stage produces
 -- exactly the graph it produced before.
+-- Dropped before it is created because the hosted apply workflow replays whole
+-- files, and three of them define this function. `create or replace` cannot
+-- change an existing function's return type, so the day one of these versions
+-- widens the signature, every replay of an older one dies halfway through and
+-- leaves the migrations behind it unapplied — apply run 32272188607, exactly.
+-- Dropping first makes a replay in any order structurally safe.
+--
+-- It does NOT make the ORDER harmless, and that is a separate hazard worth
+-- naming: whichever replayed file runs last wins the body. Running
+-- `scope=broker-functions` after `scope=lifecycle` reinstates the pre-lifecycle
+-- body, which ignores lifecycle_stage, gate_kind and is_feedback and would
+-- silently plant lifecycle graphs with no gates. Nothing is corrupted by that —
+-- the newer body is a strict superset — but `scope=lifecycle` has to be re-run
+-- afterwards. AI/HOSTED_APPLY_RUNBOOK.md says so where an owner will read it.
+drop function if exists public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level,
+  boolean, jsonb, jsonb, jsonb);
+
 create or replace function public.create_graph_from_plan(
   p_organization_id uuid,
   p_project_id uuid,
@@ -338,6 +356,17 @@ begin
   return v_graph_id;
 end;
 $$;
+
+-- Re-granted rather than inherited. `create or replace` preserves a function's
+-- grants; the `drop` above does not, and this file no longer uses the former.
+-- Without these two statements the console's launch button answers 42501 with
+-- no other symptom — the function exists, and `authenticated` may not call it.
+revoke all on function public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level, boolean, jsonb, jsonb, jsonb
+) from public, anon;
+grant execute on function public.create_graph_from_plan(
+  uuid, uuid, text, public.graph_topology, jsonb, public.risk_level, boolean, jsonb, jsonb, jsonb
+) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- The gate lifecycle
@@ -572,7 +601,6 @@ grant execute on function public.decide_node_gate(uuid, boolean, text) to authen
 revoke all on function public.advance_graph_iteration(uuid) from public, anon;
 grant execute on function public.advance_graph_iteration(uuid) to authenticated;
 
-
 -- ---------------------------------------------------------------------------
 -- The claim, made lifecycle-aware
 -- ---------------------------------------------------------------------------
@@ -586,6 +614,15 @@ grant execute on function public.advance_graph_iteration(uuid) to authenticated;
 -- Everything outside the four marked changes is 20260819001000's function
 -- verbatim, because a divergence here would be a second claim policy quietly
 -- disagreeing with the first about which graphs may run.
+-- Both overloads dropped first, exactly as 20260819001000 does, and for the
+-- same two reasons. `create or replace` cannot change a return type, so a drop
+-- is what keeps a replay in any order from dying halfway through; and the
+-- one-argument overload must not be allowed to survive, because a resurrected
+-- older signature is a live claim that reports no gates at all. That failure
+-- has no symptom: lifecycle graphs would run straight past every gate.
+drop function if exists public.claim_planned_graph(text);
+drop function if exists public.claim_planned_graph(text, text[]);
+
 create or replace function public.claim_planned_graph(
   p_worker_id text,
   p_supported_executors text[]
