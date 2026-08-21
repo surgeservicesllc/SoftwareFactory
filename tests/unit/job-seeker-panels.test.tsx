@@ -31,7 +31,7 @@ const SCORED_JOB: JobView = {
     threshold: 80,
     qualified: true,
   },
-  application: { id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review" },
+  application: { id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review", applicationUrl: null, notes: null, followUpAt: null },
 };
 
 afterEach(() => {
@@ -129,7 +129,7 @@ describe("JobSeekerApplicationsPanel", () => {
       const url = String(input);
       if (url.startsWith("/api/job-seeker/applications/") && init?.method === "PATCH") {
         patches.push(JSON.parse(String(init.body)));
-        return jsonResponse({ application: { id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "approved" } });
+        return jsonResponse({ application: { id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "approved", applicationUrl: null, notes: null, followUpAt: null } });
       }
       if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
       if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
@@ -141,6 +141,41 @@ describe("JobSeekerApplicationsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(patches).toEqual([{ action: "approve" }]));
+  });
+
+  it("saves notes, application URL, and follow-up date through one PATCH", async () => {
+    const patches: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/job-seeker/applications/") && init?.method === "PATCH") {
+        patches.push(JSON.parse(String(init.body)));
+        return jsonResponse({
+          application: {
+            id: "a1", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review",
+            applicationUrl: "https://apply.acme.example/42", notes: "Sent thank-you note", followUpAt: "2026-09-01T09:00:00.000Z",
+          },
+        });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    await screen.findByText("Awaiting your review");
+
+    fireEvent.click(screen.getByText("Notes & follow-up"));
+    fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "Sent thank-you note" } });
+    fireEvent.change(screen.getByLabelText("Application URL"), { target: { value: "https://apply.acme.example/42" } });
+    fireEvent.change(screen.getByLabelText("Follow-up date"), { target: { value: "2026-09-01T09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const sent = patches[0] as Record<string, unknown>;
+    expect(sent.action).toBe("follow_up");
+    expect(sent.notes).toBe("Sent thank-you note");
+    expect(sent.applicationUrl).toBe("https://apply.acme.example/42");
+    expect(String(sent.followUpAt)).toMatch(/^2026-09-01T\d{2}:00:00/);
   });
 
   it("never offers a post-approval stage while the decision is pending", async () => {
@@ -194,7 +229,7 @@ describe("JobSeekerApplicationsPanel", () => {
       if (url === "/api/job-seeker/jobs") {
         return jsonResponse({ jobs: [{
           ...SCORED_JOB,
-          application: { id: "a2", stage, approvalStatus: "pending_review" },
+          application: { id: "a2", stage, approvalStatus: "pending_review", applicationUrl: null, notes: null, followUpAt: null },
         }] });
       }
       throw new Error(`Unexpected request: ${url}`);

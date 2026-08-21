@@ -35,6 +35,12 @@ Last triaged: 2026-08-13
   three live defects it surfaced (no-workspace dead end → onboarding flow
   with `?next=`, PostgREST one-to-one embed shape in the jobs route,
   empty-history-entry 422 → client-side prune).
+- [x] Live verification round 2 (same day): the journey covers the whole
+  capability surface — all eleven stages, reject+close, entry removal,
+  resume download round-trip, analytics re-check — and two more wiring
+  gaps closed: the CRM details editor (notes / application URL /
+  follow-up date had PATCH support but no UI) and the persistent
+  current-resume link (the `resume_upload_id` pointer went unread).
 - [ ] Open (needs external credentials/decisions): activate an import
   adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
   _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;

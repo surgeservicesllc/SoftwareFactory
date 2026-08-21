@@ -31,7 +31,14 @@ export type JobView = {
     threshold: number;
     qualified: boolean;
   } | null;
-  application: { id: string; stage: string; approvalStatus: string } | null;
+  application: {
+    id: string;
+    stage: string;
+    approvalStatus: string;
+    applicationUrl: string | null;
+    notes: string | null;
+    followUpAt: string | null;
+  } | null;
 };
 
 const FIELD_CLASS =
