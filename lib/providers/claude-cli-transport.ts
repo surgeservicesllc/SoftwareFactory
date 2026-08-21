@@ -354,12 +354,31 @@ export async function executeClaudeThroughCli(
   } catch (error) {
     if (error instanceof ProviderError) throw error;
     const message = error instanceof Error ? error.message : "The Claude CLI failed.";
-    throw new ProviderError("upstream_unavailable", redact(message, auth), "anthropic");
+    // Spending the run's own turn budget is not the provider being unavailable.
+    // The subtype branch above already calls that `invalid_response`; this path
+    // used to call the identical condition `upstream_unavailable`, so which
+    // cause an operator was shown depended only on whether the SDK reported the
+    // exhaustion as a result message or threw it. Live canary 32314191037
+    // reported an Anthropic outage for a node that had simply run out of turns.
+    throw new ProviderError(
+      BUDGET_EXHAUSTED.test(message) ? "invalid_response" : "upstream_unavailable",
+      redact(message, auth),
+      "anthropic",
+    );
   } finally {
     // The credential must not outlive the run, whatever happened to it.
     await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
+
+/**
+ * A run that spent its own budget, however the SDK chose to report it.
+ *
+ * Two shapes exist for one condition: a result message with subtype
+ * `error_max_turns`, and a thrown error whose message names the limit. Both
+ * mean the same thing and must classify the same way.
+ */
+const BUDGET_EXHAUSTED = /reached maximum number of turns|maximum number of structured[- ]output retries/i;
 
 /** Describe the transport for a surface, without naming any credential value. */
 export function describeClaudeTransport(auth: ClaudeAuthResolution): string {

@@ -38,7 +38,7 @@ export class SupabaseGraphStore implements GraphRunStore {
 
   async recordNodeState(
     nodeRunId: string,
-    state: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "SKIPPED",
+    state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
     execution?: { provider?: string; model?: string; latencyMs?: number },
   ): Promise<void> {
@@ -52,6 +52,25 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_latency_ms: execution?.latencyMs ?? null,
     });
     if (error) throw new Error(`Recording a node transition failed: ${error.message ?? "unknown error"}`);
+  }
+
+  /**
+   * Open the gate a finished node waits at.
+   *
+   * Keyed on the graph node, not the node run: the run id changes on every
+   * claim and the node id does not, so a decision made on one run is still
+   * there for the next. The function is idempotent on that key, which is what
+   * lets a re-claim find an existing approval instead of manufacturing a
+   * second, undecided gate.
+   */
+  async openGate(nodeId: string, graphRunId: string, anchorCount: number): Promise<void> {
+    const { error } = await this.client.rpc("open_node_gate_as_worker", {
+      p_worker_id: this.workerId,
+      p_node_id: nodeId,
+      p_graph_run_id: graphRunId,
+      p_anchor_count: anchorCount,
+    });
+    if (error) throw new Error(`Opening a lifecycle gate failed: ${error.message ?? "unknown error"}`);
   }
 
   async recordArtifact(

@@ -26,6 +26,18 @@ type GraphRunNode = {
   model: string | null;
   latency_ms: number | null;
   error_message: string | null;
+  /*
+   * Optional throughout: this is JSON off the network, and a response from a
+   * deployment that predates the lifecycle must render a run rather than
+   * blanking the view on a missing key — the same reason `verifications` is
+   * optional below.
+   */
+  lifecycle_stage?: string | null;
+  gate_kind?: string | null;
+  gate_id?: string | null;
+  gate_state?: string | null;
+  gate_anchor_count?: number | null;
+  gate_reason?: string | null;
 };
 
 type GraphVerification = {
@@ -52,6 +64,9 @@ type GraphRunView = {
   // a deployment that predates verifications must render a run rather than
   // blanking the whole view on a missing key.
   verifications?: GraphVerification[];
+  isLifecycle?: boolean;
+  iteration?: number;
+  maxIterations?: number;
 };
 
 type State = "loading" | "signed-out" | "setup" | "error" | "ready";
@@ -106,6 +121,95 @@ function timestamp(value: string | null): string {
   if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString();
+}
+
+/**
+ * The decision, offered where the gate is.
+ *
+ * Deliberately inline in the node row rather than gathered into a separate
+ * "approvals" panel: a gate is a fact about one stage, and separating the
+ * question from the work it guards is how someone approves a thing they have
+ * not looked at.
+ *
+ * The button says what the click does rather than what the state is, and the
+ * outcome is whatever the route reports — including its refusals, which carry
+ * the database's own sentence about why.
+ */
+function GateDecision({
+  node,
+  onDecided,
+}: {
+  readonly node: GraphRunNode;
+  readonly onDecided: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  const decide = useCallback(
+    async (approved: boolean) => {
+      if (!node.gate_id) return;
+      setBusy(true);
+      setNotice("");
+      try {
+        const response = await fetch(`/api/graph-gates/${node.gate_id}/decide`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approved }),
+        });
+        const body = (await response.json()) as {
+          error?: { message?: string };
+          note?: string;
+        };
+        if (!response.ok) {
+          // The route passes the database's sentence through; showing a
+          // friendlier one here would discard the only text that says why.
+          setNotice(body.error?.message ?? "The decision could not be recorded.");
+          return;
+        }
+        setNotice(body.note ?? "Recorded.");
+        onDecided();
+      } catch {
+        setNotice("The request did not reach the server.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [node.gate_id, onDecided],
+  );
+
+  if (!node.gate_id || node.gate_state !== "OPEN") return null;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void decide(true)}
+        className="btn btn-secondary btn-sm"
+      >
+        Approve
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void decide(false)}
+        className="btn btn-secondary btn-sm"
+      >
+        Reject
+      </button>
+      <span className="text-muted">
+        {node.gate_kind === "HUMAN" ? "Human gate" : "Automatic gate"}
+        {typeof node.gate_anchor_count === "number"
+          ? ` · ${node.gate_anchor_count} anchor${node.gate_anchor_count === 1 ? "" : "s"}`
+          : ""}
+      </span>
+      {notice ? (
+        <span role="status" className="basis-full text-muted">
+          {notice}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export function GraphRunsPanel() {
@@ -232,6 +336,7 @@ export function GraphRunsPanel() {
                       <thead>
                         <tr className="text-faint">
                           <th className="py-1 pr-3 font-medium">Node</th>
+                          <th className="py-1 pr-3 font-medium">Stage</th>
                           <th className="py-1 pr-3 font-medium">State</th>
                           <th className="py-1 pr-3 font-medium">Executor</th>
                           <th className="py-1 pr-3 font-medium">Provider / model</th>
@@ -242,8 +347,19 @@ export function GraphRunsPanel() {
                       <tbody className="divide-y divide-[var(--border)]">
                         {(run.nodes ?? []).map((node) => (
                           <tr key={node.node_key}>
-                            <td className="py-1.5 pr-3 font-medium text-foreground">{node.node_key}</td>
-                            <td className="py-1.5 pr-3"><StatusBadge tone={nodeTone(node.state)} dot={false}>{node.state}</StatusBadge></td>
+                            <td className="py-1.5 pr-3 font-medium text-foreground">
+                              {node.node_key}
+                              <GateDecision node={node} onDecided={() => void load()} />
+                            </td>
+                            <td className="py-1.5 pr-3 text-muted">{node.lifecycle_stage ?? "—"}</td>
+                            <td className="py-1.5 pr-3">
+                              <StatusBadge tone={nodeTone(node.state)} dot={false}>{node.state}</StatusBadge>
+                              {node.gate_state === "OPEN" ? (
+                                // VERIFYING alone does not say a person is owed
+                                // something. This does.
+                                <span className="ml-1.5 text-muted">awaiting a decision</span>
+                              ) : null}
+                            </td>
                             <td className="py-1.5 pr-3 text-muted">{node.executor}</td>
                             <td className="py-1.5 pr-3 text-muted">
                               {node.provider ? `${node.provider}${node.model ? ` / ${node.model}` : ""}` : "—"}

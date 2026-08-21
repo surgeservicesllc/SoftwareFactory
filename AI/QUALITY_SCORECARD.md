@@ -24,6 +24,29 @@ proven live by run 32533731639 — green in 3m40s on a runner that
 provisioned the stack itself. Live-wiring regressions surface within a
 day without anyone asking.
 
+**Addendum, 2026-08-21 — Factory Briefing (ADR-104):** locally implemented
+as a read-only Dashboard projection with no schema or authority change. The
+pure classifier pins mutual exclusivity, task ownership of linked runs
+records, lifecycle precedence, deterministic priority/recency sorting, caps,
+cancelled omission, coordinator/crew counts, stale-worker escalation, and
+fail-visible unknown states. The component suite pins signed-out zero-read
+behavior, eight concurrent `no-store` GETs with no mutating method, all four
+populated lanes, GitHub-only evidence links, server-minimized briefing payloads,
+omission of prompt-derived titles, command prompts, inbox bodies, and detailed
+graph evidence beyond fail-visible verdicts; explicit unavailable/malformed/
+saturated-source integrity warnings, and expired-session handling. Reads have
+per-source timeout, batch cancellation, stale-response protection, and
+visibility-aware polling. The populated browser harness covers every width from 320 through
+1440 px and drives the component's refresh control; axe scans cover 320 and
+1440 px, and a maximum-length coordinator has an explicit 320 px overflow
+regression. Local evidence is full lint/typecheck/build green, 57/57 focused
+tests, a browser matrix with 30 passes plus 15 intentional non-resizable-
+project skips, and 2,506/2,506 unit tests on the rebased tree after excluding
+two known Windows-only process/permission files. Database behavior suites need
+their configured stack; Linux draft-PR CI remains authoritative. Production
+behavior is not claimed until an authorized deployment and live authenticated
+observation exist.
+
 **Addendum, 2026-08-19 — graph execution (ADR-092):** the graph executor
 boundary (migration `20260819000100`), the worker
 (`scripts/graph-worker.mts`), edge data flow, capacity-refusal voiding, and
@@ -61,6 +84,26 @@ the CLI, the deterministic reduce, and the report synthesis, dispatched
 alone in a fresh provider window per the plan in `20260819001200`. No
 graph-execution claim is withheld any longer. CI on main is green on the
 merged state with the browser suite sharded 3×535.
+
+**Addendum, 2026-08-18 — a project's selected pipelines (ADR-098):**
+migration `20260821000300` (`project_pipelines`, RLS + FORCE RLS, all table
+privileges revoked from `anon`/`authenticated`/`service_role`, three definer
+functions), `GET`/`POST`/`DELETE /api/project-pipelines`, the Use toggle in
+`PipelineTemplatesManager`, and the AI Factory's Configure Pipeline step are
+covered by `tests/integration/project-pipeline-selection.behavior.test.ts` (16
+cases against the real migration chain, including owner-allowed,
+member-denied-write/allowed-read, outsider-denied, anonymous-denied, and no
+direct browser write path), `tests/unit/project-pipelines-routes.test.ts` (14
+cases) and the two component suites. Lint, typecheck, the full 3258-test suite
+and a production build are green on this change.
+
+**The migration is unhosted**, so no production claim is made and none is
+implied by the console: `/api/project-pipelines` reports PGRST202 as **Not
+Connected** with its own code, and the Use button is disabled naming that
+reason rather than rendering an empty selection set. The hosted evidence class
+for this feature is therefore *none* until
+`.github/workflows/apply-hosted-migrations.yml` (`scope=broker-functions`, which
+now carries the file) is run by the owner.
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to

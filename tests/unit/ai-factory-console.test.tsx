@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import type { PipelineTemplateSummary } from "@/components/pipelines-console";
+import { LEAST_PRIVILEGE_CONFIG } from "@/lib/bots/assignment-config";
 
 const BUILT_INS: PipelineTemplateSummary[] = [
   {
@@ -39,6 +40,7 @@ function stubFactory(overrides: Partial<Record<string, unknown>> = {}) {
     "/api/ai-accounts": { accounts: [] },
     "/api/bots": { bots: [], assignments: [] },
     "/api/commands": { commands: [] },
+    "/api/project-pipelines": { pipelines: [], canManage: true },
   };
   const bodies = { ...defaults, ...overrides };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -83,10 +85,24 @@ describe("AiFactoryConsole", () => {
       "/api/ai-accounts": { accounts: [{ status: "connected" }] },
       "/api/bots": {
         bots: [{ id: "b1" }],
-        assignments: [{ id: "a1", projectId: "p1", roleId: "builder", status: "active" }],
+        // Configured means somebody moved this posting off the least-privilege
+        // default. The fixture said only `roleId: "builder"`, which every
+        // assignment has, and the step counted as done for that reason alone.
+        assignments: [{
+          id: "a1",
+          projectId: "p1",
+          roleId: "builder",
+          status: "active",
+          config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Ship search"] },
+        }],
+        executor: { connected: true, label: "Connected", detail: "" },
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+      "/api/project-pipelines": {
+        pipelines: [{ id: "pp1", projectId: "p1", templateKey: "general_audit", name: "General Audit" }],
+        canManage: true,
       },
     });
 
@@ -102,7 +118,8 @@ describe("AiFactoryConsole", () => {
     fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Command execution, live")).toBeInTheDocument();
+    expect(within(dialog).getByText("Command execution")).toBeInTheDocument();
+    expect(within(dialog).getByText("Connected")).toBeInTheDocument();
     expect(within(dialog).getByText("Ship search")).toBeInTheDocument();
     expect(within(dialog).getByText("Building")).toBeInTheDocument();
   });
@@ -155,11 +172,18 @@ describe("AiFactoryConsole", () => {
   });
 
   it("counts only configured assignments for the configure step", async () => {
+    // Every assignment carries a role: `bot_assignments.role_id` is NOT NULL,
+    // so a fixture without one describes a record the database cannot hold.
+    // This step used to be derived from `roleId || responsibilities.length` --
+    // a field the payload nests under `config`, plus a column that is always
+    // set -- so it was marked done the moment a bot was assigned and could
+    // never read as outstanding. What counts is whether somebody moved the
+    // posting off its least-privilege default.
     stubFactory({
       "/api/bots": {
         assignments: [
-          { id: "a1", projectId: "p1", status: "active" },
-          { id: "a2", projectId: "p1", roleId: "builder", status: "released" },
+          { id: "a1", projectId: "p1", roleId: "role-1", status: "active", config: LEAST_PRIVILEGE_CONFIG },
+          { id: "a2", projectId: "p1", roleId: "role-1", status: "released", config: { ...LEAST_PRIVILEGE_CONFIG, preset: "builder" } },
         ],
         bots: [{ id: "b1" }],
       },
@@ -171,7 +195,179 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
-    expect(within(configure).getByText(/none carries a role or responsibilities yet/)).toBeInTheDocument();
+    expect(within(configure).getByText(/still on the default least-privilege settings/)).toBeInTheDocument();
+  });
+
+  it("marks the configure step done once a posting is actually configured", async () => {
+    stubFactory({
+      "/api/bots": {
+        assignments: [
+          {
+            id: "a1",
+            projectId: "p1",
+            roleId: "role-1",
+            status: "active",
+            config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Review migrations"] },
+          },
+        ],
+        bots: [{ id: "b1" }],
+      },
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
+    expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
+  });
+
+  it("opens the roster on the factory the journey is showing, not the first project", async () => {
+    // With two projects these differ: the roster fell back to `projects[0]`
+    // while the steps counted the active factory, so a person sent to
+    // "Assign Bots" configured one project while the step measured another.
+    stubFactory({
+      "/api/projects": {
+        projects: [
+          { id: "p1", name: "First Project" },
+          { id: "p2", name: "Second Project" },
+        ],
+      },
+      "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    // Pick the second project as the factory being built.
+    const picker = await screen.findByLabelText("Factory");
+    fireEvent.change(picker, { target: { value: "p2" } });
+
+    const assign = (await screen.findByText("Assign Bots to Project")).closest("li") as HTMLElement;
+    fireEvent.click(within(assign).getByRole("button", { name: /assign a bot|assign/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    const rosterPicker = within(dialog).getByLabelText("Project") as HTMLSelectElement;
+    expect(rosterPicker.value).toBe("p2");
+  });
+
+  it("does not mark the pipeline configured just because a project exists", async () => {
+    // `done` for this step was the same expression as the step above it
+    // (`activeProject !== null`), so creating a project marked the pipeline
+    // configured and the step could never read as outstanding. It is derived
+    // from what actually compiles now, and from the tenant's own templates.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/pipeline-templates": { templates: [] },
+    });
+
+    render(<AiFactoryConsole builtIns={[]} />);
+
+    const pipeline = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(pipeline).getByText("No pipeline template compiles right now")).toBeInTheDocument();
+    // Create Project is the only step satisfied here; the pipeline step is not.
+    expect(await screen.findByText("1 of 8 complete")).toBeInTheDocument();
+  });
+
+  it("counts the tenant's own pipeline templates as evidence", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/pipeline-templates": { templates: [{ id: "t1", slug: "fake_review_pipeline" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const pipeline = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(pipeline).getByText(/1 custom template/)).toBeInTheDocument();
+  });
+
+  it("says the executor is Not Connected rather than promising a run that cannot start", async () => {
+    // The step's whole subject is shipping. With nothing to execute a command,
+    // it said "Every run lands as a draft pull request" and "Work is in
+    // flight" over a command that would sit queued indefinitely.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/bots": {
+        bots: [{ id: "b1" }],
+        assignments: [],
+        executor: {
+          connected: false,
+          label: "Not Connected",
+          detail: "No worker executes them in this phase.",
+        },
+      },
+      "/api/commands": {
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
+    expect(within(watch).queryByText(/Work is in flight/)).not.toBeInTheDocument();
+    expect(within(watch).getByText(/When an executor is connected/)).toBeInTheDocument();
+
+    fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Not Connected")).toBeInTheDocument();
+    expect(within(dialog).getByText(/will not start until an executor is connected/)).toBeInTheDocument();
+  });
+
+  it("treats a missing executor field as Not Connected", async () => {
+    // Absent must never read as connected: an older payload, a partial
+    // response, or a failed read all land here.
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+      "/api/commands": {
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+    const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
+  });
+
+  it("does not call Configure Pipeline done until a pipeline is actually selected", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    // A project existing is not a pipeline being chosen. The step used to
+    // read done the moment step 2 finished, which made it the one step on
+    // the page nobody could ever work on.
+    expect(within(step).queryByText("Done")).not.toBeInTheDocument();
+    expect(within(step).getByText(/No pipeline selected yet/)).toBeInTheDocument();
+    expect(within(step).getByRole("button", { name: /choose a pipeline/i })).toBeInTheDocument();
+  });
+
+  it("shows the selected pipelines on the page itself, not only inside the overlay", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/project-pipelines": {
+        pipelines: [
+          { id: "pp1", projectId: "p1", templateKey: "general_audit", name: "General Audit" },
+          { id: "pp2", projectId: "p1", templateKey: "rls_audit", name: "RLS Audit" },
+          { id: "pp3", projectId: "p2", templateKey: "bug_sweep", name: "Bug Sweep" },
+        ],
+        canManage: true,
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
+    expect(within(step).getByText("Done")).toBeInTheDocument();
+    expect(within(step).getByText(/2 pipelines selected: General Audit, RLS Audit/)).toBeInTheDocument();
+
+    const chips = within(step).getByRole("list", { name: "Selected pipelines" });
+    expect(within(chips).getByText("General Audit")).toBeInTheDocument();
+    expect(within(chips).getByText("RLS Audit")).toBeInTheDocument();
+    // Another factory's selection belongs to that factory, not this one.
+    expect(within(chips).queryByText("Bug Sweep")).not.toBeInTheDocument();
   });
 
   it("fails closed for a signed-out visitor", async () => {

@@ -688,7 +688,16 @@ export async function startClaudeSetupToken(
     dispose: async () => {
       child.stdout.removeListener("data", onChunk);
       child.stderr.removeListener("data", onChunk);
-      if (!exited) child.kill("SIGTERM");
+      if (!exited) {
+        try {
+          // The default termination signal is portable; explicitly naming
+          // SIGTERM throws EINVAL for some Windows-spawned CLI shims.
+          child.kill();
+        } catch {
+          // Disposal is best-effort and the temporary credential directory
+          // still has to be removed when the child exited between checks.
+        }
+      }
       await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };
@@ -874,7 +883,14 @@ export async function startCodexLogin(
     dispose: async () => {
       child.stdout.removeListener("data", onChunk);
       child.stderr.removeListener("data", onChunk);
-      if (!exited) child.kill("SIGTERM");
+      if (!exited) {
+        try {
+          child.kill();
+        } catch {
+          // Windows CLI shims can reject termination after their child exits;
+          // cleanup of the temporary credential directory must still finish.
+        }
+      }
       await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };

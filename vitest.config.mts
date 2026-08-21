@@ -10,6 +10,12 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
+    // Integration suites replay the full PostgreSQL migration chain. At 130
+    // files that setup legitimately exceeds Vitest's 10s hook default on a
+    // busy Windows runner; contract walks can likewise cross the 5s test
+    // default. Keep failures bounded without treating expected setup as a hang.
+    hookTimeout: 30_000,
+    testTimeout: 30_000,
     include: [
       "tests/unit/**/*.test.{ts,tsx}",
       "tests/integration/**/*.test.{ts,tsx}",

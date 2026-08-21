@@ -46,6 +46,19 @@ revoke all on function public.assert_graph_worker_id(text) from public, anon, au
 -- with its contract and its node_run id, and every edge. Edges are data; the
 -- worker receives everything it needs in this one call and shares no hidden
 -- context with the console.
+-- Dropped before it is created because the hosted apply workflow replays whole
+-- files, and three of them define this function. `create or replace` cannot
+-- change an existing function's return type, so a later version that widens the
+-- signature makes every replay of an older one die halfway through and leave the
+-- migrations behind it unapplied — apply run 32272188607, exactly.
+--
+-- The drop guards signature drift; it does not stop this file's replay from
+-- recreating the one-argument overload that 20260819001000 deliberately
+-- removed. What stops that is list order: 20260819001000 runs after this file
+-- in `scope=broker-functions`, and drops both overloads before creating the
+-- two-argument one.
+drop function if exists public.claim_planned_graph(text);
+
 create or replace function public.claim_planned_graph(p_worker_id text)
 returns jsonb
 language plpgsql

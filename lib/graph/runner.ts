@@ -45,6 +45,17 @@ export type NodeExecutionResult =
        * attempts on a credential that is exhausted rather than mistaken.
        */
       readonly capacityWithheld?: boolean;
+      /**
+       * True when the node did its work and is now waiting at a lifecycle gate.
+       *
+       * A failure to the engine, deliberately: the scheduler's only way to stop
+       * dependents starting is for their dependency not to have completed, and
+       * a node awaiting a decision has genuinely not completed. It is *not* a
+       * failure to the caller, which records the node as VERIFYING and closes
+       * the run PARTIAL — the same shape `capacityWithheld` already uses for
+       * "this did not fail, it did not happen".
+       */
+      readonly gateHeld?: boolean;
       readonly provider?: string;
       readonly model?: string;
       readonly latencyMs?: number;

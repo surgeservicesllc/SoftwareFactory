@@ -1,6 +1,31 @@
 # Backlog
 
-Last triaged: 2026-08-13
+Last triaged: 2026-08-21
+
+## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
+
+- [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`
+  and adapt its strongest safe product pattern: one bounded member briefing
+  with Needs owner now, Underway, Recently finished, and Up next lanes.
+- [x] Keep the integration read-only and tenant-scoped; use existing bounded
+  APIs, fold linked runs into tasks, disclose saturated source windows and
+  cancelled omissions, treat unknown states as inspectable, and mark partial
+  reads as incomplete rather than clear.
+- [x] Add pure classification tests, component tests, populated responsive
+  harness coverage at 320–1440 px, and populated axe coverage at phone and
+  desktop widths.
+- [ ] Consolidate the eight bounded reads behind one server-side safe
+  projection if dashboard request volume becomes material. Preserve the same
+  per-source integrity signal; a consolidation must not turn one failed
+  sub-read into an empty success.
+- [ ] Design durable keyed owner decisions and explicit analysis-versus-code
+  output contracts as separate increments before changing mission execution.
+  A true liaison, restart checkpoints, or graph-to-Phase-1C child runs require
+  their own schema, RLS, audit, lease, and authority review; none is implied by
+  the briefing.
+- [ ] Do not import FirstMate's Bash/tmux runtime, Relay/public intake,
+  ambient CLI credentials, `+yolo`/raw launch escape hatches, merge scripts,
+  or flat-file state into this multi-tenant control plane.
 
 ## Job Seeker increments (2026-08-20, ADR-096, owner goal)
 
@@ -65,6 +90,29 @@ Last triaged: 2026-08-13
 - [ ] Until then the Bot Manager states the truth per ADR-095: Connected,
   fully operational for running bots, usage not measurable for this
   connection type. Do not weaken that wording to imply a transient failure.
+
+## A project's selected pipelines (2026-08-18, ADR-098)
+
+- [x] Add `project_pipelines` (migration `20260821000300`) with RLS + FORCE RLS, every
+  table privilege revoked from `anon`, `authenticated` and `service_role`, and
+  owner/administrator `select_project_pipeline` / `deselect_project_pipeline` plus
+  member `list_project_pipelines` as the only paths, each audit-evented and
+  advisory-locked per project-and-key.
+- [x] Expose them at `GET`/`POST`/`DELETE /api/project-pipelines`, resolving names from
+  `GRAPH_TEMPLATES` for a built-in and `graph_templates` for a custom template so no
+  label can go stale, and refusing a key that names neither before anything is written.
+- [x] Make **Use** a persisted toggle — grey with `aria-pressed` when selected, many per
+  project — and move the graph-planning dialog to its own **Plan graph** button.
+- [x] Make the AI Factory's Configure Pipeline step read the selections: done only when
+  one is chosen, with the chosen names on the page rather than only in the overlay.
+- [x] Cover the migration against the real chain (owner allowed, member read-only,
+  outsider denied, anonymous denied, no direct browser write path), the route boundary,
+  the toggle, and the selected-state layout at every swept width.
+- [ ] Apply `20260821000300` to hosted Supabase: run the apply workflow with
+  `confirm=apply`, `scope=pipeline-selection` — a one-file scope added for it, so
+  production is reached without re-running twenty-three unrelated migrations. Until
+  then `/api/project-pipelines` reports PGRST202 as **Not Connected** and the Use
+  button is disabled naming that reason.
 
 ## Project repository picker (2026-08-16)
 

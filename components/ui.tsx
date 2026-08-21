@@ -41,16 +41,19 @@ export function StatusBadge({
   children,
   tone = "neutral",
   dot = true,
+  className,
 }: {
   children: React.ReactNode;
   tone?: keyof typeof statusStyles;
   dot?: boolean;
+  className?: string;
 }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
         statusStyles[tone],
+        className,
       )}
     >
       {dot ? <span className="size-1.5 rounded-full bg-current" aria-hidden="true" /> : null}

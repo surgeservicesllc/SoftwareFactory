@@ -3,12 +3,17 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below — as measured. Two further migrations,
-`20260816001600_phase2c_resource_reservations` and
-`20260819000700_bot_credential_ref_privileged_parity`, were added locally *after* that probe run
-and are also unhosted, so the next probe should return twenty-one. It is deliberately not appended to the
-list below: that list is a measurement, and adding an unmeasured version to it would turn
-evidence into assertion. The repository total is 127 migration
+**The current total is 19**, named in the list below — as measured. Four further migrations —
+`20260816001600_phase2c_resource_reservations`,
+`20260821000100_agentic_sdlc_activity_types`,
+`20260821000200_agentic_sdlc_lifecycle`, and
+`20260821000300_project_pipeline_selection` — were added locally *after* that probe run and
+remain absent from the hosted ledger, so the current expected absent-from-ledger count is
+twenty-three. They are deliberately not appended to the list below: that list is a measurement,
+and adding an unmeasured version to it would turn evidence into assertion. The two lifecycle
+files are instead asked about by a **separate**
+query in the same `scope=probe` step, which reports the objects they introduce rather than a
+ledger row. The repository total is 130 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -46,13 +51,45 @@ constraint exists.** Confirm it directly:
 `select conname from pg_constraint where conname = 'bots_credential_ref_not_privileged'`
 and check that its definition names all fourteen privileged references.
 
+**Closed 2026-08-21, run `32531787440` (`scope=probe`, read-only).** That direct check now
+answers `bots_credential_ref_not_privileged | covers_all_five_added = t`, so the parity fix is
+live on production and `20260819000700` is no longer listed above as unhosted. The row and the
+constraint finally agree. The same run also shows the whole `20260819` range —
+`000100` through `001200` — recorded on both sides of the ledger, which is the prerequisite
+`scope=lifecycle` depends on: `20260821000200` rebuilds `claim_planned_graph` and
+`list_graph_runs` from `20260819001000` and `20260819000800`, and would create functions
+referencing columns that do not exist if those files had never run.
+
+## Scope order matters: run `scope=lifecycle` last — 2026-08-21
+
+The workflow's surgical scopes replay whole files, and **whichever replayed file runs last wins
+the function body**. Three files define `create_graph_from_plan`; two define
+`claim_planned_graph`. `scope=broker-functions` replays the older ones.
+
+So: **if you ever dispatch `scope=broker-functions` after `scope=lifecycle`, dispatch
+`scope=lifecycle` again afterwards.** Otherwise production keeps a pre-lifecycle
+`create_graph_from_plan` that ignores `lifecycle_stage`, `gate_kind` and `is_feedback`, and
+lifecycle graphs are planted with no gates at all. Nothing is corrupted — the lifecycle body is
+a strict superset of the older one, and re-running the scope restores it — but the failure is
+silent. A graph runs straight through every gate and looks like it succeeded.
+
+Confirm rather than assume, with the query the `scope=lifecycle` step runs at the end:
+
+```sql
+select pg_get_function_identity_arguments(oid) as signature,
+       strpos(pg_get_functiondef(oid), 'graph_gates') > 0 as knows_about_gates
+  from pg_proc where proname = 'claim_planned_graph';
+```
+
+Exactly one row, and `knows_about_gates = t`. Two rows means a `text`-only overload was
+resurrected by a replay, and the live claim is the one that reports no gates.
+
 ## The ledger, measured — 2026-08-18 05:40Z, run `32103778884` (`scope=probe`, read-only)
 
 This supersedes every count and every high-water mark stated below it. The run mutated nothing:
 the three apply steps were skipped by their `if:` conditions, and the log shows it.
 
 **Absent from the hosted ledger — 19 versions:**
-
 | Version | Migration | Marker object the probe asks about |
 |---|---|---|
 | `20260814002500` | provider_credential_vault | table `provider_credentials` |
@@ -121,7 +158,14 @@ failure was the worker's old 8-turn ceiling — fixed in code (24 turns) —
 which is why `20260819000500_replant_with_room_to_work` re-plants one final
 fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
 All of these re-apply through the same replay-safe `scope=broker-functions`
-path. Earlier revisions of this
+path. `20260821000300_project_pipeline_selection` (the `project_pipelines` table and
+its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
+functions, which is what makes the AI Factory's Use button record anything) is newer than that
+measurement and remains outstanding. `20260821000300` has its own one-file scope,
+**`scope=pipeline-selection`**, so it can reach production without re-running unrelated
+migrations; it is still in the `broker-functions` batch scope as well. Until then the Configure
+Pipeline step reads **Not Connected** in effect: `/api/project-pipelines` will return the
+database's own missing-function error rather than pretending a selection stuck. Earlier revisions of this
 document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
 high-water mark and is withdrawn.
 
