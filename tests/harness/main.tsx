@@ -55,6 +55,7 @@ import {
   AUTONOMY_DECISIONS,
   AUTONOMY_STATUS,
   COMMANDS,
+  CUSTOM_PIPELINE_TEMPLATES,
   CONNECTIONS,
   OPERATIONS_OVERVIEW,
   JOB_SEEKER_PREFERENCES,
@@ -184,6 +185,9 @@ function serveFixtures() {
     if (url.includes("/api/autonomy/status")) return json({ status: AUTONOMY_STATUS });
     if (url.includes("/api/autonomy/decisions")) return json({ decisions: AUTONOMY_DECISIONS });
     if (url.includes("/api/worker/status")) return json({ worker: WORKER_STATUS });
+    if (url.includes("/api/pipeline-templates")) {
+      return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
+    }
     if (url.includes("/api/commands")) return json({ commands: COMMANDS });
     return unserved(url);
   }) as typeof window.fetch;

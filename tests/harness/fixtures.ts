@@ -396,6 +396,34 @@ export const TEMPLATES = [
  * `compileErrors.map`, which is the fixture being wrong rather than the
  * component being fragile.
  */
+/**
+ * The tenant's own pipeline templates, as `/api/pipeline-templates` returns
+ * them — a different shape from the built-in `TEMPLATES` above, which are
+ * compiled from code rather than stored per tenant.
+ */
+export const CUSTOM_PIPELINE_TEMPLATES = [
+  {
+    id: "b6f7c0e2-1f2a-4c3d-9e4f-5a6b7c8d9e01",
+    slug: "checkout_audit",
+    name: "Checkout Audit",
+    summary: "Reads the checkout path and reports what would break under load.",
+    category: "AUDIT",
+    capability: "analysis",
+    areas: [
+      { id: "config", job: "Check configuration and environment handling for unsafe defaults." },
+      { id: "payments", job: "Follow the payment call path and name every failure it swallows." },
+    ],
+    version: 2,
+    editable: true,
+    compiles: true,
+    topology: "DAG",
+    nodeCount: 4,
+    maxParallelism: 2,
+    anchorNodeCount: 0,
+    errors: [] as string[],
+  },
+];
+
 export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   key: template.key,
   name: template.name,
