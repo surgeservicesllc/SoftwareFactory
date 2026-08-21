@@ -66,12 +66,17 @@ Last triaged: 2026-08-21
   gaps closed: the CRM details editor (notes / application URL /
   follow-up date had PATCH support but no UI) and the persistent
   current-resume link (the `resume_upload_id` pointer went unread).
-- [ ] Open (needs external credentials/decisions): activate an import
-  adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
-  _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
-  model-polished document variants through the job_search_pipeline graph
-  template (live and launchable from Pipelines → Templates), QA-lens-checked
-  against the deterministic baseline.
+- [x] Greenhouse + Lever imports (2026-08-21, ADR-105): the two public
+  adapters turned out to need identifiers, not credentials — real
+  `fetchPostings` against the providers' keyless APIs, identifier-driven
+  from the page, recorded and scored through the shared chain, journey-
+  proven live (40/40 imported rows scored and in the pipeline).
+- [ ] Open (needs external credentials/decisions): LinkedIn import
+  (SOFTWAREFACTORY_LINKEDIN_CLIENT_ID+SECRET — real OAuth app, reviewed
+  integration); model-polished document variants through the
+  job_search_pipeline graph template (live and launchable from
+  Pipelines → Templates), QA-lens-checked against the deterministic
+  baseline.
 - [x] CI lane (2026-08-21): `.github/workflows/job-seeker-journey.yml` —
   workflow_dispatch + daily schedule; provisions `supabase start` (lean
   exclusion set) on the runner, mints the pre-confirmed journey user

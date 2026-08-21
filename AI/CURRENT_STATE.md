@@ -27,6 +27,18 @@ shell/session code, state files, credentials, relay, merge path, or execution
 authority was imported. No schema, RLS, workflow, provider, autonomy, or
 production change is part of this increment.
 
+**Addendum, 2026-08-21 late (Job Discovery operational — ADR-105):**
+discovery on /job-seeker now has two real ways in: manual recording and
+public-board import. Greenhouse and Lever are identifier-driven public
+adapters (their public APIs need no credential — only which board to
+read, typed on the card); `POST /api/job-seeker/import` fetches up to 40
+postings per request, records each through the same evaluate → job →
+match → application chain as manual entry, counts duplicates against the
+unique index, and states the board's true total. Rows carry `via
+{source}` attribution; LinkedIn remains Not Connected pending real OAuth.
+The journey proves the live provider round-trip (missing-board refusal
+verbatim, then a real board imported and scored end to end).
+
 **Addendum, 2026-08-21 (Job Seeker verified live — ADR-097):** the whole
 /job-seeker surface has now been driven in a real browser against a real
 Supabase stack (`supabase start` with the full migration chain + the
