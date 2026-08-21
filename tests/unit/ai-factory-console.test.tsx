@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import type { PipelineTemplateSummary } from "@/components/pipelines-console";
+import { LEAST_PRIVILEGE_CONFIG } from "@/lib/bots/assignment-config";
 
 const BUILT_INS: PipelineTemplateSummary[] = [
   {
@@ -83,7 +84,16 @@ describe("AiFactoryConsole", () => {
       "/api/ai-accounts": { accounts: [{ status: "connected" }] },
       "/api/bots": {
         bots: [{ id: "b1" }],
-        assignments: [{ id: "a1", projectId: "p1", roleId: "builder", status: "active" }],
+        // Configured means somebody moved this posting off the least-privilege
+        // default. The fixture said only `roleId: "builder"`, which every
+        // assignment has, and the step counted as done for that reason alone.
+        assignments: [{
+          id: "a1",
+          projectId: "p1",
+          roleId: "builder",
+          status: "active",
+          config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Ship search"] },
+        }],
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
@@ -155,11 +165,18 @@ describe("AiFactoryConsole", () => {
   });
 
   it("counts only configured assignments for the configure step", async () => {
+    // Every assignment carries a role: `bot_assignments.role_id` is NOT NULL,
+    // so a fixture without one describes a record the database cannot hold.
+    // This step used to be derived from `roleId || responsibilities.length` --
+    // a field the payload nests under `config`, plus a column that is always
+    // set -- so it was marked done the moment a bot was assigned and could
+    // never read as outstanding. What counts is whether somebody moved the
+    // posting off its least-privilege default.
     stubFactory({
       "/api/bots": {
         assignments: [
-          { id: "a1", projectId: "p1", status: "active" },
-          { id: "a2", projectId: "p1", roleId: "builder", status: "released" },
+          { id: "a1", projectId: "p1", roleId: "role-1", status: "active", config: LEAST_PRIVILEGE_CONFIG },
+          { id: "a2", projectId: "p1", roleId: "role-1", status: "released", config: { ...LEAST_PRIVILEGE_CONFIG, preset: "builder" } },
         ],
         bots: [{ id: "b1" }],
       },
@@ -171,7 +188,30 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
-    expect(within(configure).getByText(/none carries a role or responsibilities yet/)).toBeInTheDocument();
+    expect(within(configure).getByText(/still on the default least-privilege settings/)).toBeInTheDocument();
+  });
+
+  it("marks the configure step done once a posting is actually configured", async () => {
+    stubFactory({
+      "/api/bots": {
+        assignments: [
+          {
+            id: "a1",
+            projectId: "p1",
+            roleId: "role-1",
+            status: "active",
+            config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Review migrations"] },
+          },
+        ],
+        bots: [{ id: "b1" }],
+      },
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
+    expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
   });
 
   it("fails closed for a signed-out visitor", async () => {

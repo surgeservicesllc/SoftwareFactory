@@ -25,6 +25,11 @@ import { PipelineTemplatesManager } from "@/components/pipeline-templates-manage
 import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
+import {
+  assignmentIsConfigured,
+  LEAST_PRIVILEGE_CONFIG,
+  type AssignmentConfig,
+} from "@/lib/bots/assignment-config";
 import { cn } from "@/lib/cn";
 
 /**
@@ -206,18 +211,23 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           bots?: unknown[];
           assignments?: Array<{
             projectId?: string | null;
-            responsibilities?: unknown[];
-            roleId?: string | null;
             status?: string;
+            config?: Partial<AssignmentConfig>;
           }>;
         }>(bots.value);
         data.bots = (body?.bots ?? []).length;
         data.assignments = (body?.assignments ?? [])
           .filter((assignment) => assignment.status !== "released")
           .map((assignment) => ({
-            configured: Boolean(
-              assignment.roleId || (assignment.responsibilities ?? []).length > 0,
-            ),
+            // Read from `config`, where the API actually puts these fields, and
+            // measured against the least-privilege baseline. The previous check
+            // (`roleId || responsibilities.length`) read a field that is not on
+            // the payload and a column that is NOT NULL, so it was true of every
+            // assignment and this step could never be shown as outstanding.
+            configured: assignmentIsConfigured({
+              ...LEAST_PRIVILEGE_CONFIG,
+              ...(assignment.config ?? {}),
+            }),
             projectId: assignment.projectId ?? null,
           }));
       }
@@ -445,7 +455,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       evidence: scopedConfigured.length > 0
         ? `${scopedConfigured.length} of ${scopedAssignments.length} assignment${scopedAssignments.length === 1 ? "" : "s"} configured`
         : scopedAssignments.length > 0
-          ? "Assignments exist; none carries a role or responsibilities yet"
+          ? "Assignments exist; every one is still on the default least-privilege settings"
           : "Assign a bot first",
       action: "Configure",
       icon: Settings2,
