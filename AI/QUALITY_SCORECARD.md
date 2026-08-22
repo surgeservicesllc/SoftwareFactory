@@ -1,6 +1,20 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
+
+**Addendum, 2026-08-22 — Job Seeker, production-behavior certified:** the
+evidence tier above local-stack certification now exists: the full
+fake-data journey ran against https://www.theagoras.com itself (journey
+lane remote mode, run 32540879299 — first attempt timed out on a
+production cold start immediately after sign-in; the CI retry completed
+the entire spec, so the run is recorded flaky-then-green). Confirmed
+independently by signing in to production as the fake account and
+reading the production API back: 42 jobs in its RLS-isolated workspace
+(2 manual + 40 imported live from Greenhouse in production), all 42
+scored, analytics recomputed from the walked rows (1 application, 100%
+measured response rate, 1 interview-stage count, 1 offer). Every
+capability on /job-seeker has now been observed working in production,
+wired to hosted Supabase end to end.
 
 **Release addendum, 2026-08-21 — Factory command routing (ADR-106):**
 implementation is locally complete but not live. Migration

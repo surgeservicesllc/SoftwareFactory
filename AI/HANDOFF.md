@@ -1,6 +1,32 @@
 # Handoff
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
+
+## Newest (2026-08-22 ~00:45Z): the journey has now run against PRODUCTION itself — green
+
+The owner's goal ("connect to the site remotely, fill every field with
+fake data, prove every capability, everything wired to Supabase")
+completed against https://www.theagoras.com directly. Sequence: the
+owner approved the one-shot `journey-prod-user.yml` (#305, dispatched)
+which marked the fake account jordan.seeker.prod1@example.org
+email-confirmed in hosted GoTrue and swept the unconfirmed probe
+residues — no auth configuration changed, confirmation stays ON for real
+users. The journey lane gained a remote-target mode (#306:
+`base_url`/`email`/`password` dispatch inputs skip the local-stack
+steps). Dispatch run 32540879299: remote step green (one first attempt
+timed out just after sign-in on a production cold start; the CI retry
+ran the complete spec to the end — Playwright reports it flaky, the job
+succeeded). Independently verified by signing in to production as the
+fake user and reading back through the production API: 42 jobs in the
+fake workspace (2 manual + 40 `via greenhouse` — real Stripe postings
+imported live in production), all 42 scored, analytics computed from the
+walked rows (applications 1, response rate 100%, interviews 1, offers
+1). Sandbox note: this session's egress proxy accepts curl and raw
+CONNECT but resets every Chromium TLS hello, so remote browser runs ride
+the CI runner (the lane's remote mode) — playwright.config.ts now
+forwards HTTPS_PROXY for remote HTTPS targets for environments where the
+proxy accepts browsers. Cleanup when desired: delete the fake user in
+Supabase Auth → Users; the cascade removes its workspace rows.
 
 ## Newest (2026-08-21): immutable Factory command routing (ADR-106)
 

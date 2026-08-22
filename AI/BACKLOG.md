@@ -112,6 +112,13 @@ Last triaged: 2026-08-21
   through GoTrue's admin API, builds and serves the production app, and
   runs the JOB_SEEKER_E2E journey. No deployment, no production
   credentials, no provider usage.
+- [x] Production run (2026-08-22, owner goal): the lane's remote mode
+  (`base_url` dispatch input) drove the whole journey against
+  https://www.theagoras.com as the owner-approved fake account — run
+  32540879299 green (flaky first attempt on a cold start, full pass on
+  the CI retry), verified by reading production's API back as that user
+  (42 jobs, 40 imported live via Greenhouse, all scored, analytics
+  correct). Fake-account cleanup is one dashboard delete.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 
