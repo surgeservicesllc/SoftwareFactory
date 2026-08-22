@@ -12,9 +12,31 @@ name: Job Seeker live journey
 # No deployment, no production credentials, no provider usage: everything
 # in this lane is local to the runner, and the only keys involved are the
 # Supabase CLI's public local-development defaults.
+#
+# Remote mode (owner-directed): dispatching with base_url set skips the
+# local stack entirely and drives the SAME journey against that deployed
+# site with the named fake account. The account credentials here are a
+# throwaway guarding synthetic data in the owner's own project — the fake
+# journey identity, not a secret.
 
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Remote target (e.g. https://www.theagoras.com). Empty = provision a local stack."
+        required: false
+        type: string
+        default: ""
+      email:
+        description: "Fake journey account email (remote mode)"
+        required: false
+        type: string
+        default: "jordan.seeker.prod1@example.org"
+      password:
+        description: "Fake journey account password (remote mode; throwaway test identity)"
+        required: false
+        type: string
+        default: "fake-data-journey-2026x"
   schedule:
     # Daily, off the busy hours of every other scheduled lane.
     - cron: "41 7 * * *"
@@ -72,6 +94,7 @@ jobs:
           exit 1
 
       - name: Start the local Supabase stack
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         # The journey needs db, auth, rest, and kong; everything else is
         # excluded so the stack boots lean and fast. config.toml reads SMTP
         # settings through env(), so dummies must exist for auth to start —
@@ -87,6 +110,7 @@ jobs:
           npx --yes supabase@2 start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Mint the journey user and point the app at the stack
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         # The local stack's keys are the Supabase CLI's public development
         # defaults — not secrets. The user is admin-created with
         # email_confirm so the flow never depends on receiving mail.
@@ -107,6 +131,7 @@ jobs:
           } > .env.local
 
       - name: Build and serve the production app
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         run: |
           npm run build
           nohup npx next start > next-start.log 2>&1 &
@@ -118,8 +143,18 @@ jobs:
           tail -50 next-start.log
           exit 1
 
-      - name: Run the journey
+      - name: Run the journey (local stack)
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         env:
           JOB_SEEKER_E2E: 1
           PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: npx playwright test tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium --reporter=line
+
+      - name: Run the journey (remote target)
+        if: ${{ inputs.base_url != '' && inputs.base_url != null }}
+        env:
+          JOB_SEEKER_E2E: 1
+          PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
+          JOB_SEEKER_E2E_EMAIL: ${{ inputs.email }}
+          JOB_SEEKER_E2E_PASSWORD: ${{ inputs.password }}
         run: npx playwright test tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium --reporter=line
