@@ -72,6 +72,12 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Holds sealed credential envelopes. A policy would imply some role may read the "
     + "column; none may. Every table privilege is revoked from anon, authenticated and "
     + "service_role, and the only readers are definer functions.",
+  project_agents:
+    "Which logical agents a project's AI Factory includes. Reads go through the "
+    + "list_project_agents member projection and writes through the "
+    + "owner/administrator select_project_agent and deselect_project_agent "
+    + "definer functions, both of which write an activity event; a policy would "
+    + "open a second, unaudited path to the same rows.",
   project_pipelines:
     "Which pipeline templates a project runs. Reads go through the "
     + "list_project_pipelines member projection and writes through the "

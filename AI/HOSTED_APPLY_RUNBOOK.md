@@ -13,7 +13,7 @@ twenty-three. They are deliberately not appended to the list below: that list is
 and adding an unmeasured version to it would turn evidence into assertion. The two lifecycle
 files are instead asked about by a **separate**
 query in the same `scope=probe` step, which reports the objects they introduce rather than a
-ledger row. The repository total is 130 migration
+ledger row. The repository total is 131 migration
 files. Those two numbers no longer stand in the old relationship, and the reason matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

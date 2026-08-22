@@ -2,6 +2,24 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22 ~01:30Z): agents are selectable into the AI Factory (ADR-106)
+
+The owner's goal for /solutions/agents, shipped as the mirror of pipeline
+selection: migration `20260822000100_project_agent_selection.sql`
+(project_agents + three definer functions, RLS + FORCE RLS, no direct
+table path), `/api/project-agents` (GET/POST/DELETE, unapplied migration
+reported as Not Connected), and one shared `ProjectAgentSelector`
+component rendering "Include in AI Factory" toggles on the Agents page
+(standalone project picker) and inside the factory's new **Select
+Agents** step (journey-scoped, done when at least one agent is included,
+included names as evidence). Selection is routing intent — audit-evented,
+advisory-locked, refused for archived projects, cross-project agents,
+and non-managers. Local certification: 16 behavior cases against the
+full migration chain, 10 route cases, 5 component cases, factory suite
+updated to the nine-step journey; lint, tsc, and the production build
+green. Hosted apply: `scope=agent-selection` added to the apply workflow;
+runbook total is now 131 and the 13 tail pins moved to the new file.
+
 ## Newest (2026-08-22 ~00:45Z): the journey has now run against PRODUCTION itself — green
 
 The owner's goal ("connect to the site remotely, fill every field with

@@ -2,6 +2,22 @@
 
 Last triaged: 2026-08-21
 
+## Agents selectable into the AI Factory (2026-08-22, ADR-106, owner goal)
+
+- [x] Migration `20260822000100_project_agent_selection.sql`: project_agents
+  with RLS + FORCE RLS, no direct table path, owner/admin select/deselect and
+  member list definer functions, audit events, advisory locks; 16 behavior
+  cases against the real chain.
+- [x] `/api/project-agents` (GET/POST/DELETE) reporting the unapplied
+  migration as Not Connected; 10 route cases.
+- [x] `ProjectAgentSelector` on /solutions/agents (standalone project picker)
+  and in the AI Factory's new Select Agents step (nine-step journey; done =
+  at least one agent included, names as evidence); 5 component cases plus the
+  updated factory suite.
+- [ ] Apply `20260822000100` to hosted Supabase: apply workflow,
+  `confirm=apply`, `scope=agent-selection`. Until then the surfaces say Not
+  Connected and record nothing.
+
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 
 - [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`

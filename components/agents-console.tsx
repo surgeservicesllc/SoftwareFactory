@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Children, useCallback, useEffect, useState } from "react";
 
 import { ControlPlaneDetail, DetailFacts, useControlPlaneDetail } from "@/components/control-plane-detail";
+import { ProjectAgentSelector } from "@/components/project-agent-selection";
 import type {
   ProviderModelConfiguration,
   ProviderStatusPayload,
@@ -337,6 +338,20 @@ export function AgentsConsole() {
                     </li>
                   ))}
                 </ul>
+              </section>
+
+              <section className="border-b border-line p-4" aria-labelledby="factory-inclusion-title">
+                <h3 id="factory-inclusion-title" className="text-sm font-semibold text-foreground">
+                  Include agents in the AI Factory
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  Choose which logical agents a project&apos;s factory uses. The AI
+                  Factory journey reads these selections, so what you include here
+                  is what it shows there.
+                </p>
+                <div className="mt-3">
+                  <ProjectAgentSelector />
+                </div>
               </section>
 
               <ul className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">

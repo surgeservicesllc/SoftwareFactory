@@ -44,6 +44,7 @@ on:
           - broker-functions
           - project-controls
           - pipeline-selection
+          - agent-selection
           - lifecycle
           - probe
 
@@ -841,6 +842,34 @@ jobs:
           # ago must not keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Pipeline selection applied and recorded; the API schema cache was reloaded."
+
+      - name: Apply the agent selection surgically (scope=agent-selection)
+        # Exactly one file — 20260822000100 — the project_agents mirror of the
+        # pipeline-selection scope above, and replay-safe the same way: enum
+        # labels are `add value if not exists`, the table is `create table if
+        # not exists`, indexes are `if not exists`, and the three definer
+        # functions are `create or replace`.
+        if: ${{ inputs.scope == 'agent-selection' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260822000100_project_agent_selection.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000100
+          else
+            npx supabase migration repair --status applied 20260822000100 --db-url "$DB_URL"
+          fi
+          # Insurance: Supabase's DDL event trigger reloads the PostgREST
+          # schema cache on its own, but a browser that saw PGRST202 seconds
+          # ago must not keep seeing it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Agent selection applied and recorded; the API schema cache was reloaded."
 
       - name: Apply the Agentic SDLC lifecycle surgically (scope=lifecycle)
         # Exactly two files — 20260821000100 and 20260821000200 — and no others.
