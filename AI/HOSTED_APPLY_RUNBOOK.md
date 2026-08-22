@@ -56,7 +56,7 @@ signed-in production Step 8 submission with Claude or another non-Codex model,
 verify truthful Step 9, reload, and prove the same project-scoped history remains.
 Only that complete evidence permits a deployed/production-ready claim.
 
-**The current total is 19** within the dated, test-guarded probe list below. That phrase describes
+**The current total is 25** within the dated, test-guarded probe list below. That phrase describes
 the measured list, not today's total outstanding migration count. Later exact evidence proves
 `20260821000300_project_pipeline_selection` and
 `20260822000100_project_agent_selection` are hosted, while
@@ -271,7 +271,7 @@ resurrected by a replay, and the live claim is the one that reports no gates.
 This supersedes every count and every high-water mark stated below it. The run mutated nothing:
 the three apply steps were skipped by their `if:` conditions, and the log shows it.
 
-**Absent from the hosted ledger — 19 versions:**
+**Absent from the hosted ledger — 25 probed marker objects:**
 | Version | Migration | Marker object the probe asks about |
 |---|---|---|
 | `20260814002500` | provider_credential_vault | table `provider_credentials` |
@@ -293,6 +293,19 @@ the three apply steps were skipped by their `if:` conditions, and the log shows 
 | `20260816000100` | ai_accounts_auth_broker | table `ai_accounts` |
 | `20260816000200` | ai_account_verification | function `list_ai_accounts_for_verification` |
 | `20260816000300` | resume_ai_auth_session | function `find_open_ai_auth_session` |
+| `20260816001600` | phase2c_resource_reservations | table `resource_reservations` |
+| `20260821000200` | agentic_sdlc_lifecycle | table `graph_gates` |
+| `20260821000400` | command_factory_routing | table `factory_command_routes` |
+| `20260821000400` | command_factory_routing | function `list_factory_command_routing_candidates` |
+| `20260821000400` | command_factory_routing | function `submit_factory_command` |
+| `20260822000600` | route_bots_onto_the_executable_model | body of `normalize_phase1c_command` |
+
+The last six were added on 2026-08-22. Issue a Command runs through
+`list_factory_command_routing_candidates` and `submit_factory_command`, and their
+migration has no history row on the remote — so the one surface an owner actually
+uses was the only thing this report could not answer for. A blank ledger row means
+nothing on its own: every Phase 2E version above reads blank in the ledger and `t`
+in the probe.
 
 **Present in the hosted ledger:** every other local version, including the whole
 `20260817` range — `000100` through `001100`. So the run-review controls, the owner-operated
