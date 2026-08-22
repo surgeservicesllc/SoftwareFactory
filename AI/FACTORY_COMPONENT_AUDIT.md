@@ -182,6 +182,54 @@ deployed site with the fake account, running the signed-in read
 be dispatched until the workflow file reaches `main` — `workflow_dispatch`
 reads the default branch — so that dispatch waits on this pull request landing.
 
+## Round 6 — the eight-step walk, run for real, against a reset stack
+
+Rounds 3-5 wrote the lane; nothing had executed it end to end, because the
+workflow is not on `main` yet and so has never run in CI. Running it here —
+`supabase db reset`, the workflow's own seed, the production build, the spec —
+found that it could not have passed, and then found a defect in the product.
+
+8. **The Bot Manager could not create a bot at all.** Its account chooser sent
+   the account row's *vault purpose* (`claude`, `claude_2`, `codex_47`) to
+   `/api/bots/connect/provision`, whose schema accepts only the catalogue's
+   *choice* (`default`, `subscription`, `subscription_N`). Measured against a
+   real stack on 2026-08-22:
+
+   ```
+   credential=claude       -> 400 invalid_request
+   credential=subscription -> 200 {"provisioned":true,"outcome":"created"}
+   ```
+
+   Every attempt failed, and the console answered "The bot could not be
+   created. Try again from the accounts list" — from the list that had just
+   failed. `project-bots.tsx` translated between the two vocabularies;
+   `bot-manager/home.tsx` did not, at three call sites. The translation is now
+   one shared `credentialChoiceForPurpose` beside the purposes it translates,
+   used by both, with a test walking 60 slots per provider against the route's
+   own pattern — and asserting a raw purpose fails it, which is the drift that
+   caused this. **This was live on production**, on the Connect Bots step of
+   this very journey.
+
+Two gaps in the lane itself, both invisible while it had never run:
+
+- The seed created no AI account, so step 4 could never read done. It now
+  seeds the row a real Claude sign-in records — identity and the name of its
+  vault slot, `claude`, never a credential.
+- The runner's `.env.local` set no credential slot, so the server-side
+  reference check had nothing to resolve. It now writes a labelled fake
+  placeholder; it authenticates nothing and no provider is ever called.
+
+And one racy assertion dropped: the spec waited for the add-project form's own
+confirmation, but creating a project calls back into the page, which closes the
+overlay and re-reads, so that message can be gone before an assertion sees it.
+
+**The run, after the fixes** — 3 passed, and read back from Postgres rather
+than from the page: 1 project, 1 pipeline selection, **1 bot** (0 before the
+fix), 0 assignments, 0 commands, 7 activity events. The two zeros are the
+product gates the spec asserts rather than seeds past: a new workspace has no
+role to assign, and step 7 re-resolves the repository against the live GitHub
+API, which the seeded repository is not in. The refusals left no phantom rows.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
