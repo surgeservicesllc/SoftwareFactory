@@ -206,7 +206,7 @@ describe("the brand mark", () => {
   it("is one labelled link, so the lockup is not spelled out line by line", () => {
     render(<SiteHeader />);
 
-    const brand = screen.getAllByRole("link", { name: /ai software factory home/i });
+    const brand = screen.getAllByRole("link", { name: /ai factory home/i });
     expect(brand.length).toBeGreaterThan(0);
     expect(brand[0]).toHaveAttribute("href", "/");
   });
