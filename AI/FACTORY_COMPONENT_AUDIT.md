@@ -124,6 +124,21 @@ The deployed bundle does confirm round 2's fixes are live: it contains
 `assignmentIsConfigured`, `LEAST_PRIVILEGE_CONFIG`, `When an executor is
 connected`, and the pipeline-templates read.
 
+## Round 4 — what the honest state cost the page's heading
+
+The unavailable state added in round 3 made a blocked state reachable without
+a session, and the repository's own page check caught what had been hiding
+behind that: `AiFactoryConsole` returned its blocked states *instead of* the
+page, `PageHeader` included. `/solutions/ai-factory renders its heading, stays
+in the viewport, and passes axe` failed on all three browser shards — the page
+had no `h1` and no place in the heading outline, only an `h2` inside a card.
+
+8. **A blocked console dropped the page's title.** Every early return now
+   renders inside the same header ("AI Factory" plus its one description),
+   so loading, signed-out, unavailable, and setup all keep the page's
+   heading. A unit test walks 401, 409, and 503 and asserts the level-1
+   heading survives each.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph

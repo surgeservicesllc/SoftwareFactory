@@ -45,6 +45,10 @@ import { cn } from "@/lib/cn";
  * disagree with the rest of the console.
  */
 
+/** One description for the page, whatever state it is able to render in. */
+const PAGE_DESCRIPTION =
+  "From new project to shipped pull request: the whole journey, one guided path over your live workspace.";
+
 type StepId =
   | "connect_github"
   | "create_project"
@@ -304,29 +308,50 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     void load();
   }, [load]);
 
+  /*
+   * Every state keeps the page's own heading.
+   *
+   * The blocked states used to replace the whole page, h1 included, so a
+   * console that could not read its data rendered a panel with no page title
+   * and no place in the heading outline. Nobody noticed while the only
+   * reachable blocked state needed a session the browser suite never has;
+   * the unavailable state made it reachable, and the /solutions/ai-factory
+   * page check caught it.
+   */
+  const framed = (children: React.ReactNode) => (
+    <div className="space-y-6">
+      <PageHeader title="AI Factory" description={PAGE_DESCRIPTION} />
+      {children}
+    </div>
+  );
+
   if (state.kind === "loading") {
-    return (
+    return framed(
       <Card className="grid min-h-64 place-items-center">
         <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
-      </Card>
+      </Card>,
     );
   }
   if (state.kind === "signed-out") {
-    return <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />;
+    return framed(
+      <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />,
+    );
   }
   if (state.kind === "unavailable") {
-    return (
+    return framed(
       <BlockedState
         icon={Factory}
         title="Your factory's state could not be read"
         description="The journey derives every step from live records, so it shows nothing rather than showing zeros it cannot stand behind. Try again in a moment."
         href="/solutions/ai-factory"
         label="Try again"
-      />
+      />,
     );
   }
   if (state.kind === "setup") {
-    return <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />;
+    return framed(
+      <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />,
+    );
   }
 
   const { data } = state;
@@ -678,7 +703,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     <div className="space-y-6">
       <PageHeader
         title="AI Factory"
-        description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        description={PAGE_DESCRIPTION}
         action={
           <div className="flex flex-wrap items-center gap-2">
             {data.projects.length > 1 || (isStartingNew && data.projects.length > 0) ? (
