@@ -1,3 +1,5 @@
 supabase/migrations/20260822000150_normalize_legacy_bot_function_acls.sql text eol=lf
 supabase/migrations/20260822000200_register_bot_for_ai_account.sql text eol=lf
 supabase/migrations/20260822000300_contract_bot_mutator_acls.sql text eol=lf
+supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql text eol=lf
+supabase/migrations/20260822001000_factory_anthropic_record_only.sql text eol=lf

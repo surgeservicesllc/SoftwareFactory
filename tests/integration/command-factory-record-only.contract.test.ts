@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const migrationPath = resolve(
   import.meta.dirname,
-  "../../supabase/migrations/20260822000700_factory_anthropic_record_only.sql",
+  "../../supabase/migrations/20260822001000_factory_anthropic_record_only.sql",
 );
 
 describe("factory Anthropic record-only migration contract", () => {
@@ -42,7 +42,7 @@ describe("factory Anthropic record-only migration contract", () => {
     );
   });
 
-  it("gates the frozen 00600 input catalog before the first durable change", () => {
+  it("gates the frozen 00900 input catalog before the first durable change", () => {
     const preflight = migration.indexOf("do $preflight$");
     const durableChange = migration.indexOf(
       "create table public.factory_record_only_submission_guards",
@@ -56,10 +56,10 @@ describe("factory Anthropic record-only migration contract", () => {
       /pg_catalog\.pg_depend[\s\S]*?refobjid[\s\S]*?refuses to rename a function with catalog dependents/i,
     );
     expect(migration.slice(0, durableChange)).toMatch(
-      /_sf_20260822000700_trigger_expectations[\s\S]*?commands_phase1c_normalize[\s\S]*?tasks_phase1c_queue[\s\S]*?agent_runs_red_execution_gate/i,
+      /_sf_20260822001000_trigger_expectations[\s\S]*?commands_phase1c_normalize[\s\S]*?tasks_phase1c_queue[\s\S]*?agent_runs_red_execution_gate/i,
     );
     expect(migration.slice(0, durableChange)).toContain(
-      "00700 agent_runs RLS, ACL, or policy boundary mismatch",
+      "01000 agent_runs RLS, ACL, or policy boundary mismatch",
     );
   });
 
@@ -228,15 +228,15 @@ describe("factory Anthropic record-only migration contract", () => {
   it("postflights exact OIDs, source/catalog/ACL, trigger bindings, and run producers", () => {
     const postflight = migration.slice(migration.indexOf("do $postflight$"));
     expect(postflight).not.toBe("");
-    expect(postflight).toContain("_sf_20260822000700_function_guard");
+    expect(postflight).toContain("_sf_20260822001000_function_guard");
     expect(postflight).toContain("catalog_without_name_source_acl");
     expect(postflight).toContain("procedure.oid is distinct from input_guard.routine_oid");
-    expect(postflight).toContain("00700 output function catalog, source, OID, or ACL mismatch");
-    expect(postflight).toContain("00700 changed a protected trigger or rule binding");
-    expect(postflight).toContain("00700 agent_run producer identity changed");
-    expect(postflight).toContain("00700 record-only guard table postflight mismatch");
+    expect(postflight).toContain("01000 output function catalog, source, OID, or ACL mismatch");
+    expect(postflight).toContain("01000 changed a protected trigger or rule binding");
+    expect(postflight).toContain("01000 agent_run producer identity changed");
+    expect(postflight).toContain("01000 record-only guard table postflight mismatch");
     expect(postflight).toMatch(
-      /_sf_20260822000700_output_expectations[\s\S]*?record_provider_run_phase2a_internal/i,
+      /_sf_20260822001000_output_expectations[\s\S]*?record_provider_run_phase2a_internal/i,
     );
   });
 
