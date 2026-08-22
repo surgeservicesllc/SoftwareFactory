@@ -56,6 +56,22 @@ export function slotIndexForPurpose(
   return Number(match[1]) - 1;
 }
 
+/**
+ * The credential *choice* the bot-provisioning route accepts for an account
+ * holding this purpose.
+ *
+ * Two vocabularies meet here. An account row names its vault slot in the
+ * broker's words (`claude`, `claude_2`, `codex_47`); `/api/bots/connect/provision`
+ * names it in the catalogue's (`subscription`, `subscription_2`) so the
+ * variable itself is never chosen by the browser. Sending one where the other
+ * is expected is rejected as an unknown credential choice, which is what the
+ * Bot Manager's account chooser did to every bot it tried to create.
+ */
+export function credentialChoiceForPurpose(purpose: string | null | undefined): string {
+  const slot = /_(\d+)$/.exec(purpose ?? "");
+  return slot ? `subscription_${slot[1]}` : "subscription";
+}
+
 /** Any provider's slot purpose — `claude`, `codex_2`, `claude_47`, … */
 export function isSlotPurpose(purpose: string): boolean {
   return (Object.keys(BROKER_PROVIDERS) as BrokerProviderId[]).some(

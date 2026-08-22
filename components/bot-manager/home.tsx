@@ -7,6 +7,7 @@ import { AiAccountConnect } from "@/components/ai-account-connect";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { findBotProvider } from "@/lib/bots/catalog";
 import { accountCanBackABot } from "@/lib/bots/accounts";
+import { credentialChoiceForPurpose } from "@/lib/ai-accounts/purposes";
 import { cn } from "@/lib/cn";
 
 /**
@@ -343,7 +344,7 @@ export function BotManagerHome({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: account.provider,
-            credential: account.credentialPurpose,
+            credential: credentialChoiceForPurpose(account.credentialPurpose),
             additional: seen.has(account.provider),
           }),
         });
@@ -401,7 +402,7 @@ export function BotManagerHome({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider: account.provider,
-              credential: account.credentialPurpose,
+              credential: credentialChoiceForPurpose(account.credentialPurpose),
               additional: seen.has(account.provider),
             }),
           });
@@ -466,7 +467,9 @@ export function BotManagerHome({
 
   const provisionBot = useCallback(async (
     providerId: string,
-    credentialPurpose = "subscription",
+    // An account's vault purpose ("claude", "claude_2"), not the route's
+    // credential choice -- translated below.
+    credentialPurpose: string | null | undefined = null,
   ) => {
     setCreatingBot(true);
     setBotNotice("");
@@ -476,7 +479,7 @@ export function BotManagerHome({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: providerId,
-          credential: credentialPurpose,
+          credential: credentialChoiceForPurpose(credentialPurpose),
           additional: bots.some((bot) => bot.provider === providerId),
         }),
       });

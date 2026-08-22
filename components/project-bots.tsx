@@ -40,6 +40,7 @@ import {
   type PipelineAccess,
   type RepositoryAccess,
 } from "@/lib/bots/assignment-config";
+import { credentialChoiceForPurpose } from "@/lib/ai-accounts/purposes";
 import { findBotProvider } from "@/lib/bots/catalog";
 import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -105,8 +106,7 @@ function accountCredentialRef(account: LinkableAccount): string | null {
 
 /** The provision endpoint's pattern-checked name for the same slot. */
 function accountCredentialChoice(account: LinkableAccount): string {
-  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
-  return slot ? `subscription_${slot[1]}` : "subscription";
+  return credentialChoiceForPurpose(account.credentialPurpose);
 }
 
 type ProjectRole = { id: string; name: string; slug: string; summary: string };

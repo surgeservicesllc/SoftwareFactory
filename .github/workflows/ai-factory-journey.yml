@@ -182,15 +182,16 @@ jobs:
           -- Signing into Claude is an external account action like the App
           -- install, so the row that sign-in would have recorded is seeded
           -- and nothing further. The credential itself is never here: the row
-          -- names the vault slot, and the journey's bot creation is what
-          -- exercises the server-side reference check.
+          -- names the vault slot -- 'claude' is the broker's slot 1, exactly
+          -- what a real sign-in records -- and the journey's bot creation is
+          -- what exercises the server-side reference check.
           insert into public.ai_accounts (
             id, organization_id, provider, auth_method, display_name, status,
             credential_purpose, last_verified_at, created_by
           ) values (
             '40000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
             'anthropic', 'subscription', 'Fake Claude Account', 'connected',
-            'softwarefactory_claude_code_oauth_token', now(), :user_id
+            'claude', now(), :user_id
           );
 
           insert into public.github_repositories (
