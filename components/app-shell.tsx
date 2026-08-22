@@ -35,6 +35,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
+import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
 
 /**
  * The console shell renders for signed-out visitors too — individual pages
@@ -187,9 +188,20 @@ const navigationEntries: readonly NavigationEntry[] = [
  * filter it is showing — so the plain view's link stays the single current
  * marker for that path.
  */
+/*
+ * A section root matches exactly; everything else matches by prefix.
+ *
+ * `/job-seeker` is the Overview group's own href *and* the prefix of every
+ * other Job Seeker destination, so prefix-matching it would light Overview up
+ * while someone stood in Resume Library. The group still highlights from its
+ * children — `entryActive` ors the subpages in — which is the behaviour the
+ * design shows and the reason this exactness costs nothing.
+ */
+const SECTION_ROOTS = new Set(["/solutions", "/job-seeker"]);
+
 function isActiveHref(pathname: string, href: string) {
   if (href.includes("?") || href.includes("#")) return false;
-  return href === "/solutions" ? pathname === href : pathname.startsWith(href);
+  return SECTION_ROOTS.has(href) ? pathname === href : pathname.startsWith(href);
 }
 
 function NavigationLink({
@@ -257,6 +269,19 @@ function Navigation({
 }) {
   const pathname = usePathname();
   /*
+   * Job Seeker is a different product, not a page of the console.
+   *
+   * A person here is managing a job search; Projects, Bots, Runs and Secrets
+   * are noise against that task, and the owner's design shows a navigation of
+   * its own. So the shell swaps the whole set while the path is under
+   * `/job-seeker` rather than appending a group to the console's list.
+   */
+  const jobSeeker = isJobSeekerPath(pathname);
+  const entries: readonly NavigationEntry[] = jobSeeker
+    ? JOB_SEEKER_NAVIGATION
+    : navigationEntries;
+  const navigationLabel = jobSeeker ? "Job Seeker" : "Console";
+  /*
    * Closed by default, with one exception that keeps the two requirements from
    * contradicting each other: the group containing the current page opens
    * itself. "Start collapsed" is about not dumping every destination on
@@ -275,9 +300,9 @@ function Navigation({
   // navigation is also on the page, and two landmarks sharing an accessible
   // name give screen-reader users no way to tell them apart.
   return (
-    <nav aria-label="Console" className="flex-1 space-y-6">
+    <nav aria-label={navigationLabel} className="flex-1 space-y-6">
       <ul className="space-y-0.5">
-        {navigationEntries.map((entry) => {
+        {entries.map((entry) => {
           const subpages = entry.subpages ?? [];
           const entryActive = isActiveHref(pathname, entry.href)
             || subpages.some((subpage) => isActiveHref(pathname, subpage.href));

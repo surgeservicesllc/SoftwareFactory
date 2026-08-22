@@ -55,6 +55,25 @@ const ROUTES = [
   "/offline",
   // A resource's own page: the eight library entries used to point at "#".
   "/resources/ultimate-guide-ai-powered-software-development",
+  /*
+   * The Job Seeker section. Signed out, every one of these redirects to
+   * sign-in — which is itself the layout being measured, and is the whole
+   * behavior a signed-out visitor can reach. The populated layouts are swept
+   * through the component harness, where the fixtures give them rows.
+   */
+  "/job-seeker",
+  "/job-seeker/profile",
+  "/job-seeker/preferences",
+  "/job-seeker/discovery",
+  "/job-seeker/applications",
+  "/job-seeker/follow-up",
+  "/job-seeker/resumes",
+  "/job-seeker/cover-letters",
+  "/job-seeker/contacts",
+  "/job-seeker/interviews",
+  "/job-seeker/documents",
+  "/job-seeker/analytics",
+  "/job-seeker/settings",
 ];
 
 /**
