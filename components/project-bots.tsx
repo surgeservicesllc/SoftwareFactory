@@ -859,6 +859,11 @@ function AssignWizard({
     [selected, drafts],
   );
 
+  const everySelectedBotHasRole = useMemo(
+    () => selected.length > 0 && selected.every((id) => Boolean(drafts[id]?.roleId)),
+    [selected, drafts],
+  );
+
   const moving = useMemo(
     () => selectedBots.filter((bot) => bot.currentProjectId && !bot.alreadyOnThisProject),
     [selectedBots],
@@ -1081,7 +1086,9 @@ function AssignWizard({
             <button
               type="button"
               onClick={() => setStep(STEPS[stepIndex + 1])}
-              disabled={selected.length === 0}
+              disabled={
+                selected.length === 0 || (step === "Configure" && !everySelectedBotHasRole)
+              }
               className="btn btn-primary btn-sm"
             >
               Next
@@ -1323,6 +1330,18 @@ function ConfigureCard({
               </option>
             ))}
           </select>
+          {roles.length === 0 ? (
+            <span className="mt-1.5 block text-xs text-faint">
+              No roles yet. A posting needs one. Create it in the{" "}
+              <Link
+                href="/solutions/bot-manager"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Bot Manager
+              </Link>
+              , then come back.
+            </span>
+          ) : null}
         </label>
 
         <label className="block">

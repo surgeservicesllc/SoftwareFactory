@@ -28,12 +28,17 @@ hosted. Submission dispatches no worker and changes no autonomy control; no
 connected/fresh worker was observed, while merge, deploy, and rollback remain
 not connected.
 
+The UI candidate also pins two first-use boundaries: embedded graph planning
+renders and submits only the caller's project from the first dialog frame,
+without a workspace project read; bot assignment cannot advance past Configure
+with a missing role and gives a real Bot Manager recovery path.
+
 Current candidate lint, typecheck, and production build pass. Default
 unbounded-run Supabase-wiring and pipeline failures were contention-only and
 both clear on isolated retry; the wiring contract passes 2/2 in 0.603s with
 `maxWorkers=1`. The bounded current-head non-frozen command
 `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
-passes 317 files / 3,729 tests, 7 skipped, in 140.74s. The excluded owner-
+passes 317 files / 3,730 tests, 7 skipped, in 183.78s. The excluded owner-
 frozen auth-broker file has 19 tests and is excluded locally solely because
 Windows lacks Unix `script`; Linux CI must run the complete suite. Hosted-
 runbook/repository-memory guards separately pass 21/21. Production still hosts

@@ -28,8 +28,14 @@ Last triaged: 2026-08-21
   passes 2/2 in 0.603s with `maxWorkers=1`.
 - [x] Run the bounded current-head non-frozen Windows suite:
   `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
-  passes 317 files / 3,729 tests, 7 skipped, in 140.74s. Lint, typecheck, and
+  passes 317 files / 3,730 tests, 7 skipped, in 183.78s. Lint, typecheck, and
   build are green.
+- [x] Remove the embedded template-plan first-render race: derive the caller's
+  project synchronously, perform no workspace project read, and pin the
+  immediate render and project-scoped graph submission in regression tests.
+- [x] Remove the no-role assignment dead end: explain the required role, link
+  to `/solutions/bot-manager`, and keep Configure from advancing until every
+  selected bot has one.
 - [ ] Require Linux CI to run the complete suite, including the owner-frozen
   19-test `tests/unit/auth-broker-runner.test.ts`. Its local exclusion is only
   because Windows lacks the Unix `script` executable; it is not a test waiver.

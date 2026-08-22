@@ -17,6 +17,13 @@ and merge, deploy, and rollback remain Not Connected. A missing routing RPC
 returns Not Connected/503, so the application fails closed until the migration
 is hosted.
 
+The candidate also closes two first-use UI failures. An embedded template-plan
+dialog now derives its locked project directly from `projectContext`, so its
+first render cannot falsely claim that the workspace has no projects and it
+never performs the wider `/api/projects` read. The bot-assignment wizard now
+explains that a role is required, links to the real Bot Manager route, and
+cannot advance from Configure until every selected bot has a role.
+
 This is candidate evidence, not a production claim. Production still serves
 the previous copy and its hosted ledger includes `20260821000300`, not
 `20260821000400`. The exact hosted project currently has five linked-database
@@ -32,7 +39,7 @@ Windows run exposed contention-only Supabase-wiring and pipeline failures;
 both cleared on isolated retry (the wiring contract passed 2/2 in 0.603s with
 `maxWorkers=1`). The bounded current-head non-frozen command
 `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
-passes 317 files / 3,729 tests with 7 skipped in 140.74s. The owner-frozen
+passes 317 files / 3,730 tests with 7 skipped in 183.78s. The owner-frozen
 19-test auth-broker file is excluded locally solely because Windows lacks the
 Unix `script` executable. This is not a full-suite waiver: Linux CI must run
 the complete suite including that file. The separate hosted-runbook/
