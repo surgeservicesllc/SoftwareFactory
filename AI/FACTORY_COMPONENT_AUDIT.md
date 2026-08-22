@@ -74,6 +74,56 @@ daemon, so `supabase start` (GoTrue + PostgREST + Mailpit) cannot run either.
 Real PostgreSQL with the real migrations is what remains, and it is what every
 row above was proved against.
 
+## Round 3 — the journey in a real browser, against a real stack
+
+`supabase start` needs a Docker daemon. This container ships `dockerd` and runs
+as root, so the daemon can simply be started — which turns the whole full-stack
+lane on: real Postgres carrying the production migration chain, real PostgREST,
+real GoTrue, the production Next build in front, driven in Chromium.
+`tests/e2e/ai-factory-journey.spec.ts` is the walk;
+`.github/workflows/ai-factory-journey.yml` is the same sequence on a runner.
+
+Only two things are seeded, both being external systems whose *recorded result*
+is the honest fixture: the GitHub App installation (step 1) and the AI account
+sign-in (step 4). Everything else is performed in the browser.
+
+| # | Step | Result | Issue found | Resolution |
+|---|------|--------|-------------|------------|
+| 30 | 2 Create Project | PASS live | None | Filled and submitted in the browser; Postgres holds `Storefront Rebuild -> fake-owner/storefront` |
+| 31 | 3 Configure Pipeline | PASS live | None | "Use" on a built-in recorded `agentic_sdlc` in `project_pipelines`, and the selection survived closing the overlay |
+| 32 | 4 Connect Bots | PASS live | None | Create Bot on a connected account registered a real bot row |
+| 33 | 5 Assign Bots | **FIXED — the round's most serious defect** | The bot's checkbox was **permanently disabled**. `ALLOWED_CREDENTIAL_REFS` was built from the catalogue's `defaultCredentialRef` alone, so the two `subscriptionCredentialRef` values *the same catalogue declares* were rejected: `normalizeCredentialRef` threw, `isCredentialPresent` returned false, and a bot made from a connected subscription account read "Needs credential" forever. The path the product recommends over API keys could never reach an assignment | Both fields are sourced from the catalogue now, and `tests/unit/credential-ref-catalogue-parity.test.ts` walks every reference it declares. The denylist and the "not declared" refusal are unchanged and asserted |
+| 34 | 6 Configure Bot Settings | **FIXED** | With no roles in the workspace the role select was blank, Confirm stayed dead, and nothing said an assignment needs a role or where to make one | The wizard names the gap and links to Bot Manager. The underlying requirement is correct and is asserted, not seeded past |
+| 35 | 7 Issue a Command | PASS — an honest refusal | None | The server re-resolves the repository and base commit from the live GitHub API before queueing; the seeded repository does not exist there, so it refuses and **says** "Command submission failed safely". No command row is written. The journey asserts the refusal is stated rather than swallowed |
+| 36 | 8 Watch It Ship | PASS live | None | Reads **Not Connected** from `/api/bots`, as fixed in round 2 |
+| 37 | Signed-out visitor | PASS live | None | A fresh browser context sees the gate, no tenant content, and not one 200 from `/api/*` |
+
+Read back from Postgres after the run: the project bound to its repository, the
+pipeline selection, one bot, **zero** assignments, **zero** commands, four
+activity events — the refusals left no phantom rows.
+
+### The live deployed site
+
+Not reachable from this sandbox, measured three ways rather than assumed:
+
+1. `www.theagoras.com/solutions/ai-factory` returns 200 and renders only the
+   sign-in gate to an unauthenticated visitor.
+2. **Sign-up on production is failing.** `POST /api/auth/sign-up` returns
+   `503 authentication_unavailable` on every attempt, while sign-in correctly
+   returns `401 invalid_credentials` for a bad password — GoTrue is up,
+   registration is not. `scripts/configure-auth-email.sh` documents the cause:
+   the hosted project requires email confirmation and has no custom SMTP.
+   **No new user can register on the live site right now**, and only project
+   configuration can fix it.
+3. A browser in this sandbox cannot reach any external host — Chromium gets
+   `ERR_CONNECTION_RESET` on `example.com` exactly as on `theagoras.com`,
+   through every proxy configuration, while `curl` through the same relay
+   returns 200.
+
+The deployed bundle does confirm round 2's fixes are live: it contains
+`assignmentIsConfigured`, `LEAST_PRIVILEGE_CONFIG`, `When an executor is
+connected`, and the pipeline-templates read.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
