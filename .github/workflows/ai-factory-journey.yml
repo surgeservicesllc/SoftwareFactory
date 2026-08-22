@@ -20,12 +20,19 @@ name: AI Factory live journey
 #
 # Remote mode (owner-directed): dispatching with base_url set skips the local
 # stack entirely and drives the deployed site with the named fake account —
-# the same pattern the Job Seeker lane uses. It runs the signed-in read half
-# only: step 1 cannot be seeded on a deployed target, because nothing here has
-# write access to a hosted database and nothing should. What it proves is the
-# half a deployment can regress on its own — a real session against the real
-# edge, and eight live reads rendering the journey rather than a gate or an
-# unreadable snapshot.
+# the same pattern the Job Seeker lane uses. By default it runs the signed-in
+# read half only: step 1 cannot be seeded on a deployed target, because
+# nothing here has write access to a hosted database and nothing should. What
+# that proves is the half a deployment can regress on its own — a real session
+# against the real edge, and eight live reads rendering the journey rather
+# than a gate or an unreadable snapshot.
+#
+# Once somebody installs the GitHub App on that fake account's workspace,
+# step 1 is genuinely done and the rest of the walk can run there too: tick
+# walk_all_steps. That writes real rows — a project, a pipeline selection, a
+# bot, a command — into that account's own workspace, with fake data. It is
+# owner-directed for exactly that reason, and it is the only path by which
+# anything in this repository writes to production.
 
 on:
   workflow_dispatch:
@@ -45,6 +52,16 @@ on:
         required: false
         type: string
         default: "fake-data-journey-2026x"
+      walk_all_steps:
+        description: >-
+          Remote mode only. Tick this once the GitHub App is installed on the
+          fake account's workspace, so step 1 is genuinely done and the
+          eight-step walk can run against the deployed site. It writes real
+          rows to that account's own workspace with fake data. Leave unticked
+          and only the signed-in read runs.
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Daily, clear of the other scheduled lanes.
     - cron: "53 8 * * *"
@@ -227,14 +244,19 @@ jobs:
         run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
 
       - name: Run the journey (remote target)
-        # No AI_FACTORY_E2E_SEEDED: the eight-step walk skips itself, and what
-        # runs is the signed-in read against the deployed site.
+        # AI_FACTORY_E2E_SEEDED is never set here: no runner may write to a
+        # hosted database. AI_FACTORY_E2E_INSTALLED carries the owner's tick
+        # instead -- the claim that a person really installed the App on that
+        # workspace, which is the only honest way step 1 is done on a deployed
+        # site. Unticked, the eight-step walk skips itself and what runs is the
+        # signed-in read.
         if: ${{ inputs.base_url != '' && inputs.base_url != null }}
         env:
           AI_FACTORY_E2E: 1
           PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
           AI_FACTORY_E2E_EMAIL: ${{ inputs.email }}
           AI_FACTORY_E2E_PASSWORD: ${{ inputs.password }}
+          AI_FACTORY_E2E_INSTALLED: ${{ inputs.walk_all_steps && '1' || '' }}
         run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
 
       - name: Report what the app logged if the journey failed

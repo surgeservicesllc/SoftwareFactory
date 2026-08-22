@@ -44,16 +44,25 @@ test.describe("AI Factory live journey", () => {
   const email = process.env.AI_FACTORY_E2E_EMAIL ?? "factory.owner@example.com";
   const password = process.env.AI_FACTORY_E2E_PASSWORD ?? "fake-data-journey-2026!";
   /*
-   * Whether step 1's installation rows are already in the database.
+   * Whether step 1 is already satisfied for this account, by either honest
+   * route.
    *
-   * The local lane seeds them, because installing a GitHub App is an account
-   * action against github.com that no runner can perform. A deployed target
-   * cannot be seeded at all -- nothing here has write access to a hosted
-   * database, and nothing should. So against a deployed site the eight-step
-   * walk below does not run: what runs is the signed-in read, which is the
-   * part a deployment can genuinely regress.
+   * The local lane seeds the rows, because installing a GitHub App is an
+   * account action against github.com that no runner can perform. A deployed
+   * target cannot be seeded at all -- nothing here has write access to a
+   * hosted database, and nothing should -- so there the same precondition has
+   * to be met the real way: somebody installs the App on that workspace once,
+   * and from then on step 1 is genuinely done rather than fabricated.
+   *
+   * Two variables rather than one, because they are two different claims.
+   * SEEDED says a runner wrote the rows; INSTALLED says a person completed
+   * the installation and the walk may proceed against a deployed site. Only
+   * the second is ever true of production, and nothing in this repository can
+   * set it on its own.
    */
   const seeded = process.env.AI_FACTORY_E2E_SEEDED === "1";
+  const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
+  const stepOneReady = seeded || installed;
 
   /** The card for one step, found by its title. */
   function stepCard(page: import("@playwright/test").Page, title: string) {
@@ -61,7 +70,10 @@ test.describe("AI Factory live journey", () => {
   }
 
   test("walks all eight steps with fake data and reads them back from Supabase", async ({ page }) => {
-    test.skip(!seeded, "needs step 1's installation rows seeded (AI_FACTORY_E2E_SEEDED=1)");
+    test.skip(
+      !stepOneReady,
+      "needs step 1 satisfied: seeded rows locally (AI_FACTORY_E2E_SEEDED=1), or a real GitHub App installation on a deployed target (AI_FACTORY_E2E_INSTALLED=1)",
+    );
     test.setTimeout(420_000);
 
     // ── Sign in (user admin-created and pre-confirmed by the runner) ──────

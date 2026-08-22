@@ -230,6 +230,31 @@ product gates the spec asserts rather than seeds past: a new workspace has no
 role to assign, and step 7 re-resolves the repository against the live GitHub
 API, which the seeded repository is not in. The refusals left no phantom rows.
 
+## Round 7 — the journey run against production, in a real browser
+
+Run [32547765437](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32547765437),
+remote mode against `https://www.theagoras.com` as the fake account, on
+`e3da2cd`: **1 skipped, 2 passed**.
+
+What passed is the half a deployment can regress on its own, and it passed
+against the real edge rather than a local build: a real GoTrue sign-in, then
+the page rendering the live journey — `h1` present, "Your factory, step by
+step", all eight step cards, and an `N of 8 complete` derived from eight live
+reads — plus the signed-out case, where none of those reads answer.
+
+What skipped is the eight-step walk, and the reason is worth stating exactly:
+step 1 is a GitHub App installation, an account action against github.com. No
+runner can perform it, and no agent may fake it — writing a `connected`
+connection row pointing at an installation that does not exist would state a
+live integration that is not there, which is the one thing this page exists
+not to do.
+
+So the gate now names the two honest routes separately. `AI_FACTORY_E2E_SEEDED`
+says a runner wrote step 1's rows into a local stack. `AI_FACTORY_E2E_INSTALLED`
+says a person really installed the App on that workspace, and it is the only
+one that can ever be true of production — set by the owner ticking
+`walk_all_steps` at dispatch, settable no other way.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
