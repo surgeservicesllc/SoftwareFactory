@@ -260,6 +260,34 @@ main has since added a ninth, so a re-run reads `N of 9`. Correcting a recorded
 measurement to match today's code would make the record say something the run
 did not observe — the step count moved, the run did not.
 
+## Round 8 — testing the state production is actually in
+
+The nine-step walk cannot run against the deployed site until somebody
+installs the GitHub App, and that is structural rather than an assumption:
+`POST /api/projects` requires `repositoryId`, a repository requires an
+installation, and step 1 is an account action against github.com. Read back
+from production on 2026-08-22, the fake account's workspace answers
+`{"connections":[]}` and `{"projects":[]}` — so every later step is genuinely
+out of reach there, and seeding them would mean writing a `connected` row for
+an installation that does not exist.
+
+What was left untested is the state production is *in*: an organization with
+nothing connected, which is exactly what a new owner meets. That state is now
+asserted on whatever target the lane points at, and it asserts refusals rather
+than progress, so it stays honest on an empty workspace and skips itself once
+a workspace has any:
+
+- step 1 says "No GitHub installation yet";
+- step 2 says "No project yet for this factory";
+- step 7 says "No command yet for this factory";
+- step 8 shows the conditional wording and **not** the present-tense promise,
+  which is the defect from round 2 pinned where it was live;
+- nothing anywhere on the page is labelled Demo Data.
+
+Proved both ways against a real stack: passing on an empty workspace, and
+failing when step 8's description is reverted to the unconditional promise —
+the page rebuilt with the lie, the test caught it, the lie reverted.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph

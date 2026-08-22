@@ -474,6 +474,71 @@ test.describe("AI Factory live journey", () => {
     await expect(page.getByText(/\d of 9 complete/)).toBeVisible();
   });
 
+  test("states every step honestly for a workspace with nothing connected", async ({ page }) => {
+    /*
+     * The first-run state, asserted on whatever target this lane points at --
+     * and the one that matters most on a deployed site, because it is what a
+     * new owner actually meets and the one place the page has been caught
+     * lying twice: once claiming a completed-nothing factory from reads that
+     * failed, once promising draft pull requests while nothing could run.
+     *
+     * It asserts refusals rather than progress, so it is honest on an empty
+     * workspace and skips itself the moment the workspace has any, instead of
+     * failing on a factory that legitimately got built.
+     */
+    test.setTimeout(180_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+
+    await page.goto("/solutions/ai-factory");
+    /*
+     * Count-agnostic on purpose: the journey was eight steps and is now nine.
+     * What this test is about is whether the page tells the truth about an
+     * empty workspace, which does not depend on how many steps there are.
+     */
+    const progress = page.getByText(/\d+ of \d+ complete/);
+    await expect(progress).toBeVisible({ timeout: 45_000 });
+
+    const complete = (await progress.textContent())?.trim() ?? "";
+    test.skip(
+      !/^0 of /.test(complete),
+      `this workspace has progress (${complete}); the empty-state claims below would not apply`,
+    );
+
+    // Step 1 is the gate everything else waits on, and it must offer the real
+    // way through rather than a dead end.
+    const connect = stepCard(page, "Connect Repository");
+    await expect(connect.getByText("No GitHub installation yet")).toBeVisible();
+
+    // Step 2's evidence must not imply a project exists.
+    await expect(stepCard(page, "Create Project").getByText("No project yet for this factory"))
+      .toBeVisible();
+
+    // Step 7 must not claim a command was issued.
+    await expect(stepCard(page, "Issue a Command").getByText("No command yet for this factory"))
+      .toBeVisible();
+
+    /*
+     * Step 8 is the one that used to promise what it could not deliver: with
+     * no executor it described runs landing as draft pull requests, in the
+     * present tense, on a workspace where nothing ships. The conditional
+     * wording is the fix, and this asserts the honest branch is the one a
+     * disconnected workspace sees.
+     */
+    const ship = stepCard(page, "Watch It Ship");
+    await expect(ship.getByText(/When an executor is connected/)).toBeVisible();
+    await expect(ship.getByText("Every run lands as a draft pull request with CI evidence; you review and merge."))
+      .toHaveCount(0);
+    await expect(ship.getByText("Nothing has run yet")).toBeVisible();
+
+    // Nothing anywhere on the page may claim a live connection.
+    await expect(page.getByText("Demo Data")).toHaveCount(0);
+  });
+
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {
     // A fresh context: no cookies, so this is the state a stranger meets.
     const context = await browser.newContext();
