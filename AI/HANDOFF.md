@@ -22,10 +22,24 @@ the owner-frozen connection path: Bot Manager forwards raw broker purposes
 `/api/bots/connect/provision` accepts provider-neutral
 `subscription`/`subscription_N` choices. The branch candidate now normalizes
 all account-backed paths and fails closed on missing or mismatched metadata;
-real broker-purpose fixtures, the focused 100-test run, lint, typecheck, and a
-production build pass. The fix is not deployed, so do not claim the Claude
-account is yet usable or sticky as a bot; after an authorized release, repeat
-create, assign, configure, and reload acceptance.
+PR #309 exact head `db1958f8b501e865a9e741a21298683e0f88f969` has 99 focused
+tests, lint, typecheck, production build, and secret/protected-path audit green.
+It did not pass its merge gate: browser shards 1/3 through 3/3 in run `32545138211` failed
+because the loading state omitted the page's H1. The forward candidate keeps
+the `AI Factory` H1 in loading and every fail-closed state and adds a direct
+regression test, so the prior exact-head merge approval is stale.
+
+Do not merge after only repairing that shard. The protected credential
+normalizer currently rejects the catalog-declared Claude/Codex subscription
+references that provisioning writes, so a created subscription bot would read
+Not Connected despite a stored vault credential. The manager-only manual
+readiness endpoint also checks and serializes environment presence only, so it
+persists the same false negative for vault-backed accounts. Those protected
+paths remain unchanged pending exact owner approval. Provisioning also leaves
+`bots.ai_account_id` null; full account-identity binding needs a separately
+reviewed forward schema/RPC change. The fix is not deployed, so do not claim
+the Claude account is yet usable or sticky as a bot; after an authorized
+release, repeat create, assign, configure, and reload acceptance.
 
 Do not promote production while the known blockers remain: five linked lint
 errors/ten findings, raw autonomy enabled for one organization, raw kill switch

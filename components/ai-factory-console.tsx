@@ -83,6 +83,15 @@ type State =
   | { kind: "unavailable" }
   | { kind: "ready"; data: FactoryData; stale: boolean };
 
+function FactoryPageHeader() {
+  return (
+    <PageHeader
+      title="AI Factory"
+      description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+    />
+  );
+}
+
 function staleOrUnavailable(current: State): State {
   return current.kind === "ready"
     ? { ...current, stale: true }
@@ -342,31 +351,47 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   if (state.kind === "loading") {
     return (
-      <Card className="grid min-h-64 place-items-center">
-        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
-      </Card>
+      <div className="space-y-6">
+        <FactoryPageHeader />
+        <Card className="grid min-h-64 place-items-center">
+          <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
+        </Card>
+      </div>
     );
   }
   if (state.kind === "signed-out") {
-    return <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />;
+    return (
+      <div className="space-y-6">
+        <FactoryPageHeader />
+        <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />
+      </div>
+    );
   }
   if (state.kind === "setup") {
-    return <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />;
+    return (
+      <div className="space-y-6">
+        <FactoryPageHeader />
+        <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />
+      </div>
+    );
   }
   if (state.kind === "unavailable") {
     return (
-      <Card className="grid min-h-64 place-items-center p-6 text-center">
-        <div className="max-w-md">
-          <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
-          <p className="mt-1 text-sm text-muted">
-            We could not read a complete workspace snapshot. No progress was inferred from missing data.
-          </p>
-          <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
-      </Card>
+      <div className="space-y-6">
+        <FactoryPageHeader />
+        <Card className="grid min-h-64 place-items-center p-6 text-center">
+          <div className="max-w-md">
+            <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
+            <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
+            <p className="mt-1 text-sm text-muted">
+              We could not read a complete workspace snapshot. No progress was inferred from missing data.
+            </p>
+            <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
+              Retry
+            </button>
+          </div>
+        </Card>
+      </div>
     );
   }
 
