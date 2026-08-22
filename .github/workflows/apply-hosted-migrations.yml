@@ -920,6 +920,114 @@ jobs:
           echo "revoked only anon — a hole PGlite cannot reproduce, because it has no"
           echo "default privileges configured for these roles."
 
+          echo ""
+          echo "Exact immutable Job Seeker gate evidence (read-only)."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "
+            set search_path = pg_catalog, public;
+            with relation as (
+              select relation.*
+              from pg_class relation
+              where relation.oid = to_regclass('public.job_seeker_resume_extractions')
+            ), columns as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       column_row.attnum, column_row.attname,
+                       format_type(column_row.atttypid, column_row.atttypmod),
+                       column_row.attnotnull, column_row.attidentity,
+                       column_row.attgenerated,
+                       coalesce(pg_get_expr(default_row.adbin, default_row.adrelid), ''),
+                       coalesce(array_to_string(column_row.attacl, ','), '')
+                     ) order by column_row.attnum)::text) as fingerprint,
+                     count(*) as column_count,
+                     bool_and(column_row.attacl is null) as no_column_acl
+              from pg_attribute column_row
+              left join pg_attrdef default_row
+                on default_row.adrelid = column_row.attrelid
+               and default_row.adnum = column_row.attnum
+              where column_row.attrelid = (select oid from relation)
+                and column_row.attnum > 0 and not column_row.attisdropped
+            ), indexes as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       index_relation.relname, pg_get_indexdef(index_row.indexrelid)
+                     ) order by index_relation.relname)::text) as fingerprint,
+                     count(*) as index_count
+              from pg_index index_row
+              join pg_class index_relation on index_relation.oid = index_row.indexrelid
+              where index_row.indrelid = (select oid from relation)
+            ), policies as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       policy.polname, policy.polcmd, policy.polpermissive,
+                       policy.polroles = array[to_regrole('authenticated')::oid],
+                       coalesce(pg_get_expr(policy.polqual, policy.polrelid), ''),
+                       coalesce(pg_get_expr(policy.polwithcheck, policy.polrelid), '')
+                     ) order by policy.polname)::text) as fingerprint,
+                     count(*) as policy_count
+              from pg_policy policy
+              where policy.polrelid = (select oid from relation)
+            ), function_state as (
+              select routine.*, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as source_md5,
+                     md5(jsonb_build_array(
+                       pg_get_userbyid(routine.proowner), routine_language.lanname,
+                       routine.prokind::text, routine.provolatile::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text, routine.prosupport = 0,
+                       routine.probin is null, routine.prosqlbody is null,
+                       routine.protrftypes is null, routine.proconfig,
+                       routine.proacl is null
+                     )::text) as contract_md5
+              from pg_proc routine
+              join pg_language routine_language on routine_language.oid = routine.prolang
+              where routine.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')
+            )
+            select current_setting('server_version') as server_version,
+                   (select pg_get_userbyid(relowner) from relation) as relation_owner,
+                   (select relkind from relation) as relkind,
+                   (select relacl::text from relation) as relation_acl,
+                   (select column_count from columns) as column_count,
+                   (select no_column_acl from columns) as no_column_acl,
+                   (select fingerprint from columns) as column_fingerprint,
+                   (select index_count from indexes) as index_count,
+                   (select fingerprint from indexes) as index_fingerprint,
+                   (select policy_count from policies) as policy_count,
+                   (select fingerprint from policies) as policy_fingerprint,
+                   (select count(*) from pg_constraint where conrelid = (select oid from relation) and contype in ('p','f','c')) as constraint_count,
+                   (select count(*) from pg_trigger where tgrelid = (select oid from relation) and not tgisinternal) as trigger_count,
+                   (select count(*) from pg_rewrite where ev_class = (select oid from relation) and rulename <> '_RETURN') as rule_count,
+                   (select source_md5 from function_state) as function_source_md5,
+                   (select contract_md5 from function_state) as function_contract_md5,
+                   (select proacl::text from function_state) as function_acl;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "
+            set search_path = pg_catalog, public;
+            select column_row.attnum, column_row.attname,
+                   format_type(column_row.atttypid, column_row.atttypmod) as type,
+                   column_row.attnotnull, column_row.attidentity, column_row.attgenerated,
+                   coalesce(pg_get_expr(default_row.adbin, default_row.adrelid), '') as default_expr,
+                   coalesce(array_to_string(column_row.attacl, ','), '') as column_acl
+            from pg_attribute column_row
+            left join pg_attrdef default_row on default_row.adrelid = column_row.attrelid and default_row.adnum = column_row.attnum
+            where column_row.attrelid = to_regclass('public.job_seeker_resume_extractions')
+              and column_row.attnum > 0 and not column_row.attisdropped
+            order by column_row.attnum;
+            select index_relation.relname, pg_get_indexdef(index_row.indexrelid)
+            from pg_index index_row join pg_class index_relation on index_relation.oid = index_row.indexrelid
+            where index_row.indrelid = to_regclass('public.job_seeker_resume_extractions') order by 1;
+            select policy.polname, policy.polcmd, policy.polpermissive, policy.polroles,
+                   coalesce(pg_get_expr(policy.polqual, policy.polrelid), '') as using_expr,
+                   coalesce(pg_get_expr(policy.polwithcheck, policy.polrelid), '') as check_expr
+            from pg_policy policy where policy.polrelid = to_regclass('public.job_seeker_resume_extractions') order by 1;
+            select constraint_row.conname, constraint_row.contype, constraint_row.convalidated,
+                   pg_get_constraintdef(constraint_row.oid) as definition
+            from pg_constraint constraint_row
+            where constraint_row.conrelid = to_regclass('public.job_seeker_resume_extractions') order by 1;"
+
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
         # project detail page's priority, focus, stop and cancel controls need,
