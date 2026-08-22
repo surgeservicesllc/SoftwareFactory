@@ -34,7 +34,6 @@ import {
 } from "@/lib/github/client";
 import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
 import { getGitHubBranchReference } from "@/lib/github/repository";
-import { tenantRpcListResponse } from "@/lib/server/tenant-list";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -838,6 +837,11 @@ type CommandRow = {
 
 type CommandExecutionMode = "manual" | "record_only" | "unknown";
 
+const commandListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  projectId: z.string().uuid().optional(),
+}).strict();
+
 function commandExecutionMode(value: unknown): CommandExecutionMode {
   return value === "manual" || value === "record_only" ? value : "unknown";
 }
@@ -848,25 +852,57 @@ function commandExecutionMode(value: unknown): CommandExecutionMode {
  * has no reason to travel back to the browser in a list view.
  */
 export async function GET(request: Request) {
-  return tenantRpcListResponse<CommandRow>({
-    request,
-    rpc: "list_factory_commands",
-    fallbackRpc: "list_commands",
-    unavailableCode: "commands_unavailable",
-    unavailableMessage: "Saved requests could not be loaded.",
-    shape: (rows) => ({
-        commands: rows.map((row) => ({
-          id: row.id,
-          prompt: row.prompt,
-          risk: row.requested_risk,
-          status: row.status,
-          executionMode: commandExecutionMode(row.execution_mode),
-          submittedAt: row.submitted_at,
-          completedAt: row.completed_at,
-          project: row.project_id
-            ? { id: row.project_id, name: row.project_name ?? "Project" }
-            : null,
-        })),
-      }),
-  });
+  try {
+    const url = new URL(request.url);
+    const parsed = commandListQuerySchema.safeParse({
+      limit: url.searchParams.get("limit") ?? undefined,
+      projectId: url.searchParams.get("projectId") ?? undefined,
+    });
+    if (!parsed.success) {
+      return jsonNoStore(
+        { error: { code: "invalid_query", message: "The query is invalid." } },
+        { status: 400 },
+      );
+    }
+
+    const context = await requireActiveOrganization();
+    let result = await context.client.rpc("list_factory_commands", {
+      p_limit: parsed.data.limit,
+      p_organization_id: context.activeOrganization.id,
+      p_project_id: parsed.data.projectId ?? null,
+    });
+    if (result.error?.code === "PGRST202") {
+      result = await context.client.rpc("list_commands", {
+        p_limit: parsed.data.limit,
+        p_organization_id: context.activeOrganization.id,
+      });
+    }
+    if (result.error) return databaseErrorResponse(result.error);
+
+    const rows = ((result.data ?? []) as CommandRow[]).filter((row) => (
+      parsed.data.projectId === undefined || row.project_id === parsed.data.projectId
+    ));
+    return jsonNoStore({
+      activeOrganizationId: context.activeOrganization.id,
+      commands: rows.map((row) => ({
+        id: row.id,
+        prompt: row.prompt,
+        risk: row.requested_risk,
+        status: row.status,
+        executionMode: commandExecutionMode(row.execution_mode),
+        submittedAt: row.submitted_at,
+        completedAt: row.completed_at,
+        project: row.project_id
+          ? { id: row.project_id, name: row.project_name ?? "Project" }
+          : null,
+      })),
+    });
+  } catch (error) {
+    const boundaryResponse = supabaseBoundaryErrorResponse(error);
+    if (boundaryResponse) return boundaryResponse;
+    return jsonNoStore(
+      { error: { code: "commands_unavailable", message: "Saved requests could not be loaded." } },
+      { status: 500 },
+    );
+  }
 }

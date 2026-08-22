@@ -211,7 +211,7 @@ describe("factory any-model record-only migration contract", () => {
       /create function public\.list_factory_commands\([\s\S]*?execution_mode text[\s\S]*?command\.parameters ->> 'executionMode' = 'record_only'[\s\S]*?from public\.commands command/i,
     );
     expect(migration).toMatch(
-      /revoke all on function public\.list_factory_commands\(uuid, integer\)[\s\S]*?from public, anon, authenticated, service_role[\s\S]*?grant execute on function public\.list_factory_commands\(uuid, integer\)[\s\S]*?to authenticated/i,
+      /revoke all on function public\.list_factory_commands\(uuid, integer, uuid\)[\s\S]*?from public, anon, authenticated, service_role[\s\S]*?grant execute on function public\.list_factory_commands\(uuid, integer, uuid\)[\s\S]*?to authenticated/i,
     );
     expect(migration).toContain(
       "01000 safe command disposition list catalog, source, or ACL mismatch",

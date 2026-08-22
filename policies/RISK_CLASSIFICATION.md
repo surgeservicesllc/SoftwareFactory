@@ -70,14 +70,26 @@ RED includes:
 
 Required controls:
 
-- **Explicit owner approval is mandatory for every RED action in Phase 1.**
-- Approval must describe the exact action, target, risk, evidence, expiration, and rollback/containment plan.
-- Approval cannot be inferred from a toggle, old approval, chat silence, or approval of a different target.
+- **Explicit owner authorization is mandatory for RED actions in Phase 1.** Runtime and product RED actions retain their specific owner-approval records; owner-directed repository releases use the narrow rule below.
+- Runtime/product approval must describe the action, target, risk, evidence, expiration when the applicable control requires one, and rollback/containment plan.
+- Authorization cannot be inferred from a toggle, an autonomous decision, chat silence, an unrelated task, or approval of a different target.
 - Separate duties where practical; the requester/executor must not silently self-approve.
 - Use a maintenance window, backup/restore validation, and live observation when applicable.
 - Record request, decision, actor, execution, outcome, and incident/rollback events in the audit trail.
 
 Phase 1A does not execute RED actions autonomously even after a UI control is changed.
+
+## Owner-directed repository release authorization
+
+A direct owner request in the active task to push, deploy, or apply the task's reviewed repository changes is the authorization for that bounded release. RED classification still determines the exact technical gates and handling; it does not require a second approval ceremony for a release the owner has just ordered.
+
+- Ordinary language is sufficient. No magic phrase, separate confirmation string, or approval form is required.
+- The owner does not have to predeclare an exact commit, tree, artifact, or migration hash. Those identities may not exist until the requested work is committed. Release tooling must derive the final identity and verify it exactly before and after the external write.
+- The active-task authorization has no artificial expiration and does not need repeated approval after a commit, rebase, required-check run, deployment handoff, or bounded retry within the same request. It cannot be carried into an unrelated later task or materially broader target.
+- The authorization covers only the repository, branch/environment, release contents, and apply/deploy intent reasonably identified by the request. A new repository, branch, environment, unrequested migration, or materially expanded operation requires new owner direction.
+- Required checks, branch protection, exact final-SHA/artifact matching, migration hashes and catalog checks, least privilege, secret scanning, audit evidence, containment, rollback planning, and post-deploy validation remain mandatory. Owner direction cannot approve past a failed technical gate.
+- A repository release request is not approval for a SoftwareFactory runtime RED command, provider run, protected-change product flow, automatic merge/deploy/rollback, freeze or kill-switch removal, or autonomous guardrail change.
+- A general push/deploy/apply request does not silently authorize destructive production-data work, secret access or rotation, authentication/authorization changes, billing, DNS, ownership transfer, or protection weakening. If one is genuinely required, it must be expressly within the owner's request and satisfy its own technical, audit, backup, and containment controls.
 
 ## Classification procedure
 
@@ -91,7 +103,7 @@ Phase 1A does not execute RED actions autonomously even after a UI control is ch
 
 ## Examples of escalation
 
-- A documentation edit is normally GREEN; editing this risk policy is YELLOW because it changes governance, and weakening owner approval is RED.
+- A documentation edit is normally GREEN; editing this risk policy is YELLOW because it changes governance, and weakening runtime/product owner approval or autonomous guardrails is RED.
 - An additive migration is normally YELLOW; dropping a production column is RED.
 - Updating a non-secret connection display name is GREEN/YELLOW; rotating its credential is RED.
-- Creating a draft PR can become GREEN in a later authorized phase; changing protected-branch rules or merging to production is RED under Phase 1 policy.
+- Creating a draft PR can become GREEN in a later authorized phase; changing protected-branch rules or an autonomous merge remains RED. A human-directed repository release may merge or deploy only when the active-task owner request authorizes it and every technical gate passes.

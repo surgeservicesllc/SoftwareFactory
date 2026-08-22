@@ -54,14 +54,38 @@ describe("repository memory contract", () => {
     }
   });
 
-  it("documents all risk tiers and the non-optional RED approval gate", () => {
+  it("documents all risk tiers and preserves the runtime/product RED approval gate", () => {
     const riskPolicy = readRepositoryFile("policies/RISK_CLASSIFICATION.md");
 
     expect(riskPolicy).toMatch(/\bGREEN\b/i);
     expect(riskPolicy).toMatch(/\bYELLOW\b/i);
     expect(riskPolicy).toMatch(/\bRED\b/i);
     expect(riskPolicy).toMatch(
-      /owner approval is mandatory for every RED action in Phase 1/i,
+      /Runtime and product RED actions retain their specific owner-approval records/i,
     );
+    expect(riskPolicy).toMatch(/does not execute RED actions autonomously/i);
+  });
+
+  it("treats an active-task owner release request as authorization without a second ceremony", () => {
+    const agentInstructions = readRepositoryFile("AGENTS.md");
+    const riskPolicy = readRepositoryFile("policies/RISK_CLASSIFICATION.md");
+    const protectedResources = readRepositoryFile("policies/PROTECTED_RESOURCES.md");
+
+    for (const policy of [agentInstructions, riskPolicy, protectedResources]) {
+      expect(policy).toMatch(
+        /direct owner request in the active task to push, deploy, or apply/i,
+      );
+      expect(policy).toMatch(/No magic phrase/i);
+      expect(policy).toMatch(/predeclare|predeclared/i);
+      expect(policy).toMatch(/expiration/i);
+      expect(policy).toMatch(/repeated approval|repeated confirmation/i);
+      expect(policy).toMatch(/exact technical (?:release )?gates/i);
+    }
+
+    expect(riskPolicy).toMatch(/cannot approve past a failed technical gate/i);
+    expect(protectedResources).toMatch(
+      /Automated systems still cannot approve or weaken their own guardrails/i,
+    );
+    expect(protectedResources).toMatch(/Product\/runtime RED approvals remain separate/i);
   });
 });

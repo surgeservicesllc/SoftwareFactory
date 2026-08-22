@@ -28,7 +28,7 @@ describe("Phase 1C execution plan", () => {
     });
   });
 
-  it("accepts a bounded server-selected model name", () => {
+  it("accepts the exact server execution model", () => {
     expect(createPhase1CExecutionPlan("audit", {
       SOFTWAREFACTORY_CODEX_MODEL: "gpt-5.3-codex",
     }).model).toBe("gpt-5.3-codex");
@@ -93,5 +93,11 @@ describe("Phase 1C execution plan", () => {
       model: "m".repeat(129),
       provider: "future-provider",
     })).toBeNull();
+  });
+
+  it("refuses a valid-looking model that the worker and database do not execute", () => {
+    expect(() => createPhase1CExecutionPlan("audit", {
+      SOFTWAREFACTORY_CODEX_MODEL: "gpt-5.4-codex",
+    })).toThrow(/must remain gpt-5\.3-codex/i);
   });
 });

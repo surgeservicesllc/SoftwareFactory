@@ -306,7 +306,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         projectsBody,
         accountsBody,
         botsBody,
-        commandsBody,
+        initialCommandsBody,
         pipelinesBody,
         templatesBody,
         workerBody,
@@ -365,7 +365,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         || projectsBody === null
         || accountsBody === null
         || botsBody === null
-        || commandsBody === null
+        || initialCommandsBody === null
         || pipelinesBody === null
         || templatesBody === null
         || workerBody === null
@@ -382,6 +382,85 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       const activeOrganizationId = typeof botsBody.activeOrganizationId === "string"
         ? botsBody.activeOrganizationId
         : "";
+
+      // Resolve the factory identity before asking for command history. The
+      // organization-wide command list is bounded and can be filled entirely
+      // by other projects; project scoping must happen in PostgreSQL before
+      // that limit or a persisted Step 8 command can disappear on reload.
+      if (
+        activeOrganizationId
+        && activeOrganizationIdRef.current !== activeOrganizationId
+      ) {
+        activeOrganizationIdRef.current = activeOrganizationId;
+        activeProjectIdRef.current = null;
+        const pendingProject = pendingCreatedProjectRef.current;
+        if (pendingProject && pendingProject.organizationId !== activeOrganizationId) {
+          pendingCreatedProjectRef.current = null;
+          startingNewFactoryRef.current = false;
+          setStartingNewFactory(false);
+        }
+      }
+
+      const pendingProject = pendingCreatedProjectRef.current;
+      const newProject = startingNewFactoryRef.current
+        && pendingProject?.organizationId === activeOrganizationId
+        ? projects.find((project) => project.id === pendingProject.projectId) ?? null
+        : null;
+
+      if (newProject) {
+        activeProjectIdRef.current = newProject.id;
+        startingNewFactoryRef.current = false;
+        pendingCreatedProjectRef.current = null;
+        setActiveProjectId(newProject.id);
+        setStartingNewFactory(false);
+        writeFactorySelection(activeOrganizationId, newProject.id);
+      } else if (!startingNewFactoryRef.current) {
+        const currentProjectId = activeProjectIdRef.current;
+        const currentStillExists = currentProjectId !== null
+          && projects.some((project) => project.id === currentProjectId);
+        const storedProjectId = readFactorySelection(activeOrganizationId);
+        const storedStillExists = storedProjectId !== null
+          && projects.some((project) => project.id === storedProjectId);
+        const nextProjectId = currentStillExists
+          ? currentProjectId
+          : storedStillExists
+            ? storedProjectId
+            : projects[0]?.id ?? null;
+
+        activeProjectIdRef.current = nextProjectId;
+        setActiveProjectId(nextProjectId);
+        if (nextProjectId) writeFactorySelection(activeOrganizationId, nextProjectId);
+      }
+
+      let commandsBody = initialCommandsBody;
+      if (activeProjectIdRef.current) {
+        const scopedCommandsResponse = await fetch(
+          `/api/commands?projectId=${encodeURIComponent(activeProjectIdRef.current)}&limit=100`,
+          { cache: "no-store" },
+        );
+        if (!isCurrent()) return;
+        if (scopedCommandsResponse.status === 401) {
+          setState({ kind: "signed-out" });
+          return;
+        }
+        if (scopedCommandsResponse.status === 409) {
+          setState({ kind: "setup" });
+          return;
+        }
+        if (!scopedCommandsResponse.ok) {
+          setState(staleOrUnavailable);
+          return;
+        }
+        const scopedCommandsBody = await readJson<{ commands?: FactoryData["commands"] }>(
+          scopedCommandsResponse,
+        );
+        if (!isCurrent()) return;
+        if (scopedCommandsBody === null) {
+          setState(staleOrUnavailable);
+          return;
+        }
+        commandsBody = scopedCommandsBody;
+      }
 
       const data: FactoryData = {
         activeOrganizationId,
@@ -458,54 +537,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         },
         customTemplates: (templatesBody.templates ?? []).length,
       };
-
-      // Restore the selected factory while the page is still showing its
-      // loading state. The key is organization-scoped, and a stale/deleted
-      // project id is ignored in favor of the first live project.
-      if (
-        activeOrganizationId
-        && activeOrganizationIdRef.current !== activeOrganizationId
-      ) {
-        activeOrganizationIdRef.current = activeOrganizationId;
-        activeProjectIdRef.current = null;
-        const pendingProject = pendingCreatedProjectRef.current;
-        if (pendingProject && pendingProject.organizationId !== activeOrganizationId) {
-          pendingCreatedProjectRef.current = null;
-          startingNewFactoryRef.current = false;
-          setStartingNewFactory(false);
-        }
-      }
-
-      const pendingProject = pendingCreatedProjectRef.current;
-      const newProject = startingNewFactoryRef.current
-        && pendingProject?.organizationId === activeOrganizationId
-        ? projects.find((project) => project.id === pendingProject.projectId) ?? null
-        : null;
-
-      if (newProject) {
-        activeProjectIdRef.current = newProject.id;
-        startingNewFactoryRef.current = false;
-        pendingCreatedProjectRef.current = null;
-        setActiveProjectId(newProject.id);
-        setStartingNewFactory(false);
-        writeFactorySelection(activeOrganizationId, newProject.id);
-      } else if (!startingNewFactoryRef.current) {
-        const currentProjectId = activeProjectIdRef.current;
-        const currentStillExists = currentProjectId !== null
-          && projects.some((project) => project.id === currentProjectId);
-        const storedProjectId = readFactorySelection(activeOrganizationId);
-        const storedStillExists = storedProjectId !== null
-          && projects.some((project) => project.id === storedProjectId);
-        const nextProjectId = currentStillExists
-          ? currentProjectId
-          : storedStillExists
-            ? storedProjectId
-            : projects[0]?.id ?? null;
-
-        activeProjectIdRef.current = nextProjectId;
-        setActiveProjectId(nextProjectId);
-        if (nextProjectId) writeFactorySelection(activeOrganizationId, nextProjectId);
-      }
 
       setState({ kind: "ready", data, stale: false });
     } catch {

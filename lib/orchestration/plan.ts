@@ -72,11 +72,16 @@ export const DEFAULT_PHASE_1C_BUDGET = Object.freeze({
 export function executionModel(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  const value = environment.SOFTWAREFACTORY_CODEX_MODEL?.trim() || DEFAULT_CODEX_MODEL;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value)) {
+  const configured = environment.SOFTWAREFACTORY_CODEX_MODEL?.trim();
+  if (configured && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(configured)) {
     throw new Error("SOFTWAREFACTORY_CODEX_MODEL is invalid.");
   }
-  return value;
+  if (configured && configured !== DEFAULT_CODEX_MODEL) {
+    throw new Error(
+      `SOFTWAREFACTORY_CODEX_MODEL must remain ${DEFAULT_CODEX_MODEL} until the worker and database execution contract move together.`,
+    );
+  }
+  return DEFAULT_CODEX_MODEL;
 }
 
 export function createPhase1CExecutionPlan(

@@ -15,9 +15,12 @@ const workflowPath = resolve(
 const migrationRelativePath =
   "supabase/migrations/20260822000300_contract_bot_mutator_acls.sql";
 const migrationPath = resolve(repositoryRoot, migrationRelativePath);
-const scope = "bot-account-binding-contract";
+const retiredScope = "bot-account-binding-contract";
+const protectedScope = "factory-any-model-record-only";
 const frozenSha256 =
   "79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7";
+const protectedStepName =
+  "Apply the exact factory any-model record-only chain (scope=factory-any-model-record-only)";
 
 interface WorkflowStep {
   readonly env?: Readonly<Record<string, string>>;
@@ -46,22 +49,25 @@ const source = readFileSync(workflowPath, "utf8");
 const workflow = parse(source) as HostedApplyWorkflow;
 const steps = workflow.jobs.apply.steps;
 
-function contractStep(): WorkflowStep {
-  const matches = steps.filter((step) =>
-    step.name.includes("scope=bot-account-binding-contract")
-  );
-  expect(matches, "the workflow must contain exactly one CONTRACT step").toHaveLength(1);
+function stepByName(name: string): WorkflowStep {
+  const matches = steps.filter((step) => step.name === name);
+  expect(matches, `the workflow must contain exactly one ${name} step`).toHaveLength(1);
   return matches[0]!;
 }
 
-function canRunForContract(step: WorkflowStep): boolean {
+function protectedStep(): WorkflowStep {
+  return stepByName(protectedStepName);
+}
+
+function canRunForRetiredScope(step: WorkflowStep): boolean {
   const guard = step.if ?? "";
+  if (/\bfalse\b/.test(guard)) return false;
   const exclusions = [...guard.matchAll(/inputs\.scope\s*!=\s*'([^']+)'/g)]
     .map((match) => match[1]);
-  if (exclusions.includes(scope)) return false;
+  if (exclusions.includes(retiredScope)) return false;
   const inclusions = [...guard.matchAll(/inputs\.scope\s*==\s*'([^']+)'/g)]
     .map((match) => match[1]);
-  return inclusions.length === 0 || inclusions.includes(scope);
+  return inclusions.length === 0 || inclusions.includes(retiredScope);
 }
 
 function writesMigrationState(step: WorkflowStep): boolean {
@@ -71,167 +77,126 @@ function writesMigrationState(step: WorkflowStep): boolean {
     || /\bpsql\b[\s\S]*?(?:^|\s)-f(?:\s|$)/m.test(command);
 }
 
-describe("the hosted bot mutator CONTRACT scope", () => {
-  it("is a distinct protected choice that cannot reach another mutation step", () => {
-    expect(workflow.on.workflow_dispatch.inputs.scope?.options?.filter(
-      (value) => value === scope,
-    )).toEqual([scope]);
-    expect(contractStep().if).toBe(
-      "${{ inputs.scope == 'bot-account-binding-contract' }}",
+describe("the hosted bot mutator CONTRACT release path", () => {
+  it("retires the standalone scope before connection and makes its old mutator unreachable", () => {
+    const options = workflow.on.workflow_dispatch.inputs.scope?.options ?? [];
+    expect(options).not.toContain(retiredScope);
+    expect(options.filter((value) => value === protectedScope)).toEqual([protectedScope]);
+
+    const checkoutIndex = steps.findIndex((step) => step.name === "Check out the migrations");
+    const refusalIndex = steps.findIndex((step) =>
+      step.name === "Refuse the retired standalone bot mutator CONTRACT scope"
+    );
+    const connectionIndex = steps.findIndex((step) => step.name === "Choose the connection");
+    const refusal = steps[refusalIndex];
+    const retiredMutator = stepByName(
+      "Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)",
     );
 
-    const reachableWrites = steps
-      .filter(canRunForContract)
-      .filter(writesMigrationState)
-      .map((step) => step.name);
-    expect(reachableWrites).toEqual([
-      "Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)",
-    ]);
+    expect(refusalIndex).toBeGreaterThan(checkoutIndex);
+    expect(connectionIndex).toBeGreaterThan(refusalIndex);
+    expect(refusal?.if).toBe("${{ inputs.scope == 'bot-account-binding-contract' }}");
+    expect(refusal?.run).toContain("scope=factory-any-model-record-only");
+    expect(refusal?.run).toMatch(/exit 1\s*$/);
+    expect(retiredMutator.if).toBe(
+      "${{ false && inputs.scope == 'bot-account-binding-contract' }}",
+    );
+
+    const reachableWrites = steps.filter(canRunForRetiredScope)
+      .filter(writesMigrationState).map((step) => step.name);
+    expect(reachableWrites).toEqual([]);
   });
 
-  it("pins exactly one migration file and its real SHA-256", () => {
-    const command = contractStep().run ?? "";
-    const referenced = command.match(
-      /supabase\/migrations\/[A-Za-z0-9_.-]+\.sql/g,
-    ) ?? [];
-    const declared = command.match(/(?<=EXPECTED_SHA256=)[a-f0-9]{64}/g) ?? [];
+  it("pins CONTRACT only inside the exact atomic protected chain", () => {
+    const command = protectedStep().run ?? "";
     const actual = createHash("sha256")
       .update(readFileSync(migrationPath))
       .digest("hex");
 
-    expect(referenced).toEqual([migrationRelativePath]);
-    expect(declared).toEqual([frozenSha256]);
     expect(actual).toBe(frozenSha256);
-    expect(command.match(/\s-f\s+"\$FILE"/g)).toHaveLength(1);
-    expect(command.match(
-      /psql\s+"\$DB_URL"[\s\S]*?--single-transaction[\s\S]*?-f\s+"\$FILE"\s+\\[\s\S]*?-c\s+"insert into supabase_migrations\.schema_migrations \(version\) values \('20260822000300'\);"/g,
-    )).toHaveLength(1);
+    expect(command).toContain(`CONTRACT_FILE=${migrationRelativePath}`);
+    expect(command).toContain(`CONTRACT_SHA256=${frozenSha256}`);
+    expect(command.match(/\s-f\s+"\$CONTRACT_FILE"/g)).toHaveLength(2);
+    expect(command).toContain(
+      "('20260822000300'), ('20260822000900'), ('20260822001000')",
+    );
     expect(command).not.toMatch(/\bsupabase(?:@\S+)?\s+(?:db\s+push|migration\s+up)\b/);
-    expect(command).not.toMatch(/\bfor\s+FILE\b/);
   });
 
-  it("machine-gates exact main/Vercel deployment identity and manual acceptance before database access", () => {
-    const acceptanceStepIndex = steps.findIndex((candidate) =>
-      candidate.name === "Verify exact application acceptance before CONTRACT preflight"
+  it("machine-gates exact green CI and Vercel release before every database-capable step", () => {
+    const releaseGateIndex = steps.findIndex((step) =>
+      step.name === "Verify exact green application release before protected database preflight"
     );
-    const connectionStepIndex = steps.findIndex((candidate) =>
-      candidate.name === "Choose the connection"
+    const firstDatabaseIndex = steps.findIndex((step) =>
+      /\b(?:psql|supabase(?:@\S+)?\s+(?:link|migration|db))\b/.test(step.run ?? "")
     );
-    const acceptanceStep = steps[acceptanceStepIndex];
-    const step = contractStep();
-    const command = step.run ?? "";
-    const appGate = command.indexOf("CHECKED_OUT_SHA=$(git rev-parse HEAD)");
-    const acceptanceGate = command.indexOf(
-      'if [ "$CONTRACT_ACCEPTANCE" != "exact-app-vercel-accepted" ]',
-    );
-    const databaseUse = command.indexOf('psql "$DB_URL"');
+    const releaseGate = steps[releaseGateIndex];
+    const command = releaseGate?.run ?? "";
 
-    expect(acceptanceStepIndex).toBeGreaterThanOrEqual(0);
-    expect(connectionStepIndex).toBeGreaterThan(acceptanceStepIndex);
-    expect(acceptanceStep?.if).toBe(
-      "${{ inputs.scope == 'bot-account-binding-contract' }}",
+    expect(releaseGateIndex).toBeGreaterThanOrEqual(0);
+    expect(firstDatabaseIndex).toBeGreaterThan(releaseGateIndex);
+    expect(releaseGate?.if).toBe(
+      "${{ inputs.scope == 'factory-any-model-record-only' }}",
     );
-    expect(acceptanceStep?.env).toMatchObject({
-      CONTRACT_ACCEPTANCE: "${{ inputs.contract_acceptance }}",
-      CONTRACT_APP_SHA: "${{ inputs.contract_app_sha }}",
+    expect(releaseGate?.env).toEqual({
       GH_REF: "${{ github.ref }}",
       GH_REPOSITORY: "${{ github.repository }}",
+      GH_API_URL: "${{ github.api_url }}",
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
     });
-    expect(workflow.permissions).toEqual({ contents: "read", deployments: "read" });
-    expect(acceptanceStep?.run).toContain("CHECKED_OUT_SHA=$(git rev-parse HEAD)");
-    expect(acceptanceStep?.run).toContain("exact-app-vercel-accepted");
-    expect(acceptanceStep?.run).toContain('if [ "$GH_REF" != "refs/heads/main" ]');
-    expect(acceptanceStep?.run).toContain("/deployments?environment=Production&per_page=100");
-    expect(acceptanceStep?.run).toContain("LATEST_VERCEL_DEPLOYMENT=");
-    expect(acceptanceStep?.run).toContain('.sha == $sha and .ref == $sha');
-    expect(acceptanceStep?.run).toContain('.task == "deploy"');
-    expect(acceptanceStep?.run).toContain('.creator.login == "vercel[bot]"');
-    expect(acceptanceStep?.run).toContain('.[0].state == "success"');
-    expect(acceptanceStep?.run).toContain(".vercel\\\\.app");
-    expect(step.env).toMatchObject({
-      CONTRACT_ACCEPTANCE: "${{ inputs.contract_acceptance }}",
-      CONTRACT_APP_SHA: "${{ inputs.contract_app_sha }}",
+    expect(workflow.permissions).toEqual({
+      checks: "read",
+      contents: "read",
+      deployments: "read",
     });
-    expect(workflow.on.workflow_dispatch.inputs.contract_app_sha?.description)
-      .toContain("exact 40-character application SHA");
-    expect(workflow.on.workflow_dispatch.inputs.contract_acceptance?.description)
-      .toContain("exact-app-vercel-accepted");
-    expect(appGate).toBeGreaterThanOrEqual(0);
-    expect(acceptanceGate).toBeGreaterThan(appGate);
-    expect(databaseUse).toBeGreaterThan(acceptanceGate);
-    expect(command).toContain("healthy Vercel production deployment");
-    expect(command).toContain("signed-in owner acceptance");
+    expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual(["scope"]);
+    expect(source).not.toMatch(/inputs\.(?:confirm|contract_)/);
+    expect(source).not.toContain(["exact", "app", "vercel", "accepted"].join("-"));
+    expect(command).toContain("CHECKED_OUT_SHA=$(git rev-parse HEAD)");
+    expect(command).toContain('[ "$GH_REF" != "refs/heads/main" ]');
+    expect(command).toContain("/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100");
+    for (const check of [
+      "Lint, typecheck, test, and build",
+      "Browser and accessibility tests 1/3",
+      "Browser and accessibility tests 2/3",
+      "Browser and accessibility tests 3/3",
+    ]) expect(command).toContain(check);
+    expect(command).toContain('.app.slug == "github-actions"');
+    expect(command).toContain('LATEST_CHECK_STATE" != "completed|success"');
+    expect(command).toContain("/deployments?environment=Production&per_page=100");
+    expect(command).toContain("LATEST_VERCEL_DEPLOYMENT=");
+    expect(command).toContain(".sha == $sha and .ref == $sha");
+    expect(command).toContain('.creator.login == "vercel[bot]"');
+    expect(command).toContain('.[0].state == "success"');
+    expect(command).toContain(".vercel\\\\.app");
   });
 
-  it("requires EXPAND exactly once, CONTRACT absent, then records CONTRACT exactly once", () => {
-    const command = contractStep().run ?? "";
-    const predecessor = command.indexOf(
-      "where version = '20260822000200'",
-    );
-    const target = command.indexOf("where version = '20260822000300'");
-    const apply = command.indexOf('-f "$FILE"');
-    const ledgerInsert = command.indexOf(
-      "insert into supabase_migrations.schema_migrations (version) values ('20260822000300')",
-    );
+  it("requires EXPAND once and CONTRACT absent before the atomic transaction", () => {
+    const command = protectedStep().run ?? "";
+    const history = command.indexOf("HISTORY=");
+    const precontract = command.indexOf("PRECONTRACT_READY=", history);
+    const transaction = command.indexOf("--single-transaction", precontract);
 
-    expect(predecessor).toBeGreaterThanOrEqual(0);
-    expect(target).toBeGreaterThan(predecessor);
-    expect(apply).toBeGreaterThan(target);
-    expect(command).toContain(
-      'if [ "$NORMALIZER" != "1" ] || [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]',
-    );
-    expect(ledgerInsert).toBeGreaterThan(apply);
-    expect(command).not.toMatch(/migration\s+repair\s+--status\s+applied\s+20260822000300/);
-    expect(command).toContain('if [ "$RECORDED" != "1" ]');
+    expect(history).toBeGreaterThanOrEqual(0);
+    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]');
+    expect(precontract).toBeGreaterThan(history);
+    expect(command.slice(precontract, transaction)).toContain("count(oid) = 6");
+    expect(command.slice(precontract, transaction)).toContain("aclexplode(proacl)");
+    expect(transaction).toBeGreaterThan(precontract);
   });
 
-  it("stops unless the complete frozen EXPAND catalog is exact", () => {
-    const command = contractStep().run ?? "";
-    const catalog = command.indexOf("CATALOG_READY=");
-    const apply = command.indexOf('-f "$FILE"');
-    expect(catalog).toBeGreaterThanOrEqual(0);
-    expect(apply).toBeGreaterThan(catalog);
-    expect(command.slice(catalog, apply)).toContain("count(oid) = 16");
-    for (const identity of [
-      "public.ai_account_bot_credential_ref(public.bot_provider,text)",
-      "public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)",
-      "public.assign_bots_to_project_checked(uuid,uuid,jsonb)",
-      "public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)",
-      "public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)",
-      "public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)",
-      "public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)",
-      "bots_revision_positive",
-      "bot_assignments_revision_positive",
-      "bots_ai_account_binding_coherent",
-      "bots_increment_revision",
-      "bot_assignments_increment_revision",
-    ]) {
-      expect(command.slice(catalog, apply)).toContain(identity);
-    }
-    expect(command.slice(catalog, apply)).toContain(
-      "md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n'))",
-    );
-    expect(command.slice(catalog, apply)).not.toMatch(/md5\(routine\.prosrc\)/);
-    expect(command.slice(catalog, apply)).toContain("actual_contract_md5");
-    expect(command.slice(catalog, apply)).toContain("trigger_row.tgtype = expected.trigger_type");
-    expect(command.slice(catalog, apply)).toContain("search_path=pg_catalog");
-    expect(command.slice(catalog, apply)).toContain("aclexplode(proacl)");
-    expect(command.slice(catalog, apply)).toContain("count(default_row.oid) = 2");
-    expect(command.slice(catalog, apply)).toContain("coalesce(");
-  });
-
-  it("preserves legacy definitions and closes authenticated/public/anon/service_role execution", () => {
-    const command = contractStep().run ?? "";
+  it("preserves CONTRACT identity and closes the six legacy mutator ACLs", () => {
+    const command = protectedStep().run ?? "";
     const migration = readFileSync(migrationPath, "utf8");
-    expect(command).toContain("DEFINITIONS_BEFORE=");
-    expect(command).toContain("DEFINITIONS_AFTER=");
-    expect(command).toContain('if [ "$DEFINITIONS_AFTER" != "$DEFINITIONS_BEFORE" ]');
-    expect(command).toContain("ACLS_CLOSED=");
-    expect(command).toContain("has_function_privilege('authenticated'");
-    expect(command).toContain("has_function_privilege('anon'");
-    expect(command).toContain("has_function_privilege('service_role'");
-    expect(command).toContain("acl.grantee = 0");
+
+    for (const signature of [
+      "public.assign_bot(uuid,uuid,uuid,uuid)",
+      "public.assign_bots_to_project(uuid,uuid,jsonb)",
+      "public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)",
+      "public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)",
+      "public.set_bot_assignment_execution(uuid,uuid,text,text)",
+      "public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)",
+    ]) expect(command).toContain(signature);
 
     const aclStatements = [...migration.matchAll(/execute '([^']+)'/g)]
       .map((match) => match[1]);
@@ -239,35 +204,29 @@ describe("the hosted bot mutator CONTRACT scope", () => {
     expect(aclStatements.every((statement) => statement.endsWith(
       "from public, anon, authenticated, service_role",
     ))).toBe(true);
-    expect(migration).toContain("20260822000200 function catalog");
-    expect(migration).toContain("20260822000200 revision column or constraint catalog");
-    expect(migration).toContain("20260822000200 trigger catalog");
     expect(migration).toContain("legacy bot mutator CONTRACT verification failed");
   });
 
-  it("makes scope=all prove both ledgers and the exact live contracted catalog before push", () => {
-    const broad = steps.find((step) =>
-      step.name === "Push the outstanding migrations (scope=all)"
-    );
-    const command = broad?.run ?? "";
-    const expand = command.indexOf("where version = '20260822000200'");
+  it("makes broad push prove CONTRACT and the whole protected catalog after the atomic scope", () => {
+    const broad = stepByName("Push the outstanding migrations (scope=all)");
+    const command = broad.run ?? "";
     const contract = command.indexOf("where version = '20260822000300'");
-    const catalog = command.indexOf("PROTECTED_CATALOG_READY=");
+    const repair = command.indexOf("where version = '20260822000900'", contract);
+    const recordOnly = command.indexOf("where version = '20260822001000'", repair);
+    const contractCatalog = command.indexOf("PROTECTED_CATALOG_READY=", recordOnly);
     const push = command.search(/\bsupabase\s+db\s+push\b/);
 
-    expect(expand).toBeGreaterThanOrEqual(0);
-    expect(contract).toBeGreaterThan(expand);
-    expect(command).toContain('if [ "$PROTECTED_EXPAND" != "1" ]');
+    expect(contract).toBeGreaterThanOrEqual(0);
+    expect(repair).toBeGreaterThan(contract);
+    expect(recordOnly).toBeGreaterThan(repair);
     expect(command).toContain('if [ "$PROTECTED_CONTRACT" != "1" ]');
-    expect(command).toContain("scope=bot-account-binding-contract after exact-app Vercel acceptance");
-    expect(catalog).toBeGreaterThan(contract);
+    expect(command).toContain("scope=factory-any-model-record-only");
+    expect(contractCatalog).toBeGreaterThan(recordOnly);
     expect(command).toContain('if [ "$PROTECTED_CATALOG_READY" != "t" ]');
-    expect(command.slice(catalog, push)).toContain("count(default_row.oid) = 2");
-    expect(command.slice(catalog, push)).toContain("count(trigger_row.oid) = 3");
-    expect(command.slice(catalog, push)).toContain("actual_source_md5 = source_md5");
-    expect(command.slice(catalog, push)).toContain("actual_contract_md5 = contract_md5");
-    expect(command.slice(catalog, push)).toContain("provolatile::text = volatility");
-    expect(command.slice(catalog, push)).toContain("execute_role = 'none'");
-    expect(push).toBeGreaterThan(catalog);
+    expect(command.slice(contractCatalog, push)).toContain("count(default_row.oid) = 2");
+    expect(command.slice(contractCatalog, push)).toContain("count(trigger_row.oid) = 3");
+    expect(command.slice(contractCatalog, push)).toContain("actual_source_md5 = source_md5");
+    expect(command.slice(contractCatalog, push)).toContain("actual_contract_md5 = contract_md5");
+    expect(push).toBeGreaterThan(contractCatalog);
   });
 });

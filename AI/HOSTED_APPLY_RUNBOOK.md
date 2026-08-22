@@ -3,6 +3,59 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
+
+This section is the current release procedure and supersedes older command-model
+instructions below. The implementation is a local release candidate only. It has
+not been frozen as a final commit, pushed to `main`, deployed by Vercel, or applied
+through the protected database scope. Do not describe the behavior in this section
+as production behavior until all evidence steps below are complete.
+
+The execution contract is deliberately asymmetric:
+
+- `openai` / `gpt-5.3-codex` is the only executable Factory identity. It retains
+  the existing manual Phase 1C path.
+- Every other syntactically valid, bounded provider/model pair, including Claude
+  and alternate OpenAI models, is admitted as `record_only`. Submission persists
+  the command, task, immutable route, and disposition, but creates no
+  `agent_runs`, worker dispatch, branch, commit, pull request, or deployment.
+- Invalid or out-of-bounds provider/model values still fail closed. Setting
+  `SOFTWAREFACTORY_CODEX_MODEL` to any nondefault value also fails closed; an
+  environment variable cannot widen the worker/database execution contract.
+- Step 8 advances after the selected posting's command is durably recorded. Step
+  9 reads project-scoped command history and, for `record_only`, explicitly says
+  that no execution artifacts exist by design. History must never bleed between
+  projects, and its safe projection must not expose raw command parameters.
+
+Hosted migration `20260822000600_route_bots_onto_the_executable_model.sql` is
+already applied. That repair aligns legacy Codex rows with the sole executable
+identity; it does not make any other provider or model executable.
+
+The protected database tail remains pending and must land only as one atomic,
+forward-only chain:
+
+1. `20260822000300_contract_bot_mutator_acls.sql`;
+2. `20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql`;
+3. `20260822001000_factory_any_model_record_only.sql`.
+
+Do not apply `00300` through its retired standalone scope, do not run a broad
+push to introduce any member of this chain, and never reset, down-migrate, replay
+history, or use `migration repair` as a substitute for the transaction. Use only
+`scope=factory-any-model-record-only`. The scope must first verify the exact
+`main` checkout and matching successful Vercel Production deployment, immutable
+prerequisite ledger/catalog state, exact final file hashes, safety containment,
+and the active task's direct owner release instruction. No magic RED phrase,
+predeclared-SHA approval, expiry, or repeat approval is required (ADR-116). It
+then rehearses all three files under rollback
+and applies all three plus their ledger rows in one transaction.
+
+After the transaction, require exact ledger/catalog/ACL/lint/health evidence,
+autonomy and automatic actions OFF, the global kill switch ON, workers/executors
+disconnected, and zero runs for every `record_only` command. Finally, perform a
+signed-in production Step 8 submission with Claude or another non-Codex model,
+verify truthful Step 9, reload, and prove the same project-scoped history remains.
+Only that complete evidence permits a deployed/production-ready claim.
+
 **The current total is 19** within the dated, test-guarded probe list below. That phrase describes
 the measured list, not today's total outstanding migration count. Later exact evidence proves
 `20260821000300_project_pipeline_selection` and
@@ -24,7 +77,10 @@ version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
 
-## Current release tail — 2026-08-22
+## Historical release tail before ADR-115 — 2026-08-22 (superseded)
+
+The evidence in this section records an earlier checkpoint. It is not the
+current apply procedure; use the ADR-115 atomic-chain instructions above.
 
 Exact application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is
 current `main`. Vercel deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY

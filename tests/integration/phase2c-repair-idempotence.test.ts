@@ -111,6 +111,10 @@ async function presentTables(db: PGlite): Promise<string[]> {
  * statement with `42710` before reaching the four tables it creates.
  */
 const ANCHORS = "20260814002200_graph_anchors.sql";
+const HOSTED_CATALOG_CONTAINMENT = [
+  "20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
+  "20260822001000_factory_any_model_record_only.sql",
+] as const;
 const ANCHOR_TABLES = [
   "claim_acceptable_anchors", "claim_anchors", "graph_anchors", "node_run_claims",
 ] as const;
@@ -123,7 +127,11 @@ async function anchorRepairSql(): Promise<string> {
 describe("the graph anchors repair", () => {
   it("completes a migration that stopped after its enums", async () => {
     const db = await bootstrap();
-    await applyChain(db, { skip: [ANCHORS] });
+    // The release-tail containment migrations deliberately fail closed when
+    // this legacy function/catalog is missing. They are downstream consumers,
+    // not prerequisites for reconstructing and repairing the historical
+    // half-applied state under test here.
+    await applyChain(db, { skip: [ANCHORS, ...HOSTED_CATALOG_CONTAINMENT] });
 
     // Reproduce the hosted state: the enums landed, nothing after them did.
     const original = await readFile(resolve(migrationsDirectory, ANCHORS), "utf8");

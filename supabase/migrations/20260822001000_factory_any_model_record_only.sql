@@ -162,7 +162,7 @@ begin
 
   if pg_catalog.to_regclass('public.factory_record_only_submission_guards') is not null
     or pg_catalog.to_regprocedure(
-      'public.list_factory_commands(uuid,integer)'
+      'public.list_factory_commands(uuid,integer,uuid)'
     ) is not null
     or pg_catalog.to_regprocedure(
       'public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)'
@@ -1831,7 +1831,8 @@ comment on function public.record_provider_run(
 -- private; every other field matches the established safe command list.
 create function public.list_factory_commands(
   p_organization_id uuid,
-  p_limit integer default 50
+  p_limit integer default 50,
+  p_project_id uuid default null
 )
 returns table (
   id uuid,
@@ -1860,25 +1861,30 @@ begin
       case
         when command.parameters ->> 'executionMode' = 'record_only'
           then 'record_only'::text
-        else 'manual'::text
+        when command.parameters ->> 'executionMode' = 'manual'
+          and command.parameters ->> 'provider' = 'openai'
+          and command.parameters ->> 'model' = 'gpt-5.3-codex'
+          then 'manual'::text
+        else 'unknown'::text
       end
     from public.commands command
     left join public.projects project
       on project.id = command.project_id
      and project.organization_id = command.organization_id
     where command.organization_id = p_organization_id
+      and (p_project_id is null or command.project_id = p_project_id)
     order by command.submitted_at desc
     limit greatest(1, least(coalesce(p_limit, 50), 100));
 end;
 $function$;
 
-revoke all on function public.list_factory_commands(uuid, integer)
+revoke all on function public.list_factory_commands(uuid, integer, uuid)
   from public, anon, authenticated, service_role;
-grant execute on function public.list_factory_commands(uuid, integer)
+grant execute on function public.list_factory_commands(uuid, integer, uuid)
   to authenticated;
 
-comment on function public.list_factory_commands(uuid, integer) is
-  'Caller-bound tenant command list with a canonical manual or record_only disposition and no raw parameters or idempotency data.';
+comment on function public.list_factory_commands(uuid, integer, uuid) is
+  'Caller-bound tenant command list, optionally project-scoped before its row limit, with canonical manual, record_only, or unknown disposition and no raw parameters or idempotency data.';
 
 -- Prove the entire replacement landed as one exact catalog transition. The
 -- three prior public entrypoint OIDs must now be the three private delegates;
@@ -2092,7 +2098,7 @@ begin
       join pg_catalog.pg_language language
         on language.oid = procedure.prolang
       where procedure.oid = pg_catalog.to_regprocedure(
-        'public.list_factory_commands(uuid,integer)'
+        'public.list_factory_commands(uuid,integer,uuid)'
       )
         and namespace.nspname = 'public'
         and language.lanname = 'plpgsql'
@@ -2110,7 +2116,7 @@ begin
         and procedure.prosqlbody is null
         and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(
           procedure.prosrc, E'\r\n', E'\n'), E'\r', E'\n'))
-          = '8ecb481cc9ccb47ed915ae24e102fc20'
+          = 'ba62f4f5357cec647d3ff582107710a7'
         and procedure.proacl is not null
         and (select pg_catalog.count(*)
              from pg_catalog.aclexplode(procedure.proacl)) = 2

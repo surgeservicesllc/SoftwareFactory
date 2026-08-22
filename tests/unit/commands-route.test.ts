@@ -385,6 +385,7 @@ describe("GET /api/commands", () => {
     expect(rpc).toHaveBeenCalledExactlyOnceWith("list_factory_commands", {
       p_limit: 7,
       p_organization_id: organizationId,
+      p_project_id: null,
     });
     expect(body).toEqual({
       activeOrganizationId: organizationId,
@@ -401,6 +402,68 @@ describe("GET /api/commands", () => {
     });
     expect(JSON.stringify(body)).not.toContain("parameters");
     expect(JSON.stringify(body)).not.toContain("must-not-escape");
+  });
+
+  it("passes a validated project scope to the canonical list and filters mismatched rows", async () => {
+    const otherProjectId = "33333333-3333-4333-8333-333333333333";
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: commandId,
+          project_id: projectId,
+          prompt: "Scoped command",
+          requested_risk: "green",
+          status: "queued",
+          submitted_at: "2026-08-22T12:00:00.000Z",
+          completed_at: null,
+          project_name: "SoftwareFactory",
+          execution_mode: "record_only",
+        },
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          project_id: otherProjectId,
+          prompt: "Other project command",
+          requested_risk: "green",
+          status: "queued",
+          submitted_at: "2026-08-22T12:01:00.000Z",
+          completed_at: null,
+          project_name: "OtherFactory",
+          execution_mode: "record_only",
+        },
+      ],
+      error: null,
+    });
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: { rpc },
+    });
+
+    const response = await GET(new Request(
+      `https://factory.example/api/commands?projectId=${projectId}&limit=8`,
+    ));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("list_factory_commands", {
+      p_limit: 8,
+      p_organization_id: organizationId,
+      p_project_id: projectId,
+    });
+    expect(body.commands).toEqual([
+      expect.objectContaining({ id: commandId, project: { id: projectId, name: "SoftwareFactory" } }),
+    ]);
+  });
+
+  it("rejects an invalid projectId before resolving the active organization", async () => {
+    const response = await GET(new Request(
+      "https://factory.example/api/commands?projectId=not-a-uuid",
+    ));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "invalid_query", message: "The query is invalid." },
+    });
+    expect(requireActiveOrganization).not.toHaveBeenCalled();
   });
 
   it("uses the legacy list only for PGRST202 and reports its mode as unknown", async () => {

@@ -581,22 +581,21 @@ function PostingCard({
     ...(posting.model ? [posting.model] : []),
   ]));
   /*
-   * Which of these can actually run.
-   *
-   * One worker claims the command queue, and it claims exactly one
-   * provider/model pair; routing refuses every other bot at submission — the
-   * last step of the journey, after a project, a pipeline and a bot have all
-   * been chosen. Offering four models with nothing to tell them apart is how
-   * a person walks into that. `null` when the server did not say, because a
-   * wrong "runs" label would be worse than none.
+   * Every bounded provider/model can accept a Factory command. The one exact
+   * worker identity can execute separately authorized work; every other model
+   * records the command durably without dispatch. Keep that distinction
+   * visible without turning a safe record-only route into a dead end.
    */
-  const executableModel = execution && posting.bot?.provider === execution.provider
-    ? execution.model
-    : null;
   const effectiveModel = posting.model ?? posting.bot?.model ?? null;
-  const runnable = executableModel === null || effectiveModel === executableModel;
-  const modelNote = (option: string) =>
-    executableModel === null ? "" : option === executableModel ? " · runs" : " · cannot run";
+  const recordsOnly = execution !== null && (
+    posting.bot?.provider !== execution.provider || effectiveModel !== execution.model
+  );
+  const modelNote = (option: string) => {
+    if (!execution) return "";
+    return posting.bot?.provider === execution.provider && option === execution.model
+      ? " · can execute"
+      : " · records only";
+  };
 
   return (
     <li className="rounded-lg border border-line p-4">
@@ -655,9 +654,10 @@ function PostingCard({
                 <option key={option} value={option}>{option}{modelNote(option)}</option>
               ))}
             </select>
-            {!runnable && effectiveModel ? (
-              <p className="mt-1 text-xs text-[var(--danger)]">
-                {effectiveModel} cannot run a command — the executor runs {executableModel}.
+            {recordsOnly && effectiveModel ? (
+              <p className="mt-1 text-xs text-faint">
+                {effectiveModel} accepts commands as recorded-only work with no worker dispatch.
+                The Factory execution contract supports only {execution.provider}/{execution.model}.
               </p>
             ) : null}
           </div>
