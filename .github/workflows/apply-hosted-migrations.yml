@@ -35,6 +35,9 @@ on:
           files, which is what the project detail page and the Runs page need;
           "pipeline-selection" applies only 20260821000300, which is what makes
           the AI Factory's Use button record a project's pipelines;
+          "executable-model-repair" applies only 20260822000500, which moves
+          bots already provisioned with a model the executor cannot claim onto
+          the one it can, so Issue a Command stops refusing every submission;
           "bot-legacy-acl-normalization" applies only 20260822000150, which
           removes the exact Supabase-default service_role overgrant from the
           seven frozen legacy bot routines;
@@ -2422,6 +2425,36 @@ jobs:
             exit 1
           fi
           echo "Applied, recorded, and verified: RLS forced, three policies, no UPDATE grant, definer function callable by members only."
+
+      - name: Repair bots onto the executable model (scope=executable-model-repair)
+        # One file. It rewrites data rather than schema: bots whose model came
+        # from the catalog's openai list are moved onto the model the Codex
+        # worker actually claims, and posting overrides naming one are cleared.
+        #
+        # Replay-safe by construction — after the first run nothing matches the
+        # stale set, so a second run writes no rows and no events. Every repair
+        # is an activity event naming the previous model, so the change is
+        # visible to the person whose bot moved rather than silent. A model the
+        # console never offered is deliberately out of scope: it was typed by a
+        # person, and rewriting a deliberate choice is worse than refusing it.
+        if: ${{ inputs.scope == 'executable-model-repair' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260822000500_route_bots_onto_the_executable_model.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000500
+          else
+            npx supabase migration repair --status applied 20260822000500 --db-url "$DB_URL"
+          fi
+          echo "Reporting what moved:"
+          psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, metadata ->> 'model' as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;

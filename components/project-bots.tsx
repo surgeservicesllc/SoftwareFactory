@@ -133,6 +133,13 @@ type Roster = {
   assigned: Posting[];
   available: ProjectBot[];
   roles: ProjectRole[];
+  /**
+   * The provider and model a command actually executes on, from the server so
+   * an operator's model pin is included. Null on an older deployment that does
+   * not send it — in which case the picker says nothing rather than guessing,
+   * because a wrong "runs" label is worse than no label.
+   */
+  execution: { provider: string; model: string } | null;
 };
 
 type UsageWindow = { windowKey: string; label: string; usedPercent: number };
@@ -208,11 +215,15 @@ export function ProjectBots({
        * with it. The panel is one section of a page; it does not get to be the
        * reason the rest disappears.
        */
+      const execution = body.execution as { provider?: unknown; model?: unknown } | undefined;
       const normalized: Roster = {
         canManage: body.canManage === true,
         assigned: Array.isArray(body.assigned) ? body.assigned : [],
         available: Array.isArray(body.available) ? body.available : [],
         roles: Array.isArray(body.roles) ? body.roles : [],
+        execution: typeof execution?.provider === "string" && typeof execution?.model === "string"
+          ? { model: execution.model, provider: execution.provider }
+          : null,
       };
       setRoster(normalized);
       return normalized;
@@ -490,6 +501,7 @@ export function ProjectBots({
               posting={posting}
               busy={busy === posting.id}
               canManage={roster.canManage}
+              execution={roster.execution}
               projectName={projectName}
               onPause={() => void setStatus(posting, "paused")}
               onResume={() => void setStatus(posting, "active")}
@@ -537,6 +549,7 @@ function PostingCard({
   posting,
   busy,
   canManage,
+  execution,
   projectName,
   onPause,
   onResume,
@@ -553,6 +566,7 @@ function PostingCard({
   onEdit: () => void;
   onRemove: () => void;
   onSetExecution: (patch: { model?: string; workEffort?: string }) => void;
+  execution: { provider: string; model: string } | null;
 }) {
   const name = posting.bot?.name ?? "Unknown bot";
   const elevated = elevatedPermissions(posting.config);
@@ -566,6 +580,23 @@ function PostingCard({
     ...suggestedModels,
     ...(posting.model ? [posting.model] : []),
   ]));
+  /*
+   * Which of these can actually run.
+   *
+   * One worker claims the command queue, and it claims exactly one
+   * provider/model pair; routing refuses every other bot at submission — the
+   * last step of the journey, after a project, a pipeline and a bot have all
+   * been chosen. Offering four models with nothing to tell them apart is how
+   * a person walks into that. `null` when the server did not say, because a
+   * wrong "runs" label would be worse than none.
+   */
+  const executableModel = execution && posting.bot?.provider === execution.provider
+    ? execution.model
+    : null;
+  const effectiveModel = posting.model ?? posting.bot?.model ?? null;
+  const runnable = executableModel === null || effectiveModel === executableModel;
+  const modelNote = (option: string) =>
+    executableModel === null ? "" : option === executableModel ? " · runs" : " · cannot run";
 
   return (
     <li className="rounded-lg border border-line p-4">
@@ -618,12 +649,17 @@ function PostingCard({
               className="input w-full"
             >
               <option value="">
-                Bot default{posting.bot?.model ? ` (${posting.bot.model})` : ""}
+                Bot default{posting.bot?.model ? ` (${posting.bot.model}${modelNote(posting.bot.model)})` : ""}
               </option>
               {modelOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option} value={option}>{option}{modelNote(option)}</option>
               ))}
             </select>
+            {!runnable && effectiveModel ? (
+              <p className="mt-1 text-xs text-[var(--danger)]">
+                {effectiveModel} cannot run a command — the executor runs {executableModel}.
+              </p>
+            ) : null}
           </div>
           <div className="min-w-0">
             <label htmlFor={`posting-effort-${posting.id}`} className="field-label">Work effort</label>
