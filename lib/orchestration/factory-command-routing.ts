@@ -12,6 +12,7 @@ import {
   type RefusalCode as AssignmentRefusalCode,
   type RoutableAssignment,
 } from "@/lib/bots/assignment-routing";
+import { classifyFactoryCommandExecutionIdentity } from "@/lib/orchestration/plan";
 import { isWithinRiskCeiling, type RiskLevel } from "@/lib/risk";
 
 /**
@@ -234,11 +235,13 @@ function assignmentRefusal(
 }
 
 /**
- * Select one bot posting for a static Phase 1C draft-PR command.
+ * Select one bot posting for a factory command.
  *
  * Every property besides ordering is a gate.  Priority and headroom can order
  * eligible postings, but they can never compensate for a missing permission,
- * a low role ceiling, unavailable credentials, or a provider/model mismatch.
+ * a low role ceiling or unavailable credentials. The selected posting is the
+ * authoritative execution identity; its provider and effective model are
+ * persisted by the caller and rechecked by the atomic database submit.
  * Final ordering uses the assignment router's ordering policy, so this path
  * and the rest of the bot fabric share one deterministic tie-break policy.
  */
@@ -246,8 +249,6 @@ export function routeFactoryCommand(input: {
   readonly candidates: readonly FactoryCommandRoutingCandidate[];
   readonly pipelineTemplateKey: string;
   readonly effectiveRisk: RiskLevel;
-  readonly provider: string;
-  readonly model: string;
   /**
    * A same-key replay has to reach the atomic RPC: that boundary verifies the
    * immutable existing route before checking capacity. Every non-capacity
@@ -311,11 +312,14 @@ export function routeFactoryCommand(input: {
       continue;
     }
 
-    if (candidate.provider !== input.provider || candidate.model !== input.model) {
+    if (!classifyFactoryCommandExecutionIdentity({
+      model: candidate.model,
+      provider: candidate.provider,
+    })) {
       refused.push(refusal(
         candidate,
         "PROVIDER_MODEL_MISMATCH",
-        "This bot does not match the command's fixed execution provider and model.",
+        "This bot's provider and model are not supported for factory command recording.",
       ));
       continue;
     }

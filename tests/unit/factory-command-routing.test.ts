@@ -64,8 +64,6 @@ function decide(overrides: Record<string, unknown> = {}, risk: RiskLevel = "GREE
     candidates: [candidate(overrides)],
     pipelineTemplateKey: PIPELINE,
     effectiveRisk: risk,
-    provider: "openai",
-    model: "gpt-5.3-codex",
   });
 }
 
@@ -99,8 +97,6 @@ describe("factory command routing", () => {
       candidates: [],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(decision).toMatchObject({
@@ -136,12 +132,12 @@ describe("factory command routing", () => {
       code: "BOT_NOT_READY",
     },
     {
-      label: "wrong provider",
-      overrides: { provider: "anthropic" },
+      label: "unsupported provider",
+      overrides: { provider: "google" },
       code: "PROVIDER_MODEL_MISMATCH",
     },
     {
-      label: "wrong model",
+      label: "unsupported OpenAI model",
       overrides: { model: "gpt-5.3" },
       code: "PROVIDER_MODEL_MISMATCH",
     },
@@ -211,8 +207,6 @@ describe("factory command routing", () => {
       candidates: [full],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
 
@@ -233,8 +227,6 @@ describe("factory command routing", () => {
       })],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
     expect(forbidden).toMatchObject({
@@ -263,14 +255,58 @@ describe("factory command routing", () => {
       candidates: [fullPriorityBot, availableBot],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
 
     expect(decision).toMatchObject({
       outcome: "SELECTED",
       selected: { botName: "Available bot" },
+    });
+  });
+
+  it("uses a ready Claude posting as the authoritative provider and model", () => {
+    const decision = decide({
+      bot_name: "Claude - Daniel",
+      provider: "anthropic",
+      model: "claude-opus-5",
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: {
+        botName: "Claude - Daniel",
+        provider: "anthropic",
+        model: "claude-opus-5",
+      },
+    });
+  });
+
+  it("skips an unsupported higher-priority posting for a supported Claude posting", () => {
+    const decision = routeFactoryCommand({
+      candidates: [
+        candidate({
+          assignment_id: "00000000-0000-4000-8000-000000000099",
+          bot_id: "00000000-0000-4000-8000-000000000098",
+          bot_name: "Unsupported",
+          provider: "google",
+          assignment_config: { ...configuredGrant, priority: 0 },
+        }),
+        candidate({
+          assignment_id: "00000000-0000-4000-8000-000000000097",
+          bot_id: "00000000-0000-4000-8000-000000000096",
+          bot_name: "Claude - Daniel",
+          provider: "anthropic",
+          model: "claude-opus-5",
+          assignment_config: { ...configuredGrant, priority: 1 },
+        }),
+      ],
+      pipelineTemplateKey: PIPELINE,
+      effectiveRisk: "GREEN",
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: { botName: "Claude - Daniel", provider: "anthropic" },
     });
   });
 
@@ -314,8 +350,6 @@ describe("factory command routing", () => {
       candidates,
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(route([oldest, urgent, samePriorityNewer])).toMatchObject({
@@ -352,8 +386,6 @@ describe("factory command routing", () => {
       candidates: [newer, fullish, older],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(decision).toMatchObject({ outcome: "SELECTED", selected: { botName: "Older" } });

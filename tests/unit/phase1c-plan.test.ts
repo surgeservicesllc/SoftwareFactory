@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyFactoryCommandExecutionIdentity,
+  createFactoryCommandExecutionIntent,
   createPhase1CExecutionPlan,
   DEFAULT_CODEX_MODEL,
   DEFAULT_PHASE_1C_BUDGET,
+  FACTORY_RECORD_ONLY_PLAN,
 } from "@/lib/orchestration/plan";
 
 describe("Phase 1C execution plan", () => {
@@ -46,4 +49,45 @@ describe("Phase 1C execution plan", () => {
       }
     },
   );
+
+  it("keeps the exact Codex posting on the manual Phase 1C path", () => {
+    const phase1CPlan = createPhase1CExecutionPlan("fix_bug", {});
+
+    expect(createFactoryCommandExecutionIntent({
+      model: DEFAULT_CODEX_MODEL,
+      phase1CPlan,
+      provider: "openai",
+    })).toMatchObject({
+      executionMode: "manual",
+      model: DEFAULT_CODEX_MODEL,
+      plan: phase1CPlan.plan,
+      provider: "openai",
+    });
+  });
+
+  it("records a non-Codex posting without creating executable work", () => {
+    const phase1CPlan = createPhase1CExecutionPlan("fix_bug", {});
+
+    expect(createFactoryCommandExecutionIntent({
+      model: "claude-opus-5",
+      phase1CPlan,
+      provider: "anthropic",
+    })).toEqual({
+      executionMode: "record_only",
+      model: "claude-opus-5",
+      plan: FACTORY_RECORD_ONLY_PLAN,
+      provider: "anthropic",
+    });
+  });
+
+  it("rejects providers and OpenAI models outside the two reviewed lanes", () => {
+    expect(classifyFactoryCommandExecutionIdentity({
+      model: "gemini-pro",
+      provider: "google",
+    })).toBeNull();
+    expect(classifyFactoryCommandExecutionIdentity({
+      model: "gpt-5.3",
+      provider: "openai",
+    })).toBeNull();
+  });
 });

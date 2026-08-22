@@ -22,7 +22,11 @@ import {
   parseFactoryCommandRoutingCandidates,
   routeFactoryCommand,
 } from "@/lib/orchestration/factory-command-routing";
-import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import {
+  classifyFactoryCommandExecutionIdentity,
+  createFactoryCommandExecutionIntent,
+  createPhase1CExecutionPlan,
+} from "@/lib/orchestration/plan";
 import { evaluateConnectionIdentity } from "@/lib/connections/routable-candidates";
 import {
   createGitHubInstallationToken,
@@ -72,6 +76,7 @@ const submissionResultSchema = z.object({
 });
 
 const replayCommandParametersSchema = z.object({
+  executionMode: z.enum(["manual", "record_only"]),
   provider: z.string().trim().min(1).max(40),
   model: z.string().trim().min(1).max(128),
   repositoryBinding: z.object({
@@ -262,7 +267,7 @@ export async function POST(request: Request) {
         {
           error: {
             code: "owner_required",
-            message: "Only the organization owner can start a Codex engineering command.",
+            message: "Only the organization owner can record a factory engineering command.",
           },
         },
         { status: 403 },
@@ -313,8 +318,14 @@ export async function POST(request: Request) {
       if (replay) {
         const snapshot = replay.routing_snapshot;
         const parameters = replay.command_parameters;
+        const replayExecutionMode = classifyFactoryCommandExecutionIdentity({
+          model: snapshot.assignment.model,
+          provider: snapshot.assignment.provider,
+        });
         if (
-          snapshot.project.organizationId !== activeOrganization.id
+          !replayExecutionMode
+          || parameters.executionMode !== replayExecutionMode
+          || snapshot.project.organizationId !== activeOrganization.id
           || snapshot.project.projectId !== parsed.data.projectId
           || replay.project_pipeline_id !== snapshot.pipeline.selectionId
           || replay.pipeline_template_key !== snapshot.pipeline.templateKey
@@ -339,6 +350,8 @@ export async function POST(request: Request) {
               started: false,
               message: replay.requires_owner_approval
                 ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
+                : replayExecutionMode === "record_only"
+                  ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
                 : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
               workerDispatch: "not_applicable",
             },
@@ -350,6 +363,7 @@ export async function POST(request: Request) {
               connectionRouting: { mode: "persisted_replay" },
               dependencyTaskIds,
               effectiveRisk: snapshot.command.effectiveRisk,
+              executionMode: replayExecutionMode,
               model: snapshot.assignment.model,
               provider: snapshot.assignment.provider,
               repository: replay.repository_full_name ?? "connected repository",
@@ -490,8 +504,6 @@ export async function POST(request: Request) {
       candidates: liveRoutingCandidates,
       pipelineTemplateKey: parsed.data.pipelineTemplateKey,
       effectiveRisk: riskAssessment.effectiveRisk,
-      provider: executionPlan.provider,
-      model: executionPlan.model,
       deferCapacityToAtomicSubmit: parsed.data.idempotencyKey !== undefined,
     });
     if (factoryRouting.outcome === "REFUSED") {
@@ -506,6 +518,16 @@ export async function POST(request: Request) {
       });
     }
     const selectedAssignment = factoryRouting.selected;
+    const commandExecution = createFactoryCommandExecutionIntent({
+      model: selectedAssignment.model,
+      phase1CPlan: executionPlan,
+      provider: selectedAssignment.provider,
+    });
+    if (!commandExecution) {
+      return routingSetupRefusal(
+        "The selected bot's provider and model are not supported for factory command recording.",
+      );
+    }
 
     // Phase 2D seam: the Identity Router is consulted where work is created.
     // A Phase 1C command exercises `repository.write` — the worker pushes a
@@ -621,10 +643,10 @@ export async function POST(request: Request) {
       budget: executionPlan.budget,
       commandType: parsed.data.commandType,
       dependencyTaskIds,
-      executionMode: "manual",
-      model: executionPlan.model,
-      plan: executionPlan.plan,
-      provider: executionPlan.provider,
+      executionMode: commandExecution.executionMode,
+      model: commandExecution.model,
+      plan: commandExecution.plan,
+      provider: commandExecution.provider,
       repositoryBinding: {
         appId: target.app_id,
         baseBranch: target.base_branch,
@@ -706,8 +728,8 @@ export async function POST(request: Request) {
       || snapshot.assignment.assignmentId !== result.assignment_id
       || snapshot.assignment.botId !== result.bot_id
       || snapshot.assignment.roleId !== result.role_id
-      || snapshot.assignment.provider !== executionPlan.provider
-      || snapshot.assignment.model !== executionPlan.model
+      || snapshot.assignment.provider !== selectedAssignment.provider
+      || snapshot.assignment.model !== selectedAssignment.model
       || (snapshot.command.effectiveRisk === "red" && !result.requires_owner_approval)
     ) {
       return unavailableRead(
@@ -730,6 +752,8 @@ export async function POST(request: Request) {
           started: false,
           message: result.requires_owner_approval
             ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
+            : commandExecution.executionMode === "record_only"
+              ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
             : "Persisted only. This request did not dispatch a worker or change autonomy.",
           workerDispatch,
         },
@@ -764,6 +788,7 @@ export async function POST(request: Request) {
           },
           dependencyTaskIds,
           effectiveRisk: snapshot.command.effectiveRisk,
+          executionMode: commandExecution.executionMode,
           model: snapshot.assignment.model,
           provider: snapshot.assignment.provider,
           repository: target.repository_full_name,

@@ -197,6 +197,7 @@ function factoryReplay(overrides: RegistryRow = {}): RegistryRow {
       },
     },
     command_parameters: {
+      executionMode: "manual",
       provider: "openai",
       model: "gpt-5.3-codex",
       repositoryBinding: {
@@ -473,6 +474,71 @@ describe("POST /api/commands", () => {
     });
   });
 
+  it("returns an Anthropic record-only replay without claiming an execution run", async () => {
+    const stored = factoryReplay();
+    const routingSnapshot = stored.routing_snapshot as RegistryRow;
+    const assignment = routingSnapshot.assignment as RegistryRow;
+    const commandParameters = stored.command_parameters as RegistryRow;
+    const rpc = configuredClient({
+      replayRows: [{
+        ...stored,
+        routing_snapshot: {
+          ...routingSnapshot,
+          assignment: {
+            ...assignment,
+            provider: "anthropic",
+            model: "claude-opus-5",
+          },
+        },
+        command_parameters: {
+          ...commandParameters,
+          executionMode: "record_only",
+          provider: "anthropic",
+          model: "claude-opus-5",
+        },
+      }],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      idempotentReplay: true,
+      execution: { started: false, workerDispatch: "not_applicable" },
+      orchestration: {
+        executionMode: "record_only",
+        provider: "anthropic",
+        model: "claude-opus-5",
+      },
+    });
+    expect(body.execution.message).toContain("No execution run was created");
+    expect(rpc).not.toHaveBeenCalledWith("submit_factory_command", expect.anything());
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a stored replay mode conflicts with its immutable provider route", async () => {
+    const stored = factoryReplay();
+    const rpc = configuredClient({
+      replayRows: [{
+        ...stored,
+        command_parameters: {
+          ...(stored.command_parameters as RegistryRow),
+          executionMode: "record_only",
+        },
+      }],
+    });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "factory_replay_projection_invalid" },
+    });
+    expect(rpc).not.toHaveBeenCalledWith("submit_factory_command", expect.anything());
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+  });
+
   it("maps replay intent conflicts before consulting mutable live state", async () => {
     const rpc = configuredClient({
       replayError: {
@@ -500,8 +566,6 @@ describe("POST /api/commands", () => {
     ["unconfigured assignment", { is_configured: false }],
     ["persisted unready bot", { current_readiness: "not_connected" }],
     ["AI account needing reauthentication", { ai_account_status: "needs_reauth" }],
-    ["provider mismatch", { provider: "anthropic" }],
-    ["model mismatch", { model: "gpt-5.3" }],
     ["read-only repository", {
       assignment_config: {
         ...configuredGrant,
@@ -675,6 +739,51 @@ describe("POST /api/commands", () => {
         },
       },
     });
+  });
+
+  it("queues a command against the selected ready Claude identity without waking a worker", async () => {
+    const claude = routingCandidate({
+      bot_name: "Claude - Daniel",
+      provider: "anthropic",
+      model: "claude-opus-5",
+    });
+    const rpc = configuredClient({ candidateRows: [claude] });
+
+    const response = await POST(commandRequest("https://factory.example", {
+      commandType: "fix_bug",
+      prompt: "Fix high-priority bugs.",
+    }));
+
+    expect(response.status).toBe(202);
+    expect(rpc).toHaveBeenCalledWith("submit_factory_command", expect.objectContaining({
+      p_assignment_id: assignmentId,
+      p_parameters: expect.objectContaining({
+        executionMode: "record_only",
+        model: "claude-opus-5",
+        plan: {
+          requiresDraftPullRequest: false,
+          stages: ["record"],
+          workflow: "factory_record_only",
+        },
+        provider: "anthropic",
+      }),
+    }));
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+    const body = await response.json();
+    expect(body).toMatchObject({
+      execution: { started: false, workerDispatch: "not_applicable" },
+      orchestration: {
+        executionMode: "record_only",
+        model: "claude-opus-5",
+        provider: "anthropic",
+        factoryRouting: {
+          assignmentId,
+          model: "claude-opus-5",
+          provider: "anthropic",
+        },
+      },
+    });
+    expect(body.execution.message).toContain("No execution run was created");
   });
 
   it("reports the locked SQL routing snapshot when authoritative risk and effort differ", async () => {

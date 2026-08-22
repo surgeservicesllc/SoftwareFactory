@@ -2,6 +2,21 @@ import type { CommandType } from "@/lib/orchestration/command";
 
 export const DEFAULT_CODEX_MODEL = "gpt-5.3-codex";
 
+export const FACTORY_RECORD_ONLY_PLAN = Object.freeze({
+  requiresDraftPullRequest: false,
+  stages: Object.freeze(["record"]),
+  workflow: "factory_record_only",
+});
+
+export function classifyFactoryCommandExecutionIdentity(input: {
+  readonly model: string;
+  readonly provider: string;
+}): "manual" | "record_only" | null {
+  if (input.provider === "openai" && input.model === DEFAULT_CODEX_MODEL) return "manual";
+  if (input.provider === "anthropic") return "record_only";
+  return null;
+}
+
 export type Phase1CAgentRole =
   | "orchestrator"
   | "architect"
@@ -63,5 +78,28 @@ export function createPhase1CExecutionPlan(
       workflow: "codex_draft_pr",
     }),
     provider: "openai" as const,
+  });
+}
+
+/**
+ * A Factory posting owns the provider/model identity selected for the command.
+ * Only the existing Codex identity is claimable by the Phase 1C worker. A
+ * reviewed Anthropic posting is durable routing intent only: it creates no
+ * execution run and cannot be claimed by a worker. Every other identity is
+ * refused until it receives its own reviewed recording contract.
+ */
+export function createFactoryCommandExecutionIntent(input: {
+  readonly model: string;
+  readonly phase1CPlan: ReturnType<typeof createPhase1CExecutionPlan>;
+  readonly provider: string;
+}) {
+  const executionMode = classifyFactoryCommandExecutionIdentity(input);
+  if (!executionMode) return null;
+
+  return Object.freeze({
+    executionMode,
+    model: input.model,
+    plan: executionMode === "manual" ? input.phase1CPlan.plan : FACTORY_RECORD_ONLY_PLAN,
+    provider: input.provider,
   });
 }
