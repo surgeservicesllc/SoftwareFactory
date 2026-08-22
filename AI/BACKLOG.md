@@ -23,10 +23,13 @@ Last triaged: 2026-08-21
   release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
   and prove the matching production copy. Production remains on hosted
   `20260821000300` and the old application until then.
-- [ ] Rerun the complete suite after the two pre-documentation bookkeeping
-  failures are corrected. The candidate already has 3,744 passing tests plus
-  passing lint/typecheck/build; retain the known Windows ENOENT warning as a
-  warning, not as evidence.
+- [x] Clear the full-run Supabase-wiring contention timeout with an isolated
+  retry: `tests/integration/supabase-wiring.contract.test.ts` passes 2/2 in
+  0.603s with `maxWorkers=1`.
+- [ ] Resolve or safely classify the sole remaining full-Windows-suite issue:
+  the known spawn-script `ENOENT` unhandled error. The full run has 3,747
+  passing tests and lint/typecheck/build are green, but the Windows test gate
+  is not green while that error remains.
 
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 

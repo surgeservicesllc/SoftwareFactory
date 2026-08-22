@@ -28,12 +28,13 @@ that linked lint is clean or that hosted controls are universally all-OFF and
 kill-ON. Contain and remeasure them before any hosted apply or production
 promotion.
 
-Candidate lint, typecheck, and build pass. The full test command recorded
-3,744 passing tests and two stale documentation-bookkeeping failures before
-this update, plus the known Windows `TAR_ENTRY_ERROR ENOENT` warning. Run the
-focused count guards after this edit and rerun the complete suite before
-release; the focused hosted-runbook/repository-memory guards are now 21/21
-passing. Do not translate the pre-doc full-run failures into an all-green claim.
+Candidate lint, typecheck, and build pass. The latest full local test command
+recorded 3,747 passing tests, one Supabase-wiring timeout under parallel load,
+and one known Windows spawn-script `ENOENT` unhandled error. The timeout is
+cleared by the isolated retry: `supabase-wiring.contract.test.ts` passes 2/2 in
+0.603s with `maxWorkers=1`. The full Windows suite remains not green solely
+because of the spawn-script ENOENT/unhandled error. The independent hosted-
+runbook/repository-memory guards remain 21/21 passing.
 
 ## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-104)
 
@@ -613,7 +614,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 ## Verification state
 
 - The prior verified production baseline before this update passed supported Node `24.19.0` lint/typecheck, 117 files/1,282 tests, a production build with 74 page/route entries, prior coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration/security suites, production dependency audit 0, and safe disabled-worker smoke. Baseline commit `0c662a24393f682073e6002c5aff9339292226d8` passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY.
-- Current routing candidate: lint/typecheck/build pass; the full command recorded 3,744 passes and two pre-doc bookkeeping failures plus the known Windows ENOENT warning. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, complete post-doc test rerun, hosted apply, matching deployment, and owner acceptance remain pending.
+- Current routing candidate: lint/typecheck/build pass; the latest full command recorded 3,747 passes, a Supabase-wiring timeout that then cleared 2/2 in 0.603s under isolated `maxWorkers=1`, and one known Windows spawn-script `ENOENT` unhandled error. The full Windows suite remains not green solely because of that ENOENT. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, a green final test gate, hosted apply, matching deployment, and owner acceptance remain pending.
 - First acceptance evidence: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, durable run `f4594556-6f72-4763-a480-6993939e3651`, and worker Actions run `31746057998`. A real heartbeat and provider thread identifier were recorded, then Codex startup failed. No changed file, factory branch, commit, PR, validation, or exact-head CI evidence was created. Its planned base is now stale against current `main`, so the failed row must not be retried. Activation is OFF.
 - Published provider-only diagnostic `31748582858` skipped Docker preload and durable claim. The exact-model GET passed; the bounded non-stored Responses call returned only the safe machine-readable code `credit_balance_exhausted`. The stale failed run was not touched and activation is OFF.
 - The exact blocker is no longer funding. The paid dependency was removed from the execution path; the blocker is the owner-supplied `SOFTWAREFACTORY_CODEX_AUTH_JSON`. Configure it, rerun the no-claim diagnostic, then submit a new current-base command. Never retry the stale failed run. No production-monitor journey or successful live Phase 1C provider result exists.

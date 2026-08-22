@@ -15,9 +15,11 @@ Status: **Implemented and locally gated; not hosted or deployed.**
 - Exact replay resolves before mutable state. Missing hosted schema fails
   closed. No worker dispatch, autonomous action, merge, deploy, or rollback is
   introduced.
-- Lint, typecheck, and build pass; 3,744 tests pass in the pre-doc full run,
-  which ended with two documentation-bookkeeping failures and the known
-  Windows ENOENT warning. The full suite must be rerun after bookkeeping fixes.
+- Lint, typecheck, and build pass. The latest full local run has 3,747 passing
+  tests, one Supabase-wiring timeout under parallel load, and one known Windows
+  spawn-script `ENOENT` unhandled error. The wiring contract clears on isolated
+  retry (2/2 in 0.603s, `maxWorkers=1`). The full Windows suite is not green
+  solely because of the known spawn-script ENOENT/unhandled error.
 - Production remains on hosted `20260821000300` and the old copy. Before
   hosting `20260821000400`, contain and remeasure five linked lint errors/ten
   findings, one raw organization with `autonomous_mode = true`, one with

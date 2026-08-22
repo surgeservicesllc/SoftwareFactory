@@ -14,11 +14,13 @@ hosted. Submission dispatches no worker and changes no autonomy control; no
 connected/fresh worker was observed, while merge, deploy, and rollback remain
 not connected.
 
-Current candidate evidence is lint, typecheck, and production build passing;
-the full test command recorded 3,744 passes and two pre-documentation
-bookkeeping failures, plus the known Windows `TAR_ENTRY_ERROR ENOENT` warning.
-Focused hosted-runbook/repository-memory guards pass 21/21 after this update;
-a complete post-doc suite rerun remains the release gate. Production still hosts
+Current candidate evidence is lint, typecheck, and production build passing.
+The latest full local test command recorded 3,747 passes, one Supabase-wiring
+timeout under parallel load, and one known Windows spawn-script `ENOENT`
+unhandled error. The wiring contract passes its isolated retry 2/2 in 0.603s
+with `maxWorkers=1`, clearing the contention timeout. The full Windows suite is
+not green solely because of the known spawn-script ENOENT/unhandled error.
+Hosted-runbook/repository-memory guards separately pass 21/21. Production still hosts
 `20260821000300`, not `20260821000400`, and serves the old application copy.
 Hosted quality is blocked by five linked lint errors/ten findings, one raw
 organization with `autonomous_mode = true`, one with

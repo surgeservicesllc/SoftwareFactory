@@ -27,13 +27,14 @@ was observed. These facts supersede older blanket claims in this file that
 linked lint is clean or that every hosted autonomy flag/kill switch is safely
 OFF/ON. Release must stop until those conditions are contained and remeasured.
 
-Candidate gates: lint, typecheck, and the production build pass. The full test
-command recorded 3,744 passing tests and two failures in stale documentation
-bookkeeping before this release-memory update; it also emitted the known
-Windows `TAR_ENTRY_ERROR ENOENT` warning. That warning is not a passing test or
-a production exception. Focused documentation/count guards must pass after the
-bookkeeping update. The focused hosted-runbook/repository-memory rerun is now
-21/21 passing; the complete suite must still be rerun before release.
+Candidate lint, typecheck, and production build pass. The latest full local
+test command recorded 3,747 passing tests, one Supabase-wiring timeout under
+parallel load, and one known Windows spawn-script `ENOENT` unhandled error.
+The wiring timeout cleared on isolated retry:
+`tests/integration/supabase-wiring.contract.test.ts` passed 2/2 in 0.603s with
+`maxWorkers=1`. The full Windows suite is therefore not green solely because
+of the known spawn-script ENOENT/unhandled error. The separate hosted-runbook/
+repository-memory guards remain 21/21 passing.
 
 **Addendum, 2026-08-21 (Factory Briefing, ADR-104):** the Dashboard now has
 one read-only, four-lane control-plane briefing: Needs owner now, Underway,
