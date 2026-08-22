@@ -8,7 +8,7 @@
 
 create temporary table _sf_20260822000900_foundation_state (
   state text primary key check (state in ('absent', 'full'))
-) on commit drop;
+) on commit preserve rows;
 
 do $preflight$
 declare
@@ -1025,7 +1025,7 @@ create temporary table _sf_20260822000900_function_guard (
   effective_acl jsonb not null,
   expected_source text not null,
   expected_volatility "char" not null
-) on commit drop;
+) on commit preserve rows;
 
 do $function_preflight$
 declare
@@ -1816,3 +1816,12 @@ begin
   perform pg_temp._sf_20260822000900_validate_foundation();
 end;
 $postflight$;
+
+-- psql applies this migration in autocommit mode during the real-PostgreSQL
+-- integration path. Keep cross-statement guards alive until postflight, then
+-- remove every session-local helper explicitly so no later migration can
+-- observe or reuse stale guard state.
+drop function pg_temp._sf_20260822000900_replace_source(text, text, text, integer);
+drop function pg_temp._sf_20260822000900_validate_foundation();
+drop table pg_temp._sf_20260822000900_function_guard;
+drop table pg_temp._sf_20260822000900_foundation_state;

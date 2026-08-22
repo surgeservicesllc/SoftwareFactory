@@ -30,7 +30,7 @@ const hashes = {
   modelRepair: "c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0",
   clearTypes: "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b",
   clearFunctions: "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a",
-  repair: "8f49d0c5077c60872ed9f8962c3807331fda321ce255a0444b5a4e7381c16096",
+  repair: "d429a4a8e1cf3ef72a268d02d718e8f1b7d3bc2377d7f42badf0fcd4d02efef8",
   recordOnly: "bae5b50ac8c054c2ffacb74d9788e759a7254e1703cddd3c59a816f8de0f85a4",
 } as const;
 
@@ -83,6 +83,7 @@ interface HostedApplyWorkflow {
 }
 
 const source = readFileSync(workflowPath, "utf8");
+const repairSource = readFileSync(resolve(repositoryRoot, files.repair), "utf8");
 const workflow = parse(source) as HostedApplyWorkflow;
 const steps = workflow.jobs.apply.steps;
 
@@ -138,6 +139,27 @@ describe("the protected factory any-model record-only chain", () => {
     expect(source).not.toContain("plpgsql-catalog-lint-repair");
     expect(command).not.toMatch(/\bsupabase(?:@\S+)?\s+(?:db\s+push|migration\s+up)\b/);
     expect(command).not.toMatch(/\bmigration\s+repair\b|\bdb\s+reset\b|\bdown\b/i);
+  });
+
+  it("keeps cross-statement repair guards alive in psql autocommit and cleans them", () => {
+    for (const table of [
+      "_sf_20260822000900_foundation_state",
+      "_sf_20260822000900_function_guard",
+    ]) {
+      expect(repairSource).toMatch(
+        new RegExp(`create temporary table ${table} \\([\\s\\S]*?\\) on commit preserve rows;`),
+      );
+      expect(repairSource).toContain(`drop table pg_temp.${table};`);
+    }
+    for (const helper of [
+      "_sf_20260822000900_replace_source(text, text, text, integer)",
+      "_sf_20260822000900_validate_foundation()",
+    ]) {
+      expect(repairSource).toContain(`drop function pg_temp.${helper};`);
+    }
+    expect(repairSource.lastIndexOf("drop table pg_temp.")).toBeGreaterThan(
+      repairSource.lastIndexOf("$postflight$;"),
+    );
   });
 
   it("requires exact history and applies 00300 -> 00900 -> 01000 atomically", () => {
