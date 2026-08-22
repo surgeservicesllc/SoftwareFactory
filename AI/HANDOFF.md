@@ -2,6 +2,38 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-21): AI Factory production pass is 4/8; bot fix pending
+
+Exact candidate head `a020e8192d8512a1bb65112e01017047087f0528` is green in
+CI run `32543409160`: quality and browser shards 1/3, 2/3, and 3/3 all passed.
+That proves the candidate head only; it is not evidence that production serves
+the candidate.
+
+Authenticated production-browser evidence is now **4/8**. **Agentic SDLC** was
+selected for the existing project, survived reload, and produced an immutable
+`pipeline.selected` event visible in Activity. The owner reconnected Claude,
+and production reports that account Connected. Refresh queued background
+re-verification but remains pending because no worker sweep completed; do not
+present the spinner as fresh worker or end-to-end health evidence.
+
+Create Bot currently fails and leaves zero bots. Root cause is isolated outside
+the owner-frozen connection path: Bot Manager forwards raw broker purposes
+`claude`/`claude_N` or `codex`/`codex_N`, while
+`/api/bots/connect/provision` accepts provider-neutral
+`subscription`/`subscription_N` choices. The branch candidate now normalizes
+all account-backed paths and fails closed on missing or mismatched metadata;
+real broker-purpose fixtures, the focused 100-test run, lint, typecheck, and a
+production build pass. The fix is not deployed, so do not claim the Claude
+account is yet usable or sticky as a bot; after an authorized release, repeat
+create, assign, configure, and reload acceptance.
+
+Do not promote production while the known blockers remain: five linked lint
+errors/ten findings, raw autonomy enabled for one organization, raw kill switch
+off for one organization, two projects with effective kill off, no
+connected/fresh worker, and hosted `20260821000300`/candidate
+`20260821000400` drift. Worker/autonomy stays off and production is not fully
+live.
+
 ## Newest (2026-08-22 ~00:45Z): the journey has now run against PRODUCTION itself — green
 
 The owner's goal ("connect to the site remotely, fill every field with

@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-08-21
 
+**Production acceptance addendum, 2026-08-21 (AI Factory):** exact candidate
+head `a020e8192d8512a1bb65112e01017047087f0528` passed all four Linux CI jobs in
+run `32543409160`: quality plus browser shards 1/3, 2/3, and 3/3. This is
+exact-head candidate evidence, not proof that the candidate is deployed.
+
+An authenticated production-browser pass now measures the guided journey at
+**4/8**. Selecting built-in pipeline **Agentic SDLC** persisted across reload,
+and the Activity surface exposed its immutable `pipeline.selected` event. The
+owner then reconnected the Claude account, which production reports Connected.
+Account Refresh has queued re-verification but remains pending because no
+worker sweep completed, so it is not fresh worker evidence. Creating a bot
+still fails and leaves the roster at zero: the Bot Manager sends the broker's
+raw `claude`/`claude_N` purpose (and would do the same for `codex`/`codex_N`)
+where the provisioning boundary accepts the provider-neutral
+`subscription`/`subscription_N` choice. The branch candidate now normalizes
+every account-backed provisioning path, rejects provider/purpose mismatches,
+and carries real-purpose regression fixtures. Its focused 100-test run, lint,
+typecheck, and production build pass. It is not deployed and no production bot
+stickiness claim is made.
+
+Production therefore remains unsafe and not fully live. The same release gates
+remain open: five linked-database lint errors across ten findings, one raw
+organization with `autonomous_mode = true`, one raw organization with
+`autonomy_kill_switch_active = false`, two projects with effective kill off,
+no connected/fresh worker, and hosted migration/application drift
+(`20260821000300` rather than candidate `20260821000400`).
+
 **Addendum, 2026-08-21 (Factory Briefing, ADR-104):** the Dashboard now has
 one read-only, four-lane control-plane briefing: Needs owner now, Underway,
 Recently finished, and Up next. A deterministic classifier folds the existing

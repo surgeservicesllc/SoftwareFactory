@@ -2,6 +2,30 @@
 
 Last triaged: 2026-08-21
 
+## AI Factory production acceptance (2026-08-21)
+
+- [x] Verify exact candidate head
+  `a020e8192d8512a1bb65112e01017047087f0528`: CI run `32543409160` passed
+  quality and all three browser shards.
+- [x] Advance and reload production at 4/8: **Agentic SDLC** remains selected,
+  its immutable `pipeline.selected` Activity event is visible, and the owner's
+  reconnected Claude account reports Connected.
+- [ ] Complete the account Refresh with a real worker sweep. It remains pending
+  and is not connected/fresh-worker evidence.
+- [x] Implement and locally verify the downstream bot-purpose normalization:
+  translate
+  broker `claude`/`claude_N` and `codex`/`codex_N` purposes into provision
+  choices `subscription`/`subscription_N`, reject mismatches, and pin the real
+  broker-purpose fixtures in regression tests. The branch candidate passes 100
+  focused tests, lint, typecheck, and a production build. It is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [ ] After an authorized release, repeat Create Bot, assignment, settings, and
+  reload checks before claiming that a connected bot is usable and sticky.
+- [ ] Keep production promotion stopped until the five linked-lint errors/ten
+  findings, raw autonomy/kill-switch drift, two effective-kill-off projects,
+  absent fresh worker, and hosted `20260821000300`/candidate `20260821000400`
+  drift are contained and remeasured.
+
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 
 - [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`
