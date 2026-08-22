@@ -145,15 +145,14 @@ const navigationEntries: readonly NavigationEntry[] = [
       { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
     ],
   },
-  {
-    label: "Watch",
-    href: "/solutions/operations",
-    icon: HeartPulse,
-    subpages: [
-      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
-      { label: "Activity", href: "/solutions/activity", icon: Activity },
-    ],
-  },
+  /*
+   * Operations is a destination, not a category. "Watch" wrapped it in a
+   * collapsible group whose only other child was Activity — which already
+   * appears under Bots as "Bot Activity", pointing at the same page. So the
+   * group cost a click to reach one real page and listed a second one twice.
+   * Owner instruction, 2026-08-22: drop the group and promote Operations.
+   */
+  { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
   {
     label: "Advanced",
     href: "/solutions/files",
