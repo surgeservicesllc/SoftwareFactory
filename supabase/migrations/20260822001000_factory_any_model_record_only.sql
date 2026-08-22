@@ -19,7 +19,7 @@ create temporary table _sf_20260822001000_input_expectations (
   contract_md5 text not null check (pg_catalog.length(contract_md5) = 32),
   volatility text not null check (volatility in ('i', 's', 'v')),
   execute_role text not null check (execute_role in ('none', 'authenticated'))
-) on commit drop;
+) on commit preserve rows;
 
 insert into _sf_20260822001000_input_expectations (
   purpose, signature, source_md5, contract_md5, volatility, execute_role
@@ -59,23 +59,24 @@ create temporary table _sf_20260822001000_function_guard (
   input_signature text unique not null,
   routine_oid oid unique not null,
   input_source text not null,
-  catalog_without_name_source_acl jsonb not null,
+  catalog_without_name_source_defaults_acl jsonb not null,
+  argument_defaults text,
   effective_acl jsonb not null,
   object_comment text
-) on commit drop;
+) on commit preserve rows;
 
 create temporary table _sf_20260822001000_trigger_guard (
   trigger_name text primary key,
   trigger_oid oid unique not null,
   trigger_catalog jsonb not null
-) on commit drop;
+) on commit preserve rows;
 
 create temporary table _sf_20260822001000_trigger_expectations (
   relation_name text not null,
   trigger_name text primary key,
   function_signature text not null,
   trigger_type smallint not null
-) on commit drop;
+) on commit preserve rows;
 
 insert into _sf_20260822001000_trigger_expectations (
   relation_name, trigger_name, function_signature, trigger_type
@@ -125,7 +126,7 @@ create temporary table _sf_20260822001000_agent_runs_guard (
   relation_catalog jsonb not null,
   column_catalog jsonb not null,
   policy_catalog jsonb not null
-) on commit drop;
+) on commit preserve rows;
 
 do $preflight$
 declare
@@ -452,10 +453,13 @@ begin
 
   insert into _sf_20260822001000_function_guard (
     purpose, input_signature, routine_oid, input_source,
-    catalog_without_name_source_acl, effective_acl, object_comment
+    catalog_without_name_source_defaults_acl, argument_defaults,
+    effective_acl, object_comment
   )
   select expected.purpose, expected.signature, procedure.oid, procedure.prosrc,
-    pg_catalog.to_jsonb(procedure) - 'proname' - 'prosrc' - 'proacl',
+    pg_catalog.to_jsonb(procedure)
+      - 'proname' - 'prosrc' - 'proargdefaults' - 'proacl',
+    pg_catalog.pg_get_expr(procedure.proargdefaults, 0),
     coalesce((
       select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
         'grantor', acl.grantor,
@@ -1898,7 +1902,7 @@ create temporary table _sf_20260822001000_output_expectations (
   volatility text not null check (volatility in ('s', 'v')),
   execute_role text not null check (execute_role in ('none', 'authenticated')),
   input_purpose text
-) on commit drop;
+) on commit preserve rows;
 
 insert into _sf_20260822001000_output_expectations (
   purpose, signature, source_md5, contract_md5, volatility, execute_role,
@@ -2081,8 +2085,14 @@ begin
      )
      or (
        expected.input_purpose is not null
-       and pg_catalog.to_jsonb(procedure) - 'proname' - 'prosrc' - 'proacl'
-           is distinct from input_guard.catalog_without_name_source_acl
+       and (
+         pg_catalog.to_jsonb(procedure)
+           - 'proname' - 'prosrc' - 'proargdefaults' - 'proacl'
+           is distinct from
+             input_guard.catalog_without_name_source_defaults_acl
+         or pg_catalog.pg_get_expr(procedure.proargdefaults, 0)
+           is distinct from input_guard.argument_defaults
+       )
      );
 
   if v_bad is not null then
@@ -2373,3 +2383,13 @@ begin
   end if;
 end;
 $postflight$;
+
+-- These guards intentionally span top-level statements. psql runs the real
+-- PostgreSQL chain in autocommit mode, so retain them through postflight and
+-- remove every session-local artifact explicitly afterward.
+drop table pg_temp._sf_20260822001000_output_expectations;
+drop table pg_temp._sf_20260822001000_agent_runs_guard;
+drop table pg_temp._sf_20260822001000_trigger_expectations;
+drop table pg_temp._sf_20260822001000_trigger_guard;
+drop table pg_temp._sf_20260822001000_function_guard;
+drop table pg_temp._sf_20260822001000_input_expectations;

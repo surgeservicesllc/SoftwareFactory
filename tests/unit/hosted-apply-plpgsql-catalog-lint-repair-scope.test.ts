@@ -30,8 +30,8 @@ const hashes = {
   modelRepair: "c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0",
   clearTypes: "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b",
   clearFunctions: "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a",
-  repair: "d429a4a8e1cf3ef72a268d02d718e8f1b7d3bc2377d7f42badf0fcd4d02efef8",
-  recordOnly: "bae5b50ac8c054c2ffacb74d9788e759a7254e1703cddd3c59a816f8de0f85a4",
+  repair: "87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b",
+  recordOnly: "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255",
 } as const;
 
 const lintedSignatures = [
@@ -84,6 +84,7 @@ interface HostedApplyWorkflow {
 
 const source = readFileSync(workflowPath, "utf8");
 const repairSource = readFileSync(resolve(repositoryRoot, files.repair), "utf8");
+const recordOnlySource = readFileSync(resolve(repositoryRoot, files.recordOnly), "utf8");
 const workflow = parse(source) as HostedApplyWorkflow;
 const steps = workflow.jobs.apply.steps;
 
@@ -159,6 +160,25 @@ describe("the protected factory any-model record-only chain", () => {
     }
     expect(repairSource.lastIndexOf("drop table pg_temp.")).toBeGreaterThan(
       repairSource.lastIndexOf("$postflight$;"),
+    );
+  });
+
+  it("keeps every record-only guard alive in psql autocommit and cleans it", () => {
+    for (const table of [
+      "_sf_20260822001000_input_expectations",
+      "_sf_20260822001000_function_guard",
+      "_sf_20260822001000_trigger_guard",
+      "_sf_20260822001000_trigger_expectations",
+      "_sf_20260822001000_agent_runs_guard",
+      "_sf_20260822001000_output_expectations",
+    ]) {
+      expect(recordOnlySource).toMatch(
+        new RegExp(`create temporary table ${table} \\([\\s\\S]*?\\) on commit preserve rows;`),
+      );
+      expect(recordOnlySource).toContain(`drop table pg_temp.${table};`);
+    }
+    expect(recordOnlySource.lastIndexOf("drop table pg_temp.")).toBeGreaterThan(
+      recordOnlySource.lastIndexOf("$postflight$;"),
     );
   });
 

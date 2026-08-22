@@ -264,7 +264,8 @@ describe("factory any-model record-only migration contract", () => {
     const postflight = migration.slice(migration.indexOf("do $postflight$"));
     expect(postflight).not.toBe("");
     expect(postflight).toContain("_sf_20260822001000_function_guard");
-    expect(postflight).toContain("catalog_without_name_source_acl");
+    expect(postflight).toContain("catalog_without_name_source_defaults_acl");
+    expect(postflight).toContain("pg_get_expr(procedure.proargdefaults, 0)");
     expect(postflight).toContain("procedure.oid is distinct from input_guard.routine_oid");
     expect(postflight).toContain("01000 output function catalog, source, OID, or ACL mismatch");
     expect(postflight).toContain("01000 changed a protected trigger or rule binding");

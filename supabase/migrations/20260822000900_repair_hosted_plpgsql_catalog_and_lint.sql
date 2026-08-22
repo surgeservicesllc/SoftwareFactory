@@ -1014,14 +1014,16 @@ $restore_security$;
 
 select pg_temp._sf_20260822000900_validate_foundation();
 
--- Freeze every routine before replacing source.  The guard stores the exact
--- catalog row (minus only prosrc and the two intentional volatility changes),
--- plus the effective ACL.  Postflight requires the same OID, owner, signature,
+-- Freeze every routine before replacing source. The guard stores the exact
+-- catalog row minus the body, volatility, and the parser's non-semantic source
+-- offsets inside proargdefaults. Canonical default expressions are frozen
+-- separately. Postflight requires the same OID, owner, signature, defaults,
 -- SECURITY DEFINER posture, search_path, raw proacl, and effective grants.
 create temporary table _sf_20260822000900_function_guard (
   signature text primary key,
   routine_oid oid not null,
-  catalog_without_source_or_volatility jsonb not null,
+  catalog_without_source_defaults_or_volatility jsonb not null,
+  expected_argument_defaults text,
   effective_acl jsonb not null,
   expected_source text not null,
   expected_volatility "char" not null
@@ -1409,13 +1411,15 @@ begin
   end if;
 
   insert into _sf_20260822000900_function_guard (
-    signature, routine_oid, catalog_without_source_or_volatility,
-    effective_acl, expected_source, expected_volatility
+    signature, routine_oid, catalog_without_source_defaults_or_volatility,
+    expected_argument_defaults, effective_acl, expected_source,
+    expected_volatility
   )
   select
     expected.signature,
     p.oid,
-    pg_catalog.to_jsonb(p) - 'prosrc' - 'provolatile',
+    pg_catalog.to_jsonb(p) - 'prosrc' - 'proargdefaults' - 'provolatile',
+    pg_catalog.pg_get_expr(p.proargdefaults, 0),
     coalesce((
       select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
                'grantor', acl.grantor,
@@ -1751,14 +1755,20 @@ do $postflight$
 declare
   v_bad text;
 begin
+  -- Match the preflight's deterministic qualification context so canonical
+  -- defaults that reference public enum types compare identically on PG16.
+  perform pg_catalog.set_config('search_path', 'pg_catalog', true);
+
   select pg_catalog.string_agg(guard.signature, ', ' order by guard.signature)
   into v_bad
   from _sf_20260822000900_function_guard guard
   left join pg_catalog.pg_proc p on p.oid = guard.routine_oid
   where p.oid is null
      or pg_catalog.to_regprocedure(guard.signature) <> guard.routine_oid
-     or (pg_catalog.to_jsonb(p) - 'prosrc' - 'provolatile')
-          is distinct from guard.catalog_without_source_or_volatility
+     or (pg_catalog.to_jsonb(p) - 'prosrc' - 'proargdefaults' - 'provolatile')
+          is distinct from guard.catalog_without_source_defaults_or_volatility
+     or pg_catalog.pg_get_expr(p.proargdefaults, 0)
+          is distinct from guard.expected_argument_defaults
      or p.provolatile <> guard.expected_volatility
      or p.prosrc is distinct from guard.expected_source
      or coalesce((
