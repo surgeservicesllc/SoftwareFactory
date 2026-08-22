@@ -1109,4 +1109,52 @@ describe("managing an assigned bot", () => {
       },
     ]);
   });
+  it("says which model can run a command, and which cannot", async () => {
+    // The defect this guards: the picker offered every model the catalog
+    // lists for a provider, and exactly one of them can be claimed by the
+    // worker. Choosing any other one is refused at submission — the last step
+    // of the journey, after a project, a pipeline and a bot are all chosen.
+    stub(roster({
+      assigned: [{
+        id: "as-1",
+        revision: 7,
+        botId: "bot-9",
+        projectId,
+        roleId: "role-dev",
+        status: "active",
+        assignedAt: "2026-08-17T00:00:00.000Z",
+        config: { ...LEAST_PRIVILEGE_CONFIG, maxConcurrentTasks: 2 },
+        bot: bot("bot-9", "Codex", { provider: "openai", model: "gpt-5.1-codex" }),
+        role: roles[0],
+      }],
+      execution: { provider: "openai", model: "gpt-5.3-codex" },
+    }));
+
+    render(<ProjectBots projectId={projectId} projectName="Storefront" />);
+
+    const model = await screen.findByLabelText("Model") as HTMLSelectElement;
+    const labels = [...model.options].map((option) => option.textContent ?? "");
+    expect(labels.some((label) => label.includes("gpt-5.3-codex · runs"))).toBe(true);
+    expect(labels.some((label) => label.includes("gpt-5.1 · cannot run"))).toBe(true);
+
+    // And the posting's current, unrunnable setting is called out rather than
+    // left to be discovered at the end.
+    expect(
+      await screen.findByText(/gpt-5\.1-codex cannot run a command/),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about runnability when the server did not say", async () => {
+    // An older deployment does not send `execution`. A guessed "runs" label
+    // would be worse than none, so the picker stays quiet.
+    stub(roster({ execution: undefined }));
+
+    render(<ProjectBots projectId={projectId} projectName="Storefront" />);
+
+    const model = await screen.findByLabelText("Model") as HTMLSelectElement;
+    const labels = [...model.options].map((option) => option.textContent ?? "");
+    expect(labels.every((label) => !label.includes("· runs"))).toBe(true);
+    expect(labels.every((label) => !label.includes("· cannot run"))).toBe(true);
+    expect(screen.queryByText(/cannot run a command/)).not.toBeInTheDocument();
+  });
 });

@@ -13,6 +13,7 @@ import {
 import { botFabricErrorResponse } from "@/lib/bots/route";
 import { jsonNoStore } from "@/lib/server/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
+import { EXECUTION_PROVIDER, executionModel } from "@/lib/orchestration/plan";
 
 /**
  * Which providers are set up, and whether their keys actually work.
@@ -181,6 +182,17 @@ export async function GET(request: Request) {
           summary: provider.summary,
           suggestedModels: provider.suggestedModels,
           defaultModel: provider.suggestedModels[0] ?? null,
+          /*
+           * The model a command can actually be executed on, resolved
+           * server-side so an operator's `SOFTWAREFACTORY_CODEX_MODEL` pin is
+           * included. Null for every provider no worker claims.
+           *
+           * The console offers several models per provider, and exactly one
+           * of them can run: routing refuses the rest at submission. Sending
+           * this lets a picker say which is which, instead of presenting four
+           * choices that quietly end the journey.
+           */
+          executableModel: provider.id === EXECUTION_PROVIDER ? executionModel() : null,
           credentialRef: provider.defaultCredentialRef,
           credentialReady,
           credentialOptional: provider.defaultCredentialRef === null,

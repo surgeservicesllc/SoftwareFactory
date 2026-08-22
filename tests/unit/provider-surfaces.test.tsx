@@ -8,6 +8,7 @@ import {
   type ProviderStatus,
 } from "@/components/provider-status-panel";
 import { RunsConsole } from "@/components/runs-console";
+import { STANDARD_MODEL_CATALOGUE } from "@/lib/providers/standard-catalogue";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -253,13 +254,22 @@ describe("AgentsConsole provider assignment", () => {
     const enable = screen.getByRole("button", { name: "Enable the standard model catalogue" });
     await userEvent.click(enable);
 
+    // Derived, not counted by hand: the catalogue is built from the provider
+    // list, so a model added there is a change to this number and pinning a
+    // literal only means editing two places instead of one.
+    const standardCount = STANDARD_MODEL_CATALOGUE.length;
+    const openAiCount = STANDARD_MODEL_CATALOGUE
+      .filter((entry) => entry.provider === "openai").length;
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "8 standard models are enabled. Every agent below is now selectable.",
+      `${standardCount} standard models are enabled. Every agent below is now selectable.`,
     );
     // The standard list flows through the same upsert endpoint, one per model.
-    expect(seeded).toHaveLength(8);
+    expect(seeded).toHaveLength(standardCount);
     expect(seeded[0]).toMatchObject({ provider: "anthropic", model: "claude-opus-5", displayName: "Claude Opus 5" });
-    expect(seeded.filter((entry) => entry.provider === "openai")).toHaveLength(4);
+    expect(seeded.filter((entry) => entry.provider === "openai")).toHaveLength(openAiCount);
+    // Every entry carries a real display name rather than falling back to the
+    // raw identifier, which is what an unnamed new model would show.
+    expect(seeded.every((entry) => !/^gpt-|^claude-/.test(entry.displayName))).toBe(true);
 
     // And the reloaded catalogue makes the agent's select a real choice.
     const selector = screen.getByRole("combobox", { name: "Provider assignment for Security Reviewer" });

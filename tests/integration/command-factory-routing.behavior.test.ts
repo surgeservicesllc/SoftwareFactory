@@ -7,7 +7,11 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import { findBotProvider } from "@/lib/bots/catalog";
+import {
+  createPhase1CExecutionPlan,
+  EXECUTION_PROVIDER,
+} from "@/lib/orchestration/plan";
 
 const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrations");
 
@@ -304,12 +308,24 @@ describe("durable command to factory routing", () => {
       [organizationId, emptyProjectId],
     );
 
+    /*
+     * Seeded with the model the console would actually give this bot, not a
+     * literal that happens to match the plan.
+     *
+     * A hand-written 'gpt-5.3-codex' here is what let the defect ship: the
+     * suite proved the submit path accepts the plan's pair while
+     * `ensureProviderBot` was naming every real bot 'gpt-5.1-codex' from the
+     * catalog's list. Both halves passed and every command in production was
+     * refused. Deriving the seed the way provisioning derives it puts the two
+     * on the same chain, so they cannot part again without this failing.
+     */
+    const provisionedModel = findBotProvider(EXECUTION_PROVIDER)?.suggestedModels[0];
     const bot = await db.query<{ id: string }>(
       `select id from public.register_bot(
          $1::uuid, 'Synthetic Routing Bot', 'openai'::public.bot_provider,
-         'gpt-5.3-codex', 'OPENAI_API_KEY', null, 'Fake routing evidence bot.'
+         $2, 'OPENAI_API_KEY', null, 'Fake routing evidence bot.'
        )`,
-      [organizationId],
+      [organizationId, provisionedModel],
     );
     botId = bot.rows[0].id;
     await markBotReady(botId, "Synthetic check passed.");

@@ -33,6 +33,10 @@ on:
           records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
+          "executable-model-repair" applies only 20260822000600, which moves
+          bots already provisioned with a model the Codex worker cannot claim
+          onto the one it can, so Issue a Command stops refusing every
+          submission;
           "pipeline-selection" applies only 20260821000300, which is what makes
           the AI Factory's Use button record a project's pipelines;
           "bot-legacy-acl-normalization" applies only 20260822000150, which
@@ -55,6 +59,7 @@ on:
           - broker-functions
           - project-controls
           - pipeline-selection
+          - executable-model-repair
           - agent-selection
           - bot-legacy-acl-normalization
           - bot-account-binding
@@ -2609,6 +2614,49 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: both clears are SECURITY DEFINER, callable by members only, with their audit labels present."
+
+      - name: Repair bots onto the executable model (scope=executable-model-repair)
+        # One file, and it rewrites data rather than schema: bots whose model
+        # came from the catalog's openai list move onto the model the Codex
+        # worker actually claims, and posting overrides naming one are cleared.
+        #
+        # Replay-safe by construction — after the first run nothing matches the
+        # stale set, so a second run writes no rows and no events. Every repair
+        # is an activity event carrying the previous model, so the change is
+        # visible to the person whose bot moved rather than silent. A model this
+        # console never offered is deliberately out of scope: it was typed by a
+        # person, and rewriting a deliberate choice is worse than refusing it.
+        if: ${{ inputs.scope == 'executable-model-repair' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql
+          EXPECTED_SHA256=c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production write."
+            exit 1
+          fi
+
+          echo "Before:"
+          psql "$DB_URL" -q -c "select model, count(*) from public.bots where provider = 'openai' group by model order by 2 desc;"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000600
+          else
+            npx supabase migration repair --status applied 20260822000600 --db-url "$DB_URL"
+          fi
+
+          echo "After, and what moved:"
+          psql "$DB_URL" -q -c "select model, count(*) from public.bots where provider = 'openai' group by model order by 2 desc;"
+          psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, coalesce(metadata ->> 'model', '(cleared)') as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
