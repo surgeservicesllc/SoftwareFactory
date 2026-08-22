@@ -26,7 +26,7 @@ on:
           20260822000150, 20260822000200, the job-seeker 20260822000400/00500
           pair, executable-model repair 20260822000600,
           clear-controls 20260822000700/00800, and protected
-          20260822000300/00900/01000 are each recorded by
+          20260822000300/00900/01000/01100 are each recorded by
           their dedicated
           scopes; "broker-functions"
           applies only the idempotent broker migrations
@@ -46,7 +46,7 @@ on:
           "bot-account-binding" applies only 20260822000200, which binds a
           subscription bot to its exact tenant-scoped AI account;
           "factory-any-model-record-only" atomically applies the exact
-          20260822000300/00900/01000 protected chain, restoring the AgentOS
+          20260822000300/00900/01000/01100 protected chain, restoring the AgentOS
           isolation catalog, repairing the frozen PL/pgSQL lint set, and
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
@@ -99,7 +99,7 @@ jobs:
       - name: Refuse the retired standalone bot mutator CONTRACT scope
         if: ${{ inputs.scope == 'bot-account-binding-contract' }}
         run: |
-          echo "::error::The standalone 00300 CONTRACT path is retired. Use scope=factory-any-model-record-only so 00300/00900/01000 remain one exact, accepted, forward-only transaction."
+          echo "::error::The standalone 00300 CONTRACT path is retired. Use scope=factory-any-model-record-only so 00300/00900/01000/01100 remain one exact, accepted, forward-only transaction."
           exit 1
 
       - name: Verify exact green application release before protected database preflight
@@ -911,10 +911,14 @@ jobs:
               (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                 where n.nspname = 'public' and p.proname = 'apply_resume_extraction') as definer,
               has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as auth_execute,
-              has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as anon_execute;" \
+              has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as anon_execute,
+              has_function_privilege('service_role', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as service_execute,
+              (select p.proacl::text from pg_proc p
+                where p.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')) as function_acl;" \
             || echo "the table does not exist yet"
           echo "Expected: rls t, forced t, policies 3, auth_select t, auth_update f,"
-          echo "anon_select f, service_update f, definer t, auth_execute t, anon_execute f."
+          echo "anon_select f, service_update f, definer t, auth_execute t, anon_execute f,"
+          echo "service_execute f, and function_acl owner plus authenticated only."
           echo "A true auth_update or service_update means Supabase default privileges"
           echo "granted the table to those roles at CREATE TABLE time and the migration"
           echo "revoked only anon — a hole PGlite cannot reproduce, because it has no"
@@ -1917,7 +1921,7 @@ jobs:
         # proves that GitHub deployment identity.
         # Retained only as immutable release evidence. The selectable standalone
         # scope and its mutation path are retired: 00300 may now land only in
-        # the accepted, atomic 00300 -> 00900 -> 01000 protected chain below.
+        # the accepted, atomic 00300 -> 00900 -> 01000 -> 01100 protected chain below.
         if: ${{ false && inputs.scope == 'bot-account-binding-contract' }}
         run: |
           echo "::error::The standalone CONTRACT mutation path is retired; use the exact machine-gated atomic scope."
@@ -2246,7 +2250,7 @@ jobs:
         # One fail-closed forward-only transaction: CONTRACT, hosted catalog
         # repair, and record-only routing. A complete rehearsal (including
         # linked warning-level lint) rolls back before the only production
-        # transaction can write DDL or three ledger rows. Never repairs
+        # transaction can write DDL or four ledger rows. Never repairs
         # history, broad-pushes, resets, reruns, drops, or down-migrates.
         if: ${{ inputs.scope == 'factory-any-model-record-only' }}
         run: |
@@ -2278,6 +2282,7 @@ jobs:
           CLEAR_FUNCTIONS_FILE=supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql
           REPAIR_FILE=supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql
           RECORD_ONLY_FILE=supabase/migrations/20260822001000_factory_any_model_record_only.sql
+          FUNCTION_ACL_FILE=supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql
           CONTRACT_SHA256=79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7
           JOB_RESUME_SHA256=0faa6d4174f01a43abffda463d4dbe9dc60d82be54d9207011e4c064c4f0b465
           JOB_GRANTS_SHA256=c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee
@@ -2286,6 +2291,7 @@ jobs:
           CLEAR_FUNCTIONS_SHA256=e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a
           REPAIR_SHA256=87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b
           RECORD_ONLY_SHA256=b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255
+          FUNCTION_ACL_SHA256=dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789
           if [ "$(tr -d '\r' < "$CONTRACT_FILE" | sha256sum | cut -d' ' -f1)" != "$CONTRACT_SHA256" ] \
             || [ "$(tr -d '\r' < "$JOB_RESUME_FILE" | sha256sum | cut -d' ' -f1)" != "$JOB_RESUME_SHA256" ] \
             || [ "$(tr -d '\r' < "$JOB_GRANTS_FILE" | sha256sum | cut -d' ' -f1)" != "$JOB_GRANTS_SHA256" ] \
@@ -2293,8 +2299,9 @@ jobs:
             || [ "$(tr -d '\r' < "$CLEAR_TYPES_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_TYPES_SHA256" ] \
             || [ "$(tr -d '\r' < "$CLEAR_FUNCTIONS_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_FUNCTIONS_SHA256" ] \
             || [ "$(tr -d '\r' < "$REPAIR_FILE" | sha256sum | cut -d' ' -f1)" != "$REPAIR_SHA256" ] \
-            || [ "$(tr -d '\r' < "$RECORD_ONLY_FILE" | sha256sum | cut -d' ' -f1)" != "$RECORD_ONLY_SHA256" ]; then
-            echo "::error::A protected prerequisite or migration hash does not match frozen 00300/00400/00500/00600/00700/00800/00900/01000 identity."
+            || [ "$(tr -d '\r' < "$RECORD_ONLY_FILE" | sha256sum | cut -d' ' -f1)" != "$RECORD_ONLY_SHA256" ] \
+            || [ "$(tr -d '\r' < "$FUNCTION_ACL_FILE" | sha256sum | cut -d' ' -f1)" != "$FUNCTION_ACL_SHA256" ]; then
+            echo "::error::A protected prerequisite or migration hash does not match frozen 00300/00400/00500/00600/00700/00800/00900/01000/01100 identity."
             exit 1
           fi
 
@@ -2309,16 +2316,17 @@ jobs:
               count(*) filter (where version = '20260822000700'),
               count(*) filter (where version = '20260822000800'),
               count(*) filter (where version = '20260822000900'),
-              count(*) filter (where version = '20260822001000')
+              count(*) filter (where version = '20260822001000'),
+              count(*) filter (where version = '20260822001100')
             from supabase_migrations.schema_migrations
             where version in (
               '20260822000150', '20260822000200', '20260822000300',
               '20260822000400', '20260822000500', '20260822000600',
               '20260822000700', '20260822000800', '20260822000900',
-              '20260822001000'
+              '20260822001000', '20260822001100'
             );")
-          if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]; then
-            echo "::error::History must record 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800 once, with protected 00300/00900/01000 absent."
+          if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0" ]; then
+            echo "::error::History must record 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800 once, with protected 00300/00900/01000/01100 absent."
             exit 1
           fi
 
@@ -2423,7 +2431,11 @@ jobs:
             exit 1
           fi
 
-          JOB_SEEKER_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+          job_seeker_ready() {
+            if [ "$1" != "pre" ] && [ "$1" != "post" ]; then
+              return 2
+            fi
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog, public;
             with relation as (
               select relation.*
@@ -2549,17 +2561,23 @@ jobs:
               and (select count(*) = 1 and bool_and(
                 source_md5 = '2bc4b362facbea54d3fd0b67c2545682'
                 and contract_md5 = 'f0b1bd6c32a55077dd010d420cd324ab'
-                and proacl is not null and (select count(*) from aclexplode(proacl)) = 2
+                and proacl is not null
+                and (select count(*) from aclexplode(proacl)) =
+                      case when '$1' = 'pre' then 3 else 2 end
                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                and ('$1' = 'post' or exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('service_role')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable))
                 and has_function_privilege('authenticated', oid, 'EXECUTE')
                 and not has_function_privilege('anon', oid, 'EXECUTE')
-                and not has_function_privilege('service_role', oid, 'EXECUTE')
-                and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner,to_regrole('authenticated')::oid) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
+                and has_function_privilege('service_role', oid, 'EXECUTE')
+                    is not distinct from ('$1' = 'pre')
+                and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner,to_regrole('authenticated')::oid,case when '$1' = 'pre' then to_regrole('service_role')::oid else proowner end) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
               ) from function_state)
-              and (select count(*) = 1 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname = 'apply_resume_extraction');")
+              and (select count(*) = 1 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname = 'apply_resume_extraction');"
+          }
+          JOB_SEEKER_READY=$(job_seeker_ready pre)
           if [ "$JOB_SEEKER_READY" != "t" ]; then
-            echo "::error::Immutable job-seeker 00400/00500 catalog, RLS, policies, function, or ACL state drifted."
+            echo "::error::Immutable job-seeker 00400/00500 catalog or exact hosted owner/authenticated/service_role function-ACL input drifted."
             exit 1
           fi
 
@@ -2994,6 +3012,7 @@ jobs:
             -f "$CONTRACT_FILE" \
             -f "$REPAIR_FILE" \
             -f "$RECORD_ONLY_FILE" \
+            -f "$FUNCTION_ACL_FILE" \
             -c "create extension if not exists plpgsql_check with schema extensions;" \
             -c "with expected(signature) as (values
               ('public.agentos_resolved_agent_grants(uuid)'),
@@ -3051,23 +3070,29 @@ jobs:
             exit 1
           fi
 
-          echo "Applying exact 00300 -> 00900 -> 01000 protected chain in one production transaction."
+          echo "Applying exact 00300 -> 00900 -> 01000 -> 01100 protected chain in one production transaction."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
             -f "$CONTRACT_FILE" \
             -f "$REPAIR_FILE" \
             -f "$RECORD_ONLY_FILE" \
+            -f "$FUNCTION_ACL_FILE" \
             -c "insert into supabase_migrations.schema_migrations (version) values
-                  ('20260822000300'), ('20260822000900'), ('20260822001000');"
+                  ('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100');"
 
           RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
             "select concat_ws('|',
                count(*) filter (where version = '20260822000300'),
                count(*) filter (where version = '20260822000900'),
-               count(*) filter (where version = '20260822001000'))
+               count(*) filter (where version = '20260822001000'),
+               count(*) filter (where version = '20260822001100'))
              from supabase_migrations.schema_migrations
-             where version in ('20260822000300','20260822000900','20260822001000');")
-          if [ "$RECORDED" != "1|1|1" ]; then
-            echo "::error::The exact protected 00300/00900/01000 chain did not land once each in the ledger."
+             where version in ('20260822000300','20260822000900','20260822001000','20260822001100');")
+          if [ "$RECORDED" != "1|1|1|1" ]; then
+            echo "::error::The exact protected 00300/00900/01000/01100 chain did not land once each in the ledger."
+            exit 1
+          fi
+          if [ "$(job_seeker_ready post)" != "t" ]; then
+            echo "::error::The 01100 postflight did not leave the exact owner/authenticated-only resume extraction function ACL."
             exit 1
           fi
           FUNCTION_CONTRACT_AFTER=$(function_contract)
@@ -3772,7 +3797,7 @@ jobs:
           # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
           # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00900/01000 are already recorded."
+            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00900/01000/01100 are already recorded."
             exit 1
           fi
           if [ "$MODE" != "dburl" ]; then
@@ -3788,8 +3813,9 @@ jobs:
             || [ "$(tr -d '\r' < supabase/migrations/20260822000700_clear_surface_activity_types.sql | sha256sum | cut -d' ' -f1)" != "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql | sha256sum | cut -d' ' -f1)" != "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b" ] \
-            || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ]; then
-            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00900/01000 file hash drifted; broad push is forbidden."
+            || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql | sha256sum | cut -d' ' -f1)" != "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789" ]; then
+            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00900/01000/01100 file hash drifted; broad push is forbidden."
             exit 1
           fi
           PROTECTED_NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -3812,6 +3838,8 @@ jobs:
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000900';")
           PROTECTED_RECORD_ONLY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822001000';")
+          PROTECTED_RESUME_FUNCTION_ACL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822001100';")
           if [ "$PROTECTED_NORMALIZER" != "1" ]; then
             echo "::error::Protected migration 20260822000150 is not recorded exactly once. Apply it only through scope=bot-legacy-acl-normalization; broad push is forbidden."
             exit 1
@@ -3842,6 +3870,58 @@ jobs:
           fi
           if [ "$PROTECTED_RECORD_ONLY" != "1" ]; then
             echo "::error::Protected migration 20260822001000 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_RESUME_FUNCTION_ACL" != "1" ]; then
+            echo "::error::Protected migration 20260822001100 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
+            exit 1
+          fi
+          PROTECTED_RESUME_FUNCTION_ACL_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with state as (
+              select routine.*, routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as source_md5,
+                     md5(jsonb_build_array(
+                       pg_get_userbyid(routine.proowner), routine_language.lanname,
+                       routine.prokind::text, routine.provolatile::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as contract_md5
+              from pg_proc routine
+              join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              join pg_language routine_language on routine_language.oid = routine.prolang
+              where routine.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')
+            )
+            select count(*) = 1 and bool_and(
+              nspname = 'public' and lanname = 'plpgsql'
+              and pg_get_userbyid(proowner) = 'postgres'
+              and prokind = 'f' and provolatile = 'v' and prosecdef
+              and proconfig = array['search_path=pg_catalog']::text[]
+              and source_md5 = '2bc4b362facbea54d3fd0b67c2545682'
+              and contract_md5 = 'f0b1bd6c32a55077dd010d420cd324ab'
+              and proacl is not null and (select count(*) from aclexplode(proacl)) = 2
+              and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+              and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+              and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner,to_regrole('authenticated')::oid) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
+              and has_function_privilege('authenticated', oid, 'EXECUTE')
+              and not has_function_privilege('anon', oid, 'EXECUTE')
+              and not has_function_privilege('service_role', oid, 'EXECUTE')
+            )
+            and (select count(*) = 1 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname = 'apply_resume_extraction')
+            from state;")
+          if [ "$PROTECTED_RESUME_FUNCTION_ACL_READY" != "t" ]; then
+            echo "::error::Protected 01100 resume extraction function source, catalog, overload, or owner/authenticated-only ACL drifted; broad push is forbidden."
             exit 1
           fi
           PROTECTED_CLEAR_CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "

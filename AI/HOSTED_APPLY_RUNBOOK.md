@@ -36,7 +36,8 @@ forward-only chain:
 
 1. `20260822000300_contract_bot_mutator_acls.sql`;
 2. `20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql`;
-3. `20260822001000_factory_any_model_record_only.sql`.
+3. `20260822001000_factory_any_model_record_only.sql`;
+4. `20260822001100_contract_resume_extraction_function_acl.sql`.
 
 Do not apply `00300` through its retired standalone scope, do not run a broad
 push to introduce any member of this chain, and never reset, down-migrate, replay
@@ -46,8 +47,10 @@ history, or use `migration repair` as a substitute for the transaction. Use only
 prerequisite ledger/catalog state, exact final file hashes, safety containment,
 and the active task's direct owner release instruction. No magic RED phrase,
 predeclared-SHA approval, expiry, or repeat approval is required (ADR-116). It
-then rehearses all three files under rollback
-and applies all three plus their ledger rows in one transaction.
+then rehearses all four files under rollback
+and applies all four plus their ledger rows in one transaction. The final file
+is forward-only containment for the direct `service_role` function EXECUTE
+grant that hosted Supabase default privileges left behind after `00500`.
 
 After the transaction, require exact ledger/catalog/ACL/lint/health evidence,
 autonomy and automatic actions OFF, the global kill switch ON, workers/executors
@@ -67,7 +70,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 142 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 143 migration files. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

@@ -21,6 +21,7 @@ const files = {
   clearFunctions: "supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql",
   repair: "supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
   recordOnly: "supabase/migrations/20260822001000_factory_any_model_record_only.sql",
+  functionAcl: "supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql",
 } as const;
 
 const hashes = {
@@ -32,6 +33,7 @@ const hashes = {
   clearFunctions: "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a",
   repair: "87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b",
   recordOnly: "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255",
+  functionAcl: "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789",
 } as const;
 
 const lintedSignatures = [
@@ -125,14 +127,14 @@ describe("the protected factory any-model record-only chain", () => {
     expect(reachableWrites).toEqual([protectedStepName]);
   });
 
-  it("pins immutable prerequisites and the three-file protected chain", () => {
+  it("pins immutable prerequisites and the four-file protected chain", () => {
     const command = protectedStep().run ?? "";
     const referenced = command.match(/supabase\/migrations\/[A-Za-z0-9_.-]+\.sql/g) ?? [];
     expect(referenced).toEqual(Object.values(files));
     for (const hash of Object.values(hashes)) expect(command).toContain(hash);
     for (const variable of [
       "CONTRACT_FILE", "JOB_RESUME_FILE", "JOB_GRANTS_FILE", "MODEL_REPAIR_FILE", "CLEAR_TYPES_FILE",
-      "CLEAR_FUNCTIONS_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE",
+      "CLEAR_FUNCTIONS_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE",
     ]) {
       expect(command).toContain(`tr -d '\\r' < "$${variable}" | sha256sum`);
     }
@@ -182,13 +184,13 @@ describe("the protected factory any-model record-only chain", () => {
     );
   });
 
-  it("requires exact history and applies 00300 -> 00900 -> 01000 atomically", () => {
+  it("requires exact history and applies 00300 -> 00900 -> 01000 -> 01100 atomically", () => {
     const command = protectedStep().run ?? "";
-    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]');
+    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0" ]');
     for (const version of [
       "20260822000150", "20260822000200", "20260822000300", "20260822000400",
       "20260822000500", "20260822000600", "20260822000700", "20260822000800",
-      "20260822000900", "20260822001000",
+      "20260822000900", "20260822001000", "20260822001100",
     ]) {
       expect(command).toContain(version);
     }
@@ -200,27 +202,33 @@ describe("the protected factory any-model record-only chain", () => {
     const rehearsalContract = command.indexOf('-f "$CONTRACT_FILE"', begin);
     const rehearsalRepair = command.indexOf('-f "$REPAIR_FILE"', rehearsalContract);
     const rehearsalRecordOnly = command.indexOf('-f "$RECORD_ONLY_FILE"', rehearsalRepair);
-    const rollback = command.indexOf('-c "rollback;"', rehearsalRecordOnly);
+    const rehearsalFunctionAcl = command.indexOf('-f "$FUNCTION_ACL_FILE"', rehearsalRecordOnly);
+    const rollback = command.indexOf('-c "rollback;"', rehearsalFunctionAcl);
     const actual = command.indexOf("--single-transaction", rollback);
     const actualContract = command.indexOf('-f "$CONTRACT_FILE"', actual);
     const actualRepair = command.indexOf('-f "$REPAIR_FILE"', actualContract);
     const actualRecordOnly = command.indexOf('-f "$RECORD_ONLY_FILE"', actualRepair);
-    const ledger = command.indexOf("('20260822000300'), ('20260822000900'), ('20260822001000')", actualRecordOnly);
+    const actualFunctionAcl = command.indexOf('-f "$FUNCTION_ACL_FILE"', actualRecordOnly);
+    const ledger = command.indexOf("('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100')", actualFunctionAcl);
 
     expect(begin).toBeGreaterThan(rehearsal);
     expect(rehearsalContract).toBeGreaterThan(begin);
     expect(rehearsalRepair).toBeGreaterThan(rehearsalContract);
     expect(rehearsalRecordOnly).toBeGreaterThan(rehearsalRepair);
-    expect(rollback).toBeGreaterThan(rehearsalRecordOnly);
+    expect(rehearsalFunctionAcl).toBeGreaterThan(rehearsalRecordOnly);
+    expect(rollback).toBeGreaterThan(rehearsalFunctionAcl);
     expect(actual).toBeGreaterThan(rollback);
     expect(actualContract).toBeGreaterThan(actual);
     expect(actualRepair).toBeGreaterThan(actualContract);
     expect(actualRecordOnly).toBeGreaterThan(actualRepair);
-    expect(ledger).toBeGreaterThan(actualRecordOnly);
-    for (const variable of ["CONTRACT_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE"]) {
+    expect(actualFunctionAcl).toBeGreaterThan(actualRecordOnly);
+    expect(ledger).toBeGreaterThan(actualFunctionAcl);
+    for (const variable of ["CONTRACT_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE"]) {
       expect(command.match(new RegExp(`\\s-f\\s+"\\$${variable}"`, "g"))).toHaveLength(2);
     }
-    expect(command).toContain('if [ "$RECORDED" != "1|1|1" ]');
+    expect(command).toContain('if [ "$RECORDED" != "1|1|1|1" ]');
+    expect(command).toContain("job_seeker_ready pre");
+    expect(command).toContain("job_seeker_ready post");
     expect(command).toContain("RECORD_ONLY_READY=");
     expect(command).toContain("RECORD_ONLY_BOUNDARY=");
     expect(command).toContain("count(oid) = 12 and count(distinct oid) = 12");
@@ -348,11 +356,19 @@ describe("the protected factory any-model record-only chain", () => {
     for (const variable of [
       "PROTECTED_NORMALIZER", "PROTECTED_EXPAND", "PROTECTED_CONTRACT",
       "PROTECTED_EXECUTABLE_MODEL", "PROTECTED_REPAIR", "PROTECTED_RECORD_ONLY",
+      "PROTECTED_RESUME_FUNCTION_ACL",
     ]) expect(command).toContain(`if [ "$${variable}"`);
     expect(command).toContain('if [ "$PROTECTED_JOB_RESUME" != "1" ] || [ "$PROTECTED_JOB_GRANTS" != "1" ]');
     expect(command).toContain('if [ "$PROTECTED_CLEAR_TYPES" != "1" ] || [ "$PROTECTED_CLEAR_FUNCTIONS" != "1" ]');
     expect(command).toContain("version = '20260822000900'");
     expect(command).toContain("version = '20260822001000'");
+    expect(command).toContain("version = '20260822001100'");
+    const resumeAclLedgerGate = command.indexOf('if [ "$PROTECTED_RESUME_FUNCTION_ACL" != "1" ]');
+    const resumeAclCatalogGate = command.indexOf("PROTECTED_RESUME_FUNCTION_ACL_READY=", resumeAclLedgerGate);
+    expect(resumeAclLedgerGate).toBeGreaterThanOrEqual(0);
+    expect(resumeAclCatalogGate).toBeGreaterThan(resumeAclLedgerGate);
+    expect(command).toContain('if [ "$PROTECTED_RESUME_FUNCTION_ACL_READY" != "t" ]');
+    expect(command.slice(resumeAclCatalogGate)).toContain("not has_function_privilege('service_role', oid, 'EXECUTE')");
     expect(command).toContain("PROTECTED_CLEAR_CATALOG_READY=");
     expect(command).toContain("protected_repair_function_catalog_ready()");
     expect(command).toContain("protected_repair_function_catalog_ready post");
@@ -360,7 +376,7 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command).toContain("PROTECTED_RECORD_ONLY_READY=");
     expect(command).toContain("scope=factory-any-model-record-only");
     expect(command.search(/\bsupabase\s+db\s+push\b/)).toBeGreaterThan(
-      command.indexOf('if [ "$PROTECTED_RECORD_ONLY" != "1" ]'),
+      resumeAclCatalogGate,
     );
   });
 });

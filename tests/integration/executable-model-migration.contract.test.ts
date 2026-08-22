@@ -59,7 +59,7 @@ describe("the repair migration and the executable model agree", () => {
     for (const model of stale) expect(offered).toContain(model);
   });
 
-  it("is the newest migration, so the repair runs after the schema it repairs", async () => {
+  it("is present after the schema it repairs", async () => {
     const files = (await readdir(resolve(repositoryRoot, "supabase/migrations")))
       .filter((file) => file.endsWith(".sql"))
       .sort();

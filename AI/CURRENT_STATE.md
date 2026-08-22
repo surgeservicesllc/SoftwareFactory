@@ -20,7 +20,7 @@ path remains distinct and unchanged.
 
 Hosted `20260822000600_route_bots_onto_the_executable_model.sql` is already
 applied. The protected `20260822000300` -> `20260822000900` ->
-`20260822001000` chain is still pending and may be applied only atomically through
+`20260822001000` -> `20260822001100` chain is still pending and may be applied only atomically through
 `scope=factory-any-model-record-only` after exact-head CI, exact READY Vercel
 identity, the owner's direct release request in this active task, and all
 ledger/catalog/safety preflights. ADR-116 removes the repository's magic RED
@@ -30,6 +30,15 @@ Workers, autonomy, and automatic actions remain OFF and the global kill switch
 remains ON. This candidate has no final commit, production deployment, hosted
 chain apply, or signed-in production Step 8 -> Step 9 evidence yet; make no
 deployed or production-ready claim.
+
+Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
+real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was
+exact, but `apply_resume_extraction(uuid,text[])` still had direct
+`service_role EXECUTE` from Supabase function default privileges. Immutable
+`00500` did not revoke that role. New forward migration `01100` freezes the
+exact known three-entry input, removes only the overgrant, and requires the
+final owner-plus-authenticated ACL. It is part of the same rollback rehearsal
+and production transaction; it has not yet been hosted.
 
 **Historical release checkpoint before ADR-115, 2026-08-22 (ADR-111,
 superseded):** exact commit

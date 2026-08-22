@@ -1088,7 +1088,8 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: hosted `20260822000600_route_bots_onto_the_executable_model.sql` is
   already applied and continues to align legacy Codex rows with the one
   executable identity. The new database contract must land only as the atomic,
-  forward-only `20260822000300` -> `20260822000900` -> `20260822001000` chain.
+  forward-only `20260822000300` -> `20260822000900` -> `20260822001000` ->
+  `20260822001100` chain.
   The retired standalone CONTRACT scope is non-mutating; only
   `scope=factory-any-model-record-only` may rehearse and apply the chain after
   exact-main, exact READY Vercel, owner-acceptance, ledger, catalog, ACL, lint,
@@ -1146,3 +1147,29 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: `lib/job-seeker/navigation.ts` holds the section's own left navigation — Overview with its five sections, then Job Search, Applications, Resume Library, Cover Letters, Contacts & Outreach, Interview Tracker, Notes & Documents, Analytics, Settings — and `AppShell` swaps its whole navigation set while the path is under `/job-seeker`. `/job-seeker` lands on an Overview dashboard rather than on the Career Profile form. The six existing panels gain real routes (`/job-seeker/profile` and siblings) instead of `?section=` query state, and the in-page tab strip is hidden when a route names its section, because the left navigation is now the wayfinding. The auth gate moves from `page.tsx` to a section `layout.tsx`. Resume Library, Cover Letters and Notes & Documents are one component over `job_seeker_documents` filtered by `kind`; Contacts & Outreach reads the contacts and outreach tables together; Interview Tracker is derived from applications at an interview stage rather than from a second table; Settings is the preferences surface that already governs matching.
 - Rationale: a person in Job Seeker is managing a job search, and the console's destinations — Projects, Bots, Runs, Secrets — are noise against that task. The owner's design shows a different navigation, which is the correct reading: this is a second product sharing a shell, not a page of the first. Landing on Career Profile meant a returning person's first sight was data entry rather than where their search stood. Interviews are derived rather than stored because an interview *is* an application at a stage, and keeping a second copy is how two screens start disagreeing about how many you have. `isActiveHref` gained an exact-match set because `/job-seeker` is both Overview's href and the prefix of every sibling, so prefix-matching would light Overview up while someone stood in Resume Library; the group still highlights from its children, which is what the design shows.
 - Consequence: `tests/unit/job-seeker-navigation.test.ts` checks every href against the file that would serve it, so an entry cannot promise a destination that does not exist. `tests/unit/job-seeker-overview-model.test.ts` pins the arithmetic on the cases where a wrong answer would look plausible — an unscored job counted as a low score, an application counted as submitted before it was, a percentage taken over every recorded job rather than over the applications. The thirteen new routes are registered in the width sweep, which the responsive-coverage contract required before it would pass. Documents are listed with a 280-character preview rather than their full 60k, and the list carries versions because the table keeps every one: a tailored resume is evidence of what was actually sent.
+
+## ADR-118 - Contract the hosted resume function ACL in a new forward version
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: preserve immutable hosted migrations `20260822000400` and
+  `20260822000500`. Add `20260822001100` to freeze the exact
+  `apply_resume_extraction(uuid,text[])` signature, source, owner, language,
+  SECURITY DEFINER/search-path contract, overload count, and known hosted ACL
+  input; revoke function access from PUBLIC, anon, authenticated, and
+  service_role; then grant EXECUTE only to authenticated and require exactly
+  owner plus authenticated in postflight. Rehearse and apply the complete
+  `00300 -> 00900 -> 01000 -> 01100` chain in the same protected transaction.
+- Rationale: hosted probe `32587973532` proved that every Job Seeker table,
+  column, index, policy, constraint, RLS, source, and catalog fingerprint was
+  exact. The only mismatch was direct `service_role EXECUTE` left by Supabase
+  function default privileges. `00500` contracted table grants but revoked the
+  function only from PUBLIC and anon; its earlier verifier omitted
+  service_role, so the residual grant was real and invisible locally until the
+  hosted default was reproduced.
+- Consequence: no applied migration is edited or replayed, no final-state gate
+  is weakened, and service_role loses the unintended person-facing function
+  path before the atomic transaction becomes visible. The regression suite
+  reproduces the three-entry hosted input and proves `00500` leaves it while
+  `01100` closes it. Workers, autonomy, and automatic actions remain OFF and
+  the global kill switch remains ON.

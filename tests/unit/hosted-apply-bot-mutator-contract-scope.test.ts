@@ -118,7 +118,7 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     expect(command).toContain(`CONTRACT_SHA256=${frozenSha256}`);
     expect(command.match(/\s-f\s+"\$CONTRACT_FILE"/g)).toHaveLength(2);
     expect(command).toContain(
-      "('20260822000300'), ('20260822000900'), ('20260822001000')",
+      "('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100')",
     );
     expect(command).not.toMatch(/\bsupabase(?:@\S+)?\s+(?:db\s+push|migration\s+up)\b/);
   });
@@ -178,7 +178,7 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     const transaction = command.indexOf("--single-transaction", precontract);
 
     expect(history).toBeGreaterThanOrEqual(0);
-    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]');
+    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0" ]');
     expect(precontract).toBeGreaterThan(history);
     expect(command.slice(precontract, transaction)).toContain("count(oid) = 6");
     expect(command.slice(precontract, transaction)).toContain("aclexplode(proacl)");
@@ -213,15 +213,17 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     const contract = command.indexOf("where version = '20260822000300'");
     const repair = command.indexOf("where version = '20260822000900'", contract);
     const recordOnly = command.indexOf("where version = '20260822001000'", repair);
-    const contractCatalog = command.indexOf("PROTECTED_CATALOG_READY=", recordOnly);
+    const functionAcl = command.indexOf("where version = '20260822001100'", recordOnly);
+    const contractCatalog = command.indexOf("PROTECTED_CATALOG_READY=", functionAcl);
     const push = command.search(/\bsupabase\s+db\s+push\b/);
 
     expect(contract).toBeGreaterThanOrEqual(0);
     expect(repair).toBeGreaterThan(contract);
     expect(recordOnly).toBeGreaterThan(repair);
+    expect(functionAcl).toBeGreaterThan(recordOnly);
     expect(command).toContain('if [ "$PROTECTED_CONTRACT" != "1" ]');
     expect(command).toContain("scope=factory-any-model-record-only");
-    expect(contractCatalog).toBeGreaterThan(recordOnly);
+    expect(contractCatalog).toBeGreaterThan(functionAcl);
     expect(command).toContain('if [ "$PROTECTED_CATALOG_READY" != "t" ]');
     expect(command.slice(contractCatalog, push)).toContain("count(default_row.oid) = 2");
     expect(command.slice(contractCatalog, push)).toContain("count(trigger_row.oid) = 3");
