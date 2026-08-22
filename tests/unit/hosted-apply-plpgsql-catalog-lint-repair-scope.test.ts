@@ -325,6 +325,16 @@ describe("the protected factory any-model record-only chain", () => {
     const rollback = command.indexOf("rollback;", check);
     expect(command.slice(check, rollback)).toContain("false, true, true, false, false, false");
     expect(command.slice(check, rollback)).toContain("finding.level in ('error', 'warning', 'extra')");
+    // plpgsql_check raises "missing trigger relation" for a trigger function
+    // linted without a relation, so the three trigger rows must carry the
+    // relation 01000 pins in trigger_expectations and all others stay null.
+    expect(command.slice(check, rollback)).toContain(
+      "coalesce(expected.trigger_relation::regclass, 0::regclass)"
+    );
+    expect(command).toContain("('public.normalize_phase1c_command()', 'public.commands')");
+    expect(command).toContain("('public.plan_phase1c_task_and_run()', 'public.tasks')");
+    expect(command).toContain("('public.queue_phase1c_run_for_task()', 'public.tasks')");
+    expect(command).not.toContain("()', null)");
     expect(command).toContain('if [ -n "$LINT_FINDINGS" ]');
     expect(command).toContain('if [ "$EXTENSION_RESIDUE" != "0|0" ]');
     expect(command).not.toMatch(/drop\s+extension/i);

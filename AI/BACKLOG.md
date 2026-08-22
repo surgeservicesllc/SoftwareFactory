@@ -54,10 +54,18 @@ Last triaged: 2026-08-22
 - [x] Dispatch `scope=agentos-foundation-cleanup`: run 32601173685 measured
   the 4-object remnant (three enums plus one helper), dropped it, and read
   back a zero roster (ADR-123).
-- [ ] Dispatch `scope=command-carry-forward` so hosted submit_command reaches
-  the exact 20260815001000 source and owner-plus-authenticated ACL the
-  protected input guard freezes (ADR-124; chain run 32601908933 stopped on
-  exactly that signature after the AgentOS restore rehearsed cleanly).
+- [x] Dispatch `scope=command-carry-forward`: run 32602669547 applied
+  20260815001000 then 20260822001500, carrying hosted submit_command from
+  source 2772f6554cf16c98aa72c7d94f525f63 to the frozen
+  adb50eb74e1721274f23d0d69b79e2e8 with the owner-plus-authenticated ACL, and
+  read both back (ADR-124).
+- [x] Fix the rehearsal lint so it can execute at all: chain run 32603384774
+  passed every input gate the carry-forward unblocked and then died on
+  `missing trigger relation` — plpgsql_check refuses a trigger function
+  without its relation, and the lint passed `0::regclass` for all 27 roster
+  functions including the three Phase 1C trigger functions. The lint rows now
+  carry the relations 01000 pins in trigger_expectations (ADR-125), with the
+  mechanics probe-verified inside a rolled-back transaction.
 - [ ] Apply only the protected atomic
   `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact

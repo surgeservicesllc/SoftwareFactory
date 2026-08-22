@@ -1261,6 +1261,47 @@ jobs:
              limit 10;"
           echo "Expected: heartbeats_in_future 0, heartbeats_last_10_minutes 0, holding_a_run 0."
 
+          echo ""
+          echo "Rehearsal lint mechanics, inside one rolled-back transaction. plpgsql_check"
+          echo "refuses a trigger function without its relation (missing trigger relation),"
+          echo "so each trigger row is linted against the relation 01000 pins for it. The"
+          echo "counts are finding rows on the current hosted bodies, not failures; this"
+          echo "block completing without that error is the verdict."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin;" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "select 'current_trigger_attachment|' || routine.proname || '|' || trigger_row.tgrelid::regclass::text
+                  from pg_trigger trigger_row
+                  join pg_proc routine on routine.oid = trigger_row.tgfoid
+                 where not trigger_row.tgisinternal
+                   and routine.proname in ('normalize_phase1c_command', 'plan_phase1c_task_and_run', 'queue_phase1c_run_for_task')
+                 order by 1;" \
+            -c "select 'trigger_lint_rows|' || expected.signature || '|' || count(finding.message)::text
+                  from (
+                    select candidate.signature, candidate.trigger_relation
+                      from (values
+                        ('public.normalize_phase1c_command()', 'public.commands'),
+                        ('public.plan_phase1c_task_and_run()', 'public.tasks'),
+                        ('public.queue_phase1c_run_for_task()', 'public.tasks')
+                      ) candidate(signature, trigger_relation)
+                     where to_regprocedure(candidate.signature) is not null
+                  ) expected
+                  left join lateral extensions.plpgsql_check_function_tb(
+                    expected.signature::regprocedure,
+                    expected.trigger_relation::regclass,
+                    false, true, true, false, false, false
+                  ) finding on true
+                 group by expected.signature
+                 order by expected.signature;" \
+            -c "rollback;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select count(*) filter (where extension_row.oid is not null) as extension_rows,
+                   count(*) filter (where routine.oid is not null) as function_rows
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname = 'plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';"
+          echo "Expected after rollback: extension_rows 0, function_rows 0."
+
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
         # project detail page's priority, focus, stop and cancel controls need,
@@ -3435,6 +3476,10 @@ jobs:
           # Exercise the entire exact frozen chain and warning-level linked
           # lint in one transaction, then roll the whole rehearsal back. Any
           # SQL, catalog, ACL, or lint mismatch therefore stops before commit.
+          # plpgsql_check refuses to lint a trigger function without the
+          # relation that types NEW/OLD ("missing trigger relation"), so the
+          # three trigger rows carry the relation 01000 pins for them in its
+          # trigger_expectations; every non-trigger row stays at 0::regclass.
           LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
             -c "begin;" \
             -f "$CONTRACT_FILE" \
@@ -3444,39 +3489,40 @@ jobs:
             -f "$FUNCTION_ACL_FILE" \
             -f "$CLEAR_FUNCTION_ACL_FILE" \
             -c "create extension if not exists plpgsql_check with schema extensions;" \
-            -c "with expected(signature) as (values
-              ('public.agentos_resolved_agent_grants(uuid)'),
-              ('public.agentos_list_agent_grants(uuid,integer)'),
-              ('public.agentos_export_project_config(uuid,uuid)'),
-              ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)'),
-              ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])'),
-              ('public.claim_provider_connect_session(text,text)'),
-              ('public.normalize_bot_assignment_configuration(jsonb)'),
-              ('public.capture_improvement_baseline(uuid)'),
-              ('public.audit_factory_health(uuid)'),
-              ('public.validate_pipeline_template_areas(jsonb)'),
-              ('public.list_factory_command_routing_candidates(uuid,uuid,text)'),
-              ('public.list_factory_commands(uuid,integer,uuid)'),
-              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)'),
-              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)'),
-              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)'),
-              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)'),
-              ('public.normalize_phase1c_command()'),
-              ('public.plan_phase1c_task_and_run()'),
-              ('public.queue_phase1c_run_for_task()'),
-              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
-              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
-              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
-              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)'),
-              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)'),
-              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)'),
-              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)'),
-              ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)')
+            -c "with expected(signature, trigger_relation) as (values
+              ('public.agentos_resolved_agent_grants(uuid)', null),
+              ('public.agentos_list_agent_grants(uuid,integer)', null),
+              ('public.agentos_export_project_config(uuid,uuid)', null),
+              ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)', null),
+              ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])', null),
+              ('public.claim_provider_connect_session(text,text)', null),
+              ('public.normalize_bot_assignment_configuration(jsonb)', null),
+              ('public.capture_improvement_baseline(uuid)', null),
+              ('public.audit_factory_health(uuid)', null),
+              ('public.validate_pipeline_template_areas(jsonb)', null),
+              ('public.list_factory_command_routing_candidates(uuid,uuid,text)', null),
+              ('public.list_factory_commands(uuid,integer,uuid)', null),
+              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)', null),
+              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)', null),
+              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)', null),
+              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)', null),
+              ('public.normalize_phase1c_command()', 'public.commands'),
+              ('public.plan_phase1c_task_and_run()', 'public.tasks'),
+              ('public.queue_phase1c_run_for_task()', 'public.tasks'),
+              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', null),
+              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', null),
+              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', null),
+              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', null),
+              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', null),
+              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', null),
+              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', null),
+              ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)', null)
             )
             select expected.signature || '|' || finding.level || '|' || finding.sqlstate || '|' || finding.message
             from expected
             cross join lateral extensions.plpgsql_check_function_tb(
-              expected.signature::regprocedure, 0::regclass,
+              expected.signature::regprocedure,
+              coalesce(expected.trigger_relation::regclass, 0::regclass),
               false, true, true, false, false, false
             ) finding
             where finding.level in ('error', 'warning', 'extra')

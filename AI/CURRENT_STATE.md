@@ -77,6 +77,22 @@ EXECUTE` on `reject_activity_event_mutation()`. `20260822001300` behind
 `audit-guard-acl-contract`, then re-dispatch `factory-any-model-record-only`
 under fresh exact-head CI and READY Vercel identity.
 
+All three hosted-input repairs then landed and read back exactly: run
+32599987697 (`audit-guard-acl-contract`), run 32601173685
+(`agentos-foundation-cleanup`, ADR-123), and run 32602669547
+(`command-carry-forward`, ADR-124). Chain run 32603384774 subsequently
+passed every prerequisite, history, catalog, containment, and input gate for
+the first time and aborted inside the rehearsal transaction on
+plpgsql_check's `missing trigger relation`: the lint invoked all 27 roster
+functions with `0::regclass`, and the three Phase 1C trigger functions can
+never be linted without their relations, so the clause was unsatisfiable on
+every database (ADR-125). Nothing committed; the ledger is unchanged. The
+lint rows now carry the `trigger_expectations` relations from
+`20260822001000`, and `scope=probe` proves the mechanics inside a
+rolled-back transaction. Remaining order: probe, then the chain under fresh
+exact-head CI and READY Vercel identity, then production Step 8/Step 9
+acceptance.
+
 Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
 real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was
 exact, but `apply_resume_extraction(uuid,text[])` still had direct
