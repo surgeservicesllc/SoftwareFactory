@@ -13,7 +13,6 @@ const listRoutes = [
   { name: "tasks", path: "app/api/tasks/route.ts", rpc: "list_tasks" },
   { name: "runs", path: "app/api/runs/route.ts", rpc: "list_agent_runs" },
   { name: "reports", path: "app/api/reports/route.ts", rpc: "list_reports" },
-  { name: "commands", path: "app/api/commands/route.ts", rpc: "list_commands" },
 ] as const;
 
 describe("tenant list boundary", () => {
@@ -47,6 +46,39 @@ describe.each(listRoutes)("$name list route", ({ path, rpc }) => {
   });
 });
 
+describe("commands list route", () => {
+  const route = read("app/api/commands/route.ts");
+  const queryContract = route.split("const commandListQuerySchema")[1]
+    ?.split("function commandExecutionMode")[0] ?? "";
+  const getHandler = route.split("export async function GET")[1] ?? "";
+
+  it("validates projectId and binds it to the canonical tenant RPC", () => {
+    expect(queryContract).toMatch(/projectId: z\.string\(\)\.uuid\(\)\.optional\(\)/);
+    expect(getHandler).toMatch(
+      /projectId: url\.searchParams\.get\("projectId"\) \?\? undefined/,
+    );
+    expect(getHandler).toMatch(
+      /context\.client\.rpc\("list_factory_commands", \{[\s\S]*?p_project_id: parsed\.data\.projectId \?\? null/,
+    );
+  });
+
+  it("uses only the PGRST202 legacy fallback and defensively filters project history", () => {
+    expect(getHandler).toMatch(
+      /if \(result\.error\?\.code === "PGRST202"\) \{\s*result = await context\.client\.rpc\("list_commands"/,
+    );
+    expect(getHandler).toMatch(
+      /parsed\.data\.projectId === undefined \|\| row\.project_id === parsed\.data\.projectId/,
+    );
+  });
+
+  it("projects only the canonical command execution disposition", () => {
+    expect(route).toMatch(
+      /value === "manual" \|\| value === "record_only" \? value : "unknown"/,
+    );
+    expect(getHandler).toContain("executionMode: commandExecutionMode(row.execution_mode)");
+  });
+});
+
 describe("list routes withhold sensitive columns", () => {
   it("omits agent run payloads and raw provider errors", () => {
     // Scoped to the GET handler, matching how the commands route is asserted
@@ -68,6 +100,7 @@ describe("list routes withhold sensitive columns", () => {
     const getHandler = read("app/api/commands/route.ts").split("export async function GET")[1] ?? "";
     expect(getHandler).not.toMatch(/\bparameters\b/);
   });
+
 });
 
 describe("provider routes preserve hardened tenant reads", () => {

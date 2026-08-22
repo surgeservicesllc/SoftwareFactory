@@ -210,6 +210,64 @@ describe("the extraction table", () => {
     ]);
   });
 
+  it("removes the hosted service_role function default grant in a new forward version", async () => {
+    /*
+     * Hosted Supabase also applies ALTER DEFAULT PRIVILEGES to new functions.
+     * 00500 contracted the table correctly but named only PUBLIC and anon in
+     * its function REVOKE, so the direct service_role EXECUTE survived there.
+     * Reproduce that exact residual state, prove 00500 cannot repair it, then
+     * prove the new forward-only 01100 migration does.
+     */
+    await db.exec(`
+      grant execute on function public.apply_resume_extraction(uuid, text[]) to service_role;
+    `);
+    const hostedInput = await db.query<{ service_execute: boolean }>(`
+      select has_function_privilege(
+        'service_role', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE'
+      ) as service_execute`);
+    expect(hostedInput.rows[0].service_execute).toBe(true);
+
+    await db.exec(
+      await readFile(
+        resolve(migrationsRoot, "20260822000500_job_seeker_extraction_grant_contract.sql"),
+        "utf8",
+      ),
+    );
+    const afterLegacyContract = await db.query<{ service_execute: boolean }>(`
+      select has_function_privilege(
+        'service_role', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE'
+      ) as service_execute`);
+    expect(
+      afterLegacyContract.rows[0].service_execute,
+      "the hosted 00500 residual grant must be faithfully reproduced",
+    ).toBe(true);
+
+    await db.exec(
+      await readFile(
+        resolve(migrationsRoot, "20260822001100_contract_resume_extraction_function_acl.sql"),
+        "utf8",
+      ),
+    );
+    const afterForwardContract = await db.query<{
+      acl_entries: number;
+      auth_execute: boolean;
+      anon_execute: boolean;
+      service_execute: boolean;
+    }>(`
+      select (select count(*)::int from aclexplode(routine.proacl)) as acl_entries,
+             has_function_privilege('authenticated', routine.oid, 'EXECUTE') as auth_execute,
+             has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_execute,
+             has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_execute
+      from pg_proc routine
+      where routine.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')`);
+    expect(afterForwardContract.rows[0]).toEqual({
+      acl_entries: 2,
+      auth_execute: true,
+      anon_execute: false,
+      service_execute: false,
+    });
+  });
+
   it("keeps the apply function callable by members and nobody else", async () => {
     const acl = await db.query<{ role: string; may_execute: boolean }>(`
       select role_name as role,

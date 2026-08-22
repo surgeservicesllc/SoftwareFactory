@@ -106,7 +106,13 @@ type FactoryData = {
   }>;
   /** Missing/false means assignment-derived progress must fail closed. */
   assignmentsComplete: boolean;
-  commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
+  commands: Array<{
+    id: string;
+    prompt: string;
+    status: string;
+    executionMode: "manual" | "record_only" | "unknown";
+    project: { id: string; name: string } | null;
+  }>;
   pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
   /** Which logical agents each project's factory includes, and whether the
    * selection store exists on this database at all. */
@@ -300,7 +306,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         projectsBody,
         accountsBody,
         botsBody,
-        commandsBody,
+        initialCommandsBody,
         pipelinesBody,
         templatesBody,
         workerBody,
@@ -359,7 +365,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         || projectsBody === null
         || accountsBody === null
         || botsBody === null
-        || commandsBody === null
+        || initialCommandsBody === null
         || pipelinesBody === null
         || templatesBody === null
         || workerBody === null
@@ -376,6 +382,85 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       const activeOrganizationId = typeof botsBody.activeOrganizationId === "string"
         ? botsBody.activeOrganizationId
         : "";
+
+      // Resolve the factory identity before asking for command history. The
+      // organization-wide command list is bounded and can be filled entirely
+      // by other projects; project scoping must happen in PostgreSQL before
+      // that limit or a persisted Step 8 command can disappear on reload.
+      if (
+        activeOrganizationId
+        && activeOrganizationIdRef.current !== activeOrganizationId
+      ) {
+        activeOrganizationIdRef.current = activeOrganizationId;
+        activeProjectIdRef.current = null;
+        const pendingProject = pendingCreatedProjectRef.current;
+        if (pendingProject && pendingProject.organizationId !== activeOrganizationId) {
+          pendingCreatedProjectRef.current = null;
+          startingNewFactoryRef.current = false;
+          setStartingNewFactory(false);
+        }
+      }
+
+      const pendingProject = pendingCreatedProjectRef.current;
+      const newProject = startingNewFactoryRef.current
+        && pendingProject?.organizationId === activeOrganizationId
+        ? projects.find((project) => project.id === pendingProject.projectId) ?? null
+        : null;
+
+      if (newProject) {
+        activeProjectIdRef.current = newProject.id;
+        startingNewFactoryRef.current = false;
+        pendingCreatedProjectRef.current = null;
+        setActiveProjectId(newProject.id);
+        setStartingNewFactory(false);
+        writeFactorySelection(activeOrganizationId, newProject.id);
+      } else if (!startingNewFactoryRef.current) {
+        const currentProjectId = activeProjectIdRef.current;
+        const currentStillExists = currentProjectId !== null
+          && projects.some((project) => project.id === currentProjectId);
+        const storedProjectId = readFactorySelection(activeOrganizationId);
+        const storedStillExists = storedProjectId !== null
+          && projects.some((project) => project.id === storedProjectId);
+        const nextProjectId = currentStillExists
+          ? currentProjectId
+          : storedStillExists
+            ? storedProjectId
+            : projects[0]?.id ?? null;
+
+        activeProjectIdRef.current = nextProjectId;
+        setActiveProjectId(nextProjectId);
+        if (nextProjectId) writeFactorySelection(activeOrganizationId, nextProjectId);
+      }
+
+      let commandsBody = initialCommandsBody;
+      if (activeProjectIdRef.current) {
+        const scopedCommandsResponse = await fetch(
+          `/api/commands?projectId=${encodeURIComponent(activeProjectIdRef.current)}&limit=100`,
+          { cache: "no-store" },
+        );
+        if (!isCurrent()) return;
+        if (scopedCommandsResponse.status === 401) {
+          setState({ kind: "signed-out" });
+          return;
+        }
+        if (scopedCommandsResponse.status === 409) {
+          setState({ kind: "setup" });
+          return;
+        }
+        if (!scopedCommandsResponse.ok) {
+          setState(staleOrUnavailable);
+          return;
+        }
+        const scopedCommandsBody = await readJson<{ commands?: FactoryData["commands"] }>(
+          scopedCommandsResponse,
+        );
+        if (!isCurrent()) return;
+        if (scopedCommandsBody === null) {
+          setState(staleOrUnavailable);
+          return;
+        }
+        commandsBody = scopedCommandsBody;
+      }
 
       const data: FactoryData = {
         activeOrganizationId,
@@ -424,7 +509,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         // or a truncated projection may still carry plausible rows, but those
         // rows cannot truthfully complete Assign or Configure.
         assignmentsComplete: botsBody.assignmentsComplete === true,
-        commands: commandsBody.commands ?? [],
+        commands: (commandsBody.commands ?? []).map((command) => ({
+          ...command,
+          executionMode: command.executionMode === "manual"
+            || command.executionMode === "record_only"
+            ? command.executionMode
+            : "unknown",
+        })),
         pipelines: (pipelinesBody.pipelines ?? []).map((pipeline) => ({
           name: pipeline.name,
           projectId: pipeline.projectId,
@@ -446,54 +537,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         },
         customTemplates: (templatesBody.templates ?? []).length,
       };
-
-      // Restore the selected factory while the page is still showing its
-      // loading state. The key is organization-scoped, and a stale/deleted
-      // project id is ignored in favor of the first live project.
-      if (
-        activeOrganizationId
-        && activeOrganizationIdRef.current !== activeOrganizationId
-      ) {
-        activeOrganizationIdRef.current = activeOrganizationId;
-        activeProjectIdRef.current = null;
-        const pendingProject = pendingCreatedProjectRef.current;
-        if (pendingProject && pendingProject.organizationId !== activeOrganizationId) {
-          pendingCreatedProjectRef.current = null;
-          startingNewFactoryRef.current = false;
-          setStartingNewFactory(false);
-        }
-      }
-
-      const pendingProject = pendingCreatedProjectRef.current;
-      const newProject = startingNewFactoryRef.current
-        && pendingProject?.organizationId === activeOrganizationId
-        ? projects.find((project) => project.id === pendingProject.projectId) ?? null
-        : null;
-
-      if (newProject) {
-        activeProjectIdRef.current = newProject.id;
-        startingNewFactoryRef.current = false;
-        pendingCreatedProjectRef.current = null;
-        setActiveProjectId(newProject.id);
-        setStartingNewFactory(false);
-        writeFactorySelection(activeOrganizationId, newProject.id);
-      } else if (!startingNewFactoryRef.current) {
-        const currentProjectId = activeProjectIdRef.current;
-        const currentStillExists = currentProjectId !== null
-          && projects.some((project) => project.id === currentProjectId);
-        const storedProjectId = readFactorySelection(activeOrganizationId);
-        const storedStillExists = storedProjectId !== null
-          && projects.some((project) => project.id === storedProjectId);
-        const nextProjectId = currentStillExists
-          ? currentProjectId
-          : storedStillExists
-            ? storedProjectId
-            : projects[0]?.id ?? null;
-
-        activeProjectIdRef.current = nextProjectId;
-        setActiveProjectId(nextProjectId);
-        if (nextProjectId) writeFactorySelection(activeOrganizationId, nextProjectId);
-      }
 
       setState({ kind: "ready", data, stale: false });
     } catch {
@@ -705,7 +748,16 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     ? data.commands.filter((command) => command.project?.id === activeProject.id)
     : [];
 
-  const hasSucceededCommand = scopedCommands.some((command) => command.status === "succeeded");
+  const latestCommand = scopedCommands[0] ?? null;
+  const latestExecutionMode = latestCommand?.executionMode ?? null;
+  const latestIsRecordOnly = latestExecutionMode === "record_only";
+  const latestModeIsUnknown = latestExecutionMode === "unknown";
+  const recordOnlyCount = scopedCommands.filter(
+    (command) => command.executionMode === "record_only",
+  ).length;
+  const hasSucceededCommand = scopedCommands.some(
+    (command) => command.executionMode === "manual" && command.status === "succeeded",
+  );
   const recent = scopedCommands.slice(0, 3);
 
   const steps: Array<{
@@ -944,7 +996,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route without dispatching a worker.",
       done: scopedCommands.length > 0,
       evidence: scopedCommands.length > 0
-        ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`
+        ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory${
+          recordOnlyCount > 0 ? ` · ${recordOnlyCount} recorded only` : ""
+        }`
         : "No command yet for this factory",
       action: "Give a bot work",
       icon: Terminal,
@@ -960,33 +1014,49 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "watch",
       title: "Watch It Ship",
-      description: data.executor.connected
-        ? "Every run lands as a draft pull request with CI evidence; you review and merge."
-        : "When an executor is connected, a run lands as a draft pull request with CI evidence for you to review and merge.",
-      done: hasSucceededCommand,
-      evidence: hasSucceededCommand
-        ? "At least one command has completed end to end"
-        : scopedCommands.length > 0
-          ? data.executor.connected
-            ? "Work is in flight — watch it on Pipelines"
-            : `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} queued; ${data.executor.label}`
-          : "Nothing has run yet",
-      action: "Watch execution",
+      description: latestIsRecordOnly
+        ? "This command is recorded only. By design it creates no worker dispatch, execution run, branch, or pull request."
+        : latestModeIsUnknown
+          ? "The command is recorded, but this database does not report its execution mode yet. Nothing is claimed to be running."
+          : data.executor.connected
+            ? "Every run lands as a draft pull request with CI evidence; you review and merge."
+            : "When an executor is connected, a manual command can run toward a draft pull request with CI evidence for you to review and merge.",
+      done: !latestIsRecordOnly && !latestModeIsUnknown && hasSucceededCommand,
+      evidence: latestIsRecordOnly
+        ? `${recordOnlyCount} command${recordOnlyCount === 1 ? "" : "s"} recorded only · no execution is queued`
+        : latestModeIsUnknown
+          ? "Command recorded · execution mode unavailable"
+          : hasSucceededCommand
+            ? "At least one command has completed end to end"
+            : scopedCommands.length > 0
+              ? data.executor.connected
+                ? "Work is in flight — watch it on Pipelines"
+                : `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} queued; ${data.executor.label}`
+              : "Nothing has run yet",
+      action: latestIsRecordOnly ? "Review command record" : "Watch execution",
       icon: Workflow,
       body: (
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-base font-semibold text-foreground">Command execution</h4>
-            <StatusBadge tone={data.executor.connected ? "safe" : "neutral"}>
-              {data.executor.label}
+            <h4 className="text-base font-semibold text-foreground">
+              {latestIsRecordOnly ? "Command record" : "Command execution"}
+            </h4>
+            <StatusBadge tone={!latestIsRecordOnly && !latestModeIsUnknown && data.executor.connected ? "safe" : "neutral"}>
+              {latestIsRecordOnly
+                ? "Recorded only"
+                : latestModeIsUnknown
+                  ? "Execution mode unavailable"
+                  : data.executor.label}
             </StatusBadge>
           </div>
           <p className="mt-1 text-sm text-muted">
-            A command runs the same lifecycle: verified intake → queue → a worker claims it →
-            isolated branch → draft pull request with CI. Merging stays yours, and production
-            deploys from the merge.
+            {latestIsRecordOnly
+              ? "The selected bot's verified route was saved as durable command evidence. Record-only mode creates no worker dispatch, execution run, branch, or pull request by design."
+              : latestModeIsUnknown
+                ? "This command predates execution-mode reporting or the database rollout is incomplete. Its durable record is visible, but no execution, branch, or pull request is inferred."
+                : "A manual command runs the same lifecycle: verified intake → queue → a worker claims it → isolated branch → draft pull request with CI. Merging stays yours, and production deploys from the merge."}
           </p>
-          {data.executor.connected ? null : (
+          {latestIsRecordOnly || latestModeIsUnknown || data.executor.connected ? null : (
             <p className="mt-2 text-sm text-faint">
               {data.executor.detail
                 || "No worker executes commands in this phase."}{" "}
@@ -1003,7 +1073,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                     <p className="min-w-0 flex-1 truncate text-sm text-foreground" title={command.prompt}>
                       {command.prompt}
                     </p>
-                    <StatusBadge tone={stage.tone} dot={false}>{stage.label}</StatusBadge>
+                    <StatusBadge tone={stage.tone} dot={false}>
+                      {command.executionMode === "record_only"
+                        ? "Recorded only"
+                        : command.executionMode === "unknown"
+                          ? "Mode unavailable"
+                          : stage.label}
+                    </StatusBadge>
                   </li>
                 );
               })}

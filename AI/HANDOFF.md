@@ -2,7 +2,50 @@
 
 Last updated: 2026-08-22
 
-## Newest (2026-08-22): every command was being refused, and why
+## Newest (2026-08-22): any model records safely; only exact Codex executes
+
+The current release candidate resolves the Step 8 provider/model dead end
+without pretending that every provider has an executor (ADR-115). Exact
+`openai` / `gpt-5.3-codex` is still the only executable Factory identity. Every
+other valid bounded pair, including Claude and alternate OpenAI models, is
+`record_only`: command, task, immutable route, and disposition persist, while
+the database and application both guarantee zero `agent_runs`, no worker
+dispatch, and no branch, commit, pull request, merge, or deployment. Invalid
+identities still fail closed. A nondefault `SOFTWAREFACTORY_CODEX_MODEL` also
+fails before planning; do not use environment configuration to claim a second
+executable model.
+
+Step 8 now completes on durable recording. Step 9 consumes project-scoped safe
+command history and explicitly reports that a `record_only` command has no run,
+worker, branch, or PR by design. Reload must preserve the same project-only row,
+and the projection must not reveal raw parameters.
+
+Hosted migration `20260822000600_route_bots_onto_the_executable_model.sql` is
+already applied. The protected database tail is not: `00300`, `00900`, and
+`01000`, plus forward ACL containment `01100`, remain pending as one atomic
+forward-only chain. Apply them only through
+`scope=factory-any-model-record-only`, after exact-main/READY-Vercel identity
+and all immutable prerequisite, catalog, lint, health, and containment checks.
+The owner directly requested this release in the active task; ADR-116 removes
+the old magic RED phrase, predeclared-SHA, expiry, and repeat-approval ceremony
+without weakening any technical or product/runtime gate. The workflow rehearses
+the same four files under rollback
+before the one transaction that records all four ledger rows. `01100` removes
+the exact hosted `service_role EXECUTE` overgrant on
+`apply_resume_extraction(uuid,text[])` that the immutable `00500` left behind.
+The retired
+standalone `00300` path must not mutate, and `scope=all` must not introduce any
+member of the chain.
+
+This is not a deployment handoff yet. No final candidate SHA, green exact-head
+CI set, matching Vercel deployment, hosted atomic apply, or signed-in production
+Step 8 -> Step 9/reload proof exists. Keep workers, autonomy, and automatic
+actions OFF and the global kill switch ON. The next operator must freeze exact
+identities, publish and verify the application, run the protected atomic scope,
+then capture Claude/alternate-model project-scoped acceptance before using
+"deployed" or "production ready."
+
+## Prior (2026-08-22): every command was being refused, and why
 
 `Issue a Command` refused every submission in every workspace with
 `PROVIDER_MODEL_MISMATCH` — at the last step of the journey, after a project, a
@@ -15,15 +58,13 @@ exactly. One fact in two files, with nothing tying them.
 picker marks each model **runs** or **cannot run**, and the refusal names the
 bot, both models, and where to change one.
 
-**Outstanding owner action:** migration `20260822000600_route_bots_onto_the_executable_model`
-repairs bots already written with the unexecutable model. Until it is applied,
-existing bots stay refused even on the new code, because the bad model is
-already in their rows. Apply with
-`.github/workflows/apply-hosted-migrations.yml`, `confirm=apply`,
-`scope=executable-model-repair`.
+At this historical checkpoint, migration
+`20260822000600_route_bots_onto_the_executable_model` was still outstanding.
+It is now hosted; do not rerun it. The current pending database action is the
+atomic ADR-115/ADR-118 `00300 -> 00900 -> 01000 -> 01100` scope described above.
 
 
-## Newest (2026-08-22): application deployed; repaired database sequence local
+## Prior (2026-08-22): application deployed; repaired database sequence local
 
 Exact commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is current
 `main`, with `surgeservicesllc <surgeservicesllc@gmail.com>` as author and

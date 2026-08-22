@@ -200,6 +200,10 @@ const CASES = [
   "portfolio",
   "pipelines",
   "pipeline-templates-selected",
+  "job-seeker-overview",
+  "job-seeker-documents",
+  "job-seeker-contacts",
+  "job-seeker-interviews",
   "agentos",
   "autonomy",
   "bot-usage",
@@ -396,6 +400,34 @@ test("AI Factory owns one modal above the whole shell, including pipeline Plan a
   expect(await page.locator("#root").getAttribute("aria-hidden")).toBeNull();
   await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("inert", "legacy");
   await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("aria-hidden", "false");
+});
+
+test("AI Factory advances a persisted record-only command to a truthful non-execution Step 9", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "semantic browser check runs once in a resizable project");
+  await open(page, "ai-factory", 1280);
+
+  const commandStep = page.getByRole("heading", {
+    name: "Issue a Command",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  await expect(commandStep.getByText("Done")).toBeVisible();
+  await expect(commandStep.getByText(/1 recorded only/i)).toBeVisible();
+
+  const watchStep = page.getByRole("heading", {
+    name: "Watch It Ship",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  await expect(watchStep.getByText(/no execution is queued/i)).toBeVisible();
+  await expect(watchStep.getByText(/no worker dispatch, execution run, branch, or pull request/i))
+    .toBeVisible();
+  await expect(watchStep.getByText(/when an executor is connected/i)).toHaveCount(0);
+
+  await watchStep.getByRole("button", { name: "Review command record" }).click();
+  const dialog = page.getByRole("dialog", { name: "Watch It Ship" });
+  await expect(dialog.getByText("Command record")).toBeVisible();
+  await expect(dialog.getByText(/creates no worker dispatch, execution run, branch, or pull request by design/i))
+    .toBeVisible();
+  await expect(dialog.getByText(/will not start until an executor is connected/i)).toHaveCount(0);
 });
 
 test("standalone Bot Manager and Project Bots modals contain focus and share one close path", async ({ page, isMobile }) => {

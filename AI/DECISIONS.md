@@ -1060,3 +1060,116 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: `executionModel()` and `EXECUTION_PROVIDER` are exported from `lib/orchestration/plan.ts` and are the single source of the pair a Phase 1C command can run on. `ensureProviderBot` asks that function for the executing provider instead of taking `suggestedModels[0]`, so an operator's `SOFTWAREFACTORY_CODEX_MODEL` pin moves the plan and every newly provisioned bot together. The catalog's openai list leads with the same value, `GET /api/projects/:id/bots` and `GET /api/bots/providers` publish it, and the roster's model picker marks each option **runs** or **cannot run**. Migration `20260822000600` moves already-provisioned bots off the models the catalog itself produced and clears posting overrides naming one, each repair written as an activity event. A model the console never offered is left alone.
 - Rationale: the plan fixed `gpt-5.3-codex` while `ensureProviderBot` named new bots `gpt-5.1-codex`. `selectFactoryCommandRoute` and `submit_factory_command` both compare the pair exactly, so **every command in every workspace was refused** — at the last step of the journey, after a project, a pipeline and a bot had all been chosen, with `PROVIDER_MODEL_MISMATCH`. Nothing was misconfigured; the console had shipped a bot its own executor could never match. The defect was possible because one fact lived in two files with nothing tying them, and it was invisible because the refusal named two internal concepts ("the command's fixed execution provider and model") that appear on no screen. Repairing rows is not optional cleanup: fixing the constants alone would leave every existing workspace blocked, since the bad model is already written. Overrides are cleared rather than rewritten because null means "use the bot's model", which is now correct, while setting the executable model would assert an intention nobody expressed.
 - Consequence: `tests/unit/execution-model-agreement.test.ts` ties the catalog to the plan, and `tests/integration/executable-model-migration.contract.test.ts` ties the migration's literal to `DEFAULT_CODEX_MODEL` — SQL cannot import the constant, so the third copy is checked by reading the file. `tests/integration/executable-model-repair.behavior.test.ts` seeds rows *before* the repair migration and applies it, which is the upgrade a live workspace experiences rather than a fresh install that never had the defect; it proves the repaired bot is routable, that a hand-typed model and another provider are untouched, that the repair is replayable, and that each change is audit-evented. The refusal now names the bot, both models, and where to change one, pinned by `tests/unit/factory-command-routing.test.ts`. `STANDARD_MODEL_CATALOGUE` grew by one entry, and `provider-surfaces` now derives its count from the catalogue rather than repeating a literal, and asserts every entry has a display name — an unnamed model silently renders its raw identifier.
+
+## ADR-115 - Admit every valid Factory model, but execute only the identity the worker implements
+
+- Date: 2026-08-22
+- Status: Accepted as an unpublished release candidate; protected hosted apply
+  and production acceptance are pending
+- Supersedes: ADR-114 only where ADR-114 allowed an environment pin to move the
+  executable model. Its exact worker/posting agreement and hosted `00600` repair
+  remain in force.
+- Decision: classify the selected posting's provider/model at command admission.
+  Exact `openai` / `gpt-5.3-codex` is the sole executable identity and retains
+  the existing manual Phase 1C plan. Every other syntactically valid, bounded
+  provider/model pair is `record_only`: persist the command, task, immutable
+  route, and execution disposition, but create no `agent_runs` and expose no
+  route to a worker, repository branch, commit, pull request, merge, or
+  deployment. Reject invalid identities. Reject every nondefault
+  `SOFTWAREFACTORY_CODEX_MODEL` value before planning rather than treating an
+  environment variable as execution authorization.
+- Decision: Step 8 is complete when the command is durably recorded. Step 9
+  reads a caller-authorized, project-scoped safe projection and renders the
+  recorded-only disposition truthfully, including the deliberate absence of
+  execution artifacts. Reload must preserve that project-only history, and the
+  projection must not expose raw command parameters. Record-only history is
+  excluded from executable capacity calculations and provider-run APIs refuse
+  it even if called directly.
+- Decision: hosted `20260822000600_route_bots_onto_the_executable_model.sql` is
+  already applied and continues to align legacy Codex rows with the one
+  executable identity. The new database contract must land only as the atomic,
+  forward-only `20260822000300` -> `20260822000900` -> `20260822001000` ->
+  `20260822001100` chain.
+  The retired standalone CONTRACT scope is non-mutating; only
+  `scope=factory-any-model-record-only` may rehearse and apply the chain after
+  exact-main, exact READY Vercel, owner-acceptance, ledger, catalog, ACL, lint,
+  health, and containment gates.
+- Rationale: a connected Claude or alternate OpenAI account is valid routing
+  intent even when this factory has no executor for it. Rejecting that intent
+  made Step 8 unusable; pretending it was executable would be worse, because it
+  would fabricate runs and make Step 9 promise artifacts no worker can create.
+  A durable record-only mode preserves user intent and project history while
+  keeping the execution boundary honest and closed.
+- Consequence: adding another executable provider/model requires a new decision
+  plus synchronized worker, claim, database, policy, and acceptance changes; a
+  catalog entry, connected account, UI selection, or environment variable is
+  insufficient. Until the candidate has a frozen commit, green exact-head CI,
+  matching Vercel deployment, atomic hosted apply, zero-run postflight, and
+  signed-in Step 8 -> Step 9/reload evidence, it must not be described as
+  deployed or production ready. Workers, autonomy, and automatic actions remain
+  OFF and the global kill switch remains ON.
+
+## ADR-116 - Owner-directed releases use technical gates, not a magic RED approval ceremony
+
+- Date: 2026-08-22
+- Status: Accepted by direct owner instruction
+- Decision: an owner's direct request in the active task to push, deploy, or
+  apply the named release is sufficient repository release authority. Agents
+  must not demand a second magic phrase, a commit/hash declared before it
+  exists, an artificial expiry window, or repeated approval after routine
+  rebases and validation. The exact artifact is frozen and reported by the
+  executor as evidence rather than used as a conversational password.
+- Decision: this changes release authorization only. Exact repository/main/head
+  identity, green required CI, exact READY production deployment, immutable
+  migration hashes and prerequisites, rollback rehearsal, forward-only apply,
+  ledger/catalog/ACL/lint/health verification, audit evidence, stop-on-drift,
+  workers/autonomy/actions OFF, and the kill switch remain mandatory. Product
+  RED commands, protected draft changes generated by the product, secrets,
+  destructive data work, auth/RLS, billing, DNS, and autonomous authority keep
+  their existing approval and safety boundaries unless the owner separately
+  changes those policies.
+- Rationale: binding release authority to a specially formatted sentence and a
+  not-yet-created commit delayed a release without adding technical assurance.
+  Artifact identity, tests, provider identity, database preflights, atomicity,
+  containment, and postflight evidence are the controls that prevent the
+  failure modes. The owner's plain-language instruction already establishes
+  intent and scope.
+- Consequence: release tooling may request identifiers needed to verify the
+  artifact being executed, but it may not require a magic acceptance value or
+  conversational re-approval. Any target or scope beyond the owner's direct
+  request still requires new authority; uncertainty or a failed technical gate
+  still stops the release.
+
+## ADR-117 - Job Seeker is a product with its own navigation, not a page of the console
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: `lib/job-seeker/navigation.ts` holds the section's own left navigation — Overview with its five sections, then Job Search, Applications, Resume Library, Cover Letters, Contacts & Outreach, Interview Tracker, Notes & Documents, Analytics, Settings — and `AppShell` swaps its whole navigation set while the path is under `/job-seeker`. `/job-seeker` lands on an Overview dashboard rather than on the Career Profile form. The six existing panels gain real routes (`/job-seeker/profile` and siblings) instead of `?section=` query state, and the in-page tab strip is hidden when a route names its section, because the left navigation is now the wayfinding. The auth gate moves from `page.tsx` to a section `layout.tsx`. Resume Library, Cover Letters and Notes & Documents are one component over `job_seeker_documents` filtered by `kind`; Contacts & Outreach reads the contacts and outreach tables together; Interview Tracker is derived from applications at an interview stage rather than from a second table; Settings is the preferences surface that already governs matching.
+- Rationale: a person in Job Seeker is managing a job search, and the console's destinations — Projects, Bots, Runs, Secrets — are noise against that task. The owner's design shows a different navigation, which is the correct reading: this is a second product sharing a shell, not a page of the first. Landing on Career Profile meant a returning person's first sight was data entry rather than where their search stood. Interviews are derived rather than stored because an interview *is* an application at a stage, and keeping a second copy is how two screens start disagreeing about how many you have. `isActiveHref` gained an exact-match set because `/job-seeker` is both Overview's href and the prefix of every sibling, so prefix-matching would light Overview up while someone stood in Resume Library; the group still highlights from its children, which is what the design shows.
+- Consequence: `tests/unit/job-seeker-navigation.test.ts` checks every href against the file that would serve it, so an entry cannot promise a destination that does not exist. `tests/unit/job-seeker-overview-model.test.ts` pins the arithmetic on the cases where a wrong answer would look plausible — an unscored job counted as a low score, an application counted as submitted before it was, a percentage taken over every recorded job rather than over the applications. The thirteen new routes are registered in the width sweep, which the responsive-coverage contract required before it would pass. Documents are listed with a 280-character preview rather than their full 60k, and the list carries versions because the table keeps every one: a tailored resume is evidence of what was actually sent.
+
+## ADR-118 - Contract the hosted resume function ACL in a new forward version
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: preserve immutable hosted migrations `20260822000400` and
+  `20260822000500`. Add `20260822001100` to freeze the exact
+  `apply_resume_extraction(uuid,text[])` signature, source, owner, language,
+  SECURITY DEFINER/search-path contract, overload count, and known hosted ACL
+  input; revoke function access from PUBLIC, anon, authenticated, and
+  service_role; then grant EXECUTE only to authenticated and require exactly
+  owner plus authenticated in postflight. Rehearse and apply the complete
+  `00300 -> 00900 -> 01000 -> 01100` chain in the same protected transaction.
+- Rationale: hosted probe `32587973532` proved that every Job Seeker table,
+  column, index, policy, constraint, RLS, source, and catalog fingerprint was
+  exact. The only mismatch was direct `service_role EXECUTE` left by Supabase
+  function default privileges. `00500` contracted table grants but revoked the
+  function only from PUBLIC and anon; its earlier verifier omitted
+  service_role, so the residual grant was real and invisible locally until the
+  hosted default was reproduced.
+- Consequence: no applied migration is edited or replayed, no final-state gate
+  is weakened, and service_role loses the unintended person-facing function
+  path before the atomic transaction becomes visible. The regression suite
+  reproduces the three-entry hosted input and proves `00500` leaves it while
+  `01100` closes it. Workers, autonomy, and automatic actions remain OFF and
+  the global kill switch remains ON.

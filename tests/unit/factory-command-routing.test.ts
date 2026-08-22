@@ -64,8 +64,6 @@ function decide(overrides: Record<string, unknown> = {}, risk: RiskLevel = "GREE
     candidates: [candidate(overrides)],
     pipelineTemplateKey: PIPELINE,
     effectiveRisk: risk,
-    provider: "openai",
-    model: "gpt-5.3-codex",
   });
 }
 
@@ -99,8 +97,6 @@ describe("factory command routing", () => {
       candidates: [],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(decision).toMatchObject({
@@ -134,16 +130,6 @@ describe("factory command routing", () => {
       label: "AI account needing reauthentication",
       overrides: { ai_account_status: "needs_reauth" },
       code: "BOT_NOT_READY",
-    },
-    {
-      label: "wrong provider",
-      overrides: { provider: "anthropic" },
-      code: "PROVIDER_MODEL_MISMATCH",
-    },
-    {
-      label: "wrong model",
-      overrides: { model: "gpt-5.3" },
-      code: "PROVIDER_MODEL_MISMATCH",
     },
     {
       label: "repository is read-only",
@@ -211,8 +197,6 @@ describe("factory command routing", () => {
       candidates: [full],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
 
@@ -233,8 +217,6 @@ describe("factory command routing", () => {
       })],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
     expect(forbidden).toMatchObject({
@@ -263,14 +245,76 @@ describe("factory command routing", () => {
       candidates: [fullPriorityBot, availableBot],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
       deferCapacityToAtomicSubmit: true,
     });
 
     expect(decision).toMatchObject({
       outcome: "SELECTED",
       selected: { botName: "Available bot" },
+    });
+  });
+
+  it("uses a ready Claude posting as the authoritative provider and model", () => {
+    const decision = decide({
+      bot_name: "Claude - Daniel",
+      provider: "anthropic",
+      model: "claude-opus-5",
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: {
+        botName: "Claude - Daniel",
+        provider: "anthropic",
+        model: "claude-opus-5",
+      },
+    });
+  });
+
+  it("records with a least-privilege Claude posting that cannot write or open a pull request", () => {
+    const decision = decide({
+      bot_name: "Claude - Daniel",
+      provider: "anthropic",
+      model: "claude-opus-5",
+      assignment_config: {
+        ...configuredGrant,
+        repositoryAccess: "read",
+        canOpenPullRequest: false,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: { botName: "Claude - Daniel", provider: "anthropic" },
+    });
+  });
+
+  it("uses the highest-priority bounded provider/model as record-only routing", () => {
+    const decision = routeFactoryCommand({
+      candidates: [
+        candidate({
+          assignment_id: "00000000-0000-4000-8000-000000000099",
+          bot_id: "00000000-0000-4000-8000-000000000098",
+          bot_name: "Future provider",
+          provider: "google",
+          assignment_config: { ...configuredGrant, priority: 0 },
+        }),
+        candidate({
+          assignment_id: "00000000-0000-4000-8000-000000000097",
+          bot_id: "00000000-0000-4000-8000-000000000096",
+          bot_name: "Claude - Daniel",
+          provider: "anthropic",
+          model: "claude-opus-5",
+          assignment_config: { ...configuredGrant, priority: 1 },
+        }),
+      ],
+      pipelineTemplateKey: PIPELINE,
+      effectiveRisk: "GREEN",
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: { botName: "Future provider", provider: "google" },
     });
   });
 
@@ -314,8 +358,6 @@ describe("factory command routing", () => {
       candidates,
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(route([oldest, urgent, samePriorityNewer])).toMatchObject({
@@ -352,30 +394,18 @@ describe("factory command routing", () => {
       candidates: [newer, fullish, older],
       pipelineTemplateKey: PIPELINE,
       effectiveRisk: "GREEN",
-      provider: "openai",
-      model: "gpt-5.3-codex",
     });
 
     expect(decision).toMatchObject({ outcome: "SELECTED", selected: { botName: "Older" } });
   });
-  it("tells a person which model the bot has and which one runs, and where to change it", () => {
-    // The message this replaces — "does not match the command's fixed
-    // execution provider and model" — was true and unactionable: it named two
-    // internal concepts, neither of which appears on any screen. This is the
-    // last step of the journey, so a dead end here costs the whole setup.
-    const wrongModel = decide({ model: "gpt-5.1-codex" });
-    expect(wrongModel.outcome).toBe("REFUSED");
-    const modelReason = wrongModel.refused[0]?.reason ?? "";
-    expect(modelReason).toContain("Codex Audit Bot");
-    expect(modelReason).toContain("gpt-5.1-codex");
-    expect(modelReason).toContain("gpt-5.3-codex");
-    expect(modelReason).toContain("Configure Bot Settings");
-
-    const wrongProvider = decide({ provider: "anthropic" });
-    const providerReason = wrongProvider.refused[0]?.reason ?? "";
-    // Names the provider pair, not the model pair, when that is what differs.
-    expect(providerReason).toContain("anthropic");
-    expect(providerReason).toContain("openai");
-    expect(providerReason).not.toContain("is set to");
+  it("removes the provider/model mismatch dead end for alternate models", () => {
+    expect(decide({ model: "gpt-5.1-codex" })).toMatchObject({
+      outcome: "SELECTED",
+      selected: { model: "gpt-5.1-codex", provider: "openai" },
+    });
+    expect(decide({ provider: "anthropic", model: "claude-opus-5" })).toMatchObject({
+      outcome: "SELECTED",
+      selected: { model: "claude-opus-5", provider: "anthropic" },
+    });
   });
 });

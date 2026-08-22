@@ -2,7 +2,46 @@
 
 Last reviewed: 2026-08-22
 
-**Current release checkpoint, 2026-08-22 (ADR-111):** exact commit
+**Unpublished any-model command candidate, 2026-08-22 (ADR-115):** Factory
+command admission now follows the selected posting instead of forcing every bot
+to impersonate the one executable worker. Exact `openai` / `gpt-5.3-codex`
+remains the only executable identity and keeps the manual Phase 1C plan. Every
+other valid bounded provider/model pair is `record_only`: its command, task,
+route, and disposition persist, but it creates zero agent runs and cannot reach a
+worker, branch, commit, pull request, merge, or deployment. Invalid identities
+are refused. A nondefault `SOFTWAREFACTORY_CODEX_MODEL` value also throws before
+planning, so environment configuration cannot silently widen execution.
+
+Step 8 may advance on durable `record_only` persistence. Step 9 then reads the
+project-scoped safe command projection and truthfully reports that no run,
+worker, branch, or pull request exists by design; a reload must preserve that
+same project-only history without exposing raw parameters. The executable Codex
+path remains distinct and unchanged.
+
+Hosted `20260822000600_route_bots_onto_the_executable_model.sql` is already
+applied. The protected `20260822000300` -> `20260822000900` ->
+`20260822001000` -> `20260822001100` chain is still pending and may be applied only atomically through
+`scope=factory-any-model-record-only` after exact-head CI, exact READY Vercel
+identity, the owner's direct release request in this active task, and all
+ledger/catalog/safety preflights. ADR-116 removes the repository's magic RED
+release phrase, predeclared-SHA, expiry, and repeat-approval ceremony; it does
+not remove any technical gate or any product/runtime RED approval boundary.
+Workers, autonomy, and automatic actions remain OFF and the global kill switch
+remains ON. This candidate has no final commit, production deployment, hosted
+chain apply, or signed-in production Step 8 -> Step 9 evidence yet; make no
+deployed or production-ready claim.
+
+Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
+real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was
+exact, but `apply_resume_extraction(uuid,text[])` still had direct
+`service_role EXECUTE` from Supabase function default privileges. Immutable
+`00500` did not revoke that role. New forward migration `01100` freezes the
+exact known three-entry input, removes only the overgrant, and requires the
+final owner-plus-authenticated ACL. It is part of the same rollback rehearsal
+and production transaction; it has not yet been hosted.
+
+**Historical release checkpoint before ADR-115, 2026-08-22 (ADR-111,
+superseded):** exact commit
 `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, with
 `surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer.
 Vercel production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at

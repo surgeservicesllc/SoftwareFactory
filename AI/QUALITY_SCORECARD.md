@@ -2,7 +2,36 @@
 
 Last reviewed: 2026-08-22
 
-**Current release checkpoint, 2026-08-22 (ADR-111):** exact commit
+**Any-model safe command candidate (ADR-115): LOCAL/PENDING RELEASE.** Exact
+`openai` / `gpt-5.3-codex` remains the only executable identity. All other valid
+bounded provider/models are `record_only` and are contractually limited to
+durable command/task/route history with zero runs, worker dispatch, repository
+artifacts, or deployment. Invalid identities and every nondefault
+`SOFTWAREFACTORY_CODEX_MODEL` execution pin fail closed.
+
+Step 8 durable-record advancement and truthful Step 9 are implemented against a
+project-scoped safe history projection; raw parameters are not part of that
+projection, and reload persistence is covered locally. Hosted `00600` is
+already applied. Protected `00300/00900/01000/01100` remain pending as one atomic
+scope, with rollback rehearsal and exact ledger/catalog/ACL/lint/health and
+safety gates.
+
+ADR-116 removes only the repository release ceremony: a direct owner request in
+the active task is sufficient release authority, without a magic RED phrase,
+predeclared commit/hash, expiry, or repeated approval. Exact-head CI, READY
+deployment identity, immutable migration hashes, rollback rehearsal,
+ledger/catalog/ACL/lint/health checks, audit evidence, and containment remain
+mandatory. Product/runtime RED approvals are unchanged.
+
+Release status is therefore **NOT DEPLOYED / NOT PRODUCTION-ACCEPTED** for this
+candidate. Final commit identity, exact-head green CI, matching READY Vercel
+deployment, hosted atomic apply, zero-run postflight, and signed-in
+Claude/alternate-model Step 8 -> Step 9 -> reload evidence are all still
+required. Existing workers/autonomy/actions remain OFF and the global kill
+switch remains ON; no prior deployment is evidence for this new behavior.
+
+**Historical release checkpoint before ADR-115, 2026-08-22 (ADR-111,
+superseded):** exact commit
 `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, authored and
 committed by `surgeservicesllc <surgeservicesllc@gmail.com>`. Exact Vercel
 production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
