@@ -160,14 +160,14 @@ fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
 All of these re-apply through the same replay-safe `scope=broker-functions`
 path. `20260821000300_project_pipeline_selection` (the `project_pipelines` table and
 its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
-functions, which is what makes the AI Factory's Use button record anything) is newer than that
-measurement and remains outstanding. `20260821000300` has its own one-file scope,
-**`scope=pipeline-selection`**, so it can reach production without re-running unrelated
-migrations; it is still in the `broker-functions` batch scope as well. Until then the Configure
-Pipeline step reads **Not Connected** in effect: `/api/project-pipelines` will return the
-database's own missing-function error rather than pretending a selection stuck. Earlier revisions of this
-document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
-high-water mark and is withdrawn.
+functions, which is what makes the AI Factory's Use button record anything) was newer than
+that measurement and is now **applied**: run `32536895799`, 2026-08-21 23:27Z,
+`scope=pipeline-selection`. Its one-file scope is what let it reach production without
+re-running unrelated migrations; it is still in the `broker-functions` batch scope as well.
+The run's after-ledger listing prints the version local and remote, and the step reloaded the
+PostgREST schema cache, so the Configure Pipeline step no longer reads **Not Connected** on
+this database. Earlier revisions of this document and of `todo.md` said the opposite; that
+claim was drawn from the ledger's old high-water mark and is withdrawn.
 
 **And the ledger still understates the schema.** The same run's object probe returned 19 of 19
 present, among them `scheduling_decisions`, `provider_capacity_limits`,

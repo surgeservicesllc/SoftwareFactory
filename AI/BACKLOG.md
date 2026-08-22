@@ -113,11 +113,12 @@ Last triaged: 2026-08-21
 - [x] Cover the migration against the real chain (owner allowed, member read-only,
   outsider denied, anonymous denied, no direct browser write path), the route boundary,
   the toggle, and the selected-state layout at every swept width.
-- [ ] Apply `20260821000300` to hosted Supabase: run the apply workflow with
-  `confirm=apply`, `scope=pipeline-selection` — a one-file scope added for it, so
-  production is reached without re-running twenty-three unrelated migrations. Until
-  then `/api/project-pipelines` reports PGRST202 as **Not Connected** and the Use
-  button is disabled naming that reason.
+- [x] Apply `20260821000300` to hosted Supabase — run `32536895799`, 2026-08-21
+  23:27Z, `confirm=apply` `scope=pipeline-selection`; the after-ledger listing shows
+  the version local and remote, and the step reloaded the PostgREST schema cache.
+- [ ] Observe the behaviour on production: press Use on `/solutions/ai-factory`,
+  refresh, and confirm the selection is still there. The ledger row proves the DDL
+  ran; it does not prove the journey reads it back on the live site.
 
 ## Project repository picker (2026-08-16)
 
