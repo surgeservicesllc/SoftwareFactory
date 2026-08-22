@@ -61,6 +61,7 @@ on:
           - bot-account-binding-contract
           - lifecycle
           - job-seeker-resume
+          - job-seeker-grant-contract
           - probe
       contract_app_sha:
         description: >-
@@ -2422,6 +2423,81 @@ jobs:
             exit 1
           fi
           echo "Applied, recorded, and verified: RLS forced, three policies, no UPDATE grant, definer function callable by members only."
+
+      - name: Contract the resume extraction table's grants (scope=job-seeker-grant-contract)
+        # Takes back the privileges Supabase's default grants handed to
+        # authenticated and service_role when 20260822000400 created the table.
+        # Its own post-apply readback measured auth_update = t and
+        # service_update = t on production, which is the defect this closes.
+        #
+        # Pure REVOKE and GRANT — no schema change, replay-safe by definition,
+        # and its effect is fully described by the readback below.
+        if: ${{ inputs.scope == 'job-seeker-grant-contract' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822000500_job_seeker_extraction_grant_contract.sql
+          EXPECTED_SHA256=c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          # The table it contracts has to exist, which means 20260822000400 ran.
+          PREDECESSOR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000400';")
+          if [ "$PREDECESSOR" != "1" ]; then
+            echo "::error::20260822000400 is not recorded; there is no table to contract."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000500
+          else
+            npx supabase migration repair --status applied 20260822000500 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo ""
+          echo "Every role's privileges on the table, read back one by one."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select role_name as role,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'SELECT') as may_select,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'INSERT') as may_insert,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'UPDATE') as may_update,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'DELETE') as may_delete
+              from (values ('anon'), ('authenticated'), ('service_role')) as roles(role_name)
+             order by 1;"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+                  not has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE')
+              and not has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'UPDATE')
+              and not has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'SELECT')
+              and not has_table_privilege('anon', 'public.job_seeker_resume_extractions', 'SELECT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'SELECT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'INSERT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'DELETE')
+              and has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Grant contraction did not produce the intended privileges."
+            exit 1
+          fi
+          echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
