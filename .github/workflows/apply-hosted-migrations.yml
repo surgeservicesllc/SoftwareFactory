@@ -55,6 +55,10 @@ on:
           "audit-guard-acl-contract" applies only 20260822001300, which
           removes the hosted Supabase default service_role EXECUTE grant from
           the append-only audit guard reject_activity_event_mutation();
+          "agentos-foundation-cleanup" applies only 20260822001400, which
+          drops the empty partial AgentOS remnant a mixed-era 20260814000300
+          apply left behind, so 20260822000900 can restore the foundation
+          from its proven-absent state;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -75,6 +79,7 @@ on:
           - job-seeker-grant-contract
           - clear-controls
           - audit-guard-acl-contract
+          - agentos-foundation-cleanup
           - probe
 permissions:
   checks: read
@@ -1164,6 +1169,61 @@ jobs:
                   and trigger_row.tgconstraint = 0 and trigger_row.tgparentid = 0
                   and trigger_row.tgqual is null
               ) as append_only_trigger_posture;"
+          echo "The AgentOS foundation census: which of 20260822000900's 32 named"
+          echo "objects exist. The chain's first in-file guard refuses anything"
+          echo "between 0 and 32 (run 32600709789 found 4), and a cleanup needs to"
+          echo "know exactly which remnants a partial 20260814000300 apply left."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            set search_path = pg_catalog;
+            select 'enum ' || expected.name as object, to_regtype('public.' || expected.name) is not null as present
+              from (values ('agentos_network_mode'), ('agentos_skill_kind'), ('agentos_repo_permission')) expected(name)
+            union all
+            select 'table ' || expected.name, to_regclass('public.' || expected.name) is not null
+              from (values ('agentos_environments'), ('agentos_mcp_connections'), ('agentos_skills'),
+                           ('agentos_agent_grants'), ('agentos_agent_mcp_grants'), ('agentos_agent_skill_grants'),
+                           ('agentos_agent_repo_grants'), ('agentos_agent_filesystem_grants'),
+                           ('agentos_agent_collaborators')) expected(name)
+            union all
+            select 'index ' || expected.name, to_regclass('public.' || expected.name) is not null
+              from (values ('agentos_environments_org_idx'), ('agentos_mcp_org_idx'), ('agentos_skills_org_idx'),
+                           ('agentos_agent_grants_org_idx'), ('agentos_agent_mcp_agent_idx'),
+                           ('agentos_agent_skill_agent_idx'), ('agentos_agent_repo_agent_idx'),
+                           ('agentos_agent_fs_agent_idx'), ('agentos_agent_collaborator_agent_idx')) expected(name)
+            union all
+            select 'function ' || expected.name, exists (
+                     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                     where n.nspname = 'public' and p.proname = expected.name)
+              from (values ('agentos_hosts_are_bare_hostnames'), ('agentos_resolved_agent_grants')) expected(name)
+            union all
+            select 'policy ' || expected.name, exists (
+                     select 1 from pg_policy p where p.polname = expected.name
+                       and p.polrelid = coalesce(to_regclass(expected.rel), 0))
+              from (values ('agentos_environments_select_members', 'public.agentos_environments'),
+                           ('agentos_mcp_select_members', 'public.agentos_mcp_connections'),
+                           ('agentos_skills_select_members', 'public.agentos_skills'),
+                           ('agentos_agent_grants_select_members', 'public.agentos_agent_grants'),
+                           ('agentos_agent_mcp_select_members', 'public.agentos_agent_mcp_grants'),
+                           ('agentos_agent_skill_select_members', 'public.agentos_agent_skill_grants'),
+                           ('agentos_agent_repo_select_members', 'public.agentos_agent_repo_grants'),
+                           ('agentos_agent_fs_select_members', 'public.agentos_agent_filesystem_grants'),
+                           ('agentos_agent_collaborator_select_members', 'public.agentos_agent_collaborators')) expected(name, rel)
+             order by 2 desc, 1;"
+          echo "Row counts for whichever roster tables exist (a cleanup may only ever"
+          echo "drop empty remnants)."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            set search_path = pg_catalog;
+            select relation.relname, (select count(*) from pg_stat_user_tables stat where stat.relid = relation.oid) as has_stats,
+                   pg_catalog.pg_relation_size(relation.oid) as size_bytes
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public' and relation.relkind = 'r'
+               and relation.relname in (
+                 'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                 'agentos_agent_grants', 'agentos_agent_mcp_grants', 'agentos_agent_skill_grants',
+                 'agentos_agent_repo_grants', 'agentos_agent_filesystem_grants',
+                 'agentos_agent_collaborators')
+             order by relation.relname;"
+
           echo "Every row of the named-project census, so a duplicate name is visible"
           echo "instead of inferred from a count."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
@@ -4061,6 +4121,91 @@ jobs:
             exit 1
           fi
           echo "Contracted: the audit guard is owner-only; no browser or server role may execute it directly."
+
+      - name: Clear the partial AgentOS foundation (scope=agentos-foundation-cleanup)
+        # Exactly one file — 20260822001400 — which returns the AgentOS
+        # isolation foundation to the proven-absent state 20260822000900
+        # requires. Hosted records 20260814000300 as applied while only a
+        # fragment of its 32 named objects exists (protected-chain run
+        # 32600709789: "expected 0 or 32 named objects; found 4"), the known
+        # mixed-era pattern of a history row recorded around a partial
+        # autocommit apply. The file no-ops on 0 and on a complete 32,
+        # refuses any remnant table that holds rows, and drops with RESTRICT
+        # semantics only, inside one transaction.
+        if: ${{ inputs.scope == 'agentos-foundation-cleanup' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822001400_clear_partial_agentos_foundation.sql
+          EXPECTED_SHA256=9dcf6da9814411afa4f3b98caae35ec49786797ac43ef50208e7090659a26f7c
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          echo "The AgentOS roster census before the cleanup, for the log."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            set search_path = pg_catalog;
+            select 'enum ' || t.typname as remnant
+              from pg_type t join pg_namespace n on n.oid = t.typnamespace
+             where n.nspname = 'public'
+               and t.typname in ('agentos_network_mode', 'agentos_skill_kind', 'agentos_repo_permission')
+            union all
+            select 'table ' || c.relname
+              from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+               and c.relname in (
+                 'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                 'agentos_agent_grants', 'agentos_agent_mcp_grants', 'agentos_agent_skill_grants',
+                 'agentos_agent_repo_grants', 'agentos_agent_filesystem_grants',
+                 'agentos_agent_collaborators')
+            union all
+            select 'function ' || p.proname
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('agentos_hosts_are_bare_hostnames', 'agentos_resolved_agent_grants')
+             order by 1;"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822001400
+          else
+            npx supabase migration repair --status applied 20260822001400 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          REMAINING=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            set search_path = pg_catalog;
+            select
+              (select count(*) from pg_type t join pg_namespace n on n.oid = t.typnamespace
+                where n.nspname = 'public'
+                  and t.typname in ('agentos_network_mode', 'agentos_skill_kind', 'agentos_repo_permission'))
+              + (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relkind = 'r'
+                    and c.relname in (
+                      'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                      'agentos_agent_grants', 'agentos_agent_mcp_grants', 'agentos_agent_skill_grants',
+                      'agentos_agent_repo_grants', 'agentos_agent_filesystem_grants',
+                      'agentos_agent_collaborators'))
+              + (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public'
+                    and p.proname in ('agentos_hosts_are_bare_hostnames', 'agentos_resolved_agent_grants'));")
+          if [ "$REMAINING" != "0" ] && [ "$REMAINING" != "14" ]; then
+            echo "::error::The AgentOS roster is neither absent (0) nor complete (14) after the cleanup: ${REMAINING}."
+            exit 1
+          fi
+          echo "AgentOS roster after cleanup: ${REMAINING} named objects (0 = proven absent, ready for the protected restore)."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

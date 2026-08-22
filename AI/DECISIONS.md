@@ -1276,3 +1276,30 @@ Use this append-only log for decisions that constrain future implementation. Cha
   Autonomous Mode OFF in the active workspace through the Safety page, which
   wrote the real events the trail-agreement clauses read. Workers, autonomy,
   and automatic actions remain OFF and the global kill switch remains ON.
+
+## ADR-123 - A partial mixed-era AgentOS foundation is cleared, never completed in place
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: add `20260822001400_clear_partial_agentos_foundation.sql` behind
+  `scope=agentos-foundation-cleanup`. Hosted records `20260814000300` as
+  applied while only 4 of its 32 named objects exist; protected-chain run
+  `32600709789` stopped at `20260822000900`'s first in-file guard ("expected
+  0 or 32 named objects; found 4") - the first failure inside the chain
+  itself after every workflow gate passed. The cleanup returns the roster to
+  the proven-absent state: it no-ops on 0 and on a complete foundation,
+  refuses any remnant table that holds rows, drops children before parents
+  with RESTRICT semantics only, and verifies zero named objects afterward,
+  all in one transaction.
+- Rationale: 00900 restores the foundation only from proven absence because
+  a fragment's fingerprint is ambiguous, and completing a fragment in place
+  would duplicate the protected restore outside its rehearsed transaction.
+  The remnants are the leading objects of a partial autocommit apply whose
+  history row was recorded anyway - the same mixed-era pattern the runbook
+  documents - and they can hold no meaningful data, which the row-count
+  guard enforces rather than assumes.
+- Consequence: hosted's roster goes to zero, the protected chain's first
+  guard takes its 'absent' branch, and the restore creates all 32 objects
+  inside the atomic transaction. A full local replay reaches 001400 with a
+  complete foundation and does nothing. Workers, autonomy, and automatic
+  actions remain OFF and the global kill switch remains ON.
