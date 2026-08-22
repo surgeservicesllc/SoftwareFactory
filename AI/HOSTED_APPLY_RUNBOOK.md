@@ -67,7 +67,7 @@ signed-in production Step 8 submission with Claude or another non-Codex model,
 verify truthful Step 9, reload, and prove the same project-scoped history remains.
 Only that complete evidence permits a deployed/production-ready claim.
 
-**The current total is 25** within the dated, test-guarded probe list below. That phrase describes
+**The current total is 26** within the dated, test-guarded probe list below. That phrase describes
 the measured list, not today's total outstanding migration count. Later exact evidence proves
 `20260821000300_project_pipeline_selection` and
 `20260822000100_project_agent_selection` are hosted, while
@@ -78,7 +78,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 145 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 146 migration files. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -282,7 +282,7 @@ resurrected by a replay, and the live claim is the one that reports no gates.
 This supersedes every count and every high-water mark stated below it. The run mutated nothing:
 the three apply steps were skipped by their `if:` conditions, and the log shows it.
 
-**Absent from the hosted ledger — 25 probed marker objects:**
+**Absent from the hosted ledger — 26 probed marker objects:**
 | Version | Migration | Marker object the probe asks about |
 |---|---|---|
 | `20260814002500` | provider_credential_vault | table `provider_credentials` |
@@ -310,6 +310,7 @@ the three apply steps were skipped by their `if:` conditions, and the log shows 
 | `20260821000400` | command_factory_routing | function `list_factory_command_routing_candidates` |
 | `20260821000400` | command_factory_routing | function `submit_factory_command` |
 | `20260822000600` | route_bots_onto_the_executable_model | body of `normalize_phase1c_command` |
+| `20260822001300` | contract_audit_guard_function_acl | function `reject_activity_event_mutation` |
 
 The last six were added on 2026-08-22. Issue a Command runs through
 `list_factory_command_routing_candidates` and `submit_factory_command`, and their

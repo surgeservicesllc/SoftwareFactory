@@ -43,6 +43,15 @@ Last triaged: 2026-08-22
   that exact head, and require all exact-head quality plus browser/accessibility
   jobs green and an exact READY Vercel Production identity. No such release
   evidence exists yet.
+- [x] Contain the factory posture the gate requires: the owner engaged the
+  global kill switch and turned Autonomous Mode OFF via the Safety page
+  (~21:11Z), and probe run 32599024205 read every state, census, worker, and
+  event clause green afterwards.
+- [ ] Dispatch `scope=audit-guard-acl-contract` so hosted
+  `reject_activity_event_mutation()` drops its Supabase-default
+  `service_role EXECUTE` grant — probe run 32599284961 isolated it as the one
+  red containment clause (ADR-122; the gate's space-only btrim source
+  comparison is fixed in the same change).
 - [ ] Apply only the protected atomic
   `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact

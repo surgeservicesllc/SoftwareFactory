@@ -65,6 +65,18 @@ remains ON. This candidate has no final commit, production deployment, hosted
 chain apply, or signed-in production Step 8 -> Step 9 evidence yet; make no
 deployed or production-ready claim.
 
+The containment gate walked to its last clause on 2026-08-22 evening
+(ADR-122). The owner engaged the global kill switch and turned Autonomous
+Mode OFF via the Safety page at ~21:11Z; probe 32599024205 then read every
+state, census, worker, and event clause green, and probe 32599284961
+isolated the one red clause: `reject_mutation_function_posture`. Two causes:
+the gate's space-only `btrim` source comparison was false on every database
+(fixed to trim `' \n'`), and hosted default privileges left `service_role
+EXECUTE` on `reject_activity_event_mutation()`. `20260822001300` behind
+`scope=audit-guard-acl-contract` removes that grant. Order:
+`audit-guard-acl-contract`, then re-dispatch `factory-any-model-record-only`
+under fresh exact-head CI and READY Vercel identity.
+
 Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
 real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was
 exact, but `apply_resume_extraction(uuid,text[])` still had direct

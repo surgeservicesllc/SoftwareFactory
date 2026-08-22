@@ -52,6 +52,9 @@ on:
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
           (20260821000100 and 20260821000200) and records them in history;
+          "audit-guard-acl-contract" applies only 20260822001300, which
+          removes the hosted Supabase default service_role EXECUTE grant from
+          the append-only audit guard reject_activity_event_mutation();
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -71,6 +74,7 @@ on:
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
+          - audit-guard-acl-contract
           - probe
 permissions:
   checks: read
@@ -454,7 +458,10 @@ jobs:
               ('20260821000400', 'table',    'factory_command_routes',               null),
               ('20260821000400', 'function', 'list_factory_command_routing_candidates', null),
               ('20260821000400', 'function', 'submit_factory_command',               null),
-              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex')
+              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex'),
+              -- Presence only: the migration is a pure ACL contraction, and the
+              -- containment report below prints the guard's actual privileges.
+              ('20260822001300', 'function', 'reject_activity_event_mutation',       null)
             )
             select expected.version,
                    expected.kind,
@@ -1125,7 +1132,7 @@ jobs:
                       and not routine.prosecdef
                       and routine.proconfig = array['search_path=pg_catalog']::text[]
                       and pg_get_userbyid(routine.proowner) = 'postgres'
-                      and btrim(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) =
+                      and btrim(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'), E' \n') =
                         E'begin\n  raise exception using errcode = ''55000'', message = ''activity events are append-only'';\nend;'
                       and not has_function_privilege('anon', routine.oid, 'EXECUTE')
                       and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
@@ -1134,6 +1141,19 @@ jobs:
                  join pg_language routine_language on routine_language.oid = routine.prolang
                 where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure)
                 as reject_mutation_function_posture,
+              (select (select count(*) from aclexplode(routine.proacl))
+                 from pg_proc routine
+                where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure)
+                as reject_mutation_acl_entries,
+              has_function_privilege('service_role',
+                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
+                as reject_mutation_service_role_execute,
+              has_function_privilege('authenticated',
+                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
+                as reject_mutation_authenticated_execute,
+              has_function_privilege('anon',
+                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
+                as reject_mutation_anon_execute,
               exists (
                 select 1 from pg_trigger trigger_row
                 where trigger_row.tgrelid = 'public.activity_events'::regclass
@@ -3298,7 +3318,7 @@ jobs:
                              and not routine.prosecdef
                              and routine.proconfig = array['search_path=pg_catalog']::text[]
                              and pg_get_userbyid(routine.proowner) = 'postgres'
-                             and btrim(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) =
+                             and btrim(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n'), E' \\n') =
                                E'begin\\n  raise exception using errcode = ''55000'', message = ''activity events are append-only'';\\nend;'
                              and not has_function_privilege('anon', routine.oid, 'EXECUTE')
                              and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
@@ -3977,6 +3997,70 @@ jobs:
             exit 1
           fi
           echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
+
+      - name: Contract the audit guard function's ACL (scope=audit-guard-acl-contract)
+        # Exactly one file — 20260822001300 — which removes the hosted
+        # Supabase default service_role EXECUTE grant from
+        # reject_activity_event_mutation(). 20260812000300 revoked PUBLIC,
+        # anon, and authenticated but not service_role, because locally that
+        # grant never existed; hosted default privileges made it real. Probe
+        # run 32599284961 measured the drift as the one containment clause
+        # still refusing the protected chain. Pure REVOKE — no schema change,
+        # replay-safe, fail-closed on any unknown state via the file's own
+        # preflight.
+        if: ${{ inputs.scope == 'audit-guard-acl-contract' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822001300_contract_audit_guard_function_acl.sql
+          EXPECTED_SHA256=910fe9268d310025d54ad5861ae3e59964f90d6c17bc60b8fbd6d25d419caded
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          echo "The guard function's ACL before the contraction, for the log."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
+            set search_path = pg_catalog;
+            select routine.proacl,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_role_execute,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_execute,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_execute
+              from pg_proc routine
+             where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure;"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822001300
+          else
+            npx supabase migration repair --status applied 20260822001300 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            set search_path = pg_catalog;
+            select (select count(*) from aclexplode(routine.proacl)) = 1
+               and not has_function_privilege('service_role', routine.oid, 'EXECUTE')
+               and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
+               and not has_function_privilege('anon', routine.oid, 'EXECUTE')
+              from pg_proc routine
+             where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure;")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The guard function did not read back with the owner-only ACL."
+            exit 1
+          fi
+          echo "Contracted: the audit guard is owner-only; no browser or server role may execute it directly."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
