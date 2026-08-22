@@ -500,6 +500,46 @@ for (const layoutCase of CASES) {
 }
 
 /*
+ * The global header, signed in.
+ *
+ * The rest of the browser suite browses signed out, so the owner's specified
+ * header — AI Factory, Job Seeker, Admin, then the account controls — had no
+ * coverage in a real browser at all. This reads the rendered entries rather
+ * than the module that supplies them, which is the point: the wiring is the
+ * instruction, and a unit test importing the same constant cannot catch a
+ * header that stops rendering what it is given.
+ */
+test("the signed-in header names the two products and the admin area", async ({ page }) => {
+  await open(page, "site-header", 1440);
+
+  const primary = page.getByRole("navigation", { name: "Primary" });
+  await expect(primary).toBeVisible();
+
+  await expect(primary.getByRole("link")).toHaveText(["AI Factory", "Job Seeker", "Admin"]);
+  await expect(primary.getByRole("link", { name: "AI Factory" })).toHaveAttribute(
+    "href",
+    "/solutions",
+  );
+  await expect(primary.getByRole("link", { name: "Job Seeker" })).toHaveAttribute(
+    "href",
+    "/job-seeker",
+  );
+
+  // The account side of the same row, which the owner's image also shows.
+  await expect(page.getByText("Super admin")).toBeVisible();
+  await expect(page.getByText("owner@example.org")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Console" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
+
+  // A signed-in header must not still be selling the product.
+  for (const gone of ["Platform", "Features", "Pricing", "About", "Get Started Free"]) {
+    await expect(page.getByRole("link", { name: gone, exact: true })).toHaveCount(0);
+  }
+
+  expect(await overflowing(page), "the signed-in header pushed content out").toEqual([]);
+});
+
+/*
  * The desktop rail: narrower column, wider content, and the choice remembered.
  *
  * "Retract and expand on a Windows or macOS device" and "the content must take

@@ -33,11 +33,12 @@ on:
           records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
+          "executable-model-repair" applies only 20260822000600, which moves
+          bots already provisioned with a model the Codex worker cannot claim
+          onto the one it can, so Issue a Command stops refusing every
+          submission;
           "pipeline-selection" applies only 20260821000300, which is what makes
           the AI Factory's Use button record a project's pipelines;
-          "executable-model-repair" applies only 20260822000500, which moves
-          bots already provisioned with a model the executor cannot claim onto
-          the one it can, so Issue a Command stops refusing every submission;
           "bot-legacy-acl-normalization" applies only 20260822000150, which
           removes the exact Supabase-default service_role overgrant from the
           seven frozen legacy bot routines;
@@ -58,12 +59,14 @@ on:
           - broker-functions
           - project-controls
           - pipeline-selection
+          - executable-model-repair
           - agent-selection
           - bot-legacy-acl-normalization
           - bot-account-binding
           - bot-account-binding-contract
           - lifecycle
           - job-seeker-resume
+          - job-seeker-grant-contract
           - probe
       contract_app_sha:
         description: >-
@@ -2426,15 +2429,90 @@ jobs:
           fi
           echo "Applied, recorded, and verified: RLS forced, three policies, no UPDATE grant, definer function callable by members only."
 
+      - name: Contract the resume extraction table's grants (scope=job-seeker-grant-contract)
+        # Takes back the privileges Supabase's default grants handed to
+        # authenticated and service_role when 20260822000400 created the table.
+        # Its own post-apply readback measured auth_update = t and
+        # service_update = t on production, which is the defect this closes.
+        #
+        # Pure REVOKE and GRANT — no schema change, replay-safe by definition,
+        # and its effect is fully described by the readback below.
+        if: ${{ inputs.scope == 'job-seeker-grant-contract' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822000500_job_seeker_extraction_grant_contract.sql
+          EXPECTED_SHA256=c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          # The table it contracts has to exist, which means 20260822000400 ran.
+          PREDECESSOR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000400';")
+          if [ "$PREDECESSOR" != "1" ]; then
+            echo "::error::20260822000400 is not recorded; there is no table to contract."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000500
+          else
+            npx supabase migration repair --status applied 20260822000500 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo ""
+          echo "Every role's privileges on the table, read back one by one."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select role_name as role,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'SELECT') as may_select,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'INSERT') as may_insert,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'UPDATE') as may_update,
+                   has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'DELETE') as may_delete
+              from (values ('anon'), ('authenticated'), ('service_role')) as roles(role_name)
+             order by 1;"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+                  not has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE')
+              and not has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'UPDATE')
+              and not has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'SELECT')
+              and not has_table_privilege('anon', 'public.job_seeker_resume_extractions', 'SELECT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'SELECT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'INSERT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'DELETE')
+              and has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Grant contraction did not produce the intended privileges."
+            exit 1
+          fi
+          echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
+
       - name: Repair bots onto the executable model (scope=executable-model-repair)
-        # One file. It rewrites data rather than schema: bots whose model came
-        # from the catalog's openai list are moved onto the model the Codex
+        # One file, and it rewrites data rather than schema: bots whose model
+        # came from the catalog's openai list move onto the model the Codex
         # worker actually claims, and posting overrides naming one are cleared.
         #
         # Replay-safe by construction — after the first run nothing matches the
         # stale set, so a second run writes no rows and no events. Every repair
-        # is an activity event naming the previous model, so the change is
-        # visible to the person whose bot moved rather than silent. A model the
+        # is an activity event carrying the previous model, so the change is
+        # visible to the person whose bot moved rather than silent. A model this
         # console never offered is deliberately out of scope: it was typed by a
         # person, and rewriting a deliberate choice is worse than refusing it.
         if: ${{ inputs.scope == 'executable-model-repair' }}
@@ -2445,16 +2523,29 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          FILE=supabase/migrations/20260822000500_route_bots_onto_the_executable_model.sql
+
+          FILE=supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql
+          EXPECTED_SHA256=c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production write."
+            exit 1
+          fi
+
+          echo "Before:"
+          psql "$DB_URL" -q -c "select model, count(*) from public.bots where provider = 'openai' group by model order by 2 desc;"
+
           echo "Applying ${FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
           if [ "$MODE" = "token" ]; then
-            npx supabase migration repair --status applied 20260822000500
+            npx supabase migration repair --status applied 20260822000600
           else
-            npx supabase migration repair --status applied 20260822000500 --db-url "$DB_URL"
+            npx supabase migration repair --status applied 20260822000600 --db-url "$DB_URL"
           fi
-          echo "Reporting what moved:"
-          psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, metadata ->> 'model' as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
+
+          echo "After, and what moved:"
+          psql "$DB_URL" -q -c "select model, count(*) from public.bots where provider = 'openai' group by model order by 2 desc;"
+          psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, coalesce(metadata ->> 'model', '(cleared)') as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;

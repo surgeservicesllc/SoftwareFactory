@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  */
 
 const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrations");
-const repairMigration = "20260822000500_route_bots_onto_the_executable_model.sql";
+const repairMigration = "20260822000600_route_bots_onto_the_executable_model.sql";
 const EXECUTABLE_MODEL = "gpt-5.3-codex";
 
 const ownerId = "00000000-0000-4000-8000-0000000005a1";

@@ -152,6 +152,77 @@ describe("the extraction table", () => {
     expect(result.rows[0].authenticated_update).toBe(false);
   });
 
+  it("holds no UPDATE grant for any role, even one Supabase granted by default", async () => {
+    /*
+     * The defect this suite could not previously see.
+     *
+     * Hosted Supabase carries ALTER DEFAULT PRIVILEGES that grant new public
+     * tables to anon, authenticated and service_role at CREATE TABLE time.
+     * PGlite has no such default, so a table created here starts with no
+     * grants at all and the original migration's `revoke ... from anon` looked
+     * sufficient. On production it was not: the post-apply readback measured
+     * auth_update = t and service_update = t.
+     *
+     * So the hosted condition is reproduced rather than assumed — grant the
+     * table exactly as Supabase would, then re-run the migration that is
+     * supposed to take it back. Without that setup this test would pass on an
+     * empty grant list and prove nothing.
+     */
+    await db.exec(`
+      grant all on table public.job_seeker_resume_extractions to anon, authenticated, service_role;
+      grant all on table public.job_seeker_resume_extractions to public;
+    `);
+    const granted = await db.query<{ auth_update: boolean; service_update: boolean }>(`
+      select has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE') as auth_update,
+             has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'UPDATE') as service_update`);
+    expect(granted.rows[0], "the hosted condition was not reproduced").toEqual({
+      auth_update: true,
+      service_update: true,
+    });
+
+    await db.exec(
+      await readFile(
+        resolve(migrationsRoot, "20260822000500_job_seeker_extraction_grant_contract.sql"),
+        "utf8",
+      ),
+    );
+
+    const after = await db.query<{
+      role: string; may_select: boolean; may_insert: boolean; may_update: boolean; may_delete: boolean;
+    }>(`
+      select role_name as role,
+             has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'SELECT') as may_select,
+             has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'INSERT') as may_insert,
+             has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'UPDATE') as may_update,
+             has_table_privilege(role_name, 'public.job_seeker_resume_extractions', 'DELETE') as may_delete
+        from (values ('anon'), ('authenticated'), ('service_role')) as roles(role_name)
+       order by 1`);
+
+    expect(after.rows).toEqual([
+      { role: "anon", may_select: false, may_insert: false, may_update: false, may_delete: false },
+      // The three verbs a person needs on their own rows, and no fourth.
+      { role: "authenticated", may_select: true, may_insert: true, may_update: false, may_delete: true },
+      /*
+       * Nothing for service_role. It bypasses row level security, so a grant
+       * here would be the one privilege on this table no policy could contain.
+       */
+      { role: "service_role", may_select: false, may_insert: false, may_update: false, may_delete: false },
+    ]);
+  });
+
+  it("keeps the apply function callable by members and nobody else", async () => {
+    const acl = await db.query<{ role: string; may_execute: boolean }>(`
+      select role_name as role,
+             has_function_privilege(role_name, 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as may_execute
+        from (values ('anon'), ('authenticated'), ('service_role')) as roles(role_name)
+       order by 1`);
+    expect(acl.rows).toEqual([
+      { role: "anon", may_execute: false },
+      { role: "authenticated", may_execute: true },
+      { role: "service_role", may_execute: false },
+    ]);
+  });
+
   it("refuses to record a review that cannot name the model that did it", async () => {
     // The one false claim this feature must never make.
     await expect(insertExtraction(ownerId, { status: "reviewed", model: null })).rejects.toThrow(

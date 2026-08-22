@@ -11,11 +11,11 @@ fixed `gpt-5.3-codex`; `ensureProviderBot` named new bots `gpt-5.1-codex` from
 the catalog's list; routing and `submit_factory_command` both compare the pair
 exactly. One fact in two files, with nothing tying them.
 
-`executionModel()` is now that tie (ADR-100), provisioning asks it, the roster's
+`executionModel()` is now that tie (ADR-114), provisioning asks it, the roster's
 picker marks each model **runs** or **cannot run**, and the refusal names the
 bot, both models, and where to change one.
 
-**Outstanding owner action:** migration `20260822000500_route_bots_onto_the_executable_model`
+**Outstanding owner action:** migration `20260822000600_route_bots_onto_the_executable_model`
 repairs bots already written with the unexecutable model. Until it is applied,
 existing bots stay refused even on the new code, because the bad model is
 already in their rows. Apply with

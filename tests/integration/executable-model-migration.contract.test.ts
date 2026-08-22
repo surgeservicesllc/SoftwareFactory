@@ -20,7 +20,7 @@ import { DEFAULT_CODEX_MODEL, EXECUTION_PROVIDER } from "@/lib/orchestration/pla
  */
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const repairMigration = "20260822000500_route_bots_onto_the_executable_model.sql";
+const repairMigration = "20260822000600_route_bots_onto_the_executable_model.sql";
 
 describe("the repair migration and the executable model agree", () => {
   it("repairs rows onto exactly the model the plan fixes", async () => {
