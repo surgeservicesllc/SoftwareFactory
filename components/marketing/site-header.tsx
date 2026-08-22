@@ -64,8 +64,23 @@ export function SiteHeader({
     };
   }, [mobileOpen]);
 
+  /*
+   * One current destination, decided by the most specific match.
+   *
+   * The entries nest now: `AI Factory` is `/solutions` and `Admin` is
+   * `/solutions/admin`, so a prefix test alone marks both as current on the
+   * admin page — two links carrying `aria-current="page"`, and two underlines
+   * drawn at once. The longest matching href wins, which is the entry a person
+   * is actually on; a set with no nesting behaves exactly as it did before.
+   */
+  const activeHref = navItems.reduce<string | null>((best, item) => {
+    const matches = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    if (!matches) return best;
+    return best === null || item.href.length > best.length ? item.href : best;
+  }, null);
+
   function isActive(href: string) {
-    return pathname === href || pathname.startsWith(`${href}/`);
+    return href === activeHref;
   }
 
   return (

@@ -122,6 +122,17 @@ const navigationEntries: readonly NavigationEntry[] = [
   // even within the organization.
   { label: "Job Seeker", href: "/job-seeker", icon: BriefcaseBusiness },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+  /*
+   * Operations, promoted out of a group and placed above Reports by owner
+   * instruction (2026-08-19).
+   *
+   * It was the first subpage of a "Watch" group whose only other child was
+   * Activity. A group holding one destination anybody wants costs a click and
+   * a disclosure to reach it, and names a category rather than a place. The
+   * group is gone; Activity went with it, and is still reached from Bots as
+   * "Bot Activity", which points at the same page.
+   */
+  { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
   { label: "Reports", href: "/solutions/reports", icon: ScrollText },
   { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
   /*
@@ -145,14 +156,6 @@ const navigationEntries: readonly NavigationEntry[] = [
       { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
     ],
   },
-  /*
-   * Operations is a destination, not a category. "Watch" wrapped it in a
-   * collapsible group whose only other child was Activity — which already
-   * appears under Bots as "Bot Activity", pointing at the same page. So the
-   * group cost a click to reach one real page and listed a second one twice.
-   * Owner instruction, 2026-08-22: drop the group and promote Operations.
-   */
-  { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
   {
     label: "Advanced",
     href: "/solutions/files",

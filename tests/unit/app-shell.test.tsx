@@ -32,11 +32,11 @@ describe("AppShell navigation", () => {
       "Bots",
       "Job Seeker",
       "Runs",
+      "Operations",
       "Reports",
       "Integrations",
       "Secrets",
       "Settings",
-      "Operations",
       "Advanced",
       // The list ends at the navigation. The owner marked the whole action
       // block on the live page — New Project, the Quick actions shortcuts and
@@ -268,30 +268,58 @@ describe("what the navigation takes from the reference, and what it does not", (
     ).toHaveAttribute("href", "/solutions/settings#providers");
   });
 
-  it("reaches Operations in one click, with no group in the way", () => {
+  it("keeps Advanced, which the reference does not show", () => {
     /*
-     * Owner instruction, 2026-08-22: the Watch group is gone and Operations is
-     * a top-level destination. The group wrapped exactly one page nothing else
-     * reached, plus an Activity entry that duplicated Bots > Bot Activity —
-     * so it charged a click for one real page and listed a second one twice.
+     * A deliberate departure, and the reason is the other half of the same
+     * instruction: this holds Files, Agents, Resources, AgentOS and Autonomy,
+     * all of which are real pages. Matching the image exactly would mean
+     * deleting the only way to reach them, and "do not remove functionality"
+     * is not a rule the picture overrides.
+     *
+     * `Watch` was the other such group and is gone (2026-08-19, owner
+     * instruction). It is not the same case: its two children both survived
+     * the removal, so nothing became unreachable — see below.
      */
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
 
-    expect(within(navigation).getByRole("link", { name: "Operations" }))
-      .toHaveAttribute("href", "/solutions/operations");
-    expect(within(navigation).queryByRole("link", { name: "Watch" })).not.toBeInTheDocument();
-    // Advanced stays: it holds Files, Agents, Resources, AgentOS and Autonomy,
-    // and nothing else reaches them.
     expect(within(navigation).getByRole("link", { name: "Advanced" })).toBeInTheDocument();
   });
 
-  it("still reaches the activity feed, through Bots where it already lived", () => {
-    // Removing the duplicate must not remove the page. Bot Activity and the
-    // old Watch > Activity entry pointed at the same href all along.
+  it("drops the Watch group without stranding either page it held", () => {
+    /*
+     * Removing a group is only safe if its destinations survive it, and these
+     * did, by two different routes:
+     *
+     *   Operations was promoted to a top-level destination of its own, above
+     *   Reports, which is where the owner asked for it.
+     *
+     *   Activity is still reached from Bots as "Bot Activity" — the same
+     *   `/solutions/activity` page under the name that says whose activity it
+     *   is. That entry pre-dates this change and is why removing the
+     *   duplicate costs nothing.
+     */
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
-    expect(within(navigation).getByRole("link", { name: "Bots" })).toBeInTheDocument();
+
+    expect(within(navigation).queryByRole("link", { name: "Watch" })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole("button", { name: /watch subpages/i }))
+      .not.toBeInTheDocument();
+
+    expect(within(navigation).getByRole("link", { name: "Operations" }))
+      .toHaveAttribute("href", "/solutions/operations");
+  });
+
+  it("puts Operations directly above Reports", () => {
+    // The position is the instruction, so it is asserted as adjacency rather
+    // than as mere presence somewhere in the column.
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+
+    const labels = within(screen.getByRole("navigation", { name: "Console" }))
+      .getAllByRole("link")
+      .map((link) => link.textContent);
+
+    expect(labels.indexOf("Reports")).toBe(labels.indexOf("Operations") + 1);
   });
 });
 
