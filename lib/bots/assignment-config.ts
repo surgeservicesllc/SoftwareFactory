@@ -120,6 +120,21 @@ export function assignmentIsConfigured(config: AssignmentConfig): boolean {
   );
 }
 
+/**
+ * Whether an assignment posting differs from every execution default.
+ * Model and work effort live beside `config` in the API/database shape, so
+ * callers that summarize a whole posting must include them as well.
+ */
+export function assignmentPostingIsConfigured(input: {
+  readonly config: AssignmentConfig;
+  readonly model?: string | null;
+  readonly workEffort?: string | null;
+}): boolean {
+  return assignmentIsConfigured(input.config)
+    || (input.model ?? "").trim().length > 0
+    || (input.workEffort ?? "medium") !== "medium";
+}
+
 export const assignmentConfigSchema = z
   .object({
     preset: z

@@ -270,6 +270,21 @@ describe("assigning several bots at once", () => {
     expect(within(dialog).getByRole("button", { name: /next/i })).toBeDisabled();
   });
 
+  it("explains how to create a required role and does not advance without one", async () => {
+    stub(roster({ assigned: [], roles: [] }));
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByLabelText("Select Code Master"));
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+
+    const managerLink = within(dialog).getByRole("link", { name: "Bot Manager" });
+    expect(managerLink).toHaveAttribute("href", "/solutions/bot-manager");
+    expect(within(dialog).getByText(/a posting needs one/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /next/i })).toBeDisabled();
+  });
+
   it("requires acknowledgement before confirming an elevated grant", async () => {
     const calls = stub(roster(), (_url, init) =>
       init?.method === "POST"

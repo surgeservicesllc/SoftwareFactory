@@ -865,6 +865,11 @@ function AssignWizard({
     [selected, drafts],
   );
 
+  const everySelectedBotHasRole = useMemo(
+    () => selected.length > 0 && selected.every((id) => Boolean(drafts[id]?.roleId)),
+    [selected, drafts],
+  );
+
   const moving = useMemo(
     () => selectedBots.filter((bot) => bot.currentProjectId && !bot.alreadyOnThisProject),
     [selectedBots],
@@ -1087,7 +1092,9 @@ function AssignWizard({
             <button
               type="button"
               onClick={() => setStep(STEPS[stepIndex + 1])}
-              disabled={selected.length === 0}
+              disabled={
+                selected.length === 0 || (step === "Configure" && !everySelectedBotHasRole)
+              }
               className="btn btn-primary btn-sm"
             >
               Next
@@ -1332,15 +1339,25 @@ function ConfigureCard({
           {roles.length === 0 ? (
             /*
              * A workspace has no roles until somebody makes one, and every
-             * assignment needs one — the database requires it. With the list
+             * assignment needs one -- the database requires it. With the list
              * empty this select was simply blank and Confirm stayed disabled
              * with nothing said, which is where the AI Factory's Assign Bots
              * step dead-ended for a first-time owner: the wizard would not
              * finish and did not explain why.
+             *
+             * The link goes to /solutions/bot-manager. It pointed at
+             * /solutions/bots, which is neither a route nor a redirect -- the
+             * one instruction offered to an owner who cannot proceed was a 404.
              */
             <span className="mt-1.5 block text-xs text-faint">
               No roles yet. A posting needs one — create it in{" "}
-              <Link href="/solutions/bots" className="underline">Bot Manager</Link>, then come back.
+              <Link
+                href="/solutions/bot-manager"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Bot Manager
+              </Link>
+              , then come back.
             </span>
           ) : null}
         </label>

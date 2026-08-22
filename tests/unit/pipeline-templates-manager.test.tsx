@@ -307,8 +307,9 @@ describe("PipelineTemplatesManager", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Plan a graph from Feature Build" }));
-    const dialog = await screen.findByRole("dialog", { name: "Plan a graph from Feature Build" });
+    fireEvent.click(screen.getByRole("button", { name: "Plan a graph from Feature Build" }));
+    const dialog = screen.getByRole("dialog", { name: "Plan a graph from Feature Build" });
+    expect(within(dialog).queryByText(/this workspace has none yet/i)).not.toBeInTheDocument();
     const picker = within(dialog).getByLabelText("Project");
     expect(picker).toHaveValue("p2");
     expect(picker).toBeDisabled();

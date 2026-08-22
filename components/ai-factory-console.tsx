@@ -26,7 +26,7 @@ import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipeli
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
-  assignmentIsConfigured,
+  assignmentPostingIsConfigured,
   LEAST_PRIVILEGE_CONFIG,
   type AssignmentConfig,
 } from "@/lib/bots/assignment-config";
@@ -244,6 +244,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             projectId?: string | null;
             status?: string;
             config?: Partial<AssignmentConfig>;
+            model?: string | null;
+            workEffort?: string | null;
           }>;
           executor?: { connected?: boolean; label?: string; detail?: string };
         }>(responses[3]!),
@@ -298,9 +300,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           .map((assignment) => ({
             // Read from `config`, where the API actually puts these fields,
             // and measure it against the least-privilege baseline.
-            configured: assignmentIsConfigured({
-              ...LEAST_PRIVILEGE_CONFIG,
-              ...(assignment.config ?? {}),
+            configured: assignmentPostingIsConfigured({
+              config: {
+                ...LEAST_PRIVILEGE_CONFIG,
+                ...(assignment.config ?? {}),
+              },
+              model: assignment.model,
+              workEffort: assignment.workEffort,
             }),
             projectId: assignment.projectId ?? null,
           })),
@@ -648,7 +654,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "command",
       title: "Issue a Command",
-      description: "Describe the outcome you want in plain words. The server verifies it, queues it, and a worker builds it.",
+      description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route without dispatching a worker.",
       done: scopedCommands.length > 0,
       evidence: scopedCommands.length > 0
         ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`

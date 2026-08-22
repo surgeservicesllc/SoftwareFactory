@@ -920,16 +920,19 @@ function TemplatePlanDialog({
   const [projectsReadFailed, setProjectsReadFailed] = useState(false);
   const [projectReadAttempt, setProjectReadAttempt] = useState(0);
 
+  const availableProjects = projectContext === undefined
+    ? projects
+    : projectContext
+      ? [projectContext]
+      : [];
+  const selectedProjectId = projectContext === undefined
+    ? projectId
+    : projectContext?.id ?? "";
+  const projectsAreLoading = projectContext === undefined && loadingProjects;
+  const projectReadHasFailed = projectContext === undefined && projectsReadFailed;
+
   useEffect(() => {
-    if (projectContext !== undefined) {
-      const timer = window.setTimeout(() => {
-        setProjects(projectContext ? [projectContext] : []);
-        setProjectId(projectContext?.id ?? "");
-        setLoadingProjects(false);
-        setProjectsReadFailed(false);
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }
+    if (projectContext !== undefined) return;
 
     let cancelled = false;
     void (async () => {
@@ -968,7 +971,7 @@ function TemplatePlanDialog({
       const response = await fetch("/api/graphs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, templateKey }),
+        body: JSON.stringify({ projectId: selectedProjectId, templateKey }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         graphId?: string;
@@ -1004,14 +1007,14 @@ function TemplatePlanDialog({
           a permanently disabled button and say nothing — a dead end that reads
           as a broken dialog rather than as a missing prerequisite.
         */}
-        {loadingProjects ? (
+        {projectsAreLoading ? (
           <p className="text-sm text-muted">Reading your projects…</p>
-        ) : projectsReadFailed ? (
+        ) : projectReadHasFailed ? (
           <div role="alert">
             <p className="text-sm text-muted">Graph planning is unavailable because projects could not be verified.</p>
             <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={() => setProjectReadAttempt((attempt) => attempt + 1)}>Retry</button>
           </div>
-        ) : projects.length === 0 ? (
+        ) : availableProjects.length === 0 ? (
           <p className="text-sm text-muted">
             A pipeline is planned against a project, and this workspace has none yet.{" "}
             <Link href="/solutions/projects#add-project" className="text-accent underline">
@@ -1024,19 +1027,19 @@ function TemplatePlanDialog({
             <label htmlFor="use-template-project" className="field-label">Project</label>
             <select
               id="use-template-project"
-              value={projectId}
+              value={selectedProjectId}
               onChange={(event) => setProjectId(event.target.value)}
               disabled={projectContext !== undefined}
               className="input w-full"
             >
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              {availableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </>
         )}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        {projects.length > 0 ? (
-          <button type="button" onClick={() => void plan()} disabled={busy || !projectId} className="btn btn-primary btn-sm">
+        {availableProjects.length > 0 ? (
+          <button type="button" onClick={() => void plan()} disabled={busy || !selectedProjectId} className="btn btn-primary btn-sm">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" aria-hidden="true" />}
             Plan graph
           </button>

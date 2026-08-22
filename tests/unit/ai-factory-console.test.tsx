@@ -276,6 +276,29 @@ describe("AiFactoryConsole", () => {
     expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
   });
 
+  it("counts a non-default posting model as configured", async () => {
+    stubFactory({
+      "/api/bots": {
+        assignments: [{
+          id: "a1",
+          projectId: "p1",
+          roleId: "role-1",
+          status: "active",
+          config: LEAST_PRIVILEGE_CONFIG,
+          model: "gpt-5.4",
+          workEffort: "medium",
+        }],
+        bots: [{ id: "b1" }],
+      },
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
+    expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
+  });
+
   it("keeps configure incomplete until every active posting is configured", async () => {
     stubFactory({
       "/api/bots": {
@@ -390,6 +413,10 @@ describe("AiFactoryConsole", () => {
     });
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const command = (await screen.findByText("Issue a Command")).closest("li") as HTMLElement;
+    expect(within(command).getByText(/without dispatching a worker/i)).toBeInTheDocument();
+    expect(within(command).queryByText(/a worker builds it/i)).not.toBeInTheDocument();
 
     const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
     expect(within(watch).getByText(/1 command queued; Worker Not Connected/)).toBeInTheDocument();

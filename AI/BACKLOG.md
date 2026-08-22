@@ -40,12 +40,54 @@ Last triaged: 2026-08-21
 - [ ] Bind a provisioned bot to its exact `ai_accounts.id` through a separately
   reviewed forward schema/RPC design. `bots.ai_account_id` currently remains
   null, so credential-slot stickiness is not full identity stickiness.
+  broker-purpose fixtures in regression tests. The branch candidate passes 100
+  focused tests, lint, typecheck, and a production build. It is not deployed;
+  production Create Bot still fails and the roster remains empty.
 - [ ] After an authorized release, repeat Create Bot, assignment, settings, and
   reload checks before claiming that a connected bot is usable and sticky.
 - [ ] Keep production promotion stopped until the five linked-lint errors/ten
   findings, raw autonomy/kill-switch drift, two effective-kill-off projects,
   absent fresh worker, and hosted `20260821000300`/candidate `20260821000400`
   drift are contained and remeasured.
+
+
+## Factory command routing release (2026-08-21, ADR-106)
+
+- [x] Persist one immutable route for every owner-submitted factory command,
+  including selected pipeline/template, bot assignment, bot, provider/model,
+  work effort, effective risk, and the routing/configuration snapshot.
+- [x] Resolve exact idempotent replay before any mutable pipeline, roster,
+  readiness, or capacity read; recheck stored effective risk in the database.
+- [x] Keep submission and replay owner-only, fail closed when the routing RPC
+  is absent, and leave worker dispatch, autonomy, merge, deploy, and rollback
+  unavailable.
+- [x] Freeze `20260821000400_command_factory_routing.sql` at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- [ ] Remediate and remeasure the hosted release blockers: five linked lint
+  errors/ten findings; one raw organization with `autonomous_mode = true`; one
+  raw organization with `autonomy_kill_switch_active = false`; two projects with effective
+  kill off; and no connected/fresh worker.
+- [ ] Apply `20260821000400` only through a separately authorized hosted
+  release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
+  and prove the matching production copy. Production remains on hosted
+  `20260821000300` and the old application until then.
+- [x] Classify the default unbounded-run Supabase-wiring and pipeline failures
+  as contention-only by clearing both on isolated retry; the wiring contract
+  passes 2/2 in 0.603s with `maxWorkers=1`.
+- [x] Run the bounded current-head non-frozen Windows suite:
+  `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+  passes 317 files / 3,730 tests, 7 skipped, in 183.78s. Lint, typecheck, and
+  build are green.
+- [x] Remove the embedded template-plan first-render race: derive the caller's
+  project synchronously, perform no workspace project read, and pin the
+  immediate render and project-scoped graph submission in regression tests.
+- [x] Remove the no-role assignment dead end: explain the required role, link
+  to `/solutions/bot-manager`, and keep Configure from advancing until every
+  selected bot has one.
+- [ ] Require Linux CI to run the complete suite, including the owner-frozen
+  19-test `tests/unit/auth-broker-runner.test.ts`. Its local exclusion is only
+  because Windows lacks the Unix `script` executable; it is not a test waiver.
 
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 
