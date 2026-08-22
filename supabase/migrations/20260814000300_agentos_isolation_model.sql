@@ -392,7 +392,7 @@ declare
   grant_configured boolean := false;
   environment_id uuid;
   environment_name text;
-  environment_networking public.agentos_network_mode := 'limited';
+  environment_networking public.agentos_network_mode := 'limited'::public.agentos_network_mode;
   environment_hosts text[] := '{}'::text[];
   environment_configured boolean := false;
   result jsonb;

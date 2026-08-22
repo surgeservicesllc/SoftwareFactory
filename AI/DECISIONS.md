@@ -1363,3 +1363,36 @@ Use this append-only log for decisions that constrain future implementation. Cha
   frozen six-file chain is untouched; only the workflow's lint invocation and
   its pinning test changed. Workers, autonomy, and automatic actions remain
   OFF and the global kill switch remains ON.
+
+## ADR-126 - The lint's first real finding is fixed at its source, and findings become sentinel rows
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: with ADR-125's relations in place, chain run `32604992678`
+  completed the rehearsal lint for the first time and the gate refused on one
+  genuine warning: `public.agentos_resolved_agent_grants(uuid)` initialized
+  `environment_networking public.agentos_network_mode := 'limited'`, and
+  plpgsql_check warns (42804) that the text literal has no assignment cast to
+  the enum. The initializer now carries the explicit
+  `::public.agentos_network_mode` cast in both creator copies - the original
+  `20260814000300_agentos_isolation_model.sql` (the full local path) and the
+  restore copy in `20260822000900` (the hosted path) - keeping the two bodies
+  byte-identical; 00900's own source pin moves to
+  `a1231a4a5329b1dab132b6e774d97bb3` and the workflow's frozen REPAIR sha to
+  `512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694`. The
+  same run also proved the gate's evaluation could never pass: the captured
+  rehearsal stdout legitimately contains blank lines (void-returning SELECTs
+  under -Atq), so plain non-emptiness refused even a finding-free rehearsal.
+  Finding rows are now sentinel-prefixed (`LINTROW|`, every field coalesced
+  so a NULL cannot erase its row's sentinel) and the gate greps for the
+  sentinel.
+- Rationale: the lint gate worked exactly as designed the first time it
+  could run, and the honest response to a real finding is to repair the
+  linted body, not to waive the warning level. Editing a frozen chain file
+  re-freezes identity through the workflow constant, the pinning tests, and
+  exact-head CI. Verified empirically in the supabase postgres 17.6 image:
+  all 148 migrations apply with the fix, both creator paths produce the
+  pinned md5, and the full 27-function roster lints with zero findings.
+- Consequence: the rehearsal can produce a clean lint verdict for the first
+  time. Workers, autonomy, and automatic actions remain OFF and the global
+  kill switch remains ON.

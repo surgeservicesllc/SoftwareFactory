@@ -239,7 +239,7 @@ begin
      array['search_path=pg_catalog']::text[], 'public', 'pg_catalog.bool', 'p_hosts',
      'True when every entry is a bare hostname. A scheme, port, path, or wildcard would widen the network wall in a way the proxy cannot honestly enforce.'),
     ('public.agentos_resolved_agent_grants(uuid)',
-     'plpgsql', 's', true, 'a11033983d4ed0d766e96687c799dce6',
+     'plpgsql', 's', true, 'a1231a4a5329b1dab132b6e774d97bb3',
      array['search_path=pg_catalog']::text[], 'authenticated', 'pg_catalog.jsonb', 'p_agent_id',
      'The single answer to what an agent may do. An unconfigured agent resolves to deny-everything, so "not configured" and "not allowed" behave identically.')
   ) expected(signature, language_name, volatility, security_definer,
@@ -908,7 +908,7 @@ declare
   grant_configured boolean := false;
   environment_id uuid;
   environment_name text;
-  environment_networking public.agentos_network_mode := 'limited';
+  environment_networking public.agentos_network_mode := 'limited'::public.agentos_network_mode;
   environment_hosts text[] := '{}'::text[];
   environment_configured boolean := false;
   result jsonb;

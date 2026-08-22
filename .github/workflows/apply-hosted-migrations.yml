@@ -2670,7 +2670,7 @@ jobs:
           CLEAR_TYPES_SHA256=184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b
           CLEAR_FUNCTIONS_SHA256=e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a
           HOSTED_FUNCTION_ACL_SHA256=8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce
-          REPAIR_SHA256=64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f
+          REPAIR_SHA256=512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694
           RECORD_ONLY_SHA256=b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255
           FUNCTION_ACL_SHA256=dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789
           CLEAR_FUNCTION_ACL_SHA256=ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e
@@ -3518,7 +3518,7 @@ jobs:
               ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', null),
               ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)', null)
             )
-            select expected.signature || '|' || finding.level || '|' || finding.sqlstate || '|' || finding.message
+            select 'LINTROW|' || expected.signature || '|' || coalesce(finding.lineno::text, '') || '|' || coalesce(finding.level, '') || '|' || coalesce(finding.sqlstate, '') || '|' || coalesce(finding.message, '')
             from expected
             cross join lateral extensions.plpgsql_check_function_tb(
               expected.signature::regprocedure,
@@ -3528,9 +3528,14 @@ jobs:
             where finding.level in ('error', 'warning', 'extra')
             order by expected.signature, finding.lineno, finding.position;" \
             -c "rollback;")
-          if [ -n "$LINT_FINDINGS" ]; then
+          # The capture holds every byte the rehearsal wrote to stdout, and the
+          # chain files legitimately emit blank lines (void-returning SELECTs
+          # under -Atq), so plain non-emptiness would refuse a finding-free
+          # rehearsal forever. Only sentinel-prefixed rows are findings; the
+          # coalesce above keeps a NULL field from erasing its row's sentinel.
+          if printf '%s\n' "$LINT_FINDINGS" | grep -q '^LINTROW|'; then
             echo "::error::Pre-commit linked database lint found error/warning/extra findings in a repaired, restored, record-only, or delegated function."
-            printf '%s\n' "$LINT_FINDINGS"
+            printf '%s\n' "$LINT_FINDINGS" | grep '^LINTROW|'
             exit 1
           fi
 
@@ -4546,7 +4551,7 @@ jobs:
             || [ "$(tr -d '\r' < supabase/migrations/20260822000700_clear_surface_activity_types.sql | sha256sum | cut -d' ' -f1)" != "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql | sha256sum | cut -d' ' -f1)" != "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000850_normalize_hosted_pre_repair_function_acls.sql | sha256sum | cut -d' ' -f1)" != "8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce" ] \
-            || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql | sha256sum | cut -d' ' -f1)" != "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001200_contract_clear_function_acls.sql | sha256sum | cut -d' ' -f1)" != "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e" ]; then
