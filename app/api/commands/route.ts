@@ -8,6 +8,7 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
+import { loadBotFabric } from "@/lib/bots/service";
 import {
   acceptanceCriterionSchema,
   assessCommandRisk,
@@ -16,7 +17,11 @@ import {
   normalizeDependencyTaskIds,
   resolveAcceptanceCriteria,
 } from "@/lib/orchestration/command";
-import { dispatchPhase1CWorker } from "@/lib/orchestration/dispatch";
+import {
+  FactoryCommandCandidateProjectionError,
+  parseFactoryCommandRoutingCandidates,
+  routeFactoryCommand,
+} from "@/lib/orchestration/factory-command-routing";
 import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
 import { evaluateConnectionIdentity } from "@/lib/connections/routable-candidates";
 import {
@@ -39,19 +44,101 @@ const commandRequestSchema = z.object({
   commandType: commandTypeSchema.default("other"),
   acceptanceCriteria: z.array(acceptanceCriterionSchema).max(12).default([]),
   dependencyTaskIds: z.array(dependencyTaskIdSchema).max(20).default([]),
+  pipelineTemplateKey: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
   risk: z.enum(["green", "yellow", "red"]).default("green"),
   parameters: z.object({}).strict().default({}),
   idempotencyKey: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/).optional(),
 }).strict();
 
-type SubmissionResult = {
-  command_id: string;
-  task_id: string;
-  command_state: "submitted" | "awaiting_approval" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
-  task_state: "backlog" | "awaiting_approval" | "queued" | "in_progress" | "blocked" | "completed" | "failed" | "cancelled";
-  requires_owner_approval: boolean;
-  was_created: boolean;
+const submissionResultSchema = z.object({
+  command_id: z.string().uuid(),
+  task_id: z.string().uuid(),
+  command_state: z.enum([
+    "submitted", "awaiting_approval", "queued", "running", "succeeded", "failed", "cancelled",
+  ]),
+  task_state: z.enum([
+    "backlog", "awaiting_approval", "queued", "in_progress", "blocked", "completed", "failed", "cancelled",
+  ]),
+  requires_owner_approval: z.boolean(),
+  was_created: z.boolean(),
+  route_id: z.string().uuid(),
+  project_pipeline_id: z.string().uuid(),
+  pipeline_template_key: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
+  pipeline_template_id: z.string().uuid().nullable(),
+  assignment_id: z.string().uuid(),
+  bot_id: z.string().uuid(),
+  role_id: z.string().uuid(),
+  routing_snapshot: z.unknown(),
+});
+
+const replayCommandParametersSchema = z.object({
+  provider: z.string().trim().min(1).max(40),
+  model: z.string().trim().min(1).max(128),
+  repositoryBinding: z.object({
+    baseBranch: z.string().trim().min(1).max(255),
+    baseSha: z.string().regex(/^[0-9a-f]{40}$/),
+  }).passthrough(),
+}).passthrough();
+
+const replayRoutingSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  command: z.object({
+    effectiveRisk: z.enum(["green", "yellow", "red"]),
+  }).passthrough(),
+  project: z.object({
+    organizationId: z.string().uuid(),
+    projectId: z.string().uuid(),
+  }).passthrough(),
+  pipeline: z.object({
+    selectionId: z.string().uuid(),
+    templateKey: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
+    templateId: z.string().uuid().nullable(),
+  }).passthrough(),
+  assignment: z.object({
+    assignmentId: z.string().uuid(),
+    botId: z.string().uuid(),
+    roleId: z.string().uuid(),
+    provider: z.string().trim().min(1).max(40),
+    model: z.string().trim().min(1).max(128),
+    workEffort: z.enum(["low", "medium", "high", "max"]),
+  }).passthrough(),
+}).passthrough();
+
+const replayResultSchema = z.object({
+  command_id: z.string().uuid(),
+  task_id: z.string().uuid(),
+  command_state: submissionResultSchema.shape.command_state,
+  task_state: submissionResultSchema.shape.task_state,
+  requires_owner_approval: z.boolean(),
+  was_created: z.literal(false),
+  route_id: z.string().uuid(),
+  project_pipeline_id: z.string().uuid(),
+  pipeline_template_key: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
+  pipeline_template_id: z.string().uuid().nullable(),
+  assignment_id: z.string().uuid(),
+  bot_id: z.string().uuid(),
+  role_id: z.string().uuid(),
+  routing_snapshot: replayRoutingSnapshotSchema,
+  command_parameters: replayCommandParametersSchema,
+  repository_full_name: z.string().trim().min(3).max(255).nullable(),
+});
+
+type DatabaseError = {
+  code?: string;
+  message?: string;
 };
+
+const FACTORY_ROUTING_SETUP_MESSAGES = new Set([
+  "selected bot assignment is not active for this project",
+  "selected bot assignment is not configured",
+  "selected bot assignment cannot write the repository",
+  "selected bot assignment cannot open pull requests",
+  "selected bot assignment cannot run this pipeline",
+  "selected bot role risk ceiling is too low",
+  "selected bot does not match command execution provider and model",
+  "selected bot is not ready",
+  "selected bot assignment is at its concurrency limit",
+]);
 
 type CommandTarget = {
   app_id: number;
@@ -64,6 +151,68 @@ type CommandTarget = {
   repository_full_name: string;
   repository_id: string;
 };
+
+function unavailableRead(code: string, message: string) {
+  return jsonNoStore({ error: { code, message } }, { status: 503 });
+}
+
+function pipelineNotSelected() {
+  return jsonNoStore(
+    {
+      error: {
+        code: "pipeline_not_selected",
+        message: "Choose a pipeline that is selected for this active project.",
+      },
+    },
+    { status: 409 },
+  );
+}
+
+function routingSetupRefusal(message: string, details?: unknown) {
+  return jsonNoStore(
+    {
+      error: {
+        code: "factory_routing_unavailable",
+        message,
+        ...(details === undefined ? {} : { details }),
+      },
+    },
+    { status: 409 },
+  );
+}
+
+function factoryIdempotencyConflict() {
+  return jsonNoStore(
+    {
+      error: {
+        code: "factory_routing_idempotency_conflict",
+        message: "The idempotency key is already bound to a different factory command intent or route.",
+      },
+    },
+    { status: 409 },
+  );
+}
+
+function isMissingFactoryRoutingRpc(error: DatabaseError | null): boolean {
+  return error?.code === "PGRST202";
+}
+
+function isSelectedPipelineMissing(error: DatabaseError | null): boolean {
+  return error?.code === "P0002";
+}
+
+function isFactoryRoutingSetupConflict(error: DatabaseError | null): boolean {
+  return error?.code === "55000";
+}
+
+function isFactoryIdempotencyConflict(error: DatabaseError | null): boolean {
+  return error?.code === "22023"
+    && [
+      "idempotent factory command routing evidence conflicts",
+      "idempotent command predates factory routing evidence",
+      "idempotency key was already used for a different factory command intent",
+    ].includes(error.message ?? "");
+}
 
 export async function POST(request: Request) {
   try {
@@ -119,12 +268,145 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
-    const { data: targetData, error: targetError } = await supabase
-      .rpc("resolve_phase1c_command_target", {
+
+    // Resolve an exact idempotent replay before consulting any mutable live
+    // state. Its immutable command parameters and route snapshot are the
+    // evidence to return: a changed base branch, credential, roster, or
+    // capacity count must not turn a retry into a different command.
+    if (parsed.data.idempotencyKey) {
+      const replayRead = await supabase.rpc("resolve_factory_command_replay", {
         p_organization_id: activeOrganization.id,
         p_project_id: parsed.data.projectId,
-      })
-      .single();
+        p_pipeline_template_key: parsed.data.pipelineTemplateKey,
+        p_prompt: parsed.data.prompt,
+        p_requested_risk: parsed.data.risk,
+        p_command_type: parsed.data.commandType,
+        p_acceptance_criteria: acceptanceCriteria,
+        p_dependency_task_ids: dependencyTaskIds,
+        p_idempotency_key: parsed.data.idempotencyKey,
+      });
+      if (replayRead.error) {
+        if (isMissingFactoryRoutingRpc(replayRead.error)) {
+          return unavailableRead(
+            "factory_routing_not_connected",
+            "Factory command replay resolution is not connected in this environment.",
+          );
+        }
+        if (isFactoryIdempotencyConflict(replayRead.error)) {
+          return factoryIdempotencyConflict();
+        }
+        if (isSelectedPipelineMissing(replayRead.error)) return pipelineNotSelected();
+        return unavailableRead(
+          "factory_replay_unavailable",
+          "The existing factory command could not be resolved safely.",
+        );
+      }
+
+      const parsedReplayRows = z.array(replayResultSchema).max(1).safeParse(replayRead.data);
+      if (!parsedReplayRows.success) {
+        return unavailableRead(
+          "factory_replay_projection_invalid",
+          "Factory command replay returned an invalid result projection.",
+        );
+      }
+      const replay = parsedReplayRows.data[0];
+      if (replay) {
+        const snapshot = replay.routing_snapshot;
+        const parameters = replay.command_parameters;
+        if (
+          snapshot.project.organizationId !== activeOrganization.id
+          || snapshot.project.projectId !== parsed.data.projectId
+          || replay.project_pipeline_id !== snapshot.pipeline.selectionId
+          || replay.pipeline_template_key !== snapshot.pipeline.templateKey
+          || replay.pipeline_template_id !== snapshot.pipeline.templateId
+          || replay.assignment_id !== snapshot.assignment.assignmentId
+          || replay.bot_id !== snapshot.assignment.botId
+          || replay.role_id !== snapshot.assignment.roleId
+          || parameters.provider !== snapshot.assignment.provider
+          || parameters.model !== snapshot.assignment.model
+        ) {
+          return unavailableRead(
+            "factory_replay_projection_invalid",
+            "Factory command replay returned conflicting stored routing evidence.",
+          );
+        }
+
+        return jsonNoStore(
+          {
+            command: { id: replay.command_id, status: replay.command_state },
+            task: { id: replay.task_id, status: replay.task_state },
+            execution: {
+              started: false,
+              message: replay.requires_owner_approval
+                ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
+                : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
+              workerDispatch: "not_applicable",
+            },
+            orchestration: {
+              acceptanceCriteria,
+              baseBranch: parameters.repositoryBinding.baseBranch,
+              baseSha: parameters.repositoryBinding.baseSha,
+              commandType: parsed.data.commandType,
+              connectionRouting: { mode: "persisted_replay" },
+              dependencyTaskIds,
+              effectiveRisk: snapshot.command.effectiveRisk,
+              model: snapshot.assignment.model,
+              provider: snapshot.assignment.provider,
+              repository: replay.repository_full_name ?? "connected repository",
+              factoryRouting: {
+                routeId: replay.route_id,
+                projectPipelineId: replay.project_pipeline_id,
+                pipelineTemplateKey: replay.pipeline_template_key,
+                pipelineTemplateId: replay.pipeline_template_id,
+                assignmentId: replay.assignment_id,
+                botId: replay.bot_id,
+                roleId: replay.role_id,
+                provider: snapshot.assignment.provider,
+                model: snapshot.assignment.model,
+                workEffort: snapshot.assignment.workEffort,
+              },
+            },
+            requiresOwnerApproval: replay.requires_owner_approval,
+            idempotentReplay: true,
+          },
+          { status: 200 },
+        );
+      }
+    }
+
+    const requestedRisk = parsed.data.risk.toUpperCase() as "GREEN" | "YELLOW" | "RED";
+    const riskAssessment = assessCommandRisk({
+      acceptanceCriteria,
+      commandType: parsed.data.commandType,
+      prompt: parsed.data.prompt,
+      requestedRisk,
+    });
+    const executionPlan = createPhase1CExecutionPlan(parsed.data.commandType);
+
+    // These are independent read boundaries. Reading them from the same
+    // authenticated tenant client in parallel shortens admission latency, but
+    // none of their answers can dispatch work. The atomic submit RPC repeats
+    // every routing gate after taking the selected assignment's lock.
+    const [targetRead, candidateRead, identity, fabricRead] = await Promise.all([
+      supabase
+        .rpc("resolve_phase1c_command_target", {
+          p_organization_id: activeOrganization.id,
+          p_project_id: parsed.data.projectId,
+        })
+        .single(),
+      supabase.rpc("list_factory_command_routing_candidates", {
+        p_organization_id: activeOrganization.id,
+        p_project_id: parsed.data.projectId,
+        p_template_key: parsed.data.pipelineTemplateKey,
+      }),
+      evaluateConnectionIdentity(supabase, parsed.data.projectId, "repository.write"),
+      loadBotFabric(supabase, activeOrganization.id).then(
+        (data) => ({ data, error: null }),
+        (error: unknown) => ({ data: null, error }),
+      ),
+    ]);
+
+    const { data: targetData, error: targetError } = targetRead;
     if (targetError) {
       if (["P0002", "42501", "55000"].includes(targetError.code ?? "")) {
         return jsonNoStore(
@@ -137,7 +419,10 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
-      return databaseErrorResponse(targetError);
+      return unavailableRead(
+        "command_target_unavailable",
+        "The project's executable repository binding could not be read safely.",
+      );
     }
     if (!targetData) {
       return jsonNoStore(
@@ -153,6 +438,75 @@ export async function POST(request: Request) {
 
     const target = targetData as CommandTarget;
 
+    if (candidateRead.error) {
+      if (isMissingFactoryRoutingRpc(candidateRead.error)) {
+        return unavailableRead(
+          "factory_routing_not_connected",
+          "Factory command routing is not connected in this environment.",
+        );
+      }
+      if (isSelectedPipelineMissing(candidateRead.error)) return pipelineNotSelected();
+      return unavailableRead(
+        "factory_routing_unavailable",
+        "Factory command routing candidates could not be read safely.",
+      );
+    }
+
+    if (fabricRead.error || !fabricRead.data) {
+      return unavailableRead(
+        "bot_fabric_unavailable",
+        "The live bot fabric could not be read safely.",
+      );
+    }
+
+    let routingCandidates;
+    try {
+      routingCandidates = parseFactoryCommandRoutingCandidates(candidateRead.data);
+    } catch (error) {
+      if (error instanceof FactoryCommandCandidateProjectionError) {
+        return unavailableRead(
+          "factory_routing_projection_invalid",
+          "Factory command routing returned an invalid candidate projection.",
+        );
+      }
+      throw error;
+    }
+
+    const liveBots = new Map(fabricRead.data.bots.map((bot) => [bot.id, bot]));
+    if (routingCandidates.some((candidate) => !liveBots.has(candidate.botId))) {
+      return unavailableRead(
+        "bot_fabric_projection_invalid",
+        "Factory command routing referenced a bot missing from the live fabric.",
+      );
+    }
+    const liveRoutingCandidates = routingCandidates.map((candidate) => ({
+      ...candidate,
+      currentReadiness: candidate.currentReadiness === "ready"
+        ? liveBots.get(candidate.botId)!.currentReadiness
+        : candidate.currentReadiness,
+    }));
+
+    const factoryRouting = routeFactoryCommand({
+      candidates: liveRoutingCandidates,
+      pipelineTemplateKey: parsed.data.pipelineTemplateKey,
+      effectiveRisk: riskAssessment.effectiveRisk,
+      provider: executionPlan.provider,
+      model: executionPlan.model,
+      deferCapacityToAtomicSubmit: parsed.data.idempotencyKey !== undefined,
+    });
+    if (factoryRouting.outcome === "REFUSED") {
+      const singleReason = factoryRouting.refused.length === 1
+        ? factoryRouting.refused[0]?.reason
+        : undefined;
+      return routingSetupRefusal(singleReason ?? factoryRouting.reason, {
+        refusals: factoryRouting.refused.slice(0, 20).map((entry) => ({
+          assignmentId: entry.assignmentId,
+          code: entry.code,
+        })),
+      });
+    }
+    const selectedAssignment = factoryRouting.selected;
+
     // Phase 2D seam: the Identity Router is consulted where work is created.
     // A Phase 1C command exercises `repository.write` — the worker pushes a
     // branch and opens a draft PR through the chosen connection. For a project
@@ -161,9 +515,6 @@ export async function POST(request: Request) {
     // resolved primary binding is a contradiction to surface, never a
     // tiebreak to guess. A project with only legacy (unlabelled) mappings
     // proceeds exactly as before Phase 2D, and the response says so.
-    const identity = await evaluateConnectionIdentity(
-      supabase, parsed.data.projectId, "repository.write",
-    );
     if (identity.mode === "error") {
       return jsonNoStore(
         {
@@ -225,14 +576,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const requestedRisk = parsed.data.risk.toUpperCase() as "GREEN" | "YELLOW" | "RED";
-    const riskAssessment = assessCommandRisk({
-      acceptanceCriteria,
-      commandType: parsed.data.commandType,
-      prompt: parsed.data.prompt,
-      requestedRisk,
-    });
-    const executionPlan = createPhase1CExecutionPlan(parsed.data.commandType);
     const [repositoryOwner, repositoryName] = target.repository_full_name.split("/");
     if (!repositoryOwner || !repositoryName || target.repository_full_name.split("/").length !== 2) {
       return jsonNoStore(
@@ -259,14 +602,15 @@ export async function POST(request: Request) {
       baseSha = reference.object.sha.toLowerCase();
     } catch (error) {
       if (error instanceof GitHubApiError) {
+        const unavailable = error.status >= 500;
         return jsonNoStore(
           {
             error: {
-              code: "project_not_executable",
+              code: unavailable ? "repository_verification_unavailable" : "project_not_executable",
               message: "The connected repository base branch could not be verified safely.",
             },
           },
-          { status: error.status === 429 ? 429 : 409 },
+          { status: error.status === 429 ? 429 : unavailable ? 503 : 409 },
         );
       }
       throw error;
@@ -298,8 +642,11 @@ export async function POST(request: Request) {
       },
     };
 
-    const { data, error } = await supabase.rpc("submit_command", {
+    const { data, error } = await supabase.rpc("submit_factory_command", {
+      p_organization_id: activeOrganization.id,
       p_project_id: parsed.data.projectId,
+      p_project_pipeline_id: selectedAssignment.projectPipelineId,
+      p_assignment_id: selectedAssignment.assignmentId,
       p_prompt: parsed.data.prompt,
       p_requested_risk: riskAssessment.effectiveRisk.toLowerCase(),
       p_parameters: orchestrationParameters,
@@ -307,41 +654,68 @@ export async function POST(request: Request) {
     }).single();
 
     if (error) {
+      if (isMissingFactoryRoutingRpc(error)) {
+        return unavailableRead(
+          "factory_routing_not_connected",
+          "Factory command routing is not connected in this environment.",
+        );
+      }
+      if (isSelectedPipelineMissing(error)) return pipelineNotSelected();
+      if (isFactoryRoutingSetupConflict(error)) {
+        const message = error.message && FACTORY_ROUTING_SETUP_MESSAGES.has(error.message)
+          ? error.message
+          : "The selected bot assignment can no longer run this command.";
+        return routingSetupRefusal(
+          message,
+        );
+      }
+      if (isFactoryIdempotencyConflict(error)) {
+        return factoryIdempotencyConflict();
+      }
       return databaseErrorResponse(error);
     }
 
-    const result = data as SubmissionResult;
-    let workerDispatch: "not_applicable" | "requested" | "delayed" = "not_applicable";
-    if (!result.requires_owner_approval && result.task_state === "queued") {
-      try {
-        await dispatchPhase1CWorker(
-          {
-            appId: target.app_id,
-            externalInstallationId: target.external_installation_id,
-            externalRepositoryId: target.external_repository_id,
-            repositoryFullName: target.repository_full_name,
-          },
-          result.command_id,
-        );
-        workerDispatch = "requested";
-      } catch {
-        // The command/task transaction is durable. A same-key retry can wake
-        // the worker again without creating duplicate work.
-        workerDispatch = "delayed";
-      }
-      const { error: dispatchEvidenceError } = await supabase.rpc(
-        "record_phase1c_dispatch_outcome",
-        {
-          p_command_id: result.command_id,
-          p_organization_id: activeOrganization.id,
-          p_outcome: workerDispatch,
-          p_reason_code: workerDispatch === "delayed" ? "provider_dispatch_failed" : null,
-        },
+    const parsedSubmission = submissionResultSchema.safeParse(data);
+    if (!parsedSubmission.success) {
+      return unavailableRead(
+        "factory_submission_projection_invalid",
+        "Factory command submission returned an invalid result projection.",
       );
-      if (dispatchEvidenceError) {
-        return databaseErrorResponse(dispatchEvidenceError);
-      }
     }
+    const result = parsedSubmission.data;
+    const parsedSnapshot = replayRoutingSnapshotSchema.safeParse(result.routing_snapshot);
+    if (!parsedSnapshot.success) {
+      return unavailableRead(
+        "factory_submission_projection_invalid",
+        "Factory command submission returned an invalid routing snapshot.",
+      );
+    }
+    const snapshot = parsedSnapshot.data;
+    if (
+      result.project_pipeline_id !== selectedAssignment.projectPipelineId
+      || result.pipeline_template_key !== selectedAssignment.pipelineTemplateKey
+      || result.pipeline_template_id !== selectedAssignment.pipelineTemplateId
+      || result.assignment_id !== selectedAssignment.assignmentId
+      || result.bot_id !== selectedAssignment.botId
+      || result.role_id !== selectedAssignment.roleId
+      || snapshot.project.organizationId !== activeOrganization.id
+      || snapshot.project.projectId !== parsed.data.projectId
+      || snapshot.pipeline.selectionId !== result.project_pipeline_id
+      || snapshot.pipeline.templateKey !== result.pipeline_template_key
+      || snapshot.pipeline.templateId !== result.pipeline_template_id
+      || snapshot.assignment.assignmentId !== result.assignment_id
+      || snapshot.assignment.botId !== result.bot_id
+      || snapshot.assignment.roleId !== result.role_id
+      || snapshot.assignment.provider !== executionPlan.provider
+      || snapshot.assignment.model !== executionPlan.model
+      || (snapshot.command.effectiveRisk === "red" && !result.requires_owner_approval)
+    ) {
+      return unavailableRead(
+        "factory_submission_route_mismatch",
+        "Factory command submission returned routing evidence that conflicts with admission.",
+      );
+    }
+    const workerDispatch = "not_applicable" as const;
     return jsonNoStore(
       {
         command: {
@@ -355,10 +729,8 @@ export async function POST(request: Request) {
         execution: {
           started: false,
           message: result.requires_owner_approval
-            ? "Persisted only. RED Codex execution remains blocked in Phase 1C; owner approval does not widen the worker ceiling."
-            : workerDispatch === "requested"
-              ? "The command is queued and the durable Phase 1C worker was notified."
-              : "The command is queued durably. Worker notification is delayed; retrying is safe.",
+            ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
+            : "Persisted only. This request did not dispatch a worker or change autonomy.",
           workerDispatch,
         },
         orchestration: {
@@ -378,9 +750,22 @@ export async function POST(request: Request) {
                 rejected: identity.result.rejected,
                 usedFallback: identity.result.outcome === "SELECTED" ? identity.result.usedFallback : false,
               },
+          factoryRouting: {
+            routeId: result.route_id,
+            projectPipelineId: result.project_pipeline_id,
+            pipelineTemplateKey: result.pipeline_template_key,
+            pipelineTemplateId: result.pipeline_template_id,
+            assignmentId: result.assignment_id,
+            botId: result.bot_id,
+            roleId: result.role_id,
+            provider: snapshot.assignment.provider,
+            model: snapshot.assignment.model,
+            workEffort: snapshot.assignment.workEffort,
+          },
           dependencyTaskIds,
-          effectiveRisk: riskAssessment.effectiveRisk.toLowerCase(),
-          model: executionPlan.model,
+          effectiveRisk: snapshot.command.effectiveRisk,
+          model: snapshot.assignment.model,
+          provider: snapshot.assignment.provider,
           repository: target.repository_full_name,
         },
         requiresOwnerApproval: result.requires_owner_approval,

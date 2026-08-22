@@ -2,7 +2,7 @@
 
 Last triaged: 2026-08-21
 
-## Agents selectable into the AI Factory (2026-08-22, ADR-106, owner goal)
+## Agents selectable into the AI Factory (2026-08-22, ADR-107, owner goal)
 
 - [x] Migration `20260822000100_project_agent_selection.sql`: project_agents
   with RLS + FORCE RLS, no direct table path, owner/admin select/deselect and
@@ -17,6 +17,93 @@ Last triaged: 2026-08-21
 - [ ] Apply `20260822000100` to hosted Supabase: apply workflow,
   `confirm=apply`, `scope=agent-selection`. Until then the surfaces say Not
   Connected and record nothing.
+
+## AI Factory production acceptance (2026-08-21)
+
+- [x] Verify exact candidate head
+  `a020e8192d8512a1bb65112e01017047087f0528`: CI run `32543409160` passed
+  quality and all three browser shards.
+- [x] Advance and reload production at 4/8: **Agentic SDLC** remains selected,
+  its immutable `pipeline.selected` Activity event is visible, and the owner's
+  reconnected Claude account reports Connected.
+- [ ] Complete the account Refresh with a real worker sweep. It remains pending
+  and is not connected/fresh-worker evidence.
+- [x] Implement and locally verify the downstream bot-purpose normalization:
+  translate
+  broker `claude`/`claude_N` and `codex`/`codex_N` purposes into provision
+  choices `subscription`/`subscription_N`, reject mismatches, and pin the real
+  broker-purpose fixtures in regression tests. PR #309 at exact head
+  `db1958f8b501e865a9e741a21298683e0f88f969` passes 99 focused tests,
+  lint, typecheck, a production build, and the secret/protected-path audit. It
+  is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [x] Diagnose PR #309 CI run `32545138211` browser shards 1/3 through 3/3: the async
+  loading state omitted the page H1. Keep `AI Factory` visible in loading and
+  every fail-closed state and pin the initial-loading state in a component
+  regression test. This is a forward candidate; it invalidates the prior exact-
+  head merge approval.
+- [ ] Obtain exact owner approval before changing the protected
+  `lib/bots/credentials.ts` boundary. It must admit only catalog-declared
+  subscription reference bases and valid `_2` through `_9999` slots, while
+  continuing to reject arbitrary, malformed, browser-public, and privileged
+  references. Until this lands, a subscription bot can be created but cannot
+  read ready from its vault credential.
+- [ ] Make the manager-only manual readiness check use the same boolean-only
+  environment-or-vault presence predicate as the bot-fabric read. It currently
+  checks and serializes with environment presence only, so a vault-backed bot
+  can be persisted and returned as Not Connected. This protected readiness
+  change also requires exact owner approval.
+- [ ] Bind a provisioned bot to its exact `ai_accounts.id` through a separately
+  reviewed forward schema/RPC design. `bots.ai_account_id` currently remains
+  null, so credential-slot stickiness is not full identity stickiness.
+  broker-purpose fixtures in regression tests. The branch candidate passes 100
+  focused tests, lint, typecheck, and a production build. It is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [ ] After an authorized release, repeat Create Bot, assignment, settings, and
+  reload checks before claiming that a connected bot is usable and sticky.
+- [ ] Keep production promotion stopped until the five linked-lint errors/ten
+  findings, raw autonomy/kill-switch drift, two effective-kill-off projects,
+  absent fresh worker, and hosted `20260821000300`/candidate `20260821000400`
+  drift are contained and remeasured.
+
+
+## Factory command routing release (2026-08-21, ADR-106)
+
+- [x] Persist one immutable route for every owner-submitted factory command,
+  including selected pipeline/template, bot assignment, bot, provider/model,
+  work effort, effective risk, and the routing/configuration snapshot.
+- [x] Resolve exact idempotent replay before any mutable pipeline, roster,
+  readiness, or capacity read; recheck stored effective risk in the database.
+- [x] Keep submission and replay owner-only, fail closed when the routing RPC
+  is absent, and leave worker dispatch, autonomy, merge, deploy, and rollback
+  unavailable.
+- [x] Freeze `20260821000400_command_factory_routing.sql` at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- [ ] Remediate and remeasure the hosted release blockers: five linked lint
+  errors/ten findings; one raw organization with `autonomous_mode = true`; one
+  raw organization with `autonomy_kill_switch_active = false`; two projects with effective
+  kill off; and no connected/fresh worker.
+- [ ] Apply `20260821000400` only through a separately authorized hosted
+  release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
+  and prove the matching production copy. Production remains on hosted
+  `20260821000300` and the old application until then.
+- [x] Classify the default unbounded-run Supabase-wiring and pipeline failures
+  as contention-only by clearing both on isolated retry; the wiring contract
+  passes 2/2 in 0.603s with `maxWorkers=1`.
+- [x] Run the bounded current-head non-frozen Windows suite:
+  `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+  passes 317 files / 3,730 tests, 7 skipped, in 183.78s. Lint, typecheck, and
+  build are green.
+- [x] Remove the embedded template-plan first-render race: derive the caller's
+  project synchronously, perform no workspace project read, and pin the
+  immediate render and project-scoped graph submission in regression tests.
+- [x] Remove the no-role assignment dead end: explain the required role, link
+  to `/solutions/bot-manager`, and keep Configure from advancing until every
+  selected bot has one.
+- [ ] Require Linux CI to run the complete suite, including the owner-frozen
+  19-test `tests/unit/auth-broker-runner.test.ts`. Its local exclusion is only
+  because Windows lacks the Unix `script` executable; it is not a test waiver.
 
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 

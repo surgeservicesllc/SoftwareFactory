@@ -8,7 +8,7 @@ const connectedAccount = {
   id: "acc-1",
   provider: "anthropic",
   providerLabel: "Claude",
-  credentialPurpose: "subscription",
+  credentialPurpose: "claude",
   displayName: "Claude account 1",
   status: "connected",
   lastVerifiedAt: null,
@@ -274,7 +274,7 @@ const disconnectedAccount = {
   id: "acc-4",
   provider: "openai",
   providerLabel: "Codex",
-  credentialPurpose: "subscription",
+  credentialPurpose: "codex",
   displayName: "Codex Daniel",
   status: "disconnected",
   lastVerifiedAt: null,
@@ -285,7 +285,7 @@ const needsReauthAccount = {
   id: "acc-2",
   provider: "anthropic",
   providerLabel: "Claude",
-  credentialPurpose: "subscription_2",
+  credentialPurpose: "claude_2",
   displayName: "Claude Blackstone",
   status: "needs_reauth",
   lastVerifiedAt: null,
@@ -314,6 +314,37 @@ describe("BotManagerHome — creating a bot", () => {
     expect(within(dialog).getByRole("button", { name: /claude account 1/i })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /claude blackstone/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /codex daniel/i })).toBeNull();
+  });
+
+  it("translates the broker purpose before creating the chosen account's bot", async () => {
+    const user = userEvent.setup();
+    const provisioned: unknown[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [],
+      extra: (url, init) => {
+        if (url !== "/api/bots/connect/provision" || init?.method !== "POST") return null;
+        provisioned.push(JSON.parse(String(init.body)));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ provisioned: true, outcome: "created" }),
+        } as unknown as Response;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: /create bot/i }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: /create bot/i }))
+        .getByRole("button", { name: /claude account 1/i }),
+    );
+
+    expect(provisioned).toEqual([{
+      provider: "anthropic",
+      credential: "subscription",
+      additional: false,
+    }]);
   });
 
   it("says why it cannot create one when no account holds a credential", async () => {

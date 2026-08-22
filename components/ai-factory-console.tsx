@@ -28,7 +28,7 @@ import { ProjectAgentSelector } from "@/components/project-agent-selection";
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
-  assignmentIsConfigured,
+  assignmentPostingIsConfigured,
   LEAST_PRIVILEGE_CONFIG,
   type AssignmentConfig,
 } from "@/lib/bots/assignment-config";
@@ -46,6 +46,10 @@ import { cn } from "@/lib/cn";
  * and navigation by construction, and what makes this page unable to
  * disagree with the rest of the console.
  */
+
+/** One description for the page, whatever state it is able to render in. */
+const PAGE_DESCRIPTION =
+  "From new project to shipped pull request: the whole journey, one guided path over your live workspace.";
 
 type StepId =
   | "connect_github"
@@ -86,8 +90,8 @@ type FactoryData = {
 type State =
   | { kind: "loading" }
   | { kind: "signed-out" }
-  | { kind: "setup" }
   | { kind: "unavailable" }
+  | { kind: "setup" }
   | { kind: "ready"; data: FactoryData; stale: boolean };
 
 function staleOrUnavailable(current: State): State {
@@ -214,7 +218,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         setState({ kind: "setup" });
         return;
       }
-
       // A factory view is one snapshot, not seven independently optional
       // cards. If even one request rejected or returned a non-success status,
       // retain the last complete snapshot instead of turning that slice into a
@@ -250,6 +253,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             projectId?: string | null;
             status?: string;
             config?: Partial<AssignmentConfig>;
+            model?: string | null;
+            workEffort?: string | null;
           }>;
           executor?: { connected?: boolean; label?: string; detail?: string };
         }>(responses[3]!),
@@ -308,9 +313,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           .map((assignment) => ({
             // Read from `config`, where the API actually puts these fields,
             // and measure it against the least-privilege baseline.
-            configured: assignmentIsConfigured({
-              ...LEAST_PRIVILEGE_CONFIG,
-              ...(assignment.config ?? {}),
+            configured: assignmentPostingIsConfigured({
+              config: {
+                ...LEAST_PRIVILEGE_CONFIG,
+                ...(assignment.config ?? {}),
+              },
+              model: assignment.model,
+              workEffort: assignment.workEffort,
             }),
             projectId: assignment.projectId ?? null,
           })),
@@ -358,21 +367,42 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     void load();
   }, [load]);
 
+  /*
+   * Every state keeps the page's own heading.
+   *
+   * The blocked states used to replace the whole page, h1 included, so a
+   * console that could not read its data rendered a panel with no page title
+   * and no place in the heading outline. Nobody noticed while the only
+   * reachable blocked state needed a session the browser suite never has;
+   * the unavailable state made it reachable, and the /solutions/ai-factory
+   * page check caught it.
+   */
+  const framed = (children: React.ReactNode) => (
+    <div className="space-y-6">
+      <PageHeader title="AI Factory" description={PAGE_DESCRIPTION} />
+      {children}
+    </div>
+  );
+
   if (state.kind === "loading") {
-    return (
+    return framed(
       <Card className="grid min-h-64 place-items-center">
         <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
-      </Card>
+      </Card>,
     );
   }
   if (state.kind === "signed-out") {
-    return <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />;
+    return framed(
+      <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />,
+    );
   }
   if (state.kind === "setup") {
-    return <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />;
+    return framed(
+      <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />,
+    );
   }
   if (state.kind === "unavailable") {
-    return (
+    return framed(
       <Card className="grid min-h-64 place-items-center p-6 text-center">
         <div className="max-w-md">
           <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
@@ -384,7 +414,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             Retry
           </button>
         </div>
-      </Card>
+      </Card>,
     );
   }
 
@@ -683,7 +713,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "command",
       title: "Issue a Command",
-      description: "Describe the outcome you want in plain words. The server verifies it, queues it, and a worker builds it.",
+      description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route without dispatching a worker.",
       done: scopedCommands.length > 0,
       evidence: scopedCommands.length > 0
         ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`
@@ -787,7 +817,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     <div className="space-y-6">
       <PageHeader
         title="AI Factory"
-        description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        description={PAGE_DESCRIPTION}
         action={
           <div className="flex flex-wrap items-center gap-2">
             {data.projects.length > 1 || (isStartingNew && data.projects.length > 0) ? (

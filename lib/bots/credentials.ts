@@ -59,10 +59,25 @@ const PROVIDER_CREDENTIAL_ALTERNATES: readonly string[] = [
   "COHERE_API_KEY",
 ];
 
+/**
+ * Every reference the catalogue itself declares, plus the conventional
+ * alternates.
+ *
+ * Both of the catalogue's reference fields belong here. Only
+ * `defaultCredentialRef` was included, so the two subscription references it
+ * declares — `SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN` and
+ * `SOFTWAREFACTORY_CODEX_AUTH_JSON` — were rejected by a list built from the
+ * same catalogue that names them. A bot created from a connected
+ * subscription account, which is the path the product recommends over API
+ * keys, carried a reference that could never resolve: it read "Needs
+ * credential" forever and the assignment wizard disabled it, so the AI
+ * Factory's Assign Bots step was unreachable by that route.
+ */
 const ALLOWED_CREDENTIAL_REFS: ReadonlySet<string> = new Set([
-  ...BOT_PROVIDERS.flatMap((provider) =>
-    provider.defaultCredentialRef ? [provider.defaultCredentialRef] : [],
-  ),
+  ...BOT_PROVIDERS.flatMap((provider) => [
+    provider.defaultCredentialRef,
+    provider.subscriptionCredentialRef,
+  ].filter((reference): reference is string => Boolean(reference))),
   ...PROVIDER_CREDENTIAL_ALTERNATES,
 ]);
 

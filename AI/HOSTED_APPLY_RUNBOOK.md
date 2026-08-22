@@ -3,18 +3,14 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below — as measured. Four further migrations —
-`20260816001600_phase2c_resource_reservations`,
-`20260821000100_agentic_sdlc_activity_types`,
-`20260821000200_agentic_sdlc_lifecycle`, and
-`20260821000300_project_pipeline_selection` — were added locally *after* that probe run and
-remain absent from the hosted ledger, so the current expected absent-from-ledger count is
-twenty-three. They are deliberately not appended to the list below: that list is a measurement,
-and adding an unmeasured version to it would turn evidence into assertion. The two lifecycle
-files are instead asked about by a **separate**
-query in the same `scope=probe` step, which reports the objects they introduce rather than a
-ledger row. The repository total is 131 migration
-files. Those two numbers no longer stand in the old relationship, and the reason matters: the
+**The current total is 19** within the dated, test-guarded probe list below. That phrase describes
+the measured list, not today's total outstanding migration count. Later exact evidence proves
+`20260821000300_project_pipeline_selection` is hosted, while the newer
+`20260821000400_command_factory_routing` and `20260822000100_project_agent_selection` are not
+until their scoped applies run. Do not add any of them to the 19-row measurement or
+infer a new overall missing count without another complete ledger probe. As of this release,
+the repository total is 132 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
 false, and every apply decision made from one has been wrong.
@@ -22,6 +18,28 @@ false, and every apply decision made from one has been wrong.
 version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
+
+## Current release tail — 2026-08-21
+
+- `20260821000300_project_pipeline_selection` is **hosted**. Apply run
+  `32536895799` and its after-ledger listing are recorded below.
+- `20260821000400_command_factory_routing.sql` is **unhosted**. Its reviewed
+  repository blob is exactly 34,999 bytes with SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+  Production still serves the pre-routing application copy. Until the function
+  is hosted, the application intentionally fails closed with Not Connected/503.
+- Do not apply or promote this tail while hosted preconditions are adverse. The
+  latest evidence has five linked-database lint errors across ten findings, one
+  raw organization with `autonomous_mode = true`, one raw organization with
+  `autonomy_kill_switch_active = false`, two projects whose effective kill switch is off,
+  and no connected/fresh worker. This is not a clean/all-off baseline.
+- A separately authorized release must first contain and remeasure those
+  conditions, then apply only the exact reviewed migration and verify its
+  ledger row, immutable-table protections, owner/outsider/anonymous ACL and RLS
+  behavior, stored effective-risk recheck, exact replay-before-mutable-state
+  behavior, and the continued absence of worker dispatch/autonomous authority.
+  Only a matching deployed application and live owner acceptance can change
+  the production claim.
 
 ## Version collision, and one ledger row that lies — 2026-08-19 15:2xZ
 

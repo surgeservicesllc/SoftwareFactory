@@ -2,6 +2,98 @@
 
 Last reviewed: 2026-08-21
 
+**Production acceptance addendum, 2026-08-21 (AI Factory):** exact candidate
+head `a020e8192d8512a1bb65112e01017047087f0528` passed all four Linux CI jobs in
+run `32543409160`: quality plus browser shards 1/3, 2/3, and 3/3. This is
+exact-head candidate evidence, not proof that the candidate is deployed.
+
+An authenticated production-browser pass now measures the guided journey at
+**4/8**. Selecting built-in pipeline **Agentic SDLC** persisted across reload,
+and the Activity surface exposed its immutable `pipeline.selected` event. The
+owner then reconnected the Claude account, which production reports Connected.
+Account Refresh has queued re-verification but remains pending because no
+worker sweep completed, so it is not fresh worker evidence. Creating a bot
+still fails and leaves the roster at zero: the Bot Manager sends the broker's
+raw `claude`/`claude_N` purpose (and would do the same for `codex`/`codex_N`)
+where the provisioning boundary accepts the provider-neutral
+`subscription`/`subscription_N` choice. PR #309 isolates the normalization at
+exact head `db1958f8b501e865a9e741a21298683e0f88f969`, rejects
+provider/purpose mismatches, and carries real-purpose regression fixtures. Its
+focused 99-test run, lint, typecheck, production build, and secret/protected-
+path audit pass. It is not deployed and no production bot stickiness claim is
+made.
+
+PR #309 did not satisfy its merge gate. Browser/accessibility shards 1/3, 2/3,
+and 3/3 in CI run `32545138211` failed because the client-only console rendered a spinner
+without the page's `AI Factory` H1 while required workspace reads were pending.
+The forward candidate keeps the H1 in loading and all fail-closed states and
+adds a direct regression test. A separate release blocker remains at the
+protected credential-resolution boundary: provisioning stores the catalog's
+Claude/Codex subscription reference, but `normalizeCredentialRef` currently
+allowlists provider API-key references only, so a created subscription bot
+would read Not Connected even when its vault credential exists. The manual
+readiness endpoint also evaluates and serializes environment presence only,
+creating the same false negative for vault-backed accounts. No protected file
+has been changed without the requested exact owner approval. Provisioning
+also does not set `bots.ai_account_id`; credential-reference persistence is not
+yet full account-identity binding.
+`subscription`/`subscription_N` choice. The branch candidate now normalizes
+every account-backed provisioning path, rejects provider/purpose mismatches,
+and carries real-purpose regression fixtures. Its focused 100-test run, lint,
+typecheck, and production build pass. It is not deployed and no production bot
+stickiness claim is made.
+
+Production therefore remains unsafe and not fully live. The same release gates
+remain open: five linked-database lint errors across ten findings, one raw
+organization with `autonomous_mode = true`, one raw organization with
+`autonomy_kill_switch_active = false`, two projects with effective kill off,
+no connected/fresh worker, and hosted migration/application drift
+(`20260821000300` rather than candidate `20260821000400`).
+
+
+**Release addendum, 2026-08-21 (Factory command routing, ADR-106):** the
+rebased candidate adds `20260821000400_command_factory_routing.sql`, an exact
+34,999-byte migration with SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+An authenticated organization owner can submit or replay a factory command;
+the database delegates to the existing command/task/run transaction, rechecks
+the stored effective risk, and persists one immutable route containing the
+selected pipeline, bot assignment, bot, provider/model, and work-effort
+evidence. Exact idempotent replay resolves that durable route before reading
+mutable pipeline, roster, readiness, or capacity state. The request does not
+dispatch a worker or change autonomy; no connected/fresh worker was observed,
+and merge, deploy, and rollback remain Not Connected. A missing routing RPC
+returns Not Connected/503, so the application fails closed until the migration
+is hosted.
+
+The candidate also closes two first-use UI failures. An embedded template-plan
+dialog now derives its locked project directly from `projectContext`, so its
+first render cannot falsely claim that the workspace has no projects and it
+never performs the wider `/api/projects` read. The bot-assignment wizard now
+explains that a role is required, links to the real Bot Manager route, and
+cannot advance from Configure until every selected bot has a role.
+
+This is candidate evidence, not a production claim. Production still serves
+the previous copy and its hosted ledger includes `20260821000300`, not
+`20260821000400`. The exact hosted project currently has five linked-database
+lint errors across ten findings; raw data includes one organization with
+`autonomous_mode = true`, one organization with `autonomy_kill_switch_active = false`,
+and two projects whose effective kill switch is off. No connected/fresh worker
+was observed. These facts supersede older blanket claims in this file that
+linked lint is clean or that every hosted autonomy flag/kill switch is safely
+OFF/ON. Release must stop until those conditions are contained and remeasured.
+
+Candidate lint, typecheck, and production build pass. The default unbounded
+Windows run exposed contention-only Supabase-wiring and pipeline failures;
+both cleared on isolated retry (the wiring contract passed 2/2 in 0.603s with
+`maxWorkers=1`). The bounded current-head non-frozen command
+`vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+passes 317 files / 3,730 tests with 7 skipped in 183.78s. The owner-frozen
+19-test auth-broker file is excluded locally solely because Windows lacks the
+Unix `script` executable. This is not a full-suite waiver: Linux CI must run
+the complete suite including that file. The separate hosted-runbook/
+repository-memory guards remain 21/21 passing.
+
 **Addendum, 2026-08-21 (Factory Briefing, ADR-104):** the Dashboard now has
 one read-only, four-lane control-plane briefing: Needs owner now, Underway,
 Recently finished, and Up next. A deterministic classifier folds the existing
@@ -198,7 +290,7 @@ events. Local and CI-verified; recorded as **unhosted** when this was written. T
 broker connect flow works live against production — unledgered DDL, not missing schema. No execution authority changes. The broker API, worker auth
 runner, and UI are not built yet; the connect-command flow remains the live path.
 
-Active delivery tracks: Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution; the credential is **configured** and the worker is **LIVE**, polling every ~5 minutes (see correction below) — a live canary awaits one owner-submitted command
+Historical delivery snapshot (superseded by the 2026-08-21 routing addendum): Phase 1B GitHub App owner path live; hosted Supabase ledger reconciled and forward migrations applied through `130014`; Phase 1D decision layer hosted and execution-inert; Phase 1C re-architected to zero-token subscription-authenticated Codex execution; the credential was reported configured and the worker live at that time. Current evidence instead has no connected/fresh worker.
 
 Overall status: **The protected hosted-database sequence completed on exact project `qpuofpmagrmyamahqwxw`: catalog-proven history for `028`/`130001`-`130005` was reconciled without DDL replay, forward migrations `130006`-`130014` were applied, the ledger is current, and linked lint is clean. Focused hosted verification preserved bot-function identity/security/search-path/ACL boundaries, found zero `pg_catalog.nullif`, passed register/update/readiness audit behavior `1/1/1`, and confirmed the Phase 1D resolver is hosted with all actions OFF and the global kill switch ON. Local migration `130015` restores assignment/run model checks from the accidental 120-character narrowing to the original 128-character provider catalogue/API contract, adds four no-secret constraints for catalogue model/display-name, assignment model, and routing policy-version/selected-model text, adds a bounded routing-evidence projection, and revokes authenticated raw reads of routing decisions/events while retaining RLS-scoped model-configuration reads; it is not hosted or covered by an existing approval. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Distinct no-claim diagnostic Actions run `31748582858` passed the exact-model lookup, then the bounded non-stored Responses probe failed with the safe machine-readable code `credit_balance_exhausted`. Docker preload and durable claim were skipped. Durable run `f4594556-6f72-4763-a480-6993939e3651` remains failed safely after attempt 1 of 2, but its immutable planned base predates the published baseline; it must not be retried because the worker would correctly reject it as `stale_base_sha`. Acceptance requires a new command bound to the then-current base after the subscription credential is configured. The activation variable is absent/OFF. The user-pasted OpenAI key is treated as compromised; `SOFTWAREFACTORY_OPENAI_API_KEY` has been removed from repository Actions secrets and is now **permanently** absent rather than pending replacement, because Phase 1C no longer has a paid-API path to restore it to. The other six protected secrets remain. The temporary Supabase release token was revoked and its temporary file deleted. There is still no successful live Phase 1C result, factory branch, or draft PR. Phase 1E execution, Phase 2A provider execution, bot-provider execution, Phase 1D execution, and Phase 1C Codex execution remain **Not Connected**.**
 
@@ -332,10 +424,10 @@ apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 - Authenticated direct reads of raw Activity and webhook-delivery rows are revoked. Activity uses a caller-member, row-limited RPC and returns only allowlisted, bounded GitHub/SoftwareFactory actor, source, resource, action, status, conclusion, and transition evidence; raw audit metadata and stored webhook subsets remain server-side. Webhook project attribution uses the stable repository UUID.
 - Projects selects repositories by stable provider ID and renders live repository sync time, branch protection/SHA, commit author/date, PR author/created/updated time and detail-fetched mergeability, default-branch checks, and per-PR checks fetched against each displayed head SHA.
 - Global browser headers include a restrictive CSP, framing/object denial, a narrow Supabase connection allowlist, and a narrow image allowlist; repository Markdown previews do not load external images.
-- No direct default-branch write, merge, deployment, rollback, or Claude worker exists. The published manual Codex worker is draft-PR-only and remains **Not Connected** after its first provider-startup failure. The Phase 1D control model is complete and remains execution-inert: Autonomous Mode OFF, global kill switch ON, GREEN ceiling, all **nine** automatic actions OFF at both the organization and project scope.
+- No direct default-branch write, merge, deployment, rollback, or Claude worker exists. The published manual Codex worker is draft-PR-only and remains **Not Connected** after its first provider-startup failure. The intended Phase 1D control model is execution-inert, but current hosted raw/effective rows have drifted from the older all-OFF/kill-ON baseline described below; no connected/fresh executor was observed, and containment remains a release gate.
 - The signed-out dashboard receives a server-verified authentication hint so it skips protected browser fetches; the focused production race regression passes 30/30 repeated runs.
-- `POST /api/commands` accepts a connected project, bounded command type, prompt, acceptance criteria, requested risk, and stable idempotency key. It resolves the live repository binding and exact base SHA server-side, computes a deterministic risk floor and execution plan, persists the command/task/run transaction, and dispatches only an opaque command UUID.
-- GREEN and YELLOW manual commands may queue. RED commands remain persisted as blocked/awaiting approval and are never claimable in Phase 1C; owner approval does not widen this ceiling.
+- `POST /api/commands` accepts a connected project, one exact selected project pipeline, bounded command type, prompt, acceptance criteria, requested risk, and stable idempotency key. It resolves the live repository binding and exact base SHA server-side, computes a deterministic risk floor and execution plan, then atomically persists command/task/run plus immutable pipeline/bot routing evidence. The response uses the database's locked risk/model/work-effort snapshot. This request does not dispatch a worker or change autonomy.
+- GREEN and YELLOW manual commands may be recorded. RED commands remain persisted as blocked/awaiting approval and are never claimable in Phase 1C; owner approval does not widen this ceiling.
 - Provider, model, logical role, budget, workflow, repository IDs, branch, and base SHA are server-selected and independently normalized/revalidated by Phase 1C migrations `130007`-`130011`. Migration `130010` includes acceptance-criteria SQL risk parity and owner-only submission; `130011` adds canonical same-project dependencies plus cumulative turn/token budgets across retries.
 - Migration `130010` initializes an idempotent provider-neutral roster of Orchestrator, Product, Architect, Frontend, Backend, Database, QA, Security, Performance, Release, and CEO Reporter for existing and future organizations. Provider/model remain execution metadata on runs, and prior factory role references are rebound without rewriting user-created agents.
 - Logical roles include orchestrator, product, architect, frontend, backend, database, QA, security, performance, release, CEO reporter, and custom. The execution record keeps role, provider, model, project, connection, repository, and user identities separate.
@@ -413,7 +505,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 
 | Capability | Status | Evidence |
 | --- | --- | --- |
-| Hosted Supabase | Current through `130014` | Ledger reconciled; linked lint clean; focused catalog, ACL, bot-runtime, Phase 1C runtime, and autonomy-control verification pass. |
+| Hosted Supabase | `20260821000300` hosted; `20260821000400` unhosted | Current linked lint has 5 errors/10 findings. Raw controls include one organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects effective-kill-off; no connected/fresh worker was observed. Do not reuse the older clean/all-off evidence as current truth. |
 | Primary GitHub App | Connected rollback path; webhook impaired | App `4573846` and installation `153445938` remain active for rollback; Support ticket [#4660724](https://support.github.com/ticket/personal/0/4660724) remains open. |
 | Candidate GitHub App/project | Connected for the owner repository path | App `4582606`, installation `153479019`, connection `85591f43-dd4e-46d2-8a1b-0f036b32639f`, and project `b1f23696-437e-4d89-b55f-d7a949980e8f` passed callback, sync, signed webhook, handoff, reads, and draft-only write acceptance. |
 | Supabase Auth owner | Confirmed and authenticated | `surgeservicesllc@gmail.com` is the only real user/email authorized for live acceptance. |
@@ -560,11 +652,11 @@ acceptance criteria and none is claimed to have.
 
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.
 2. Preserve the passing frozen local candidate and publish only after exact review, recording a new commit, CI run, and matching Vercel deployment. Keep `130015` local until a fresh exact RED approval authorizes only that complete forward migration on `qpuofpmagrmyamahqwxw`, including all four new no-secret constraints; then stop on any ledger, identity, constraint, secret-shaped-text regression, table/function ACL, signature, RLS/direct-denial, runtime, lint, or health mismatch.
-3. Preserve the verified hosted ledger, clean linked lint, bot/Phase 1C function identity and ACL evidence, `1/1/1` bot runtime audit behavior, and hosted resolver/all-OFF/kill-ON evidence.
+3. Contain and remeasure the current hosted blockers: five linked lint errors/ten findings, one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, two projects effective-kill-off, and no connected/fresh worker. Preserve valid historical identity/ACL/audit evidence without presenting it as a clean current baseline.
 4. Configure an owner-authorized production monitor target and record real Phase 1E observation/detection/resolution evidence before claiming monitoring Connected; rollback, repair, telemetry, and scheduling remain separately blocked.
-5. Preserve the hosted execution-inert Phase 1D controls: all nine actions OFF and the global kill switch ON. Enabling any action remains a separate RED change requiring its own owner-approved forward migration.
+5. Keep execution inert: no worker dispatch and no merge/deploy/rollback executor. Do not host or promote `20260821000400` until the observed hosted autonomy/kill-switch drift is contained under a separate owner-approved action and verified from raw plus effective state.
 6. Keep `SOFTWAREFACTORY_OPENAI_API_KEY` absent permanently and revoke the exposed key at the provider. Do not fund an OpenAI API account for Phase 1C. Configure `SOFTWAREFACTORY_CODEX_AUTH_JSON` instead, from a subscription `codex login`. Keep `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent/false.
 7. Rerun the distinct `softwarefactory_phase1c_preflight` event after the subscription credential is configured. In subscription mode it verifies the pinned CLI and reports the resolved authentication mode, and makes no request to `api.openai.com` at all, without preloading Docker or claiming a durable run. Leave stale run `f4594556-6f72-4763-a480-6993939e3651` failed as historical evidence. Only then submit a new safe GREEN command bound to the current `main`, observe the complete draft-PR/exact-head-CI journey, and immediately return activation to absent/false. Any diagnostic failure remains fail-closed and consumes no run attempt.
 8. Observe the Phase 1B rollback window, reverse handoff, disconnect/loss, live second-tenant/anonymous/RPC, and remaining stale-SHA, approval-expiry, permission, rate-limit, ordering, deletion/restore, idempotency, and recovery cases before retiring primary access; keep Support ticket `#4660724` open.
-9. Keep Phase 1B incomplete, Phase 1C/Phase 2 **Not Connected**, Autonomous Mode OFF, the global kill switch ON, and every automatic action OFF until the corresponding live evidence exists.
+9. Keep Phase 1B incomplete and Phase 1C/Phase 2 **Not Connected**. The intended control policy remains Autonomous Mode OFF, kill switch ON, and automatic actions OFF, but current hosted raw/effective drift must be remediated before that policy may again be claimed as observed fact.
 10. Update this file and `AI/QUALITY_SCORECARD.md` with exact hosted, monitoring, provider, worker, run, branch, commit, PR, CI, deployment, activation, and deactivation evidence before changing any **Not Connected** status.

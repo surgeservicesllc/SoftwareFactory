@@ -1,5 +1,29 @@
 # Architecture
 
+## Current release boundary — immutable Factory command routing (ADR-106)
+
+`POST /api/commands/route` is an authenticated, same-origin, organization-
+owner-only boundary. Migration `20260821000400_command_factory_routing.sql`
+(34,999 bytes; SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`)
+delegates command/task/run creation to the established transaction, rechecks
+the persisted effective risk, and stores an immutable route. That route binds
+the selected project pipeline/template, configured bot assignment and bot,
+role, provider, resolved model, work effort, and risk/configuration snapshot.
+Exact idempotent replay reads the immutable route before consulting mutable
+project, pipeline, roster, readiness, or capacity state, so later configuration
+changes cannot rewrite or reroute history.
+
+This boundary chooses and records; it does not dispatch or change an autonomy
+control. No connected/fresh worker was observed, and approve, merge, deploy,
+and rollback remain Not Connected. Missing hosted routing functions produce a
+fail-closed Not Connected/503 response. Production currently hosts
+`20260821000300` and the old application copy; `20260821000400` is unhosted.
+The hosted release gate is not healthy: five linked lint errors/ten findings,
+one raw organization with `autonomous_mode = true`, one raw organization with
+`autonomy_kill_switch_active = false`, and two projects with effective kill off. These facts
+supersede the older clean-lint/all-OFF/kill-ON global summary below.
+
 ## System context
 
 ```text
@@ -24,7 +48,7 @@ GitHub Actions one-shot worker (trusted server process; not a Vercel request)
   -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, Phase 1D decision layer, and Phase 1C worker/recovery path are published on the default branch. Hosted Supabase history is reconciled and forward migrations through `130014` are applied. Linked lint and focused hosted runtime/catalog checks pass. Six non-OpenAI worker secrets remain configured, the exposed OpenAI secret is absent, and the activation variable is absent. A real worker claim/heartbeat/provider-thread transition was recorded before provider startup failed without repository mutation; the later no-claim diagnostic classified `credit_balance_exhausted`. All execution switches/actions remain OFF and the global kill switch remains ON. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
+The historical Phase 1E/2A/1D/1C source remains published, but the current production boundary is narrower than older evidence implied. Hosted production includes `20260821000300` and still serves the old copy; factory routing migration `20260821000400` is unhosted. Linked lint currently reports five errors/ten findings, and raw/effective control data contains the drift named above. No connected/fresh worker is present and no dispatch occurs. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
 
 ## Phase 2A advisory provider boundary
 
@@ -84,7 +108,7 @@ There is no default-branch commit, approval, merge, release, deployment, rollbac
 ## Persistence
 
 - Hosted history is canonical through `130014`. Catalog-proven `028`/`130001`-`130005` were reconciled ledger-only; their DDL was not rerun.
-- Hosted `130006` preserves the global kill switch plus all nine actions OFF. Hosted `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets.
+- Hosted `130006` defines the intended global-kill/all-actions-OFF policy, while `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets. Current raw/effective hosted rows have drifted from that intended control state; absence of a connected/fresh worker prevents dispatch but does not make the drift acceptable.
 - Hosted `130012` repairs bot `NULLIF` qualification without changing function identity/security/ACLs; `130013` resolves Phase 1C function lint; `130014` adds the resolver's explicit emergency-stop result. Corrections remain forward-only.
 - Local `130015` restores the original 128-character provider catalogue/API model bound by changing `provider_agent_assignments_model_check` and `agent_runs_model_check` from 120 to 128 while retaining the assignment regex and other constraint semantics. It adds four named no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text so credential-shaped scalars cannot enter browser-readable rows. It also replaces `get_agent_run_detail(uuid, uuid)` with a rolling-compatible bounded `routing` object: Phase 2A evidence is allowlisted/capped, Phase 1C command runs receive fixed-policy reasons without fabricated scores, and absent durable evidence returns null. To prevent bypass of that projection, it revokes authenticated raw SELECT on `provider_routing_decisions` and `provider_run_events`, retains tenant-scoped SELECT on `provider_model_configurations`, and leaves assignment reads behind their bounded function. The application accepts a missing field against hosted `130014`; `130015` remains unhosted pending its own exact RED approval and exact six-constraint-definition/128-character/no-secret regressions plus identity/signature/table-and-function-ACL/RLS/direct-denial/runtime/lint/health verification.
 
@@ -94,7 +118,7 @@ The Phase 1B candidate App path remains independently live for installation `153
 
 ## Autonomous-mode boundary
 
-Manual Phase 1C execution is not Autonomous Mode. Migration `010` still locks the global kill switch ON and Autonomous Mode, auto approve, auto merge, auto deploy, and auto rollback OFF. The worker refuses RED and cannot merge or deploy. Phase 1D authority can change only through a separate owner-approved policy, migration, implementation, and rollout.
+Manual Phase 1C execution is not Autonomous Mode. The schema's intended policy locks the kill switch ON and Autonomous Mode, auto approve, auto merge, auto deploy, and auto rollback OFF, but current hosted raw/effective rows do not uniformly satisfy that policy. No worker/executor is connected, so the drift grants no dispatch, merge, or deploy path; it must nevertheless be contained before release. Phase 1D authority can change only through a separate owner-approved policy, migration, implementation, and rollout.
 
 ## Secret topology
 

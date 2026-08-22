@@ -40,6 +40,7 @@ import {
   type PipelineAccess,
   type RepositoryAccess,
 } from "@/lib/bots/assignment-config";
+import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
 import { findBotProvider } from "@/lib/bots/catalog";
 import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -99,14 +100,15 @@ type LinkableAccount = {
 function accountCredentialRef(account: LinkableAccount): string | null {
   const provider = findBotProvider(account.provider);
   if (!provider?.subscriptionCredentialRef) return null;
-  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
+  const choice = accountProvisionCredentialChoice(account.provider, account.credentialPurpose);
+  if (!choice) return null;
+  const slot = /^subscription_(\d+)$/.exec(choice);
   return `${provider.subscriptionCredentialRef}${slot ? `_${slot[1]}` : ""}`;
 }
 
 /** The provision endpoint's pattern-checked name for the same slot. */
-function accountCredentialChoice(account: LinkableAccount): string {
-  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
-  return slot ? `subscription_${slot[1]}` : "subscription";
+function accountCredentialChoice(account: LinkableAccount): string | null {
+  return accountProvisionCredentialChoice(account.provider, account.credentialPurpose);
 }
 
 type ProjectRole = { id: string; name: string; slug: string; summary: string };
@@ -791,12 +793,16 @@ function AssignWizard({
       for (const id of linkSelected) {
         const account = linkable.find((entry) => entry.id === id);
         if (!account) continue;
+        const credential = accountCredentialChoice(account);
+        if (!credential) {
+          throw new Error(`${account.displayName} has an unrecognized sign-in slot. Reconnect it and try again.`);
+        }
         const response = await fetch("/api/bots/connect/provision", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: account.provider,
-            credential: accountCredentialChoice(account),
+            credential,
             additional: true,
           }),
         });
@@ -856,6 +862,11 @@ function AssignWizard({
 
   const anyElevated = useMemo(
     () => selected.some((id) => elevatedPermissions(drafts[id]?.config ?? LEAST_PRIVILEGE_CONFIG).length > 0),
+    [selected, drafts],
+  );
+
+  const everySelectedBotHasRole = useMemo(
+    () => selected.length > 0 && selected.every((id) => Boolean(drafts[id]?.roleId)),
     [selected, drafts],
   );
 
@@ -1081,7 +1092,9 @@ function AssignWizard({
             <button
               type="button"
               onClick={() => setStep(STEPS[stepIndex + 1])}
-              disabled={selected.length === 0}
+              disabled={
+                selected.length === 0 || (step === "Configure" && !everySelectedBotHasRole)
+              }
               className="btn btn-primary btn-sm"
             >
               Next
@@ -1323,6 +1336,30 @@ function ConfigureCard({
               </option>
             ))}
           </select>
+          {roles.length === 0 ? (
+            /*
+             * A workspace has no roles until somebody makes one, and every
+             * assignment needs one -- the database requires it. With the list
+             * empty this select was simply blank and Confirm stayed disabled
+             * with nothing said, which is where the AI Factory's Assign Bots
+             * step dead-ended for a first-time owner: the wizard would not
+             * finish and did not explain why.
+             *
+             * The link goes to /solutions/bot-manager. It pointed at
+             * /solutions/bots, which is neither a route nor a redirect -- the
+             * one instruction offered to an owner who cannot proceed was a 404.
+             */
+            <span className="mt-1.5 block text-xs text-faint">
+              No roles yet. A posting needs one — create it in{" "}
+              <Link
+                href="/solutions/bot-manager"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Bot Manager
+              </Link>
+              , then come back.
+            </span>
+          ) : null}
         </label>
 
         <label className="block">

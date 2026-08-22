@@ -65,6 +65,10 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Broker sign-in sessions. The sealed relay code must be impossible to read "
     + "rather than merely restricted — only the worker's definer function returns "
     + "it, and the browser's projection cannot name the column.",
+  factory_command_routes:
+    "Immutable command-to-pipeline-and-bot routing evidence. Authenticated callers "
+    + "use bounded candidate and submit definer functions; every direct table path "
+    + "is denied so no caller can bypass atomic validation or rewrite history.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",

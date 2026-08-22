@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assignmentIsConfigured,
+  assignmentPostingIsConfigured,
   LEAST_PRIVILEGE_CONFIG,
   normalizeAssignmentConfig,
 } from "@/lib/bots/assignment-config";
@@ -50,5 +51,23 @@ describe("whether a posting has actually been configured", () => {
     // the one the normalizer produces rather than a hand-set flag.
     const widened = normalizeAssignmentConfig({ repositoryAccess: "write", canOpenPullRequest: true });
     expect(assignmentIsConfigured(widened)).toBe(true);
+  });
+
+  it("counts model and work-effort choices stored beside the config", () => {
+    expect(assignmentPostingIsConfigured({
+      config: LEAST_PRIVILEGE_CONFIG,
+      model: "gpt-5.4",
+      workEffort: "medium",
+    })).toBe(true);
+    expect(assignmentPostingIsConfigured({
+      config: LEAST_PRIVILEGE_CONFIG,
+      model: null,
+      workEffort: "high",
+    })).toBe(true);
+    expect(assignmentPostingIsConfigured({
+      config: LEAST_PRIVILEGE_CONFIG,
+      model: null,
+      workEffort: "medium",
+    })).toBe(false);
   });
 });

@@ -59,6 +59,7 @@ const publicTables = [
   "connections",
   "deployment_validations",
   "deployments",
+  "factory_command_routes",
   "github_change_requests",
   "github_installations",
   "github_project_handoff_approvals",
