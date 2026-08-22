@@ -1066,32 +1066,40 @@ jobs:
                    (select controls.executor_connected
                       from public.resolved_autonomy_controls(target_projects.project_id) controls
                      ) as resolved_executor_connected,
-                   exists (
-                     select 1 from public.activity_events event
+                   (
+                     select event.metadata ->> 'active'
+                     from public.activity_events event
                      where event.organization_id = target_projects.organization_id
                        and event.event_type::text = 'autonomy.kill_switch_changed'
                        and event.entity_type = 'organization'
                        and event.entity_id = target_projects.organization_id
-                       and event.metadata ->> 'active' = 'true'
-                   ) as kill_switch_on_event_exists,
-                   exists (
-                     select 1 from public.activity_events event
+                     order by event.created_at desc, event.id desc
+                     limit 1
+                   ) as newest_kill_switch_event_active,
+                   (
+                     select case
+                       when event.event_type::text = 'project.autonomous_mode_changed'
+                         then event.metadata ->> 'to'
+                       else event.metadata ->> 'autonomousMode'
+                     end
+                     from public.activity_events event
                      where event.organization_id = target_projects.organization_id
                        and (event.project_id = target_projects.project_id
                             or event.entity_id = target_projects.project_id)
                        and (
-                         (event.event_type::text = 'project.autonomous_mode_changed'
-                          and event.metadata ->> 'to' = 'false')
-                         or
-                         (event.event_type::text = 'autonomy.controls_changed'
-                          and event.metadata ->> 'autonomousMode' = 'false')
+                         event.event_type::text = 'project.autonomous_mode_changed'
+                         or event.event_type::text = 'autonomy.controls_changed'
                        )
-                   ) as autonomy_off_event_exists
+                     order by event.created_at desc, event.id desc
+                     limit 1
+                   ) as newest_project_autonomy_event
               from target_projects
              order by project_name, project_id;"
           echo "Gate requires per row: project_present t, org_kill_switch_active t,"
           echo "org/project autonomous_mode f, both max risks green, no auto action t,"
-          echo "resolved_kill_switch_active t, resolved_executor_connected f, both event flags t."
+          echo "resolved_kill_switch_active t, resolved_executor_connected f,"
+          echo "newest_kill_switch_event_active true-or-empty, and"
+          echo "newest_project_autonomy_event anything but true."
           echo ""
           echo "Worker rows the gate reads. Any heartbeat in the future or inside ten"
           echo "minutes, or any held run, refuses the chain."
@@ -3166,32 +3174,61 @@ jobs:
                    and auto_merge is false and auto_deploy is false and auto_rollback is false
                    and kill_switch_active is true and executor_connected is false
                  ) from resolved)
+                 -- The audit trail must agree with the contained state: for each
+                 -- org, the newest autonomy.kill_switch_changed event (if any)
+                 -- must have engaged the switch. Requiring an engage event to
+                 -- exist was unsatisfiable for a tenant whose switch has been ON
+                 -- since creation, because set_autonomy_kill_switch only writes
+                 -- an event on a real change; the state clause above still
+                 -- requires the switch itself to be ON.
                  and not exists (
                    select 1
                    from (select distinct organization_id from expected_projects) expected_org
-                   where not exists (
+                   where exists (
                      select 1 from public.activity_events event
                      where event.organization_id = expected_org.organization_id
                        and event.event_type::text = 'autonomy.kill_switch_changed'
                        and event.entity_type = 'organization'
                        and event.entity_id = expected_org.organization_id
-                       and event.metadata ->> 'active' = 'true'
                    )
+                   and (
+                     select event.metadata ->> 'active'
+                     from public.activity_events event
+                     where event.organization_id = expected_org.organization_id
+                       and event.event_type::text = 'autonomy.kill_switch_changed'
+                       and event.entity_type = 'organization'
+                       and event.entity_id = expected_org.organization_id
+                     order by event.created_at desc, event.id desc
+                     limit 1
+                   ) is distinct from 'true'
                  )
+                 -- Same trail-agreement shape per project. Requiring an
+                 -- autonomy-off change event to exist was unsatisfiable by
+                 -- design: project.autonomous_mode_changed only writes on a
+                 -- real flip, and update_project_controls refuses ever turning
+                 -- project autonomy ON (Phase 1D scaffold-only), so the flip
+                 -- that would mint the event is forbidden by the platform. The
+                 -- state clauses above still require every mode OFF; here the
+                 -- newest autonomy-affecting event (if any) must not contradict
+                 -- that.
                  and not exists (
                    select 1 from expected_projects expected
-                   where not exists (
-                     select 1 from public.activity_events event
+                   where (
+                     select case
+                       when event.event_type::text = 'project.autonomous_mode_changed'
+                         then event.metadata ->> 'to'
+                       else event.metadata ->> 'autonomousMode'
+                     end
+                     from public.activity_events event
                      where event.organization_id = expected.organization_id
                        and (event.project_id = expected.project_id or event.entity_id = expected.project_id)
                        and (
-                         (event.event_type::text = 'project.autonomous_mode_changed'
-                          and event.metadata ->> 'to' = 'false')
-                         or
-                         (event.event_type::text = 'autonomy.controls_changed'
-                          and event.metadata ->> 'autonomousMode' = 'false')
+                         event.event_type::text = 'project.autonomous_mode_changed'
+                         or event.event_type::text = 'autonomy.controls_changed'
                        )
-                   )
+                     order by event.created_at desc, event.id desc
+                     limit 1
+                   ) = 'true'
                  )
                  and (select relation.relrowsecurity and relation.relforcerowsecurity
                              and pg_get_userbyid(relation.relowner) = 'postgres'
