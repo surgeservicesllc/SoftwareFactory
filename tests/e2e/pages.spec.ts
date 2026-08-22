@@ -73,7 +73,7 @@ for (const { path, heading } of routes) {
      * future route group cannot quietly become another exception.
      */
     await expect(
-      page.getByRole("link", { name: /ai software factory (home|console home)/i }).first(),
+      page.getByRole("link", { name: /ai factory (home|console home)/i }).first(),
       `${path} renders no global brand link`,
     ).toBeVisible();
     /*

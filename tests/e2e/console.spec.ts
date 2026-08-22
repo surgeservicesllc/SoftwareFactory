@@ -77,7 +77,7 @@ test("loads the control plane without browser errors", async ({
   // chip were both removed as the same duplication. This asserts the brand
   // affordance that actually survives — on every breakpoint, signed in or out.
   await expect(
-    page.getByRole("link", { name: /ai software factory home/i }).first(),
+    page.getByRole("link", { name: /ai factory home/i }).first(),
   ).toBeVisible();
   // Every surface now reads live tenant records, so there is no seeded
   // content left to label. The truthfulness contract is stronger this way:

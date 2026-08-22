@@ -3,23 +3,28 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 /**
- * The AI Software Factory mark, in one place.
+ * The AI Factory mark, in one place.
  *
  * It appeared twice — once in the global header, once in the console sidebar —
  * drawn differently each time, so the same product had two logos depending on
- * which half of the page you looked at. This is the single drawing both now
- * render, which is also the only way a change to it stays a single change.
+ * which half of the page you looked at. This is the single drawing every
+ * caller renders, which is also the only way a change to it stays a single
+ * change.
  *
- * The two lines are deliberately different colours rather than decoration:
- * "AI SOFTWARE" is the product and reads as text, "FACTORY" is the mark and
- * carries the accent. Both are `aria-hidden` inside one labelled link, so a
- * screen reader hears the product name once instead of spelling out a
- * two-line lockup.
+ * One line, not two. It was a stacked lockup — "AI SOFTWARE" over an accented
+ * "FACTORY" — and the owner's reference (2026-08-22) is a single white
+ * wordmark beside the glyph, so the second line and its accent are gone rather
+ * than restyled.
+ *
+ * The wordmark is `aria-hidden` inside a labelled link, and the label says the
+ * same words it does: a visible name and an accessible name that disagree is
+ * the defect WCAG 2.5.3 is about, and it would be an easy one to introduce
+ * here by changing only what is drawn.
  */
 
 export function BrandMark({
   href = "/",
-  label = "AI Software Factory home",
+  label = "AI Factory home",
   className,
   /** The header sits on dark chrome at every breakpoint; the console follows its theme. */
   tone = "chrome",
@@ -85,18 +90,15 @@ export function BrandMark({
       </svg>
 
       {glyphOnly ? null : (
-      <span className="min-w-0 leading-none" aria-hidden="true">
-        <span
-          className={cn(
-            "block truncate text-[15px] font-extrabold uppercase tracking-[-0.005em] sm:text-[17px]",
-            tone === "chrome" ? "text-white" : "text-foreground",
-          )}
-        >
-          AI Software
-        </span>
-        <span className="mt-[3px] block truncate text-[10px] font-extrabold uppercase tracking-[0.34em] text-[#d7f04a] sm:text-[11px]">
-          Factory
-        </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "min-w-0 truncate text-[17px] font-extrabold uppercase leading-none",
+          "tracking-[-0.005em] sm:text-[19px]",
+          tone === "chrome" ? "text-white" : "text-foreground",
+        )}
+      >
+        AI Factory
       </span>
       )}
     </Link>
