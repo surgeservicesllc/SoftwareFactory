@@ -36,6 +36,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
 import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
+import { JobSeekerSidebarProfile } from "@/components/job-seeker/sidebar-profile";
 
 /**
  * The console shell renders for signed-out visitors too — individual pages
@@ -467,6 +468,10 @@ function Sidebar({
   onToggleCompact?: () => void;
   siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
+  // The same check `Navigation` makes: the career-profile card belongs to
+  // the Job Seeker section, and nowhere else.
+  const sidebarPathname = usePathname();
+  const jobSeeker = isJobSeekerPath(sidebarPathname);
   /*
    * The navigation starts at the top of the column, and the retract control
    * ends it.
@@ -504,6 +509,16 @@ function Sidebar({
           </ul>
         </div>
       ) : null}
+      {/*
+        Whose search this is.
+
+        The Job Seeker section is scoped to one person, so naming them is part
+        of saying what you are looking at. Absent on the rail for the same
+        reason the account panel is: a 4rem column cannot show a name, a role
+        and four contact lines without truncating each into something
+        misleading.
+      */}
+      {jobSeeker && !compact ? <JobSeekerSidebarProfile /> : null}
       {/*
         The account panel, and the single glyph it becomes on the rail.
 
