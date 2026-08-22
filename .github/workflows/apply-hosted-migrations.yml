@@ -60,6 +60,7 @@ on:
           - bot-account-binding
           - bot-account-binding-contract
           - lifecycle
+          - job-seeker-resume
           - probe
       contract_app_sha:
         description: >-
@@ -2279,6 +2280,120 @@ jobs:
               join pg_namespace space on space.oid = routine.pronamespace
               where space.nspname = 'public'
                 and routine.proname = 'claim_planned_graph';"
+
+      - name: Apply the job-seeker resume extraction migration (scope=job-seeker-resume)
+        # Exactly one file — 20260822000400 — and no others. Every other
+        # outstanding migration stays outstanding and separately decidable,
+        # which is the point of a narrow scope rather than a scope=all that
+        # would sweep unrelated versions along with it.
+        #
+        # Prerequisites are checked against the live ledger rather than
+        # assumed. This file references job_seeker_uploads and
+        # job_seeker_profiles (20260820000200/000300), the validator
+        # job_seeker_text_list_valid (20260820000200), and the enum label
+        # job_seeker.profile_updated (20260820000100). If any of those had not
+        # run, this would create a table and a function referencing objects
+        # that do not exist.
+        #
+        # Replay-safe by construction: create table if not exists, policies
+        # dropped before they are created, indexes if not exists, and one
+        # create or replace function. No other migration defines
+        # apply_resume_extraction, so there is no shared-function ordering
+        # hazard here.
+        if: ${{ inputs.scope == 'job-seeker-resume' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live ledger verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822000400_job_seeker_resume_extraction.sql
+          EXPECTED_SHA256=0faa6d4174f01a43abffda463d4dbe9dc60d82be54d9207011e4c064c4f0b465
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          # The three prerequisites present, and the target genuinely absent.
+          # Applying a migration whose version the ledger already records would
+          # make the row lie about which DDL ran.
+          FOUNDATION=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260820000200';")
+          UPLOADS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260820000300';")
+          VOCABULARY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260820000100';")
+          TARGET=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000400';")
+          if [ "$FOUNDATION" != "1" ] || [ "$UPLOADS" != "1" ] || [ "$VOCABULARY" != "1" ] || [ "$TARGET" != "0" ]; then
+            echo "::error::Ledger is not in the expected state (foundation=$FOUNDATION uploads=$UPLOADS vocabulary=$VOCABULARY target=$TARGET; want 1/1/1/0)."
+            exit 1
+          fi
+
+          # The objects themselves, not just their ledger rows — the ledger has
+          # been proven to understate the live schema before.
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                       where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'job_seeker_uploads')
+              and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                       where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'job_seeker_profiles')
+              and exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                       where n.nspname = 'public' and p.proname = 'job_seeker_text_list_valid')
+              and exists (select 1 from pg_type t join pg_enum e on e.enumtypid = t.oid
+                       where t.typname = 'activity_event_type' and e.enumlabel = 'job_seeker.profile_updated')
+            );")
+          if [ "$READY" != "t" ]; then
+            echo "::error::A prerequisite object is missing even though its ledger row is present."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822000400
+          else
+            npx supabase migration repair --status applied 20260822000400 --db-url "$DB_URL"
+          fi
+          # Supabase's DDL event trigger reloads the PostgREST schema cache on
+          # its own; this is insurance so a browser that saw PGRST202 seconds
+          # ago cannot keep seeing it for apply_resume_extraction.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo ""
+          echo "What the run produced, read back rather than assumed."
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              -- The table is protected exactly as every other job_seeker table is.
+              (select c.relrowsecurity and c.relforcerowsecurity
+                 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relname = 'job_seeker_resume_extractions')
+              and (select count(*) = 3 from pg_policy p join pg_class c on c.oid = p.polrelid
+                    where c.relname = 'job_seeker_resume_extractions')
+              -- No UPDATE grant: applying is the definer function's job, so a
+              -- client cannot mark an extraction applied without the profile
+              -- ever changing.
+              and not has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE')
+              and not has_table_privilege('anon', 'public.job_seeker_resume_extractions', 'SELECT')
+              and has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'SELECT')
+              -- The apply function is a definer the member may call and anon may not.
+              and (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public' and p.proname = 'apply_resume_extraction')
+              and has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE')
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Post-apply verification failed: RLS, policy count, table grants, or function ACLs are not as intended."
+            exit 1
+          fi
+          echo "Applied, recorded, and verified: RLS forced, three policies, no UPDATE grant, definer function callable by members only."
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;
