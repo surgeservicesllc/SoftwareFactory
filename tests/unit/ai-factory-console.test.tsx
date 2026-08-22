@@ -96,7 +96,7 @@ describe("AiFactoryConsole", () => {
       "dialog",
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
+    expect(screen.getByText("0 of 9 complete")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
@@ -116,7 +116,7 @@ describe("AiFactoryConsole", () => {
     const step = (await screen.findByText("Connect Repository")).closest("li") as HTMLElement;
     expect(within(step).getByText(/1 installation · 0 repositories authorized/)).toBeInTheDocument();
     expect(within(step).queryByText("Done")).not.toBeInTheDocument();
-    expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
+    expect(screen.getByText("0 of 9 complete")).toBeInTheDocument();
   });
 
   it("derives progress from the live records and shows the live evidence in its overlay", async () => {
@@ -155,6 +155,11 @@ describe("AiFactoryConsole", () => {
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
       },
+      "/api/project-agents": {
+        available: true,
+        canManage: true,
+        selections: [{ id: "pa1", projectId: "p1", agentId: "ag1", agentName: "Orchestrator", agentRole: "orchestrator" }],
+      },
       "/api/project-pipelines": {
         pipelines: [{ id: "pp1", projectId: "p1", templateKey: "general_audit", name: "General Audit" }],
         canManage: true,
@@ -163,9 +168,9 @@ describe("AiFactoryConsole", () => {
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
-    // Seven steps carry evidence; only "Watch It Ship" remains, because no
+    // Eight steps carry evidence; only "Watch It Ship" remains, because no
     // command has succeeded yet.
-    expect(await screen.findByText("7 of 8 complete")).toBeInTheDocument();
+    expect(await screen.findByText("8 of 9 complete")).toBeInTheDocument();
     const watch = screen.getByText("Watch It Ship").closest("li") as HTMLElement;
     expect(within(watch).getByText("You are here")).toBeInTheDocument();
     expect(within(watch).getByText(/Work is in flight/)).toBeInTheDocument();
@@ -373,7 +378,7 @@ describe("AiFactoryConsole", () => {
     const pipeline = (await screen.findByText("Configure Pipeline")).closest("li") as HTMLElement;
     expect(within(pipeline).getByText("No pipeline template compiles right now")).toBeInTheDocument();
     // Create Project is the only step satisfied here; the pipeline step is not.
-    expect(await screen.findByText("1 of 8 complete")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 9 complete")).toBeInTheDocument();
   });
 
   it("counts the tenant's own pipeline templates as evidence", async () => {
@@ -519,7 +524,7 @@ describe("AiFactoryConsole", () => {
     const picker = await screen.findByLabelText("Factory");
     fireEvent.change(picker, { target: { value: "p2" } });
     expect(screen.getByText("This factory: Second Project")).toBeInTheDocument();
-    expect(screen.getByText("3 of 8 complete")).toBeInTheDocument();
+    expect(screen.getByText("3 of 9 complete")).toBeInTheDocument();
 
     // Closing a real step refreshes all eight slices. The second projects read
     // fails, so the selected p2 snapshot must remain intact instead of becoming
@@ -534,7 +539,7 @@ describe("AiFactoryConsole", () => {
     expect(within(warning).getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByLabelText("Factory")).toHaveValue("p2");
     expect(screen.getByText("This factory: Second Project")).toBeInTheDocument();
-    expect(screen.getByText("3 of 8 complete")).toBeInTheDocument();
+    expect(screen.getByText("3 of 9 complete")).toBeInTheDocument();
   });
 
   it("shows unavailable with Retry when the first snapshot is incomplete", async () => {
@@ -552,10 +557,10 @@ describe("AiFactoryConsole", () => {
 
     expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
-    expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 of 9 complete")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("0 of 8 complete")).toBeInTheDocument();
+    expect(await screen.findByText("0 of 9 complete")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "AI Factory is unavailable" })).not.toBeInTheDocument();
   });
 
@@ -568,7 +573,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
-    expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 of 9 complete")).not.toBeInTheDocument();
   });
 
   it("recognizes a 401 from any required read", async () => {

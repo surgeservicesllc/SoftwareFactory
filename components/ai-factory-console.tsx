@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   Bot,
+  Boxes,
   Check,
   Factory,
   GitBranch,
@@ -23,6 +24,7 @@ import { CommandComposer } from "@/components/command-composer";
 import { ConnectionsConsole } from "@/components/connections-console";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
+import { ProjectAgentSelector } from "@/components/project-agent-selection";
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
@@ -53,6 +55,7 @@ type StepId =
   | "connect_github"
   | "create_project"
   | "pipeline"
+  | "select_agents"
   | "connect_bots"
   | "assign_bots"
   | "configure_bots"
@@ -68,6 +71,10 @@ type FactoryData = {
   assignments: Array<{ projectId: string | null; configured: boolean }>;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
   pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
+  /** Which logical agents each project's factory includes, and whether the
+   * selection store exists on this database at all. */
+  agentSelections: Array<{ projectId: string; agentId: string; agentName: string }>;
+  agentSelectionsAvailable: boolean;
   /**
    * Whether anything actually executes a command, read from the same
    * `/api/bots` field the bot fabric already publishes rather than restated
@@ -192,6 +199,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         fetch("/api/project-pipelines", { cache: "no-store" }),
         fetch("/api/pipeline-templates", { cache: "no-store" }),
         fetch("/api/worker/status", { cache: "no-store" }),
+        fetch("/api/project-agents", { cache: "no-store" }),
       ]);
 
       const responses = results.map((result) => (
@@ -228,6 +236,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         pipelinesBody,
         templatesBody,
         workerBody,
+        agentSelectionsBody,
       ] = await Promise.all([
         readJson<{
           connections?: Array<{
@@ -261,6 +270,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             availableWorkers?: number;
           };
         }>(responses[7]!),
+        readJson<{
+          available?: boolean;
+          selections?: Array<{ projectId: string; agentId: string; agentName: string }>;
+        }>(responses[8]!),
       ]);
 
       if (
@@ -316,6 +329,11 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           projectId: pipeline.projectId,
           templateKey: pipeline.templateKey,
         })),
+        // A null body here means the route itself failed; the migration being
+        // absent arrives as available:false with an empty list, which the
+        // Select Agents step reports as Not Connected rather than "none".
+        agentSelections: agentSelectionsBody?.selections ?? [],
+        agentSelectionsAvailable: agentSelectionsBody?.available ?? false,
         // Command execution has its own live readiness route. Bot-fabric
         // readiness is a separate control-plane fact and must not overwrite it.
         executor: {
@@ -484,6 +502,9 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const scopedPipelines = activeProject
     ? data.pipelines.filter((pipeline) => pipeline.projectId === activeProject.id)
     : [];
+  const scopedAgentSelections = activeProject
+    ? data.agentSelections.filter((selection) => selection.projectId === activeProject.id)
+    : [];
   const scopedAssignments = activeProject
     ? data.assignments.filter((assignment) => assignment.projectId === activeProject.id)
     : [];
@@ -594,6 +615,44 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       ),
       pageHref: "/solutions/pipelines?view=templates",
       pageLabel: "Pipelines",
+    },
+    {
+      id: "select_agents",
+      title: "Select Agents",
+      description: "Choose which logical agents this factory includes. Selection is routing intent — provider and model stay per-agent settings, and nothing dispatches from here.",
+      done: scopedAgentSelections.length > 0,
+      evidence: !data.agentSelectionsAvailable
+        ? "Not Connected — the project_agents migration is not applied on this database"
+        : scopedAgentSelections.length > 0
+          ? `${scopedAgentSelections.length} agent${scopedAgentSelections.length === 1 ? "" : "s"} included: ${scopedAgentSelections.map((selection) => selection.agentName).join(", ")}`
+          : "No agents included yet",
+      action: scopedAgentSelections.length > 0 ? "Change agents" : "Choose agents",
+      icon: Boxes,
+      /*
+       * The selections themselves, on the page rather than only inside the
+       * overlay that made them — the same contract the pipeline step keeps.
+       */
+      detail: scopedAgentSelections.length > 0 ? (
+        <ul aria-label="Included agents" className="mt-2 flex flex-wrap gap-1.5">
+          {scopedAgentSelections.map((selection) => (
+            <li
+              key={selection.agentId}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-[var(--surface-raised)] px-2.5 py-1 text-xs text-muted"
+            >
+              <Check className="size-3.5 shrink-0 text-[var(--accent-text)]" aria-hidden="true" />
+              {selection.agentName}
+            </li>
+          ))}
+        </ul>
+      ) : null,
+      body: (
+        <ProjectAgentSelector
+          onSelectionChanged={() => void load()}
+          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : null}
+        />
+      ),
+      pageHref: "/solutions/agents",
+      pageLabel: "Agents",
     },
     {
       id: "connect_bots",
