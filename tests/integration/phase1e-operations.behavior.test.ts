@@ -184,11 +184,12 @@ describe("Phase 1E production operations behavior", () => {
     // tables, the two Phase 2E portfolio-scheduling tables, the Phase 2D
     // connection-routing evidence table, the Phase 3 improvement ledger, the
     // two AI-account auth-broker tables, the two Phase 2C reservation tables,
-    // the lifecycle graph-gate table, the project pipeline selections, and
-    // the immutable factory-command routing evidence table.
+    // the lifecycle graph-gate table, the project pipeline selections, the
+    // immutable factory-command routing evidence table, and the job-seeker
+    // resume-extraction table.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(127);
+    expect(rlsRows).toHaveLength(128);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

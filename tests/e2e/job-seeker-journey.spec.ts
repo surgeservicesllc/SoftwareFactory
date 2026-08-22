@@ -98,13 +98,61 @@ test.describe("job seeker live journey", () => {
     await page.getByLabel(/^Certifications/).fill("AWS Solutions Architect");
     await page.getByLabel(/^Industries/).fill("Software");
 
-    // Resume upload: a real file through the real endpoint.
+    // Resume upload: a real file through the real endpoint. Uploading now also
+    // reads it, so the assertions below cover the whole path — store, extract,
+    // propose, apply — against the real database rather than a mocked one.
     await page.getByLabel(/Resume file/).setInputFiles({
       name: "jordan-resume.txt",
       mimeType: "text/plain",
-      buffer: Buffer.from("Jordan Seeker — Staff Engineer.\nTypeScript, PostgreSQL, Next.js."),
+      buffer: Buffer.from(
+        [
+          "Avery Lin",
+          "avery.lin@example.com | +1 (206) 555-0177 | Seattle, WA",
+          "https://www.linkedin.com/in/averylin",
+          "SUMMARY",
+          "Staff engineer focused on developer platforms.",
+          "EXPERIENCE",
+          "Staff Engineer — Contoso Cloud (2019 - Present)",
+          "Halved deploy times across sixty services.",
+          "SKILLS",
+          "Rust, Kubernetes",
+        ].join("\n"),
+      ),
     });
     await expect(page.getByText(/Uploaded jordan-resume\.txt/)).toBeVisible({ timeout: 20_000 });
+
+    // ── The reading of that resume ─────────────────────────────────────────
+    // The local stack has no provider credential, so this must report pattern
+    // extraction and must NOT claim a model read the document.
+    await expect(page.getByText(/Found \d+ fields? in your resume/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Pattern extraction only — Not Connected/)).toBeVisible();
+    await expect(page.getByText("avery.lin@example.com")).toBeVisible();
+    await expect(page.getByText(/Staff Engineer — Contoso Cloud/)).toBeVisible();
+
+    // Untick one field to prove the selection is honoured rather than ignored:
+    // the summary written by hand above must survive an apply that excludes it.
+    await page.locator("#resume-field-summary").uncheck();
+    await page.getByRole("button", { name: /Apply \d+ selected/ }).click();
+    await expect(page.getByRole("status")).toContainText(/Filled in \d+ fields? from your resume/, {
+      timeout: 30_000,
+    });
+
+    // Applied fields are in the editor; the unticked one kept what was typed.
+    await expect(page.getByLabel("Email")).toHaveValue("avery.lin@example.com");
+    await expect(page.getByLabel("Full name")).toHaveValue("Avery Lin");
+    await expect(page.getByLabel(/^Skills/)).toHaveValue(/Rust/);
+    await expect(page.getByLabel("Professional summary")).toHaveValue(
+      "Platform engineer who ships end to end.",
+    );
+
+    // Re-applying the same reading is refused by the database, not by the UI.
+    await expect(page.getByRole("button", { name: /Apply \d+ selected/ })).toHaveCount(0);
+
+    // Put the hand-written identity back before the rest of the journey, which
+    // asserts against Jordan Seeker throughout.
+    await page.getByLabel("Full name").fill("Jordan Seeker");
+    await page.getByLabel("Email").fill("jordan.seeker@example.com");
+    await page.getByLabel(/^Skills/).fill("TypeScript\nPostgreSQL");
 
     await page.getByRole("button", { name: /save profile/i }).click();
     await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
