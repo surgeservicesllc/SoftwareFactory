@@ -46,6 +46,11 @@ import { RunsConsole } from "@/components/runs-console";
 
 import { buildPortfolio } from "@/lib/portfolio/aggregate";
 
+import { JobSeekerContactsPanel } from "@/components/job-seeker/contacts-panel";
+import { JobSeekerDocumentsPanel } from "@/components/job-seeker/documents-panel";
+import { JobSeekerInterviewsPanel } from "@/components/job-seeker/interviews-panel";
+import { JobSeekerOverview } from "@/components/job-seeker/overview";
+
 import {
   ACTIVITY,
   AGENTOS_CHAINS,
@@ -61,12 +66,16 @@ import {
   COMMANDS,
   CONNECTIONS,
   CUSTOM_PIPELINE_TEMPLATES,
+  JOB_SEEKER_CONTACTS,
+  JOB_SEEKER_DOCUMENTS,
+  JOB_SEEKER_JOBS,
+  JOB_SEEKER_OUTREACH,
+  JOB_SEEKER_PREFERENCES,
+  JOB_SEEKER_PROFILE,
   FACTORY_BRIEFING_AGENTS,
   FACTORY_BRIEFING_CONNECTIONS,
   FACTORY_BRIEFING_RUNS,
   OPERATIONS_OVERVIEW,
-  JOB_SEEKER_PREFERENCES,
-  JOB_SEEKER_PROFILE,
   PORTFOLIO_SCHEDULING,
   PORTFOLIO_SOURCES,
   PROJECT_BOTS_ROSTER,
@@ -169,6 +178,10 @@ function serveFixtures() {
     }
     if (url.includes("/api/graphs/runs")) return json({ runs: [] });
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
+    if (url.includes("/api/job-seeker/jobs")) return json({ jobs: JOB_SEEKER_JOBS });
+    if (url.includes("/api/job-seeker/documents")) return json({ documents: JOB_SEEKER_DOCUMENTS });
+    if (url.includes("/api/job-seeker/contacts")) return json({ contacts: JOB_SEEKER_CONTACTS });
+    if (url.includes("/api/job-seeker/outreach")) return json({ outreach: JOB_SEEKER_OUTREACH });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
     if (url.includes("/api/project-agents")) {
@@ -355,6 +368,25 @@ const CASES: Record<string, () => React.ReactElement> = {
       />
     </InShell>
   ),
+  /*
+   * The Job Seeker surfaces, with rows. The Overview is the densest — five
+   * tiles, two distribution lists, two tables and a four-column preference
+   * strip — and the sidebar carries an extra card here that the console's
+   * never shows, so both need measuring at every width.
+   */
+  "job-seeker-overview": () => <InShell><JobSeekerOverview /></InShell>,
+  "job-seeker-documents": () => (
+    <InShell>
+      <JobSeekerDocumentsPanel
+        documentKind={null}
+        title="Notes & Documents"
+        description="Every document this search has produced, of every kind."
+        emptyHint="Nothing has been generated yet."
+      />
+    </InShell>
+  ),
+  "job-seeker-contacts": () => <InShell><JobSeekerContactsPanel /></InShell>,
+  "job-seeker-interviews": () => <InShell><JobSeekerInterviewsPanel /></InShell>,
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

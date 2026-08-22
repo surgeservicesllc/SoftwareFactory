@@ -518,6 +518,88 @@ export const CUSTOM_PIPELINE_TEMPLATES = [
   },
 ];
 
+/**
+ * A job search with rows in every state the Overview distinguishes: scored and
+ * unscored, applied and not, an interview, an offer. A fixture where every job
+ * looks the same would measure one row repeated, not the layout.
+ */
+export const JOB_SEEKER_JOBS = [
+  {
+    id: "js-1", title: "VP of Marketing", company: "Acme Corporation",
+    discoveredAt: "2026-05-19T10:00:00.000Z",
+    match: { score: 94, qualified: true },
+    application: { id: "ja-1", stage: "APPLIED" },
+  },
+  {
+    id: "js-2", title: "Head of Growth Marketing", company: "TechNova",
+    discoveredAt: "2026-05-18T10:00:00.000Z",
+    match: { score: 91, qualified: true },
+    application: { id: "ja-2", stage: "INTERVIEW" },
+  },
+  {
+    id: "js-3", title: "VP of Digital Marketing", company: "NextWave Solutions",
+    discoveredAt: "2026-05-17T10:00:00.000Z",
+    match: { score: 88, qualified: true },
+    application: { id: "ja-3", stage: "FINAL_INTERVIEW" },
+  },
+  {
+    id: "js-4", title: "Senior Director of Marketing", company: "BrightPath",
+    discoveredAt: "2026-05-16T10:00:00.000Z",
+    match: { score: 85, qualified: true },
+    application: { id: "ja-4", stage: "OFFER" },
+  },
+  {
+    id: "js-5", title: "VP of Marketing", company: "InnovateX",
+    discoveredAt: "2026-05-15T10:00:00.000Z",
+    match: { score: 62, qualified: false },
+    application: null,
+  },
+  // Unscored on purpose: the Overview must not count it as a low score.
+  { id: "js-6", title: "Chief Marketing Officer", company: "Northwind", match: null, application: null },
+];
+
+export const JOB_SEEKER_DOCUMENTS = [
+  {
+    id: "jd-1", applicationId: "ja-1", kind: "resume", version: 3,
+    createdAt: "2026-05-19T10:05:00.000Z", stage: "APPLIED",
+    title: "VP of Marketing", company: "Acme Corporation",
+    preview: "Marketing leader with fifteen years building demand engines across B2B SaaS.",
+    characters: 4820,
+  },
+  {
+    id: "jd-2", applicationId: "ja-2", kind: "cover_letter", version: 1,
+    createdAt: "2026-05-18T10:05:00.000Z", stage: "INTERVIEW",
+    title: "Head of Growth Marketing", company: "TechNova",
+    preview: "TechNova's move into product-led growth is exactly the transition I ran at scale.",
+    characters: 2140,
+  },
+];
+
+export const JOB_SEEKER_CONTACTS = [
+  {
+    id: "jc-1", name: "Priya Raman", role: "Talent Partner", source: "linkedin",
+    linkedinUrl: "linkedin.com/in/priyaraman", email: "priya@acme.example",
+    notes: "Owns the VP of Marketing req; asked for a portfolio link.",
+  },
+  {
+    id: "jc-2", name: "Marcus Webb", role: "Hiring Manager", source: "referral",
+    linkedinUrl: null, email: null, notes: null,
+  },
+];
+
+export const JOB_SEEKER_OUTREACH = [
+  {
+    id: "jo-1", contactId: "jc-1", subject: "VP of Marketing — following up",
+    body: "Thanks for the call on Tuesday. Sending the portfolio you asked about.",
+    status: "sent", sentAt: "2026-05-19T12:00:00.000Z",
+  },
+  {
+    id: "jo-2", contactId: "jc-2", subject: "Introduction via Dana",
+    body: "Dana suggested I reach out about the growth marketing role.",
+    status: "draft", sentAt: null,
+  },
+];
+
 export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   key: template.key,
   name: template.name,
