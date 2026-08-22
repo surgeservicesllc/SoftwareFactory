@@ -1239,3 +1239,40 @@ Use this append-only log for decisions that constrain future implementation. Cha
   catalog, lint, health, and containment checks stop on any mixed or unexpected
   state. No applied migration is edited or replayed, and workers, autonomy, and
   automatic actions remain OFF with the global kill switch ON.
+
+## ADR-122 - The containment gate measures what can exist, and the audit guard loses its hosted default grant
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: two repairs to the protected release's containment gate and its
+  inputs, with no state requirement weakened. First, the gate's two audit
+  evidence clauses become trail-agreement: the newest
+  `autonomy.kill_switch_changed` event per org (if any) must show the switch
+  engaged, and the newest autonomy-affecting event per pinned project (if
+  any) must not show autonomy on. The old clauses demanded change events the
+  platform forbids from ever being written - `update_project_controls`
+  refuses turning project autonomy ON, so the OFF-flip event cannot exist,
+  and a tenant whose kill switch has been ON since creation has no change to
+  record. Second, the gate's source comparison for
+  `reject_activity_event_mutation()` used `btrim(...)` with the default
+  space-only character set against a body that begins and ends with
+  newlines, so it read false on every database including a pristine one; it
+  now trims `' \n'`. Third, `20260822001300_contract_audit_guard_function_acl`
+  behind `scope=audit-guard-acl-contract` removes the hosted Supabase default
+  `service_role EXECUTE` grant the 20260812000300 revoke never covered,
+  accepting only the clean or exact known-overgrant input.
+- Rationale: probe evidence, clause by clause. Runs 32591774367, 32594887321,
+  32599024205, and 32599284961 walked the refusals from the sixteen-function
+  gate to containment, and the last one isolated
+  `reject_mutation_function_posture f` as the only red clause while every
+  state, census, worker, and event clause read green. A local reproduction
+  then showed the btrim comparison false even on the clean chain, which means
+  that clause alone could refuse the chain forever regardless of any owner
+  action.
+- Consequence: the containment gate still requires every autonomy mode OFF,
+  GREEN ceilings, no auto action, the kill switch ON with an agreeing audit
+  trail, the exact four-project census, the append-only audit posture, and a
+  disconnected worker table. The owner engaged the kill switch and turned
+  Autonomous Mode OFF in the active workspace through the Safety page, which
+  wrote the real events the trail-agreement clauses read. Workers, autonomy,
+  and automatic actions remain OFF and the global kill switch remains ON.

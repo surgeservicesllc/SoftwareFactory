@@ -2,6 +2,24 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-22 ~21:30Z — containment gate honesty and the audit
+guard's hosted ACL (ADR-122):** four probe-guided rounds isolated why the
+protected chain kept refusing at containment after every catalog gate went
+green. The owner's Safety-page actions (~21:11Z: kill switch engaged,
+Autonomous Mode OFF) satisfied every state and event clause — probe
+`32599024205` reads all four project rows green with a disconnected worker
+table — leaving exactly one red clause, `reject_mutation_function_posture`
+(probe `32599284961`). Its two causes are fixed in one change: the gate's
+space-only `btrim` source comparison, false on every database including a
+pristine one, now trims `' \n'`; and `20260822001300` behind
+`scope=audit-guard-acl-contract` removes the hosted Supabase default
+`service_role EXECUTE` grant on `reject_activity_event_mutation()`.
+Certified locally by `tests/integration/audit-guard-acl-contract.test.ts` —
+**PASS** at 4 cases: clean-chain no-op, reproduced hosted default grant
+contracted, unknown-ACL refusal, and full-chain replay including the
+protected six. Hosted application of `20260822001300`, the protected chain,
+and the production Step 8/9 acceptance remain **PENDING**.
+
 **Addendum, 2026-08-22 — Backlog and All Pipelines clear controls
 (ADR-119):** `main` commit `9761055` (#317). Local verification before merge is
 **PASS**: 345 test files, 4168 tests passed, 0 failed, 2 skipped, with lint,

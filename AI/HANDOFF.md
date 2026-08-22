@@ -2,6 +2,32 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22 ~21:30Z): the containment gate is honest and its last hosted input is contracted
+
+The protected `factory-any-model-record-only` release walked through four
+fail-closed refusals today, each isolated by extending `scope=probe` with a
+clause-by-clause report (ADR-122). In order: the sixteen-function pre-repair
+gate (resolved by `20260822000850` inside the chain); the containment gate's
+two audit-evidence clauses, which demanded change events the platform forbids
+from ever being written (now trail-agreement: the newest relevant event, if
+any, must agree with the contained state); the owner's runtime posture in the
+active workspace — the owner engaged the global kill switch and turned
+Autonomous Mode OFF through the Safety page at ~21:11Z, writing the real
+events the gate reads; and finally `reject_mutation_function_posture f`,
+which had two causes at once: the gate compared the guard function's source
+with space-only `btrim` against a body that begins and ends with newlines
+(false on every database, fixed to trim `' \n'`), and hosted Supabase default
+privileges left `service_role EXECUTE` on the guard that 20260812000300 never
+revoked. `20260822001300_contract_audit_guard_function_acl` behind
+`scope=audit-guard-acl-contract` removes that grant, fail-closed on any
+unknown state, no-op on the clean replay.
+
+Operator order: dispatch `scope=audit-guard-acl-contract`, then under
+exact-main CI green and READY Vercel identity re-dispatch
+`scope=factory-any-model-record-only`, then capture the signed-in production
+Step 8 record-only acceptance. Workers, autonomy, and automatic actions stay
+OFF; the global kill switch stays ON.
+
 ## Newest (2026-08-22): the Backlog and All Pipelines pages can be cleared
 
 `/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear
