@@ -204,6 +204,7 @@ const CASES = [
   "autonomy",
   "bot-usage",
   "job-seeker",
+  "resume-review",
   "bot-fabric",
   "bot-manager",
   "bot-manager-in-journey",

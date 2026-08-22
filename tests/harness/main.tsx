@@ -23,6 +23,7 @@ import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
+import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
@@ -248,6 +249,70 @@ const CASES: Record<string, () => React.ReactElement> = {
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
+  /*
+   * The resume review panel only exists after an upload, so the job-seeker
+   * case above never renders it and it had no width coverage at all. Its
+   * content is the widest thing on that page — a long employment line and a
+   * comma-joined skills list — which is exactly the shape that overflows a
+   * 320px column.
+   */
+  "resume-review": () => (
+    <InShell>
+      <ResumeReviewPanel
+        busy={false}
+        onApply={() => {}}
+        onDismiss={() => {}}
+        extraction={{
+          id: "a0000000-0000-4000-8000-0000000000e1",
+          status: "reviewed",
+          model: "claude-opus-5",
+          detail: "Reviewed by claude-opus-5.",
+          proposal: {
+            fullName: "Dana Okafor",
+            email: "dana.okafor@example.com",
+            phone: "+1 (415) 555-0148",
+            linkedinUrl: "https://www.linkedin.com/in/danaokafor",
+            location: "Oakland, CA",
+            summary:
+              "Platform engineer with eleven years building developer infrastructure at scale, "
+              + "most recently leading the migration of four hundred repositories onto a shared "
+              + "continuous integration platform.",
+            employmentHistory: [
+              {
+                organization: "Northwind Systems International",
+                title: "Staff Platform Engineer",
+                started: "2021",
+                ended: "Present",
+              },
+              {
+                organization: "Helio Labs",
+                title: "Senior Software Engineer",
+                started: "2017",
+                ended: "2021",
+              },
+            ],
+            skills: ["Go", "TypeScript", "PostgreSQL", "Terraform", "Kubernetes", "Distributed systems"],
+            technologies: ["Next.js", "Supabase", "GitHub Actions"],
+          },
+          sources: {
+            fullName: "pattern",
+            email: "pattern",
+            phone: "pattern",
+            linkedinUrl: "pattern",
+            location: "pattern",
+            summary: "model",
+            employmentHistory: "model",
+            skills: "pattern",
+            technologies: "model",
+          },
+          proposedFieldCount: 9,
+          characterCount: 4200,
+          truncated: false,
+          appliedAt: null,
+        }}
+      />
+    </InShell>
+  ),
   "bot-fabric": () => <InShell><BotFabricConsole /></InShell>,
   "bot-manager": () => <InShell><BotManagerHome /></InShell>,
   /*
