@@ -55,20 +55,20 @@ and the projection must not reveal raw parameters.
 
 Hosted migration `20260822000600_route_bots_onto_the_executable_model.sql` is
 already applied. The protected database tail is not: `00300`, `00900`, and
-`01000`, plus forward ACL containment `01100`, remain pending as one atomic
-forward-only chain. Apply them only through
+`01000`, plus forward ACL containment `01100` and `01200`, remain pending as
+one atomic forward-only chain. Apply them only through
 `scope=factory-any-model-record-only`, after exact-main/READY-Vercel identity
 and all immutable prerequisite, catalog, lint, health, and containment checks.
 The owner directly requested this release in the active task; ADR-116 removes
 the old magic RED phrase, predeclared-SHA, expiry, and repeat-approval ceremony
 without weakening any technical or product/runtime gate. The workflow rehearses
-the same four files under rollback
-before the one transaction that records all four ledger rows. `01100` removes
+the same five files under rollback
+before the one transaction that records all five ledger rows. `01100` removes
 the exact hosted `service_role EXECUTE` overgrant on
-`apply_resume_extraction(uuid,text[])` that the immutable `00500` left behind.
-The retired
-standalone `00300` path must not mutate, and `scope=all` must not introduce any
-member of the chain.
+`apply_resume_extraction(uuid,text[])` that the immutable `00500` left behind;
+`01200` does the same for both clear-control functions left by immutable `00800`.
+The retired standalone `00300` path must not mutate, and `scope=all` must not
+introduce any member of the chain.
 
 This is not a deployment handoff yet. No final candidate SHA, green exact-head
 CI set, matching Vercel deployment, hosted atomic apply, or signed-in production
@@ -94,7 +94,8 @@ bot, both models, and where to change one.
 At this historical checkpoint, migration
 `20260822000600_route_bots_onto_the_executable_model` was still outstanding.
 It is now hosted; do not rerun it. The current pending database action is the
-atomic ADR-115/ADR-118 `00300 -> 00900 -> 01000 -> 01100` scope described above.
+atomic ADR-115/ADR-118/ADR-120
+`00300 -> 00900 -> 01000 -> 01100 -> 01200` scope described above.
 
 
 ## Prior (2026-08-22): application deployed; repaired database sequence local

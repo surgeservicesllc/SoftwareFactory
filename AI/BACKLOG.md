@@ -43,7 +43,8 @@ Last triaged: 2026-08-22
   that exact head, and require all exact-head quality plus browser/accessibility
   jobs green and an exact READY Vercel Production identity. No such release
   evidence exists yet.
-- [ ] Apply only the protected atomic `00300 -> 00900 -> 01000 -> 01100` chain through
+- [ ] Apply only the protected atomic
+  `00300 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact
   prerequisite/ledger/catalog/ACL/lint/health checks, and one-transaction ledger
   recording. Never use the retired standalone CONTRACT scope or a broad push.
@@ -58,7 +59,7 @@ Last triaged: 2026-08-22
 
 This preserves the earlier release checklist as evidence. Do not execute its
 separate release sequence; the current pending database action is the atomic
-ADR-115/ADR-118 `00300 -> 00900 -> 01000 -> 01100` scope above.
+ADR-115/ADR-118/ADR-120 `00300 -> 00900 -> 01000 -> 01100 -> 01200` scope above.
 
 - [x] Push exact approved commit
   `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` to `main` and verify exact

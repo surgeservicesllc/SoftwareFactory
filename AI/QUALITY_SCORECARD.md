@@ -33,9 +33,9 @@ artifacts, or deployment. Invalid identities and every nondefault
 Step 8 durable-record advancement and truthful Step 9 are implemented against a
 project-scoped safe history projection; raw parameters are not part of that
 projection, and reload persistence is covered locally. Hosted `00600` is
-already applied. Protected `00300/00900/01000/01100` remain pending as one atomic
-scope, with rollback rehearsal and exact ledger/catalog/ACL/lint/health and
-safety gates.
+already applied. Protected `00300/00900/01000/01100/01200` remain pending as
+one atomic scope, with rollback rehearsal and exact ledger/catalog/ACL/lint/
+health and safety gates.
 
 ADR-116 removes only the repository release ceremony: a direct owner request in
 the active task is sufficient release authority, without a magic RED phrase,

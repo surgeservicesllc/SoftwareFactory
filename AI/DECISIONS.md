@@ -1089,7 +1089,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   already applied and continues to align legacy Codex rows with the one
   executable identity. The new database contract must land only as the atomic,
   forward-only `20260822000300` -> `20260822000900` -> `20260822001000` ->
-  `20260822001100` chain.
+  `20260822001100` -> `20260822001200` chain.
   The retired standalone CONTRACT scope is non-mutating; only
   `scope=factory-any-model-record-only` may rehearse and apply the chain after
   exact-main, exact READY Vercel, owner-acceptance, ledger, catalog, ACL, lint,
@@ -1159,7 +1159,8 @@ Use this append-only log for decisions that constrain future implementation. Cha
   input; revoke function access from PUBLIC, anon, authenticated, and
   service_role; then grant EXECUTE only to authenticated and require exactly
   owner plus authenticated in postflight. Rehearse and apply the complete
-  `00300 -> 00900 -> 01000 -> 01100` chain in the same protected transaction.
+  `00300 -> 00900 -> 01000 -> 01100 -> 01200` chain in the same protected
+  transaction.
 - Rationale: hosted probe `32587973532` proved that every Job Seeker table,
   column, index, policy, constraint, RLS, source, and catalog fingerprint was
   exact. The only mismatch was direct `service_role EXECUTE` left by Supabase
@@ -1182,3 +1183,29 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: the destructive decision is identical on both pages, and the moment it is two implementations they start to disagree — one grows a confirmation step the other lacks, one reports counts the other swallows. The refusals matter more than the deletions: `commands -> tasks -> agent_runs` is `ON DELETE CASCADE` the whole way, so an unguarded "clear all" on either page silently destroys run history that `delete_agent_run` protects individually. Skipping is the default and opting in is a labelled checkbox, because a person pressing "clear the page" is asking about the page, not about the evidence behind it. The reason floor is enforced in the browser as well as the database, since discovering a ten-character rule after a confirmation dialog is a worse experience than the field simply being required.
 - Consequence: the control reports what it kept and why — `"3 pipelines cleared. Kept: 1 still running, 2 with run history."` — because "cleared" over a list that still has rows in it is the kind of small lie that costs someone their trust in the surface. `tests/integration/clear-backlog-and-pipelines.behavior.test.ts` covers 15 cases against real PostgreSQL, including the manager check, the reason floor, the live-work skip, the cascade skip and its opt-in, replay, and the audit row on an empty clear. Building the fixtures required suspending `tasks_phase1c_plan` and `tasks_phase1c_queue` for construction only: the planner triggers refuse the completed-task shape these tests need to delete.
 - Hosted: applied by run `32582241930`, `scope=clear-controls`, both versions absent from the ledger beforehand. The post-apply readback measured `security_definer t`, `member_may_execute t`, `anon_may_execute f` for both functions, and both enum labels present. That readback was produced by the step that ran the DDL, so `scope=probe` gained the same read plus `service_role` EXECUTE — an apply grading its own work cannot distinguish a wrong assertion from a wrong migration.
+
+## ADR-120 - Contract hosted clear-control function ACLs in a forward migration
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: preserve immutable hosted migration `20260822000800`. Add
+  `20260822001200` to freeze the exact signatures, sources, owners, languages,
+  SECURITY DEFINER/search-path contracts, overload counts, and known hosted ACL
+  inputs of `clear_backlog_tasks(uuid,text,boolean)` and
+  `clear_all_pipelines(uuid,text,boolean)`; revoke function access from PUBLIC,
+  anon, authenticated, and service_role; then grant EXECUTE only to
+  authenticated and require exactly owner plus authenticated in postflight.
+  Rehearse and apply the complete `00300 -> 00900 -> 01000 -> 01100 -> 01200`
+  chain in the same protected transaction.
+- Rationale: read-only hosted probe `32590061431` proved both clear-control
+  functions retained direct `service_role EXECUTE` from Supabase function
+  default privileges. Migration `00800` revoked PUBLIC and anon but omitted
+  service_role, and its original postflight did not measure service-role
+  privilege, so the unintended direct grant survived and must be removed before
+  the protected release can pass.
+- Consequence: no applied migration is edited or replayed and no final-state
+  gate is weakened. The new version accepts only the frozen clean or exact
+  hosted overgrant input and converges both functions to the same
+  owner-plus-authenticated ACL before the atomic transaction becomes visible.
+  Workers, autonomy, and automatic actions remain OFF and the global kill
+  switch remains ON.

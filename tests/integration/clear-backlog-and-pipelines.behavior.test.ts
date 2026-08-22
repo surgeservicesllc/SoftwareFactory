@@ -434,4 +434,101 @@ describe("both functions", () => {
       { name: "clear_backlog_tasks", auth: true, anon: false },
     ]);
   });
+
+  it("removes the hosted service_role default grant without changing runtime behavior", async () => {
+    /*
+     * Hosted Supabase applies ALTER DEFAULT PRIVILEGES to new functions. The
+     * immutable 00800 migration revoked PUBLIC and anon, but did not name the
+     * resulting direct service_role grant. Reproduce that exact residual
+     * state, prove replaying 00800 cannot remove it, then apply the new
+     * forward-only ACL contraction.
+     */
+    await db.exec(`
+      grant execute on function public.clear_backlog_tasks(uuid, text, boolean) to service_role;
+      grant execute on function public.clear_all_pipelines(uuid, text, boolean) to service_role;
+    `);
+
+    const hostedInput = await db.query<{ name: string; service_execute: boolean }>(`
+      select routine.proname as name,
+             has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_execute
+        from pg_proc routine
+        join pg_namespace space on space.oid = routine.pronamespace
+       where space.nspname = 'public'
+         and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+       order by 1`);
+    expect(hostedInput.rows, "the hosted function defaults were not reproduced").toEqual([
+      { name: "clear_all_pipelines", service_execute: true },
+      { name: "clear_backlog_tasks", service_execute: true },
+    ]);
+
+    await db.exec(
+      await readFile(
+        resolve(migrationsRoot, "20260822000800_clear_backlog_and_pipelines.sql"),
+        "utf8",
+      ),
+    );
+    const afterOriginalMigration = await db.query<{ name: string; service_execute: boolean }>(`
+      select routine.proname as name,
+             has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_execute
+        from pg_proc routine
+        join pg_namespace space on space.oid = routine.pronamespace
+       where space.nspname = 'public'
+         and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+       order by 1`);
+    expect(
+      afterOriginalMigration.rows,
+      "the hosted 00800 residual grants must be faithfully reproduced",
+    ).toEqual([
+      { name: "clear_all_pipelines", service_execute: true },
+      { name: "clear_backlog_tasks", service_execute: true },
+    ]);
+
+    await db.exec(
+      await readFile(
+        resolve(migrationsRoot, "20260822001200_contract_clear_function_acls.sql"),
+        "utf8",
+      ),
+    );
+    const contracted = await db.query<{
+      name: string;
+      acl_entries: number;
+      auth_execute: boolean;
+      anon_execute: boolean;
+      service_execute: boolean;
+    }>(`
+      select routine.proname as name,
+             (select count(*)::int from aclexplode(routine.proacl)) as acl_entries,
+             has_function_privilege('authenticated', routine.oid, 'EXECUTE') as auth_execute,
+             has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_execute,
+             has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_execute
+        from pg_proc routine
+        join pg_namespace space on space.oid = routine.pronamespace
+       where space.nspname = 'public'
+         and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+       order by 1`);
+    expect(contracted.rows).toEqual([
+      {
+        name: "clear_all_pipelines",
+        acl_entries: 2,
+        auth_execute: true,
+        anon_execute: false,
+        service_execute: false,
+      },
+      {
+        name: "clear_backlog_tasks",
+        acl_entries: 2,
+        auth_execute: true,
+        anon_execute: false,
+        service_execute: false,
+      },
+    ]);
+
+    // The containment changes only ACLs: both owner workflows still execute.
+    await makeTask("backlog");
+    await makeCommand("succeeded");
+    await asUser(ownerId);
+    expect((await clearBacklog()).rows[0].deleted_count).toBe(1);
+    expect((await clearPipelines()).rows[0].deleted_count).toBe(1);
+    expect(await counts()).toEqual({ tasks: 0, commands: 0, runs: 0 });
+  });
 });

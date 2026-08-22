@@ -53,7 +53,8 @@ path remains distinct and unchanged.
 
 Hosted `20260822000600_route_bots_onto_the_executable_model.sql` is already
 applied. The protected `20260822000300` -> `20260822000900` ->
-`20260822001000` -> `20260822001100` chain is still pending and may be applied only atomically through
+`20260822001000` -> `20260822001100` -> `20260822001200` chain is still pending
+and may be applied only atomically through
 `scope=factory-any-model-record-only` after exact-head CI, exact READY Vercel
 identity, the owner's direct release request in this active task, and all
 ledger/catalog/safety preflights. ADR-116 removes the repository's magic RED
@@ -72,6 +73,15 @@ exact, but `apply_resume_extraction(uuid,text[])` still had direct
 exact known three-entry input, removes only the overgrant, and requires the
 final owner-plus-authenticated ACL. It is part of the same rollback rehearsal
 and production transaction; it has not yet been hosted.
+
+Read-only hosted probe `32590061431` then proved the same Supabase default
+privilege overgrant on both clear-control functions: `service_role` could
+directly execute `clear_backlog_tasks(uuid,text,boolean)` and
+`clear_all_pipelines(uuid,text,boolean)`. Forward migration `01200` freezes
+their exact identities and known ACL inputs, removes only the unintended
+function access, and requires owner plus authenticated as the final ACL. It
+extends the protected rollback rehearsal and atomic production transaction;
+it has not yet been hosted.
 
 **Historical release checkpoint before ADR-115, 2026-08-22 (ADR-111,
 superseded):** exact commit
