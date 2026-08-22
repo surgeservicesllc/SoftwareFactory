@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Briefcase,
   CalendarClock,
@@ -14,13 +14,17 @@ import {
   Users,
 } from "lucide-react";
 
+import {
+  ApplicationsOverTime,
+  ScoreDistribution,
+  StatusRing,
+} from "@/components/job-seeker/charts";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
   APPLICATION_STAGES,
   buildOverview,
   type JobSeekerJobView,
-  type OverviewModel,
 } from "@/lib/job-seeker/overview";
 
 /**
@@ -37,7 +41,7 @@ import {
 type State =
   | { kind: "loading" }
   | { kind: "error" }
-  | { kind: "ready"; model: OverviewModel; profile: ProfileSummary | null };
+  | { kind: "ready"; profile: ProfileSummary | null };
 
 type ProfileSummary = {
   fullName: string | null;
@@ -57,6 +61,13 @@ type PreferenceSummary = {
 export function JobSeekerOverview() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [preferences, setPreferences] = useState<PreferenceSummary | null>(null);
+  /*
+   * The window the timeline covers. Held here and re-derived rather than
+   * refetched: the model is a pure function over jobs already in hand, so
+   * changing the range is arithmetic, not a round trip.
+   */
+  const [windowDays, setWindowDays] = useState(30);
+  const [jobs, setJobs] = useState<JobSeekerJobView[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -71,7 +82,7 @@ export function JobSeekerOverview() {
         return;
       }
       const jobsBody = (await jobsResponse.value.json()) as { jobs?: JobSeekerJobView[] };
-      const model = buildOverview(jobsBody.jobs ?? []);
+      setJobs(jobsBody.jobs ?? []);
 
       let profile: ProfileSummary | null = null;
       if (profileResponse.status === "fulfilled" && profileResponse.value.ok) {
@@ -85,11 +96,21 @@ export function JobSeekerOverview() {
         setPreferences(body.preferences ?? null);
       }
 
-      setState({ kind: "ready", model, profile });
+      setState({ kind: "ready", profile });
     } catch {
       setState({ kind: "error" });
     }
   }, []);
+
+  /*
+   * Derived in render, not stored.
+   *
+   * The model is a pure function of the jobs already in hand and the chosen
+   * window, so changing the range is arithmetic rather than a round trip — and
+   * a copy held in state would be a second source that can fall behind the
+   * first.
+   */
+  const model = useMemo(() => buildOverview(jobs, { windowDays }), [jobs, windowDays]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -119,7 +140,7 @@ export function JobSeekerOverview() {
     );
   }
 
-  const { model, profile } = state;
+  const { profile } = state;
 
   return (
     <div className="space-y-6">
@@ -173,22 +194,11 @@ export function JobSeekerOverview() {
           {model.applicationsTotal === 0 ? (
             <p className="mt-3 text-sm text-muted">No application has been recorded yet.</p>
           ) : (
-            <ul className="mt-4 space-y-2">
-              {model.byStage.map((entry) => (
-                <li key={entry.stage} className="flex items-center gap-3">
-                  <span className="w-40 shrink-0 text-sm text-muted">{entry.label}</span>
-                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-inset)]">
-                    <span
-                      className="block h-full rounded-full bg-[var(--accent)]"
-                      style={{ width: `${entry.percent}%` }}
-                    />
-                  </span>
-                  <span className="w-20 shrink-0 text-right text-sm text-foreground">
-                    {entry.count} ({entry.percent}%)
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <StatusRing
+              className="mt-4"
+              slices={model.statusRing}
+              total={model.applicationsTotal}
+            />
           )}
         </Card>
 
@@ -202,20 +212,7 @@ export function JobSeekerOverview() {
           {model.scored === 0 ? (
             <p className="mt-3 text-sm text-muted">No job has been scored yet.</p>
           ) : (
-            <ul className="mt-4 space-y-2">
-              {model.scoreBands.map((band) => (
-                <li key={band.label} className="flex items-center gap-3">
-                  <span className="w-16 shrink-0 text-sm text-muted">{band.label}</span>
-                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-inset)]">
-                    <span
-                      className="block h-full rounded-full bg-[var(--accent)]"
-                      style={{ width: `${band.percent}%` }}
-                    />
-                  </span>
-                  <span className="w-12 shrink-0 text-right text-sm text-foreground">{band.count}</span>
-                </li>
-              ))}
-            </ul>
+            <ScoreDistribution className="mt-4" bands={model.scoreBands} />
           )}
           <p className="mt-3 text-xs text-faint">
             {model.scored} of {model.jobsFound} recorded job{model.jobsFound === 1 ? "" : "s"} carry a
@@ -223,6 +220,46 @@ export function JobSeekerOverview() {
           </p>
         </Card>
       </div>
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-foreground">Applications Over Time</h2>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <span className="sr-only">Time range</span>
+            <select
+              aria-label="Time range"
+              value={windowDays}
+              onChange={(event) => setWindowDays(Number(event.target.value))}
+              className="input h-9 py-0 text-sm"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+          </label>
+        </div>
+        {model.applied === 0 ? (
+          <p className="mt-3 text-sm text-muted">
+            Nothing has been submitted yet, so there is no line to draw.
+          </p>
+        ) : (
+          <>
+            <ApplicationsOverTime
+              className="mt-4"
+              points={model.timeline}
+              peak={model.timelinePeak}
+            />
+            <p className="mt-2 text-xs text-faint">
+              {model.timelinePeak} submitted in total, cumulative across the last{" "}
+              {windowDays} days. A day with no submission holds the line flat rather than
+              being left out.
+            </p>
+          </>
+        )}
+        <Link href="/job-seeker/analytics" className="text-sm font-medium text-accent">
+          View analytics
+        </Link>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="p-5">

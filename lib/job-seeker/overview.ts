@@ -14,7 +14,7 @@ export type JobSeekerJobView = Readonly<{
   company: string;
   discoveredAt?: string | null;
   match?: Readonly<{ score: number; qualified: boolean }> | null;
-  application?: Readonly<{ id: string; stage: string }> | null;
+  application?: Readonly<{ id: string; stage: string; appliedAt?: string | null }> | null;
 }>;
 
 /**
@@ -52,6 +52,28 @@ const SCORE_BANDS: ReadonlyArray<{ label: string; min: number; max: number }> = 
   { label: "<60", min: 0, max: 59 },
 ];
 
+/** A slice of the status ring, pre-resolved to the arc it draws. */
+export type StatusSlice = Readonly<{
+  stage: string;
+  label: string;
+  count: number;
+  percent: number;
+  /** Fraction of the circle this slice covers, 0-1. */
+  fraction: number;
+  /** Where its arc starts, 0-1 clockwise from twelve o'clock. */
+  offset: number;
+}>;
+
+/** One point on the submissions-over-time line. */
+export type TimelinePoint = Readonly<{
+  /** ISO date, midnight UTC. */
+  date: string;
+  /** Submissions on that day. */
+  count: number;
+  /** Submissions up to and including it — what the line plots. */
+  cumulative: number;
+}>;
+
 export type OverviewModel = Readonly<{
   jobsFound: number;
   scored: number;
@@ -75,6 +97,12 @@ export type OverviewModel = Readonly<{
     applied: number;
     bestScore: number | null;
   }>;
+  /** The status ring: the same counts as `byStage`, resolved to arcs. */
+  statusRing: ReadonlyArray<StatusSlice>;
+  /** Submissions per day over the requested window, oldest first. */
+  timeline: ReadonlyArray<TimelinePoint>;
+  /** The largest cumulative value, so an axis can be drawn without rescanning. */
+  timelinePeak: number;
 }>;
 
 function percentOf(count: number, total: number): number {
@@ -86,7 +114,83 @@ export function stageLabel(stage: string): string {
   return STAGE_LABEL.get(stage) ?? stage;
 }
 
-export function buildOverview(jobs: readonly JobSeekerJobView[]): OverviewModel {
+/** UTC midnight for a timestamp, as an ISO date. A day is a day, not a slice. */
+function dayKey(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+/**
+ * Submissions per day across a window ending today, plus the running total.
+ *
+ * Every day in the window gets a point, including the empty ones: a line drawn
+ * only through days that had activity compresses quiet stretches and makes a
+ * slow month look like a busy one. The line plots the cumulative figure, which
+ * is what "applications over time" means to someone asking whether their
+ * search is moving.
+ */
+export function buildTimeline(
+  jobs: readonly JobSeekerJobView[],
+  windowDays: number,
+  today: Date = new Date(),
+): TimelinePoint[] {
+  const perDay = new Map<string, number>();
+  let before = 0;
+
+  const end = new Date(Date.UTC(
+    today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(),
+  ));
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (windowDays - 1));
+  const startKey = start.toISOString().slice(0, 10);
+
+  for (const job of jobs) {
+    const appliedAt = job.application?.appliedAt;
+    if (!appliedAt) continue;
+    const key = dayKey(appliedAt);
+    // Submissions older than the window still count toward the running total;
+    // dropping them would restart the line at zero and understate the search.
+    if (key < startKey) {
+      before += 1;
+      continue;
+    }
+    perDay.set(key, (perDay.get(key) ?? 0) + 1);
+  }
+
+  const points: TimelinePoint[] = [];
+  let cumulative = before;
+  for (let index = 0; index < windowDays; index += 1) {
+    const day = new Date(start);
+    day.setUTCDate(day.getUTCDate() + index);
+    const key = day.toISOString().slice(0, 10);
+    const count = perDay.get(key) ?? 0;
+    cumulative += count;
+    points.push({ date: key, count, cumulative });
+  }
+  return points;
+}
+
+/** Turn stage counts into arcs, so the ring is drawn from the same numbers. */
+function buildStatusRing(
+  byStage: ReadonlyArray<{ stage: string; label: string; count: number; percent: number }>,
+  total: number,
+): StatusSlice[] {
+  let offset = 0;
+  return byStage.map((entry) => {
+    // The fraction comes from the counts, not from the rounded percentage:
+    // eleven rounded percentages do not add to 100, and a ring drawn from
+    // them leaves a wedge of nothing at the end.
+    const fraction = total > 0 ? entry.count / total : 0;
+    const slice = { ...entry, fraction, offset };
+    offset += fraction;
+    return slice;
+  });
+}
+
+export function buildOverview(
+  jobs: readonly JobSeekerJobView[],
+  options: { windowDays?: number; today?: Date } = {},
+): OverviewModel {
+  const windowDays = options.windowDays ?? 30;
   const scoredJobs = jobs.filter((job) => typeof job.match?.score === "number");
   const applications = jobs.filter((job) => job.application);
 
@@ -114,6 +218,8 @@ export function buildOverview(jobs: readonly JobSeekerJobView[]): OverviewModel 
     }).length;
     return { label: band.label, count, percent: percentOf(count, scoredJobs.length) };
   });
+
+  const timeline = buildTimeline(jobs, windowDays, options.today);
 
   const byTitle = new Map<string, { jobs: number; applied: number; bestScore: number | null }>();
   for (const job of jobs) {
@@ -158,5 +264,8 @@ export function buildOverview(jobs: readonly JobSeekerJobView[]): OverviewModel 
       .map(([title, entry]) => ({ title, ...entry }))
       .sort((a, b) => (b.bestScore ?? -1) - (a.bestScore ?? -1) || b.jobs - a.jobs)
       .slice(0, 5),
+    statusRing: buildStatusRing(byStage, applications.length),
+    timeline,
+    timelinePeak: timeline.reduce((peak, point) => Math.max(peak, point.cumulative), 0),
   });
 }
