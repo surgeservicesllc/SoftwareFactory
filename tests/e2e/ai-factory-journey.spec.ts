@@ -92,8 +92,11 @@ test.describe("AI Factory live journey", () => {
     await projectDialog.getByLabel("Name it").fill("Storefront Rebuild");
     await projectDialog.getByLabel(/what is it/i).fill("A fake project created by the journey walk.");
     await projectDialog.getByRole("button", { name: "Add project" }).click();
-    await expect(projectDialog.getByText(/Storefront Rebuild is connected/)).toBeVisible({ timeout: 30_000 });
-    await page.keyboard.press("Escape");
+    // The form's own confirmation is not the thing to wait for: creating a
+    // project calls back into the page, which closes the overlay and re-reads,
+    // so that message can be gone before an assertion sees it. What must be
+    // true is the step itself, derived from the row the POST created.
+    await expect(projectDialog).toBeHidden({ timeout: 30_000 });
     await expect(createStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
 
     // ── Step 3: Configure Pipeline ────────────────────────────────────────

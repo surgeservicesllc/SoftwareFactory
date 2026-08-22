@@ -135,6 +135,12 @@ jobs:
             echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
             echo "NEXT_PUBLIC_SUPABASE_URL=$SUPA_URL"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON"
+            # Creating a bot checks, server-side, that the account's credential
+            # slot resolves — the check that caught the catalogue/allowlist
+            # mismatch. This is a fake placeholder so that check has something
+            # to find; it is not a credential and authenticates nothing, and
+            # the journey never calls a provider with it.
+            echo "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN=fake-journey-placeholder-not-a-credential"
           } > .env.local
 
       - name: Seed the workspace and the GitHub installation
@@ -171,6 +177,20 @@ jobs:
             '30000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
             '20000000-0000-4000-8000-0000000fa001', 700123, 4582606, 'fake-factory-app',
             900001, 'fake-owner', 'User', 'User', 'selected', 'active', now(), :user_id
+          );
+
+          -- Signing into Claude is an external account action like the App
+          -- install, so the row that sign-in would have recorded is seeded
+          -- and nothing further. The credential itself is never here: the row
+          -- names the vault slot, and the journey's bot creation is what
+          -- exercises the server-side reference check.
+          insert into public.ai_accounts (
+            id, organization_id, provider, auth_method, display_name, status,
+            credential_purpose, last_verified_at, created_by
+          ) values (
+            '40000000-0000-4000-8000-0000000fa001', '10000000-0000-4000-8000-0000000fa001',
+            'anthropic', 'subscription', 'Fake Claude Account', 'connected',
+            'softwarefactory_claude_code_oauth_token', now(), :user_id
           );
 
           insert into public.github_repositories (
