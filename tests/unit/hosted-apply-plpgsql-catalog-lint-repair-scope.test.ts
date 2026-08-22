@@ -254,6 +254,7 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command).toContain(hashes.modelRepair);
     expect(command).toContain(files.modelRepair);
     expect(command).toContain("CLEAR_CONTROLS_READY=");
+    expect(command).toContain("array_agg(enum_value.enumlabel::text order by enum_value.enumsortorder)");
     for (const hash of [
       "bec3779775db79ea9150725a9e5d087f", "cd91f464350f968f5b11a52f10d127bd",
       "dcb23b5217f03e5f74da437fe0c3393f", "295424372a8549485dcc9f7b66dfe025",

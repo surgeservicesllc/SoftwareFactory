@@ -2633,7 +2633,7 @@ jobs:
                  and not has_function_privilege('service_role', signature, 'EXECUTE')
                )
                and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in ('clear_all_pipelines','clear_backlog_tasks'))
-               and (select array_agg(enum_value.enumlabel order by enum_value.enumsortorder) @> array['task.backlog_cleared','command.pipelines_cleared']::text[]
+               and (select array_agg(enum_value.enumlabel::text order by enum_value.enumsortorder) @> array['task.backlog_cleared','command.pipelines_cleared']::text[]
                       from pg_type enum_type join pg_namespace enum_schema on enum_schema.oid = enum_type.typnamespace join pg_enum enum_value on enum_value.enumtypid = enum_type.oid
                      where enum_schema.nspname = 'public' and enum_type.typname = 'activity_event_type')
             from state;")
