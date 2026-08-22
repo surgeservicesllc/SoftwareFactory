@@ -59,6 +59,24 @@ const PROVIDER_CREDENTIAL_ALTERNATES: readonly string[] = [
   "COHERE_API_KEY",
 ];
 
+/** Subscription credential families may have one variable per connected account. */
+const SUBSCRIPTION_CREDENTIAL_REFS: ReadonlySet<string> = new Set(
+  BOT_PROVIDERS
+    .map((provider) => provider.subscriptionCredentialRef)
+    .filter((reference): reference is string => Boolean(reference)),
+);
+
+/** Keep this slot grammar aligned with stored-credential purpose suffixes. */
+const SUBSCRIPTION_SLOT_PATTERN = /^(?:[2-9]|[1-9][0-9]{1,3})$/;
+
+function isSubscriptionSlotCredentialRef(candidate: string): boolean {
+  for (const baseRef of SUBSCRIPTION_CREDENTIAL_REFS) {
+    if (!candidate.startsWith(`${baseRef}_`)) continue;
+    return SUBSCRIPTION_SLOT_PATTERN.test(candidate.slice(baseRef.length + 1));
+  }
+  return false;
+}
+
 /**
  * Every reference the catalogue itself declares, plus the conventional
  * alternates.
@@ -132,7 +150,11 @@ export function normalizeCredentialRef(value: string | null | undefined): string
       "That variable holds control-plane credentials and cannot be referenced by a bot.",
     );
   }
-  if (!ALLOWED_CREDENTIAL_REFS.has(candidate) && !CUSTOM_CREDENTIAL_REF_PATTERN.test(candidate)) {
+  if (
+    !ALLOWED_CREDENTIAL_REFS.has(candidate)
+    && !isSubscriptionSlotCredentialRef(candidate)
+    && !CUSTOM_CREDENTIAL_REF_PATTERN.test(candidate)
+  ) {
     throw new BotCredentialError(
       "credential_ref_not_allowed",
       "Use a known provider variable, or name your own as BOT_CREDENTIAL_<NAME>.",

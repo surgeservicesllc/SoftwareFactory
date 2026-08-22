@@ -204,6 +204,7 @@ const CASES = [
   "autonomy",
   "bot-usage",
   "job-seeker",
+  "resume-review",
   "bot-fabric",
   "bot-manager",
   "bot-manager-in-journey",
@@ -324,6 +325,116 @@ for (const width of WIDTHS) {
   });
 }
 
+test("AI Factory owns one modal above the whole shell, including pipeline Plan and Clone", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "ai-factory", 1280);
+
+  const pipelineStep = page.getByRole("heading", {
+    name: "Configure Pipeline",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  const opener = pipelineStep.getByRole("button", { name: /choose a pipeline|change pipelines/i });
+  const skipLink = page.locator('a[href="#main-content"]');
+  await expect(opener).toBeVisible();
+
+  // A pre-existing boolean/string value on an unrelated body child catches a
+  // cleanup that blindly removes attributes instead of restoring exact state.
+  await page.evaluate(() => {
+    const preserved = document.createElement("div");
+    preserved.id = "pre-existing-modal-sibling";
+    preserved.setAttribute("inert", "legacy");
+    preserved.setAttribute("aria-hidden", "false");
+    document.body.append(preserved);
+  });
+
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Configure Pipeline" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+
+  const isolation = await page.evaluate(() => {
+    const current = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+    return {
+      directBodyChild: current?.parentElement === document.body,
+      backgrounds: Array.from(document.body.children)
+        .filter((element) => element !== current)
+        .map((element) => ({
+          id: element.id,
+          inert: element.getAttribute("inert"),
+          ariaHidden: element.getAttribute("aria-hidden"),
+        })),
+    };
+  });
+  expect(isolation.directBodyChild).toBe(true);
+  expect(isolation.backgrounds.length).toBeGreaterThan(0);
+  expect(isolation.backgrounds.every((entry) => (
+    entry.inert === "" && entry.ariaHidden === "true"
+  ))).toBe(true);
+
+  // Even an adversarial programmatic focus attempt cannot escape to the
+  // shell's z-100 skip link; the z-110 dialog remains the active boundary.
+  await skipLink.evaluate((element) => (element as HTMLElement).focus());
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+  await dialog.getByRole("button", { name: /^Plan a graph from / }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(dialog.getByRole("region", { name: /^Plan a graph from / })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Back to templates" }).click();
+
+  await dialog.getByRole("button", { name: /^Clone / }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(dialog.getByRole("region", { name: "New template" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "Back to templates" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+  expect(await page.locator("#root").getAttribute("inert")).toBeNull();
+  expect(await page.locator("#root").getAttribute("aria-hidden")).toBeNull();
+  await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("inert", "legacy");
+  await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("aria-hidden", "false");
+});
+
+test("standalone Bot Manager and Project Bots modals contain focus and share one close path", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  await open(page, "bot-manager", 1280);
+  let opener = page.getByRole("button", { name: "Create Bot" });
+  await opener.click();
+  let dialog = page.getByRole("dialog", { name: "Create Bot" });
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.locator("#root")).toHaveAttribute("inert", "");
+  await page.locator('a[href="#main-content"]').evaluate((element) => (
+    element as HTMLElement
+  ).focus());
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  dialog = page.getByRole("dialog", { name: "Create Bot" });
+  await expect(dialog).toBeVisible();
+  await dialog.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  await open(page, "project-bots", 1280);
+  opener = page.getByRole("button", { name: /assign more|assign bots/i }).first();
+  await opener.click();
+  dialog = page.getByRole("dialog", { name: /assign bots/i });
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.locator("#root")).toHaveAttribute("inert", "");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+});
+
 /**
  * The harness measures populated layouts, or it measures nothing.
  *
@@ -387,6 +498,46 @@ for (const layoutCase of CASES) {
     ).toEqual([]);
   });
 }
+
+/*
+ * The global header, signed in.
+ *
+ * The rest of the browser suite browses signed out, so the owner's specified
+ * header — AI Factory, Job Seeker, Admin, then the account controls — had no
+ * coverage in a real browser at all. This reads the rendered entries rather
+ * than the module that supplies them, which is the point: the wiring is the
+ * instruction, and a unit test importing the same constant cannot catch a
+ * header that stops rendering what it is given.
+ */
+test("the signed-in header names the two products and the admin area", async ({ page }) => {
+  await open(page, "site-header", 1440);
+
+  const primary = page.getByRole("navigation", { name: "Primary" });
+  await expect(primary).toBeVisible();
+
+  await expect(primary.getByRole("link")).toHaveText(["AI Factory", "Job Seeker", "Admin"]);
+  await expect(primary.getByRole("link", { name: "AI Factory" })).toHaveAttribute(
+    "href",
+    "/solutions",
+  );
+  await expect(primary.getByRole("link", { name: "Job Seeker" })).toHaveAttribute(
+    "href",
+    "/job-seeker",
+  );
+
+  // The account side of the same row, which the owner's image also shows.
+  await expect(page.getByText("Super admin")).toBeVisible();
+  await expect(page.getByText("owner@example.org")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Console" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
+
+  // A signed-in header must not still be selling the product.
+  for (const gone of ["Platform", "Features", "Pricing", "About", "Get Started Free"]) {
+    await expect(page.getByRole("link", { name: gone, exact: true })).toHaveCount(0);
+  }
+
+  expect(await overflowing(page), "the signed-in header pushed content out").toEqual([]);
+});
 
 /*
  * The desktop rail: narrower column, wider content, and the choice remembered.

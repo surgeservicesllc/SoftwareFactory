@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Card, SectionTitle } from "@/components/ui";
+import { ResumeReviewPanel, type ExtractionView } from "@/components/job-seeker/resume-review-panel";
 
 /**
  * The career profile editor: the master source of truth every generated
@@ -211,6 +212,98 @@ export function JobSeekerProfileForm({
   const [resumeUpload, setResumeUpload] = useState<{ id: string; filename: string; byteSize: number } | null>(
     initial?.resumeUpload ?? null,
   );
+  // The reading of the current resume, once one has been asked for. Null means
+  // nothing has been read yet, which is a different state from "read it and
+  // found nothing" — the panel says so rather than showing an empty list.
+  const [extraction, setExtraction] = useState<ExtractionView | null>(null);
+  const [reading, setReading] = useState(false);
+
+  /**
+   * Ask the server to read an uploaded resume.
+   *
+   * Kept separate from the upload itself so a person can re-read a resume they
+   * already uploaded — which is exactly what they will want to do when a model
+   * becomes available on a deployment that had none.
+   */
+  async function readResume(uploadId: string) {
+    setReading(true);
+    setProblem("");
+    try {
+      const response = await fetch(`/api/job-seeker/uploads/${uploadId}/extract`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as {
+        extraction?: ExtractionView;
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.extraction) {
+        setProblem(body.error?.message ?? "The resume could not be read.");
+        return;
+      }
+      setExtraction(body.extraction);
+    } catch {
+      setProblem("The resume could not be read.");
+    } finally {
+      setReading(false);
+    }
+  }
+
+  /**
+   * Write the accepted fields, then mirror them into this form.
+   *
+   * The server call is the one that counts: it is atomic and audited. Updating
+   * the local fields afterwards keeps the editor showing what the profile now
+   * actually holds — without it, the person would be looking at stale values
+   * and could save them straight back over what they just applied.
+   */
+  async function applyExtraction(fields: string[]) {
+    if (!extraction) return;
+    setBusy(true);
+    setProblem("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/job-seeker/extractions/${extraction.id}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields }),
+      });
+      const body = (await response.json()) as {
+        applied?: { fields: string[]; appliedAt: string };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.applied) {
+        setProblem(body.error?.message ?? "Those fields could not be applied.");
+        return;
+      }
+
+      const proposal = extraction.proposal;
+      const has = (key: string) => body.applied!.fields.includes(key) && proposal[key] !== undefined;
+      if (has("fullName")) setFullName(String(proposal.fullName));
+      if (has("email")) setEmail(String(proposal.email));
+      if (has("phone")) setPhone(String(proposal.phone));
+      if (has("linkedinUrl")) setLinkedinUrl(String(proposal.linkedinUrl));
+      if (has("location")) setLocation(String(proposal.location));
+      if (has("summary")) setSummary(String(proposal.summary));
+      if (has("employmentHistory")) setEmployment(proposal.employmentHistory as HistoryEntry[]);
+      if (has("education")) setEducation(proposal.education as HistoryEntry[]);
+      if (has("accomplishments")) setAccomplishments(toLines(proposal.accomplishments as string[]));
+      if (has("skills")) setSkills(toLines(proposal.skills as string[]));
+      if (has("certifications")) setCertifications(toLines(proposal.certifications as string[]));
+      if (has("technologies")) setTechnologies(toLines(proposal.technologies as string[]));
+      if (has("industries")) setIndustries(toLines(proposal.industries as string[]));
+
+      setExtraction({ ...extraction, appliedAt: body.applied.appliedAt });
+      setNotice(
+        `Filled in ${body.applied.fields.length} ${
+          body.applied.fields.length === 1 ? "field" : "fields"
+        } from your resume.`,
+      );
+    } catch {
+      setProblem("Those fields could not be applied.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function uploadResume(file: File) {
     setBusy(true);
@@ -230,7 +323,11 @@ export function JobSeekerProfileForm({
         return;
       }
       setResumeUpload(body.upload);
+      setExtraction(null);
       setNotice(`Uploaded ${body.upload.filename} (${Math.round(body.upload.byteSize / 1024)} KB) as your current resume.`);
+      // Reading it is the point of uploading it, so do not make someone press
+      // a second button to get the thing they came for.
+      void readResume(body.upload.id);
     } catch {
       setProblem("The file could not be uploaded.");
     } finally {
@@ -373,9 +470,30 @@ export function JobSeekerProfileForm({
           />
         </Field>
         {resumeUpload ? (
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Current resume: <a className="text-[var(--accent)] underline" href={`/api/job-seeker/uploads/${resumeUpload.id}`}>{resumeUpload.filename}</a>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span>
+              Current resume: <a className="text-[var(--accent)] underline" href={`/api/job-seeker/uploads/${resumeUpload.id}`}>{resumeUpload.filename}</a>
+            </span>
+            <button
+              type="button"
+              className="text-[var(--accent)] underline disabled:opacity-60"
+              disabled={reading || busy}
+              onClick={() => void readResume(resumeUpload.id)}
+            >
+              {reading ? "Reading…" : extraction ? "Read it again" : "Fill in my profile from it"}
+            </button>
           </p>
+        ) : null}
+        {reading && !extraction ? (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">Reading your resume…</p>
+        ) : null}
+        {extraction ? (
+          <ResumeReviewPanel
+            extraction={extraction}
+            busy={busy}
+            onApply={applyExtraction}
+            onDismiss={() => setExtraction(null)}
+          />
         ) : null}
       </div>
 

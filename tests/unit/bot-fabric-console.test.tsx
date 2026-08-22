@@ -196,7 +196,9 @@ describe("BotFabricConsole", () => {
     const provisionBody = vi.mocked(fetch).mock.calls
       .filter(([request]) => String(request) === "/api/bots/connect/provision")
       .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
-    expect(provisionBody[0]).toMatchObject({ provider: "anthropic", credential: "subscription" });
+    expect(provisionBody[0]).toMatchObject({
+      provider: "anthropic", credential: "subscription", aiAccountId: "acc-1",
+    });
     const codeBody = vi.mocked(fetch).mock.calls
       .filter(([request]) => String(request) === "/api/ai-accounts/sessions/sess-1/code")
       .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -319,6 +321,211 @@ describe("BotFabricConsole", () => {
     expect(screen.getByLabelText(/role/i)).toHaveValue("role-1");
   });
 
+  it("disables assignment when the server reports current readiness is not ready", async () => {
+    stubFetch({
+      status: 200,
+      body: {
+        ...fabricPayload,
+        bots: [{
+          ...fabricPayload.bots[0],
+          currentReadiness: "not_connected",
+          currentReadinessDetail: "The subscription credential is missing.",
+        }],
+      },
+    });
+
+    render(<BotFabricConsole />);
+
+    const assign = await screen.findByRole("button", { name: /assign claude/i });
+    expect(assign).toBeDisabled();
+    expect(assign).toHaveAttribute("title", "The subscription credential is missing.");
+  });
+
+  it("marks a first posting as expecting no current assignment", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        bodies.push(JSON.parse(String(init.body)));
+        return { ok: true, status: 201, json: async () => ({ assignment: {} }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<BotFabricConsole />);
+
+    await user.click(await screen.findByRole("button", { name: /assign claude/i }));
+
+    expect(bodies[0]).toEqual({
+      botId: "bot-1",
+      projectId: "project-1",
+      roleId: "role-1",
+      expectedAssignmentId: null,
+      expectedProjectId: null,
+      expectedRevision: null,
+    });
+  });
+
+  it("carries exact posting identity on move, pause, and release", async () => {
+    const assignedPayload = {
+      ...fabricPayload,
+      projects: [
+        ...fabricPayload.projects,
+        { ...fabricPayload.projects[0], id: "project-2", name: "Second project" },
+      ],
+      assignments: [{
+        id: "assignment-1",
+        revision: 7,
+        botId: "bot-1",
+        projectId: "project-1",
+        roleId: "role-1",
+        status: "active",
+        assignedAt: "2026-08-22T00:00:00.000Z",
+        releasedAt: null,
+        model: null,
+        workEffort: "medium",
+        config: {},
+      }],
+    };
+    const mutations: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST" || init?.method === "PATCH") {
+        mutations.push({ url: String(input), body: JSON.parse(String(init.body)) });
+        return { ok: true, status: 200, json: async () => ({ assignment: {} }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => assignedPayload } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<BotFabricConsole />);
+
+    await user.selectOptions(await screen.findByLabelText("Move to project"), "project-2");
+    await waitFor(() => expect(mutations).toHaveLength(1));
+    const pause = screen.getByRole("button", { name: /pause/i });
+    await waitFor(() => expect(pause).toBeEnabled());
+    await user.click(pause);
+    await waitFor(() => expect(mutations).toHaveLength(2));
+    const release = screen.getByRole("button", { name: /return to bench/i });
+    await waitFor(() => expect(release).toBeEnabled());
+    await user.click(release);
+    await waitFor(() => expect(mutations).toHaveLength(3));
+
+    expect(mutations).toEqual(expect.arrayContaining([
+      {
+        url: "/api/bot-assignments",
+        body: expect.objectContaining({
+          expectedAssignmentId: "assignment-1",
+          expectedProjectId: "project-1",
+          expectedRevision: 7,
+        }),
+      },
+      {
+        url: "/api/bot-assignments/assignment-1",
+        body: {
+          status: "paused",
+          expectedProjectId: "project-1",
+          expectedRevision: 7,
+        },
+      },
+      {
+        url: "/api/bot-assignments/assignment-1",
+        body: {
+          status: "released",
+          expectedProjectId: "project-1",
+          expectedRevision: 7,
+        },
+      },
+    ]));
+  });
+
+  it("changes an active posting role in place with its exact identity", async () => {
+    const secondRole = {
+      ...fabricPayload.roles[0],
+      id: "role-2",
+      name: "Reviewer",
+      slug: "reviewer",
+    };
+    const assignedPayload = {
+      ...fabricPayload,
+      roles: [...fabricPayload.roles, secondRole],
+      assignments: [{
+        id: "assignment-1",
+        revision: 7,
+        botId: "bot-1",
+        projectId: "project-1",
+        roleId: "role-1",
+        status: "active",
+        assignedAt: "2026-08-22T00:00:00.000Z",
+        releasedAt: null,
+        model: null,
+        workEffort: "medium",
+        config: {},
+      }],
+    };
+    const mutations: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        mutations.push({ url: String(input), body: JSON.parse(String(init.body)) });
+        return { ok: true, status: 201, json: async () => ({ assignment: {} }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => assignedPayload } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<BotFabricConsole />);
+
+    await user.selectOptions(await screen.findByLabelText("Role"), secondRole.id);
+    await waitFor(() => expect(mutations).toHaveLength(1));
+
+    expect(mutations[0]).toEqual({
+      url: "/api/bot-assignments",
+      body: {
+        botId: "bot-1",
+        projectId: "project-1",
+        roleId: secondRole.id,
+        expectedAssignmentId: "assignment-1",
+        expectedProjectId: "project-1",
+        expectedRevision: 7,
+      },
+    });
+  });
+
+  it("requires an explicit resume before a paused posting can move or change role", async () => {
+    const pausedPayload = {
+      ...fabricPayload,
+      projects: [
+        ...fabricPayload.projects,
+        { ...fabricPayload.projects[0], id: "project-2", name: "Second project" },
+      ],
+      roles: [
+        ...fabricPayload.roles,
+        { ...fabricPayload.roles[0], id: "role-2", name: "Reviewer", slug: "reviewer" },
+      ],
+      assignments: [{
+        id: "assignment-1",
+        revision: 7,
+        botId: "bot-1",
+        projectId: "project-1",
+        roleId: "role-1",
+        status: "paused",
+        assignedAt: "2026-08-22T00:00:00.000Z",
+        releasedAt: null,
+        model: null,
+        workEffort: "medium",
+        config: {},
+      }],
+    };
+    stubFetch({ status: 200, body: pausedPayload });
+    render(<BotFabricConsole />);
+
+    const move = await screen.findByLabelText("Move to project");
+    const role = screen.getByLabelText("Role");
+    expect(move).toBeDisabled();
+    expect(role).toBeDisabled();
+    expect(move).toHaveAttribute(
+      "title",
+      "Resume this posting before moving it or changing its role.",
+    );
+    expect(screen.getByRole("button", { name: /resume/i })).toBeEnabled();
+  });
+
   it("shows the credential reference name and never a credential value", async () => {
     stubFetch({ status: 200, body: fabricPayload });
 
@@ -344,6 +551,123 @@ describe("BotFabricConsole", () => {
     expect(
       screen.getByText(/never pass through this page/i),
     ).toBeInTheDocument();
+  });
+
+  it("requires a provider endpoint and submits every manual bot field at the API boundary", async () => {
+    const registrations: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/bots" && init?.method === "POST") {
+        registrations.push(JSON.parse(String(init.body)));
+        return { ok: true, status: 201, json: async () => ({ bot: {} }) } as Response;
+      }
+      if (url === "/api/bots/providers") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            providers: [{
+              id: "selfhosted",
+              label: "Self-hosted",
+              vendor: "Your infrastructure",
+              monogram: "SH",
+              accent: "#60d8ff",
+              summary: "A private model gateway.",
+              suggestedModels: ["llama3.1:70b"],
+              defaultModel: "llama3.1:70b",
+              credentialRef: null,
+              credentialReady: true,
+              credentialOptional: true,
+              probeVerdict: "not_configured",
+              probeReason: null,
+              probeLive: false,
+              requiresBaseUrl: true,
+              docsUrl: "https://docs.vllm.ai",
+              apiKeyUrl: null,
+            }],
+          }),
+        } as Response;
+      }
+      if (url === "/api/ai-accounts") {
+        return { ok: true, status: 200, json: async () => ({ accounts: [] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload } as Response;
+    }));
+    const user = userEvent.setup();
+
+    render(<BotFabricConsole />);
+    await user.click(await screen.findByRole("tab", { name: /bots/i }));
+    await user.click(await screen.findByRole("button", { name: /self-hosted/i }));
+    await user.click(screen.getByRole("button", { name: /customise name, model and endpoint/i }));
+
+    const connect = screen.getByRole("button", { name: /connect self-hosted/i });
+    const endpoint = screen.getByLabelText("HTTPS endpoint (required)");
+    expect(endpoint).toBeRequired();
+    expect(connect).toBeDisabled();
+
+    await user.clear(screen.getByLabelText("Bot name"));
+    await user.type(screen.getByLabelText("Bot name"), "  Edge Runner  ");
+    await user.clear(screen.getByLabelText("Model identifier"));
+    await user.type(screen.getByLabelText("Model identifier"), "  qwen2.5-coder:32b  ");
+    await user.type(screen.getByLabelText("Credential variable name"), "  PRIVATE_GATEWAY_TOKEN  ");
+    await user.type(endpoint, "  https://models.example.test/v1  ");
+    await user.type(screen.getByLabelText("Notes"), "  Runs private code review  ");
+    expect(connect).toBeEnabled();
+    await user.click(connect);
+
+    await waitFor(() => expect(registrations).toHaveLength(1));
+    expect(registrations[0]).toEqual({
+      provider: "selfhosted",
+      name: "Edge Runner",
+      model: "qwen2.5-coder:32b",
+      credentialRef: "PRIVATE_GATEWAY_TOKEN",
+      baseUrl: "https://models.example.test/v1",
+      notes: "Runs private code review",
+    });
+  });
+
+  it("submits every authored role field with normalized capabilities", async () => {
+    const roleWrites: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/bot-roles" && init?.method === "POST") {
+        roleWrites.push(JSON.parse(String(init.body)));
+        return { ok: true, status: 201, json: async () => ({ role: {} }) } as Response;
+      }
+      if (url === "/api/ai-accounts") {
+        return { ok: true, status: 200, json: async () => ({ accounts: [] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => fabricPayload } as Response;
+    }));
+    const user = userEvent.setup();
+
+    render(<BotFabricConsole />);
+    await user.click(await screen.findByRole("tab", { name: /roles/i }));
+    await user.click(screen.getByRole("button", { name: /new role/i }));
+    await user.type(screen.getByLabelText("Role name"), "  Release Captain  ");
+    expect(screen.getByLabelText("Slug")).toHaveValue("release-captain");
+    await user.type(screen.getByLabelText("Summary"), "  Owns release readiness  ");
+    await user.type(
+      screen.getByLabelText("Instructions"),
+      "  Verify tests, preserve containment, and report evidence.  ",
+    );
+    await user.selectOptions(screen.getByLabelText("Risk ceiling"), "RED");
+    await user.type(
+      screen.getByLabelText("Capabilities"),
+      " release, deployment , evidence ",
+    );
+    await user.click(screen.getByRole("button", { name: /save role/i }));
+
+    await waitFor(() => expect(roleWrites).toHaveLength(1));
+    expect(roleWrites[0]).toEqual({
+      roleId: null,
+      name: "Release Captain",
+      slug: "release-captain",
+      summary: "Owns release readiness",
+      instructions: "Verify tests, preserve containment, and report evidence.",
+      riskCeiling: "RED",
+      capabilities: ["release", "deployment", "evidence"],
+    });
   });
 
   it("hides management controls from a read-only member", async () => {

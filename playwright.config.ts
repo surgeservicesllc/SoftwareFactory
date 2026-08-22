@@ -9,6 +9,8 @@ const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 /** Where the component layout harness is served. */
 export const HARNESS_URL = process.env.PLAYWRIGHT_HARNESS_URL ?? "http://localhost:4321";
+const externalHarnessServer = Boolean(process.env.PLAYWRIGHT_HARNESS_URL) &&
+  !process.env.PLAYWRIGHT_HARNESS_WEB_SERVER_COMMAND;
 const launchOptions = chromiumExecutable
   ? { executablePath: chromiumExecutable }
   : undefined;
@@ -108,7 +110,7 @@ export default defineConfig({
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
       }]),
-    {
+    ...(externalHarnessServer ? [] : [{
       /*
        * Rebuilt every run, never reused.
        *
@@ -125,10 +127,11 @@ export default defineConfig({
        * every module on request took this suite from ten minutes to over
        * twenty-five. One build per run is the cheap half of that trade.
        */
-      command: "npm run harness:build && npm run harness:serve",
+      command: process.env.PLAYWRIGHT_HARNESS_WEB_SERVER_COMMAND ??
+        "npm run harness:build && npm run harness:serve",
       url: HARNESS_URL,
       reuseExistingServer: false,
       timeout: 180_000,
-    },
+    }]),
   ],
 });

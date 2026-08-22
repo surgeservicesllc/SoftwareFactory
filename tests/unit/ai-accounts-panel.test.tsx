@@ -89,6 +89,46 @@ describe("AiAccountsPanel", () => {
     ]);
   });
 
+  it("keeps the selection when bulk bot creation fails so the remainder can be retried", async () => {
+    stubAccounts([connectedAccount, reauthAccount]);
+    const onCreateBots = vi.fn().mockRejectedValue(new Error("second account failed"));
+    const user = userEvent.setup();
+
+    render(
+      <AiAccountsPanel
+        canManage
+        onChanged={() => undefined}
+        onCreateBots={onCreateBots}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /select claude account 1/i }));
+    await user.click(screen.getByRole("button", { name: /select claude account 2/i }));
+    await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
+
+    expect(await screen.findByText(/selection was kept/i)).toBeInTheDocument();
+    expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create 2 bots/i })).toBeEnabled();
+  });
+
+  it("does not claim a bot was created or assigned before the action runs", async () => {
+    stubAccounts([reauthAccount]);
+    const user = userEvent.setup();
+
+    render(
+      <AiAccountsPanel
+        canManage
+        onChanged={() => undefined}
+        onCreateBots={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /select claude account 2/i }));
+
+    expect(screen.getByText(/a bot can be created for it/i)).toBeInTheDocument();
+    expect(screen.queryByText(/bot is created and assigned/i)).not.toBeInTheDocument();
+  });
+
   it("disconnects only after an in-place confirmation, through the credential-deleting route", async () => {
     const calls: string[] = [];
     stubAccounts([connectedAccount], (url, init) => {

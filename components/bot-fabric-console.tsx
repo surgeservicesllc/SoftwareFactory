@@ -467,6 +467,7 @@ function BenchCard({
   const [projectId, setProjectId] = useState(fabric.projects[0]?.id ?? "");
   const [roleId, setRoleId] = useState(fabric.roles[0]?.id ?? "");
   const key = `assign:${bot.id}`;
+  const assignable = bot.currentReadiness === "ready";
 
   return (
     <article className="rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4">
@@ -502,12 +503,23 @@ function BenchCard({
         </Field>
         <button
           type="button"
-          disabled={!fabric.canManage || busyKey === key || !projectId || !roleId}
+          disabled={!fabric.canManage || busyKey === key || !projectId || !roleId || !assignable}
+          title={assignable ? undefined : bot.currentReadinessDetail}
           onClick={() =>
             void mutate(
               key,
               "/api/bot-assignments",
-              { method: "POST", body: JSON.stringify({ botId: bot.id, projectId, roleId }) },
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  botId: bot.id,
+                  projectId,
+                  roleId,
+                  expectedAssignmentId: null,
+                  expectedProjectId: null,
+                  expectedRevision: null,
+                }),
+              },
               `${bot.name} is posted. Assignment is routing intent; no worker runs it.`,
             )
           }
@@ -594,12 +606,26 @@ function PostingCard({
   const moveKey = `move:${assignment.id}`;
   const statusKey = `status:${assignment.id}`;
   const disabled = !fabric.canManage || busyKey === moveKey || busyKey === statusKey;
+  const reassignDisabled = disabled || assignment.status === "paused";
+  const reassignTitle = assignment.status === "paused"
+    ? "Resume this posting before moving it or changing its role."
+    : undefined;
 
   function reassign(projectId: string, roleId: string, successMessage: string) {
     void mutate(
       moveKey,
       "/api/bot-assignments",
-      { method: "POST", body: JSON.stringify({ botId: bot.id, projectId, roleId }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          botId: bot.id,
+          projectId,
+          roleId,
+          expectedAssignmentId: assignment.id,
+          expectedProjectId: assignment.projectId,
+          expectedRevision: assignment.revision,
+        }),
+      },
       successMessage,
     );
   }
@@ -618,7 +644,8 @@ function PostingCard({
           <select
             id={`move-${assignment.id}`}
             value={assignment.projectId}
-            disabled={disabled}
+            disabled={reassignDisabled}
+            title={reassignTitle}
             onChange={(event) =>
               reassign(
                 event.target.value,
@@ -639,7 +666,8 @@ function PostingCard({
           <select
             id={`role-${assignment.id}`}
             value={assignment.roleId}
-            disabled={disabled}
+            disabled={reassignDisabled}
+            title={reassignTitle}
             onChange={(event) =>
               reassign(
                 assignment.projectId,
@@ -670,6 +698,8 @@ function PostingCard({
                 method: "PATCH",
                 body: JSON.stringify({
                   status: assignment.status === "active" ? "paused" : "active",
+                  expectedProjectId: assignment.projectId,
+                  expectedRevision: assignment.revision,
                 }),
               },
               assignment.status === "active"
@@ -693,7 +723,14 @@ function PostingCard({
             void mutate(
               statusKey,
               `/api/bot-assignments/${assignment.id}`,
-              { method: "PATCH", body: JSON.stringify({ status: "released" }) },
+              {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: "released",
+                  expectedProjectId: assignment.projectId,
+                  expectedRevision: assignment.revision,
+                }),
+              },
               `${bot.name} returned to the bench.`,
             )
           }
@@ -1506,6 +1543,7 @@ function BotDirectory({
                 id="bot-base-url"
                 value={draft.baseUrl}
                 onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
+                required={provider.requiresBaseUrl}
                 maxLength={300}
                 inputMode="url"
                 placeholder="https://gateway.example.com/v1"
@@ -1538,7 +1576,11 @@ function BotDirectory({
                 <button
                   type="submit"
                   disabled={
-                    busyKey === "register" || !draft.name.trim() || !draft.model.trim() || needsSetup
+                    busyKey === "register"
+                    || !draft.name.trim()
+                    || !draft.model.trim()
+                    || (provider.requiresBaseUrl && !draft.baseUrl.trim())
+                    || needsSetup
                   }
                   className="btn btn-primary justify-center"
                 >
@@ -2166,6 +2208,10 @@ function SubscriptionQuickConnect({
   // Which account slot the flow is currently connecting (0-based). A ref, not
   // state: the polling interval must always read the live value.
   const slotRef = useRef(0);
+  // The broker returns the exact account identity. Keep it with the slot so
+  // provisioning can persist the account-to-bot binding instead of inferring
+  // identity from a shared credential reference.
+  const accountIdRef = useRef<string | null>(null);
   const [connectedSlots, setConnectedSlots] = useState(0);
   const pollRef = useRef<number | null>(null);
 
@@ -2203,6 +2249,7 @@ function SubscriptionQuickConnect({
         body: JSON.stringify({
           provider: providerId,
           credential: slot === 0 ? "subscription" : `subscription_${slot + 1}`,
+          ...(accountIdRef.current ? { aiAccountId: accountIdRef.current } : {}),
           additional,
         }),
       });
@@ -2235,6 +2282,10 @@ function SubscriptionQuickConnect({
 
   const start = useCallback(async (slot = 0) => {
     slotRef.current = slot;
+    // The command fallback predates first-class AI accounts. It remains a
+    // supported legacy credential path, but must never reuse a stale account
+    // identity from a previous broker sign-in.
+    accountIdRef.current = null;
     setPhase("starting");
     setDetail("");
     // Already signed in from before? Then this is genuinely one click.
@@ -2303,6 +2354,7 @@ function SubscriptionQuickConnect({
             return;
           }
           slotRef.current = slot;
+          accountIdRef.current = accountId;
           await provision(false);
         }}
         onFallback={() => {

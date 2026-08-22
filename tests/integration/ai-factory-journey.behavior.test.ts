@@ -175,6 +175,7 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
   let botId = "";
   let roleId = "";
   let assignmentId = "";
+  let assignmentRevision = 0;
   let commandId = "";
 
   it("step 1 — Connect Repository: a selected repository is offered to the journey", async () => {
@@ -325,13 +326,23 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     );
     roleId = roleRows[0].id;
 
-    const { rows } = await db.query<{ id: string; bot_id: string; project_id: string; status: string }>(
-      `select id, bot_id, project_id, status::text from public.assign_bots_to_project($1::uuid, $2::uuid, $3::jsonb)`,
-      [organizationId, projectId, JSON.stringify([{ bot_id: botId, role_id: roleId }])],
+    const { rows } = await db.query<{
+      id: string; bot_id: string; project_id: string; status: string; revision: number;
+    }>(
+      `select id, bot_id, project_id, status::text, revision
+       from public.assign_bots_to_project_checked($1::uuid, $2::uuid, $3::jsonb)`,
+      [organizationId, projectId, JSON.stringify([{
+        bot_id: botId,
+        role_id: roleId,
+        expected_assignment_id: null,
+        expected_project_id: null,
+        expected_revision: null,
+      }])],
     );
 
     expect(rows).toHaveLength(1);
     assignmentId = rows[0].id;
+    assignmentRevision = Number(rows[0].revision);
     expect(rows[0].bot_id).toBe(botId);
     expect(rows[0].project_id).toBe(projectId);
     record("5 Assign Bots", `Fake Reviewer assigned to Storefront Rebuild as fake-reviewer`);
@@ -365,12 +376,14 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     await asOwner();
 
     const { rows } = await db.query<{ id: string }>(
-      `select id from public.update_bot_assignment_configuration(
-         $1::uuid, $2::uuid, $3::jsonb, null, null
+      `select id from public.update_bot_assignment_configuration_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::jsonb, null, null
        )`,
       [
         organizationId,
         assignmentId,
+        projectId,
+        assignmentRevision,
         JSON.stringify({
           preset: "reviewer",
           responsibilities: ["Review migrations", "Check RLS"],

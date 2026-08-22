@@ -266,7 +266,10 @@ describe("CommandComposer", () => {
     render(<CommandComposer />);
 
     expect(await screen.findByRole("option", { name: "No pipelines selected for this project" })).toBeInTheDocument();
-    expect(screen.getByText(/Select a pipeline for this project/)).toBeInTheDocument();
+    const pipelinePicker = screen.getByRole("combobox", { name: "Pipeline" });
+    expect(await screen.findByText(/Application has no selected pipelines\. Select one in/)).toBeInTheDocument();
+    expect(pipelinePicker).toHaveAttribute("aria-describedby", "command-pipeline-guidance");
+    expect(pipelinePicker).toBeDisabled();
     await user.type(screen.getByLabelText("What do you want done?"), "Build without implicit routing");
     expect(screen.getByRole("button", { name: "Queue command" })).toBeDisabled();
   });
@@ -497,6 +500,66 @@ describe("CommandComposer", () => {
     };
     expect(body.acceptanceCriteria).toEqual([]);
     expect(body.dependencyTaskIds).toEqual([dependencyTaskA, dependencyTaskB]);
+  });
+
+  it("submits every advanced command field with canonical criteria and dependencies", async () => {
+    const project = { id: "11111111-1111-4111-8111-111111111111", name: "Application" };
+    const dependencyId = "88888888-8888-4888-8888-888888888888";
+    const commandBodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/tasks?limit=100") {
+        return jsonResponse({
+          tasks: [{
+            id: dependencyId,
+            project,
+            status: "queued",
+            title: "Prepare the release fixture",
+          }],
+        });
+      }
+      if (url === "/api/project-pipelines") {
+        return jsonResponse({ pipelines: [selectedPipeline(project.id, "feature_build", "Feature build")] });
+      }
+      if (url === "/api/commands" && init?.method === "POST") {
+        commandBodies.push(JSON.parse(String(init.body)));
+        return jsonResponse({
+          command: { id: "44444444-4444-4444-8444-444444444444" },
+          execution: { workerDispatch: "not_applicable" },
+          orchestration: { effectiveRisk: "red", repository: "example/application" },
+          requiresOwnerApproval: true,
+        }, 202);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+    const user = userEvent.setup();
+
+    render(<CommandComposer projectContext={project} />);
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("feature_build");
+    });
+    await user.type(screen.getByLabelText("What do you want done?"), "  Ship the verified release  ");
+    await user.click(screen.getByRole("button", { name: /advanced options/i }));
+    await user.selectOptions(screen.getByLabelText("Work type"), "build_feature");
+    await user.type(
+      screen.getByLabelText(/Acceptance criteria/),
+      "  Unit tests pass  \n\nProduction remains contained   ",
+    );
+    await user.click(screen.getByRole("checkbox", { name: /Prepare the release fixture/ }));
+    await user.click(screen.getByRole("button", { name: /High · RED/ }));
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+
+    await waitFor(() => expect(commandBodies).toHaveLength(1));
+    expect(commandBodies[0]).toMatchObject({
+      acceptanceCriteria: ["Unit tests pass", "Production remains contained"],
+      commandType: "build_feature",
+      dependencyTaskIds: [dependencyId],
+      parameters: {},
+      pipelineTemplateKey: "feature_build",
+      projectId: project.id,
+      prompt: "Ship the verified release",
+      risk: "red",
+    });
   });
 
   it("opens simple: advanced fields stay behind the disclosure until asked for", async () => {

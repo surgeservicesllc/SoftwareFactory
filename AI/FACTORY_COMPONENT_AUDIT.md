@@ -255,6 +255,11 @@ says a person really installed the App on that workspace, and it is the only
 one that can ever be true of production — set by the owner ticking
 `walk_all_steps` at dispatch, settable no other way.
 
+The counts above are left as they were measured. `e3da2cd` had eight steps;
+main has since added a ninth, so a re-run reads `N of 9`. Correcting a recorded
+measurement to match today's code would make the record say something the run
+did not observe — the step count moved, the run did not.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph

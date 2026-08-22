@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,7 @@ const connectedAccount = {
 
 const readyBot = {
   id: "bot-1",
+  aiAccountId: "acc-1",
   name: "Claude Builder 1",
   provider: "anthropic",
   providerLabel: "Claude",
@@ -27,6 +28,7 @@ const readyBot = {
 function stub(options: {
   accounts?: unknown[];
   bots?: unknown[];
+  assignments?: unknown[];
   roles?: unknown[];
   projects?: unknown[];
   extra?: (url: string, init?: RequestInit) => Response | null;
@@ -46,7 +48,7 @@ function stub(options: {
         ok: true, status: 200,
         json: async () => ({
           bots: options.bots ?? [],
-          assignments: [],
+          assignments: options.assignments ?? [],
           roles: options.roles ?? [],
           projects: options.projects ?? [],
           canManage: true,
@@ -62,6 +64,48 @@ afterEach(() => {
 });
 
 describe("BotManagerHome", () => {
+  it("contains focus and gives Escape, backdrop, and the X one standalone close path", async () => {
+    stub({ accounts: [connectedAccount], bots: [readyBot] });
+    const user = userEvent.setup();
+    const { container } = render(
+      <>
+        <button type="button">Outside control</button>
+        <BotManagerHome />
+      </>,
+    );
+
+    const outside = screen.getByRole("button", { name: "Outside control" });
+    const opener = await screen.findByRole("button", { name: "Create Bot" });
+    await user.click(opener);
+
+    let dialog = await screen.findByRole("dialog", { name: "Create Bot" });
+    let close = within(dialog).getByRole("button", { name: "Close" });
+    await waitFor(() => expect(close).toHaveFocus());
+    expect(within(dialog).getAllByRole("button", { name: "Close" })).toHaveLength(1);
+    expect(dialog.parentElement).toBe(document.body);
+    expect(container).toHaveAttribute("inert", "");
+    expect(container).toHaveAttribute("aria-hidden", "true");
+
+    outside.focus();
+    expect(close).toHaveFocus();
+
+    fireEvent.mouseDown(dialog);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Create Bot" }))
+      .not.toBeInTheDocument());
+    expect(container).not.toHaveAttribute("inert");
+    expect(container).not.toHaveAttribute("aria-hidden");
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    dialog = await screen.findByRole("dialog", { name: "Create Bot" });
+    close = within(dialog).getByRole("button", { name: "Close" });
+    await waitFor(() => expect(close).toHaveFocus());
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Create Bot" }))
+      .not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+
   it("gates a signed-out visitor instead of showing a disabled empty state", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => (
       { ok: false, status: 401, json: async () => ({}) } as unknown as Response
@@ -75,6 +119,98 @@ describe("BotManagerHome", () => {
       "href", "/auth/sign-in?next=%2Fsolutions%2Fbot-manager",
     );
     expect(screen.queryByText(/build your ai team/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a bots API outage and clears the unavailable state after recovery", async () => {
+    const user = userEvent.setup();
+    let botReads = 0;
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      extra: (url) => {
+        if (url !== "/api/bots") return null;
+        botReads += 1;
+        if (botReads === 1) {
+          return {
+            ok: false, status: 503, json: async () => ({ error: { message: "offline" } }),
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            bots: [readyBot], assignments: [], roles: [], projects: [], canManage: true,
+          }),
+        } as unknown as Response;
+      },
+    });
+
+    render(<BotManagerHome />);
+
+    expect(await screen.findByRole("heading", { name: /bot fabric is unavailable/i }))
+      .toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+
+    expect(await screen.findByText(readyBot.name)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /bot fabric is unavailable/i })).toBeNull();
+    expect(botReads).toBe(2);
+  });
+
+  it("renders the vault-aware current readiness instead of the persisted check", async () => {
+    const vaultReady = {
+      ...readyBot,
+      id: "bot-vault-ready",
+      name: "Vault Ready Claude",
+      readiness: "not_connected",
+      readinessLabel: "Needs credential",
+      currentReadiness: "ready",
+      currentReadinessDetail: "The sealed credential resolves.",
+    };
+    const vaultMissing = {
+      ...readyBot,
+      id: "bot-vault-missing",
+      name: "Missing Claude",
+      readiness: "ready",
+      readinessLabel: "Ready to assign",
+      currentReadiness: "not_connected",
+      currentReadinessDetail: "The credential is absent.",
+    };
+    stub({ accounts: [connectedAccount], bots: [vaultReady, vaultMissing] });
+
+    render(<BotManagerHome />);
+
+    expect(await screen.findByText("Vault Ready Claude")).toBeInTheDocument();
+    expect(screen.getByText(/Claude · Ready to assign/)).toBeInTheDocument();
+    expect(screen.getByText(/Claude · Needs credential/)).toBeInTheDocument();
+    const readyCard = screen.getByText("Ready").parentElement!;
+    expect(within(readyCard).getByText("1")).toBeInTheDocument();
+  });
+
+  it("does not offer assignment controls for a bot that is not currently ready", async () => {
+    const unavailableBot = {
+      ...readyBot,
+      id: "bot-not-ready",
+      name: "Claude Needs Attention",
+      currentReadiness: "not_connected",
+      currentReadinessDetail: "The credential is absent.",
+    };
+    stub({
+      accounts: [connectedAccount],
+      bots: [unavailableBot],
+      roles: [{ id: "00000000-0000-4000-8000-000000000001", name: "Developer" }],
+      projects: [{ id: "00000000-0000-4000-8000-000000000002", name: "Factory" }],
+    });
+
+    render(
+      <BotManagerHome
+        projectContext={{ id: "00000000-0000-4000-8000-000000000002", name: "Factory" }}
+      />,
+    );
+
+    expect(await screen.findByText("Claude Needs Attention")).toBeInTheDocument();
+    expect(screen.getByText("Not assignable until this bot is Ready.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select Claude Needs Attention" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^add to project$/i })).toBeNull();
   });
 
   it("greets an empty organization with Build your AI team — and zero terminal anywhere", async () => {
@@ -202,6 +338,41 @@ describe("BotManagerHome", () => {
     expect((await screen.findAllByText("My Production Claude")).length).toBeGreaterThan(0);
   });
 
+  it("will not create from a completed sign-in until its exact account record is readable", async () => {
+    const json = (body: unknown) =>
+      ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+    stub({
+      extra: (url, init) => {
+        if (url === "/api/ai-accounts" && init?.method === undefined) {
+          return json({ accounts: [], canManage: true });
+        }
+        if (url === "/api/ai-accounts/connect" && init?.method === "POST") {
+          return json({ accountId: "acc-late", sessionId: "sess-late", workerWoken: true });
+        }
+        if (url === "/api/ai-accounts/sessions/sess-late") {
+          return json({ session: {
+            id: "sess-late", accountId: "acc-late", status: "connected", loginUrl: null,
+            failureReason: null, heartbeatAt: null,
+            expiresAt: "2026-08-16T23:00:00.000Z", updatedAt: "2026-08-16T22:00:00.000Z",
+          } });
+        }
+        return null;
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<BotManagerHome />);
+    await user.click(await screen.findByRole("button", { name: /connect claude/i }));
+    await user.click(screen.getByRole("button", { name: /continue to claude/i }));
+
+    const dialog = within(await screen.findByRole("dialog", { name: /claude connected/i }, {
+      timeout: 8000,
+    }));
+    expect(dialog.getByText(/exact account record has not loaded yet/i)).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: /create my first bot/i })).toBeNull();
+    expect(dialog.getByRole("button", { name: /reload connected account/i })).toBeInTheDocument();
+  });
+
   it("shows summary cards and the AI team once anything exists", async () => {
     stub({ accounts: [connectedAccount], bots: [readyBot] });
 
@@ -314,6 +485,8 @@ describe("BotManagerHome — creating a bot", () => {
     expect(within(dialog).getByRole("button", { name: /claude account 1/i })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /claude blackstone/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /codex daniel/i })).toBeNull();
+    expect(within(dialog).getByText(/the bot will be created, but will wait/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/the bot is created, but waits/i)).toBeNull();
   });
 
   it("translates the broker purpose before creating the chosen account's bot", async () => {
@@ -328,7 +501,7 @@ describe("BotManagerHome — creating a bot", () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ provisioned: true, outcome: "created" }),
+          json: async () => ({ provisioned: true, outcome: "created", botId: "bot-created" }),
         } as unknown as Response;
       },
     });
@@ -343,8 +516,10 @@ describe("BotManagerHome — creating a bot", () => {
     expect(provisioned).toEqual([{
       provider: "anthropic",
       credential: "subscription",
+      aiAccountId: "acc-1",
       additional: false,
     }]);
+    expect(await screen.findByText("Bot created.")).toBeInTheDocument();
   });
 
   it("says why it cannot create one when no account holds a credential", async () => {
@@ -378,6 +553,32 @@ describe("BotManagerHome — creating a bot", () => {
 });
 
 describe("BotManagerHome — putting a bot on a project", () => {
+  it("shows an existing open posting as assigned and offers only its manager", async () => {
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      assignments: [{
+        id: "posting-1",
+        botId: readyBot.id,
+        projectId: project.id,
+        status: "active",
+      }],
+      roles: [role],
+      projects: [project],
+    });
+
+    render(<BotManagerHome />);
+
+    expect(await screen.findByText(`Assigned to ${project.name}`)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /manage assignment/i })).toHaveAttribute(
+      "href",
+      `/solutions/portfolio/${project.id}`,
+    );
+    expect(screen.queryByRole("button", { name: `Select ${readyBot.name}` })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^add to project$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /add \d+ to a project/i })).toBeNull();
+  });
+
   it("assigns the chosen bot through the project's own endpoint", async () => {
     const user = userEvent.setup();
     const calls: Array<{ url: string; body: unknown }> = [];
@@ -446,6 +647,7 @@ describe("BotManagerHome — putting a bot on a project", () => {
 
 const secondBot = {
   id: "bot-2",
+  aiAccountId: null,
   name: "Codex Reviewer",
   provider: "openai",
   providerLabel: "Codex",
@@ -534,12 +736,51 @@ describe("BotManagerHome — selecting one or many", () => {
     expect(screen.getByText(/needs signing in again/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
 
-    // Both are Claude, so the second asks for an additional bot rather than
-    // being told one already exists.
+    // Each request carries exact account identity. Sharing a provider does
+    // not turn the second account into an "additional" bot on the first.
     expect(provisioned).toEqual([
-      { provider: "anthropic", credential: "subscription", additional: false },
-      { provider: "anthropic", credential: "subscription_2", additional: true },
+      { provider: "anthropic", credential: "subscription", aiAccountId: "acc-1", additional: false },
+      { provider: "anthropic", credential: "subscription_2", aiAccountId: "acc-2", additional: false },
     ]);
+  });
+
+  it("counts created, linked, and already-existing provision outcomes separately", async () => {
+    const user = userEvent.setup();
+    const codexAccount = {
+      ...disconnectedAccount,
+      id: "acc-3",
+      displayName: "Codex Production",
+      credentialPurpose: "codex_2",
+      status: "connected",
+    };
+    stub({
+      accounts: [connectedAccount, needsReauthAccount, codexAccount],
+      bots: [],
+      extra: (url, init) => {
+        if (url !== "/api/bots/connect/provision" || init?.method !== "POST") return null;
+        const request = JSON.parse(String(init.body)) as { aiAccountId: string };
+        const outcome = request.aiAccountId === connectedAccount.id
+          ? "created"
+          : request.aiAccountId === needsReauthAccount.id ? "bound" : "exists";
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            provisioned: outcome === "created" || outcome === "bound",
+            outcome,
+            botId: `bot-${request.aiAccountId}`,
+          }),
+        } as unknown as Response;
+      },
+    });
+    render(<BotManagerHome />);
+
+    await user.click(await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${needsReauthAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: `Select ${codexAccount.displayName}` }));
+    await user.click(screen.getByRole("button", { name: /create 3 bots/i }));
+
+    expect(await screen.findByText("1 created, 1 linked, 1 already existed.")).toBeInTheDocument();
   });
 
   it("does not celebrate a 200 that made nothing: a skipped provision shows its sentence", async () => {
@@ -577,11 +818,118 @@ describe("BotManagerHome — selecting one or many", () => {
     expect(
       await screen.findByText(/0 created, 1 failed\. The bot could not be created: owner or admin role is required\./),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Select ${connectedAccount.displayName}` }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/your selection was kept so you can try again/i)).toBeInTheDocument();
   });
 });
 
 describe("BotManagerHome — inside the AI Factory", () => {
   const project2 = { id: "00000000-0000-4000-8000-000000000099", name: "Factory Two" };
+
+  it("adopts a starter role in the per-bot project flow instead of linking away", async () => {
+    const user = userEvent.setup();
+    const writes: Array<{ url: string; body: unknown }> = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [],
+      projects: [project],
+      extra: (url, init) => {
+        if (url === "/api/bot-roles" && init?.method === "POST") {
+          writes.push({ url, body: JSON.parse(String(init.body)) });
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ role }),
+          } as unknown as Response;
+        }
+        if (url === `/api/projects/${project2.id}/bots` && init?.method === "POST") {
+          writes.push({ url, body: JSON.parse(String(init.body)) });
+          return { ok: true, status: 201, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+
+    render(<BotManagerHome projectContext={project2} />);
+    await user.click(await screen.findByRole("button", { name: /^add to project$/i }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /add claude builder 1 to a project/i,
+    });
+    expect(within(dialog).getByText("Add your first bot role")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("link", { name: /open roles/i })).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Add starter role" }));
+    expect(await within(dialog).findByRole("combobox", { name: "Role" })).toHaveValue(role.id);
+    await user.click(within(dialog).getByRole("button", { name: /^add to project$/i }));
+
+    expect(writes[0]).toMatchObject({ url: "/api/bot-roles" });
+    expect(writes[1]).toEqual({
+      url: `/api/projects/${project2.id}/bots`,
+      body: { bots: [{ botId: readyBot.id, roleId: role.id }] },
+    });
+  });
+
+  it("adopts a starter role in the bulk project flow and keeps the selection", async () => {
+    const user = userEvent.setup();
+    const assigned: unknown[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [],
+      projects: [project],
+      extra: (url, init) => {
+        if (url === "/api/bot-roles" && init?.method === "POST") {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ role }),
+          } as unknown as Response;
+        }
+        if (url === `/api/projects/${project2.id}/bots` && init?.method === "POST") {
+          const request = JSON.parse(String(init.body)) as {
+            bots: Array<{ botId: string; roleId: string }>;
+          };
+          assigned.push(request);
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({
+              assigned: request.bots.length,
+              assignments: request.bots.map((entry) => ({
+                id: "assignment-starter-role",
+                botId: entry.botId,
+                projectId: project2.id,
+                roleId: entry.roleId,
+                status: "active",
+              })),
+            }),
+          } as unknown as Response;
+        }
+        return null;
+      },
+    });
+
+    render(<BotManagerHome projectContext={project2} />);
+    await user.click(await screen.findByRole("button", { name: `Select ${readyBot.name}` }));
+    expect(screen.getByText("Add your first bot role")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add starter role" }));
+
+    expect(await screen.findByRole("button", { name: /^add bots$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Select ${readyBot.name}` }))
+      .toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /^add bots$/i }));
+
+    expect(assigned).toEqual([{
+      bots: [{
+        botId: readyBot.id,
+        roleId: role.id,
+        expectedAssignmentId: null,
+        expectedProjectId: null,
+      }],
+    }]);
+  });
 
   it("adds the selected bots to the journey's project and returns", async () => {
     const user = userEvent.setup();
@@ -594,8 +942,24 @@ describe("BotManagerHome — inside the AI Factory", () => {
       projects: [project],
       extra: (url, init) => {
         if (init?.method === "POST" && url.includes(`/projects/${project2.id}/bots`)) {
-          assigned.push(JSON.parse(String(init.body)));
-          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+          const request = JSON.parse(String(init.body)) as {
+            bots: Array<{ botId: string; roleId: string }>;
+          };
+          assigned.push(request);
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({
+              assigned: request.bots.length,
+              assignments: request.bots.map((entry, index) => ({
+                id: `assignment-${index}`,
+                botId: entry.botId,
+                projectId: project2.id,
+                roleId: entry.roleId,
+                status: "active",
+              })),
+            }),
+          } as unknown as Response;
         }
         return null;
       },
@@ -611,23 +975,32 @@ describe("BotManagerHome — inside the AI Factory", () => {
     await user.click(screen.getByRole("button", { name: /^add bots$/i }));
 
     expect(assigned).toEqual([
-      { bots: [{ botId: readyBot.id, roleId: role.id }, { botId: secondBot.id, roleId: role.id }] },
+      {
+        bots: [
+          { botId: readyBot.id, roleId: role.id, expectedAssignmentId: null, expectedProjectId: null },
+          { botId: secondBot.id, roleId: role.id, expectedAssignmentId: null, expectedProjectId: null },
+        ],
+      },
     ]);
     expect(finished).toBe(1);
   });
 
-  it("creates a bot for a selected account first, then assigns what appeared", async () => {
+  it("creates a bot for a selected account first, then assigns the returned exact id", async () => {
     /*
-     * The provision endpoint answers "made one" or "already had one" rather
-     * than naming a row, so the new bot is identified by the id that appears
-     * between the two reads of /api/bots. Inventing one from the account would
-     * be a guess that assigns the wrong bot.
+     * The provision endpoint names the exact row. A roster refresh verifies
+     * that same id rather than treating an unrelated concurrent arrival as
+     * the selected account's bot.
      */
     const user = userEvent.setup();
     const assigned: unknown[] = [];
     const provisioned: unknown[] = [];
     let botsRead = 0;
-    const newBot = { ...readyBot, id: "bot-new", name: "Claude Builder 2" };
+    const newBot = {
+      ...readyBot,
+      id: "bot-new",
+      aiAccountId: needsReauthAccount.id,
+      name: "Claude Builder 2",
+    };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/ai-accounts") {
@@ -640,7 +1013,7 @@ describe("BotManagerHome — inside the AI Factory", () => {
         provisioned.push(JSON.parse(String(init?.body)));
         return {
           ok: true, status: 200,
-          json: async () => ({ provisioned: true, outcome: "created" }),
+          json: async () => ({ provisioned: true, outcome: "created", botId: newBot.id }),
         } as unknown as Response;
       }
       if (url === "/api/bots") {
@@ -654,8 +1027,24 @@ describe("BotManagerHome — inside the AI Factory", () => {
         } as unknown as Response;
       }
       if (init?.method === "POST" && url.includes(`/projects/${project2.id}/bots`)) {
-        assigned.push(JSON.parse(String(init.body)));
-        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        const request = JSON.parse(String(init.body)) as {
+          bots: Array<{ botId: string; roleId: string }>;
+        };
+        assigned.push(request);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            assigned: request.bots.length,
+            assignments: request.bots.map((entry, index) => ({
+              id: `assignment-new-${index}`,
+              botId: entry.botId,
+              projectId: project2.id,
+              roleId: entry.roleId,
+              status: "active",
+            })),
+          }),
+        } as unknown as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
     }));
@@ -670,9 +1059,17 @@ describe("BotManagerHome — inside the AI Factory", () => {
     expect(provisioned).toEqual([{
       provider: "anthropic",
       credential: "subscription_2",
-      additional: true,
+      aiAccountId: needsReauthAccount.id,
+      additional: false,
     }]);
-    expect(assigned).toEqual([{ bots: [{ botId: newBot.id, roleId: role.id }] }]);
+    expect(assigned).toEqual([{
+      bots: [{
+        botId: newBot.id,
+        roleId: role.id,
+        expectedAssignmentId: null,
+        expectedProjectId: null,
+      }],
+    }]);
   });
 
   it("scopes the per-bot assignment dialog to the journey's project", async () => {

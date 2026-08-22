@@ -1,5 +1,120 @@
 # Architecture
 
+## Current release boundary — exact bot identity and database containment
+
+Application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on
+`main` and is served by READY Vercel production deployment
+`dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2`. GitHub deployment `6036292508` and status
+`17160408639` bind the exact commit to
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and its
+stable aliases. The database half remains unhosted. Exact-head CI run
+`32570540183` is red because its LF migration chain exposed non-canonical
+`pg_proc.prosrc` hashes; all three browser/accessibility shards passed.
+
+The application and protected forward migrations make subscription identity a
+database fact. Authenticated managers call `ensure_ai_account_bot` with the exact tenant
+AI-account UUID; PostgreSQL derives the provider and credential slot, returns
+the exact bot UUID, and enforces organization/account/provider/reference
+coherence. A default/non-additional request reuses that account's bound bot or
+may adopt one and only one unambiguous matching legacy bot in place, preserving
+its UUID, assignments, and history. An explicit additional request creates a
+distinct bot with the same exact account binding. Similar provider names or
+credential references never substitute for the account identity.
+
+Both `bots` and `bot_assignments` carry positive revisions initialized at 1;
+BEFORE UPDATE triggers increment them monotonically and refuse overflow. The
+checked assignment boundaries lock the current open posting and compare its
+assignment UUID, project UUID, and revision before delegating inside the same
+transaction to the established audited mutation. Configuration, lifecycle,
+and execution-preference edits use the same comparison, and all checked edit
+paths refuse released rows. Client-callable history is therefore immutable and
+stale managers fail instead of restoring an obsolete role, grant, status,
+model, or work effort.
+
+Readiness is computed from environment-or-vault credential presence on the
+server and persisted only by
+`record_bot_readiness_preserving_disabled`. That RPC is executable only by
+`service_role`, carries the initiating owner/admin user for authorization and
+audit, locks the bot, and compares the exact revision, account UUID, provider,
+model, credential reference, and base URL that were evaluated. A stale check
+fails; a check cannot author `Disabled`; an already Disabled bot is returned
+unchanged. No opened credential value enters a bot/readiness response,
+readiness detail, bot row, or activity row. Ready remains configuration
+evidence, not a live provider call or executor.
+
+This is deliberately an EXPAND compatibility change. Legacy registration,
+assignment, and readiness mutation definitions, signatures, security mode,
+pinned search paths, and exact ACLs stay unchanged. In particular, all six
+legacy assignment/readiness RPCs retain their authenticated-only execute grant
+and their public/anon/service-role denials while checked wrappers and the
+service-only readiness recorder are added. This keeps the currently deployed
+application working across a migration-first cutover, at the bounded cost that
+old callers can still bypass revision tokens and service-only readiness. A
+separately approved forward CONTRACT migration may revoke those grants only
+after the exact replacement application is deployed and accepted.
+
+The read side obtains the complete open-assignment roster: released history is
+filtered in PostgreSQL, results are keyset-paged by assignment UUID until an
+empty terminal page even when an intermediate response is short, and invalid
+cursor progress or the bounded 100-data-page guard fails the whole read. Only
+then does the snapshot assert `assignmentsComplete`. The assignment-derived
+Assign and Configure steps therefore fail closed without that proof; Connect
+separately requires a connected account and its exact bound Ready bot. Overall
+Factory completion requires that identity to continue through the exact
+selected project and an active configured assignment.
+
+The role and modal flows preserve that identity. A new posting starts from the
+Developer permission preset and prefers an organization role with the matching
+slug; existing postings retain their authored role/configuration. With zero
+roles, the inline starter control defaults to the reviewed Backend engineer
+template, saves its complete definition through `/api/bot-roles`, and assigns
+the returned UUID only to blank selected drafts. AI Factory owns the sole
+full-app modal/focus boundary; embedded roster, assignment, configuration, and
+starter-role surfaces replace content inside it and never nest another dialog.
+
+The owner-screenshot defect was a presentation-layer identity shortcut:
+`ProjectBots` treated a similar `credentialRef` as an exact AI-account link and
+hid the repair control. An unbound Ready legacy bot could be assigned while AI
+Factory correctly kept steps 5-7 incomplete. The local fix removes that
+inference and exposes the existing exact `/api/bots/connect/provision`
+Link-or-repair/adoption path. It awaits the parent refresh and provides an
+accessible **Return to AI Factory** action. The affected completion predicate
+remains connected account + exact `aiAccountId` + current Ready + project
+assignment.
+
+This containment is frozen in the current unpublished candidate. Focused UI passes 75/75; focused
+ESLint, full typecheck, and lint/typecheck/build are green. The root full suite
+passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. A first
+contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the full
+rerun.
+
+The account-connect component serializes start, retry, close, and unmount
+cleanup. Every async read is fenced by exact session UUID and generation, so a
+late superseded poll cannot mutate state or report Connected. Close blocks a
+racing retry and waits for an in-flight start before cancelling its exact
+session; a failed cancellation keeps the overlay open and resumes polling.
+
+The protected forward files are local and unapplied at these exact repository
+SHA-256 identities:
+
+- ACL normalizer `20260822000150` —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- EXPAND `20260822000200` —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- CONTRACT `20260822000300` —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Every migration and hosted guard hashes a CRLF/CR-to-LF canonicalized
+`pg_proc.prosrc`, then verifies the transparent function and trigger catalog.
+Native PostgreSQL 17.10 and 18.4 full chains pass. The exact order is 00150,
+00200, exact-app signed-in acceptance, then 00300. Broad apply refuses to
+introduce any protected file. The repaired forward candidate is not yet pushed
+or deployed, and no hosted database mutation has occurred. Its exact identity,
+green CI, and fresh RED authorization are required. Runtime behavior,
+linked-database lint, application health, and containment remain separate
+mandatory post-apply gates. No worker, graph executor, provider-login protocol,
+autonomy control, approval, merge, deployment, or rollback authority changes.
+
 ## Current release boundary — immutable Factory command routing (ADR-106)
 
 `POST /api/commands/route` is an authenticated, same-origin, organization-

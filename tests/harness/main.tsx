@@ -23,6 +23,7 @@ import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
+import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
@@ -35,6 +36,7 @@ import { SafetyControls } from "@/components/safety-controls";
 import { AgentsConsole } from "@/components/agents-console";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { AppShell } from "@/components/app-shell";
+import { SiteHeader } from "@/components/marketing/site-header";
 import { BacklogConsole } from "@/components/backlog-console";
 import { ConnectionsConsole } from "@/components/connections-console";
 import { ProjectBots } from "@/components/project-bots";
@@ -169,6 +171,20 @@ function serveFixtures() {
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
+    if (url.includes("/api/project-agents")) {
+      return json({
+        available: true,
+        canManage: true,
+        selections: [{
+          id: "dddddddd-2222-4222-8222-222222222222",
+          projectId: PROJECT_ID,
+          agentId: AGENTS[0].id,
+          agentName: AGENTS[0].name,
+          agentRole: AGENTS[0].role,
+          selectedAt: "2026-08-22T00:00:00.000Z",
+        }],
+      });
+    }
     if (url.includes("/api/agents?limit=100")) return json({ agents: FACTORY_BRIEFING_AGENTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });
     if (url.includes("/api/activity")) return json({ events: ACTIVITY });
@@ -234,6 +250,70 @@ const CASES: Record<string, () => React.ReactElement> = {
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
+  /*
+   * The resume review panel only exists after an upload, so the job-seeker
+   * case above never renders it and it had no width coverage at all. Its
+   * content is the widest thing on that page — a long employment line and a
+   * comma-joined skills list — which is exactly the shape that overflows a
+   * 320px column.
+   */
+  "resume-review": () => (
+    <InShell>
+      <ResumeReviewPanel
+        busy={false}
+        onApply={() => {}}
+        onDismiss={() => {}}
+        extraction={{
+          id: "a0000000-0000-4000-8000-0000000000e1",
+          status: "reviewed",
+          model: "claude-opus-5",
+          detail: "Reviewed by claude-opus-5.",
+          proposal: {
+            fullName: "Dana Okafor",
+            email: "dana.okafor@example.com",
+            phone: "+1 (415) 555-0148",
+            linkedinUrl: "https://www.linkedin.com/in/danaokafor",
+            location: "Oakland, CA",
+            summary:
+              "Platform engineer with eleven years building developer infrastructure at scale, "
+              + "most recently leading the migration of four hundred repositories onto a shared "
+              + "continuous integration platform.",
+            employmentHistory: [
+              {
+                organization: "Northwind Systems International",
+                title: "Staff Platform Engineer",
+                started: "2021",
+                ended: "Present",
+              },
+              {
+                organization: "Helio Labs",
+                title: "Senior Software Engineer",
+                started: "2017",
+                ended: "2021",
+              },
+            ],
+            skills: ["Go", "TypeScript", "PostgreSQL", "Terraform", "Kubernetes", "Distributed systems"],
+            technologies: ["Next.js", "Supabase", "GitHub Actions"],
+          },
+          sources: {
+            fullName: "pattern",
+            email: "pattern",
+            phone: "pattern",
+            linkedinUrl: "pattern",
+            location: "pattern",
+            summary: "model",
+            employmentHistory: "model",
+            skills: "pattern",
+            technologies: "model",
+          },
+          proposedFieldCount: 9,
+          characterCount: 4200,
+          truncated: false,
+          appliedAt: null,
+        }}
+      />
+    </InShell>
+  ),
   "bot-fabric": () => <InShell><BotFabricConsole /></InShell>,
   "bot-manager": () => <InShell><BotManagerHome /></InShell>,
   /*
@@ -308,6 +388,26 @@ const CASES: Record<string, () => React.ReactElement> = {
     <div className="bg-background p-4">
       <AiAccountsPanel canManage onChanged={() => {}} />
     </div>
+  ),
+  /*
+   * The global header as a signed-in super administrator sees it.
+   *
+   * The browser suite browses signed out, so this state had no coverage above
+   * the unit tests at all — and it is the one the owner specified: AI Factory,
+   * Job Seeker, Admin, then the badge, the address and the account controls.
+   * Deliberately not in the layout sweep's CASES: it is checked by one test
+   * that reads the entries, rather than by the click-everything measurement,
+   * whose sweep would find the sign-out button.
+   */
+  "site-header": () => (
+    <SiteHeader
+      viewer={{
+        signedIn: true,
+        email: "owner@example.org",
+        displayName: null,
+        isSuperAdmin: true,
+      }}
+    />
   ),
   "app-shell": () => (
     <AppShell viewer={{ signedIn: true, email: "owner@example.org", isSuperAdmin: true }}>

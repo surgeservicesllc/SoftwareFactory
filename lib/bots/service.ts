@@ -12,6 +12,7 @@ import {
   type BotReadiness,
 } from "@/lib/bots/readiness";
 import { fromDatabaseRiskLevel } from "@/lib/bots/schemas";
+import { isMissingDatabaseColumn } from "@/lib/bots/schema-compat";
 import type {
   BotFabricSnapshot,
   SerializedAssignment,
@@ -43,17 +44,28 @@ export function canManageBotFabric(role: string): boolean {
   return (MANAGER_ROLES as readonly string[]).includes(role);
 }
 
+type QueryResult = {
+  data: unknown;
+  error: DatabaseError | null;
+};
+
+type OrderedQuery = {
+  order: (
+    column: string,
+    options: { ascending: boolean },
+  ) => OrderedQuery;
+  limit: (count: number) => PromiseLike<QueryResult>;
+};
+
+type FilteredOrderedQuery = OrderedQuery & {
+  neq: (column: string, value: string) => FilteredOrderedQuery;
+  gt: (column: string, value: string) => FilteredOrderedQuery;
+};
+
 type SupabaseLikeClient = {
   from: (table: string) => {
     select: (columns: string) => {
-      eq: (column: string, value: string) => {
-        order: (
-          column: string,
-          options: { ascending: boolean },
-        ) => {
-          limit: (count: number) => PromiseLike<{ data: unknown; error: DatabaseError | null }>;
-        };
-      };
+      eq: (column: string, value: string) => FilteredOrderedQuery;
     };
   };
 };
@@ -89,6 +101,8 @@ type RoleRow = {
 
 type AssignmentRow = {
   id: string;
+  /** Absent until 20260822000200; legacy rows serialize with token 1. */
+  revision?: number;
   bot_id: string;
   project_id: string;
   role_id: string;
@@ -159,7 +173,7 @@ export function serializeBot(
 ): SerializedBot {
   const provider = findBotProvider(row.provider);
   const credentialPresent = isPresent(row.credential_ref);
-  const current = evaluateBotReadiness({
+  const evaluated = evaluateBotReadiness({
     provider: row.provider,
     model: row.model,
     credentialRef: row.credential_ref,
@@ -167,6 +181,14 @@ export function serializeBot(
     credentialPresent,
   });
   const persisted: BotReadiness = isBotReadiness(row.readiness) ? row.readiness : "not_connected";
+  // Disabled is an owner-authored stop state, not a credential-health verdict.
+  // A recovered vault credential must never silently re-enable the bot.
+  const current = persisted === "disabled"
+    ? {
+      readiness: "disabled" as const,
+      detail: row.readiness_detail ?? "Disabled by an organization owner or administrator.",
+    }
+    : evaluated;
 
   return {
     id: row.id,
@@ -208,6 +230,7 @@ export function serializeBotRole(row: RoleRow): SerializedBotRole {
 export function serializeAssignment(row: AssignmentRow): SerializedAssignment {
   return {
     id: row.id,
+    revision: typeof row.revision === "number" && row.revision > 0 ? row.revision : 1,
     botId: row.bot_id,
     projectId: row.project_id,
     roleId: row.role_id,
@@ -251,13 +274,199 @@ async function readTable<Row>(
 }
 
 /**
+ * Read a tenant table to a terminal empty page using its unique id as the
+ * cursor. A short page is not terminal proof because PostgREST can enforce a
+ * server-side row cap below the requested limit.
+ */
+async function readCompleteTable<Row extends { id: string }>(
+  client: SupabaseLikeClient,
+  table: string,
+  columns: string,
+  organizationId: string,
+): Promise<Row[]> {
+  const pageSize = 200;
+  const maximumDataPages = 100;
+  const rows: Row[] = [];
+  let afterId: string | null = null;
+
+  for (let pageNumber = 0; pageNumber <= maximumDataPages; pageNumber += 1) {
+    let query = client
+      .from(table)
+      .select(columns)
+      .eq("organization_id", organizationId);
+    if (afterId !== null) query = query.gt("id", afterId);
+    const { data, error } = await query.order("id", { ascending: true }).limit(pageSize);
+    if (error) throw new BotFabricQueryError(error);
+
+    const page = (data ?? []) as Row[];
+    if (page.length === 0) return rows;
+    if (pageNumber === maximumDataPages) break;
+
+    let previousId: string | null = afterId;
+    for (const row of page) {
+      if (typeof row.id !== "string"
+        || row.id.length === 0
+        || (previousId !== null && row.id <= previousId)) {
+        throw new BotFabricQueryError({
+          code: `${table}_pagination_invalid`,
+          message: `The ${table} roster could not be read completely.`,
+        });
+      }
+      previousId = row.id;
+    }
+
+    rows.push(...page);
+    afterId = previousId;
+  }
+
+  throw new BotFabricQueryError({
+    code: `${table}_pagination_limit`,
+    message: `The ${table} roster exceeded its safe read boundary.`,
+  });
+}
+
+function sortNamedRows<Row extends { id: string; name: string }>(rows: Row[]): Row[] {
+  return rows.sort((left, right) => (
+    left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+  ));
+}
+
+async function readBots(
+  client: SupabaseLikeClient,
+  organizationId: string,
+): Promise<BotRow[]> {
+  const baseColumns =
+    "id,name,provider,model,credential_ref,base_url,readiness,readiness_detail,last_checked_at,notes";
+  try {
+    return sortNamedRows(await readCompleteTable<BotRow>(
+      client,
+      "bots",
+      `${baseColumns},ai_account_id,created_at`,
+      organizationId,
+    ));
+  } catch (error) {
+    if (!(error instanceof BotFabricQueryError)
+      || !isMissingDatabaseColumn(error.databaseError, "ai_account_id")) {
+      throw error;
+    }
+    // Very old hosted schemas predate account identity. Keep the fleet visible
+    // with a null account link; never smooth over any other read failure.
+    return sortNamedRows(await readCompleteTable<BotRow>(
+      client,
+      "bots",
+      `${baseColumns},created_at`,
+      organizationId,
+    ));
+  }
+}
+
+async function readRoles(
+  client: SupabaseLikeClient,
+  organizationId: string,
+): Promise<RoleRow[]> {
+  return sortNamedRows(await readCompleteTable<RoleRow>(
+    client,
+    "bot_roles",
+    "id,name,slug,summary,instructions,risk_ceiling,capabilities,created_at,updated_at",
+    organizationId,
+  ));
+}
+
+/**
+ * Read the complete open roster, not an arbitrary history prefix.
+ *
+ * The table keeps released postings forever as audit-supporting history. If
+ * the generic bounded read takes the oldest 500 rows before filtering those
+ * records, a newer active posting can disappear and every consumer can make a
+ * false completion or availability decision. Apply the status predicate in
+ * PostgreSQL first, then keyset-page on the unique assignment id until the
+ * database returns an empty page. Deliberately do not stop on a short page:
+ * PostgREST may impose a lower server-side row ceiling than the requested page
+ * size, and treating that short page as complete recreates the same defect.
+ *
+ * This is a rolling read, not a transaction snapshot. Its completeness marker
+ * proves that this ordered traversal reached a terminal page; ordinary changes
+ * committed after a page was read appear on the next refresh. The page guard
+ * is a denial-of-service boundary, not a completeness shortcut. Reaching it
+ * fails the entire fabric read, so no caller can interpret a partial roster as
+ * an empty or completed one.
+ */
+async function readOpenAssignments(
+  client: SupabaseLikeClient,
+  organizationId: string,
+): Promise<AssignmentRow[]> {
+  const pageSize = 250;
+  // At the requested page size this permits 25,000 open postings, followed by
+  // one terminal-page proof. More than that—or a server cap so low that 100
+  // data pages cannot finish—fails closed.
+  const maximumDataPages = 100;
+  const rows: AssignmentRow[] = [];
+  let afterId: string | null = null;
+  let revisionAvailable = true;
+
+  const baseColumns =
+    "id,bot_id,project_id,role_id,status,assigned_at,released_at,preset,responsibilities,"
+    + "instructions,repository_access,branch_strategy,can_open_pull_request,"
+    + "can_merge_pull_request,pipeline_access,environment_access,tools,"
+    + "requires_human_approval,max_concurrent_tasks,priority,model,work_effort";
+
+  const readPage = async (includeRevision: boolean): Promise<QueryResult> => {
+    let query = client
+      .from("bot_assignments")
+      .select(includeRevision ? `id,revision,${baseColumns.slice(3)}` : baseColumns)
+      .eq("organization_id", organizationId)
+      .neq("status", "released");
+    if (afterId !== null) query = query.gt("id", afterId);
+    return query.order("id", { ascending: true }).limit(pageSize);
+  };
+
+  for (let pageNumber = 0; pageNumber <= maximumDataPages; pageNumber += 1) {
+    let result = await readPage(revisionAvailable);
+    if (revisionAvailable && isMissingDatabaseColumn(result.error, "revision")) {
+      revisionAvailable = false;
+      result = await readPage(false);
+    }
+    const { data, error } = result;
+    if (error) throw new BotFabricQueryError(error);
+
+    const page = (data ?? []) as AssignmentRow[];
+    if (page.length === 0) return rows;
+
+    // The extra query after 100 data pages exists only to prove termination.
+    // Any row on it means the bounded read is incomplete, so do not serialize
+    // that prefix or imply that its progress calculations are authoritative.
+    if (pageNumber === maximumDataPages) break;
+
+    const nextAfterId = page.at(-1)?.id;
+    if (
+      typeof nextAfterId !== "string"
+      || nextAfterId.length === 0
+      || (afterId !== null && nextAfterId <= afterId)
+    ) {
+      throw new BotFabricQueryError({
+        code: "bot_assignments_pagination_invalid",
+        message: "The open bot-assignment roster could not be read completely.",
+      });
+    }
+
+    rows.push(...page);
+    afterId = nextAfterId;
+  }
+
+  throw new BotFabricQueryError({
+    code: "bot_assignments_pagination_limit",
+    message: "The open bot-assignment roster exceeded its safe read boundary.",
+  });
+}
+
+/**
  * Builds the credential-presence test for one organization: a reference is
  * present if the server environment holds it, or if a signed-in / pasted
  * credential for that same variable exists in the vault. Stored credentials
  * are opened here through the same overlay the provider-status route uses, so
  * the fleet and the providers tab can never disagree about a connection.
  */
-async function credentialPresenceForOrganization(
+export async function credentialPresenceForOrganization(
   organizationId: string,
 ): Promise<CredentialPresence> {
   const overlay = await loadStoredCredentialOverlay(organizationId);
@@ -285,33 +494,9 @@ export async function loadBotFabric(
   const [isPresent, [bots, roles, assignments, projects]] = await Promise.all([
     credentialPresenceForOrganization(organizationId),
     Promise.all([
-    readTable<BotRow>(
-      supabase,
-      "bots",
-      "id,name,provider,model,credential_ref,base_url,readiness,readiness_detail,last_checked_at,notes,ai_account_id,created_at",
-      organizationId,
-      "name",
-      200,
-    ),
-    readTable<RoleRow>(
-      supabase,
-      "bot_roles",
-      "id,name,slug,summary,instructions,risk_ceiling,capabilities,created_at,updated_at",
-      organizationId,
-      "name",
-      200,
-    ),
-    readTable<AssignmentRow>(
-      supabase,
-      "bot_assignments",
-      "id,bot_id,project_id,role_id,status,assigned_at,released_at,preset,responsibilities,"
-      + "instructions,repository_access,branch_strategy,can_open_pull_request,"
-      + "can_merge_pull_request,pipeline_access,environment_access,tools,"
-      + "requires_human_approval,max_concurrent_tasks,priority,model,work_effort",
-      organizationId,
-      "assigned_at",
-      500,
-    ),
+    readBots(supabase, organizationId),
+    readRoles(supabase, organizationId),
+    readOpenAssignments(supabase, organizationId),
     readTable<ProjectRow>(
       supabase,
       "projects",
@@ -326,9 +511,8 @@ export async function loadBotFabric(
   return {
     bots: bots.map((row) => serializeBot(row, isPresent)),
     roles: roles.map(serializeBotRole),
-    assignments: assignments
-      .map(serializeAssignment)
-      .filter((assignment) => assignment.status !== "released"),
+    assignments: assignments.map(serializeAssignment),
+    assignmentsComplete: true,
     projects: projects
       .filter((project) => project.status !== "archived")
       .map(serializeProject),

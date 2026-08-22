@@ -58,6 +58,30 @@ describe("normalizeCredentialRef", () => {
     );
   });
 
+  it("accepts numbered subscription variables emitted for additional accounts", () => {
+    expect(normalizeCredentialRef("softwarefactory_claude_code_oauth_token_2")).toBe(
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2",
+    );
+    expect(normalizeCredentialRef("SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_47")).toBe(
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_47",
+    );
+    expect(normalizeCredentialRef("SOFTWAREFACTORY_CODEX_AUTH_JSON_9999")).toBe(
+      "SOFTWAREFACTORY_CODEX_AUTH_JSON_9999",
+    );
+  });
+
+  it("refuses malformed subscription slot suffixes", () => {
+    for (const reference of [
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_0",
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_1",
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_01",
+      "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_10000",
+      "SOFTWAREFACTORY_CODEX_AUTH_JSON_SECOND",
+    ]) {
+      expectCredentialRejection(reference, "credential_ref_not_allowed");
+    }
+  });
+
   it("treats an absent reference as valid and null", () => {
     expect(normalizeCredentialRef(null)).toBeNull();
     expect(normalizeCredentialRef(undefined)).toBeNull();
@@ -100,6 +124,12 @@ describe("isCredentialPresent", () => {
   it("reports presence without exposing the value", () => {
     setEnv("BOT_CREDENTIAL_PRESENT_FIXTURE", "not-a-real-value");
     expect(isCredentialPresent("BOT_CREDENTIAL_PRESENT_FIXTURE")).toBe(true);
+  });
+
+  it("resolves a numbered subscription variable without exposing its value", () => {
+    const reference = "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2";
+    setEnv(reference, "opened-subscription-token");
+    expect(isCredentialPresent(reference)).toBe(true);
   });
 
   it("treats an unset or blank variable as absent", () => {

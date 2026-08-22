@@ -96,6 +96,45 @@ describe("durable command to factory routing", () => {
     await db.query("select set_config('request.jwt.claim.sub', '', false)");
   }
 
+  async function markBotReady(targetBotId: string, detail: string) {
+    const { rows } = await db.query<{
+      ai_account_id: string | null;
+      base_url: string | null;
+      credential_ref: string | null;
+      model: string;
+      provider: string;
+      revision: number;
+    }>(`
+      select ai_account_id, base_url, credential_ref, model, provider::text, revision
+      from public.bots where id = $1::uuid and organization_id = $2::uuid
+    `, [targetBotId, organizationId]);
+    const bot = rows[0];
+    await db.exec("reset role");
+    await db.exec("set role service_role");
+    try {
+      await db.query(`
+        select id from public.record_bot_readiness_preserving_disabled(
+          $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::uuid,
+          $6::public.bot_provider, $7::text, $8::text, $9::text,
+          'ready'::public.bot_readiness, $10::text
+        )
+      `, [
+        organizationId,
+        targetBotId,
+        ownerId,
+        Number(bot.revision),
+        bot.ai_account_id,
+        bot.provider,
+        bot.model,
+        bot.credential_ref,
+        bot.base_url,
+        detail,
+      ]);
+    } finally {
+      await asOwner();
+    }
+  }
+
   function commandParameters() {
     const plan = createPhase1CExecutionPlan("build_feature", {});
     return JSON.stringify({
@@ -273,10 +312,7 @@ describe("durable command to factory routing", () => {
       [organizationId],
     );
     botId = bot.rows[0].id;
-    await db.query(
-      "select id from public.record_bot_readiness($1, $2, 'ready'::public.bot_readiness, 'Synthetic check passed.')",
-      [organizationId, botId],
-    );
+    await markBotReady(botId, "Synthetic check passed.");
 
     const role = await db.query<{ id: string }>(
       `select id from public.save_bot_role(
@@ -289,7 +325,7 @@ describe("durable command to factory routing", () => {
     roleId = role.rows[0].id;
 
     const assignment = await db.query<{ id: string }>(
-      `select id from public.assign_bots_to_project($1::uuid, $2::uuid, $3::jsonb)`,
+      `select id from public.assign_bots_to_project_checked($1::uuid, $2::uuid, $3::jsonb)`,
       [organizationId, projectId, JSON.stringify([{
         bot_id: botId,
         role_id: roleId,
@@ -301,6 +337,9 @@ describe("durable command to factory routing", () => {
         requires_human_approval: true,
         max_concurrent_tasks: 1,
         priority: 1,
+        expected_assignment_id: null,
+        expected_project_id: null,
+        expected_revision: null,
       }])],
     );
     assignmentId = assignment.rows[0].id;
@@ -580,12 +619,9 @@ describe("durable command to factory routing", () => {
        )`,
       [organizationId],
     );
-    await db.query(
-      "select id from public.record_bot_readiness($1, $2, 'ready'::public.bot_readiness, 'Alternate check passed.')",
-      [organizationId, alternateBot.rows[0].id],
-    );
+    await markBotReady(alternateBot.rows[0].id, "Alternate check passed.");
     const alternateAssignment = await db.query<{ id: string }>(
-      "select id from public.assign_bots_to_project($1::uuid, $2::uuid, $3::jsonb)",
+      "select id from public.assign_bots_to_project_checked($1::uuid, $2::uuid, $3::jsonb)",
       [organizationId, projectId, JSON.stringify([{
         bot_id: alternateBot.rows[0].id,
         role_id: roleId,
@@ -597,6 +633,9 @@ describe("durable command to factory routing", () => {
         requires_human_approval: true,
         max_concurrent_tasks: 1,
         priority: 3,
+        expected_assignment_id: null,
+        expected_project_id: null,
+        expected_revision: null,
       }])],
     );
 
@@ -731,10 +770,15 @@ describe("durable command to factory routing", () => {
          id, organization_id, provider, auth_method, display_name,
          status, credential_purpose, created_by
        ) values ($1, $2, 'openai', 'subscription', 'Needs Sign-in Again',
-                 'needs_reauth', 'routing_reauth', $3)`,
+                 'needs_reauth', 'codex_2', $3)`,
       [reauthAccountId, organizationId, ownerId],
     );
-    await db.query("update public.bots set ai_account_id = $1 where id = $2", [
+    await db.query(`
+      update public.bots
+      set ai_account_id = $1,
+          credential_ref = 'SOFTWAREFACTORY_CODEX_AUTH_JSON_2'
+      where id = $2
+    `, [
       reauthAccountId,
       botId,
     ]);
@@ -753,7 +797,12 @@ describe("durable command to factory routing", () => {
     ).rejects.toThrow(/selected bot is not ready/i);
 
     await asSuperuser();
-    await db.query("update public.bots set ai_account_id = null where id = $1", [botId]);
+    await db.query(`
+      update public.bots
+      set ai_account_id = null,
+          credential_ref = 'OPENAI_API_KEY'
+      where id = $1
+    `, [botId]);
     await db.query("delete from public.ai_accounts where id = $1", [reauthAccountId]);
     await asOwner();
   });

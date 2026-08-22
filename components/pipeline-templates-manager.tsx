@@ -2,8 +2,9 @@
 
 import { Check, ClipboardList, Copy, Loader2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ModalDialog } from "@/components/modal-dialog";
 import type { PipelineTemplateSummary } from "@/components/pipelines-console";
 import { Card, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -124,6 +125,7 @@ export function PipelineTemplatesManager({
   builtIns,
   projectContext,
   onSelectionChanged,
+  embedded = false,
 }: {
   builtIns: readonly PipelineTemplateSummary[];
   /**
@@ -139,6 +141,8 @@ export function PipelineTemplatesManager({
   projectContext?: { id: string; name: string } | null;
   /** Lets a caller showing the same selections refresh alongside a toggle. */
   onSelectionChanged?: () => void;
+  /** Render editor/plan stages inside an owner dialog instead of stacking one. */
+  embedded?: boolean;
 }) {
   const [custom, setCustom] = useState<CustomTemplate[] | null>(null);
   const [customReadFailed, setCustomReadFailed] = useState(false);
@@ -325,6 +329,32 @@ export function PipelineTemplatesManager({
     } finally {
       setDeleteBusy(false);
     }
+  }
+
+  if (embedded && editorSeed) {
+    return (
+      <TemplateEditorDialog
+        seed={editorSeed}
+        inline
+        onClose={() => setEditorSeed(null)}
+        onSaved={async () => {
+          setEditorSeed(null);
+          await load();
+        }}
+      />
+    );
+  }
+
+  if (embedded && planning) {
+    return (
+      <TemplatePlanDialog
+        templateKey={planning.key}
+        templateName={planning.name}
+        projectContext={projectContext}
+        inline
+        onClose={() => setPlanning(null)}
+      />
+    );
   }
 
   return (
@@ -555,6 +585,7 @@ export function PipelineTemplatesManager({
       {editorSeed ? (
         <TemplateEditorDialog
           seed={editorSeed}
+          inline={false}
           onClose={() => setEditorSeed(null)}
           onSaved={async () => {
             setEditorSeed(null);
@@ -567,6 +598,7 @@ export function PipelineTemplatesManager({
           templateKey={planning.key}
           templateName={planning.name}
           projectContext={projectContext}
+          inline={false}
           onClose={() => setPlanning(null)}
         />
       ) : null}
@@ -715,16 +747,34 @@ function SelectionSummary({
   );
 }
 
-function DialogShell({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+function DialogShell({
+  label,
+  onClose,
+  children,
+  inline,
+}: {
+  label: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  inline: boolean;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  if (inline) return <section aria-label={label}>{children}</section>;
+
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={label}>
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-        <button type="button" onClick={onClose} className="btn btn-secondary btn-sm absolute right-4 top-4 size-9 px-0" aria-label="Close">
-          <X className="size-4" aria-hidden="true" />
-        </button>
-        {children}
-      </div>
-    </div>
+    <ModalDialog
+      label={label}
+      onRequestClose={onClose}
+      initialFocusRef={closeButtonRef}
+      className="fixed inset-0 z-[110] grid place-items-center overflow-y-auto bg-black/60 p-4"
+      panelClassName="relative my-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl"
+    >
+      <button ref={closeButtonRef} type="button" onClick={onClose} className="btn btn-secondary btn-sm absolute right-4 top-4 size-9 px-0" aria-label="Close">
+        <X className="size-4" aria-hidden="true" />
+      </button>
+      {children}
+    </ModalDialog>
   );
 }
 
@@ -733,10 +783,12 @@ function TemplateEditorDialog({
   seed,
   onClose,
   onSaved,
+  inline,
 }: {
   seed: EditorSeed;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
+  inline: boolean;
 }) {
   const isEdit = Boolean(seed.id);
   const [slug, setSlug] = useState(seed.slug);
@@ -790,7 +842,7 @@ function TemplateEditorDialog({
   }
 
   return (
-    <DialogShell label={isEdit ? `Edit ${seed.name}` : "New template"} onClose={onClose}>
+    <DialogShell label={isEdit ? `Edit ${seed.name}` : "New template"} onClose={onClose} inline={inline}>
       <h2 className="text-lg font-semibold text-foreground">{isEdit ? "Edit template" : "New template"}</h2>
       <p className="mt-1 text-sm text-muted">
         A template is a set of independent areas the graph engine fans out over, reduces, and
@@ -886,7 +938,9 @@ function TemplateEditorDialog({
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" aria-hidden="true" />}
             {isEdit ? "Save (bumps version)" : "Create template"}
           </button>
-          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">
+            {inline ? "Back to templates" : "Cancel"}
+          </button>
         </div>
         {error ? <p className="text-sm text-[var(--danger)]" aria-live="polite">{error}</p> : null}
       </form>
@@ -904,11 +958,13 @@ function TemplatePlanDialog({
   templateName,
   projectContext,
   onClose,
+  inline,
 }: {
   templateKey: string;
   templateName: string;
   projectContext?: { id: string; name: string } | null;
   onClose: () => void;
+  inline: boolean;
 }) {
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [projectId, setProjectId] = useState("");
@@ -992,7 +1048,7 @@ function TemplatePlanDialog({
   }
 
   return (
-    <DialogShell label={`Plan a graph from ${templateName}`} onClose={onClose}>
+    <DialogShell label={`Plan a graph from ${templateName}`} onClose={onClose} inline={inline}>
       <h2 className="text-lg font-semibold text-foreground">Plan a graph from {templateName}</h2>
       <p className="mt-1 text-sm text-muted">
         This plans a graph from the template against a project and records it — nodes, edges, and
@@ -1044,7 +1100,9 @@ function TemplatePlanDialog({
             Plan graph
           </button>
         ) : null}
-        <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Close</button>
+        <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">
+          {inline ? "Back to templates" : "Close"}
+        </button>
       </div>
       {result ? (
         <p className="mt-3 text-sm text-accent" aria-live="polite">

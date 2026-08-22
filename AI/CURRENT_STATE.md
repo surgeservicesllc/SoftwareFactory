@@ -1,6 +1,154 @@
 # Current state
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
+
+**Current release checkpoint, 2026-08-22 (ADR-111):** exact commit
+`30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, with
+`surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer.
+Vercel production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and owns
+the stable production aliases. GitHub deployment `6036292508` and status
+`17160408639` bind that production deployment to the exact commit.
+
+Exact-head CI run `32570540183` completed with failure. Browser/accessibility
+jobs `97025270171` (1/3), `97025270137` (2/3), and `97025270138` (3/3) all
+passed. Quality job `97025270055` failed during tests, so the production build
+step was skipped. The candidate defect was deterministic: migration
+`20260822000150` compared legacy `pg_proc.prosrc` hashes without canonicalizing
+line endings, and the LF Linux/PostgreSQL chain rejected all seven routines with
+`legacy bot function ACL normalization preflight failed`. Supabase Preview
+check `97025325852` also failed, but at the older
+`20260814002500_provider_credential_vault.sql` migration with SQLSTATE `42P07`
+because `provider_credentials` already exists; the identical failure predates
+this candidate and remains preview schema/ledger drift.
+
+The local cross-platform repair canonicalizes CRLF and lone CR to LF before
+every `md5(prosrc)` comparison in migrations and hosted guards, updates the
+canonical LF routine map, and pins these exact repository files:
+
+- `20260822000150_normalize_legacy_bot_function_acls.sql` —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- `20260822000200_register_bot_for_ai_account.sql` —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- `20260822000300_contract_bot_mutator_acls.sql` —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Native PostgreSQL 17.10 and 18.4 full migration chains pass with the repair.
+The repair is frozen in the current forward candidate but is not yet pushed,
+deployed, or authorized for hosted execution. No hosted database mutation has
+occurred: 00150, 00200, and 00300 remain unhosted, CONTRACT was not dispatched,
+and the old failed EXPAND must
+not be rerun.
+
+The preceding exact commit
+`4fc18d3e5ecba6f362f14a7459e588a74a84b84b` and READY deployment
+`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` remain historical application evidence.
+Protected EXPAND run `32568221857` stopped before DDL or ledger mutation at
+`LEGACY_CATALOG_READY`: `20260822000100` was present and 00200/00300 absent.
+That failure exposed the hosted all-seven direct `service_role` EXECUTE posture
+and the PostgreSQL-major-sensitive `pg_get_functiondef` deparser hashes that
+ADR-111 contains forward.
+
+**Release-candidate addendum, 2026-08-22 (Claude bot identity and Role assignment,
+ADR-108/ADR-109):** the application portion is deployed at `30d7e824`; the
+protected database sequence remains local and unhosted. AI Factory owns one
+application modal, backdrop, focus
+trap, and close/back path. Its project roster, assignment wizard, posting edit,
+and zero-role onboarding render inline in that overlay; they do not open a
+nested dialog. When an organization has no roles, the starter selector defaults
+to the reviewed **Backend engineer** template and sends that complete template
+through the existing same-origin, manager-only, audited `/api/bot-roles`
+boundary. The exact returned role UUID fills only selected drafts that still
+lack a role. This is separate from the **Developer** permission preset used for
+a new posting; an existing posting keeps its authored role and configuration,
+and a new posting with existing roles prefers a role whose slug matches the
+preset before falling back to the first available organization role.
+
+The owner screenshot exposed one UI-only identity leak: `ProjectBots` used
+`credentialRef` similarity to suppress the exact-link repair control. That let
+an unbound Ready legacy bot be assigned while AI Factory correctly held steps
+5-7 incomplete. The local fix removes the inference, exposes the existing
+exact `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the
+parent refresh, and supplies an accessible **Return to AI Factory** action. The
+affected completion predicate remains: connected account + exact
+`aiAccountId` + current Ready + project assignment.
+
+This containment is frozen in the current unpublished candidate. Focused UI
+passes 75/75; focused ESLint, full typecheck, and lint/typecheck/build are green. The root
+full suite passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. Its
+first contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+full rerun.
+
+Forward migration `20260822000200_register_bot_for_ai_account.sql` is frozen at
+SHA-256
+`658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+Its authenticated manager boundary binds every subscription bot it returns to
+the exact tenant `ai_accounts.id` and derived provider/credential slot. A
+default/non-additional request reuses that account's existing bound bot or may
+adopt one unambiguous matching legacy bot without changing its identity; an
+explicit additional request creates another distinct bot bound to the same
+account. Cross-tenant or provider/credential drift is refused. The exact
+account is the identity; provider or credential-reference similarity is not.
+`bots.revision` and
+`bot_assignments.revision` start at 1 and advance monotonically on every row
+update, with overflow refused. Assignment, status, configuration, and execution
+preference writes lock the open posting and compare its exact assignment UUID,
+  project UUID, and revision before delegating to the established audited
+  mutation. Checked edits refuse a released posting, so released history cannot
+  be reopened or rewritten through a client-callable mutation boundary. Checked
+  bulk assignment also refuses a current paused posting under lock; it must be
+  explicitly resumed through the checked status boundary before assignment or move.
+
+Readiness is server evidence. The service-role-only
+`record_bot_readiness_preserving_disabled` function also carries an owner/admin
+actor and, under the bot row lock, requires the exact bot revision, AI-account
+UUID, provider, model, credential reference, and base URL that were evaluated.
+A stale verdict fails instead of overwriting a newer configuration; a readiness
+check cannot author `Disabled`, and an already Disabled bot is returned
+unchanged. The legacy registration and mutation function definitions,
+signatures, `SECURITY DEFINER` attributes, and pinned `search_path` values are
+unchanged. This is an EXPAND migration: the exact existing authenticated-only
+execute ACLs on all six legacy assignment/readiness RPCs remain unchanged while
+authenticated revision-checked wrappers and the service-role-only readiness
+recorder are added. That temporary compatibility means the old application can
+still call unchecked mutations and the legacy readiness path; revocation is
+deferred to a separately approved forward CONTRACT migration after exact-app
+deployment and signed-in acceptance.
+
+The roster now proves completeness rather than treating a prefix as the whole
+fleet. It filters released postings in PostgreSQL, keyset-pages open postings
+by assignment UUID until an empty terminal page (including after a short
+server-capped page), and fails the entire read on invalid progress or its
+bounded page guard. Only that terminal proof sets `assignmentsComplete`; AI
+Factory fails the assignment-derived Assign and Configure steps closed without
+it. Connect remains the separate exact connected-account -> account-bound Ready
+bot proof. The combined identity continues through the exact selected project
+and revision-checked active assignment, with posting configuration evaluated
+from that same chain across reload.
+
+Broker start, retry, close, and unmount cleanup are serialized through one
+lifecycle queue. Session UUID plus generation gates discard late polls and
+callbacks from a superseded attempt. Retry cancels the exact prior session
+before starting another; close blocks a racing retry, waits for an in-flight
+start to reveal its session UUID, and keeps the overlay open/resumes polling if
+cancellation cannot be confirmed. This changes no provider login protocol or
+credential format.
+
+The prepublication working tree passed lint, typecheck, production build, 331
+Vitest files / 3,934 tests (7 skipped), and the serialized browser matrix. That
+evidence remains useful, but exact-head CI run `32570540183` supersedes it as the
+release gate and is red for the cross-platform migration-hash defect described
+above. All three exact-head browser shards remained green.
+
+The application commit was pushed and deployed; the database sequence was not.
+The protected workflow now has separate exact-file scopes for ACL normalizer
+00150, EXPAND 00200, and CONTRACT 00300. Broad apply refuses to introduce any
+of them. Before hosted execution, record the forward commit's exact identity,
+require green exact-head CI, and obtain fresh RED authorization. Runtime behavior, linked-
+database lint, application health, and kill-switch/autonomy/worker containment
+remain explicit post-apply gates. Worker/executor dispatch remains disconnected,
+all automatic actions and raw autonomous mode remain OFF, and the global kill
+switch remains ON.
 
 **Production acceptance addendum, 2026-08-21 (AI Factory):** exact candidate
 head `a020e8192d8512a1bb65112e01017047087f0528` passed all four Linux CI jobs in
@@ -408,8 +556,9 @@ apply, now 29 migrations behind (`AI/HOSTED_APPLY_RUNBOOK.md`).
 ## Published Phase 1C implementation
 
 - Next.js 16.3 App Router, React 19.2, TypeScript strict mode, Tailwind CSS 4, server-first Auth/tenant/provider boundaries, and caller-session Supabase RLS reads.
+- The global header, once signed in, carries the owner's 2026-08-19 set (ADR-112): `AI Factory` → `/solutions`, `Job Seeker` → `/job-seeker`, and `Admin` → `/solutions/admin` for a confirmed super administrator only, beside the super-admin badge, the account address, Open Console and Sign out. Visibility derives from the Supabase-verified viewer (`auth.getUser()`), and the current entry is resolved by longest-matching href so nested entries cannot both read as current. Signed out the header is unchanged.
 - The whole control plane is served under `/solutions` from `app/(portal)/`; the former `app/(console)/` group is gone. Twelve routes build there, each rendering the marketing global navigation above the console shell. Permanent redirects cover every former top-level path and its subpaths, and the GitHub return-path allowlist moved with them. `/solutions` is `noindex`, disallowed in `robots.txt`, and absent from the sitemap, which now lists marketing routes only. Each console page carries its own title so a tab no longer reads as the public home page.
-- The console sidebar column begins with the menu (ADR-090): it carries no wordmark, removed on owner instruction on 2026-08-17. The rail is chosen by viewport width (1024-1279 rails), and from 1280 a retract control at the foot of the column lets a person choose (ADR-091) — offered only on devices with a hovering fine pointer, which is how "Windows or macOS" is asked reliably, with the choice stored under `softwarefactory:sidebar-compact`. It follows the owner's 2026-08-17 design (ADR-077): top-level destinations — Overview, Projects, Pipelines, Bots, Runs, Reports, Integrations, Settings, Watch, Advanced — with collapsible subpage groups that open expanded, plus a Quick actions section (New Project, Give a bot work, Import Repository — a fourth, View Documentation, linked out to the marketing `/resources` pages and was removed by owner request on 2026-08-17). Every entry links a real page or page section; the design's subpages with no backing capability (Secrets, per-user project lists, Members/Teams/Permissions/Billing, pipeline Active/Schedules/Archived) are deliberately absent. Projects gained an Archived view (`/solutions/projects?filter=archived`, opt-in `?status=archived` on `GET /api/projects`), with unarchive pointed at the portfolio page's owner controls. `/solutions/myprojects` (owner design, 2026-08-17) renders the same live project records as collapsible rows — first row open, chevron per project — expanding into the exported `ProjectInspector`, with Import Repository / New Project page actions landing on the existing controls. `/solutions/projects` is the "All Projects" dashboard (same design set): live stat cards, All Projects / My Projects / Archived tabs, a paginated projects table with last-run and success-rate columns computed from `/api/runs` (only succeeded/failed carry a verdict) and an Open link to the portfolio detail page, plus a right rail with the by-status breakdown and the `/api/activity` feed; the add-project form stays anchored below. `GET /api/projects` exposes `updatedAt`. `/solutions/bot-usage` (same design set) lists every AI account with its latest recorded usage observation — the shared `AccountUsage` percent bars with provider reset times, derived headroom bands, connected/average-weekly summary cards, and a manager-only Refresh wired to the broker wake — with the design's plan/billing, date-range, and history affordances absent for lack of a backing model. Edit/delete controls follow ADR-078: project name/description edit (`update_project_details`, migration `20260817000100`, `PATCH /api/projects/[projectId]`, dialogs on the table and inspector), archive/unarchive in place with reasons, bot retire on the roster — while runs, activity events, and audit records remain immutable and templates are edited as code. `/solutions/pipelines` (owner pipeline goal, round 1) renders the lifecycle over saved commands — Active (worker-advanced human stages with owner-attention counts), All Pipelines (history with outcomes and durations), Templates (the graph engine's versioned templates, server-compiled topology facts, deep previews on Workflows) — with the audit and round plan tracked in `todo.md`.
+- The console sidebar column begins with the menu (ADR-090): it carries no wordmark, removed on owner instruction on 2026-08-17. The rail is chosen by viewport width (1024-1279 rails), and from 1280 a retract control at the foot of the column lets a person choose (ADR-091) — offered only on devices with a hovering fine pointer, which is how "Windows or macOS" is asked reliably, with the choice stored under `softwarefactory:sidebar-compact`. It follows the owner's 2026-08-17 design (ADR-077): top-level destinations — Overview, AI Factory, Projects, Pipelines, Bots, Job Seeker, Runs, Operations, Reports, Integrations, Secrets, Settings, Advanced — with collapsible subpage groups that open expanded. The `Watch` group was removed on owner instruction (2026-08-19) and neither page it held was stranded: Operations was promoted to a destination of its own above Reports, and Activity is still reached from Bots as `Bot Activity`, the same `/solutions/activity` page, plus a Quick actions section (New Project, Give a bot work, Import Repository — a fourth, View Documentation, linked out to the marketing `/resources` pages and was removed by owner request on 2026-08-17). Every entry links a real page or page section; the design's subpages with no backing capability (Secrets, per-user project lists, Members/Teams/Permissions/Billing, pipeline Active/Schedules/Archived) are deliberately absent. Projects gained an Archived view (`/solutions/projects?filter=archived`, opt-in `?status=archived` on `GET /api/projects`), with unarchive pointed at the portfolio page's owner controls. `/solutions/myprojects` (owner design, 2026-08-17) renders the same live project records as collapsible rows — first row open, chevron per project — expanding into the exported `ProjectInspector`, with Import Repository / New Project page actions landing on the existing controls. `/solutions/projects` is the "All Projects" dashboard (same design set): live stat cards, All Projects / My Projects / Archived tabs, a paginated projects table with last-run and success-rate columns computed from `/api/runs` (only succeeded/failed carry a verdict) and an Open link to the portfolio detail page, plus a right rail with the by-status breakdown and the `/api/activity` feed; the add-project form stays anchored below. `GET /api/projects` exposes `updatedAt`. `/solutions/bot-usage` (same design set) lists every AI account with its latest recorded usage observation — the shared `AccountUsage` percent bars with provider reset times, derived headroom bands, connected/average-weekly summary cards, and a manager-only Refresh wired to the broker wake — with the design's plan/billing, date-range, and history affordances absent for lack of a backing model. Edit/delete controls follow ADR-078: project name/description edit (`update_project_details`, migration `20260817000100`, `PATCH /api/projects/[projectId]`, dialogs on the table and inspector), archive/unarchive in place with reasons, bot retire on the roster — while runs, activity events, and audit records remain immutable and templates are edited as code. `/solutions/pipelines` (owner pipeline goal, round 1) renders the lifecycle over saved commands — Active (worker-advanced human stages with owner-attention counts), All Pipelines (history with outcomes and durations), Templates (the graph engine's versioned templates, server-compiled topology facts, deep previews on Workflows) — with the audit and round plan tracked in `todo.md`.
 - Supabase sign-up/sign-in/magic-link/sign-out/callback/onboarding, organization membership, and active-organization selection.
 - GitHub App installation start/callback, short-lived repository-ID-scoped installation tokens, bounded repository reads, signed/idempotent/redacted webhooks, transaction-serialized project linking by stable repository UUID, and an isolated branch + commit + draft-PR-only file-change flow.
 - Every interactive GitHub route is bound to the caller's exact active organization. Revoked or insufficient-permission token creation is persisted best-effort as connection loss; rate-limit errors do not falsely revoke the connection.

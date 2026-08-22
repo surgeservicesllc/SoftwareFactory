@@ -49,7 +49,10 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { slug } = await params;
   const resource = findResource(slug);
-  if (!resource) return { title: "Resource not found" };
+  // Never describe an unknown slug as a real resource. The request boundary
+  // establishes the 404 status before streaming; this remains a server-render
+  // defense if the page is invoked through another rendering path.
+  if (!resource) notFound();
   return { title: resource.title, description: resource.summary };
 }
 

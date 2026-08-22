@@ -1,13 +1,14 @@
 "use client";
 
 import { Bot, Check, ChevronDown, Loader2, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
+import { ModalDialog } from "@/components/modal-dialog";
 import { accountCanBackABot } from "@/lib/bots/accounts";
 import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
-import { findBotProvider } from "@/lib/bots/catalog";
+import { BOT_ROLE_TEMPLATES, findBotProvider } from "@/lib/bots/catalog";
 import { cn } from "@/lib/cn";
 
 /**
@@ -33,6 +34,7 @@ type AccountView = {
 
 type BotView = {
   id: string;
+  aiAccountId: string | null;
   name: string;
   provider: string;
   providerLabel: string;
@@ -40,7 +42,12 @@ type BotView = {
   readiness: string;
 };
 
-type AssignmentView = { id: string };
+type AssignmentView = {
+  id: string;
+  botId: string;
+  projectId: string;
+  status: string;
+};
 
 type RoleView = { id: string; name: string };
 type ProjectView = { id: string; name: string };
@@ -48,8 +55,9 @@ type ProjectView = { id: string; name: string };
 type FabricPayload = {
   canManage?: boolean;
   bots?: Array<{
-    id: string; name: string; provider: string; providerLabel: string;
+    id: string; aiAccountId: string | null; name: string; provider: string; providerLabel: string;
     readiness: string; readinessLabel: string;
+    currentReadiness?: string; currentReadinessDetail?: string;
   }>;
   assignments?: AssignmentView[];
   /*
@@ -61,6 +69,33 @@ type FabricPayload = {
   roles?: RoleView[];
   projects?: ProjectView[];
 };
+
+const CURRENT_READINESS_LABELS: Readonly<Record<string, string>> = {
+  ready: "Ready to assign",
+  not_connected: "Needs credential",
+  blocked: "Needs setup",
+  disabled: "Disabled",
+};
+
+/**
+ * The API carries both the last readiness check and a fresh verdict resolved
+ * against the environment plus the organization's credential vault. The
+ * roster is an action surface, so it must show the fresh verdict: a sealed
+ * Claude credential is usable even when an older persisted check still says
+ * "Needs credential", and the reverse drift must be visible too.
+ */
+function botViewFromPayload(bot: NonNullable<FabricPayload["bots"]>[number]): BotView {
+  const currentReadiness = bot.currentReadiness ?? bot.readiness;
+  return {
+    id: bot.id,
+    aiAccountId: bot.aiAccountId,
+    name: bot.name,
+    provider: bot.provider,
+    providerLabel: bot.providerLabel,
+    readiness: currentReadiness,
+    readinessLabel: CURRENT_READINESS_LABELS[currentReadiness] ?? bot.readinessLabel,
+  };
+}
 
 const CONNECTABLE = [
   {
@@ -104,9 +139,19 @@ export function BotManagerHome({
   projectContext,
   /** Called once the selection has landed on the project, to return the caller. */
   onFinished,
+  /**
+   * AI Factory already owns the modal and focus boundary. Its embedded Bot
+   * Manager stages therefore render in that shell instead of opening another
+   * fixed dialog on top of it.
+   */
+  embedded = false,
+  onBeforeOuterCloseChange,
 }: {
   projectContext?: { id: string; name: string } | null;
   onFinished?: () => void;
+  embedded?: boolean;
+  /** Lets an embedded connection veto its owner's close until it is cancelled. */
+  onBeforeOuterCloseChange?: (guard: (() => Promise<boolean>) | null) => void;
 } = {}) {
   const [accounts, setAccounts] = useState<AccountView[] | null>(null);
   const [bots, setBots] = useState<BotView[]>([]);
@@ -129,6 +174,8 @@ export function BotManagerHome({
   const [removingBotId, setRemovingBotId] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
+  const [starterRoleSlug, setStarterRoleSlug] = useState("backend");
+  const [starterRoleBusy, setStarterRoleBusy] = useState(false);
   // One or many: the assign endpoint takes up to 25 postings in one atomic
   // call, so the roster lets a person pick that many rather than repeating a
   // single-bot dialog.
@@ -142,56 +189,108 @@ export function BotManagerHome({
   const [successEditing, setSuccessEditing] = useState(false);
   const [successName, setSuccessName] = useState("");
   const [successRenameBusy, setSuccessRenameBusy] = useState(false);
+  // Reads can overlap when the page mounts while an account/bot mutation is
+  // completing. A late older roster must never undo the newer exact identity
+  // or re-offer a bot that has just received a posting.
+  const loadGenerationRef = useRef(0);
+  const modalCloseGuardRef = useRef<(() => Promise<boolean>) | null>(null);
+  const modalClosingRef = useRef(false);
+
+  const handleConnectionCloseGuardChange = useCallback((guard: (() => Promise<boolean>) | null) => {
+    modalCloseGuardRef.current = guard;
+    onBeforeOuterCloseChange?.(guard);
+  }, [onBeforeOuterCloseChange]);
+
+  const requestStandaloneModalClose = useCallback(async () => {
+    if (modalClosingRef.current) return;
+    modalClosingRef.current = true;
+    try {
+      const guard = modalCloseGuardRef.current;
+      if (guard && !(await guard())) return;
+      modalCloseGuardRef.current = null;
+      setStage({ kind: "closed" });
+    } catch {
+      // The connection surface owns the actionable cancellation error. If its
+      // guard cannot prove cancellation, keep that exact surface mounted.
+    } finally {
+      modalClosingRef.current = false;
+    }
+  }, []);
 
   const load = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
+    const isCurrent = () => loadGenerationRef.current === generation;
     try {
       const [accountsResponse, fabricResponse] = await Promise.all([
         fetch("/api/ai-accounts", { cache: "no-store" }),
         fetch("/api/bots", { cache: "no-store" }),
       ]);
-      if (accountsResponse.ok) {
-        const body = (await accountsResponse.json()) as {
-          accounts?: AccountView[]; canManage?: boolean;
-        };
-        setAccounts(body.accounts ?? []);
-        setCanManage(Boolean(body.canManage));
-        setSignedOut(false);
-      } else {
-        setAccounts([]);
-        // A signed-out visitor gets the gate, never a disabled empty state
-        // pretending they could click; any other failure is named rather
-        // than dressed up as an empty organization.
-        setSignedOut(accountsResponse.status === 401);
-        setUnavailable(accountsResponse.status !== 401);
+      if (!isCurrent()) return;
+      if (!accountsResponse.ok || !fabricResponse.ok) {
+        setAccounts((current) => current ?? []);
+        // Either protected endpoint can prove the session is gone. Every
+        // other response is a service outage, never an empty bot roster.
+        const isSignedOut = accountsResponse.status === 401 || fabricResponse.status === 401;
+        setSignedOut(isSignedOut);
+        setUnavailable(!isSignedOut);
+        return;
       }
-      if (fabricResponse.ok) {
-        const body = (await fabricResponse.json()) as FabricPayload;
-        setBots((body.bots ?? []).map((bot) => ({
-          id: bot.id,
-          name: bot.name,
-          provider: bot.provider,
-          providerLabel: bot.providerLabel,
-          readiness: bot.readiness,
-          readinessLabel: bot.readinessLabel,
-        })));
-        setAssignments(body.assignments ?? []);
-        setRoles(body.roles ?? []);
-        setProjects(body.projects ?? []);
-      }
+
+      const [accountsBody, fabricBody] = await Promise.all([
+        accountsResponse.json() as Promise<{ accounts?: AccountView[]; canManage?: boolean }>,
+        fabricResponse.json() as Promise<FabricPayload>,
+      ]);
+      if (!isCurrent()) return;
+      const nextAssignments = fabricBody.assignments ?? [];
+      const nextBots = (fabricBody.bots ?? []).map(botViewFromPayload);
+
+      setAccounts(accountsBody.accounts ?? []);
+      setCanManage(Boolean(accountsBody.canManage));
+      setBots(nextBots);
+      setAssignments(nextAssignments);
+      setRoles(fabricBody.roles ?? []);
+      setProjects(fabricBody.projects ?? []);
+      // A posting may have arrived since this browser made its selection.
+      // Remove it from the quick-action set rather than offering a move that
+      // the atomic assignment endpoint will (correctly) refuse.
+      setSelectedBotIds((current) => current.filter((botId) => (
+        nextBots.some((bot) => bot.id === botId && bot.readiness === "ready")
+        && !nextAssignments.some((assignment) => (
+          assignment.botId === botId && assignment.status !== "released"
+        ))
+      )));
+      setSignedOut(false);
+      setUnavailable(false);
     } catch {
-      setAccounts((current) => current ?? []);
+      if (isCurrent()) {
+        setAccounts((current) => current ?? []);
+        setSignedOut(false);
+        setUnavailable(true);
+      }
     }
   }, []);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(kickoff);
+    return () => {
+      window.clearTimeout(kickoff);
+      loadGenerationRef.current += 1;
+    };
   }, [load]);
 
   const connectedAccounts = useMemo(
     () => (accounts ?? []).filter((account) => account.status === "connected"),
     [accounts],
   );
+  const openAssignmentByBotId = useMemo(() => new Map(
+    assignments
+      .filter((assignment) => assignment.status !== "released")
+      .map((assignment) => [assignment.botId, assignment] as const),
+  ), [assignments]);
+  const projectNameById = useMemo(() => new Map([
+    ...projects.map((project) => [project.id, project.name] as const),
+    ...(projectContext ? [[projectContext.id, projectContext.name] as const] : []),
+  ]), [projectContext, projects]);
 
   const renameConnectedAccount = useCallback(async (accountId: string, currentName: string) => {
     const name = successName.trim();
@@ -333,8 +432,9 @@ export function BotManagerHome({
     selected: readonly { id: string; provider: string; credentialPurpose: string }[],
   ) => {
     setBotNotice("");
-    const seen = new Set(bots.map((bot) => bot.provider));
     let created = 0;
+    let bound = 0;
+    let existing = 0;
     const failed: string[] = [];
     let refusal = "";
     for (const account of selected) {
@@ -352,47 +452,102 @@ export function BotManagerHome({
           body: JSON.stringify({
             provider: account.provider,
             credential,
-            additional: seen.has(account.provider),
+            aiAccountId: account.id,
+            additional: false,
           }),
         });
         const body = (await response.json().catch(() => ({}))) as {
           provisioned?: boolean;
           outcome?: string;
+          botId?: string;
           reason?: string;
           error?: { message?: string };
         };
-        // A 200 that made nothing is a failure with a reason, not a success.
-        if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
+        // A 200 can mean four materially different things. Count only an
+        // inserted row as created; adopting a legacy row and finding the
+        // exact existing row are successful, but neither made another bot.
+        if (!response.ok
+          || !body.botId
+          || (body.outcome !== "created" && body.outcome !== "bound" && body.outcome !== "exists")
+          || ((body.outcome === "created" || body.outcome === "bound") && !body.provisioned)) {
           throw new Error(
             body.reason
               ?? body.error?.message
               ?? "A bot could not be created for this account.",
           );
         }
-        seen.add(account.provider);
-        created += 1;
+        if (body.outcome === "created") created += 1;
+        else if (body.outcome === "bound") bound += 1;
+        else existing += 1;
       } catch (error) {
         failed.push(account.provider);
         if (error instanceof Error && error.message) refusal = error.message;
       }
     }
     await load();
-    setBotNotice(
-      failed.length === 0
-        ? `${created} bot${created === 1 ? "" : "s"} created.`
-        : `${created} created, ${failed.length} failed.${refusal ? ` ${refusal}` : " Try the ones that failed again."}`,
-    );
-  }, [bots, load]);
+    const counts = [`${created} created`];
+    if (bound > 0) counts.push(`${bound} linked`);
+    if (existing > 0) counts.push(`${existing} already existed`);
+    if (failed.length > 0) counts.push(`${failed.length} failed`);
+    const notice = `${counts.join(", ")}.${failed.length > 0
+      ? (refusal ? ` ${refusal}` : " Try the ones that failed again.")
+      : ""}`;
+    setBotNotice(notice);
+
+    if (failed.length > 0) {
+      // AiAccountsPanel clears its selection only when this promise resolves.
+      // Reject after publishing the exact result so every selected row remains
+      // available for an idempotent retry (successes return `exists`).
+      throw new Error(notice);
+    }
+  }, [load]);
+
+  const createStarterRole = useCallback(async () => {
+    const template = BOT_ROLE_TEMPLATES.find((entry) => entry.slug === starterRoleSlug);
+    if (!template) return;
+
+    setStarterRoleBusy(true);
+    setBotNotice("");
+    try {
+      const response = await fetch("/api/bot-roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleId: null,
+          name: template.name,
+          slug: template.slug,
+          summary: template.summary,
+          instructions: template.instructions,
+          riskCeiling: template.riskCeiling,
+          capabilities: [...template.capabilities],
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        role?: { id?: string; name?: string };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.role?.id) {
+        throw new Error(body.error?.message ?? "The starter role could not be added.");
+      }
+
+      const role = { id: body.role.id, name: body.role.name ?? template.name };
+      setRoles((current) => (
+        current.some((entry) => entry.id === role.id) ? current : [...current, role]
+      ));
+    } catch (error) {
+      setBotNotice(error instanceof Error ? error.message : "The starter role could not be added.");
+    } finally {
+      setStarterRoleBusy(false);
+    }
+  }, [starterRoleSlug]);
 
   /**
    * The whole chain, in one press: connect → create → assign → return.
    *
    * Only available with a project in hand. Accounts that are selected but have
-   * no bot yet get one first, and the ids that appear between the two reads of
-   * `/api/bots` are how the new bots are identified — the provision endpoint
-   * answers "made one" or "already had one" rather than naming a row, and
-   * inventing an id from the account would be guessing. Every bot then lands
-   * in a single atomic assign, so the project either gains all of them or none.
+   * no bot yet get one first, and the provision endpoint returns each exact
+   * bot id. Every bot then lands in a single atomic assign, so the project
+   * either gains all of them or none.
    */
   const addSelectionToProject = useCallback(async (roleId: string) => {
     if (!projectContext) return;
@@ -404,10 +559,18 @@ export function BotManagerHome({
       );
 
       let botsToAssign = bots.filter((bot) => selectedBotIds.includes(bot.id));
+      const alreadyPosted = botsToAssign.filter((bot) => assignments.some((assignment) => (
+        assignment.botId === bot.id && assignment.status !== "released"
+      )));
+      if (alreadyPosted.length > 0) {
+        throw new Error(
+          `${alreadyPosted[0].name} is already assigned. Manage its existing posting from that project.`,
+        );
+      }
 
       if (chosenAccounts.length > 0) {
-        const before = new Set(bots.map((bot) => bot.id));
-        const seen = new Set(bots.map((bot) => bot.provider));
+        const provisionedBotIds: string[] = [];
+        const expectedAccountByBotId = new Map<string, string>();
         for (const account of chosenAccounts) {
           const credential = accountProvisionCredentialChoice(
             account.provider,
@@ -422,38 +585,56 @@ export function BotManagerHome({
             body: JSON.stringify({
               provider: account.provider,
               credential,
-              additional: seen.has(account.provider),
+              aiAccountId: account.id,
+              additional: false,
             }),
           });
           const body = (await response.json().catch(() => ({}))) as {
             provisioned?: boolean;
             outcome?: string;
+            botId?: string;
             reason?: string;
             error?: { message?: string };
           };
           // A 200 that made nothing is a refusal; carry its sentence.
-          if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
+          if (!response.ok || !body.botId
+            || (body.outcome !== "created" && body.outcome !== "bound" && body.outcome !== "exists")) {
             throw new Error(
               body.reason
                 ?? body.error?.message
                 ?? "A bot could not be created for a selected account.",
             );
           }
-          seen.add(account.provider);
+          provisionedBotIds.push(body.botId);
+          expectedAccountByBotId.set(body.botId, account.id);
         }
         const refreshed = await fetch("/api/bots", { cache: "no-store" });
+        if (!refreshed.ok) {
+          throw new Error("The provisioned bots could not be read back for assignment.");
+        }
         const body = (await refreshed.json().catch(() => ({}))) as FabricPayload;
-        const appeared = (body.bots ?? [])
-          .filter((bot) => !before.has(bot.id))
-          .map((bot) => ({
-            id: bot.id,
-            name: bot.name,
-            provider: bot.provider,
-            providerLabel: bot.providerLabel,
-            readiness: bot.readiness,
-            readinessLabel: bot.readinessLabel,
-          }));
-        botsToAssign = [...botsToAssign, ...appeared];
+        const postedIds = new Set((body.assignments ?? [])
+          .filter((assignment) => assignment.status !== "released")
+          .map((assignment) => assignment.botId));
+        if (provisionedBotIds.some((botId) => postedIds.has(botId))) {
+          throw new Error(
+            "A selected account's bot is already assigned. Manage its existing posting from that project.",
+          );
+        }
+        const exactAccountBots = (body.bots ?? [])
+          .filter((bot) => provisionedBotIds.includes(bot.id))
+          .map(botViewFromPayload);
+        if (exactAccountBots.length !== provisionedBotIds.length) {
+          throw new Error("A provisioned bot could not be read back for assignment.");
+        }
+        if (exactAccountBots.some((bot) => (
+          bot.aiAccountId !== expectedAccountByBotId.get(bot.id)
+        ))) {
+          throw new Error("A provisioned bot did not read back with its exact AI account identity.");
+        }
+        botsToAssign = Array.from(
+          new Map([...botsToAssign, ...exactAccountBots].map((bot) => [bot.id, bot])).values(),
+        );
       }
 
       if (botsToAssign.length === 0) {
@@ -466,13 +647,42 @@ export function BotManagerHome({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            bots: botsToAssign.map((bot) => ({ botId: bot.id, roleId })),
+            bots: botsToAssign.map((bot) => ({
+              botId: bot.id,
+              roleId,
+              expectedAssignmentId: null,
+              expectedProjectId: null,
+            })),
           }),
         },
       );
-      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      const body = (await response.json().catch(() => ({}))) as {
+        assigned?: number;
+        assignments?: Array<{
+          id?: string;
+          botId?: string;
+          projectId?: string;
+          roleId?: string;
+          status?: string;
+        }>;
+        error?: { message?: string };
+      };
       if (!response.ok) {
         throw new Error(body.error?.message ?? "The bots could not be added to the project.");
+      }
+      const returned = new Map(
+        (body.assignments ?? []).map((assignment) => [assignment.botId, assignment]),
+      );
+      if (body.assigned !== botsToAssign.length
+        || returned.size !== botsToAssign.length
+        || botsToAssign.some((bot) => {
+          const assignment = returned.get(bot.id);
+          return !assignment?.id
+            || assignment.projectId !== projectContext.id
+            || assignment.roleId !== roleId
+            || assignment.status !== "active";
+        })) {
+        throw new Error("The server did not confirm the exact project assignments. Reload and try again.");
       }
 
       await load();
@@ -487,11 +697,12 @@ export function BotManagerHome({
     } finally {
       setAssignBusy(false);
     }
-  }, [accounts, bots, load, onFinished, projectContext, selectedAccountIds, selectedBotIds]);
+  }, [accounts, assignments, bots, load, onFinished, projectContext, selectedAccountIds, selectedBotIds]);
 
   const provisionBot = useCallback(async (
     providerId: string,
     credentialPurpose?: string,
+    aiAccountId?: string,
   ) => {
     setCreatingBot(true);
     setBotNotice("");
@@ -506,12 +717,14 @@ export function BotManagerHome({
         body: JSON.stringify({
           provider: providerId,
           credential,
-          additional: bots.some((bot) => bot.provider === providerId),
+          aiAccountId,
+          additional: bots.some((bot) => bot.aiAccountId === aiAccountId),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         provisioned?: boolean;
         outcome?: string;
+        botId?: string;
         reason?: string;
         error?: { message?: string };
       };
@@ -525,14 +738,18 @@ export function BotManagerHome({
        * or already-existing bot closes this dialog; a refusal stays on
        * screen with the database's own sentence.
        */
-      if (!body.provisioned && body.outcome !== "exists") {
+      if (!body.botId
+        || (body.outcome !== "created" && body.outcome !== "bound" && body.outcome !== "exists")
+        || ((body.outcome === "created" || body.outcome === "bound") && !body.provisioned)) {
         throw new Error(body.reason ?? "The bot was not created.");
       }
       await load();
       setStage({ kind: "closed" });
-      if (body.outcome === "exists") {
-        setBotNotice("You already have a bot for this provider — it is in Your AI Team below.");
-      }
+      setBotNotice(body.outcome === "created"
+        ? "Bot created."
+        : body.outcome === "bound"
+          ? "Your existing bot is now linked to this AI account."
+          : "This AI account already has a bot — it is in Your AI Team below.");
     } catch (error) {
       setBotNotice(
         error instanceof Error && error.message
@@ -546,22 +763,75 @@ export function BotManagerHome({
 
   // ------------------------------------------------------------------ modal
 
-  function modal(content: React.ReactNode, label: string) {
+  function starterRolePrompt(contextLabel: string) {
     return (
-      <div
-        className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
+      <section
+        aria-label={`Add a starter role for ${contextLabel}`}
+        className="w-full basis-full rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4"
       >
-        <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl">
-          {content}
+        <h3 className="text-sm font-semibold text-[var(--text)]">Add your first bot role</h3>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          Every project posting needs a role. Choose a reviewed starter here; it is saved through
+          the same audited role control and remains yours to edit.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="field-label">Starter role</span>
+            <select
+              aria-label={`Starter role for ${contextLabel}`}
+              value={starterRoleSlug}
+              onChange={(event) => setStarterRoleSlug(event.target.value)}
+              className="input mt-1 w-full"
+            >
+              {BOT_ROLE_TEMPLATES.map((template) => (
+                <option key={template.slug} value={template.slug}>{template.name}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void createStarterRole()}
+            disabled={starterRoleBusy}
+            className="btn btn-primary btn-sm"
+          >
+            {starterRoleBusy ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Plus className="size-3.5" aria-hidden="true" />
+            )}
+            Add starter role
+          </button>
         </div>
-      </div>
+      </section>
     );
   }
 
-  const closeButton = (
+  function modal(content: React.ReactNode, label: string) {
+    if (embedded) {
+      return (
+        <section aria-label={label} className="mx-auto w-full max-w-lg">
+          {content}
+        </section>
+      );
+    }
+
+    return (
+      <ModalDialog
+        key={label}
+        label={label}
+        onRequestClose={() => void requestStandaloneModalClose()}
+        className="fixed inset-0 z-[110] grid place-items-center overflow-y-auto bg-black/60 p-4"
+        panelClassName="my-auto w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
+      >
+        {content}
+      </ModalDialog>
+    );
+  }
+
+  // The AI Factory owns the one visible close control. Rendering this second
+  // absolute X inside its shell recreates the confusing stacked-modal affordance
+  // even when the inner content is no longer an aria-modal dialog.
+  const closeButton = embedded ? null : (
     <button
       type="button"
       onClick={() => setStage({ kind: "closed" })}
@@ -576,7 +846,10 @@ export function BotManagerHome({
    * Accounts that cannot back a bot are not counted: pressing Add Bots must
    * never promise something the next request will refuse.
    */
-  const selectionCount = selectedBotIds.length
+  const selectionCount = selectedBotIds.filter((botId) => (
+    !openAssignmentByBotId.has(botId)
+    && bots.some((bot) => bot.id === botId && bot.readiness === "ready")
+  )).length
     + (accounts ?? []).filter(
       (account) => selectedAccountIds.includes(account.id) && accountCanBackABot(account.status),
     ).length;
@@ -664,7 +937,7 @@ export function BotManagerHome({
                 <button
                   type="button"
                   disabled={creatingBot}
-                  onClick={() => void provisionBot(account.provider, account.credentialPurpose)}
+                  onClick={() => void provisionBot(account.provider, account.credentialPurpose, account.id)}
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-left transition-colors hover:border-[var(--accent-border)] disabled:opacity-60"
                 >
                   <p className="truncate text-sm font-semibold text-[var(--text)]">
@@ -674,7 +947,7 @@ export function BotManagerHome({
                     {account.providerLabel}
                     {account.status === "connected"
                       ? " · Connected"
-                      : " · Needs signing in again — the bot is created, but waits"}
+                      : " · Needs signing in again — the bot will be created, but will wait"}
                   </p>
                 </button>
               </li>
@@ -734,19 +1007,21 @@ export function BotManagerHome({
           required. Open the project&rsquo;s Assign Bots wizard to widen any of that.
         </p>
 
-        {assignmentProjects.length === 0 || roles.length === 0 ? (
+        {assignmentProjects.length === 0 ? (
           <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
             <p className="text-sm text-[var(--text)]">
-              {assignmentProjects.length === 0
-                ? "This workspace has no projects yet, and a bot is assigned to a project."
-                : "This workspace has no bot roles defined, and every assignment carries one."}
+              This workspace has no projects yet, and a bot is assigned to a project.
             </p>
             <a
-              href={assignmentProjects.length === 0 ? "/solutions/projects#add-project" : "/solutions/agents"}
+              href="/solutions/projects#add-project"
               className="btn btn-primary btn-sm mt-3"
             >
-              {assignmentProjects.length === 0 ? "Create a project" : "Open roles"}
+              Create a project
             </a>
+          </div>
+        ) : roles.length === 0 ? (
+          <div className="mt-5">
+            {starterRolePrompt("this assignment")}
           </div>
         ) : (
           <>
@@ -856,6 +1131,7 @@ export function BotManagerHome({
         }}
         onFallback={() => setStage({ kind: "closed" })}
         onClose={() => setStage({ kind: "closed" })}
+        onBeforeCloseChange={handleConnectionCloseGuardChange}
       />,
       `Connecting ${entry.name}`,
     );
@@ -945,15 +1221,35 @@ export function BotManagerHome({
             </div>
           </dl>
         ) : null}
+        {!account ? (
+          <p className="mx-auto mt-4 max-w-sm text-sm text-amber-600" role="status">
+            The sign-in succeeded, but its exact account record has not loaded yet. Reload it
+            before creating a bot so the bot cannot be attached to the wrong identity.
+          </p>
+        ) : null}
         <div className="mt-5 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void provisionBot(stage.providerId, account?.credentialPurpose)}
-            disabled={creatingBot}
-            className="btn btn-primary w-full max-w-xs"
-          >
-            Create My First Bot
-          </button>
+          {account ? (
+            <button
+              type="button"
+              onClick={() => void provisionBot(
+                stage.providerId,
+                account.credentialPurpose,
+                account.id,
+              )}
+              disabled={creatingBot}
+              className="btn btn-primary w-full max-w-xs"
+            >
+              Create My First Bot
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="btn btn-primary w-full max-w-xs"
+            >
+              Reload connected account
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setStage({ kind: "closed" })}
@@ -998,6 +1294,10 @@ export function BotManagerHome({
         )}
       </section>
     );
+  }
+
+  if (embedded && dialog) {
+    return <div className="space-y-6">{dialog}</div>;
   }
 
   return (
@@ -1050,13 +1350,17 @@ export function BotManagerHome({
                 : `${connectedAccounts.length} of ${(accounts ?? []).length}`,
               detail: "Connected",
             },
-            { label: "Active Bots", value: String(bots.length), detail: null },
+            { label: "Bots", value: String(bots.length), detail: null },
             {
               label: "Ready",
               value: String(bots.filter((bot) => bot.readiness === "ready").length),
               detail: null,
             },
-            { label: "Assignments", value: String(assignments.length), detail: null },
+            {
+              label: "Assignments",
+              value: String(assignments.filter((assignment) => assignment.status !== "released").length),
+              detail: "Open",
+            },
           ].map((card) => (
             <div
               key={card.label}
@@ -1176,9 +1480,7 @@ export function BotManagerHome({
                   : "."}
               </p>
               {roles.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)]">
-                  This workspace has no bot roles defined, and every assignment carries one.
-                </p>
+                starterRolePrompt("selected bots")
               ) : (
                 <>
                   <div className="min-w-0">
@@ -1347,7 +1649,26 @@ export function BotManagerHome({
                       <p className="text-xs text-[var(--text-muted)]">
                         {bot.providerLabel} · {bot.readinessLabel}
                       </p>
-                      {canManage && projectContext !== null ? (
+                      {openAssignmentByBotId.has(bot.id) ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-surface)] px-2 py-1 font-semibold text-[var(--text)]">
+                            {openAssignmentByBotId.get(bot.id)?.status === "paused"
+                              ? "Assigned (paused)"
+                              : "Assigned"}
+                            {` to ${projectNameById.get(
+                              openAssignmentByBotId.get(bot.id)!.projectId,
+                            ) ?? "a project"}`}
+                          </span>
+                          <a
+                            href={`/solutions/portfolio/${encodeURIComponent(
+                              openAssignmentByBotId.get(bot.id)!.projectId,
+                            )}`}
+                            className="font-medium text-[var(--accent-text)] underline"
+                          >
+                            Manage assignment
+                          </a>
+                        </div>
+                      ) : canManage && projectContext !== null && bot.readiness === "ready" ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -1379,6 +1700,10 @@ export function BotManagerHome({
                             Add to project
                           </button>
                         </div>
+                      ) : canManage && projectContext !== null ? (
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">
+                          Not assignable until this bot is Ready.
+                        </p>
                       ) : null}
                       {removingBotId === bot.id ? (
                         <div className="mt-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-2.5">

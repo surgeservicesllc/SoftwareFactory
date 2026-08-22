@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { BOT_PROVIDER_IDS } from "@/lib/bots/catalog";
+import { BOT_PROVIDER_IDS, findBotProvider } from "@/lib/bots/catalog";
 import { RISK_LEVELS, type RiskLevel } from "@/lib/risk";
 
 /**
@@ -33,7 +33,17 @@ export const registerBotSchema = z
     baseUrl: baseUrlSchema,
     notes: notesSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const provider = findBotProvider(value.provider);
+    if (provider?.requiresBaseUrl && !value.baseUrl) {
+      context.addIssue({
+        code: "custom",
+        path: ["baseUrl"],
+        message: `${provider.label} requires an HTTPS endpoint.`,
+      });
+    }
+  });
 
 export const updateBotSchema = z
   .object({

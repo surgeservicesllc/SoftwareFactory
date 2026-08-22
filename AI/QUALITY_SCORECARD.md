@@ -2,6 +2,109 @@
 
 Last reviewed: 2026-08-22
 
+**Current release checkpoint, 2026-08-22 (ADR-111):** exact commit
+`30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, authored and
+committed by `surgeservicesllc <surgeservicesllc@gmail.com>`. Exact Vercel
+production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and owns
+the stable aliases. GitHub deployment `6036292508` and status `17160408639`
+bind the deployment to that exact SHA.
+
+Exact-head CI run `32570540183` is **FAIL**. Browser/accessibility jobs
+`97025270171`, `97025270137`, and `97025270138` are **PASS**. Quality job
+`97025270055` is **FAIL** during tests and skipped build because the LF
+migration chain rejected all seven legacy routine hashes at the 00150
+preflight. Supabase Preview check `97025325852` is also **FAIL**, separately,
+at the older provider-credential migration with SQLSTATE `42P07` because
+`provider_credentials` already exists; the same preview drift predates this
+candidate.
+
+The local repair canonicalizes CRLF and lone CR to LF before every
+`md5(prosrc)` comparison and pins 00150, 00200, and 00300 respectively at:
+
+- `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Native PostgreSQL 17.10 and 18.4 full chains are **PASS**. The repaired forward
+candidate is not yet pushed, deployed, or authorized for hosted execution. No
+hosted database mutation occurred; 00150/00200/00300 remain unhosted and
+CONTRACT was not dispatched. Historical predecessor commit `4fc18d3e...`,
+deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU`, and fail-closed EXPAND run
+`32568221857` remain retained safety evidence.
+
+**Addendum, 2026-08-22 — Claude bot identity and Role-assignment release
+candidate (ADR-108/ADR-109):** this is local candidate evidence only. Migration
+`20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+`658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+It binds each returned subscription bot to the exact tenant AI account and
+derived provider/credential slot. A default/non-additional request reuses the
+account's bot or permits only one unambiguous in-place legacy adoption; an
+explicit additional request creates a distinct bot with that same exact account
+binding. Future coherence is enforced. Positive bot and assignment revisions
+start at 1, increment on every update, and make stale exact-config/readiness or
+exact-posting writes fail under row lock. Checked mutation paths refuse
+released history.
+
+Readiness recording is service-role-only, carries the audited owner/admin actor,
+and compares exact bot revision, AI account, provider, model, credential
+reference, and base URL. A check cannot author Disabled and cannot overwrite an
+existing Disabled management state. `bot.registered` and adoption-path
+`bot.updated` immutable events include the exact `ai_account_id`. This is an
+EXPAND migration: legacy function definitions, signatures, security attributes,
+search paths, and exact authenticated-only execute ACLs remain unchanged while
+checked wrappers and the service-only recorder are added. The accepted rolling-
+cutover risk is that the old application can still use unchecked assignment and
+legacy readiness calls. Revocation requires a separately approved forward
+CONTRACT migration after exact-app deployment and acceptance.
+
+The visible path also closes coherently. AI Factory supplies one application
+modal/focus boundary and embeds the roster, assignment/configuration flow, and
+starter-role control without nested dialogs. With zero roles, Backend engineer
+is the reviewed starter default and its full template is saved through the
+audited role API; the exact returned UUID fills only blank selected drafts.
+Developer remains the separate default permission preset for a new posting,
+while existing posting role/configuration is preserved. The account connector
+serializes start/retry/close/unmount operations and fences async results by
+session UUID plus generation. The roster filters released rows before a
+terminal-proven keyset traversal, continues after short pages, and fails closed
+on invalid progress or the page guard. Factory completion therefore follows
+one complete connected-account -> exact account bot -> selected project ->
+revision-checked active configured posting chain.
+
+Owner-screenshot containment closes one UI-only identity shortcut:
+`ProjectBots` had used `credentialRef` similarity to suppress the exact-link
+repair control. An unbound Ready legacy bot could be assigned while AI Factory
+correctly held steps 5-7 incomplete. The local fix removes that inference,
+exposes the existing exact `/api/bots/connect/provision` Link-or-repair/adoption
+path, awaits the parent refresh, and adds an accessible **Return to AI Factory**
+action. The affected completion predicate remains connected account + exact
+`aiAccountId` + current Ready + project assignment.
+
+This UI containment is frozen in the current unpublished candidate. Focused UI
+is **PASS 75/75**; focused ESLint, full typecheck, and lint/typecheck/build are **PASS**. The root
+full suite is **PASS** for 337 files / 4,054 tests, with 3 files / 7 tests
+skipped. Its first contention-only `supabase-wiring` timeout cleared isolated
+2/2 and on the full rerun.
+
+Focused coverage exists for migration behavior, hosted-scope guards, exact bot
+and readiness synchronization, revision/stale/released handling, complete-
+roster pagination, one-modal/zero-role onboarding, assignment preservation and
+readback, broker races, and Factory progress/reload. The final semantic audit
+also covers every assignment, manual-bot, authored-role, and advanced-command
+field; it fixed controlled Instructions editing and required endpoint gating.
+Prepublication local gates and the exact-head browser shards remain useful, but
+the failed quality job controls the release verdict. The application commit has
+matching `main` and Vercel evidence; the repaired forward candidate does not
+yet have a published exact-head CI result.
+
+No database release claim is made. Dedicated protected scopes enforce the exact
+00150 -> 00200 -> signed-in application acceptance -> 00300 order, and broad
+apply refuses to introduce those files. Runtime behavior, linked-database lint,
+application health, and containment are explicit post-apply gates. Promotion
+remains RED. Kill switch stays ON, raw autonomy and all automatic actions stay
+OFF, and worker/executor remains disconnected.
+
 **Addendum, 2026-08-21 — AI Factory production acceptance:** exact candidate
 head `a020e8192d8512a1bb65112e01017047087f0528` passed all four jobs in CI run
 `32543409160` (quality plus browser shards 1/3, 2/3, and 3/3). Production-browser

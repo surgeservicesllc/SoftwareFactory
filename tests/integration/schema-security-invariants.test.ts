@@ -76,6 +76,12 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Holds sealed credential envelopes. A policy would imply some role may read the "
     + "column; none may. Every table privilege is revoked from anon, authenticated and "
     + "service_role, and the only readers are definer functions.",
+  project_agents:
+    "Which logical agents a project's AI Factory includes. Reads go through the "
+    + "list_project_agents member projection and writes through the "
+    + "owner/administrator select_project_agent and deselect_project_agent "
+    + "definer functions, both of which write an activity event; a policy would "
+    + "open a second, unaudited path to the same rows.",
   project_pipelines:
     "Which pipeline templates a project runs. Reads go through the "
     + "list_project_pipelines member projection and writes through the "
@@ -227,7 +233,7 @@ describe("SECURITY DEFINER functions", () => {
     expect(result.rows.map((row) => row.proname)).toEqual(["subscribe_to_newsletter"]);
   });
 
-  it("limits service_role to the GitHub ingress and Phase 1C worker RPCs", async () => {
+  it("limits service_role to the reviewed trusted-server and worker RPCs", async () => {
     const result = await db.query<{ proname: string }>(`
       select distinct proc.proname
       from pg_catalog.pg_proc proc
@@ -307,6 +313,10 @@ describe("SECURITY DEFINER functions", () => {
       // an account the worker just probed. Insert-only into an append-only
       // table; the definer function revalidates the account/organization pair.
       "record_ai_account_usage",
+      // Server-only credential evaluation records a verdict only when the
+      // exact bot identity/configuration/revision still matches under row lock.
+      // Browser-authenticated managers cannot execute this RPC directly.
+      "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",

@@ -116,6 +116,11 @@ export type AuthBrokerDependencies = Readonly<{
   now?: () => number;
 }>;
 
+type AuthLoginDrivers = Readonly<{
+  anthropic: (session: ClaimedAuthSession) => Promise<LoginCli>;
+  openai: (session: ClaimedAuthSession) => Promise<LoginCli>;
+}>;
+
 export type AuthBrokerTimeouts = Readonly<{
   loginUrlMs: number;
   relayCodeMs: number;
@@ -899,14 +904,18 @@ export async function startCodexLogin(
 /** The production dependency wiring, shared by the script entry point. */
 export function productionAuthBrokerDependencies(
   store: AuthBrokerStore,
+  loginDrivers: AuthLoginDrivers = {
+    anthropic: startClaudeSetupToken,
+    openai: startCodexLogin,
+  },
 ): AuthBrokerDependencies {
   return {
     store,
     startLogin: async (session) => {
       if (session.provider === "openai") {
-        return startCodexLogin(session);
+        return loginDrivers.openai(session);
       }
-      return startClaudeSetupToken(session);
+      return loginDrivers.anthropic(session);
     },
     openRelayCode: (session, sealed) => openSecret(sealed, {
       organizationId: session.organizationId,

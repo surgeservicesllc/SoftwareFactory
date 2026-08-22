@@ -157,6 +157,37 @@ test("every resource in the library leads somewhere real", async ({ page }) => {
 });
 
 test("an unknown resource slug is a 404, not an empty page", async ({ page }) => {
-  const response = await page.goto("/resources/no-such-resource");
-  expect(response?.status()).toBe(404);
+  for (const path of [
+    "/resources/no-such-resource",
+    // Proxy's general matcher excludes image extensions, so keep this case to
+    // prove the resource-specific matcher cannot regress to a streamed 200.
+    "/resources/no-such-resource.png",
+  ]) {
+    const response = await page.goto(path);
+    expect(response?.status(), path).toBe(404);
+  }
+});
+
+test("serves the generated resource social images as PNGs", async ({ page }) => {
+  await page.goto("/resources");
+
+  for (const selector of [
+    'meta[property="og:image"][content*="/resources/"]',
+    'meta[name="twitter:image"][content*="/resources/"]',
+  ]) {
+    const imageUrl = await page.locator(selector).first().getAttribute("content");
+    expect(imageUrl, selector).toBeTruthy();
+
+    // metadataBase is fixed at build time and can name a different origin in
+    // an external-server test. Exercise the emitted route on this exact build.
+    const resolvedImageUrl = new URL(imageUrl!, page.url());
+    expect(resolvedImageUrl.pathname, imageUrl!).toMatch(
+      /^\/resources\/(?:opengraph|twitter)-image-/,
+    );
+    const response = await page.request.get(
+      `${resolvedImageUrl.pathname}${resolvedImageUrl.search}`,
+    );
+    expect(response.status(), imageUrl!).toBe(200);
+    expect(response.headers()["content-type"], imageUrl!).toMatch(/^image\/png\b/);
+  }
 });

@@ -1,6 +1,140 @@
 # Backlog
 
-Last triaged: 2026-08-21
+Last triaged: 2026-08-22
+
+## Bot-account binding forward containment (2026-08-22, ADR-111)
+
+- [x] Push exact approved commit
+  `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` to `main` and verify exact
+  READY Vercel deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` plus public
+  HTTP 200 / signed-out API 401 boundaries.
+- [x] Publish successor application commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` with the sole owner identity as
+  author and committer. Verify READY Vercel production deployment
+  `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2`, GitHub deployment `6036292508`, status
+  `17160408639`, exact production URL, and stable aliases.
+- [x] Preserve the fail-closed database result: EXPAND run `32568221857`
+  stopped at `LEGACY_CATALOG_READY` before its apply notice, DDL transaction,
+  or ledger insert. Predecessor `20260822000100` remains present and both
+  protected target versions remain absent. CONTRACT was not dispatched.
+- [x] Reproduce both independent failures locally: Supabase function default
+  privileges add direct `service_role` EXECUTE to all seven frozen legacy bot
+  routines, while raw `pg_get_functiondef` MD5s vary across PostgreSQL major
+  versions even when the catalog contract is identical.
+- [x] Add forward-only migration `20260822000150` to atomically normalize only
+  the coherent all-seven hosted overgrant. It refuses mixed 1-6/7 states,
+  identity/body/catalog/owner/ACL drift, and performs no history write itself.
+- [x] Replace deparser-byte gates with line-ending-canonical `md5(prosrc)`
+  (CRLF and lone CR become LF) plus explicit return,
+  argument/default, security, volatility, cost/rows, support, transform,
+  trigger, and ACL catalog invariants in EXPAND, CONTRACT, and hosted guards.
+- [x] Record exact-head CI run `32570540183` as red: all three browser shards
+  passed, but quality job `97025270055` failed before build because the LF
+  migration chain rejected all seven non-canonical source hashes. Classify
+  Supabase Preview check `97025325852` separately as pre-existing
+  `provider_credentials` preview ledger/schema drift.
+- [x] Freeze the repaired repository file identities: 00150
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`,
+  00200
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`,
+  and 00300
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+  Native PostgreSQL 17.10 and 18.4 full chains pass.
+- [x] Confirm that publication of `30d7e824` caused no hosted database
+  mutation. No protected apply was dispatched afterward; 00150/00200/00300
+  remain unhosted and CONTRACT remains undispatched.
+- [ ] Freeze the repaired commit, obtain new exact RED authorization, push it,
+  and require green exact-head CI before any hosted DDL.
+- [ ] Apply only 00150 then 00200; complete signed-in Role/Claude stickiness,
+  runtime, audit, lint, health, autonomy-off/kill-switch-on acceptance; only
+  then apply 00300. Never reset, down-migrate, repair history, or rerun the old
+  failed workflow.
+
+## Claude bot identity and Role assignment release (2026-08-22, ADR-108/ADR-109)
+
+- [x] Remove the zero-role assignment dead end inside the Assign Bots wizard.
+  The inline starter selector defaults to the reviewed Backend engineer
+  template, creates it through the existing manager-only audited role API, and
+  places the exact returned UUID into only blank selected drafts. The Role
+  field then has a real selectable value and Configure can advance. Developer
+  remains a separate permission preset; existing posting role/configuration is
+  preserved.
+- [x] Keep AI Factory on one full-app modal/focus/close boundary, complete the
+  open-assignment roster through terminal-proven UUID keyset pagination, and
+  serialize/fence broker start, retry, close, and cleanup races.
+- [x] Contain the owner-screenshot identity shortcut. `ProjectBots` no longer
+  treats `credentialRef` similarity as an exact AI-account link or hides the
+  repair control. An unbound Ready legacy bot may be assigned while AI Factory
+  correctly keeps steps 5-7 incomplete. The UI exposes the existing exact
+  `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the parent
+  refresh, and offers an accessible **Return to AI Factory** action. Completion
+  remains connected account + exact `aiAccountId` + current Ready + project
+  assignment.
+- [x] Validate the current unpublished UI containment: focused UI 75/75,
+  focused ESLint, full typecheck, and lint/typecheck/build pass. The root full
+  suite passes 337 files / 4,054 tests with 3 files / 7 tests skipped. Its first
+  contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+  full rerun.
+- [x] Freeze forward migration
+  `20260822000200_register_bot_for_ai_account.sql` at SHA-256
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+  It binds a subscription bot to the exact tenant AI account, introduces
+  monotonic bot/assignment revisions, rejects stale or released-posting
+  writes, and records exact-config readiness through a service-role-only
+  boundary while preserving a management-authored Disabled state.
+- [x] Make `20260822000200` an EXPAND migration: preserve exact legacy function
+  definitions/signatures/security/search paths and authenticated-only execute
+  ACLs while adding authenticated revision-checked wrappers plus the
+  service-only readiness recorder. The temporary bypass is explicit; revoke
+  legacy execution only in a separately approved forward CONTRACT migration
+  after the exact replacement app is deployed and accepted.
+- [x] Preserve the prepublication working-tree gates: lint, typecheck,
+  production build, 331
+  Vitest files / 3,934 tests (7 skipped), and 1,207 serialized browser passes
+  with 545 intentional viewport skips. The one unknown-resource status defect
+  repeated across three viewports was fixed forward; its exact 404 and
+  generated-social-image regression passes 6/6 across desktop/tablet/mobile.
+  The all-fields audit additionally proves every assignment field and reload
+  readback, preserves spaces while Instructions are typed, and refuses a
+  required custom/self-hosted endpoint in both UI and API. Independent security,
+  broker, UI, and proxy reviews report no unresolved P0/P1/P2. Exact-head CI
+  `32570540183` supersedes this as the release verdict and is red for the
+  cross-platform migration-hash defect.
+- [x] Publish and deploy the application candidate at exact commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31`. This proves application identity
+  only; its failed CI gate and absence of hosted database mutation prevent a
+  release-accepted claim.
+- [ ] After the repaired commit is approved and green, verify exact
+  main/CI/Vercel identities and hosted predecessor `20260822000100`. Apply 00150
+  and then 00200 only through their dedicated scopes, verify one ledger row
+  each and exact catalog/ACL invariants, then run runtime create/bind/assign/
+  configure/readiness/audit, linked-database lint, health, and signed-in Claude
+  Role/reload stickiness. Stop on any mismatch and contain only with a new
+  forward change.
+- [ ] After exact-app production acceptance, separately review and authorize a
+  forward CONTRACT migration that revokes the six legacy authenticated execute
+  grants. Do not fold revocation into the EXPAND apply or infer approval for it.
+  Keep the global kill switch ON, raw autonomy and all automatic actions OFF,
+  and the worker/executor disconnected.
+
+## Agents selectable into the AI Factory (2026-08-22, ADR-107, owner goal)
+
+- [x] Migration `20260822000100_project_agent_selection.sql`: project_agents
+  with RLS + FORCE RLS, no direct table path, owner/admin select/deselect and
+  member list definer functions, audit events, advisory locks; 16 behavior
+  cases against the real chain.
+- [x] `/api/project-agents` (GET/POST/DELETE) reporting the unapplied
+  migration as Not Connected; 10 route cases.
+- [x] `ProjectAgentSelector` on /solutions/agents (standalone project picker)
+  and in the AI Factory's new Select Agents step (nine-step journey; done =
+  at least one agent included, names as evidence); 5 component cases plus the
+  updated factory suite.
+- [x] Applied to hosted Supabase: run 32548916762 (2026-08-22 03:25Z,
+  scope=agent-selection), ledger repaired, schema cache reloaded. Verified on
+  production: /api/project-agents answers 401 signed out; signed in,
+  available:true from the live list function, and a write probe surfaced the
+  database's own owner/administrator refusal - both definer functions execute
+  on hosted and fail closed.
 
 ## AI Factory production acceptance (2026-08-21)
 
