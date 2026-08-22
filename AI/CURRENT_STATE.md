@@ -89,9 +89,23 @@ never be linted without their relations, so the clause was unsatisfiable on
 every database (ADR-125). Nothing committed; the ledger is unchanged. The
 lint rows now carry the `trigger_expectations` relations from
 `20260822001000`, and `scope=probe` proves the mechanics inside a
-rolled-back transaction. Remaining order: probe, then the chain under fresh
-exact-head CI and READY Vercel identity, then production Step 8/Step 9
-acceptance.
+rolled-back transaction (probe 32604290485: attachments match, zero lint
+exceptions, zero extension residue).
+
+Chain run 32604992678 then completed the rehearsal lint for the first time
+and refused on one genuine warning: `agentos_resolved_agent_grants`
+initialized its `agentos_network_mode` variable from a bare text literal
+(plpgsql_check 42804). Both creator copies (20260814000300 and 00900) now
+carry the explicit enum cast, 00900's source pin is
+`a1231a4a5329b1dab132b6e774d97bb3`, and the frozen REPAIR sha is
+`512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694`. The
+gate's evaluation also could never pass as written - rehearsal stdout
+legitimately carries blank lines - so findings are sentinel-prefixed
+`LINTROW|` rows and the gate greps for the sentinel (ADR-126). All of it
+verified in the supabase postgres 17.6 image: 148 migrations apply, both
+paths yield the pinned md5, 27-function roster lints clean. Remaining
+order: the chain under fresh exact-head CI and READY Vercel identity, then
+production Step 8/Step 9 acceptance.
 
 Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
 real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was

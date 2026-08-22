@@ -2,7 +2,25 @@
 
 Last updated: 2026-08-22
 
-## Newest (2026-08-22 ~23:00Z): every input gate passes; the rehearsal lint itself was the last defect
+## Newest (2026-08-22 ~23:45Z): the lint ran, found one real warning, and both are fixed and machine-verified
+
+With ADR-125's trigger relations in place, chain run 32604992678 completed
+the rehearsal lint for the first time and the gate refused honestly on one
+genuine finding: `agentos_resolved_agent_grants` initialized its
+`agentos_network_mode` variable from a bare text literal (plpgsql_check
+42804). The initializer now carries the explicit enum cast in both creator
+copies (20260814000300 and the restore copy in 20260822000900), 00900's
+source pin moved to `a1231a4a5329b1dab132b6e774d97bb3`, and the frozen
+REPAIR sha to `512869badb...f694`. The same run proved the gate's plain
+non-emptiness test could never pass - rehearsal stdout legitimately carries
+blank lines from void-returning SELECTs - so findings are now
+sentinel-prefixed `LINTROW|` rows with every field coalesced, and the gate
+greps for the sentinel (ADR-126). Everything was verified in the supabase
+postgres 17.6 image before pushing: all 148 migrations apply, both creator
+paths produce the pinned md5, and the whole 27-function roster lints with
+zero findings. Full vitest suite: 4274 passing.
+
+## Earlier (2026-08-22 ~23:00Z): every input gate passes; the rehearsal lint itself was the last defect
 
 After the audit-guard contract (run 32599987697), the AgentOS partial-
 foundation cleanup (run 32601173685, ADR-123), and the submit_command

@@ -35,7 +35,7 @@ const hashes = {
   clearTypes: "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b",
   clearFunctions: "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a",
   hostedFunctionAcl: "8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce",
-  repair: "64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f",
+  repair: "512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694",
   recordOnly: "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255",
   functionAcl: "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789",
   clearFunctionAcl: "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e",
@@ -335,7 +335,12 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command).toContain("('public.plan_phase1c_task_and_run()', 'public.tasks')");
     expect(command).toContain("('public.queue_phase1c_run_for_task()', 'public.tasks')");
     expect(command).not.toContain("()', null)");
-    expect(command).toContain('if [ -n "$LINT_FINDINGS" ]');
+    // Findings are sentinel-prefixed because the rehearsal's stdout also
+    // carries blank lines from void-returning SELECTs in the chain files;
+    // plain non-emptiness would refuse a finding-free rehearsal forever.
+    expect(command.slice(create, rollback)).toContain("select 'LINTROW|' || expected.signature");
+    expect(command).toContain("grep -q '^LINTROW|'");
+    expect(command).not.toContain('if [ -n "$LINT_FINDINGS" ]');
     expect(command).toContain('if [ "$EXTENSION_RESIDUE" != "0|0" ]');
     expect(command).not.toMatch(/drop\s+extension/i);
   });
