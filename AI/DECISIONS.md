@@ -1303,3 +1303,31 @@ Use this append-only log for decisions that constrain future implementation. Cha
   inside the atomic transaction. A full local replay reaches 001400 with a
   complete foundation and does nothing. Workers, autonomy, and automatic
   actions remain OFF and the global kill switch remains ON.
+
+## ADR-124 - submit_command is carried to its pre-chain version before the chain freezes it
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: add `scope=command-carry-forward`, which applies the genuinely
+  unapplied `20260815001000_cross_project_dependencies.sql` and then new
+  `20260822001500_contract_command_submission_acls.sql`. Protected-chain run
+  `32601908933` passed the AgentOS restore for the first time and stopped at
+  `20260822001000`'s input guard on exactly
+  `public.submit_command(uuid,text,public.risk_level,jsonb,text)`: hosted
+  still runs the 20260813001100-era body because 20260815001000 never ran
+  there (probe: `declare_cross_project_dependency` absent), while the guard
+  freezes the carried source `adb50eb74e1721274f23d0d69b79e2e8` and an
+  owner-plus-authenticated ACL. The ACL contraction is source-agnostic - the
+  function legitimately has a pre-chain and a post-chain body - and accepts
+  only owner-granted, non-grantable EXECUTE entries for known roles before
+  converging all three command-submission functions.
+- Rationale: the guard's expectation derives from the local chain, and the
+  local chain includes 20260815001000; the only honest convergence is to
+  apply the missing file, not to relax the guard to hosted's stale body. The
+  ACL half preempts the hosted default-privilege grant class that recurred
+  five times today.
+- Consequence: hosted's submit_command reaches the exact identity the atomic
+  chain rehearses against, the cross-project dependency doorway ships with
+  its documented owner-only controls, and the ledger records both versions
+  truthfully. Workers, autonomy, and automatic actions remain OFF and the
+  global kill switch remains ON.

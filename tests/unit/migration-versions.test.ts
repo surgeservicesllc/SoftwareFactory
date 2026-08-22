@@ -58,7 +58,17 @@ describe("replayed migrations", () => {
     "utf8",
   );
   const migrationsDir = resolve(import.meta.dirname, "../../supabase/migrations");
-  const replayed = [...workflow.matchAll(/supabase\/migrations\/(\S+\.sql)/g)].map((m) => m[1]);
+  // Only the files inside `for FILE in ... done` loops are re-run blindly on
+  // every dispatch, which is the failure mode this rule exists for (see the
+  // comment above). Single-file scoped steps run once behind their own ledger
+  // and catalog preflights — command-carry-forward, for example, refuses
+  // outright once the protected chain is recorded, so its submit_command
+  // definition can never replay over the chain's newer one.
+  const replayLoops = [...workflow.matchAll(/for FILE in \\\n([\s\S]*?)\n\s*do\b/g)]
+    .map((m) => m[1]);
+  const replayed = replayLoops.flatMap((loop) =>
+    [...loop.matchAll(/supabase\/migrations\/(\S+\.sql)/g)].map((m) => m[1]),
+  );
 
   it("drop a function first wherever two of them define the same one", () => {
     const definitions = new Map<string, string[]>();

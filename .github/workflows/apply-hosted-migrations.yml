@@ -59,6 +59,10 @@ on:
           drops the empty partial AgentOS remnant a mixed-era 20260814000300
           apply left behind, so 20260822000900 can restore the foundation
           from its proven-absent state;
+          "command-carry-forward" applies 20260815001000 and then
+          20260822001500, bringing submit_command to the exact pre-chain
+          version and owner-plus-authenticated ACL the protected
+          20260822001000 input guard requires;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -80,6 +84,7 @@ on:
           - clear-controls
           - audit-guard-acl-contract
           - agentos-foundation-cleanup
+          - command-carry-forward
           - probe
 permissions:
   checks: read
@@ -4206,6 +4211,106 @@ jobs:
             exit 1
           fi
           echo "AgentOS roster after cleanup: ${REMAINING} named objects (0 = proven absent, ready for the protected restore)."
+
+      - name: Carry submit_command forward and contract its ACL (scope=command-carry-forward)
+        # Exactly two files, in order. 20260815001000 is genuinely unapplied
+        # on hosted (probe: declare_cross_project_dependency absent), so
+        # hosted's submit_command predates the version the protected
+        # 20260822001000 input guard freezes — chain run 32601908933 failed
+        # on exactly that signature. 20260822001500 then converges the three
+        # command-submission functions to the exact owner-plus-authenticated
+        # ACL the guard requires, closing the hosted default-privilege gap
+        # that has recurred all day. Both fail closed via their own in-file
+        # guards; each file is applied in its own transaction.
+        if: ${{ inputs.scope == 'command-carry-forward' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          CARRY_FILE=supabase/migrations/20260815001000_cross_project_dependencies.sql
+          CARRY_SHA256=4f3f24f181d5c1efc257c0c5e9033a25ad6666863cea2d0f92728c261b9202c9
+          ACL_FILE=supabase/migrations/20260822001500_contract_command_submission_acls.sql
+          ACL_SHA256=4a97f592747df8674720bc44dce068e5433aa3ffa1554eda73a9d775b5de4a98
+          if [ "$(sha256sum "$CARRY_FILE" | cut -d' ' -f1)" != "$CARRY_SHA256" ] \
+            || [ "$(sha256sum "$ACL_FILE" | cut -d' ' -f1)" != "$ACL_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.submit_command_phase1a_internal(uuid,uuid,text,public.risk_level,jsonb,text)') is not null
+               and to_regclass('public.task_dependencies') is not null
+               and to_regclass('public.tasks') is not null
+               and to_regprocedure('public.submit_command(uuid,text,public.risk_level,jsonb,text)') is not null;")
+          if [ "$READY" != "t" ]; then
+            echo "::error::The carry-forward prerequisites are not present on hosted."
+            exit 1
+          fi
+
+          # Once the protected chain is recorded, its rewritten submit_command
+          # is the live one; replaying the pre-chain carry would regress it.
+          CHAIN_RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from supabase_migrations.schema_migrations
+             where version = '20260822001000';")
+          if [ "$CHAIN_RECORDED" != "0" ]; then
+            echo "::error::The protected chain is already recorded; the carry-forward must never replay over it."
+            exit 1
+          fi
+
+          echo "submit_command before the carry, for the log."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
+            set search_path = pg_catalog;
+            select md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) as source_md5,
+                   routine.proacl
+              from pg_proc routine
+             where routine.oid = to_regprocedure('public.submit_command(uuid,text,public.risk_level,jsonb,text)');"
+
+          echo "Applying ${CARRY_FILE}"
+          # Autocommit on purpose: the file adds activity_event_type labels and
+          # then defines functions referencing them, the exact shape the
+          # broker-functions scope documents as needing per-statement commits.
+          # Every statement is create-or-replace/add-if-not-exists, so a rerun
+          # after a partial failure converges rather than conflicts.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$CARRY_FILE"
+          echo "Applying ${ACL_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$ACL_FILE"
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          repair 20260815001000
+          repair 20260822001500
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            set search_path = pg_catalog;
+            select md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'))
+                     = 'adb50eb74e1721274f23d0d69b79e2e8'
+               and (select count(*) from aclexplode(routine.proacl)) = 2
+               and has_function_privilege('authenticated', routine.oid, 'EXECUTE')
+               and not has_function_privilege('anon', routine.oid, 'EXECUTE')
+               and not has_function_privilege('service_role', routine.oid, 'EXECUTE')
+               and to_regprocedure('public.declare_cross_project_dependency(uuid,uuid,text)') is not null
+               and to_regprocedure('public.release_cross_project_dependency(uuid,uuid,text)') is not null
+              from pg_proc routine
+             where routine.oid = to_regprocedure('public.submit_command(uuid,text,public.risk_level,jsonb,text)');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::submit_command did not read back at the exact pre-chain source and owner-plus-authenticated ACL."
+            exit 1
+          fi
+          echo "Carried: submit_command is at the 20260815001000 source with the exact ACL the protected chain expects."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

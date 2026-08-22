@@ -51,10 +51,13 @@ Last triaged: 2026-08-22
   hosted `{postgres, service_role}` ACL, contracted it to owner-only, and read
   it back (ADR-122; the gate's space-only btrim source comparison fixed in the
   same change).
-- [ ] Dispatch `scope=agentos-foundation-cleanup` so the empty 4-object
-  remnant of the partial 20260814000300 apply is dropped and 20260822000900
-  can restore the foundation from proven absence (ADR-123; chain run
-  32600709789 stopped exactly there).
+- [x] Dispatch `scope=agentos-foundation-cleanup`: run 32601173685 measured
+  the 4-object remnant (three enums plus one helper), dropped it, and read
+  back a zero roster (ADR-123).
+- [ ] Dispatch `scope=command-carry-forward` so hosted submit_command reaches
+  the exact 20260815001000 source and owner-plus-authenticated ACL the
+  protected input guard freezes (ADR-124; chain run 32601908933 stopped on
+  exactly that signature after the AgentOS restore rehearsed cleanly).
 - [ ] Apply only the protected atomic
   `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact
