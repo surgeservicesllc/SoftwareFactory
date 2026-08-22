@@ -70,6 +70,7 @@ on:
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
+          - clear-control-acl-contract
           - probe
 permissions:
   checks: read
@@ -948,12 +949,12 @@ jobs:
           echo "The audit labels those functions write. A clear that cannot record itself is"
           echo "a silent deletion, so the enum values are as load-bearing as the functions."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select label
+            select pg_enum.enumlabel
               from pg_enum
               join pg_type on pg_type.oid = pg_enum.enumtypid
              where pg_type.typname = 'activity_event_type'
-               and label in ('task.backlog_cleared', 'command.pipelines_cleared')
-             order by label;"
+               and pg_enum.enumlabel in ('task.backlog_cleared', 'command.pipelines_cleared')
+             order by pg_enum.enumlabel;"
           echo "Expected: both labels present. A missing label means 20260822000700 has not run,"
           echo "and the function above would fail at its audit insert rather than at its delete."
 
@@ -3739,7 +3740,8 @@ jobs:
             select routine.proname,
                    routine.prosecdef as security_definer,
                    has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member_may_execute,
-                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_may_execute
               from pg_proc routine
               join pg_namespace space on space.oid = routine.pronamespace
              where space.nspname = 'public'
@@ -3811,6 +3813,102 @@ jobs:
           echo "After, and what moved:"
           psql "$DB_URL" -q -c "select model, count(*) from public.bots where provider = 'openai' group by model order by 2 desc;"
           psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, coalesce(metadata ->> 'model', '(cleared)') as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
+
+      - name: Contract the clear controls' function ACLs (scope=clear-control-acl-contract)
+        # One file, and it grants nothing new: it revokes EXECUTE that hosted
+        # Supabase handed out on our behalf.
+        #
+        # 20260822000800 revoked only PUBLIC and anon, so ALTER DEFAULT
+        # PRIVILEGES left service_role holding a direct grant on two SECURITY
+        # DEFINER functions that delete rows. Probe run 32590061431 measured it:
+        # service_may_execute = t on both. The apply that installed them had
+        # reported success because its readback asked about two roles.
+        #
+        # The migration carries its own preflight and postflight and raises
+        # rather than returning, so a drifted input fails the transaction here
+        # rather than being reported after the fact.
+        if: ${{ inputs.scope == 'clear-control-acl-contract' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822001200_contract_clear_control_function_acls.sql
+          if [ "$(tr -d '\r' < "$FILE" | sha256sum | cut -d' ' -f1)" != "da917ac167f99ed14d9edcfac3c7b5151b89e879aa5c9170a9f79668f5dc8dbe" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          # Not already recorded. Applying under a version the ledger holds is
+          # how this repository previously lost a migration entirely.
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822001200';")
+          if [ "$LEDGER" != "0" ]; then
+            echo "::error::Ledger already records 20260822001200 (got $LEDGER; want 0)."
+            exit 1
+          fi
+
+          echo "Before, including the role the original apply never asked about:"
+          psql "$DB_URL" -q -c "
+            select routine.proname,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service,
+                   routine.proacl::text as acl
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+             order by 1;"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822001200
+          else
+            npx supabase migration repair --status applied 20260822001200 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo ""
+          echo "After, read back rather than assumed:"
+          psql "$DB_URL" -q -c "
+            select routine.proname,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service,
+                   routine.proacl::text as acl
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+             order by 1;"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              select count(*) = 2 and bool_and(
+                has_function_privilege('authenticated', routine.oid, 'EXECUTE')
+                and not has_function_privilege('anon', routine.oid, 'EXECUTE')
+                and not has_function_privilege('service_role', routine.oid, 'EXECUTE')
+                and (select count(*) from aclexplode(routine.proacl)) = 2
+              )
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Contraction did not produce owner plus authenticated only."
+            exit 1
+          fi
+          echo "Contracted: both clears hold owner and authenticated EXECUTE, nothing else."
 
       - name: Push the outstanding migrations (scope=all)
         # The pipe answers the CLI's confirmation prompt when it asks one;

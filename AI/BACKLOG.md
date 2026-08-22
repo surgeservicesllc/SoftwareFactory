@@ -15,10 +15,12 @@ Last triaged: 2026-08-22
   was kept and why.
 - [x] Apply to hosted with a dedicated narrow scope, hash-pinned, with a ledger
   preflight and a post-apply readback that fails the run on a mismatch.
-- [ ] Dispatch `scope=probe` for the independent second read of the two
-  functions' privileges. The apply's own gate passed; a step that grades its
-  own work is the weaker evidence, and the probe read exists but has not been
-  run.
+- [x] Dispatch `scope=probe` for the independent second read of the two
+  functions' privileges. Run `32590061431` did, and disagreed with the apply:
+  `service_may_execute = t` on both.
+- [ ] Apply `20260822001200_contract_clear_control_function_acls` to hosted
+  with `scope=clear-control-acl-contract` (ADR-120). Until it runs, hosted
+  service_role holds EXECUTE on both clears.
 
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 

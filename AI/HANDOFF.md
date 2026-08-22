@@ -2,6 +2,44 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22): the probe found the clear controls over-granted
+
+`scope=probe` run [32590061431](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32590061431)
+read the two clear functions from a fresh run and measured:
+
+```
+   proname             | security_definer | owner    | member_may_execute | anon_may_execute | service_may_execute
+   clear_all_pipelines | t                | postgres | t                  | f                | t
+   clear_backlog_tasks | t                | postgres | t                  | f                | t
+```
+
+`service_may_execute = t`. `20260822000800` ended each function with `revoke
+all ... from public, anon`, and hosted Supabase's ALTER DEFAULT PRIVILEGES had
+already granted EXECUTE to service_role at CREATE FUNCTION time. The apply's
+own gate reported success because it asked about `authenticated` and `anon` —
+the two roles the migration had remembered.
+
+This is the second time (ADR-120). `20260822000500` did it to
+`apply_resume_extraction` and ADR-118 contained that one; `20260822000800` was
+written the same way four days later.
+
+**What it did and did not expose.** `can_manage_organization` requires
+`auth.uid() is not null`, so a raw service_role connection with no JWT is
+refused inside the body even holding EXECUTE. The clears were not callable by
+service_role in practice. What was true is that the sole barrier was one
+`auth.uid()` test in the body where a grant boundary was also intended, and
+that the migration's own comment claimed "callable by members only" of a
+database where it was not.
+
+**Outstanding owner action:** `20260822001200_contract_clear_control_function_acls`
+closes it. Apply with `.github/workflows/apply-hosted-migrations.yml`,
+`confirm=apply`, `scope=clear-control-acl-contract`. Until it runs, the grant
+stands on production.
+
+The probe also had a bug of its own: it selected `label` from `pg_enum`, whose
+column is `enumlabel`, so the step exited 1. Fixed here. It had already printed
+the rows above before failing, which is why the run still produced the finding.
+
 ## Newest (2026-08-22): the Backlog and All Pipelines pages can be cleared
 
 `/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear

@@ -2,6 +2,24 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-22 — clear-control function ACL (ADR-120):** hosted probe
+run `32590061431` is the measurement, and it is **FAIL** against intent:
+`service_may_execute = t` on both `clear_backlog_tasks` and
+`clear_all_pipelines`. `20260822000800` revoked only PUBLIC and anon, so the
+hosted default privilege to service_role survived; the apply's post-apply gate
+was **PASS** at the time because it asked about two roles rather than three.
+
+Local containment is **PASS**:
+`tests/integration/clear-control-acl-contract.behavior.test.ts`, 5 cases,
+reproducing the measured hosted input rather than the CREATE-FUNCTION-time
+input. Mutation-checked — narrowing the revoke back to `public, anon` fails two
+cases.
+
+Hosted remediation is **NOT APPLIED**. `20260822001200` exists, is hash-pinned
+at `da917ac167f99ed14d9edcfac3c7b5151b89e879aa5c9170a9f79668f5dc8dbe`, and has
+a dedicated `scope=clear-control-acl-contract`, but has not been dispatched.
+The grant stands on production until it is.
+
 **Addendum, 2026-08-22 — Backlog and All Pipelines clear controls
 (ADR-119):** `main` commit `9761055` (#317). Local verification before merge is
 **PASS**: 345 test files, 4168 tests passed, 0 failed, 2 skipped, with lint,
