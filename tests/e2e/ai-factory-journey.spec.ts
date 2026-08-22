@@ -44,16 +44,25 @@ test.describe("AI Factory live journey", () => {
   const email = process.env.AI_FACTORY_E2E_EMAIL ?? "factory.owner@example.com";
   const password = process.env.AI_FACTORY_E2E_PASSWORD ?? "fake-data-journey-2026!";
   /*
-   * Whether step 1's installation rows are already in the database.
+   * Whether step 1 is already satisfied for this account, by either honest
+   * route.
    *
-   * The local lane seeds them, because installing a GitHub App is an account
-   * action against github.com that no runner can perform. A deployed target
-   * cannot be seeded at all -- nothing here has write access to a hosted
-   * database, and nothing should. So against a deployed site the nine-step
-   * walk below does not run: what runs is the signed-in read, which is the
-   * part a deployment can genuinely regress.
+   * The local lane seeds the rows, because installing a GitHub App is an
+   * account action against github.com that no runner can perform. A deployed
+   * target cannot be seeded at all -- nothing here has write access to a
+   * hosted database, and nothing should -- so there the same precondition has
+   * to be met the real way: somebody installs the App on that workspace once,
+   * and from then on step 1 is genuinely done rather than fabricated.
+   *
+   * Two variables rather than one, because they are two different claims.
+   * SEEDED says a runner wrote the rows; INSTALLED says a person completed
+   * the installation and the walk may proceed against a deployed site. Only
+   * the second is ever true of production, and nothing in this repository can
+   * set it on its own.
    */
   const seeded = process.env.AI_FACTORY_E2E_SEEDED === "1";
+  const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
+  const stepOneReady = seeded || installed;
 
   /** The card for one step, found by its title. */
   function stepCard(page: import("@playwright/test").Page, title: string) {
@@ -61,7 +70,10 @@ test.describe("AI Factory live journey", () => {
   }
 
   test("walks all nine steps with fake data and reads them back from Supabase", async ({ page }) => {
-    test.skip(!seeded, "needs step 1's installation rows seeded (AI_FACTORY_E2E_SEEDED=1)");
+    test.skip(
+      !stepOneReady,
+      "needs step 1 satisfied: seeded rows locally (AI_FACTORY_E2E_SEEDED=1), or a real GitHub App installation on a deployed target (AI_FACTORY_E2E_INSTALLED=1)",
+    );
     test.setTimeout(420_000);
 
     // ── Sign in (user admin-created and pre-confirmed by the runner) ──────
@@ -460,6 +472,71 @@ test.describe("AI Factory live journey", () => {
       await expect(stepCard(page, title)).toBeVisible();
     }
     await expect(page.getByText(/\d of 9 complete/)).toBeVisible();
+  });
+
+  test("states every step honestly for a workspace with nothing connected", async ({ page }) => {
+    /*
+     * The first-run state, asserted on whatever target this lane points at --
+     * and the one that matters most on a deployed site, because it is what a
+     * new owner actually meets and the one place the page has been caught
+     * lying twice: once claiming a completed-nothing factory from reads that
+     * failed, once promising draft pull requests while nothing could run.
+     *
+     * It asserts refusals rather than progress, so it is honest on an empty
+     * workspace and skips itself the moment the workspace has any, instead of
+     * failing on a factory that legitimately got built.
+     */
+    test.setTimeout(180_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+
+    await page.goto("/solutions/ai-factory");
+    /*
+     * Count-agnostic on purpose: the journey was eight steps and is now nine.
+     * What this test is about is whether the page tells the truth about an
+     * empty workspace, which does not depend on how many steps there are.
+     */
+    const progress = page.getByText(/\d+ of \d+ complete/);
+    await expect(progress).toBeVisible({ timeout: 45_000 });
+
+    const complete = (await progress.textContent())?.trim() ?? "";
+    test.skip(
+      !/^0 of /.test(complete),
+      `this workspace has progress (${complete}); the empty-state claims below would not apply`,
+    );
+
+    // Step 1 is the gate everything else waits on, and it must offer the real
+    // way through rather than a dead end.
+    const connect = stepCard(page, "Connect Repository");
+    await expect(connect.getByText("No GitHub installation yet")).toBeVisible();
+
+    // Step 2's evidence must not imply a project exists.
+    await expect(stepCard(page, "Create Project").getByText("No project yet for this factory"))
+      .toBeVisible();
+
+    // Step 7 must not claim a command was issued.
+    await expect(stepCard(page, "Issue a Command").getByText("No command yet for this factory"))
+      .toBeVisible();
+
+    /*
+     * Step 8 is the one that used to promise what it could not deliver: with
+     * no executor it described runs landing as draft pull requests, in the
+     * present tense, on a workspace where nothing ships. The conditional
+     * wording is the fix, and this asserts the honest branch is the one a
+     * disconnected workspace sees.
+     */
+    const ship = stepCard(page, "Watch It Ship");
+    await expect(ship.getByText(/When an executor is connected/)).toBeVisible();
+    await expect(ship.getByText("Every run lands as a draft pull request with CI evidence; you review and merge."))
+      .toHaveCount(0);
+    await expect(ship.getByText("Nothing has run yet")).toBeVisible();
+
+    // Nothing anywhere on the page may claim a live connection.
+    await expect(page.getByText("Demo Data")).toHaveCount(0);
   });
 
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {
