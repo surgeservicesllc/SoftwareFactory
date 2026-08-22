@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AiAccountConnect } from "@/components/ai-account-connect";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { Card, StatusBadge } from "@/components/ui";
+import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
 import {
   BOT_PROVIDERS,
   BOT_ROLE_TEMPLATES,
@@ -2271,20 +2272,22 @@ function SubscriptionQuickConnect({
 
   // Which provision slot an account's credential occupies: the bare purpose
   // is slot 0, `…_N` is slot N-1. Names only — this never sees a credential.
-  const slotForAccount = useCallback(async (accountId: string): Promise<number> => {
+  const slotForAccount = useCallback(async (accountId: string): Promise<number | null> => {
     try {
       const response = await fetch("/api/ai-accounts", { cache: "no-store" });
-      if (!response.ok) return 0;
+      if (!response.ok) return null;
       const body = (await response.json()) as {
         accounts?: { id: string; credentialPurpose?: string }[];
       };
       const purposeName = body.accounts?.find((entry) => entry.id === accountId)?.credentialPurpose;
-      const match = purposeName ? /_(\d+)$/.exec(purposeName) : null;
+      const choice = accountProvisionCredentialChoice(providerId, purposeName);
+      if (!choice) return null;
+      const match = /^subscription_(\d+)$/.exec(choice);
       return match ? Number(match[1]) - 1 : 0;
     } catch {
-      return 0;
+      return null;
     }
-  }, []);
+  }, [providerId]);
 
   if (brokerActive) {
     return (
@@ -2292,8 +2295,14 @@ function SubscriptionQuickConnect({
         providerId={providerId}
         providerLabel={provider.label}
         onConnected={async (accountId) => {
-          slotRef.current = await slotForAccount(accountId);
+          const slot = await slotForAccount(accountId);
           setBrokerActive(false);
+          if (slot === null) {
+            setDetail("The connected account's sign-in slot could not be verified. Reconnect it and try again.");
+            setPhase("failed");
+            return;
+          }
+          slotRef.current = slot;
           await provision(false);
         }}
         onFallback={() => {

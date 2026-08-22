@@ -5,9 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AiAccountConnect } from "@/components/ai-account-connect";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
-import { findBotProvider } from "@/lib/bots/catalog";
 import { accountCanBackABot } from "@/lib/bots/accounts";
-import { credentialChoiceForPurpose } from "@/lib/ai-accounts/purposes";
+import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
+import { findBotProvider } from "@/lib/bots/catalog";
 import { cn } from "@/lib/cn";
 
 /**
@@ -339,12 +339,19 @@ export function BotManagerHome({
     let refusal = "";
     for (const account of selected) {
       try {
+        const credential = accountProvisionCredentialChoice(
+          account.provider,
+          account.credentialPurpose,
+        );
+        if (!credential) {
+          throw new Error("This AI account has an unrecognized sign-in slot. Reconnect it and try again.");
+        }
         const response = await fetch("/api/bots/connect/provision", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: account.provider,
-            credential: credentialChoiceForPurpose(account.credentialPurpose),
+            credential,
             additional: seen.has(account.provider),
           }),
         });
@@ -352,10 +359,15 @@ export function BotManagerHome({
           provisioned?: boolean;
           outcome?: string;
           reason?: string;
+          error?: { message?: string };
         };
         // A 200 that made nothing is a failure with a reason, not a success.
         if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
-          throw new Error(body.reason ?? "");
+          throw new Error(
+            body.reason
+              ?? body.error?.message
+              ?? "A bot could not be created for this account.",
+          );
         }
         seen.add(account.provider);
         created += 1;
@@ -397,12 +409,19 @@ export function BotManagerHome({
         const before = new Set(bots.map((bot) => bot.id));
         const seen = new Set(bots.map((bot) => bot.provider));
         for (const account of chosenAccounts) {
+          const credential = accountProvisionCredentialChoice(
+            account.provider,
+            account.credentialPurpose,
+          );
+          if (!credential) {
+            throw new Error("A selected AI account has an unrecognized sign-in slot. Reconnect it and try again.");
+          }
           const response = await fetch("/api/bots/connect/provision", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider: account.provider,
-              credential: credentialChoiceForPurpose(account.credentialPurpose),
+              credential,
               additional: seen.has(account.provider),
             }),
           });
@@ -410,10 +429,15 @@ export function BotManagerHome({
             provisioned?: boolean;
             outcome?: string;
             reason?: string;
+            error?: { message?: string };
           };
           // A 200 that made nothing is a refusal; carry its sentence.
           if (!response.ok || (!body.provisioned && body.outcome !== "exists")) {
-            throw new Error(body.reason ?? "A bot could not be created for a selected account.");
+            throw new Error(
+              body.reason
+                ?? body.error?.message
+                ?? "A bot could not be created for a selected account.",
+            );
           }
           seen.add(account.provider);
         }
@@ -467,19 +491,21 @@ export function BotManagerHome({
 
   const provisionBot = useCallback(async (
     providerId: string,
-    // An account's vault purpose ("claude", "claude_2"), not the route's
-    // credential choice -- translated below.
-    credentialPurpose: string | null | undefined = null,
+    credentialPurpose?: string,
   ) => {
     setCreatingBot(true);
     setBotNotice("");
     try {
+      const credential = accountProvisionCredentialChoice(providerId, credentialPurpose);
+      if (!credential) {
+        throw new Error("This AI account has an unrecognized sign-in slot. Reconnect it and try again.");
+      }
       const response = await fetch("/api/bots/connect/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: providerId,
-          credential: credentialChoiceForPurpose(credentialPurpose),
+          credential,
           additional: bots.some((bot) => bot.provider === providerId),
         }),
       });
@@ -487,8 +513,11 @@ export function BotManagerHome({
         provisioned?: boolean;
         outcome?: string;
         reason?: string;
+        error?: { message?: string };
       };
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? body.reason ?? "The bot was not created.");
+      }
       /*
        * The endpoint answers 200 for "made one", "already had one", AND "the
        * database refused" — treating them all as success is exactly how the

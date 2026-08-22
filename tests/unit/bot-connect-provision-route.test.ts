@@ -96,6 +96,13 @@ describe("POST /api/bots/connect/provision", () => {
     expect(ensureProviderBot).not.toHaveBeenCalled();
   });
 
+  it("keeps broker purpose names out of the server-side credential-choice boundary", async () => {
+    const response = await POST(post({ provider: "anthropic", credential: "claude" }));
+
+    expect(response.status).toBe(400);
+    expect(ensureProviderBot).not.toHaveBeenCalled();
+  });
+
   it("passes the additional flag through so many bots can be connected", async () => {
     const response = await POST(post({
       provider: "anthropic", credential: "subscription", additional: true,

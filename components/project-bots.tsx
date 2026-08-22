@@ -40,7 +40,7 @@ import {
   type PipelineAccess,
   type RepositoryAccess,
 } from "@/lib/bots/assignment-config";
-import { credentialChoiceForPurpose } from "@/lib/ai-accounts/purposes";
+import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
 import { findBotProvider } from "@/lib/bots/catalog";
 import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -100,13 +100,15 @@ type LinkableAccount = {
 function accountCredentialRef(account: LinkableAccount): string | null {
   const provider = findBotProvider(account.provider);
   if (!provider?.subscriptionCredentialRef) return null;
-  const slot = /_(\d+)$/.exec(account.credentialPurpose ?? "");
+  const choice = accountProvisionCredentialChoice(account.provider, account.credentialPurpose);
+  if (!choice) return null;
+  const slot = /^subscription_(\d+)$/.exec(choice);
   return `${provider.subscriptionCredentialRef}${slot ? `_${slot[1]}` : ""}`;
 }
 
 /** The provision endpoint's pattern-checked name for the same slot. */
-function accountCredentialChoice(account: LinkableAccount): string {
-  return credentialChoiceForPurpose(account.credentialPurpose);
+function accountCredentialChoice(account: LinkableAccount): string | null {
+  return accountProvisionCredentialChoice(account.provider, account.credentialPurpose);
 }
 
 type ProjectRole = { id: string; name: string; slug: string; summary: string };
@@ -791,12 +793,16 @@ function AssignWizard({
       for (const id of linkSelected) {
         const account = linkable.find((entry) => entry.id === id);
         if (!account) continue;
+        const credential = accountCredentialChoice(account);
+        if (!credential) {
+          throw new Error(`${account.displayName} has an unrecognized sign-in slot. Reconnect it and try again.`);
+        }
         const response = await fetch("/api/bots/connect/provision", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: account.provider,
-            credential: accountCredentialChoice(account),
+            credential,
             additional: true,
           }),
         });

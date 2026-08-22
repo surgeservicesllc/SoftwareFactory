@@ -2,6 +2,40 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-21 — AI Factory production acceptance:** exact candidate
+head `a020e8192d8512a1bb65112e01017047087f0528` passed all four jobs in CI run
+`32543409160` (quality plus browser shards 1/3, 2/3, and 3/3). Production-browser
+evidence is separately **4/8**: **Agentic SDLC** persisted after reload and its
+immutable `pipeline.selected` event appeared in Activity; the owner-reconnected
+Claude account reports Connected. Refresh remains pending because no worker
+sweep completed, so it proves no fresh worker or end-to-end bot health.
+
+Production Create Bot still fails and leaves zero bots. The proven mismatch is
+that the Bot Manager sends raw broker purposes `claude`/`claude_N` (or
+`codex`/`codex_N`) to a provision contract that accepts provider-neutral
+`subscription`/`subscription_N`. PR #309 exact head
+`db1958f8b501e865a9e741a21298683e0f88f969` normalizes every account-backed
+path and fails closed on missing/mismatched metadata; 99 focused tests, lint,
+typecheck, the production build, and the secret/protected-path audit pass. The full Windows run
+passed 3,763 tests but retained one unrelated timing failure that passed 13/13
+immediately in isolation, plus the existing `script`-binary runner errors. The
+exact-head CI gate failed in run `32545138211`: browser shards 1/3 through 3/3 could not
+find the `AI Factory` H1 while required reads were pending. The forward
+candidate keeps the page H1 in loading and all fail-closed states and adds a
+direct regression test.
+
+The candidate still is not release-ready: the protected credential normalizer
+rejects the catalog-declared Claude/Codex subscription reference that
+provisioning stores, the manual readiness endpoint checks and serializes
+environment presence only, and provisioning leaves `bots.ai_account_id` null.
+No protected fix was made without exact owner approval. Bot creation, assignment,
+configuration, readiness, identity binding, and reload stickiness therefore
+remain unproved. Production is also still unsafe/not fully
+live because of five linked lint errors/ten
+findings, raw autonomy and kill-switch drift, two projects with effective kill
+off, no connected/fresh worker, and hosted
+`20260821000300`/candidate `20260821000400` migration/application drift.
+
 **Addendum, 2026-08-22 — Job Seeker, production-behavior certified:** the
 evidence tier above local-stack certification now exists: the full
 fake-data journey ran against https://www.theagoras.com itself (journey
