@@ -312,10 +312,24 @@ export function routeFactoryCommand(input: {
     }
 
     if (candidate.provider !== input.provider || candidate.model !== input.model) {
+      /*
+       * Name both halves and where to change one.
+       *
+       * "does not match the command's fixed execution provider and model" was
+       * true and useless: it named two internal concepts, neither of which
+       * appears on any screen, and left a person who had done everything
+       * right with nothing to act on. Only one worker claims this queue, so
+       * the mismatch is always concrete — this bot runs X, the executor runs
+       * Y — and saying which is the difference between a dead end and a fix.
+       */
+      const mismatch = candidate.provider !== input.provider
+        ? `runs on ${candidate.provider}, and this command executes on ${input.provider}`
+        : `is set to ${candidate.model}, and this command executes on ${input.model}`;
       refused.push(refusal(
         candidate,
         "PROVIDER_MODEL_MISMATCH",
-        "This bot does not match the command's fixed execution provider and model.",
+        `${candidate.botName} ${mismatch}. Change the bot's model in Configure Bot Settings, `
+          + "or assign a bot that already runs it.",
       ));
       continue;
     }

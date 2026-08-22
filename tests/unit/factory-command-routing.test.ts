@@ -358,4 +358,24 @@ describe("factory command routing", () => {
 
     expect(decision).toMatchObject({ outcome: "SELECTED", selected: { botName: "Older" } });
   });
+  it("tells a person which model the bot has and which one runs, and where to change it", () => {
+    // The message this replaces — "does not match the command's fixed
+    // execution provider and model" — was true and unactionable: it named two
+    // internal concepts, neither of which appears on any screen. This is the
+    // last step of the journey, so a dead end here costs the whole setup.
+    const wrongModel = decide({ model: "gpt-5.1-codex" });
+    expect(wrongModel.outcome).toBe("REFUSED");
+    const modelReason = wrongModel.refused[0]?.reason ?? "";
+    expect(modelReason).toContain("Codex Audit Bot");
+    expect(modelReason).toContain("gpt-5.1-codex");
+    expect(modelReason).toContain("gpt-5.3-codex");
+    expect(modelReason).toContain("Configure Bot Settings");
+
+    const wrongProvider = decide({ provider: "anthropic" });
+    const providerReason = wrongProvider.refused[0]?.reason ?? "";
+    // Names the provider pair, not the model pair, when that is what differs.
+    expect(providerReason).toContain("anthropic");
+    expect(providerReason).toContain("openai");
+    expect(providerReason).not.toContain("is set to");
+  });
 });
