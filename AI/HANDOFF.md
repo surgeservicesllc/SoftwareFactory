@@ -2,7 +2,33 @@
 
 Last updated: 2026-08-22
 
-## Newest (2026-08-22 ~21:30Z): the containment gate is honest and its last hosted input is contracted
+## Newest (2026-08-22 ~23:00Z): every input gate passes; the rehearsal lint itself was the last defect
+
+After the audit-guard contract (run 32599987697), the AgentOS partial-
+foundation cleanup (run 32601173685, ADR-123), and the submit_command
+carry-forward (run 32602669547, ADR-124), chain run 32603384774 passed every
+prerequisite, history, catalog, containment, and input gate for the first
+time - and then aborted inside the rehearsal transaction on
+`missing trigger relation`. That error is plpgsql_check refusing to lint a
+trigger function without the relation that types NEW/OLD; the lint passed
+`0::regclass` for all 27 roster functions, three of which are trigger
+functions, so the clause could never complete against any database and had
+simply never been reached before. The rehearsal's `begin;` aborted with it,
+so nothing committed. The lint rows now carry the relations
+`20260822001000` pins in its own trigger_expectations
+(`normalize_phase1c_command()` -> `public.commands`;
+`plan_phase1c_task_and_run()` and `queue_phase1c_run_for_task()` ->
+`public.tasks`), and `scope=probe` gained a rolled-back
+create-extension/lint/rollback block that proves the mechanics on hosted
+plus a residue readback (ADR-125).
+
+Operator order: dispatch `scope=probe` for the lint-mechanics evidence, then
+under exact-main CI green and READY Vercel identity on the new tip dispatch
+`scope=factory-any-model-record-only`, then capture the signed-in production
+Step 8 record-only acceptance and truthful Step 9. Workers, autonomy, and
+automatic actions stay OFF; the global kill switch stays ON.
+
+## Earlier (2026-08-22 ~21:30Z): the containment gate is honest and its last hosted input is contracted
 
 The protected `factory-any-model-record-only` release walked through four
 fail-closed refusals today, each isolated by extending `scope=probe` with a

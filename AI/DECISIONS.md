@@ -1331,3 +1331,35 @@ Use this append-only log for decisions that constrain future implementation. Cha
   its documented owner-only controls, and the ledger records both versions
   truthfully. Workers, autonomy, and automatic actions remain OFF and the
   global kill switch remains ON.
+
+## ADR-125 - The rehearsal lint names each trigger function's relation instead of never running
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: the protected chain's pre-commit lint called
+  `extensions.plpgsql_check_function_tb(signature::regprocedure, 0::regclass,
+  ...)` for all 27 roster functions, three of which are the Phase 1C trigger
+  functions. plpgsql_check categorically raises `missing trigger relation` /
+  `Trigger relation oid must be valid` when asked to lint a trigger function
+  without the relation that types NEW and OLD, so that clause could not
+  complete against any database state; it had simply never been reached
+  before, because every earlier chain run refused at an earlier gate. Chain
+  run `32603384774` - the first to pass the carry-forward-unblocked input
+  guard - aborted inside the rehearsal transaction on exactly that error,
+  committing nothing. The lint's VALUES rows now carry a `trigger_relation`
+  column: `public.commands` for `normalize_phase1c_command()`, `public.tasks`
+  for `plan_phase1c_task_and_run()` and `queue_phase1c_run_for_task()` -
+  copied from `20260822001000`'s own `trigger_expectations` - and
+  `coalesce(trigger_relation::regclass, 0::regclass)` for everything else.
+- Rationale: correcting a provably unsatisfiable clause is not weakening a
+  gate. As written the lint rejected every possible database, including a
+  perfect one; as corrected it actually lints the three trigger bodies for
+  the first time, which is strictly more verification, with the same roster,
+  levels, and fail-closed handling. `scope=probe` gained a rolled-back
+  begin/create-extension/lint/rollback block proving the mechanics against
+  the current hosted bodies plus a residue readback, so the fix is measured,
+  not assumed.
+- Consequence: the rehearsal can reach its rollback for the first time. The
+  frozen six-file chain is untouched; only the workflow's lint invocation and
+  its pinning test changed. Workers, autonomy, and automatic actions remain
+  OFF and the global kill switch remains ON.
