@@ -423,7 +423,20 @@ jobs:
               ('20260815001600', 'function', 'propose_improvements_from_detections', null),
               ('20260816000100', 'table',    'ai_accounts',                          null),
               ('20260816000200', 'function', 'list_ai_accounts_for_verification',    null),
-              ('20260816000300', 'function', 'find_open_ai_auth_session',            null)
+              ('20260816000300', 'function', 'find_open_ai_auth_session',            null),
+              -- The command path itself, and the two migrations either side of it.
+              -- Their history rows are blank on the remote, and a blank row means
+              -- nothing on its own: every Phase 2E object below reads blank in the
+              -- ledger and `t` here. Issue a Command runs through
+              -- `list_factory_command_routing_candidates` and `submit_factory_command`,
+              -- so leaving them unprobed left the one surface an owner actually uses
+              -- as the only thing this report could not answer for.
+              ('20260816001600', 'table',    'resource_reservations',                null),
+              ('20260821000200', 'table',    'graph_gates',                          null),
+              ('20260821000400', 'table',    'factory_command_routes',               null),
+              ('20260821000400', 'function', 'list_factory_command_routing_candidates', null),
+              ('20260821000400', 'function', 'submit_factory_command',               null),
+              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex')
             )
             select expected.version,
                    expected.kind,
