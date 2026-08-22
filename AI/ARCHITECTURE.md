@@ -71,7 +71,7 @@ session; a failed cancellation keeps the overlay open and resumes polling.
 
 Migration `20260822000200_register_bot_for_ai_account.sql` is local and
 unapplied at SHA-256
-`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
 Its protected `scope=bot-account-binding` verifies and applies only that exact
 file after predecessor/absence and clean-catalog checks; broad apply refuses to
 introduce it. The scope proves catalog, definition, security, search-path, ACL,

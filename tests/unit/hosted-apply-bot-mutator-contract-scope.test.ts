@@ -17,7 +17,7 @@ const migrationRelativePath =
 const migrationPath = resolve(repositoryRoot, migrationRelativePath);
 const scope = "bot-account-binding-contract";
 const frozenSha256 =
-  "e3bad45af18ed07d3ab7adcfc9a326103fc09fd2b398f664c733de73fac7c1e2";
+  "591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd";
 
 interface WorkflowStep {
   readonly env?: Readonly<Record<string, string>>;
@@ -178,7 +178,9 @@ describe("the hosted bot mutator CONTRACT scope", () => {
     expect(predecessor).toBeGreaterThanOrEqual(0);
     expect(target).toBeGreaterThan(predecessor);
     expect(apply).toBeGreaterThan(target);
-    expect(command).toContain('if [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]');
+    expect(command).toContain(
+      'if [ "$NORMALIZER" != "1" ] || [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]',
+    );
     expect(ledgerInsert).toBeGreaterThan(apply);
     expect(command).not.toMatch(/migration\s+repair\s+--status\s+applied\s+20260822000300/);
     expect(command).toContain('if [ "$RECORDED" != "1" ]');
@@ -207,13 +209,13 @@ describe("the hosted bot mutator CONTRACT scope", () => {
     ]) {
       expect(command.slice(catalog, apply)).toContain(identity);
     }
-    expect(command.slice(catalog, apply)).toContain("pg_get_functiondef");
-    expect(command.slice(catalog, apply)).toContain("pg_get_triggerdef");
+    expect(command.slice(catalog, apply)).toContain("md5(routine.prosrc)");
+    expect(command.slice(catalog, apply)).toContain("actual_contract_md5");
+    expect(command.slice(catalog, apply)).toContain("trigger_row.tgtype = expected.trigger_type");
     expect(command.slice(catalog, apply)).toContain("search_path=pg_catalog");
     expect(command.slice(catalog, apply)).toContain("aclexplode(proacl)");
     expect(command.slice(catalog, apply)).toContain("count(default_row.oid) = 2");
     expect(command.slice(catalog, apply)).toContain("coalesce(");
-    expect(command.slice(catalog, apply)).toContain("8d881acabd1e1f28ea74c3efc22354f3");
   });
 
   it("preserves legacy definitions and closes authenticated/public/anon/service_role execution", () => {
@@ -259,7 +261,9 @@ describe("the hosted bot mutator CONTRACT scope", () => {
     expect(command).toContain('if [ "$PROTECTED_CATALOG_READY" != "t" ]');
     expect(command.slice(catalog, push)).toContain("count(default_row.oid) = 2");
     expect(command.slice(catalog, push)).toContain("count(trigger_row.oid) = 3");
-    expect(command.slice(catalog, push)).toContain("actual_definition_md5 = definition_md5");
+    expect(command.slice(catalog, push)).toContain("actual_source_md5 = source_md5");
+    expect(command.slice(catalog, push)).toContain("actual_contract_md5 = contract_md5");
+    expect(command.slice(catalog, push)).toContain("provolatile::text = volatility");
     expect(command.slice(catalog, push)).toContain("execute_role = 'none'");
     expect(push).toBeGreaterThan(catalog);
   });

@@ -2,6 +2,36 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22): production app live; forward containment local (ADR-111)
+
+Exact approved commit `4fc18d3e5ecba6f362f14a7459e588a74a84b84b`
+is now `main` and Vercel deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` is
+READY for that SHA. Public `/solutions/ai-factory` returns 200; signed-out
+worker/autonomy/bots/projects API checks return 401. Do not translate those
+signals into authenticated bot acceptance.
+
+EXPAND workflow run `32568221857` failed at `LEGACY_CATALOG_READY`. It had
+already verified the frozen file hash and exact ledger posture
+(`20260822000100` once, `20260822000200`/`20260822000300` absent), but it never
+printed `Applying ...`, never entered the single-transaction DDL/ledger apply,
+and never notified PostgREST. Hosted schema and both target ledger rows are
+unchanged. CONTRACT was not run.
+
+Local reproduction proved the hosted delta: Supabase default function grants
+add direct `service_role` EXECUTE to all seven legacy routines. It also proved
+the old definition MD5 was PostgreSQL-major-sensitive deparser output.
+
+Local forward containment adds protected migration 00150 to normalize only a
+coherent all-seven overgrant and refuse mixed state. Corrected 00200/00300 use
+stable source hashes plus full routine/trigger contract fields. The protected
+workflow requires 00150 before EXPAND, EXPAND before CONTRACT, and exact app
+acceptance before CONTRACT; broad apply refuses all three until already
+recorded. The read-only audit includes server version, 00150 ledger state,
+source hashes, and named ACLs. Nothing new is pushed or hosted. Freeze the new
+commit and migration hashes, obtain fresh exact RED approval, then require CI,
+00150, EXPAND, signed-in acceptance/lint/health/containment, and only then
+CONTRACT. Never rerun old EXPAND, repair history, reset, or down-migrate.
+
 ## Newest (2026-08-22): Claude bot identity and Bot Space candidate (ADR-108/ADR-109)
 
 This candidate is local, not deployed. AI Factory now owns the one application
@@ -16,7 +46,7 @@ postings retain their authored role and configuration; with existing roles, a
 new posting prefers the preset-matching slug before the first available role.
 
 Migration `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
-`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
 `ensure_ai_account_bot` derives provider and credential slot from the exact
 tenant account and returns a bot UUID bound to it. A default/non-additional
 request reuses the account's bound bot or adopts at most one unambiguous legacy

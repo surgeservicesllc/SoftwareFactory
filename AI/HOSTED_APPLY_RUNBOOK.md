@@ -8,12 +8,13 @@ the measured list, not today's total outstanding migration count. Later exact ev
 `20260821000300_project_pipeline_selection` and
 `20260822000100_project_agent_selection` are hosted, while
 `20260821000400_command_factory_routing` remains separately gated and
-`20260822000200_register_bot_for_ai_account` and its separately gated
+`20260822000150_normalize_legacy_bot_function_acls`,
+`20260822000200_register_bot_for_ai_account`, and the separately gated
 `20260822000300_contract_bot_mutator_acls` follow-up are the current exact
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 134 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 135 migration files. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -36,15 +37,26 @@ probe cannot drift apart.)
   `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
   Production still serves the pre-routing application copy. Until the function
   is hosted, the application intentionally fails closed with Not Connected/503.
+- `20260822000150_normalize_legacy_bot_function_acls.sql` is **unhosted**,
+  protected, forward-only, and frozen at SHA-256
+  `49cbfe2f71c628442b2726091c0165d3d277bd307490605aca661b161dec75ae`.
+  Apply it only through `scope=bot-legacy-acl-normalization`, with 00100 once
+  and 00150/00200/00300 absent. It accepts only an exact coherent all-seven
+  Supabase `service_role` overgrant (or the exact already-normalized vanilla
+  state), refuses any mixed count or other catalog/ACL drift, revokes only the
+  seven direct service-role grants, and records 00150 in the same protected
+  transaction. It creates no function, trigger, policy, worker, or autonomy
+  path and performs no history repair.
 - `20260822000200_register_bot_for_ai_account.sql` is **unhosted** and protected.
   Its frozen SHA-256 is
-  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
-  Apply it only through `scope=bot-account-binding`, after confirming
-  `20260822000100` is present and `20260822000200` is absent. This is the EXPAND
+  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
+  Apply it only through `scope=bot-account-binding`, after confirming 00100 and
+  00150 are each present once and 00200/00300 are absent. This is the EXPAND
   half of a rolling cutover. The scope checks the hash and a clean pre-apply
-  catalog. Before the first DDL, both the migration and workflow pin the exact
-  `pg_get_functiondef` hashes, owner, language, kind, volatility,
-  `SECURITY DEFINER`, search path, overload set, and authenticated-only ACLs of
+  catalog. Before the first DDL, both the migration and workflow pin stable
+  `prosrc` hashes plus return/argument/default/cost/rows/support/transform,
+  owner, language, kind, volatility, `SECURITY DEFINER`, search path, overload,
+  and authenticated-only ACLs of
   `register_bot` plus all six legacy mutators. Historical bindings must resolve
   to an existing same-tenant subscription account with the exact provider,
   purpose, and credential reference. The migration-local postflight rejects
@@ -62,15 +74,15 @@ probe cannot drift apart.)
   approved forward CONTRACT migration after exact-app deployment and signed-in
   acceptance.
   The workflow defaults to read-only `scope=probe`; `scope=all` refuses to push unless
-  `20260822000200` is already recorded exactly once by this dedicated scope.
+  00150, 00200, and 00300 are already recorded exactly once by their dedicated scopes.
   This workflow does not prove runtime create/bind/assign/configure/readiness/
   audit behavior, linked-database lint, application health, or containment;
   each is a mandatory post-apply release gate.
 - `20260822000300_contract_bot_mutator_acls.sql` is **unhosted**, protected,
   forward-only, and frozen at SHA-256
-  `e3bad45af18ed07d3ab7adcfc9a326103fc09fd2b398f664c733de73fac7c1e2`.
+  `591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd`.
   It may be applied only through `scope=bot-account-binding-contract`, with
-  `20260822000200` recorded exactly once and `20260822000300` absent. Before
+  00150 and 00200 recorded exactly once and 00300 absent. Before
   any database access the dispatch must run from `refs/heads/main`, name the
   exact checked-out 40-character application SHA in `contract_app_sha`, and
   provide `contract_acceptance=exact-app-vercel-accepted`. With only
@@ -87,16 +99,17 @@ probe cannot drift apart.)
   and ACLs, revision columns/constraints, triggers, and all six legacy
   definitions/signatures/owners/`SECURITY DEFINER`/search paths/authenticated-
   only ACLs. It changes only those six legacy `EXECUTE` ACLs, re-reads the
-  definitions byte-for-byte, verifies authenticated/PUBLIC/anon/service-role
+  stable sources and every catalog contract field unchanged, verifies authenticated/PUBLIC/anon/service-role
   denial, and inserts exactly one ledger row in the same transaction as the six
   revokes; target absence plus the ledger primary key makes a race/retry roll back.
 
-  The mandatory order is **EXPAND (`20260822000200`) -> deploy and accept the
-  exact application SHA in Vercel production -> CONTRACT (`20260822000300`)**.
+  The mandatory order is **ACL normalizer (`20260822000150`) -> EXPAND
+  (`20260822000200`) -> deploy and accept the exact application SHA in Vercel
+  production -> CONTRACT (`20260822000300`)**.
   The candidate server must translate cached pre-EXPAND request shapes into the
   checked RPC contracts; missing-function fallback exists only for a truly
   pre-EXPAND database and must not attempt a revoked legacy RPC after CONTRACT.
-  `scope=all` refuses to push until both protected versions are separately
+  `scope=all` refuses to push until all three protected versions are separately
   recorded exactly once by their dedicated scopes and the full live contracted
   function/ACL/revision/default/constraint/trigger catalog is still exact.
 - Production safety was contained and remeasured at 2026-08-22 03:22Z: the

@@ -2,10 +2,32 @@
 
 Last reviewed: 2026-08-22
 
+**Release containment checkpoint, 2026-08-22 (ADR-111):** exact commit
+`4fc18d3e5ecba6f362f14a7459e588a74a84b84b` is on `main`; exact Vercel
+deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` is READY. Public AI Factory
+availability is 200 and four signed-out protected APIs refuse with 401.
+Protected EXPAND run `32568221857` is a successful negative safety test and a
+failed release gate: the frozen hash and ledger predecessor/absence checks
+passed, then the seven-routine catalog/ACL predicate stopped before any DDL,
+ledger insert, schema reload, or CONTRACT action. Production therefore does
+not contain `20260822000200` or `20260822000300`, and authenticated bot/Role/
+readiness/stickiness acceptance is not claimed.
+
+Local reproduction now separates the two defects: the hosted all-seven
+`service_role` default ACL overgrant and cross-major `pg_get_functiondef`
+deparser hashes. The forward candidate adds an atomic all-or-nothing 00150 ACL
+normalizer, stable `prosrc` hashes, explicit full routine contract checks, and
+structural trigger checks. A 6/7 mixed-state test proves rollback with zero
+revokes; output-type and cost-drift tests prove catalog changes are rejected.
+The read-only audit reports server version, ledger, source hashes, and safe ACL
+metadata. This remains local candidate evidence until the new exact commit and
+all migration hashes are frozen, approved, pushed, and passed through CI and
+the staged hosted acceptance sequence.
+
 **Addendum, 2026-08-22 — Claude bot identity and Bot Space release
 candidate (ADR-108/ADR-109):** this is local candidate evidence only. Migration
 `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
-`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
 It binds each returned subscription bot to the exact tenant AI account and
 derived provider/credential slot. A default/non-additional request reuses the
 account's bot or permits only one unambiguous in-place legacy adoption; an

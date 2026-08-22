@@ -2,6 +2,33 @@
 
 Last triaged: 2026-08-21
 
+## Bot-account binding forward containment (2026-08-22, ADR-111)
+
+- [x] Push exact approved commit
+  `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` to `main` and verify exact
+  READY Vercel deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` plus public
+  HTTP 200 / signed-out API 401 boundaries.
+- [x] Preserve the fail-closed database result: EXPAND run `32568221857`
+  stopped at `LEGACY_CATALOG_READY` before its apply notice, DDL transaction,
+  or ledger insert. Predecessor `20260822000100` remains present and both
+  protected target versions remain absent. CONTRACT was not dispatched.
+- [x] Reproduce both independent failures locally: Supabase function default
+  privileges add direct `service_role` EXECUTE to all seven frozen legacy bot
+  routines, while raw `pg_get_functiondef` MD5s vary across PostgreSQL major
+  versions even when the catalog contract is identical.
+- [x] Add forward-only migration `20260822000150` to atomically normalize only
+  the coherent all-seven hosted overgrant. It refuses mixed 1-6/7 states,
+  identity/body/catalog/owner/ACL drift, and performs no history write itself.
+- [x] Replace deparser-byte gates with `md5(prosrc)` plus explicit return,
+  argument/default, security, volatility, cost/rows, support, transform,
+  trigger, and ACL catalog invariants in EXPAND, CONTRACT, and hosted guards.
+- [ ] Freeze the new commit and all three migration hashes, obtain one new exact
+  RED authorization, then push and require green CI before any hosted DDL.
+- [ ] Apply only 00150 then 00200; complete signed-in Role/Claude stickiness,
+  runtime, audit, lint, health, autonomy-off/kill-switch-on acceptance; only
+  then apply 00300. Never reset, down-migrate, repair history, or rerun the old
+  failed workflow.
+
 ## Claude bot identity and Role assignment release (2026-08-22, ADR-108/ADR-109)
 
 - [x] Remove the zero-role assignment dead end inside the Assign Bots wizard.
@@ -16,7 +43,7 @@ Last triaged: 2026-08-21
   serialize/fence broker start, retry, close, and cleanup races.
 - [x] Freeze forward migration
   `20260822000200_register_bot_for_ai_account.sql` at SHA-256
-  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
   It binds a subscription bot to the exact tenant AI account, introduces
   monotonic bot/assignment revisions, rejects stale or released-posting
   writes, and records exact-config readiness through a service-role-only

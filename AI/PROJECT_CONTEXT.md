@@ -24,7 +24,7 @@ Developer permission preset remains the new-posting configuration default, and
 existing posting role/configuration is preserved. Broker start/retry/close and
 cleanup are serialized and generation-fenced. Forward migration
 `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
-`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981` and the
+`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be` and the
 single-file `scope=bot-account-binding` is not hosted. This migration is the
 EXPAND half of a rolling cutover: legacy function definitions, signatures,
 security/search paths, and exact authenticated-only execute ACLs remain so the

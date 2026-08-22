@@ -23,7 +23,7 @@ const migrationRelativePath =
 const migrationPath = resolve(repositoryRoot, migrationRelativePath);
 const scope = "bot-account-binding";
 const frozenSha256 =
-  "39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981";
+  "394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be";
 
 interface WorkflowStep {
   readonly name: string;
@@ -140,7 +140,7 @@ describe("the hosted bot-account-binding apply scope", () => {
     expect(push).toBeGreaterThan(gate);
   });
 
-  it("prints the frozen register_bot definition hash in the read-only probe", () => {
+  it("prints the frozen register_bot source hash in the read-only probe", () => {
     const probe = steps.find((step) =>
       step.name === "Report what the database already has (scope=probe)"
     );
@@ -149,8 +149,9 @@ describe("the hosted bot-account-binding apply scope", () => {
     expect(command).toContain(
       "public.register_bot(uuid,text,public.bot_provider,text,text,text,text)",
     );
-    expect(command).toContain("md5(pg_get_functiondef(routine.oid))");
-    expect(command).toContain("318700d6d8d26603d9f5572f11d16e2f");
+    expect(command).toContain("md5(routine.prosrc) as source_md5");
+    expect(command).toContain("87f577c2ecba24836e54b4ad5e7f383a");
+    expect(command).not.toContain("md5(pg_get_functiondef(routine.oid))");
     expect(command).not.toMatch(/migration\s+repair|supabase\s+db\s+push/);
     expect(command).not.toContain("insert into supabase_migrations.schema_migrations");
   });
@@ -217,22 +218,23 @@ describe("the hosted bot-account-binding apply scope", () => {
     expect(workflowApply).toBeGreaterThan(workflowGuard);
     expect(migrationGuard).toBeGreaterThanOrEqual(0);
     expect(firstDdl).toBeGreaterThan(migrationGuard);
-    for (const [signature, definitionHash] of [
-      ["public.register_bot(uuid,text,public.bot_provider,text,text,text,text)", "318700d6d8d26603d9f5572f11d16e2f"],
-      ["public.assign_bot(uuid,uuid,uuid,uuid)", "2398b395e3545628939f4f5b6461011d"],
-      ["public.assign_bots_to_project(uuid,uuid,jsonb)", "4bf7d8d08c5cf938fba2fea2376839eb"],
-      ["public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)", "ed7c5cbe31543823161348d14d9c69d7"],
-      ["public.set_bot_assignment_execution(uuid,uuid,text,text)", "cab77271ac904b4e13105f3dd3a06335"],
-      ["public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)", "77852950f29eb560c300e0ec24649ed9"],
-      ["public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)", "6cd8b39bcae374515bedc66d5da31413"],
+    for (const [signature, sourceHash] of [
+      ["public.register_bot(uuid,text,public.bot_provider,text,text,text,text)", "87f577c2ecba24836e54b4ad5e7f383a"],
+      ["public.assign_bot(uuid,uuid,uuid,uuid)", "9e5dea25195823492e3326ed96fa0535"],
+      ["public.assign_bots_to_project(uuid,uuid,jsonb)", "742fea5b0e8655f19399f2a3944ce2c9"],
+      ["public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)", "81788757faa428efebfc8a8ee7f9b6e6"],
+      ["public.set_bot_assignment_execution(uuid,uuid,text,text)", "cd33f17d969464665066854ff7692a1c"],
+      ["public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)", "3637e0869520ee9eae89efd426b0b5c5"],
+      ["public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)", "b39a3820c504f9dda9e84f73e1e4f065"],
     ]) {
       expect(command.slice(workflowGuard, workflowApply)).toContain(signature);
-      expect(command.slice(workflowGuard, workflowApply)).toContain(definitionHash);
+      expect(command.slice(workflowGuard, workflowApply)).toContain(sourceHash);
       expect(migrationPreamble).toContain(signature);
-      expect(migrationPreamble).toContain(definitionHash);
+      expect(migrationPreamble).toContain(sourceHash);
     }
     for (const invariant of [
-      "pg_get_functiondef", "pg_get_userbyid", "pg_language", "lanname",
+      "prosrc", "prorettype", "proallargtypes", "procost",
+      "pg_get_userbyid", "pg_language", "lanname",
       "prokind", "provolatile", "prosecdef", "search_path=pg_catalog",
       "aclexplode", "is_grantable",
     ]) {
@@ -262,7 +264,10 @@ describe("the hosted bot-account-binding apply scope", () => {
       command.slice(workflowPostflight),
       migration.slice(migrationPostflight),
     ]) {
-      expect(source).toContain("pg_get_functiondef");
+      expect(source).toContain("prosrc");
+      expect(source).toContain("prorettype");
+      expect(source).toContain("proallargtypes");
+      expect(source).toContain("procost");
       expect(source).toContain("pg_get_userbyid");
       expect(source).toContain("pg_language");
       expect(source).toContain("prokind");
@@ -275,8 +280,8 @@ describe("the hosted bot-account-binding apply scope", () => {
       expect(source).toMatch(/case\s+when\s+(?:expected\.)?execute_role\s*=\s*'none'\s+then\s+1\s+else\s+2\s+end/);
     }
     expect(command.slice(workflowPostflight)).toContain("count(oid) = 10");
-    expect(command.slice(workflowPostflight)).toContain("8d881acabd1e1f28ea74c3efc22354f3");
-    expect(migration.slice(migrationPostflight)).toContain("8d881acabd1e1f28ea74c3efc22354f3");
+    expect(command.slice(workflowPostflight)).toContain("trigger_row.tgtype = 23");
+    expect(migration.slice(migrationPostflight)).toContain("trigger_row.tgtype <> expected.trigger_type");
     expect(migration.slice(migrationPostflight)).toContain("default_row.oid is null");
     expect(migration.slice(migrationPostflight)).toContain("new EXPAND trigger catalog is not exact");
   });

@@ -16,7 +16,7 @@ Status: **Implemented and locally gated; final rebased-commit gates, publication
   only blank selected drafts.
 - Bind each subscription bot to its exact tenant AI account through
   `20260822000200_register_bot_for_ai_account.sql` (SHA-256
-  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`),
+  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`),
   preserving one unambiguous legacy bot UUID and enforcing the exact
   account/provider/credential-slot identity.
 - Add monotonic bot and assignment revisions. Lock and compare exact posting

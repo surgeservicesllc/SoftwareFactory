@@ -987,3 +987,36 @@ Use this append-only log for decisions that constrain future implementation. Cha
   exact RED authorization and post-apply ledger/catalog/ACL/lint/health/
   containment verification. It enables no worker, autonomous action, provider
   execution, merge, deployment, rollback, or secret path.
+
+## ADR-111 - Contain the failed bot catalog gate with a forward ACL normalizer and stable identities
+
+- Date: 2026-08-22
+- Status: Accepted for the local forward-containment candidate; publication and execution pending new exact owner approval
+- Decision: EXPAND run `32568221857` stopped before DDL because hosted Supabase
+  gives all seven legacy routines an additional direct `service_role` EXECUTE
+  ACL through its default function privileges. A second independent defect was
+  the use of raw `md5(pg_get_functiondef(...))`: PostgreSQL 17 and 18 can
+  deparse an identical routine differently. Add protected forward migration
+  `20260822000150_normalize_legacy_bot_function_acls.sql`; it accepts only the
+  exact coherent vanilla 0/7 or hosted 7/7 service-role posture, rejects mixed
+  states, revokes only the seven direct overgrants, and verifies the exact
+  owner-plus-authenticated ACL inside one atomic statement. EXPAND/CONTRACT and
+  their hosted guards use `md5(prosrc)` plus explicit full catalog fields and
+  structural trigger checks instead of deparser hashes.
+- Frozen candidate identities: 00150 SHA-256
+  `49cbfe2f71c628442b2726091c0165d3d277bd307490605aca661b161dec75ae`;
+  corrected 00200 SHA-256
+  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`;
+  corrected 00300 SHA-256
+  `591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd`.
+- Rationale: a retry cannot repair a deterministic catalog mismatch, and
+  weakening the guard would hide unknown drift. A separately hashed forward
+  normalizer makes the one proven environmental delta explicit and fail-closed.
+  Stable source hashes plus transparent catalog fields preserve identity across
+  PostgreSQL majors without trusting a version-dependent pretty-printer.
+- Consequence: 00150 must land exactly once before corrected 00200, and 00300
+  remains gated on exact production application acceptance after EXPAND. The
+  read-only audit reports server version, ledger, source hashes, and named ACL
+  posture. No old workflow may be rerun and no reset, down-migration, history
+  repair, broad push, worker, or autonomous execution is authorized. New exact
+  commit and migration hashes require a fresh RED authorization.

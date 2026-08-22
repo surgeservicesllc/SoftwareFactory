@@ -26,7 +26,7 @@ on:
       scope:
         description: >-
           "all" pushes outstanding ordinary migrations only after protected
-          20260822000200 and 20260822000300 are each recorded by their dedicated
+          20260822000150, 20260822000200, and 20260822000300 are each recorded by their dedicated
           scopes; "broker-functions"
           applies only the idempotent broker migrations
           (20260816000400 through 20260820000300, plus 20260821000300) and
@@ -35,6 +35,9 @@ on:
           files, which is what the project detail page and the Runs page need;
           "pipeline-selection" applies only 20260821000300, which is what makes
           the AI Factory's Use button record a project's pipelines;
+          "bot-legacy-acl-normalization" applies only 20260822000150, which
+          removes the exact Supabase-default service_role overgrant from the
+          seven frozen legacy bot routines;
           "bot-account-binding" applies only 20260822000200, which binds a
           subscription bot to its exact tenant-scoped AI account;
           "bot-account-binding-contract" applies only 20260822000300, which
@@ -53,6 +56,7 @@ on:
           - project-controls
           - pipeline-selection
           - agent-selection
+          - bot-legacy-acl-normalization
           - bot-account-binding
           - bot-account-binding-contract
           - lifecycle
@@ -208,7 +212,7 @@ jobs:
         # do not yet trust the ledger -- but this step sits above the scope
         # branch, so a probe could still rewrite history rows. A read-only
         # question must not be able to edit the thing being questioned.
-        if: ${{ inputs.scope != 'probe' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' }}
+        if: ${{ inputs.scope != 'probe' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name
@@ -444,7 +448,7 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
             set search_path = pg_catalog;
             select routine.oid::regprocedure::text as signature,
-                   md5(pg_get_functiondef(routine.oid)) as definition_md5,
+                   md5(routine.prosrc) as source_md5,
                    pg_get_userbyid(routine.proowner) as owner,
                    routine_language.lanname as language,
                    routine.prokind,
@@ -457,7 +461,7 @@ jobs:
               )) expected(signature)
               left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
               left join pg_language routine_language on routine_language.oid = routine.prolang;"
-          echo "Expected definition_md5 before EXPAND: 318700d6d8d26603d9f5572f11d16e2f."
+          echo "Expected source_md5 before EXPAND: 87f577c2ecba24836e54b4ad5e7f383a."
           echo ""
           echo "The ADR-036 credential denylist, checked directly rather than through the ledger."
           echo "Version 20260819000700 was recorded once while a DIFFERENT file's DDL ran under"
@@ -972,6 +976,235 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Agent selection applied and recorded; the API schema cache was reloaded."
 
+      - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
+        # Forward-only containment for Supabase's function default privileges.
+        # This scope can remove only the direct service_role EXECUTE entry from
+        # seven frozen routines; the migration itself repeats the full catalog
+        # proof before and after inside one atomic DO statement.
+        if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::The protected bot-legacy-acl-normalization scope requires SUPABASE_DB_PASSWORD for live catalog verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822000150_normalize_legacy_bot_function_acls.sql
+          EXPECTED_SHA256=49cbfe2f71c628442b2726091c0165d3d277bd307490605aca661b161dec75ae
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Protected legacy bot ACL normalizer hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          HISTORY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where version = '20260822000100'),
+              count(*) filter (where version = '20260822000150'),
+              count(*) filter (where version = '20260822000200'),
+              count(*) filter (where version = '20260822000300')
+            from supabase_migrations.schema_migrations
+            where version in (
+              '20260822000100', '20260822000150',
+              '20260822000200', '20260822000300'
+            );")
+          if [ "$HISTORY" != "1|0|0|0" ]; then
+            echo "::error::Hosted migration history is not exact predecessor-once/normalizer-absent/EXPAND-absent/CONTRACT-absent state."
+            exit 1
+          fi
+
+          LEGACY_OVERGRANT_EXACT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5) as (values
+              ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)', '87f577c2ecba24836e54b4ad5e7f383a', '658e04bf56902695f8da49b0b62827d8'),
+              ('public.assign_bot(uuid,uuid,uuid,uuid)', '9e5dea25195823492e3326ed96fa0535', 'f6f66a20b1848121d45f08ffe716466e'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '742fea5b0e8655f19399f2a3944ce2c9', '509ff97d6dd6ccecfc6a0b559f6402ab'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', '81788757faa428efebfc8a8ee7f9b6e6', 'f399bc01e734509765a9955d6ea12d3f'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cd33f17d969464665066854ff7692a1c', '09868603f1251c9b3c0e714585c470a6'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '3637e0869520ee9eae89efd426b0b5c5', '15df08b5f10d11f2eb75939bd24ff471'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', 'b39a3820c504f9dda9e84f73e1e4f065', '25a69b2727d3e8c038411fcdfa7f9ae3')
+            ), function_state as (
+              select expected.*,
+                     routine.oid,
+                     routine.proowner,
+                     routine.prokind,
+                     routine.provolatile,
+                     routine.prosecdef,
+                     routine.proconfig,
+                     routine.proacl,
+                     routine_schema.nspname,
+                     routine_language.lanname,
+                     md5(routine.prosrc) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       format_type(routine.prorettype, null),
+                       routine.proretset,
+                       routine.pronargs,
+                       routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict,
+                       routine.proleakproof,
+                       routine.proparallel::text,
+                       case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                       routine.procost::text,
+                       routine.prorows::text,
+                       case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                       coalesce(routine.probin, ''),
+                       routine.prosqlbody is null,
+                       coalesce((
+                         select string_agg(format_type(transform_type.type_oid, null), ',' order by transform_type.ordinality)
+                         from unnest(routine.protrftypes)
+                           with ordinality transform_type(type_oid, ordinality)
+                       ), '')
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select to_regrole('authenticated') is not null
+               and to_regrole('anon') is not null
+               and to_regrole('service_role') is not null
+               and (
+                 select count(oid) = 7
+                    and bool_and(
+                      nspname = 'public'
+                      and lanname = 'plpgsql'
+                      and prokind = 'f'
+                      and provolatile = 'v'
+                      and prosecdef
+                      and proconfig = array['search_path=pg_catalog']::text[]
+                      and pg_get_userbyid(proowner) = 'postgres'
+                      and actual_source_md5 = source_md5
+                      and actual_contract_md5 = contract_md5
+                      and proacl is not null
+                      and (select count(*) from aclexplode(proacl)) = 3
+                      and exists (
+                        select 1 from aclexplode(proacl) acl
+                         where acl.grantor = proowner
+                           and acl.grantee = proowner
+                           and acl.privilege_type = 'EXECUTE'
+                           and not acl.is_grantable
+                      )
+                      and exists (
+                        select 1 from aclexplode(proacl) acl
+                         where acl.grantor = proowner
+                           and acl.grantee = to_regrole('authenticated')::oid
+                           and acl.privilege_type = 'EXECUTE'
+                           and not acl.is_grantable
+                      )
+                      and exists (
+                        select 1 from aclexplode(proacl) acl
+                         where acl.grantor = proowner
+                           and acl.grantee = to_regrole('service_role')::oid
+                           and acl.privilege_type = 'EXECUTE'
+                           and not acl.is_grantable
+                      )
+                      and not exists (
+                        select 1 from aclexplode(proacl) acl
+                         where acl.grantor <> proowner
+                            or acl.privilege_type <> 'EXECUTE'
+                            or acl.is_grantable
+                            or acl.grantee not in (
+                              proowner,
+                              to_regrole('authenticated')::oid,
+                              to_regrole('service_role')::oid
+                            )
+                      )
+                      and has_function_privilege('authenticated', signature, 'EXECUTE')
+                      and has_function_privilege('service_role', signature, 'EXECUTE')
+                      and not has_function_privilege('anon', signature, 'EXECUTE')
+                    )
+                 from function_state
+               )
+               and (
+                 select count(*) = 7
+                 from pg_proc routine
+                 join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                 where routine_schema.nspname = 'public'
+                   and routine.proname in (
+                     'register_bot', 'assign_bot', 'assign_bots_to_project',
+                     'record_bot_readiness', 'set_bot_assignment_execution',
+                     'update_bot_assignment', 'update_bot_assignment_configuration'
+                   )
+               );")
+          if [ "$LEGACY_OVERGRANT_EXACT" != "t" ]; then
+            echo "::error::The live legacy bot catalog is not the exact seven-function Supabase service_role overgrant state; refusing normalization."
+            exit 1
+          fi
+
+          echo "Applying ${FILE} at frozen SHA-256 ${EXPECTED_SHA256}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -f "$FILE" \
+            -c "insert into supabase_migrations.schema_migrations (version) values ('20260822000150');"
+
+          NORMALIZED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5) as (values
+              ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)', '87f577c2ecba24836e54b4ad5e7f383a'),
+              ('public.assign_bot(uuid,uuid,uuid,uuid)', '9e5dea25195823492e3326ed96fa0535'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '742fea5b0e8655f19399f2a3944ce2c9'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', '81788757faa428efebfc8a8ee7f9b6e6'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cd33f17d969464665066854ff7692a1c'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '3637e0869520ee9eae89efd426b0b5c5'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', 'b39a3820c504f9dda9e84f73e1e4f065')
+            )
+            select (
+              select count(routine.oid) = 7
+                 and bool_and(
+                   md5(routine.prosrc) = expected.source_md5
+                   and routine.prosecdef
+                   and routine.proconfig = array['search_path=pg_catalog']::text[]
+                   and pg_get_userbyid(routine.proowner) = 'postgres'
+                   and routine.proacl is not null
+                   and (select count(*) from aclexplode(routine.proacl)) = 2
+                   and exists (
+                     select 1 from aclexplode(routine.proacl) acl
+                      where acl.grantor = routine.proowner
+                        and acl.grantee = routine.proowner
+                        and acl.privilege_type = 'EXECUTE'
+                        and not acl.is_grantable
+                   )
+                   and exists (
+                     select 1 from aclexplode(routine.proacl) acl
+                      where acl.grantor = routine.proowner
+                        and acl.grantee = to_regrole('authenticated')::oid
+                        and acl.privilege_type = 'EXECUTE'
+                        and not acl.is_grantable
+                   )
+                   and has_function_privilege('authenticated', expected.signature, 'EXECUTE')
+                   and not has_function_privilege('anon', expected.signature, 'EXECUTE')
+                   and not has_function_privilege('service_role', expected.signature, 'EXECUTE')
+                 )
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+            )
+            and (
+              select count(*) = 1
+              from supabase_migrations.schema_migrations
+              where version = '20260822000150'
+            )
+            and (
+              select count(*) = 0
+              from supabase_migrations.schema_migrations
+              where version in ('20260822000200', '20260822000300')
+            );")
+          if [ "$NORMALIZED" != "t" ]; then
+            echo "::error::Legacy bot ACL normalization ledger/catalog postflight failed; stop and contain only with a new forward migration."
+            exit 1
+          fi
+
       - name: Apply the exact bot account binding (scope=bot-account-binding)
         # Exactly one protected file. Its frozen hash is checked before any
         # database write, the immediately preceding migration must already be
@@ -990,7 +1223,7 @@ jobs:
             echo "::add-mask::$DB_URL"
           fi
           FILE=supabase/migrations/20260822000200_register_bot_for_ai_account.sql
-          EXPECTED_SHA256=39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981
+          EXPECTED_SHA256=394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be
           ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
           if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
             echo "::error::Protected migration hash mismatch; refusing production DDL."
@@ -999,23 +1232,27 @@ jobs:
 
           PREDECESSOR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000100';")
+          NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000150';")
           TARGET=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000200';")
-          if [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]; then
-            echo "::error::Hosted migration history is not the exact expected predecessor/target state."
+          CONTRACT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000300';")
+          if [ "$PREDECESSOR" != "1" ] || [ "$NORMALIZER" != "1" ] || [ "$TARGET" != "0" ] || [ "$CONTRACT" != "0" ]; then
+            echo "::error::Hosted migration history is not the exact predecessor/normalizer-once/EXPAND-absent/CONTRACT-absent state."
             exit 1
           fi
 
           LEGACY_CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
-            with expected(signature, definition_md5) as (values
-              ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)', '318700d6d8d26603d9f5572f11d16e2f'),
-              ('public.assign_bot(uuid,uuid,uuid,uuid)', '2398b395e3545628939f4f5b6461011d'),
-              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '4bf7d8d08c5cf938fba2fea2376839eb'),
-              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', 'ed7c5cbe31543823161348d14d9c69d7'),
-              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cab77271ac904b4e13105f3dd3a06335'),
-              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '77852950f29eb560c300e0ec24649ed9'),
-              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', '6cd8b39bcae374515bedc66d5da31413')
+            with expected(signature, source_md5, contract_md5) as (values
+              ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)', '87f577c2ecba24836e54b4ad5e7f383a', '658e04bf56902695f8da49b0b62827d8'),
+              ('public.assign_bot(uuid,uuid,uuid,uuid)', '9e5dea25195823492e3326ed96fa0535', 'f6f66a20b1848121d45f08ffe716466e'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '742fea5b0e8655f19399f2a3944ce2c9', '509ff97d6dd6ccecfc6a0b559f6402ab'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', '81788757faa428efebfc8a8ee7f9b6e6', 'f399bc01e734509765a9955d6ea12d3f'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cd33f17d969464665066854ff7692a1c', '09868603f1251c9b3c0e714585c470a6'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '3637e0869520ee9eae89efd426b0b5c5', '15df08b5f10d11f2eb75939bd24ff471'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', 'b39a3820c504f9dda9e84f73e1e4f065', '25a69b2727d3e8c038411fcdfa7f9ae3')
             ), function_state as (
               select expected.*,
                      routine.oid,
@@ -1027,7 +1264,35 @@ jobs:
                      routine.proacl,
                      routine_schema.nspname,
                      routine_language.lanname,
-                     md5(pg_get_functiondef(routine.oid)) as actual_definition_md5
+                     md5(routine.prosrc) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       format_type(routine.prorettype, null),
+                       routine.proretset,
+                       routine.pronargs,
+                       routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict,
+                       routine.proleakproof,
+                       routine.proparallel::text,
+                       case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                       routine.procost::text,
+                       routine.prorows::text,
+                       case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                       coalesce(routine.probin, ''),
+                       routine.prosqlbody is null,
+                       coalesce((
+                         select string_agg(format_type(transform_type.type_oid, null), ',' order by transform_type.ordinality)
+                         from unnest(routine.protrftypes)
+                           with ordinality transform_type(type_oid, ordinality)
+                       ), '')
+                     )::text) as actual_contract_md5
                 from expected
                 left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
                 left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
@@ -1045,7 +1310,8 @@ jobs:
                         and prosecdef
                         and proconfig = array['search_path=pg_catalog']::text[]
                         and pg_get_userbyid(proowner) = 'postgres'
-                        and actual_definition_md5 = definition_md5
+                        and actual_source_md5 = source_md5
+                        and actual_contract_md5 = contract_md5
                         and proacl is not null
                         and (select count(*) from aclexplode(proacl)) = 2
                         and exists (
@@ -1087,7 +1353,7 @@ jobs:
           fi
 
           LEGACY_BEFORE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
-            select md5(pg_get_functiondef(routine.oid)),
+            select md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    coalesce(array_to_string(routine.proacl, ','), '')
@@ -1100,7 +1366,7 @@ jobs:
 
           MUTATORS_BEFORE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
             select routine.oid::regprocedure::text,
-                   md5(pg_get_functiondef(routine.oid)),
+                   md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    coalesce(array_to_string(routine.proacl, ','), '')
@@ -1208,7 +1474,7 @@ jobs:
             -c "insert into supabase_migrations.schema_migrations (version) values ('20260822000200');"
 
           LEGACY_AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
-            select md5(pg_get_functiondef(routine.oid)),
+            select md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    coalesce(array_to_string(routine.proacl, ','), '')
@@ -1221,7 +1487,7 @@ jobs:
 
           MUTATORS_AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
             select routine.oid::regprocedure::text,
-                   md5(pg_get_functiondef(routine.oid)),
+                   md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    coalesce(array_to_string(routine.proacl, ','), '')
@@ -1242,17 +1508,17 @@ jobs:
 
           EXPAND_FUNCTIONS_EXACT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
-            with expected(signature, definition_md5, volatility, execute_role) as (values
-              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'd652a3406462bd5e9fcc4ae6afabdc49', 'i', 'none'),
-              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '8d881acabd1e1f28ea74c3efc22354f3', 'v', 'authenticated'),
-              ('public.enforce_bot_ai_account_binding()', '1acb03fac46c74be02b8e6ea746e0181', 'v', 'none'),
-              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', 'eeb186b89ac3ba86f3c44bbc611d300e', 'v', 'authenticated'),
-              ('public.increment_bot_assignment_revision()', 'a38347e81d404d1e6e33782cbabcd16a', 'v', 'none'),
-              ('public.increment_bot_revision()', '25974d86264401f18dc34d4f5e10be53', 'v', 'none'),
-              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '416c81badfba6c09091b2f187188a81f', 'v', 'service_role'),
-              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', '33e2ca65ab238042321775c4144fef79', 'v', 'authenticated'),
-              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '1364d470f5bea2fa389f3d48de320504', 'v', 'authenticated'),
-              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', '237ca9363d7934b0c5d63733e5631ca7', 'v', 'authenticated')
+            with expected(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'afae78ba3750e372829dd50e1b48c5cb', '93243ca92614a4c2cd42045536de34cf', 'i', 'none'),
+              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
+              ('public.enforce_bot_ai_account_binding()', '885b6c63c7f0b761d3ae99bdb416d6f4', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', '3140ecd6b0d850732f96bdc5096b97e3', '3e616013f7f1aa22bc5b06c8babb29a6', 'v', 'authenticated'),
+              ('public.increment_bot_assignment_revision()', '90320b19a6b41eb32b084a3b0db8ef21', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.increment_bot_revision()', '154cf22e868e447c6f74aeb08508ad08', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '1132e6e0bed1697a7ccaa82006db35f5', '0fab1985ab6e7ca13e0c38d6302536f0', 'v', 'service_role'),
+              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'd0c11a5c1e57878c9b1b5d8753ecb1fd', '47ed878441dae8b7a4e4c5292e1260ae', 'v', 'authenticated'),
+              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '5323b0adb327f3d3a19c9bdca220922e', 'caa9e8093054cac7ebb3571ee2a5ec98', 'v', 'authenticated'),
+              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', 'eabefae63edf3d957ed8a0ad5e10d1bd', 'a40abf44b52cd3bcaf55f6bad964626b', 'v', 'authenticated')
             ), function_state as (
               select expected.*,
                      routine.oid,
@@ -1264,7 +1530,29 @@ jobs:
                      routine.proacl,
                      routine_schema.nspname,
                      routine_language.lanname,
-                     md5(pg_get_functiondef(routine.oid)) as actual_definition_md5
+                     md5(routine.prosrc) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.proparallel::text,
+                       case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                       routine.procost::text, routine.prorows::text,
+                       case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                       coalesce(routine.probin, ''), routine.prosqlbody is null,
+                       coalesce((
+                         select string_agg(format_type(transform_type.type_oid, null), ',' order by transform_type.ordinality)
+                         from unnest(routine.protrftypes)
+                           with ordinality transform_type(type_oid, ordinality)
+                       ), '')
+                     )::text) as actual_contract_md5
                 from expected
                 left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
                 left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
@@ -1282,7 +1570,8 @@ jobs:
                         and prosecdef
                         and proconfig = array['search_path=pg_catalog']::text[]
                         and pg_get_userbyid(proowner) = 'postgres'
-                        and actual_definition_md5 = definition_md5
+                        and actual_source_md5 = source_md5
+                        and actual_contract_md5 = contract_md5
                         and proacl is not null
                         and (select count(*) from aclexplode(proacl)) =
                           case when execute_role = 'none' then 1 else 2 end
@@ -1378,8 +1667,25 @@ jobs:
                    and trigger_row.tgenabled = 'O'
                    and trigger_row.tgtype = 23
                    and trigger_row.tgfoid = 'public.enforce_bot_ai_account_binding()'::regprocedure
-                   and pg_get_triggerdef(trigger_row.oid) like
-                     'CREATE TRIGGER bots_ai_account_binding_coherent BEFORE INSERT OR UPDATE OF organization_id, ai_account_id, provider, credential_ref ON public.bots FOR EACH ROW EXECUTE FUNCTION %enforce_bot_ai_account_binding()'
+                   and trigger_row.tgconstraint = 0
+                   and trigger_row.tgparentid = 0
+                   and trigger_row.tgconstrrelid = 0
+                   and trigger_row.tgconstrindid = 0
+                   and not trigger_row.tgdeferrable
+                   and not trigger_row.tginitdeferred
+                   and trigger_row.tgqual is null
+                   and trigger_row.tgoldtable is null
+                   and trigger_row.tgnewtable is null
+                   and octet_length(trigger_row.tgargs) = 0
+                   and (
+                     select string_agg(column_row.attname, ',' order by update_column.ordinality)
+                       from unnest(trigger_row.tgattr::smallint[])
+                         with ordinality update_column(attnum, ordinality)
+                       join pg_attribute column_row
+                         on column_row.attrelid = trigger_row.tgrelid
+                        and column_row.attnum = update_column.attnum
+                        and not column_row.attisdropped
+                   ) = 'organization_id,ai_account_id,provider,credential_ref'
               )
               and exists (
                 select 1
@@ -1572,57 +1878,94 @@ jobs:
           fi
 
           FILE=supabase/migrations/20260822000300_contract_bot_mutator_acls.sql
-          EXPECTED_SHA256=e3bad45af18ed07d3ab7adcfc9a326103fc09fd2b398f664c733de73fac7c1e2
+          EXPECTED_SHA256=591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd
           ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
           if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
             echo "::error::Protected CONTRACT migration hash mismatch; refusing production DDL."
             exit 1
           fi
 
+          NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000150';")
           PREDECESSOR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000200';")
           TARGET=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000300';")
-          if [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]; then
-            echo "::error::Hosted migration history is not the exact EXPAND-once/CONTRACT-absent state."
+          if [ "$NORMALIZER" != "1" ] || [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]; then
+            echo "::error::Hosted migration history is not the exact normalizer-once/EXPAND-once/CONTRACT-absent state."
             exit 1
           fi
 
           CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
-            with expected_functions(signature, definition_md5, execute_role) as (values
-              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'd652a3406462bd5e9fcc4ae6afabdc49', 'none'),
-              ('public.assign_bot(uuid,uuid,uuid,uuid)', '2398b395e3545628939f4f5b6461011d', 'authenticated'),
-              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '4bf7d8d08c5cf938fba2fea2376839eb', 'authenticated'),
-              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '8d881acabd1e1f28ea74c3efc22354f3', 'authenticated'),
-              ('public.enforce_bot_ai_account_binding()', '1acb03fac46c74be02b8e6ea746e0181', 'none'),
-              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', 'eeb186b89ac3ba86f3c44bbc611d300e', 'authenticated'),
-              ('public.increment_bot_assignment_revision()', 'a38347e81d404d1e6e33782cbabcd16a', 'none'),
-              ('public.increment_bot_revision()', '25974d86264401f18dc34d4f5e10be53', 'none'),
-              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', 'ed7c5cbe31543823161348d14d9c69d7', 'authenticated'),
-              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '416c81badfba6c09091b2f187188a81f', 'service_role'),
-              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cab77271ac904b4e13105f3dd3a06335', 'authenticated'),
-              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', '33e2ca65ab238042321775c4144fef79', 'authenticated'),
-              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '77852950f29eb560c300e0ec24649ed9', 'authenticated'),
-              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '1364d470f5bea2fa389f3d48de320504', 'authenticated'),
-              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', '6cd8b39bcae374515bedc66d5da31413', 'authenticated'),
-              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', '237ca9363d7934b0c5d63733e5631ca7', 'authenticated')
+            with expected_functions(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'afae78ba3750e372829dd50e1b48c5cb', '93243ca92614a4c2cd42045536de34cf', 'i', 'none'),
+              ('public.assign_bot(uuid,uuid,uuid,uuid)', '9e5dea25195823492e3326ed96fa0535', 'f6f66a20b1848121d45f08ffe716466e', 'v', 'authenticated'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '742fea5b0e8655f19399f2a3944ce2c9', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
+              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
+              ('public.enforce_bot_ai_account_binding()', '885b6c63c7f0b761d3ae99bdb416d6f4', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', '3140ecd6b0d850732f96bdc5096b97e3', '3e616013f7f1aa22bc5b06c8babb29a6', 'v', 'authenticated'),
+              ('public.increment_bot_assignment_revision()', '90320b19a6b41eb32b084a3b0db8ef21', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.increment_bot_revision()', '154cf22e868e447c6f74aeb08508ad08', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', '81788757faa428efebfc8a8ee7f9b6e6', 'f399bc01e734509765a9955d6ea12d3f', 'v', 'authenticated'),
+              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '1132e6e0bed1697a7ccaa82006db35f5', '0fab1985ab6e7ca13e0c38d6302536f0', 'v', 'service_role'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cd33f17d969464665066854ff7692a1c', '09868603f1251c9b3c0e714585c470a6', 'v', 'authenticated'),
+              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'd0c11a5c1e57878c9b1b5d8753ecb1fd', '47ed878441dae8b7a4e4c5292e1260ae', 'v', 'authenticated'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '3637e0869520ee9eae89efd426b0b5c5', '15df08b5f10d11f2eb75939bd24ff471', 'v', 'authenticated'),
+              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '5323b0adb327f3d3a19c9bdca220922e', 'caa9e8093054cac7ebb3571ee2a5ec98', 'v', 'authenticated'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', 'b39a3820c504f9dda9e84f73e1e4f065', '25a69b2727d3e8c038411fcdfa7f9ae3', 'v', 'authenticated'),
+              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', 'eabefae63edf3d957ed8a0ad5e10d1bd', 'a40abf44b52cd3bcaf55f6bad964626b', 'v', 'authenticated')
             ), function_state as (
               select expected.*,
                      routine.oid,
                      routine.proowner,
+                     routine.prokind,
+                     routine.provolatile,
                      routine.prosecdef,
                      routine.proconfig,
                      routine.proacl,
-                     md5(pg_get_functiondef(routine.oid)) as actual_definition_md5
+                     routine_schema.nspname,
+                     routine_language.lanname,
+                     md5(routine.prosrc) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.proparallel::text,
+                       case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                       routine.procost::text, routine.prorows::text,
+                       case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                       coalesce(routine.probin, ''), routine.prosqlbody is null,
+                       coalesce((
+                         select string_agg(format_type(transform_type.type_oid, null), ',' order by transform_type.ordinality)
+                         from unnest(routine.protrftypes)
+                           with ordinality transform_type(type_oid, ordinality)
+                       ), '')
+                     )::text) as actual_contract_md5
                 from expected_functions expected
                 left join pg_proc routine
                   on routine.oid = to_regprocedure(expected.signature)
+                left join pg_namespace routine_schema
+                  on routine_schema.oid = routine.pronamespace
+                left join pg_language routine_language
+                  on routine_language.oid = routine.prolang
             )
             select
               (select count(oid) = 16
                  and bool_and(
-                   actual_definition_md5 = definition_md5
+                   nspname = 'public'
+                   and lanname = 'plpgsql'
+                   and prokind = 'f'
+                   and provolatile::text = volatility
+                   and actual_source_md5 = source_md5
+                   and actual_contract_md5 = contract_md5
                    and prosecdef
                    and proconfig = array['search_path=pg_catalog']::text[]
                    and pg_get_userbyid(proowner) = 'postgres'
@@ -1719,16 +2062,35 @@ jobs:
                      trigger_row.tgenabled = 'O'
                      and trigger_row.tgtype = expected.trigger_type
                      and trigger_row.tgfoid = expected.function_id
-                     and md5(pg_get_triggerdef(trigger_row.oid)) = expected.definition_md5
+                     and trigger_row.tgconstraint = 0
+                     and trigger_row.tgparentid = 0
+                     and trigger_row.tgconstrrelid = 0
+                     and trigger_row.tgconstrindid = 0
+                     and not trigger_row.tgdeferrable
+                     and not trigger_row.tginitdeferred
+                     and trigger_row.tgqual is null
+                     and trigger_row.tgoldtable is null
+                     and trigger_row.tgnewtable is null
+                     and octet_length(trigger_row.tgargs) = 0
+                     and coalesce((
+                       select string_agg(column_row.attname, ',' order by update_column.ordinality)
+                         from unnest(trigger_row.tgattr::smallint[])
+                           with ordinality update_column(attnum, ordinality)
+                         join pg_attribute column_row
+                           on column_row.attrelid = trigger_row.tgrelid
+                          and column_row.attnum = update_column.attnum
+                          and not column_row.attisdropped
+                     ), '') = expected.update_columns
                    )
                   from (values
                     ('public.bot_assignments'::regclass, 'bot_assignments_increment_revision', 19::smallint,
-                     'public.increment_bot_assignment_revision()'::regprocedure, 'e7c4e60faa83da3f09d578815e47016b'),
+                     'public.increment_bot_assignment_revision()'::regprocedure, ''),
                     ('public.bots'::regclass, 'bots_ai_account_binding_coherent', 23::smallint,
-                     'public.enforce_bot_ai_account_binding()'::regprocedure, 'ae174d48495938eb6aa93a1340ae4680'),
+                     'public.enforce_bot_ai_account_binding()'::regprocedure,
+                     'organization_id,ai_account_id,provider,credential_ref'),
                     ('public.bots'::regclass, 'bots_increment_revision', 19::smallint,
-                     'public.increment_bot_revision()'::regprocedure, '4bb567fb61d925c6a7b8dffaf9218c4f')
-                  ) expected(relation_id, trigger_name, trigger_type, function_id, definition_md5)
+                     'public.increment_bot_revision()'::regprocedure, '')
+                  ) expected(relation_id, trigger_name, trigger_type, function_id, update_columns)
                   left join pg_trigger trigger_row
                     on trigger_row.tgrelid = expected.relation_id
                    and trigger_row.tgname = expected.trigger_name
@@ -1742,7 +2104,7 @@ jobs:
           DEFINITIONS_BEFORE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
             set search_path = pg_catalog;
             select routine.oid::regprocedure::text,
-                   md5(pg_get_functiondef(routine.oid)),
+                   md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    pg_get_userbyid(routine.proowner)
@@ -1769,7 +2131,7 @@ jobs:
           DEFINITIONS_AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -F '|' -c "
             set search_path = pg_catalog;
             select routine.oid::regprocedure::text,
-                   md5(pg_get_functiondef(routine.oid)),
+                   md5(routine.prosrc),
                    routine.prosecdef,
                    coalesce(array_to_string(routine.proconfig, ','), ''),
                    pg_get_userbyid(routine.proowner)
@@ -1930,11 +2292,11 @@ jobs:
         if: ${{ inputs.scope == 'all' }}
         run: |
           # `db push` has no per-file exclusion. Refuse the broad path until the
-          # protected EXPAND and CONTRACT migrations have each already passed
+          # protected ACL normalizer, EXPAND, and CONTRACT migrations have each already passed
           # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
           # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected migrations 20260822000200 and 20260822000300 are already recorded."
+            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected migrations 20260822000150, 20260822000200, and 20260822000300 are already recorded."
             exit 1
           fi
           if [ "$MODE" != "dburl" ]; then
@@ -1943,10 +2305,16 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
+          PROTECTED_NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000150';")
           PROTECTED_EXPAND=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000200';")
           PROTECTED_CONTRACT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000300';")
+          if [ "$PROTECTED_NORMALIZER" != "1" ]; then
+            echo "::error::Protected migration 20260822000150 is not recorded exactly once. Apply it only through scope=bot-legacy-acl-normalization; broad push is forbidden."
+            exit 1
+          fi
           if [ "$PROTECTED_EXPAND" != "1" ]; then
             echo "::error::Protected migration 20260822000200 is not recorded exactly once. Apply it only through scope=bot-account-binding; broad push is forbidden."
             exit 1
@@ -1957,34 +2325,57 @@ jobs:
           fi
           PROTECTED_CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
-            with expected_functions(signature, definition_md5, execute_role) as (values
-              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'd652a3406462bd5e9fcc4ae6afabdc49', 'none'),
-              ('public.assign_bot(uuid,uuid,uuid,uuid)', '2398b395e3545628939f4f5b6461011d', 'none'),
-              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '4bf7d8d08c5cf938fba2fea2376839eb', 'none'),
-              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '8d881acabd1e1f28ea74c3efc22354f3', 'authenticated'),
-              ('public.enforce_bot_ai_account_binding()', '1acb03fac46c74be02b8e6ea746e0181', 'none'),
-              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', 'eeb186b89ac3ba86f3c44bbc611d300e', 'authenticated'),
-              ('public.increment_bot_assignment_revision()', 'a38347e81d404d1e6e33782cbabcd16a', 'none'),
-              ('public.increment_bot_revision()', '25974d86264401f18dc34d4f5e10be53', 'none'),
-              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', 'ed7c5cbe31543823161348d14d9c69d7', 'none'),
-              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '416c81badfba6c09091b2f187188a81f', 'service_role'),
-              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cab77271ac904b4e13105f3dd3a06335', 'none'),
-              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', '33e2ca65ab238042321775c4144fef79', 'authenticated'),
-              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '77852950f29eb560c300e0ec24649ed9', 'none'),
-              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '1364d470f5bea2fa389f3d48de320504', 'authenticated'),
-              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', '6cd8b39bcae374515bedc66d5da31413', 'none'),
-              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', '237ca9363d7934b0c5d63733e5631ca7', 'authenticated')
+            with expected_functions(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'afae78ba3750e372829dd50e1b48c5cb', '93243ca92614a4c2cd42045536de34cf', 'i', 'none'),
+              ('public.assign_bot(uuid,uuid,uuid,uuid)', '9e5dea25195823492e3326ed96fa0535', 'f6f66a20b1848121d45f08ffe716466e', 'v', 'none'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)', '742fea5b0e8655f19399f2a3944ce2c9', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'none'),
+              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
+              ('public.enforce_bot_ai_account_binding()', '885b6c63c7f0b761d3ae99bdb416d6f4', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', '3140ecd6b0d850732f96bdc5096b97e3', '3e616013f7f1aa22bc5b06c8babb29a6', 'v', 'authenticated'),
+              ('public.increment_bot_assignment_revision()', '90320b19a6b41eb32b084a3b0db8ef21', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.increment_bot_revision()', '154cf22e868e447c6f74aeb08508ad08', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', '81788757faa428efebfc8a8ee7f9b6e6', 'f399bc01e734509765a9955d6ea12d3f', 'v', 'none'),
+              ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '1132e6e0bed1697a7ccaa82006db35f5', '0fab1985ab6e7ca13e0c38d6302536f0', 'v', 'service_role'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)', 'cd33f17d969464665066854ff7692a1c', '09868603f1251c9b3c0e714585c470a6', 'v', 'none'),
+              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'd0c11a5c1e57878c9b1b5d8753ecb1fd', '47ed878441dae8b7a4e4c5292e1260ae', 'v', 'authenticated'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '3637e0869520ee9eae89efd426b0b5c5', '15df08b5f10d11f2eb75939bd24ff471', 'v', 'none'),
+              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '5323b0adb327f3d3a19c9bdca220922e', 'caa9e8093054cac7ebb3571ee2a5ec98', 'v', 'authenticated'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', 'b39a3820c504f9dda9e84f73e1e4f065', '25a69b2727d3e8c038411fcdfa7f9ae3', 'v', 'none'),
+              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', 'eabefae63edf3d957ed8a0ad5e10d1bd', 'a40abf44b52cd3bcaf55f6bad964626b', 'v', 'authenticated')
             ), function_state as (
               select expected.*,
                      routine.oid,
                      routine.proowner,
                      routine.prokind,
+                     routine.provolatile,
                      routine.prosecdef,
                      routine.proconfig,
                      routine.proacl,
                      routine_schema.nspname,
                      routine_language.lanname,
-                     md5(pg_get_functiondef(routine.oid)) as actual_definition_md5
+                     md5(routine.prosrc) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.proparallel::text,
+                       case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                       routine.procost::text, routine.prorows::text,
+                       case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                       coalesce(routine.probin, ''), routine.prosqlbody is null,
+                       coalesce((
+                         select string_agg(format_type(transform_type.type_oid, null), ',' order by transform_type.ordinality)
+                         from unnest(routine.protrftypes)
+                           with ordinality transform_type(type_oid, ordinality)
+                       ), '')
+                     )::text) as actual_contract_md5
                 from expected_functions expected
                 left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
                 left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
@@ -1996,9 +2387,11 @@ jobs:
                and (select count(oid) = 16
                       and bool_and(
                         nspname = 'public'
-                        and lanname = 'plpgsql'
-                        and prokind = 'f'
-                        and actual_definition_md5 = definition_md5
+                         and lanname = 'plpgsql'
+                         and prokind = 'f'
+                         and provolatile::text = volatility
+                         and actual_source_md5 = source_md5
+                         and actual_contract_md5 = contract_md5
                         and prosecdef
                         and proconfig = array['search_path=pg_catalog']::text[]
                         and pg_get_userbyid(proowner) = 'postgres'
@@ -2095,16 +2488,35 @@ jobs:
                       trigger_row.tgenabled = 'O'
                       and trigger_row.tgtype = expected.trigger_type
                       and trigger_row.tgfoid = expected.function_id
-                      and md5(pg_get_triggerdef(trigger_row.oid)) = expected.definition_md5
+                      and trigger_row.tgconstraint = 0
+                      and trigger_row.tgparentid = 0
+                      and trigger_row.tgconstrrelid = 0
+                      and trigger_row.tgconstrindid = 0
+                      and not trigger_row.tgdeferrable
+                      and not trigger_row.tginitdeferred
+                      and trigger_row.tgqual is null
+                      and trigger_row.tgoldtable is null
+                      and trigger_row.tgnewtable is null
+                      and octet_length(trigger_row.tgargs) = 0
+                      and coalesce((
+                        select string_agg(column_row.attname, ',' order by update_column.ordinality)
+                          from unnest(trigger_row.tgattr::smallint[])
+                            with ordinality update_column(attnum, ordinality)
+                          join pg_attribute column_row
+                            on column_row.attrelid = trigger_row.tgrelid
+                           and column_row.attnum = update_column.attnum
+                           and not column_row.attisdropped
+                      ), '') = expected.update_columns
                     )
                    from (values
                      ('public.bot_assignments'::regclass, 'bot_assignments_increment_revision', 19::smallint,
-                      'public.increment_bot_assignment_revision()'::regprocedure, 'e7c4e60faa83da3f09d578815e47016b'),
+                      'public.increment_bot_assignment_revision()'::regprocedure, ''),
                      ('public.bots'::regclass, 'bots_ai_account_binding_coherent', 23::smallint,
-                      'public.enforce_bot_ai_account_binding()'::regprocedure, 'ae174d48495938eb6aa93a1340ae4680'),
+                      'public.enforce_bot_ai_account_binding()'::regprocedure,
+                      'organization_id,ai_account_id,provider,credential_ref'),
                      ('public.bots'::regclass, 'bots_increment_revision', 19::smallint,
-                      'public.increment_bot_revision()'::regprocedure, '4bb567fb61d925c6a7b8dffaf9218c4f')
-                   ) expected(relation_id, trigger_name, trigger_type, function_id, definition_md5)
+                      'public.increment_bot_revision()'::regprocedure, '')
+                   ) expected(relation_id, trigger_name, trigger_type, function_id, update_columns)
                    left join pg_trigger trigger_row
                      on trigger_row.tgrelid = expected.relation_id
                     and trigger_row.tgname = expected.trigger_name

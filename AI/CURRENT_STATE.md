@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-21
 
+**Release containment checkpoint, 2026-08-22 (ADR-111):** exact
+commit `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` was pushed directly to
+`main` under the time-bounded owner approval. Vercel production deployment
+`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` is READY and reports that exact SHA. The
+public AI Factory route returns HTTP 200, and signed-out worker, autonomy,
+bot, and project APIs each return 401. This is application/deployment evidence,
+not bot acceptance.
+
+Protected EXPAND run `32568221857` stopped before DDL or ledger mutation at
+the combined seven-routine `LEGACY_CATALOG_READY` guard. The migration hash
+and ledger preconditions passed: `20260822000100` is present, while
+`20260822000200` and `20260822000300` remain absent. The workflow never printed
+its apply notice or reached `psql --single-transaction`.
+
+The cause is now reproduced without touching production. Supabase-style
+default function privileges create a direct `service_role` EXECUTE entry on
+all seven legacy functions; a vanilla catalog lacks it. Independently, the old
+raw `md5(pg_get_functiondef(...))` values match PostgreSQL 18/PGlite but differ
+on PostgreSQL 17 because deparser bytes are not a cross-major identity.
+
+The local forward candidate adds `20260822000150` as a separately protected,
+atomic ACL normalizer. It accepts only a coherent 0/7 vanilla or 7/7 hosted
+`service_role` posture, refuses mixed states, revokes only that exact overgrant,
+and verifies the owner-plus-authenticated result. EXPAND and CONTRACT now gate
+stable `md5(prosrc)` values plus the complete transparent routine and trigger
+catalog contract. A read-only audit workflow reports server version, source
+hashes, ledger, and named ACL evidence without exposing bodies or secrets.
+Nothing in this candidate is pushed or applied. The old EXPAND must not be
+rerun; freeze new hashes and obtain new exact RED authority before publication.
+
 **Release-candidate addendum, 2026-08-22 (Claude bot identity and Bot Space,
 ADR-108/ADR-109):** the current local candidate closes the screenshot path without
 claiming a release. AI Factory owns one application modal, backdrop, focus
@@ -18,7 +48,7 @@ preset before falling back to the first available organization role.
 
 Forward migration `20260822000200_register_bot_for_ai_account.sql` is frozen at
 SHA-256
-`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
 Its authenticated manager boundary binds every subscription bot it returns to
 the exact tenant `ai_accounts.id` and derived provider/credential slot. A
 default/non-additional request reuses that account's existing bound bot or may

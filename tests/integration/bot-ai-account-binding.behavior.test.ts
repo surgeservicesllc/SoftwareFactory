@@ -1018,6 +1018,73 @@ describe("exact AI-account bot binding", { timeout: 180_000 }, () => {
     }
   });
 
+  it("refuses legacy routine cost drift before creating any EXPAND object", async () => {
+    const driftDb = await createPreExpandDatabase();
+    try {
+      await driftDb.exec(`
+        alter function public.assign_bot(uuid,uuid,uuid,uuid) cost 777
+      `);
+      const migration = await readFile(
+        resolve(migrationsDirectory, "20260822000200_register_bot_for_ai_account.sql"),
+        "utf8",
+      );
+      await expect(driftDb.exec(migration)).rejects.toThrow(
+        /legacy bot routine catalog does not match the exact authenticated-only pre-EXPAND state/i,
+      );
+      const catalog = await driftDb.query<{ approved_object_exists: boolean; cost: number }>(`
+        select to_regprocedure(
+                 'public.ai_account_bot_credential_ref(public.bot_provider,text)'
+               ) is not null as approved_object_exists,
+               procost as cost
+          from pg_proc
+         where oid = 'public.assign_bot(uuid,uuid,uuid,uuid)'::regprocedure
+      `);
+      expect(catalog.rows[0]).toEqual({ approved_object_exists: false, cost: 777 });
+    } finally {
+      await driftDb.close();
+    }
+  });
+
+  it("refuses a changed TABLE output type even when identity and body stay unchanged", async () => {
+    const driftDb = await createPreExpandDatabase();
+    try {
+      const { rows } = await driftDb.query<{ definition: string }>(`
+        select pg_get_functiondef(
+          'public.set_bot_assignment_execution(uuid,uuid,text,text)'::regprocedure
+        ) as definition
+      `);
+      const driftedDefinition = rows[0].definition.replace(
+        "RETURNS TABLE(assignment_id uuid, model text, work_effort text)",
+        "RETURNS TABLE(assignment_id text, model text, work_effort text)",
+      );
+      expect(driftedDefinition).not.toBe(rows[0].definition);
+      await driftDb.exec(`
+        drop function public.set_bot_assignment_execution(uuid,uuid,text,text);
+        ${driftedDefinition};
+        revoke all on function public.set_bot_assignment_execution(uuid,uuid,text,text)
+          from public, anon, authenticated, service_role;
+        grant execute on function public.set_bot_assignment_execution(uuid,uuid,text,text)
+          to authenticated;
+      `);
+
+      const migration = await readFile(
+        resolve(migrationsDirectory, "20260822000200_register_bot_for_ai_account.sql"),
+        "utf8",
+      );
+      await expect(driftDb.exec(migration)).rejects.toThrow(
+        /legacy bot routine catalog does not match the exact authenticated-only pre-EXPAND state/i,
+      );
+      const approvedObject = await driftDb.query<{ exists: boolean }>(`
+        select to_regprocedure(
+          'public.ai_account_bot_credential_ref(public.bot_provider,text)'
+        ) is not null as exists
+      `);
+      expect(approvedObject.rows[0].exists).toBe(false);
+    } finally {
+      await driftDb.close();
+    }
+  });
+
   it("rolls back EXPAND when custom function default privileges add an unexpected executor", async () => {
     const driftDb = await createPreExpandDatabase();
     try {
