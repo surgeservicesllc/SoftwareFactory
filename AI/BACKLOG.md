@@ -14,9 +14,12 @@ Last triaged: 2026-08-21
   and in the AI Factory's new Select Agents step (nine-step journey; done =
   at least one agent included, names as evidence); 5 component cases plus the
   updated factory suite.
-- [ ] Apply `20260822000100` to hosted Supabase: apply workflow,
-  `confirm=apply`, `scope=agent-selection`. Until then the surfaces say Not
-  Connected and record nothing.
+- [x] Applied to hosted Supabase: run 32548916762 (2026-08-22 03:25Z,
+  scope=agent-selection), ledger repaired, schema cache reloaded. Verified on
+  production: /api/project-agents answers 401 signed out; signed in,
+  available:true from the live list function, and a write probe surfaced the
+  database's own owner/administrator refusal - both definer functions execute
+  on hosted and fail closed.
 
 ## AI Factory production acceptance (2026-08-21)
 
