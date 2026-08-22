@@ -337,7 +337,7 @@ describe("the hosted legacy bot ACL normalization scope", () => {
     expect(historyStart).toBeGreaterThanOrEqual(0);
     expect(precontractStart).toBeGreaterThan(historyStart);
     expect(contract).toContain(
-      'if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]',
+      'if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0" ]',
     );
     expect(contract.indexOf('-f "$CONTRACT_FILE"')).toBeGreaterThan(precontractStart);
   });
