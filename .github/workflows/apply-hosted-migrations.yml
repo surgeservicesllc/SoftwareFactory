@@ -51,6 +51,10 @@ on:
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
           (20260821000100 and 20260821000200) and records them in history;
+          "provider-claim-repair" applies only 20260822001300, which restores
+          the hosted claim_provider_connect_session draft to its exact
+          20260814002500 signature and service_role-only ACL — the one drifted
+          row of the sixteen-function pre-repair gate;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -70,6 +74,7 @@ on:
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
+          - provider-claim-repair
           - probe
 permissions:
   checks: read
@@ -453,7 +458,11 @@ jobs:
               ('20260821000400', 'table',    'factory_command_routes',               null),
               ('20260821000400', 'function', 'list_factory_command_routing_candidates', null),
               ('20260821000400', 'function', 'submit_factory_command',               null),
-              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex')
+              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex'),
+              -- The definition carries the result-column names, so this marker
+              -- distinguishes the repaired signature from the hosted draft the
+              -- same probe exposed (probe run 32591774367, RECORD 8).
+              ('20260822001300', 'body',     'claim_provider_connect_session',       'claimed_organization_id')
             )
             select expected.version,
                    expected.kind,
@@ -3737,6 +3746,74 @@ jobs:
             exit 1
           fi
           echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
+
+      - name: Restore the provider claim signature (scope=provider-claim-repair)
+        # Exactly one file — 20260822001300 — which restores
+        # claim_provider_connect_session from the out-of-ledger draft hosted
+        # still runs (unprefixed result columns, owner-only ACL; probe run
+        # 32591774367 measured contract md5 a7ca5a02b1faa50ebba452c4a4f46195)
+        # to the exact 20260814002500 contract the sixteen-function pre-repair
+        # gate requires (8992610aa5f3749a013a3bdf9f7d4fef, EXECUTE for
+        # service_role alone). The file's own preflight refuses any state that
+        # is neither the known draft nor the current definition, and psql -1
+        # keeps drop, recreate, grants, and postflight one transaction.
+        if: ${{ inputs.scope == 'provider-claim-repair' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live catalog verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260822001300_restore_provider_claim_signature.sql
+          EXPECTED_SHA256=dedef7783fc71a9e4968d1e41783769f975376e4ec2c3a27744407f3cca74c4c
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          echo "The function's state before the repair, read back for the log."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
+            set search_path = pg_catalog;
+            select routine.oid::regprocedure::text as signature,
+                   array_to_string(routine.proargnames, ',') as argnames,
+                   routine.proacl,
+                   md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) as source_md5
+              from pg_proc routine
+             where routine.oid = to_regprocedure('public.claim_provider_connect_session(text,text)');"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260822001300
+          else
+            npx supabase migration repair --status applied 20260822001300 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            set search_path = pg_catalog;
+            select array_to_string(routine.proargnames, ',') =
+                     'p_code_digest,p_sealed_envelope,claimed_organization_id,claimed_purpose'
+               and (select count(*) from aclexplode(routine.proacl)) = 2
+               and has_function_privilege('service_role', routine.oid, 'EXECUTE')
+               and not has_function_privilege('anon', routine.oid, 'EXECUTE')
+               and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
+               and md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'))
+                     = '9961e16bbe95da08903caac340633bca'
+              from pg_proc routine
+             where routine.oid = to_regprocedure('public.claim_provider_connect_session(text,text)');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The repaired function did not read back with the exact 20260814002500 contract."
+            exit 1
+          fi
+          echo "Restored: claimed_ result columns and service_role-only EXECUTE, exactly as 20260814002500 defines them."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

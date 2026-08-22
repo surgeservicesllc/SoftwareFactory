@@ -65,6 +65,18 @@ remains ON. This candidate has no final commit, production deployment, hosted
 chain apply, or signed-in production Step 8 -> Step 9 evidence yet; make no
 deployed or production-ready claim.
 
+The first protected dispatch (run `32592576191`, from main `305a24f` with the
+four required checks green and the exact-SHA Vercel Production READY) failed
+closed at the sixteen-function pre-repair gate. Probe run `32591774367` names
+the single drifted row: hosted `claim_provider_connect_session(text,text)` is
+an early out-of-ledger draft — unprefixed result columns and an owner-only ACL
+(contract md5 `a7ca5a02b1faa50ebba452c4a4f46195` against expected
+`8992610aa5f3749a013a3bdf9f7d4fef`). `20260822001300` behind
+`scope=provider-claim-repair` (ADR-121) restores the exact `20260814002500`
+contract, refuses unknown states, and leaves the post-`00900` body alone.
+Order: `provider-claim-repair` first, then re-dispatch
+`factory-any-model-record-only`.
+
 Read-only hosted probe `32587973532` isolated the prior atomic-run stop to one
 real ACL defect: every table/RLS/policy/index/constraint/source/catalog hash was
 exact, but `apply_resume_extraction(uuid,text[])` still had direct

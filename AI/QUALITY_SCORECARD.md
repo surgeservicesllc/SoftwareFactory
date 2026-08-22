@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-22 — provider claim signature repair (ADR-121):** the
+first protected `scope=factory-any-model-record-only` dispatch (run
+`32592576191`, main `305a24f`, four required checks green, exact-SHA Vercel
+Production READY) failed closed at the sixteen-function pre-repair gate, and
+probe run `32591774367` isolated the single drifted row:
+`claim_provider_connect_session(text,text)` on hosted is an out-of-ledger
+early draft (unprefixed result columns, owner-only ACL; contract md5
+`a7ca5a02b1faa50ebba452c4a4f46195` vs expected
+`8992610aa5f3749a013a3bdf9f7d4fef`). Repair `20260822001300` behind
+`scope=provider-claim-repair` is certified locally by
+`tests/integration/provider-claim-signature-repair.test.ts` — **PASS** at 4
+cases: the no-op replay path, the drift case whose reproduction is proven
+exact by matching the probed contract md5 before repair, the full-chain
+replay that must leave the post-`00900` body untouched, and the unknown-state
+refusal. Hosted application of `20260822001300`, the protected chain, and the
+production Step 8/9 acceptance are all still **PENDING**.
+
 **Addendum, 2026-08-22 — Backlog and All Pipelines clear controls
 (ADR-119):** `main` commit `9761055` (#317). Local verification before merge is
 **PASS**: 345 test files, 4168 tests passed, 0 failed, 2 skipped, with lint,

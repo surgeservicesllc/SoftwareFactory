@@ -1209,3 +1209,34 @@ Use this append-only log for decisions that constrain future implementation. Cha
   owner-plus-authenticated ACL before the atomic transaction becomes visible.
   Workers, autonomy, and automatic actions remain OFF and the global kill
   switch remains ON.
+
+## ADR-121 - Restore the hosted provider-claim draft in a forward migration, outside the protected chain
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: add `20260822001300_restore_provider_claim_signature.sql` and a
+  dedicated `scope=provider-claim-repair` workflow step. The file recognizes
+  exactly three states of `claim_provider_connect_session(text,text)`: the
+  hosted out-of-ledger draft (unprefixed `organization_id, purpose` result
+  columns, owner-only ACL; contract md5 `a7ca5a02b1faa50ebba452c4a4f46195`),
+  which it drops, recreates from the byte-identical `20260814002500`
+  definition, and re-grants to `service_role` alone; the current
+  `20260814002500` state, where it only re-asserts the ACL; and the
+  post-`20260822000900` lint-repaired state, which it refuses to touch. Any
+  other state aborts before DDL.
+- Rationale: the protected `factory-any-model-record-only` dispatch failed
+  closed at its sixteen-function pre-repair gate, and probe run `32591774367`
+  showed one drifted row of sixteen: hosted still runs an early draft of the
+  claim function applied before the file took its final shape, with the
+  `claimed_` result-column rename and the `service_role` grant both missing.
+  CREATE OR REPLACE cannot rename result columns, which is why the drift
+  survived every later replay. The draft is dead — no role may execute it and
+  its first execution would fail on the ambiguous ON CONFLICT the rename
+  fixed — so drop-and-recreate interrupts nothing. Weakening the frozen gate
+  instead was rejected: the gate is the release's proof of identity.
+- Consequence: the protected chain's inputs converge to the frozen pre-repair
+  catalog without editing any protected file or gate. The migration sorts
+  after `20260822001200`, so a full local replay reaches it in the
+  post-`00900` state; the no-op branch and a dedicated test keep it from
+  regressing the lint repair there. Workers, autonomy, and automatic actions
+  remain OFF and the global kill switch remains ON.

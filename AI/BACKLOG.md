@@ -43,6 +43,10 @@ Last triaged: 2026-08-22
   that exact head, and require all exact-head quality plus browser/accessibility
   jobs green and an exact READY Vercel Production identity. No such release
   evidence exists yet.
+- [ ] First restore the one drifted pre-repair input: dispatch
+  `scope=provider-claim-repair` so hosted `claim_provider_connect_session`
+  matches the frozen sixteen-function gate (ADR-121; run `32592576191` failed
+  closed on exactly this row, probe `32591774367` measured it).
 - [ ] Apply only the protected atomic
   `00300 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact

@@ -2,6 +2,38 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22): the protected chain's one blocked gate, and its repair
+
+The first `scope=factory-any-model-record-only` dispatch (run `32592576191`,
+from main `305a24f` with all four CI checks green and the exact-SHA Vercel
+Production READY) failed closed at the sixteen-function pre-repair gate:
+"The exact sixteen-function pre-repair source/catalog/ACL state is not
+present." Probe run `32591774367` names the one drifted row of sixteen:
+`claim_provider_connect_session(text,text)` on hosted still carries an early
+out-of-ledger draft — result columns `organization_id, purpose` instead of the
+`claimed_` pair `20260814002500` finally shipped, and an owner-only ACL with
+the `service_role` grant missing (contract md5 measured as
+`a7ca5a02b1faa50ebba452c4a4f46195` against expected
+`8992610aa5f3749a013a3bdf9f7d4fef`). CREATE OR REPLACE cannot rename result
+columns, which is why every later replay left the draft standing. The draft is
+dead twice over: no role may execute it, and its first execution would fail on
+the ambiguous `ON CONFLICT (organization_id, purpose)` the rename fixed.
+
+The repair is `20260822001300_restore_provider_claim_signature.sql` behind
+`scope=provider-claim-repair` (ADR-121): drop the known draft, recreate the
+byte-identical `20260814002500` definition, re-grant EXECUTE to `service_role`
+alone, refuse every unknown state, and leave the post-`20260822000900` body
+strictly alone so a full replay cannot regress the lint repair.
+`tests/integration/provider-claim-signature-repair.test.ts` reproduces the
+hosted draft and proves the reproduction exact by matching the probed contract
+md5 before repairing it.
+
+Operator order from here: dispatch `scope=provider-claim-repair`, read back
+the restored contract, then re-dispatch `scope=factory-any-model-record-only`
+under the same exact-main/READY-Vercel identity, then capture the signed-in
+production Step 8 record-only acceptance per the section below. Workers,
+autonomy, and automatic actions stay OFF; the global kill switch stays ON.
+
 ## Newest (2026-08-22): the Backlog and All Pipelines pages can be cleared
 
 `/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear
