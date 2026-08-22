@@ -67,6 +67,7 @@ on:
           - lifecycle
           - job-seeker-resume
           - job-seeker-grant-contract
+          - clear-controls
           - probe
       contract_app_sha:
         description: >-
@@ -2503,6 +2504,116 @@ jobs:
             exit 1
           fi
           echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
+
+      - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
+        # Exactly two files — 20260822000700 and 20260822000800 — and no others.
+        #
+        # They run as separate psql invocations because PostgreSQL refuses to
+        # use an enum value in the transaction that added it, and the functions
+        # in 000800 write the two labels 000700 adds.
+        #
+        # Replay-safe: the labels are `add value if not exists` and the two
+        # functions are `create or replace`. Nothing here deletes a row — the
+        # DELETEs live inside the functions and only run when a person presses
+        # the button and the function's own guards allow it.
+        if: ${{ inputs.scope == 'clear-controls' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          TYPES_FILE=supabase/migrations/20260822000700_clear_surface_activity_types.sql
+          FNS_FILE=supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql
+          if [ "$(sha256sum "$TYPES_FILE" | cut -d' ' -f1)" != "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b" ] \
+            || [ "$(sha256sum "$FNS_FILE" | cut -d' ' -f1)" != "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          # Neither version already recorded. Applying under a version the
+          # ledger holds is how this repository previously lost a migration.
+          TYPES_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000700';")
+          FNS_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000800';")
+          if [ "$TYPES_ROW" != "0" ] || [ "$FNS_ROW" != "0" ]; then
+            echo "::error::Ledger already records one of these versions (types=$TYPES_ROW functions=$FNS_ROW; want 0/0)."
+            exit 1
+          fi
+
+          # The tables the functions read, checked as objects rather than rows.
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                       where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'tasks')
+              and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                       where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'commands')
+              and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                       where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'agent_runs')
+              and exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                       where n.nspname = 'public' and p.proname = 'can_manage_organization')
+            );")
+          if [ "$READY" != "t" ]; then
+            echo "::error::A table or function these clears depend on is missing."
+            exit 1
+          fi
+
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          echo "Applying ${TYPES_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$TYPES_FILE"
+          repair 20260822000700
+          echo "Applying ${FNS_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FNS_FILE"
+          repair 20260822000800
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo ""
+          echo "What the run produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select routine.proname,
+                   routine.prosecdef as security_definer,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member_may_execute,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+             order by 1;"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              (select count(*) = 2 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public'
+                  and p.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
+                  and p.prosecdef)
+              and has_function_privilege('authenticated', 'public.clear_backlog_tasks(uuid,text,boolean)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'public.clear_all_pipelines(uuid,text,boolean)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.clear_backlog_tasks(uuid,text,boolean)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.clear_all_pipelines(uuid,text,boolean)', 'EXECUTE')
+              -- The audit vocabulary the functions write.
+              and exists (select 1 from pg_type t join pg_enum e on e.enumtypid = t.oid
+                           where t.typname = 'activity_event_type' and e.enumlabel = 'task.backlog_cleared')
+              and exists (select 1 from pg_type t join pg_enum e on e.enumtypid = t.oid
+                           where t.typname = 'activity_event_type' and e.enumlabel = 'command.pipelines_cleared')
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Post-apply verification failed: definer flag, ACLs, or activity labels are not as intended."
+            exit 1
+          fi
+          echo "Applied and verified: both clears are SECURITY DEFINER, callable by members only, with their audit labels present."
 
       - name: Repair bots onto the executable model (scope=executable-model-repair)
         # One file, and it rewrites data rather than schema: bots whose model

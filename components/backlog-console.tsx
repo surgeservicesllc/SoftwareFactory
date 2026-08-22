@@ -11,6 +11,7 @@ import {
 } from "@/components/control-plane-detail";
 import { TenantListShell, formatDateTime, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
+import { ClearSurfaceButton } from "@/components/clear-surface-button";
 
 type Task = {
   id: string;
@@ -74,6 +75,22 @@ export function BacklogConsole() {
 
   return (
     <div className="space-y-4">
+      {/*
+        * Owner instruction, 2026-08-22. Above the list rather than inside it,
+        * so it is reachable when the list is long — and so it does not look
+        * like a per-row control.
+        */}
+      <div className="flex justify-end">
+        <ClearSurfaceButton
+          endpoint="/api/tasks/clear"
+          label="Clear backlog"
+          noun="work item"
+          includeFlagName="includeTasksWithRuns"
+          includeFlagLabel="Also clear work items that already have run history. Deleting these removes those runs too."
+          onCleared={reload}
+        />
+      </div>
+
       <TenantListShell
         state={state}
         reload={reload}
