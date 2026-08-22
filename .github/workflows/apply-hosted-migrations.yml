@@ -855,6 +855,34 @@ jobs:
           echo "anon_may_select f, and service_role_may_insert f — the worker writes only"
           echo "through open_node_gate_as_worker, never through a table grant."
 
+          echo ""
+          echo "The job-seeker resume extraction table's actual privileges, clause by"
+          echo "clause. The apply step asserts these as one AND, which tells you it"
+          echo "failed but not which part — this prints each separately."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select
+              (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relname = 'job_seeker_resume_extractions') as rls_enabled,
+              (select c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relname = 'job_seeker_resume_extractions') as rls_forced,
+              (select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
+                where c.relname = 'job_seeker_resume_extractions') as policies,
+              has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'SELECT') as auth_select,
+              has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE') as auth_update,
+              has_table_privilege('anon', 'public.job_seeker_resume_extractions', 'SELECT') as anon_select,
+              has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'UPDATE') as service_update,
+              (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'apply_resume_extraction') as definer,
+              has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as auth_execute,
+              has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as anon_execute;" \
+            || echo "the table does not exist yet"
+          echo "Expected: rls t, forced t, policies 3, auth_select t, auth_update f,"
+          echo "anon_select f, service_update f, definer t, auth_execute t, anon_execute f."
+          echo "A true auth_update or service_update means Supabase default privileges"
+          echo "granted the table to those roles at CREATE TABLE time and the migration"
+          echo "revoked only anon — a hole PGlite cannot reproduce, because it has no"
+          echo "default privileges configured for these roles."
+
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
         # project detail page's priority, focus, stop and cancel controls need,
