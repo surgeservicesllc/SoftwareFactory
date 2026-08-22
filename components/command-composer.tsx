@@ -1,12 +1,11 @@
 "use client";
 
 import { ArrowUp, CheckCircle2, ChevronRight, Loader2, ShieldAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Link from "next/link";
 
 import { cn } from "@/lib/cn";
-import { suggestTemplateForGoal } from "@/lib/graph/suggest";
 
 const examples = [
   "Audit this repository",
@@ -42,6 +41,7 @@ type SubmissionState =
   | {
       kind: "success";
       effectiveRisk: string;
+      executionMessage: string;
       id: string;
       repository: string;
       requiresOwnerApproval: boolean;
@@ -65,6 +65,12 @@ type TaskOption = {
   title: string;
 };
 
+type PipelineOption = {
+  projectId: string;
+  templateKey: string;
+  name: string;
+};
+
 type PendingIntent = {
   fingerprint: string;
   idempotencyKey: string;
@@ -85,6 +91,17 @@ function acceptanceCriteriaFromText(value: string) {
 
 function canonicalTaskIds(taskIds: readonly string[]) {
   return [...new Set(taskIds)].sort((left, right) => left.localeCompare(right));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPipelineOption(value: unknown): value is PipelineOption {
+  return isRecord(value)
+    && typeof value.projectId === "string"
+    && typeof value.templateKey === "string"
+    && typeof value.name === "string";
 }
 
 export function CommandComposer({
@@ -111,12 +128,25 @@ export function CommandComposer({
   const [tasks, setTasks] = useState<TaskOption[]>([]);
   const [tasksState, setTasksState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [dependencyTaskIds, setDependencyTaskIds] = useState<string[]>([]);
+  const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
+  const [pipelineTemplateKey, setPipelineTemplateKey] = useState("");
+  const [pipelinesState, setPipelinesState] = useState<
+    "idle" | "loading" | "ready" | "unavailable"
+  >("idle");
   // Simple by default: describing the outcome and picking a project is the whole
   // job. Work type, acceptance criteria, dependencies, and the risk tier are
   // real controls, but they all carry safe defaults — so they open on demand
   // rather than confronting every owner every time.
   const [showAdvanced, setShowAdvanced] = useState(false);
   const pendingIntent = useRef<PendingIntent | null>(null);
+  const pipelineReadSequence = useRef(0);
+  const projectContextMode = projectContext === undefined
+    ? "standalone"
+    : projectContext === null
+      ? "empty"
+      : "fixed";
+  const projectContextId = projectContext?.id;
+  const projectContextName = projectContext?.name;
 
   function markEdited() {
     pendingIntent.current = null;
@@ -140,13 +170,29 @@ export function CommandComposer({
     }
 
     async function loadProjects() {
-      if (projectContext !== undefined) {
-        const contextualProjects: ProjectOption[] = projectContext
-          ? [{ ...projectContext, connectionStatus: "connected", status: "active" }]
+      if (projectContextMode !== "standalone") {
+        const contextualProjects: ProjectOption[] = projectContextMode === "fixed"
+          ? [{
+              id: projectContextId ?? "",
+              name: projectContextName ?? "",
+              connectionStatus: "connected",
+              status: "active",
+            }]
           : [];
         setProjects(contextualProjects);
-        setProjectId(projectContext?.id ?? "");
+        setDependencyTaskIds([]);
+        setPipelines([]);
+        setPipelineTemplateKey("");
+        setPipelinesState(projectContextMode === "fixed" ? "loading" : "idle");
+        pendingIntent.current = null;
+        setState({ kind: "idle" });
+        setProjectId(projectContextId ?? "");
         setProjectsState("ready");
+        if (projectContextMode === "empty") {
+          setTasks([]);
+          setTasksState("ready");
+          return;
+        }
         await loadTasks();
         return;
       }
@@ -169,6 +215,12 @@ export function CommandComposer({
           && availableProjects.some((project) => project.id === requested)
           ? requested
           : availableProjects[0]?.id ?? "";
+        setDependencyTaskIds([]);
+        setPipelines([]);
+        setPipelineTemplateKey("");
+        setPipelinesState(preselected ? "loading" : "idle");
+        pendingIntent.current = null;
+        setState({ kind: "idle" });
         setProjectId(preselected);
         setProjectsState("ready");
         await loadTasks();
@@ -183,7 +235,61 @@ export function CommandComposer({
     return () => {
       active = false;
     };
-  }, [projectContext]);
+  }, [projectContextId, projectContextMode, projectContextName]);
+
+  const loadPipelines = useCallback(async (requestedProjectId: string) => {
+    const readSequence = ++pipelineReadSequence.current;
+    setPipelines([]);
+    setPipelineTemplateKey("");
+
+    if (!requestedProjectId) {
+      setPipelinesState("idle");
+      return;
+    }
+
+    setPipelinesState("loading");
+    try {
+      const response = await fetch("/api/project-pipelines", { cache: "no-store" });
+      if (!response.ok) throw new Error("Selected pipelines could not be loaded.");
+      const body = (await response.json()) as { available?: boolean; pipelines?: unknown };
+      if (
+        body.available === false
+        || !Array.isArray(body.pipelines)
+        || !body.pipelines.every(isPipelineOption)
+      ) {
+        throw new Error("Selected pipeline data was unavailable.");
+      }
+      if (readSequence !== pipelineReadSequence.current) return;
+
+      const scopedPipelines = body.pipelines.filter(
+        (pipeline) => pipeline.projectId === requestedProjectId,
+      );
+      setPipelines(scopedPipelines);
+      setPipelineTemplateKey(
+        scopedPipelines.length === 1 ? scopedPipelines[0]?.templateKey ?? "" : "",
+      );
+      setPipelinesState("ready");
+    } catch {
+      if (readSequence !== pipelineReadSequence.current) return;
+      setPipelines([]);
+      setPipelineTemplateKey("");
+      setPipelinesState("unavailable");
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadPipelines(projectId);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      // Invalidates both successful and failed reads from the project that is
+      // no longer selected. Fetch itself may not be abortable in every test
+      // or browser, but its result can never cross the project boundary.
+      pipelineReadSequence.current += 1;
+    };
+  }, [loadPipelines, projectId]);
 
   async function submitCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,6 +304,14 @@ export function CommandComposer({
       setState({ kind: "error", message: "Choose a project with a live GitHub connection first." });
       return;
     }
+    if (pipelinesState !== "ready") {
+      setState({ kind: "error", message: "Selected pipelines must be verified before this command can be queued." });
+      return;
+    }
+    if (!pipelineTemplateKey) {
+      setState({ kind: "error", message: "Choose one of this project's selected pipelines first." });
+      return;
+    }
     if (acceptanceCriteria.length > 12) {
       setState({ kind: "error", message: "Use no more than 12 acceptance criteria." });
       return;
@@ -207,6 +321,7 @@ export function CommandComposer({
       acceptanceCriteria,
       commandType,
       dependencyTaskIds: canonicalDependencyTaskIds,
+      pipelineTemplateKey,
       projectId,
       prompt: trimmed,
       risk: riskLevel,
@@ -230,6 +345,7 @@ export function CommandComposer({
           dependencyTaskIds: canonicalDependencyTaskIds,
           idempotencyKey: pendingIntent.current.idempotencyKey,
           parameters: {},
+          pipelineTemplateKey,
           projectId,
           prompt: trimmed,
           risk: riskLevel.toLowerCase(),
@@ -242,7 +358,10 @@ export function CommandComposer({
         message?: string;
         orchestration?: { effectiveRisk?: string; repository?: string };
         requiresOwnerApproval?: boolean;
-        execution?: { workerDispatch?: "delayed" | "not_applicable" | "requested" };
+        execution?: {
+          message?: string;
+          workerDispatch?: "delayed" | "not_applicable" | "requested";
+        };
       };
 
       if (!response.ok) {
@@ -259,14 +378,26 @@ export function CommandComposer({
       const id = body.command?.id ?? body.commandId ?? "queued";
       const repository = body.orchestration?.repository ?? "connected repository";
       const effectiveRisk = body.orchestration?.effectiveRisk?.toUpperCase() ?? riskLevel;
+      const workerDispatch = body.execution?.workerDispatch ?? "not_applicable";
+      const backendExecutionMessage = body.execution?.message?.trim();
+      const executionMessage = backendExecutionMessage
+        ? `Command ${id}: ${backendExecutionMessage}`
+        : body.requiresOwnerApproval === true
+          ? `Command ${id} is recorded as ${effectiveRisk} and remains blocked from execution.`
+          : workerDispatch === "delayed"
+            ? `Command ${id} is queued durably for ${repository}; it starts only when a connected worker claims it.`
+            : workerDispatch === "requested"
+              ? `Command ${id} is queued for ${repository} as ${effectiveRisk}.`
+              : `Command ${id} is recorded only; automated workers remain off.`;
       pendingIntent.current = null;
       setState({
         kind: "success",
         effectiveRisk,
+        executionMessage,
         id,
         repository,
         requiresOwnerApproval: body.requiresOwnerApproval === true,
-        workerDispatch: body.execution?.workerDispatch ?? "not_applicable",
+        workerDispatch,
       });
       setInstruction("");
       setAcceptanceText("");
@@ -290,6 +421,9 @@ export function CommandComposer({
         : "No connected projects yet";
   const dependencyOptions = tasks.filter(
     (task) => task.project?.id === projectId && !["cancelled", "failed"].includes(task.status),
+  );
+  const selectedPipeline = pipelines.find(
+    (pipeline) => pipeline.templateKey === pipelineTemplateKey,
   );
   const acceptanceCount = acceptanceCriteriaFromText(acceptanceText).length;
   const advancedSummary = [
@@ -351,6 +485,9 @@ export function CommandComposer({
             onChange={(event) => {
               setProjectId(event.target.value);
               setDependencyTaskIds([]);
+              setPipelines([]);
+              setPipelineTemplateKey("");
+              setPipelinesState(event.target.value ? "loading" : "idle");
               markEdited();
             }}
             disabled={projectContext !== undefined || projectsState !== "ready" || projects.length === 0}
@@ -363,6 +500,63 @@ export function CommandComposer({
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label htmlFor="command-pipeline" className="field-label">
+            Pipeline
+          </label>
+          <select
+            id="command-pipeline"
+            value={pipelineTemplateKey}
+            onChange={(event) => {
+              setPipelineTemplateKey(event.target.value);
+              markEdited();
+            }}
+            disabled={pipelinesState !== "ready" || pipelines.length === 0}
+            className="input"
+          >
+            {pipelineTemplateKey === "" ? (
+              <option value="">
+                {!projectId
+                  ? "Choose a project first"
+                  : pipelinesState === "loading"
+                    ? "Loading selected pipelines…"
+                    : pipelinesState === "unavailable"
+                      ? "Selected pipelines unavailable"
+                      : pipelines.length === 0
+                        ? "No pipelines selected for this project"
+                        : "Choose a selected pipeline"}
+              </option>
+            ) : null}
+            {pipelines.map((pipeline) => (
+              <option key={pipeline.templateKey} value={pipeline.templateKey}>
+                {pipeline.name}
+              </option>
+            ))}
+          </select>
+          {pipelinesState === "unavailable" ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--warning)]">
+              <span>Selected pipelines could not be verified. Queueing is paused.</span>
+              <button
+                type="button"
+                className="font-semibold underline underline-offset-2"
+                onClick={() => {
+                  markEdited();
+                  void loadPipelines(projectId);
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : pipelinesState === "ready" && pipelines.length === 0 && projectId ? (
+            <p className="mt-2 text-sm text-muted">
+              Select a pipeline for this project in{" "}
+              <Link href="/solutions/pipelines" className="font-medium text-accent">
+                Pipelines
+              </Link>{" "}
+              before queueing work.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -508,10 +702,8 @@ export function CommandComposer({
       </div>
 
       {/* Simple-mode confirmation: what will run, where, and through which
-          stages — all read from the real selections and the real lifecycle.
-          The template is a suggestion and says so: the worker executes the
-          goal as written. */}
-      {instruction.trim() && projectId ? (
+          stages — all read from the real selections and the real lifecycle. */}
+      {instruction.trim() && projectId && pipelineTemplateKey ? (
         <div className="mt-6 rounded-lg border border-line bg-surface-raised p-4">
           <p className="label mb-2">Pipeline</p>
           <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
@@ -526,26 +718,21 @@ export function CommandComposer({
               <dd className="font-medium text-foreground">{riskLevel}</dd>
             </div>
             <div>
-              <dt className="text-faint">Suggested template</dt>
-              <dd className="font-medium text-foreground">
-                {(() => {
-                  const suggested = suggestTemplateForGoal(instruction.trim());
-                  return suggested ? `${suggested.name} (v${suggested.version})` : "General build";
-                })()}
-              </dd>
+              <dt className="text-faint">Selected pipeline</dt>
+              <dd className="font-medium text-foreground">{selectedPipeline?.name ?? pipelineTemplateKey}</dd>
             </div>
             <div>
               <dt className="text-faint">Stages</dt>
               <dd className="font-medium text-foreground">
                 {riskLevel === "RED"
                   ? "Intake → Waiting for your approval"
-                  : "Intake → Planning → Building → Draft pull request"}
+                  : "Intake → Recorded (worker off)"}
               </dd>
             </div>
           </dl>
           <p className="mt-2 text-xs text-faint">
-            The template is a suggestion — the worker executes your goal as written, and every
-            outcome lands as a draft pull request for your review. Watch progress on{" "}
+            This command is recorded against the selected pipeline. Automated workers remain off;
+            a draft pull request exists only after separately authorized execution. Watch status on{" "}
             <Link href="/solutions/pipelines" className="font-medium text-accent">Pipelines</Link>.
           </p>
         </div>
@@ -553,11 +740,17 @@ export function CommandComposer({
 
       <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p id="command-help" className="text-sm text-muted">
-          The server re-checks the project, policy risk, and repository binding before it queues work.
+          The server re-checks the project, policy risk, and repository binding before it records the command.
         </p>
         <button
           type="submit"
-          disabled={state.kind === "pending" || instruction.trim().length === 0 || !projectId}
+          disabled={
+            state.kind === "pending"
+            || instruction.trim().length === 0
+            || !projectId
+            || pipelinesState !== "ready"
+            || !pipelineTemplateKey
+          }
           className="btn btn-primary shrink-0"
         >
           {state.kind === "pending" ? (
@@ -579,11 +772,7 @@ export function CommandComposer({
         {state.kind === "success" ? (
           <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] p-3 text-sm text-[var(--accent-text)]">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            {state.requiresOwnerApproval
-              ? `Command ${state.id} is recorded as ${state.effectiveRisk} and remains blocked from Phase 1C execution.`
-              : state.workerDispatch === "delayed"
-                ? `Command ${state.id} is queued durably for ${state.repository}; it starts only when a connected worker claims it.`
-              : `Command ${state.id} is queued for ${state.repository} as ${state.effectiveRisk}.`}
+            {state.executionMessage}
           </p>
         ) : null}
         {state.kind === "error" ? (

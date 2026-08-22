@@ -26,7 +26,7 @@ import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipeli
 import { ProjectBots } from "@/components/project-bots";
 import { BlockedState, Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
-  assignmentIsConfigured,
+  assignmentPostingIsConfigured,
   LEAST_PRIVILEGE_CONFIG,
   type AssignmentConfig,
 } from "@/lib/bots/assignment-config";
@@ -241,6 +241,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             projectId?: string | null;
             status?: string;
             config?: Partial<AssignmentConfig>;
+            model?: string | null;
+            workEffort?: string | null;
           }>;
           executor?: { connected?: boolean; label?: string; detail?: string };
         }>(responses[3]!),
@@ -295,9 +297,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           .map((assignment) => ({
             // Read from `config`, where the API actually puts these fields,
             // and measure it against the least-privilege baseline.
-            configured: assignmentIsConfigured({
-              ...LEAST_PRIVILEGE_CONFIG,
-              ...(assignment.config ?? {}),
+            configured: assignmentPostingIsConfigured({
+              config: {
+                ...LEAST_PRIVILEGE_CONFIG,
+                ...(assignment.config ?? {}),
+              },
+              model: assignment.model,
+              workEffort: assignment.workEffort,
             }),
             projectId: assignment.projectId ?? null,
           })),
@@ -342,31 +348,59 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
 
   if (state.kind === "loading") {
     return (
-      <Card className="grid min-h-64 place-items-center">
-        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
-      </Card>
+      <div className="space-y-6">
+        <PageHeader
+          title="AI Factory"
+          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        />
+        <Card className="grid min-h-64 place-items-center">
+          <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
+        </Card>
+      </div>
     );
   }
   if (state.kind === "signed-out") {
-    return <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />;
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="AI Factory"
+          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        />
+        <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />
+      </div>
+    );
   }
   if (state.kind === "setup") {
-    return <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />;
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="AI Factory"
+          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        />
+        <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />
+      </div>
+    );
   }
   if (state.kind === "unavailable") {
     return (
-      <Card className="grid min-h-64 place-items-center p-6 text-center">
-        <div className="max-w-md">
-          <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
-          <p className="mt-1 text-sm text-muted">
-            We could not read a complete workspace snapshot. No progress was inferred from missing data.
-          </p>
-          <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
-      </Card>
+      <div className="space-y-6">
+        <PageHeader
+          title="AI Factory"
+          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        />
+        <Card className="grid min-h-64 place-items-center p-6 text-center">
+          <div className="max-w-md">
+            <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
+            <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
+            <p className="mt-1 text-sm text-muted">
+              We could not read a complete workspace snapshot. No progress was inferred from missing data.
+            </p>
+            <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
+              Retry
+            </button>
+          </div>
+        </Card>
+      </div>
     );
   }
 
@@ -624,7 +658,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "command",
       title: "Issue a Command",
-      description: "Describe the outcome you want in plain words. The server verifies it, queues it, and a worker builds it.",
+      description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route; workers remain off.",
       done: scopedCommands.length > 0,
       evidence: scopedCommands.length > 0
         ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`

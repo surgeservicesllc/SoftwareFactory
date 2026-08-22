@@ -218,6 +218,17 @@ function compareCandidates(left: RoutableAssignment, right: RoutableAssignment):
 }
 
 /**
+ * Applies the router's stable ordering without changing eligibility facts.
+ * Callers that already established eligibility in another authoritative
+ * boundary can reuse the exact tie-break policy without inventing capacity.
+ */
+export function orderRoutableAssignments(
+  assignments: readonly RoutableAssignment[],
+): readonly RoutableAssignment[] {
+  return Object.freeze([...assignments].sort(compareCandidates));
+}
+
+/**
  * Chooses which assigned bot should take one piece of work.
  *
  * `heldPaths` is how two bots are kept off the same files. It comes from
@@ -282,7 +293,7 @@ export function routeWorkToAssignedBot(input: {
     eligible.push(assignment);
   }
 
-  const ordered = Object.freeze([...eligible].sort(compareCandidates));
+  const ordered = orderRoutableAssignments(eligible);
   const selected = ordered[0] ?? null;
 
   return Object.freeze({
