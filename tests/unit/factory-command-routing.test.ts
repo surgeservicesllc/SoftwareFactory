@@ -398,4 +398,14 @@ describe("factory command routing", () => {
 
     expect(decision).toMatchObject({ outcome: "SELECTED", selected: { botName: "Older" } });
   });
+  it("removes the provider/model mismatch dead end for alternate models", () => {
+    expect(decide({ model: "gpt-5.1-codex" })).toMatchObject({
+      outcome: "SELECTED",
+      selected: { model: "gpt-5.1-codex", provider: "openai" },
+    });
+    expect(decide({ provider: "anthropic", model: "claude-opus-5" })).toMatchObject({
+      outcome: "SELECTED",
+      selected: { model: "claude-opus-5", provider: "anthropic" },
+    });
+  });
 });

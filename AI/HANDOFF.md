@@ -2,6 +2,27 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-22): every command was being refused, and why
+
+`Issue a Command` refused every submission in every workspace with
+`PROVIDER_MODEL_MISMATCH` — at the last step of the journey, after a project, a
+pipeline and a bot had all been chosen. Nothing was misconfigured. The plan
+fixed `gpt-5.3-codex`; `ensureProviderBot` named new bots `gpt-5.1-codex` from
+the catalog's list; routing and `submit_factory_command` both compare the pair
+exactly. One fact in two files, with nothing tying them.
+
+`executionModel()` is now that tie (ADR-114), provisioning asks it, the roster's
+picker marks each model **runs** or **cannot run**, and the refusal names the
+bot, both models, and where to change one.
+
+**Outstanding owner action:** migration `20260822000600_route_bots_onto_the_executable_model`
+repairs bots already written with the unexecutable model. Until it is applied,
+existing bots stay refused even on the new code, because the bad model is
+already in their rows. Apply with
+`.github/workflows/apply-hosted-migrations.yml`, `confirm=apply`,
+`scope=executable-model-repair`.
+
+
 ## Newest (2026-08-22): application deployed; repaired database sequence local
 
 Exact commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is current

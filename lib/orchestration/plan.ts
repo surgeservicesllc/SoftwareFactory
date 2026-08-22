@@ -21,6 +21,15 @@ export function classifyFactoryCommandExecutionIdentity(input: {
   return "record_only";
 }
 
+/**
+ * The one provider a Phase 1C command can actually execute on.
+ *
+ * Only the Codex worker claims from this queue — the Claude workflow verifies
+ * its subscription and nothing else — so a command routed anywhere else would
+ * be recorded for a worker that will never arrive.
+ */
+export const EXECUTION_PROVIDER = "openai" as const;
+
 export type Phase1CAgentRole =
   | "orchestrator"
   | "architect"
@@ -51,7 +60,18 @@ export const DEFAULT_PHASE_1C_BUDGET = Object.freeze({
   maximumTurns: 4,
 });
 
-function configuredModel(environment: Readonly<Record<string, string | undefined>>) {
+/**
+ * The model the executor will accept, and therefore the model a bot has to
+ * carry to be routable at all.
+ *
+ * Exported because provisioning has to ask this rather than guess: a bot
+ * named from the catalog's list while the plan fixed a different string is
+ * how every Codex bot in every workspace became unroutable, refused at the
+ * last step of the journey with `PROVIDER_MODEL_MISMATCH`.
+ */
+export function executionModel(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+) {
   const value = environment.SOFTWAREFACTORY_CODEX_MODEL?.trim() || DEFAULT_CODEX_MODEL;
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value)) {
     throw new Error("SOFTWAREFACTORY_CODEX_MODEL is invalid.");
@@ -66,7 +86,7 @@ export function createPhase1CExecutionPlan(
   return Object.freeze({
     agentRole: agentRoleByCommandType[commandType],
     budget: DEFAULT_PHASE_1C_BUDGET,
-    model: configuredModel(environment),
+    model: executionModel(environment),
     plan: Object.freeze({
       requiresDraftPullRequest: true,
       stages: Object.freeze([
@@ -81,14 +101,14 @@ export function createPhase1CExecutionPlan(
       ]),
       workflow: "codex_draft_pr",
     }),
-    provider: "openai" as const,
+    provider: EXECUTION_PROVIDER,
   });
 }
 
 /**
  * A Factory posting owns the provider/model identity selected for the command.
- * Only the existing Codex identity is claimable by the Phase 1C worker. A
- * every other bounded posting is durable routing intent only: it creates no
+ * Only the existing Codex identity is claimable by the Phase 1C worker. Every
+ * other bounded posting is durable routing intent only: it creates no
  * execution run and cannot be claimed by a worker.
  */
 export function createFactoryCommandExecutionIntent(input: {

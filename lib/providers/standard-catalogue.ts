@@ -29,6 +29,7 @@ const DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "claude-opus-5": "Claude Opus 5",
   "claude-sonnet-5": "Claude Sonnet 5",
   "claude-haiku-4-5": "Claude Haiku 4.5",
+  "gpt-5.3-codex": "GPT-5.3 Codex",
   "gpt-5.1-codex": "GPT-5.1 Codex",
   "gpt-5.1": "GPT-5.1",
   "gpt-5-mini": "GPT-5 Mini",

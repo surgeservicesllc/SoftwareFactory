@@ -19,6 +19,7 @@ import {
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
+import { EXECUTION_PROVIDER, executionModel } from "@/lib/orchestration/plan";
 
 /**
  * The bots serving one project.
@@ -182,6 +183,17 @@ export async function GET(
       available,
       roles: fabric.roles,
       projects: fabric.projects,
+      /*
+       * The provider and model a command actually executes on, resolved
+       * server-side so an operator's model pin is included.
+       *
+       * The roster's model picker offers every model the catalog lists for a
+       * provider, and exactly one of them can run — routing refuses the rest
+       * at submission, at the last step of the journey. Sending this lets the
+       * picker say which is which rather than presenting choices that quietly
+       * end it.
+       */
+      execution: { provider: EXECUTION_PROVIDER, model: executionModel() },
     });
   } catch (error) {
     const boundaryResponse = supabaseBoundaryErrorResponse(error);

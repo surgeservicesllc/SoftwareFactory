@@ -82,7 +82,14 @@ export const BOT_PROVIDERS: readonly BotProvider[] = [
     monogram: "OA",
     accent: "#5bd6a8",
     summary: "General coding agents and the Codex family of code models.",
-    suggestedModels: ["gpt-5.1-codex", "gpt-5.1", "gpt-5-mini", "o4-mini"],
+    /*
+     * The head of this list is what a bot is provisioned with, and the
+     * executor accepts exactly one model, so the head is not a preference —
+     * it is the executable model. `tests/unit/execution-model-agreement.test.ts`
+     * ties it to `executionModel()`; the rest are for a person configuring a
+     * bot by hand.
+     */
+    suggestedModels: ["gpt-5.3-codex", "gpt-5.1-codex", "gpt-5.1", "gpt-5-mini", "o4-mini"],
     defaultCredentialRef: "OPENAI_API_KEY",
     subscriptionCredentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
     requiresBaseUrl: false,

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { findBotProvider } from "@/lib/bots/catalog";
+import { EXECUTION_PROVIDER, executionModel } from "@/lib/orchestration/plan";
 import {
   isMissingDatabaseColumn,
   isMissingDatabaseFunction,
@@ -158,6 +159,18 @@ export async function ensureProviderBot(
       name = `${provider.label} ${n}`;
     }
 
+    /*
+     * The executing provider's bot is given the model the executor will
+     * accept, resolved the same way the plan resolves it — including the
+     * operator's `SOFTWAREFACTORY_CODEX_MODEL` pin. Naming it from the
+     * catalog's list independently is what let the two drift, and a bot on
+     * the wrong model is not a slightly-worse bot: it is refused outright at
+     * submission, at the last step of the journey.
+     */
+    const provisionModel = providerId === EXECUTION_PROVIDER
+      ? executionModel()
+      : provider.suggestedModels[0] ?? provider.label;
+
     const legacyCredentialRef = options.credentialRef !== undefined
       ? options.credentialRef
       : provider.defaultCredentialRef;
@@ -165,7 +178,7 @@ export async function ensureProviderBot(
       p_organization_id: organizationId,
       p_name: name,
       p_provider: providerId,
-      p_model: provider.suggestedModels[0] ?? provider.label,
+      p_model: provisionModel,
       p_credential_ref: legacyCredentialRef,
       p_base_url: null,
       p_notes: "Created automatically when this provider was connected.",
@@ -177,7 +190,7 @@ export async function ensureProviderBot(
           p_ai_account_id: options.aiAccountId,
           p_provider: providerId,
           p_name: name,
-          p_model: provider.suggestedModels[0] ?? provider.label,
+          p_model: provisionModel,
           p_additional: options.additional ?? false,
           p_base_url: null,
           p_notes: "Created automatically when this provider was connected.",
