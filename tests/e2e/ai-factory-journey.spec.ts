@@ -298,7 +298,7 @@ test.describe("AI Factory live journey", () => {
     await expect(roster.getByRole("button", { name: /^Pause / })).toBeVisible();
     await expect(roster.getByText("1 bot assigned")).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await page.keyboard.press("Escape");
+    await roster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
@@ -408,7 +408,7 @@ test.describe("AI Factory live journey", () => {
     await persistedRoster.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await persistedRoster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 

@@ -17,7 +17,7 @@ const migrationRelativePath =
 const migrationPath = resolve(repositoryRoot, migrationRelativePath);
 const scope = "bot-account-binding-contract";
 const frozenSha256 =
-  "591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd";
+  "79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7";
 
 interface WorkflowStep {
   readonly env?: Readonly<Record<string, string>>;
@@ -209,7 +209,10 @@ describe("the hosted bot mutator CONTRACT scope", () => {
     ]) {
       expect(command.slice(catalog, apply)).toContain(identity);
     }
-    expect(command.slice(catalog, apply)).toContain("md5(routine.prosrc)");
+    expect(command.slice(catalog, apply)).toContain(
+      "md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n'))",
+    );
+    expect(command.slice(catalog, apply)).not.toMatch(/md5\(routine\.prosrc\)/);
     expect(command.slice(catalog, apply)).toContain("actual_contract_md5");
     expect(command.slice(catalog, apply)).toContain("trigger_row.tgtype = expected.trigger_type");
     expect(command.slice(catalog, apply)).toContain("search_path=pg_catalog");

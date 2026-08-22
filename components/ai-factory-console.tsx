@@ -521,6 +521,14 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     return true;
   }, [load]);
 
+  // The roster's visible Return action waits for the parent snapshot before
+  // revealing the journey, so its completion badges cannot flash stale.
+  const returnFromRoster = useCallback(async (): Promise<boolean> => {
+    await load();
+    setOpenStep(null);
+    return true;
+  }, [load]);
+
   /**
    * The footer link leaves this route, so it is another close path whenever a
    * broker sign-in is mounted inside the overlay. Keep ordinary primary-click
@@ -640,6 +648,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         projectName={activeProject.name}
         divided={false}
         embedded
+        onAssignmentComplete={load}
+        onReturnToFactory={returnFromRoster}
       />
     </div>
   ) : (

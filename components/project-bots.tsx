@@ -71,7 +71,7 @@ type ProjectBot = {
   readinessLabel: string;
   readinessTone: "safe" | "warning" | "danger" | "neutral";
   aiAccountId: string | null;
-  /** The credential variable this bot reads — how it ties back to an account. */
+  /** Operational credential metadata only; never proof of account identity. */
   credentialRef?: string | null;
   assignable: boolean;
   blockedReason: string | null;
@@ -96,21 +96,6 @@ type LinkableAccount = {
   status: string;
   credentialPurpose?: string | null;
 };
-
-/**
- * The credential variable an account's sign-in fills — names only, never
- * material. The bare purpose is the provider's base subscription variable;
- * `…_N` is the numbered slot. This is how a bot is recognized as "the bot
- * for this account": it reads the same variable the account's sign-in fills.
- */
-function accountCredentialRef(account: LinkableAccount): string | null {
-  const provider = findBotProvider(account.provider);
-  if (!provider?.subscriptionCredentialRef) return null;
-  const choice = accountProvisionCredentialChoice(account.provider, account.credentialPurpose);
-  if (!choice) return null;
-  const slot = /^subscription_(\d+)$/.exec(choice);
-  return `${provider.subscriptionCredentialRef}${slot ? `_${slot[1]}` : ""}`;
-}
 
 /** The provision endpoint's pattern-checked name for the same slot. */
 function accountCredentialChoice(account: LinkableAccount): string | null {
@@ -183,11 +168,17 @@ export function ProjectBots({
    * top of the first.
    */
   embedded = false,
+  /** Refresh the parent journey only after an exact assignment read-back. */
+  onAssignmentComplete,
+  /** AI Factory's explicit, accessible way back from the embedded roster. */
+  onReturnToFactory,
 }: {
   projectId: string;
   projectName: string;
   divided?: boolean;
   embedded?: boolean;
+  onAssignmentComplete?: () => Promise<void> | void;
+  onReturnToFactory?: () => Promise<boolean | void> | boolean | void;
 }) {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [usage, setUsage] = useState<UsageByAccount>({});
@@ -197,6 +188,7 @@ export function ProjectBots({
   const [notice, setNotice] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editing, setEditing] = useState<Posting | null>(null);
+  const [returning, setReturning] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -361,6 +353,27 @@ export function ProjectBots({
     [projectId, load],
   );
 
+  const assignmentComplete = useCallback(async () => {
+    setWizardOpen(false);
+    await load();
+    setNotice(
+      embedded
+        ? "Assignment verified. Return to AI Factory to see the refreshed journey."
+        : "Assignment verified against the project roster.",
+    );
+    await onAssignmentComplete?.();
+  }, [embedded, load, onAssignmentComplete]);
+
+  const returnToFactory = useCallback(async () => {
+    if (!onReturnToFactory || returning) return;
+    setReturning(true);
+    try {
+      await onReturnToFactory();
+    } finally {
+      setReturning(false);
+    }
+  }, [onReturnToFactory, returning]);
+
   if (failed) {
     return (
       <div className={cn("p-5", divided && "border-t border-line")}>
@@ -389,10 +402,7 @@ export function ProjectBots({
           inline
           onRosterRefresh={load}
           onClose={() => setWizardOpen(false)}
-          onAssigned={async () => {
-            setWizardOpen(false);
-            await load();
-          }}
+          onAssigned={assignmentComplete}
         />
       </div>
     );
@@ -427,16 +437,33 @@ export function ProjectBots({
               : `${assigned.length} ${assigned.length === 1 ? "bot" : "bots"} assigned`}
           </p>
         </div>
-        {roster.canManage ? (
-          <button
-            type="button"
-            onClick={() => setWizardOpen(true)}
-            className="btn btn-primary btn-sm"
-          >
-            <Plus className="size-3.5" aria-hidden="true" />
-            {assigned.length === 0 ? "Assign Bots" : "Assign More"}
-          </button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {embedded && onReturnToFactory ? (
+            <button
+              type="button"
+              onClick={() => void returnToFactory()}
+              disabled={returning}
+              className="btn btn-secondary btn-sm"
+            >
+              {returning ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowLeft className="size-3.5" aria-hidden="true" />
+              )}
+              Return to AI Factory
+            </button>
+          ) : null}
+          {roster.canManage ? (
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="btn btn-primary btn-sm"
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+              {assigned.length === 0 ? "Assign Bots" : "Assign More"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {notice ? (
@@ -485,10 +512,7 @@ export function ProjectBots({
           inline={false}
           onRosterRefresh={load}
           onClose={() => setWizardOpen(false)}
-          onAssigned={async () => {
-            setWizardOpen(false);
-            await load();
-          }}
+          onAssigned={assignmentComplete}
         />
       ) : null}
 
@@ -816,19 +840,15 @@ function AssignWizard({
   );
 
   /**
-   * Connected accounts from the Bot Manager that no bot reads yet. Each is
-   * one click from being a staffable bot; once a bot for it exists the
-   * account leaves this list, so linking is naturally idempotent.
+   * Connected accounts without an exact bot relationship. Credential names
+   * are deliberately ignored here: only aiAccountId proves identity. The
+   * provision RPC owns the guarded adoption of an eligible legacy bot.
    */
   const linkable = useMemo(
     () =>
-      accounts.filter((account) => {
-        const ref = accountCredentialRef(account);
-        return ref !== null && !bots.some(
-          (bot) => bot.aiAccountId === account.id
-            || (!bot.aiAccountId && bot.credentialRef === ref),
-        );
-      }),
+      accounts.filter((account) =>
+        accountCredentialChoice(account) !== null
+          && !bots.some((bot) => bot.aiAccountId === account.id)),
     [accounts, bots],
   );
 
@@ -1213,9 +1233,9 @@ function AssignWizard({
               <section className="mt-4 rounded-xl border border-line p-3 sm:p-4" aria-label="Link accounts from the Bot Manager">
                 <h4 className="text-sm font-semibold text-foreground">From your Bot Manager</h4>
                 <p className="mt-1 text-xs text-muted">
-                  These connected AI accounts have no bot yet. Tick any number — linking creates a
-                  bot for each and selects it above. The bots stay yours to manage on the Bot
-                  Manager page.
+                  These connected AI accounts do not have an exact account-bound bot. Link or
+                  repair each one through the verified Bot Manager path; it can adopt an eligible
+                  legacy bot instead of creating a duplicate.
                 </p>
                 <ul className="mt-2 space-y-2">
                   {linkable.map((account) => {
@@ -1243,7 +1263,7 @@ function AssignWizard({
                           />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium text-foreground">{account.displayName}</span>
-                            <span className="block text-xs text-muted">{account.providerLabel} · no bot yet</span>
+                            <span className="block text-xs text-muted">{account.providerLabel} · needs exact bot link</span>
                           </span>
                         </label>
                       </li>
@@ -1261,7 +1281,7 @@ function AssignWizard({
                   ) : (
                     <Plus className="size-3.5" aria-hidden="true" />
                   )}
-                  Link {linkSelected.length > 1 ? `${linkSelected.length} bots` : "bot"} from Bot Manager
+                  Link or repair {linkSelected.length > 1 ? `${linkSelected.length} bots` : "bot"}
                 </button>
               </section>
             ) : null}

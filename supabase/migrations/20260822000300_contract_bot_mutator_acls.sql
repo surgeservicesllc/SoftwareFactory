@@ -10,9 +10,10 @@ do $contract$
 declare
   v_bad text;
 begin
-  -- Pin name resolution, then compare version-stable stored bodies and every
+  -- Pin name resolution, then compare canonical-LF stored bodies and every
   -- externally visible contract field. pg_get_functiondef deparser bytes are
-  -- deliberately not a cross-PostgreSQL-major identity.
+  -- deliberately not a cross-PostgreSQL-major identity, and raw prosrc bytes
+  -- vary when an otherwise identical body was submitted with CRLF.
   perform pg_catalog.set_config('search_path', 'pg_catalog', true);
 
   if pg_catalog.to_regrole('authenticated') is null
@@ -82,7 +83,9 @@ begin
      or routine_language.lanname is distinct from 'plpgsql'
      or routine.prokind is distinct from 'f'
      or routine.provolatile is distinct from expected.volatility::"char"
-     or pg_catalog.md5(routine.prosrc) is distinct from expected.source_md5
+     or pg_catalog.md5(pg_catalog.replace(
+          pg_catalog.replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'
+        )) is distinct from expected.source_md5
      or routine.prorettype is distinct from pg_catalog.to_regtype(expected.result_type)
      or routine.proretset is distinct from expected.returns_set
      or coalesce(pg_catalog.array_to_string(routine.proargnames, ','), '')
@@ -308,23 +311,23 @@ begin
   into v_bad
   from (values
     ('public.assign_bot(uuid,uuid,uuid,uuid)',
-     '9e5dea25195823492e3326ed96fa0535', 'public.bot_assignments', true,
+     '80b547b7b722c57a9d2a262b67698be8', 'public.bot_assignments', true,
      'p_organization_id,p_bot_id,p_project_id,p_role_id', '', null),
     ('public.assign_bots_to_project(uuid,uuid,jsonb)',
-     '742fea5b0e8655f19399f2a3944ce2c9', 'public.bot_assignments', true,
+     '23b260247a4be4f4a8d8aa2497e1b6a2', 'public.bot_assignments', true,
      'p_organization_id,p_project_id,p_assignments', '', null),
     ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)',
-     '81788757faa428efebfc8a8ee7f9b6e6', 'public.bots', true,
+     'daecfeb964d863373a2072cc62e1033e', 'public.bots', true,
      'p_organization_id,p_bot_id,p_readiness,p_detail', '', 'NULL::text'),
     ('public.set_bot_assignment_execution(uuid,uuid,text,text)',
-     'cd33f17d969464665066854ff7692a1c', 'pg_catalog.record', true,
+     '55ec15132d903ace0300f2cbe32db6bd', 'pg_catalog.record', true,
      'p_organization_id,p_assignment_id,p_model,p_work_effort,assignment_id,model,work_effort',
      'i,i,i,i,t,t,t', 'NULL::text, NULL::text'),
     ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)',
-     '3637e0869520ee9eae89efd426b0b5c5', 'public.bot_assignments', true,
+     '0aaec47295f86adbeec784d288f24400', 'public.bot_assignments', true,
      'p_organization_id,p_assignment_id,p_status', '', null),
     ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)',
-     'b39a3820c504f9dda9e84f73e1e4f065', 'public.bot_assignments', true,
+     '7f51999309b645832d471ccebea94a9c', 'public.bot_assignments', true,
      'p_organization_id,p_assignment_id,p_configuration,p_role_id,p_status', '',
      'NULL::uuid, NULL::public.bot_assignment_status')
   ) expected(
@@ -345,7 +348,9 @@ begin
      or routine.prosecdef is distinct from true
      or routine.proconfig is distinct from array['search_path=pg_catalog']::text[]
      or pg_catalog.pg_get_userbyid(routine.proowner) is distinct from 'postgres'
-     or pg_catalog.md5(routine.prosrc) is distinct from expected.source_md5
+     or pg_catalog.md5(pg_catalog.replace(
+          pg_catalog.replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'
+        )) is distinct from expected.source_md5
      or routine.prorettype is distinct from pg_catalog.to_regtype(expected.result_type)
      or routine.proretset is distinct from expected.returns_set
      or coalesce(pg_catalog.array_to_string(routine.proargnames, ','), '')
@@ -464,21 +469,23 @@ begin
   into v_bad
   from (values
     ('public.assign_bot(uuid,uuid,uuid,uuid)',
-     '9e5dea25195823492e3326ed96fa0535'),
+     '80b547b7b722c57a9d2a262b67698be8'),
     ('public.assign_bots_to_project(uuid,uuid,jsonb)',
-     '742fea5b0e8655f19399f2a3944ce2c9'),
+     '23b260247a4be4f4a8d8aa2497e1b6a2'),
     ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)',
-     '81788757faa428efebfc8a8ee7f9b6e6'),
+     'daecfeb964d863373a2072cc62e1033e'),
     ('public.set_bot_assignment_execution(uuid,uuid,text,text)',
-     'cd33f17d969464665066854ff7692a1c'),
+     '55ec15132d903ace0300f2cbe32db6bd'),
     ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)',
-     '3637e0869520ee9eae89efd426b0b5c5'),
+     '0aaec47295f86adbeec784d288f24400'),
     ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)',
-     'b39a3820c504f9dda9e84f73e1e4f065')
+     '7f51999309b645832d471ccebea94a9c')
   ) expected(signature, source_md5)
   join pg_catalog.pg_proc routine
     on routine.oid = pg_catalog.to_regprocedure(expected.signature)
-  where pg_catalog.md5(routine.prosrc) is distinct from expected.source_md5
+  where pg_catalog.md5(pg_catalog.replace(
+          pg_catalog.replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'
+        )) is distinct from expected.source_md5
      or routine.prosecdef is distinct from true
      or routine.proconfig is distinct from array['search_path=pg_catalog']::text[]
      or routine.proacl is null

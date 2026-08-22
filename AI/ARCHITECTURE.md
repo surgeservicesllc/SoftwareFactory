@@ -1,9 +1,18 @@
 # Architecture
 
-## Current release boundary — exact AI-account bot identity (ADR-108/ADR-109)
+## Current release boundary — exact bot identity and database containment
 
-The local, not-yet-deployed candidate makes subscription identity a database
-fact. Authenticated managers call `ensure_ai_account_bot` with the exact tenant
+Application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on
+`main` and is served by READY Vercel production deployment
+`dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2`. GitHub deployment `6036292508` and status
+`17160408639` bind the exact commit to
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and its
+stable aliases. The database half remains unhosted. Exact-head CI run
+`32570540183` is red because its LF migration chain exposed non-canonical
+`pg_proc.prosrc` hashes; all three browser/accessibility shards passed.
+
+The application and protected forward migrations make subscription identity a
+database fact. Authenticated managers call `ensure_ai_account_bot` with the exact tenant
 AI-account UUID; PostgreSQL derives the provider and credential slot, returns
 the exact bot UUID, and enforces organization/account/provider/reference
 coherence. A default/non-additional request reuses that account's bound bot or
@@ -63,31 +72,48 @@ the returned UUID only to blank selected drafts. AI Factory owns the sole
 full-app modal/focus boundary; embedded roster, assignment, configuration, and
 starter-role surfaces replace content inside it and never nest another dialog.
 
+The owner-screenshot defect was a presentation-layer identity shortcut:
+`ProjectBots` treated a similar `credentialRef` as an exact AI-account link and
+hid the repair control. An unbound Ready legacy bot could be assigned while AI
+Factory correctly kept steps 5-7 incomplete. The local fix removes that
+inference and exposes the existing exact `/api/bots/connect/provision`
+Link-or-repair/adoption path. It awaits the parent refresh and provides an
+accessible **Return to AI Factory** action. The affected completion predicate
+remains connected account + exact `aiAccountId` + current Ready + project
+assignment.
+
+This containment is frozen in the current unpublished candidate. Focused UI passes 75/75; focused
+ESLint, full typecheck, and lint/typecheck/build are green. The root full suite
+passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. A first
+contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the full
+rerun.
+
 The account-connect component serializes start, retry, close, and unmount
 cleanup. Every async read is fenced by exact session UUID and generation, so a
 late superseded poll cannot mutate state or report Connected. Close blocks a
 racing retry and waits for an in-flight start before cancelling its exact
 session; a failed cancellation keeps the overlay open and resumes polling.
 
-Migration `20260822000200_register_bot_for_ai_account.sql` is local and
-unapplied at SHA-256
-`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
-Its protected `scope=bot-account-binding` verifies and applies only that exact
-file after predecessor/absence and clean-catalog checks; broad apply refuses to
-introduce it. The scope proves catalog, definition, security, search-path, ACL,
-and ledger invariants. Runtime behavior, linked-database lint, application
-health, and containment are separate mandatory post-apply release gates.
-The combined final-candidate working tree passes lint, typecheck, production build, 331
-Vitest files / 3,934 tests (7 skipped), and the corrected resource 404/social-
-image browser regression across desktop/tablet/mobile. Its serialized broader
-browser matrix passed 1,207 cases with 545 intentional viewport skips before
-the one repeated resource-status defect was repaired. The final field audit also
-fixed controlled Instructions editing and made required self-hosted/custom HTTPS
-endpoints fail closed in both the form and registration API. Independent security,
-broker, UI, and proxy reviews report no unresolved P0/P1/P2 findings. Final rebased-commit
-gates, direct-main publication, and production apply remain pending exact RED
-approval. No worker, graph executor, provider-login protocol, autonomy control,
-approval, merge, deploy, or rollback authority changes.
+The protected forward files are local and unapplied at these exact repository
+SHA-256 identities:
+
+- ACL normalizer `20260822000150` —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- EXPAND `20260822000200` —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- CONTRACT `20260822000300` —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Every migration and hosted guard hashes a CRLF/CR-to-LF canonicalized
+`pg_proc.prosrc`, then verifies the transparent function and trigger catalog.
+Native PostgreSQL 17.10 and 18.4 full chains pass. The exact order is 00150,
+00200, exact-app signed-in acceptance, then 00300. Broad apply refuses to
+introduce any protected file. The repaired forward candidate is not yet pushed
+or deployed, and no hosted database mutation has occurred. Its exact identity,
+green CI, and fresh RED authorization are required. Runtime behavior,
+linked-database lint, application health, and containment remain separate
+mandatory post-apply gates. No worker, graph executor, provider-login protocol,
+autonomy control, approval, merge, deployment, or rollback authority changes.
 
 ## Current release boundary — immutable Factory command routing (ADR-106)
 

@@ -369,6 +369,82 @@ describe("assigning several bots at once", () => {
     expect(screen.getByRole("dialog", { name: /assign bots/i })).toBeInTheDocument();
   });
 
+  it("refreshes its embedded parent after exact assignment and offers an explicit return", async () => {
+    const initial = roster({
+      assigned: [],
+      available: [bot("bot-2", "Code Master", { aiAccountId: "account-1" })],
+    });
+    let submitted: {
+      bots: Array<{ botId: string; roleId: string; config: AssignmentConfig }>;
+    } | null = null;
+    stub(null, (url, init) => {
+      if (url.endsWith("/bots") && init?.method === "POST") {
+        submitted = JSON.parse(String(init.body)) as typeof submitted;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            assignments: submitted!.bots.map((entry) => ({
+              id: "assignment-verified",
+              botId: entry.botId,
+              projectId,
+              roleId: entry.roleId,
+              status: "active",
+              config: entry.config,
+            })),
+          }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        const assigned = submitted?.bots.map((entry) => ({
+          id: "assignment-verified",
+          revision: 1,
+          botId: entry.botId,
+          projectId,
+          roleId: entry.roleId,
+          status: "active" as const,
+          assignedAt: "2026-08-22T00:00:00.000Z",
+          config: entry.config,
+          bot: initial.available[0],
+          role: roles.find((candidate) => candidate.id === entry.roleId) ?? null,
+        })) ?? [];
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...initial, assigned }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const onAssignmentComplete = vi.fn(async () => undefined);
+    const onReturnToFactory = vi.fn(async () => true);
+    const user = userEvent.setup();
+    render(
+      <ProjectBots
+        projectId={projectId}
+        projectName="SoftwareFactory"
+        embedded
+        onAssignmentComplete={onAssignmentComplete}
+        onReturnToFactory={onReturnToFactory}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Assign Bots" }));
+    const wizard = screen.getByRole("region", { name: "Assign bots to SoftwareFactory" });
+    await user.click(within(wizard).getByLabelText("Select Code Master"));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(within(wizard).getByRole("button", { name: "Security" }));
+    await user.click(within(wizard).getByRole("button", { name: "Next" }));
+    await user.click(within(wizard).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(onAssignmentComplete).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/assignment verified.*return to ai factory/i)).toBeInTheDocument();
+    expect(screen.getByText("1 bot assigned")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Return to AI Factory" }));
+    await waitFor(() => expect(onReturnToFactory).toHaveBeenCalledTimes(1));
+  });
+
   it("carries a different configuration for each bot", async () => {
     const calls = stub(roster(), (_url, init) =>
       init?.method === "POST"
@@ -770,7 +846,7 @@ describe("assigning several bots at once", () => {
 
     await user.click(within(dialog).getByRole("checkbox", { name: /claude blackstone/i }));
     await user.click(within(dialog).getByRole("checkbox", { name: /claude nwv/i }));
-    await user.click(within(dialog).getByRole("button", { name: /link 2 bots from bot manager/i }));
+    await user.click(within(dialog).getByRole("button", { name: /link or repair 2 bots/i }));
 
     // Both provisions carry the exact account id and are idempotent.
     const provisions = calls.filter((call) => call.url === "/api/bots/connect/provision");
@@ -782,6 +858,69 @@ describe("assigning several bots at once", () => {
     // The refreshed roster's new bots arrive selected, ready for Configure.
     expect(await within(dialog).findByText(/2 bots selected/)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /next/i })).toBeEnabled();
+  });
+
+  it("offers exact repair for a connected account even when an unbound bot shares its credential", async () => {
+    let bound = false;
+    const legacy = bot("bot-legacy", "Claude - Daniel", {
+      aiAccountId: null,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+    const calls = stub(null, (url, init) => {
+      if (url === "/api/ai-accounts") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            accounts: [{
+              id: "acc-1",
+              provider: "anthropic",
+              providerLabel: "Claude",
+              displayName: "Claude - Daniel",
+              status: "connected",
+              credentialPurpose: "claude",
+            }],
+          }),
+        } as unknown as Response;
+      }
+      if (url === "/api/bots/connect/provision" && init?.method === "POST") {
+        bound = true;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ outcome: "bound", botId: legacy.id }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => roster({
+            assigned: [],
+            available: [{ ...legacy, aiAccountId: bound ? "acc-1" : null }],
+          }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    expect(within(dialog).getByText(/do not have an exact account-bound bot/i)).toBeInTheDocument();
+    const repair = within(dialog).getByRole("region", { name: "Link accounts from the Bot Manager" });
+    await user.click(within(repair).getByRole("checkbox", { name: /claude - daniel/i }));
+    await user.click(within(dialog).getByRole("button", { name: "Link or repair bot" }));
+
+    const provision = calls.find((call) => call.url === "/api/bots/connect/provision");
+    expect(provision?.body).toEqual({
+      provider: "anthropic",
+      credential: "subscription",
+      aiAccountId: "acc-1",
+      additional: false,
+    });
+    expect(provision?.body).not.toHaveProperty("botId");
+    expect(await within(dialog).findByText("1 bot selected")).toBeInTheDocument();
   });
 
   it("surfaces a refusal from the server instead of claiming success", async () => {

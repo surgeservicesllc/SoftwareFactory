@@ -124,37 +124,40 @@ describe("the production bot catalog audit workflow", () => {
     for (const [signature, sourceHash] of [
       [
         "public.register_bot(uuid,text,public.bot_provider,text,text,text,text)",
-        "87f577c2ecba24836e54b4ad5e7f383a",
+        "797dcd842e22e5f0ae6b8299f744b0b4",
       ],
       [
         "public.assign_bot(uuid,uuid,uuid,uuid)",
-        "9e5dea25195823492e3326ed96fa0535",
+        "80b547b7b722c57a9d2a262b67698be8",
       ],
       [
         "public.assign_bots_to_project(uuid,uuid,jsonb)",
-        "742fea5b0e8655f19399f2a3944ce2c9",
+        "23b260247a4be4f4a8d8aa2497e1b6a2",
       ],
       [
         "public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)",
-        "81788757faa428efebfc8a8ee7f9b6e6",
+        "daecfeb964d863373a2072cc62e1033e",
       ],
       [
         "public.set_bot_assignment_execution(uuid,uuid,text,text)",
-        "cd33f17d969464665066854ff7692a1c",
+        "55ec15132d903ace0300f2cbe32db6bd",
       ],
       [
         "public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)",
-        "3637e0869520ee9eae89efd426b0b5c5",
+        "0aaec47295f86adbeec784d288f24400",
       ],
       [
         "public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)",
-        "b39a3820c504f9dda9e84f73e1e4f065",
+        "7f51999309b645832d471ccebea94a9c",
       ],
     ]) {
       expect(commands).toContain(signature);
       expect(commands).toContain(sourceHash);
     }
-    expect(commands).toContain("md5(routine.prosrc) as actual_source_md5");
+    expect(commands).toContain(
+      "md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5",
+    );
+    expect(commands).not.toMatch(/md5\(routine\.prosrc\)/);
     expect(commands).toContain("actual_source_md5 = expected_source_md5");
     expect(commands).not.toContain("pg_get_functiondef");
     expect(commands).toContain("acl_posture");

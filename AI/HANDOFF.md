@@ -2,39 +2,50 @@
 
 Last updated: 2026-08-22
 
-## Newest (2026-08-22): production app live; forward containment local (ADR-111)
+## Newest (2026-08-22): application deployed; repaired database sequence local
 
-Exact approved commit `4fc18d3e5ecba6f362f14a7459e588a74a84b84b`
-is now `main` and Vercel deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` is
-READY for that SHA. Public `/solutions/ai-factory` returns 200; signed-out
-worker/autonomy/bots/projects API checks return 401. Do not translate those
-signals into authenticated bot acceptance.
+Exact commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is current
+`main`, with `surgeservicesllc <surgeservicesllc@gmail.com>` as author and
+committer. Vercel production deployment
+`dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and owns
+the stable aliases. GitHub deployment `6036292508` and status `17160408639`
+bind that production deployment to the exact commit.
 
-EXPAND workflow run `32568221857` failed at `LEGACY_CATALOG_READY`. It had
-already verified the frozen file hash and exact ledger posture
-(`20260822000100` once, `20260822000200`/`20260822000300` absent), but it never
-printed `Applying ...`, never entered the single-transaction DDL/ledger apply,
-and never notified PostgREST. Hosted schema and both target ledger rows are
-unchanged. CONTRACT was not run.
+Exact-head CI run `32570540183` is red. Browser/accessibility shards 1/3, 2/3,
+and 3/3 passed; quality job `97025270055` failed during tests and skipped build.
+The LF Linux/PostgreSQL chain reached `20260822000150`, where all seven legacy
+routine hashes failed because `pg_proc.prosrc` line endings were not
+canonicalized. Supabase Preview check `97025325852` failed separately at the
+older provider-credential migration because `provider_credentials` already
+exists, the same pre-existing preview drift seen on earlier heads.
 
-Local reproduction proved the hosted delta: Supabase default function grants
-add direct `service_role` EXECUTE to all seven legacy routines. It also proved
-the old definition MD5 was PostgreSQL-major-sensitive deparser output.
+The local repair canonicalizes CRLF and lone CR to LF before every
+`md5(prosrc)` comparison and pins these exact repository files:
 
-Local forward containment adds protected migration 00150 to normalize only a
-coherent all-seven overgrant and refuse mixed state. Corrected 00200/00300 use
-stable source hashes plus full routine/trigger contract fields. The protected
-workflow requires 00150 before EXPAND, EXPAND before CONTRACT, and exact app
-acceptance before CONTRACT; broad apply refuses all three until already
-recorded. The read-only audit includes server version, 00150 ledger state,
-source hashes, and named ACLs. Nothing new is pushed or hosted. Freeze the new
-commit and migration hashes, obtain fresh exact RED approval, then require CI,
-00150, EXPAND, signed-in acceptance/lint/health/containment, and only then
-CONTRACT. Never rerun old EXPAND, repair history, reset, or down-migrate.
+- 00150 —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- 00200 —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- 00300 —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
 
-## Newest (2026-08-22): Claude bot identity and Bot Space candidate (ADR-108/ADR-109)
+Native PostgreSQL 17.10 and 18.4 full chains pass. Before hosted action, record
+the exact forward-commit identity and require green CI plus fresh RED authorization. No hosted
+database mutation has occurred: 00150/00200/00300 remain absent, CONTRACT was
+not dispatched, and no apply, ledger insert, repair, reset, or down-migration
+followed `30d7e824`.
 
-This candidate is local, not deployed. AI Factory now owns the one application
+Historical containment evidence remains valid: exact predecessor commit
+`4fc18d3e5ecba6f362f14a7459e588a74a84b84b` reached READY deployment
+`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU`; EXPAND run `32568221857` then stopped at
+`LEGACY_CATALOG_READY` before its apply notice, DDL transaction, ledger insert,
+or PostgREST reload. Never rerun that old EXPAND path.
+
+## Newest (2026-08-22): Claude bot identity and Role assignment
+
+The application portion is deployed at `30d7e824`; its protected database
+sequence is not. AI Factory owns the one application
 modal/backdrop/focus/close boundary. `ProjectBots`, its assign/configure/edit
 states, and zero-role onboarding render inline inside that overlay instead of
 opening nested dialogs. A zero-role organization sees the reviewed Backend
@@ -45,8 +56,23 @@ that role with the Developer permission preset used for a new posting. Existing
 postings retain their authored role and configuration; with existing roles, a
 new posting prefers the preset-matching slug before the first available role.
 
+The owner screenshot exposed a UI-only identity shortcut: `ProjectBots` used
+`credentialRef` similarity to hide the exact-link repair control. An unbound
+Ready legacy bot could then be assigned while AI Factory correctly kept steps
+5-7 incomplete. The local fix removes that inference, exposes the existing
+exact `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the
+parent refresh, and provides an accessible **Return to AI Factory** action. The
+affected completion predicate remains: connected account + exact
+`aiAccountId` + current Ready + project assignment.
+
+The containment is frozen in the current unpublished candidate. Focused UI
+passes 75/75; focused ESLint, full typecheck, and lint/typecheck/build are green. The root
+full suite passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. Its
+first contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+full rerun.
+
 Migration `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
-`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
+`658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
 `ensure_ai_account_bot` derives provider and credential slot from the exact
 tenant account and returns a bot UUID bound to it. A default/non-additional
 request reuses the account's bound bot or adopts at most one unambiguous legacy
@@ -86,26 +112,16 @@ Retry cancels before starting anew. Close blocks a racing retry, waits for an
 in-flight start's exact session id, and refuses to dismiss/resumes polling when
 cancellation cannot be confirmed.
 
-The combined final-candidate working tree passes lint, typecheck, the production
-build, and 331 Vitest files / 3,934 tests with 7 skipped. The serialized browser
-matrix passed 1,207 cases with 545 intentional viewport skips; the one repeated
-desktop/tablet/mobile resource-status defect was fixed forward, and its exact
-404 plus social-image regression now passes 6/6. The all-fields audit also covers
-every assignment, manual-bot, role, and advanced-command field and fixed both
-Instructions editing and required endpoint gating. Independent security, broker,
-UI, and proxy reviews report no unresolved P0/P1/P2 findings. Final rebased-commit identity,
-post-rebase gates, and CI are still pending.
+Prepublication local gates and the three exact-head browser shards remain useful
+evidence, but the failed quality job is the controlling release result. The
+application was pushed and deployed; the protected database sequence was not.
+The workflow verifies separate exact files and ledger/catalog boundaries for
+00150, 00200, and 00300, and `scope=all` refuses to introduce them. Runtime
+behavior, linked-database lint, application health, and kill-switch/autonomy/
+worker containment remain separate mandatory post-apply release gates.
 
-No push, hosted apply, or production mutation has occurred. The protected
-workflow's `scope=bot-account-binding` verifies the exact hash, predecessor and
-absence state, clean pre-apply catalog, legacy definition/security/search-path/
-ACL identity, new catalog/ACL state, and one ledger row while applying only
-`20260822000200`; `scope=all` refuses to apply it first. Runtime behavior,
-linked-database lint, application health, and kill-switch/autonomy/worker
-containment are separate mandatory post-apply release gates.
-After rebase and final commit freeze, request one fresh exact RED approval
-naming the commit, migration/hash, frozen auth UI, protected workflow,
-direct-main effect, and forward-only containment. Keep kill switch ON, raw
+Freeze the repaired commit, request fresh exact RED approval, publish it, and
+require green exact-head CI before any hosted DDL. Keep kill switch ON, raw
 autonomy and all automatic actions OFF, and worker/executor disconnected.
 
 ## Newest (2026-08-22 ~01:30Z): agents are selectable into the AI Factory (ADR-107)

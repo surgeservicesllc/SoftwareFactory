@@ -991,7 +991,8 @@ Use this append-only log for decisions that constrain future implementation. Cha
 ## ADR-111 - Contain the failed bot catalog gate with a forward ACL normalizer and stable identities
 
 - Date: 2026-08-22
-- Status: Accepted for the local forward-containment candidate; publication and execution pending new exact owner approval
+- Status: Accepted; application publication is complete, while the
+  cross-platform repair and hosted execution require a new exact owner approval
 - Decision: EXPAND run `32568221857` stopped before DDL because hosted Supabase
   gives all seven legacy routines an additional direct `service_role` EXECUTE
   ACL through its default function privileges. A second independent defect was
@@ -1001,22 +1002,36 @@ Use this append-only log for decisions that constrain future implementation. Cha
   exact coherent vanilla 0/7 or hosted 7/7 service-role posture, rejects mixed
   states, revokes only the seven direct overgrants, and verifies the exact
   owner-plus-authenticated ACL inside one atomic statement. EXPAND/CONTRACT and
-  their hosted guards use `md5(prosrc)` plus explicit full catalog fields and
-  structural trigger checks instead of deparser hashes.
-- Frozen candidate identities: 00150 SHA-256
-  `49cbfe2f71c628442b2726091c0165d3d277bd307490605aca661b161dec75ae`;
+  their hosted guards use line-ending-canonical `md5(prosrc)` (CRLF and lone CR
+  become LF) plus explicit full catalog fields and structural trigger checks
+  instead of deparser hashes.
+- Frozen exact repository file identities: 00150 SHA-256
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
   corrected 00200 SHA-256
-  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`;
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
   corrected 00300 SHA-256
-  `591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd`.
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+- Release evidence: exact commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, authored and
+  committed by `surgeservicesllc <surgeservicesllc@gmail.com>`. Vercel
+  production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY; GitHub
+  deployment `6036292508` and status `17160408639` bind it to the exact SHA and
+  production URL. Exact-head CI run `32570540183` is red: all three browser
+  shards passed, while quality job `97025270055` failed before build because
+  the LF migration chain rejected all seven non-canonical `prosrc` hashes.
+  Native PostgreSQL 17.10 and 18.4 full chains pass after canonicalizing CRLF
+  and lone CR to LF. This repair remains local, and no hosted database mutation
+  has occurred.
 - Rationale: a retry cannot repair a deterministic catalog mismatch, and
   weakening the guard would hide unknown drift. A separately hashed forward
   normalizer makes the one proven environmental delta explicit and fail-closed.
-  Stable source hashes plus transparent catalog fields preserve identity across
-  PostgreSQL majors without trusting a version-dependent pretty-printer.
+  Line-ending-canonical source hashes plus transparent catalog fields preserve
+  identity across PostgreSQL majors and client newline conventions without
+  trusting a version-dependent pretty-printer.
 - Consequence: 00150 must land exactly once before corrected 00200, and 00300
   remains gated on exact production application acceptance after EXPAND. The
   read-only audit reports server version, ledger, source hashes, and named ACL
   posture. No old workflow may be rerun and no reset, down-migration, history
-  repair, broad push, worker, or autonomous execution is authorized. New exact
-  commit and migration hashes require a fresh RED authorization.
+  repair, broad push, worker, or autonomous execution is authorized. The
+  repaired commit requires green exact-head CI and fresh RED authorization
+  before any hosted execution.

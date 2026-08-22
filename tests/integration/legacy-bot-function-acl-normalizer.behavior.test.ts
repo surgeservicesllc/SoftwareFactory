@@ -19,6 +19,15 @@ const legacySignatures = [
   "public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)",
   "public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)",
 ] as const;
+const canonicalSourceMd5 = new Map<string, string>([
+  [legacySignatures[0], "797dcd842e22e5f0ae6b8299f744b0b4"],
+  [legacySignatures[1], "80b547b7b722c57a9d2a262b67698be8"],
+  [legacySignatures[2], "23b260247a4be4f4a8d8aa2497e1b6a2"],
+  [legacySignatures[3], "daecfeb964d863373a2072cc62e1033e"],
+  [legacySignatures[4], "55ec15132d903ace0300f2cbe32db6bd"],
+  [legacySignatures[5], "0aaec47295f86adbeec784d288f24400"],
+  [legacySignatures[6], "7f51999309b645832d471ccebea94a9c"],
+]);
 
 async function createPreNormalizerDatabase(withServiceRoleDefault: boolean): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } });
@@ -176,6 +185,20 @@ async function readLegacyCatalog(db: PGlite): Promise<readonly RoutineSnapshot[]
   return result.rows;
 }
 
+async function recreateLegacyFunctionsWithLfBodies(db: PGlite): Promise<void> {
+  const values = legacySignatures.map((signature) => `('${signature}')`).join(",\n");
+  const definitions = await db.query<{ definition: string }>(`
+    with expected(signature) as (values ${values})
+    select pg_get_functiondef(to_regprocedure(expected.signature)) as definition
+      from expected
+     order by expected.signature
+  `);
+  expect(definitions.rows).toHaveLength(legacySignatures.length);
+  for (const { definition } of definitions.rows) {
+    await db.exec(definition.replaceAll("\r\n", "\n").replaceAll("\r", "\n"));
+  }
+}
+
 function withoutAcl(snapshot: RoutineSnapshot) {
   const {
     acl_count: _aclCount,
@@ -252,6 +275,25 @@ describe("legacy bot function ACL normalizer", { timeout: 300_000 }, () => {
     try {
       const before = await readLegacyCatalog(db);
       before.forEach(expectExactNormalizedAcl);
+      await db.exec(await readFile(resolve(migrationsDirectory, normalizerMigration), "utf8"));
+      expect(await readLegacyCatalog(db)).toEqual(before);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("accepts the same legacy bodies stored with LF line endings", async () => {
+    const db = await createPreNormalizerDatabase(false);
+    try {
+      await recreateLegacyFunctionsWithLfBodies(db);
+      const before = await readLegacyCatalog(db);
+      for (const routine of before) {
+        expect(routine.prosrc_md5, routine.signature).toBe(
+          canonicalSourceMd5.get(routine.signature),
+        );
+        expectExactNormalizedAcl(routine);
+      }
+
       await db.exec(await readFile(resolve(migrationsDirectory, normalizerMigration), "utf8"));
       expect(await readLegacyCatalog(db)).toEqual(before);
     } finally {

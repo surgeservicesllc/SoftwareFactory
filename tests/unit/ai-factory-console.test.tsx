@@ -687,6 +687,39 @@ describe("AiFactoryConsole", () => {
     expect(within(connect).getByText(/no bot linked to those accounts yet/i)).toBeInTheDocument();
   });
 
+  it("does not treat a credential-matching legacy bot as an exact account link", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/ai-accounts": { accounts: [CONNECTED_ACCOUNT] },
+      "/api/bots": {
+        bots: [{
+          ...READY_BOT,
+          aiAccountId: null,
+          credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+        }],
+        assignments: [{
+          id: "assignment-legacy",
+          botId: READY_BOT.id,
+          projectId: "p1",
+          roleId: "role-1",
+          status: "active",
+          config: LEAST_PRIVILEGE_CONFIG,
+        }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const connect = (await screen.findByText("Connect Bots")).closest("li") as HTMLElement;
+    expect(within(connect).queryByText("Done")).not.toBeInTheDocument();
+    expect(within(connect).getByText(/no bot linked to those accounts yet/i)).toBeInTheDocument();
+
+    const assign = screen.getByText("Assign Bots to Project").closest("li") as HTMLElement;
+    expect(within(assign).queryByText("Done")).not.toBeInTheDocument();
+    expect(within(assign).getByText(/none route a ready bot linked to a connected account/i))
+      .toBeInTheDocument();
+  });
+
   it("requires current readiness and the same bot on the active project's assignment", async () => {
     stubFactory({
       "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
@@ -764,6 +797,36 @@ describe("AiFactoryConsole", () => {
     fireEvent.click(within(factoryDialog).getByRole("button", { name: "Next" }));
     expect(await within(factoryDialog).findByLabelText("Role for Claude - Daniel")).toBeInTheDocument();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("refreshes the live journey before returning from the embedded roster", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/projects/p1/bots": {
+        canManage: true,
+        assigned: [],
+        roles: [],
+        available: [],
+      },
+    });
+    const user = userEvent.setup();
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const assign = (await screen.findByText("Assign Bots to Project")).closest("li") as HTMLElement;
+    await user.click(within(assign).getByRole("button", { name: /assign bots/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Assign Bots to Project" });
+    const returnButton = await within(dialog).findByRole("button", { name: "Return to AI Factory" });
+    const readsBeforeReturn = vi.mocked(fetch).mock.calls.filter(
+      ([input]) => String(input) === "/api/bots",
+    ).length;
+
+    await user.click(returnButton);
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Assign Bots to Project" }))
+      .not.toBeInTheDocument());
+    expect(vi.mocked(fetch).mock.calls.filter(
+      ([input]) => String(input) === "/api/bots",
+    ).length).toBeGreaterThan(readsBeforeReturn);
   });
 
   it("keeps Connect Bots account and bot stages inside the AI Factory dialog", async () => {

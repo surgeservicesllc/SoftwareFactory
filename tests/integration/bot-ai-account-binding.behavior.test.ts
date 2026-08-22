@@ -21,6 +21,15 @@ const secondProjectId = "30000000-0000-4000-8000-000000000902";
 const cutoverProjectId = "30000000-0000-4000-8000-000000000903";
 const assignmentRoleId = "40000000-0000-4000-8000-000000000901";
 const cutoverRoleId = "40000000-0000-4000-8000-000000000902";
+const preExpandLegacySignatures = [
+  "public.register_bot(uuid,text,public.bot_provider,text,text,text,text)",
+  "public.assign_bot(uuid,uuid,uuid,uuid)",
+  "public.assign_bots_to_project(uuid,uuid,jsonb)",
+  "public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)",
+  "public.set_bot_assignment_execution(uuid,uuid,text,text)",
+  "public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)",
+  "public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)",
+] as const;
 
 async function createPreExpandDatabase(): Promise<PGlite> {
   const database = new PGlite({ extensions: { pgcrypto } });
@@ -47,6 +56,20 @@ async function createPreExpandDatabase(): Promise<PGlite> {
     await database.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
   }
   return database;
+}
+
+async function recreateFunctionsWithLineEnding(
+  database: PGlite,
+  signatures: readonly string[],
+  lineEnding: "\n" | "\r\n",
+): Promise<void> {
+  for (const signature of signatures) {
+    const result = await database.query<{ definition: string }>(`
+      select pg_get_functiondef($1::regprocedure) as definition
+    `, [signature]);
+    const definition = result.rows[0].definition.replace(/\r?\n/g, lineEnding);
+    await database.exec(definition);
+  }
 }
 
 describe("exact AI-account bot binding", { timeout: 180_000 }, () => {
@@ -1015,6 +1038,34 @@ describe("exact AI-account bot binding", { timeout: 180_000 }, () => {
       });
     } finally {
       await driftDb.close();
+    }
+  });
+
+  it("accepts equivalent legacy bodies stored with LF line endings", async () => {
+    const lfDb = await createPreExpandDatabase();
+    try {
+      await recreateFunctionsWithLineEnding(lfDb, preExpandLegacySignatures, "\n");
+      const lineEndings = await lfDb.query<{ lf_only_count: number }>(`
+        select count(*)::integer as lf_only_count
+          from pg_proc
+         where oid = any($1::regprocedure[])
+           and strpos(prosrc, chr(10)) > 0
+           and strpos(prosrc, chr(13)) = 0
+      `, [preExpandLegacySignatures]);
+      expect(lineEndings.rows[0].lf_only_count).toBe(preExpandLegacySignatures.length);
+
+      await lfDb.exec(await readFile(
+        resolve(migrationsDirectory, "20260822000200_register_bot_for_ai_account.sql"),
+        "utf8",
+      ));
+      const catalog = await lfDb.query<{ approved_object_exists: boolean }>(`
+        select to_regprocedure(
+          'public.ai_account_bot_credential_ref(public.bot_provider,text)'
+        ) is not null as approved_object_exists
+      `);
+      expect(catalog.rows[0].approved_object_exists).toBe(true);
+    } finally {
+      await lfDb.close();
     }
   });
 

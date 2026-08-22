@@ -24,7 +24,28 @@ version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
 
-## Current release tail — 2026-08-21
+## Current release tail — 2026-08-22
+
+Exact application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is
+current `main`. Vercel deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY
+at `https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and
+owns the stable production aliases. GitHub deployment `6036292508` and status
+`17160408639` bind that deployment to the exact SHA.
+
+This is not database-apply evidence. Exact-head CI run `32570540183` failed:
+all three browser/accessibility shards passed, while quality job `97025270055`
+failed before build because the LF migration chain rejected all seven
+non-canonical legacy function-source hashes at the 00150 preflight. The local
+repair canonicalizes CRLF and lone CR to LF before every `md5(prosrc)`
+comparison. Native PostgreSQL 17.10 and 18.4 full chains pass, but the repair is
+not committed, pushed, deployed, or approved for hosted execution. No hosted
+database mutation followed `30d7e824`; 00150, 00200, and 00300 remain unhosted.
+
+Supabase Preview check `97025325852` failed independently in the older
+`20260814002500_provider_credential_vault.sql` migration with SQLSTATE `42P07`
+because `provider_credentials` already exists. Identical failures on prior
+heads classify that check as preview schema/ledger drift, not authorization to
+repair history or weaken this release gate.
 
 - `20260821000300_project_pipeline_selection` is **hosted**. Apply run
   `32536895799` and its after-ledger listing are recorded below.
@@ -38,8 +59,8 @@ probe cannot drift apart.)
   Production still serves the pre-routing application copy. Until the function
   is hosted, the application intentionally fails closed with Not Connected/503.
 - `20260822000150_normalize_legacy_bot_function_acls.sql` is **unhosted**,
-  protected, forward-only, and frozen at SHA-256
-  `49cbfe2f71c628442b2726091c0165d3d277bd307490605aca661b161dec75ae`.
+  protected, forward-only, and frozen at exact repository file SHA-256
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`.
   Apply it only through `scope=bot-legacy-acl-normalization`, with 00100 once
   and 00150/00200/00300 absent. It accepts only an exact coherent all-seven
   Supabase `service_role` overgrant (or the exact already-normalized vanilla
@@ -49,12 +70,13 @@ probe cannot drift apart.)
   path and performs no history repair.
 - `20260822000200_register_bot_for_ai_account.sql` is **unhosted** and protected.
   Its frozen SHA-256 is
-  `394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
   Apply it only through `scope=bot-account-binding`, after confirming 00100 and
   00150 are each present once and 00200/00300 are absent. This is the EXPAND
   half of a rolling cutover. The scope checks the hash and a clean pre-apply
-  catalog. Before the first DDL, both the migration and workflow pin stable
-  `prosrc` hashes plus return/argument/default/cost/rows/support/transform,
+  catalog. Before the first DDL, both the migration and workflow pin
+  line-ending-canonical `md5(prosrc)` values (CRLF and lone CR become LF) plus
+  return/argument/default/cost/rows/support/transform,
   owner, language, kind, volatility, `SECURITY DEFINER`, search path, overload,
   and authenticated-only ACLs of
   `register_bot` plus all six legacy mutators. Historical bindings must resolve
@@ -80,7 +102,7 @@ probe cannot drift apart.)
   each is a mandatory post-apply release gate.
 - `20260822000300_contract_bot_mutator_acls.sql` is **unhosted**, protected,
   forward-only, and frozen at SHA-256
-  `591543b2e7b4c738d0e914da6cd02ca210849529d6e94191ae28f8b5154081bd`.
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
   It may be applied only through `scope=bot-account-binding-contract`, with
   00150 and 00200 recorded exactly once and 00300 absent. Before
   any database access the dispatch must run from `refs/heads/main`, name the
@@ -99,8 +121,9 @@ probe cannot drift apart.)
   and ACLs, revision columns/constraints, triggers, and all six legacy
   definitions/signatures/owners/`SECURITY DEFINER`/search paths/authenticated-
   only ACLs. It changes only those six legacy `EXECUTE` ACLs, re-reads the
-  stable sources and every catalog contract field unchanged, verifies authenticated/PUBLIC/anon/service-role
-  denial, and inserts exactly one ledger row in the same transaction as the six
+  line-ending-canonical sources and every catalog contract field unchanged,
+  verifies authenticated/PUBLIC/anon/service-role denial, and inserts exactly
+  one ledger row in the same transaction as the six
   revokes; target absence plus the ledger primary key makes a race/retry roll back.
 
   The mandatory order is **ACL normalizer (`20260822000150`) -> EXPAND

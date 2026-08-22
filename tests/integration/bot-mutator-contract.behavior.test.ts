@@ -18,6 +18,19 @@ const legacySignatures = [
   "public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)",
   "public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)",
 ] as const;
+const expandFunctionSignatures = [
+  "public.ai_account_bot_credential_ref(public.bot_provider,text)",
+  "public.assign_bots_to_project_checked(uuid,uuid,jsonb)",
+  "public.enforce_bot_ai_account_binding()",
+  "public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)",
+  "public.increment_bot_assignment_revision()",
+  "public.increment_bot_revision()",
+  "public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)",
+  "public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)",
+  "public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)",
+  "public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)",
+] as const;
+const contractFrozenSignatures = [...legacySignatures, ...expandFunctionSignatures];
 
 async function createExpandedDatabase(): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } });
@@ -48,6 +61,15 @@ async function createExpandedDatabase(): Promise<PGlite> {
     await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
   }
   return db;
+}
+
+async function recreateContractFunctionsWithCrlfBodies(db: PGlite): Promise<void> {
+  for (const signature of contractFrozenSignatures) {
+    const result = await db.query<{ definition: string }>(`
+      select pg_get_functiondef($1::regprocedure) as definition
+    `, [signature]);
+    await db.exec(result.rows[0].definition.replace(/\r?\n/g, "\r\n"));
+  }
 }
 
 interface RoutineSnapshot {
@@ -197,6 +219,50 @@ describe("legacy bot mutator CONTRACT", { timeout: 180_000 }, () => {
       } finally {
         await db.close();
       }
+    }
+  });
+
+  it("accepts equivalent CRLF-stored EXPAND bodies without changing definitions", async () => {
+    const db = await createExpandedDatabase();
+    try {
+      await recreateContractFunctionsWithCrlfBodies(db);
+      const before = await readPublicRoutineCatalog(db);
+      const beforeByIdentity = new Map(before.map((routine) => [routine.identity, routine]));
+      const lineEndings = await db.query<{ crlf_count: number }>(`
+        select count(*)::integer as crlf_count
+          from pg_proc
+         where oid = any($1::regprocedure[])
+           and strpos(prosrc, chr(13) || chr(10)) > 0
+      `, [contractFrozenSignatures]);
+      expect(lineEndings.rows[0].crlf_count).toBe(contractFrozenSignatures.length);
+
+      await db.exec(await readFile(resolve(migrationsDirectory, contractMigration), "utf8"));
+      const after = await readPublicRoutineCatalog(db);
+      for (const current of after) {
+        const previous = beforeByIdentity.get(current.identity);
+        expect(previous, current.identity).toBeDefined();
+        expect({
+          definition: current.definition,
+          oid: current.oid,
+          owner_name: current.owner_name,
+          proconfig: current.proconfig,
+          prosecdef: current.prosecdef,
+        }).toEqual({
+          definition: previous?.definition,
+          oid: previous?.oid,
+          owner_name: previous?.owner_name,
+          proconfig: previous?.proconfig,
+          prosecdef: previous?.prosecdef,
+        });
+      }
+      const afterByIdentity = new Map(after.map((routine) => [routine.identity, routine]));
+      for (const signature of legacySignatures) {
+        const identity = signature.replaceAll("public.", "");
+        const routine = afterByIdentity.get(identity) ?? afterByIdentity.get(signature);
+        expect(routine?.authenticated_execute, signature).toBe(false);
+      }
+    } finally {
+      await db.close();
     }
   });
 

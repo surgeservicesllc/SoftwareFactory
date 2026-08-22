@@ -1,40 +1,58 @@
 # Current state
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
-**Release containment checkpoint, 2026-08-22 (ADR-111):** exact
-commit `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` was pushed directly to
-`main` under the time-bounded owner approval. Vercel production deployment
-`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` is READY and reports that exact SHA. The
-public AI Factory route returns HTTP 200, and signed-out worker, autonomy,
-bot, and project APIs each return 401. This is application/deployment evidence,
-not bot acceptance.
+**Current release checkpoint, 2026-08-22 (ADR-111):** exact commit
+`30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, with
+`surgeservicesllc <surgeservicesllc@gmail.com>` as both author and committer.
+Vercel production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and owns
+the stable production aliases. GitHub deployment `6036292508` and status
+`17160408639` bind that production deployment to the exact commit.
 
+Exact-head CI run `32570540183` completed with failure. Browser/accessibility
+jobs `97025270171` (1/3), `97025270137` (2/3), and `97025270138` (3/3) all
+passed. Quality job `97025270055` failed during tests, so the production build
+step was skipped. The candidate defect was deterministic: migration
+`20260822000150` compared legacy `pg_proc.prosrc` hashes without canonicalizing
+line endings, and the LF Linux/PostgreSQL chain rejected all seven routines with
+`legacy bot function ACL normalization preflight failed`. Supabase Preview
+check `97025325852` also failed, but at the older
+`20260814002500_provider_credential_vault.sql` migration with SQLSTATE `42P07`
+because `provider_credentials` already exists; the identical failure predates
+this candidate and remains preview schema/ledger drift.
+
+The local cross-platform repair canonicalizes CRLF and lone CR to LF before
+every `md5(prosrc)` comparison in migrations and hosted guards, updates the
+canonical LF routine map, and pins these exact repository files:
+
+- `20260822000150_normalize_legacy_bot_function_acls.sql` —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- `20260822000200_register_bot_for_ai_account.sql` —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- `20260822000300_contract_bot_mutator_acls.sql` —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Native PostgreSQL 17.10 and 18.4 full migration chains pass with the repair.
+The repair is frozen in the current forward candidate but is not yet pushed,
+deployed, or authorized for hosted execution. No hosted database mutation has
+occurred: 00150, 00200, and 00300 remain unhosted, CONTRACT was not dispatched,
+and the old failed EXPAND must
+not be rerun.
+
+The preceding exact commit
+`4fc18d3e5ecba6f362f14a7459e588a74a84b84b` and READY deployment
+`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` remain historical application evidence.
 Protected EXPAND run `32568221857` stopped before DDL or ledger mutation at
-the combined seven-routine `LEGACY_CATALOG_READY` guard. The migration hash
-and ledger preconditions passed: `20260822000100` is present, while
-`20260822000200` and `20260822000300` remain absent. The workflow never printed
-its apply notice or reached `psql --single-transaction`.
+`LEGACY_CATALOG_READY`: `20260822000100` was present and 00200/00300 absent.
+That failure exposed the hosted all-seven direct `service_role` EXECUTE posture
+and the PostgreSQL-major-sensitive `pg_get_functiondef` deparser hashes that
+ADR-111 contains forward.
 
-The cause is now reproduced without touching production. Supabase-style
-default function privileges create a direct `service_role` EXECUTE entry on
-all seven legacy functions; a vanilla catalog lacks it. Independently, the old
-raw `md5(pg_get_functiondef(...))` values match PostgreSQL 18/PGlite but differ
-on PostgreSQL 17 because deparser bytes are not a cross-major identity.
-
-The local forward candidate adds `20260822000150` as a separately protected,
-atomic ACL normalizer. It accepts only a coherent 0/7 vanilla or 7/7 hosted
-`service_role` posture, refuses mixed states, revokes only that exact overgrant,
-and verifies the owner-plus-authenticated result. EXPAND and CONTRACT now gate
-stable `md5(prosrc)` values plus the complete transparent routine and trigger
-catalog contract. A read-only audit workflow reports server version, source
-hashes, ledger, and named ACL evidence without exposing bodies or secrets.
-Nothing in this candidate is pushed or applied. The old EXPAND must not be
-rerun; freeze new hashes and obtain new exact RED authority before publication.
-
-**Release-candidate addendum, 2026-08-22 (Claude bot identity and Bot Space,
-ADR-108/ADR-109):** the current local candidate closes the screenshot path without
-claiming a release. AI Factory owns one application modal, backdrop, focus
+**Release-candidate addendum, 2026-08-22 (Claude bot identity and Role assignment,
+ADR-108/ADR-109):** the application portion is deployed at `30d7e824`; the
+protected database sequence remains local and unhosted. AI Factory owns one
+application modal, backdrop, focus
 trap, and close/back path. Its project roster, assignment wizard, posting edit,
 and zero-role onboarding render inline in that overlay; they do not open a
 nested dialog. When an organization has no roles, the starter selector defaults
@@ -46,9 +64,24 @@ a new posting; an existing posting keeps its authored role and configuration,
 and a new posting with existing roles prefers a role whose slug matches the
 preset before falling back to the first available organization role.
 
+The owner screenshot exposed one UI-only identity leak: `ProjectBots` used
+`credentialRef` similarity to suppress the exact-link repair control. That let
+an unbound Ready legacy bot be assigned while AI Factory correctly held steps
+5-7 incomplete. The local fix removes the inference, exposes the existing
+exact `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the
+parent refresh, and supplies an accessible **Return to AI Factory** action. The
+affected completion predicate remains: connected account + exact
+`aiAccountId` + current Ready + project assignment.
+
+This containment is frozen in the current unpublished candidate. Focused UI
+passes 75/75; focused ESLint, full typecheck, and lint/typecheck/build are green. The root
+full suite passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. Its
+first contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+full rerun.
+
 Forward migration `20260822000200_register_bot_for_ai_account.sql` is frozen at
 SHA-256
-`394ea076e37595a847f4354a02a2b9611e0b92e64e610d14987afdf4d0c186be`.
+`658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
 Its authenticated manager boundary binds every subscription bot it returns to
 the exact tenant `ai_accounts.id` and derived provider/credential slot. A
 default/non-additional request reuses that account's existing bound bot or may
@@ -101,31 +134,21 @@ start to reveal its session UUID, and keeps the overlay open/resumes polling if
 cancellation cannot be confirmed. This changes no provider login protocol or
 credential format.
 
-The combined final-candidate working tree passes lint, typecheck, the production
-build, and 331 Vitest files / 3,934 tests (7 skipped). The serialized production
-browser matrix passed 1,207 cases with 545 intentional viewport skips; its only
-three failures were the same unknown-resource HTTP-status defect in desktop,
-tablet, and mobile. The forward fix now returns a branded 404 and its exact
-desktop/tablet/mobile regression plus generated social-image contract passes
-6/6. The all-fields audit also covers every assignment, manual-bot, role, and
-advanced-command field and fixed Instructions editing plus required endpoint
-gating. Focused security, broker-lifecycle, modal/role/roster, and resource-proxy
-reviews report no unresolved P0/P1/P2 findings. These are local working-tree results, not
-final rebased-commit, CI, deployment, or hosted-database evidence.
+The prepublication working tree passed lint, typecheck, production build, 331
+Vitest files / 3,934 tests (7 skipped), and the serialized browser matrix. That
+evidence remains useful, but exact-head CI run `32570540183` supersedes it as the
+release gate and is red for the cross-platform migration-hash defect described
+above. All three exact-head browser shards remained green.
 
-Nothing in this candidate has been pushed, deployed, or applied to hosted
-Supabase. The protected hosted workflow exposes only
-`scope=bot-account-binding` for this migration: it verifies the exact hash,
-predecessor/absence state, clean pre-apply catalog, legacy definition/security/
-search-path/ACL identity, new catalog/ACL state, and one ledger row while
-applying only `20260822000200`; broad apply refuses to carry the protected file
-first. The scope does not prove runtime behavior, linked-database lint,
-application health, or kill-switch/autonomy/worker containment. Those remain
-explicit post-apply release gates. Final rebase/commit identity, direct-main
-publication, workflow changes, frozen-auth changes, and production migration
-remain RED and require fresh exact owner approval after the final commit is
-frozen. Worker/executor dispatch remains disconnected, all automatic actions
-and raw autonomous mode remain OFF, and the global kill switch remains ON.
+The application commit was pushed and deployed; the database sequence was not.
+The protected workflow now has separate exact-file scopes for ACL normalizer
+00150, EXPAND 00200, and CONTRACT 00300. Broad apply refuses to introduce any
+of them. Before hosted execution, record the forward commit's exact identity,
+require green exact-head CI, and obtain fresh RED authorization. Runtime behavior, linked-
+database lint, application health, and kill-switch/autonomy/worker containment
+remain explicit post-apply gates. Worker/executor dispatch remains disconnected,
+all automatic actions and raw autonomous mode remain OFF, and the global kill
+switch remains ON.
 
 **Production acceptance addendum, 2026-08-21 (AI Factory):** exact candidate
 head `a020e8192d8512a1bb65112e01017047087f0528` passed all four Linux CI jobs in

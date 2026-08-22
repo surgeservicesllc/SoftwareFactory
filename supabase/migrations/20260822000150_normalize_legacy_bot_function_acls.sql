@@ -15,8 +15,10 @@ declare
   v_service_effective_count integer;
 begin
   -- Keep name and type rendering deterministic. pg_get_functiondef is not
-  -- hashed because its deparser output is not stable across PostgreSQL majors;
-  -- prosrc plus every explicit contract field below is the portable identity.
+  -- hashed because its deparser output is not stable across PostgreSQL majors.
+  -- Normalize line endings before hashing prosrc because clients may submit the
+  -- same function body with LF or CRLF; every other explicit contract field is
+  -- still compared exactly below.
   perform pg_catalog.set_config('search_path', 'pg_catalog', true);
 
   if pg_catalog.to_regrole('authenticated') is null
@@ -30,23 +32,23 @@ begin
   into v_bad
   from (values
     ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)',
-     '87f577c2ecba24836e54b4ad5e7f383a', 'public.bots', true, 7, 3,
+     '797dcd842e22e5f0ae6b8299f744b0b4', 'public.bots', true, 7, 3,
      'p_organization_id,p_name,p_provider,p_model,p_credential_ref,p_base_url,p_notes',
      '', null::oid[], 'NULL::text, NULL::text, NULL::text'),
     ('public.assign_bot(uuid,uuid,uuid,uuid)',
-     '9e5dea25195823492e3326ed96fa0535', 'public.bot_assignments', true, 4, 0,
+     '80b547b7b722c57a9d2a262b67698be8', 'public.bot_assignments', true, 4, 0,
      'p_organization_id,p_bot_id,p_project_id,p_role_id',
      '', null::oid[], null),
     ('public.assign_bots_to_project(uuid,uuid,jsonb)',
-     '742fea5b0e8655f19399f2a3944ce2c9', 'public.bot_assignments', true, 3, 0,
+     '23b260247a4be4f4a8d8aa2497e1b6a2', 'public.bot_assignments', true, 3, 0,
      'p_organization_id,p_project_id,p_assignments',
      '', null::oid[], null),
     ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)',
-     '81788757faa428efebfc8a8ee7f9b6e6', 'public.bots', true, 4, 1,
+     'daecfeb964d863373a2072cc62e1033e', 'public.bots', true, 4, 1,
      'p_organization_id,p_bot_id,p_readiness,p_detail',
      '', null::oid[], 'NULL::text'),
     ('public.set_bot_assignment_execution(uuid,uuid,text,text)',
-     'cd33f17d969464665066854ff7692a1c', 'pg_catalog.record', true, 4, 2,
+     '55ec15132d903ace0300f2cbe32db6bd', 'pg_catalog.record', true, 4, 2,
      'p_organization_id,p_assignment_id,p_model,p_work_effort,assignment_id,model,work_effort',
      'i,i,i,i,t,t,t', array[
        pg_catalog.to_regtype('pg_catalog.uuid')::oid,
@@ -58,11 +60,11 @@ begin
        pg_catalog.to_regtype('pg_catalog.text')::oid
      ]::oid[], 'NULL::text, NULL::text'),
     ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)',
-     '3637e0869520ee9eae89efd426b0b5c5', 'public.bot_assignments', true, 3, 0,
+     '0aaec47295f86adbeec784d288f24400', 'public.bot_assignments', true, 3, 0,
      'p_organization_id,p_assignment_id,p_status',
      '', null::oid[], null),
     ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)',
-     'b39a3820c504f9dda9e84f73e1e4f065', 'public.bot_assignments', true, 5, 2,
+     '7f51999309b645832d471ccebea94a9c', 'public.bot_assignments', true, 5, 2,
      'p_organization_id,p_assignment_id,p_configuration,p_role_id,p_status',
      '', null::oid[], 'NULL::uuid, NULL::public.bot_assignment_status')
   ) expected(
@@ -84,7 +86,9 @@ begin
      or routine.prosecdef is distinct from true
      or routine.proconfig is distinct from array['search_path=pg_catalog']::text[]
      or pg_catalog.pg_get_userbyid(routine.proowner) is distinct from 'postgres'
-     or pg_catalog.md5(routine.prosrc) is distinct from expected.source_md5
+     or pg_catalog.md5(pg_catalog.replace(
+          pg_catalog.replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'
+        )) is distinct from expected.source_md5
      or routine.prorettype is distinct from pg_catalog.to_regtype(expected.result_type)
      or routine.proretset is distinct from expected.returns_set
      or routine.pronargs is distinct from expected.argument_count
@@ -259,23 +263,23 @@ begin
   into v_bad
   from (values
     ('public.register_bot(uuid,text,public.bot_provider,text,text,text,text)',
-     '87f577c2ecba24836e54b4ad5e7f383a', 'public.bots', true, 7, 3,
+     '797dcd842e22e5f0ae6b8299f744b0b4', 'public.bots', true, 7, 3,
      'p_organization_id,p_name,p_provider,p_model,p_credential_ref,p_base_url,p_notes',
      '', null::oid[], 'NULL::text, NULL::text, NULL::text'),
     ('public.assign_bot(uuid,uuid,uuid,uuid)',
-     '9e5dea25195823492e3326ed96fa0535', 'public.bot_assignments', true, 4, 0,
+     '80b547b7b722c57a9d2a262b67698be8', 'public.bot_assignments', true, 4, 0,
      'p_organization_id,p_bot_id,p_project_id,p_role_id',
      '', null::oid[], null),
     ('public.assign_bots_to_project(uuid,uuid,jsonb)',
-     '742fea5b0e8655f19399f2a3944ce2c9', 'public.bot_assignments', true, 3, 0,
+     '23b260247a4be4f4a8d8aa2497e1b6a2', 'public.bot_assignments', true, 3, 0,
      'p_organization_id,p_project_id,p_assignments',
      '', null::oid[], null),
     ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)',
-     '81788757faa428efebfc8a8ee7f9b6e6', 'public.bots', true, 4, 1,
+     'daecfeb964d863373a2072cc62e1033e', 'public.bots', true, 4, 1,
      'p_organization_id,p_bot_id,p_readiness,p_detail',
      '', null::oid[], 'NULL::text'),
     ('public.set_bot_assignment_execution(uuid,uuid,text,text)',
-     'cd33f17d969464665066854ff7692a1c', 'pg_catalog.record', true, 4, 2,
+     '55ec15132d903ace0300f2cbe32db6bd', 'pg_catalog.record', true, 4, 2,
      'p_organization_id,p_assignment_id,p_model,p_work_effort,assignment_id,model,work_effort',
      'i,i,i,i,t,t,t', array[
        pg_catalog.to_regtype('pg_catalog.uuid')::oid,
@@ -287,11 +291,11 @@ begin
        pg_catalog.to_regtype('pg_catalog.text')::oid
      ]::oid[], 'NULL::text, NULL::text'),
     ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)',
-     '3637e0869520ee9eae89efd426b0b5c5', 'public.bot_assignments', true, 3, 0,
+     '0aaec47295f86adbeec784d288f24400', 'public.bot_assignments', true, 3, 0,
      'p_organization_id,p_assignment_id,p_status',
      '', null::oid[], null),
     ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)',
-     'b39a3820c504f9dda9e84f73e1e4f065', 'public.bot_assignments', true, 5, 2,
+     '7f51999309b645832d471ccebea94a9c', 'public.bot_assignments', true, 5, 2,
      'p_organization_id,p_assignment_id,p_configuration,p_role_id,p_status',
      '', null::oid[], 'NULL::uuid, NULL::public.bot_assignment_status')
   ) expected(
@@ -313,7 +317,9 @@ begin
      or routine.prosecdef is distinct from true
      or routine.proconfig is distinct from array['search_path=pg_catalog']::text[]
      or pg_catalog.pg_get_userbyid(routine.proowner) is distinct from 'postgres'
-     or pg_catalog.md5(routine.prosrc) is distinct from expected.source_md5
+     or pg_catalog.md5(pg_catalog.replace(
+          pg_catalog.replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'
+        )) is distinct from expected.source_md5
      or routine.prorettype is distinct from pg_catalog.to_regtype(expected.result_type)
      or routine.proretset is distinct from expected.returns_set
      or routine.pronargs is distinct from expected.argument_count
