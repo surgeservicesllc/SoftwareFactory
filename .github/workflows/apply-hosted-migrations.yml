@@ -4247,7 +4247,7 @@ jobs:
 
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
-            select to_regprocedure('public.submit_command_phase1a_internal(uuid,uuid,text,public.risk_level,jsonb,text)') is not null
+            select to_regprocedure('public.submit_command_phase1a_internal(uuid,text,public.risk_level,jsonb,text)') is not null
                and to_regclass('public.task_dependencies') is not null
                and to_regclass('public.tasks') is not null
                and to_regprocedure('public.submit_command(uuid,text,public.risk_level,jsonb,text)') is not null;")
