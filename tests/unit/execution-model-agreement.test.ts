@@ -44,11 +44,11 @@ describe("the executable model and the catalog agree", () => {
     }
   });
 
-  it("resolves the same model an operator pins for the worker", () => {
-    // The worker workflow sets this variable, so an operator rolling the
-    // executor forward moves the plan and any newly provisioned bot together.
+  it("refuses a model pin that would drift from the database and worker", () => {
     const pinned = { SOFTWAREFACTORY_CODEX_MODEL: "gpt-5.4-codex" };
-    expect(executionModel(pinned)).toBe("gpt-5.4-codex");
-    expect(createPhase1CExecutionPlan("audit", pinned).model).toBe("gpt-5.4-codex");
+    expect(() => executionModel(pinned)).toThrow(/must remain gpt-5\.3-codex/i);
+    expect(() => createPhase1CExecutionPlan("audit", pinned)).toThrow(
+      /must remain gpt-5\.3-codex/i,
+    );
   });
 });

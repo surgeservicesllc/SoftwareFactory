@@ -69,6 +69,10 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Immutable command-to-pipeline-and-bot routing evidence. Authenticated callers "
     + "use bounded candidate and submit definer functions; every direct table path "
     + "is denied so no caller can bypass atomic validation or rewrite history.",
+  factory_record_only_submission_guards:
+    "Ephemeral one-use capabilities for the nested factory command transaction. "
+    + "Every table privilege is denied; only the SECURITY DEFINER factory/public "
+    + "command pair may create and consume a row, and successful calls leave none.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",

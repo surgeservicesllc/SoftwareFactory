@@ -53,6 +53,7 @@ const steps = workflow.jobs.apply.steps;
 
 function canRunForProtectedScope(step: WorkflowStep): boolean {
   const guard = step.if ?? "";
+  if (/\bfalse\b/.test(guard)) return false;
   const excludedScopes = [
     ...guard.matchAll(/inputs\.scope\s*!=\s*'([^']+)'/g),
   ].map((match) => match[1]);
@@ -160,14 +161,19 @@ describe("the hosted bot-account-binding apply scope", () => {
   });
 
   it("normalizes every PostgreSQL function source hash across the workflow", () => {
+    const sourceHashLines = source.split(/\r?\n/).filter((line) =>
+      /md5\([^\n]*routine\.prosrc/.test(line)
+    );
     const normalizedHash =
       "md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n'))";
-    const sourceUses = source.split("routine.prosrc").length - 1;
-    const normalizedUses = source.split(normalizedHash).length - 1;
 
-    expect(sourceUses).toBeGreaterThan(0);
-    expect(normalizedUses).toBe(sourceUses);
-    expect(source).not.toMatch(/md5\(routine\.prosrc\)/);
+    expect(sourceHashLines.length).toBeGreaterThan(0);
+    for (const line of sourceHashLines) {
+      // Shell-embedded SQL may spell each backslash once or twice. Collapse
+      // that transport escaping before asserting the same PostgreSQL value.
+      expect(line.replaceAll("\\\\", "\\")).toContain(normalizedHash);
+    }
+    expect(source).not.toMatch(/md5\(\s*routine\.prosrc\s*\)/);
   });
 
   it("verifies the expand-only atomic posting contract and preserves every legacy mutator ACL", () => {

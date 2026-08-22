@@ -57,6 +57,34 @@ function jsonResponse(body: unknown, status = 200) {
  */
 type StubbedResponse = unknown | ((init?: RequestInit) => unknown | Promise<unknown>);
 
+function scopeCommandResponse(value: unknown, requestUrl: URL) {
+  const projectId = requestUrl.searchParams.get("projectId");
+  if (
+    requestUrl.pathname !== "/api/commands"
+    || !projectId
+    || value === null
+    || typeof value !== "object"
+    || Array.isArray(value)
+  ) {
+    return value;
+  }
+
+  const commands = (value as { commands?: unknown }).commands;
+  if (!Array.isArray(commands)) return value;
+
+  return {
+    ...(value as Record<string, unknown>),
+    commands: commands.filter((command) => {
+      if (command === null || typeof command !== "object" || Array.isArray(command)) return false;
+      const project = (command as { project?: unknown }).project;
+      return project !== null
+        && typeof project === "object"
+        && !Array.isArray(project)
+        && (project as { id?: unknown }).id === projectId;
+    }),
+  };
+}
+
 function stubFactory(overrides: Partial<Record<string, StubbedResponse>> = {}) {
   const defaults: Record<string, StubbedResponse> = {
     "/api/github/connections": { connections: [] },
@@ -79,17 +107,24 @@ function stubFactory(overrides: Partial<Record<string, StubbedResponse>> = {}) {
   const bodies = { ...defaults, ...overrides };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url in bodies) {
-      const configured = bodies[url];
+    const requestUrl = new URL(url, "https://factory.test");
+    const responseKey = url in bodies
+      ? url
+      : requestUrl.pathname === "/api/commands"
+        ? requestUrl.pathname
+        : url;
+    if (responseKey in bodies) {
+      const configured = bodies[responseKey];
       const value = typeof configured === "function"
         ? await configured(init)
         : configured;
       if (value instanceof Error) throw value;
       if (value instanceof Response) return value;
+      const scopedValue = scopeCommandResponse(value, requestUrl);
       return jsonResponse(
-        url === "/api/bots" && value !== null && typeof value === "object" && !Array.isArray(value)
-          ? { assignmentsComplete: true, ...(value as Record<string, unknown>) }
-          : value,
+        responseKey === "/api/bots" && scopedValue !== null && typeof scopedValue === "object" && !Array.isArray(scopedValue)
+          ? { assignmentsComplete: true, ...(scopedValue as Record<string, unknown>) }
+          : scopedValue,
       );
     }
     return jsonResponse({});
@@ -184,7 +219,7 @@ describe("AiFactoryConsole", () => {
         },
       },
       "/api/commands": {
-        commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
+        commands: [{ id: "c1", prompt: "Ship search", status: "running", executionMode: "manual", project: { id: "p1", name: "SoftwareFactory" } }],
       },
       "/api/project-agents": {
         available: true,
@@ -914,7 +949,7 @@ describe("AiFactoryConsole", () => {
         },
       },
       "/api/commands": {
-        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", executionMode: "manual", project: { id: "p1", name: "SoftwareFactory" } }],
       },
     });
 
@@ -935,6 +970,61 @@ describe("AiFactoryConsole", () => {
     expect(within(dialog).getByText(/will not start until an executor is connected/)).toBeInTheDocument();
   });
 
+  it("advances Step 8 for a record-only command and makes Step 9 deny every execution artifact", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+      "/api/worker/status": {
+        worker: {
+          connectionStatus: "connected",
+          statusLabel: "Worker Connected",
+          lastHeartbeatAt: "2026-08-22T12:00:00.000Z",
+        },
+      },
+      "/api/commands": {
+        commands: [
+          {
+            id: "claude-command",
+            prompt: "Fix high-priority bugs",
+            status: "queued",
+            executionMode: "record_only",
+            project: { id: "p1", name: "SoftwareFactory" },
+          },
+          {
+            id: "older-manual-command",
+            prompt: "Review the repository",
+            status: "succeeded",
+            executionMode: "manual",
+            project: { id: "p1", name: "SoftwareFactory" },
+          },
+        ],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const command = (await screen.findByText("Issue a Command")).closest("li") as HTMLElement;
+    expect(within(command).getByText("Done")).toBeInTheDocument();
+    expect(within(command).getByText(/2 commands.*1 recorded only/)).toBeInTheDocument();
+
+    const watch = screen.getByText("Watch It Ship").closest("li") as HTMLElement;
+    expect(within(watch).getByText(/no execution is queued/i)).toBeInTheDocument();
+    expect(within(watch).getByText(/no worker dispatch, execution run, branch, or pull request/i))
+      .toBeInTheDocument();
+    expect(within(watch).queryByText(/when an executor is connected/i)).not.toBeInTheDocument();
+    expect(within(watch).getByRole("button", { name: "Review command record" }))
+      .toBeInTheDocument();
+
+    fireEvent.click(within(watch).getByRole("button", { name: "Review command record" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Command record")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Recorded only").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText(/creates no worker dispatch, execution run, branch, or pull request by design/i))
+      .toBeInTheDocument();
+    expect(within(dialog).queryByText(/will not start until an executor is connected/i))
+      .not.toBeInTheDocument();
+  });
+
   it("treats a missing worker field as Not Connected", async () => {
     // Absent must never read as connected: an older payload, a partial
     // response, or a failed read all land here.
@@ -943,13 +1033,42 @@ describe("AiFactoryConsole", () => {
       "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
       "/api/worker/status": {},
       "/api/commands": {
-        commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
+        commands: [{ id: "c1", prompt: "Ship search", status: "queued", executionMode: "manual", project: { id: "p1", name: "SoftwareFactory" } }],
       },
     });
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
     const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
     expect(within(watch).getByText(/1 command queued; Worker Not Connected/)).toBeInTheDocument();
+  });
+
+  it("never infers execution from a legacy command whose mode is unknown", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/commands": {
+        commands: [{
+          id: "legacy-command",
+          prompt: "Legacy command",
+          status: "succeeded",
+          project: { id: "p1", name: "SoftwareFactory" },
+        }],
+      },
+      "/api/worker/status": {
+        worker: { connectionStatus: "connected", statusLabel: "Worker Connected" },
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(watch).getByText(/execution mode unavailable/i)).toBeInTheDocument();
+    expect(within(watch).getByText(/nothing is claimed to be running/i)).toBeInTheDocument();
+    expect(within(watch).queryByText("Done")).not.toBeInTheDocument();
+
+    fireEvent.click(within(watch).getByRole("button", { name: "Watch execution" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/no execution, branch, or pull request is inferred/i))
+      .toBeInTheDocument();
   });
 
   it("does not call Configure Pipeline done until a pipeline is actually selected", async () => {
@@ -1208,7 +1327,7 @@ describe("Create New AI Factory", () => {
     },
     "/api/commands": {
       commands: [
-        { id: "c1", project: { id: "p1", name: "First" }, prompt: "go", status: "succeeded" },
+        { id: "c1", project: { id: "p1", name: "First" }, prompt: "go", status: "succeeded", executionMode: "manual" },
       ],
     },
     "/api/projects": { projects: [{ id: "p1", name: "First" }] },
@@ -1262,20 +1381,37 @@ describe("Create New AI Factory", () => {
 
   it("does not carry another factory's queued command count into a new factory", async () => {
     stubFactory({
-      "/api/projects": { projects: [{ id: "p1", name: "First" }] },
+      "/api/projects": {
+        projects: [
+          { id: "p1", name: "First" },
+          { id: "p2", name: "Second" },
+        ],
+      },
       "/api/commands": {
-        commands: Array.from({ length: 6 }, (_, index) => ({
-          id: `c${index + 1}`,
-          project: { id: "p1", name: "First" },
-          prompt: `queued command ${index + 1}`,
-          status: "queued",
-        })),
+        commands: [
+          ...Array.from({ length: 6 }, (_, index) => ({
+            id: `c${index + 1}`,
+            project: { id: "p1", name: "First" },
+            prompt: `queued command ${index + 1}`,
+            status: "queued",
+            executionMode: "manual",
+          })),
+          ...Array.from({ length: 4 }, (_, index) => ({
+            id: `other-c${index + 1}`,
+            project: { id: "p2", name: "Second" },
+            prompt: `other queued command ${index + 1}`,
+            status: "queued",
+            executionMode: "manual",
+          })),
+        ],
       },
     });
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const originalWatch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
     expect(within(originalWatch).getByText(/6 commands queued/)).toBeInTheDocument();
+    expect(within(originalWatch).queryByText(/10 commands queued/)).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/commands?projectId=p1&limit=100", { cache: "no-store" });
 
     fireEvent.click(screen.getByRole("button", { name: /Create New AI Factory/i }));
     const createDialog = await screen.findByRole("dialog");

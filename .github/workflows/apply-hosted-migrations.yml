@@ -5,9 +5,9 @@ name: Apply hosted migrations
 # Supabase project — exactly the steps the owner would type, with the ledger
 # listed before and after so the run's log is its own evidence.
 #
-# Owner-triggered only, and it refuses to run without the typed confirmation,
-# because this writes DDL to production. Secrets (Settings → Secrets and
-# variables → Actions):
+# Owner-triggered only. Mutating scopes prove their exact repository, release,
+# database, file, catalog, and containment identities before writing production
+# DDL. Secrets (Settings → Secrets and variables → Actions):
 #   SUPABASE_ACCESS_TOKEN  — a personal access token (looks like sbp_0102…)
 #   SUPABASE_DB_PASSWORD   — the project database password
 # A valid token selects the linked project flow; a missing or malformed token
@@ -20,13 +20,14 @@ name: Apply hosted migrations
 on:
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "apply" to run against the production project'
-        required: true
       scope:
         description: >-
           "all" pushes outstanding ordinary migrations only after protected
-          20260822000150, 20260822000200, and 20260822000300 are each recorded by their dedicated
+          20260822000150, 20260822000200, the job-seeker 20260822000400/00500
+          pair, executable-model repair 20260822000600,
+          clear-controls 20260822000700/00800, and protected
+          20260822000300/00900/01000 are each recorded by
+          their dedicated
           scopes; "broker-functions"
           applies only the idempotent broker migrations
           (20260816000400 through 20260820000300, plus 20260821000300) and
@@ -44,9 +45,10 @@ on:
           seven frozen legacy bot routines;
           "bot-account-binding" applies only 20260822000200, which binds a
           subscription bot to its exact tenant-scoped AI account;
-          "bot-account-binding-contract" applies only 20260822000300, which
-          revokes the six legacy bot-mutator execute grants after exact-app
-          deployment and signed-in production acceptance;
+          "factory-any-model-record-only" atomically applies the exact
+          20260822000300/00900/01000 protected chain, restoring the AgentOS
+          isolation catalog, repairing the frozen PL/pgSQL lint set, and
+          recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
           (20260821000100 and 20260821000200) and records them in history;
           "probe" changes nothing at all and just reports which objects already
@@ -63,24 +65,14 @@ on:
           - agent-selection
           - bot-legacy-acl-normalization
           - bot-account-binding
-          - bot-account-binding-contract
+          - factory-any-model-record-only
           - lifecycle
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
           - probe
-      contract_app_sha:
-        description: >-
-          CONTRACT only: exact 40-character application SHA on main, exposed by
-          the latest successful Vercel-bot Production deployment and accepted by an owner
-        required: false
-      contract_acceptance:
-        description: >-
-          CONTRACT only: type "exact-app-vercel-accepted" after verifying the
-          named SHA is healthy on Vercel project prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
-        required: false
-
 permissions:
+  checks: read
   contents: read
   deployments: read
 
@@ -91,7 +83,6 @@ concurrency:
 jobs:
   apply:
     name: Repair ledger and push migrations
-    if: ${{ inputs.confirm == 'apply' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -105,29 +96,55 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify exact application acceptance before CONTRACT preflight
+      - name: Refuse the retired standalone bot mutator CONTRACT scope
         if: ${{ inputs.scope == 'bot-account-binding-contract' }}
+        run: |
+          echo "::error::The standalone 00300 CONTRACT path is retired. Use scope=factory-any-model-record-only so 00300/00900/01000 remain one exact, accepted, forward-only transaction."
+          exit 1
+
+      - name: Verify exact green application release before protected database preflight
+        if: ${{ inputs.scope == 'factory-any-model-record-only' }}
         env:
-          CONTRACT_APP_SHA: ${{ inputs.contract_app_sha }}
-          CONTRACT_ACCEPTANCE: ${{ inputs.contract_acceptance }}
           GH_API_URL: ${{ github.api_url }}
           GH_REF: ${{ github.ref }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
-          if [ "$GH_REF" != "refs/heads/main" ]; then
-            echo "::error::CONTRACT may be dispatched only from refs/heads/main."
+          if [ "$GH_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GH_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$CHECKED_OUT_SHA" ]; then
+            echo "::error::Protected CONTRACT may run only from the exact SoftwareFactory refs/heads/main checkout."
             exit 1
           fi
-          if [[ ! "$CONTRACT_APP_SHA" =~ ^[a-f0-9]{40}$ ]] || [ "$CONTRACT_APP_SHA" != "$CHECKED_OUT_SHA" ]; then
-            echo "::error::CONTRACT requires the exact checked-out 40-character application SHA already accepted in Vercel production."
-            exit 1
-          fi
-          if [ "$CONTRACT_ACCEPTANCE" != "exact-app-vercel-accepted" ]; then
-            echo "::error::CONTRACT requires the exact-app-vercel-accepted attestation after signed-in production acceptance."
-            exit 1
-          fi
+          CHECK_RUNS=$(curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
+          for REQUIRED_CHECK in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            LATEST_CHECK_STATE=$(jq -r \
+              --arg name "$REQUIRED_CHECK" \
+              --arg sha "$CHECKED_OUT_SHA" '
+                [.check_runs[] | select(
+                  .name == $name
+                  and .head_sha == $sha
+                  and .app.slug == "github-actions"
+                )]
+                | sort_by(.completed_at // .started_at // "")
+                | last
+                | if . == null then "missing|missing"
+                  else "\(.status)|\(.conclusion // "null")" end
+              ' <<<"$CHECK_RUNS")
+            if [ "$LATEST_CHECK_STATE" != "completed|success" ]; then
+              echo "::error::Exact-head CI check '${REQUIRED_CHECK}' is not green (${LATEST_CHECK_STATE})."
+              exit 1
+            fi
+          done
           DEPLOYMENTS=$(curl --fail --silent --show-error \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer ${GH_TOKEN}" \
@@ -140,7 +157,7 @@ jobs:
               and .creator.login == "vercel[bot]"
             )
           ][0] // empty' <<<"$DEPLOYMENTS")
-          if [ -z "$LATEST_VERCEL_DEPLOYMENT" ] || ! jq -e --arg sha "$CONTRACT_APP_SHA" '
+          if [ -z "$LATEST_VERCEL_DEPLOYMENT" ] || ! jq -e --arg sha "$CHECKED_OUT_SHA" '
             .sha == $sha and .ref == $sha
           ' <<<"$LATEST_VERCEL_DEPLOYMENT" >/dev/null; then
             echo "::error::The latest Vercel-bot Production deployment is not the exact checked-out main SHA/ref."
@@ -158,13 +175,13 @@ jobs:
             and .[0].state == "success"
             and .[0].creator.login == "vercel[bot]"
             and (.[0].environment_url | type == "string")
-            and (.[0].environment_url | test("^https://[^/]+\\.vercel\\.app(/|$)"))
+            and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))
           ' <<<"$LATEST_STATUS" >/dev/null; then
-            echo "::error::The exact-SHA Vercel Production deployment has no latest successful Vercel-bot status."
+            echo "::error::The exact-SHA deployment is not a READY Vercel-bot production for surgeservices-projects/softwarefactory."
             exit 1
           fi
           VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url' <<<"$LATEST_STATUS")
-          echo "::notice::Exact main SHA ${CONTRACT_APP_SHA} has a successful Vercel Production deployment at ${VERCEL_DEPLOYMENT_URL}; the operator also attests signed-in owner acceptance."
+          echo "::notice::Exact main SHA ${CHECKED_OUT_SHA} has all four required CI checks green and a successful Vercel Production deployment at ${VERCEL_DEPLOYMENT_URL}."
 
       - name: Choose the connection
         # Decides MODE=token (valid sbp_ token, linked flow) or MODE=dburl
@@ -220,7 +237,7 @@ jobs:
         # do not yet trust the ledger -- but this step sits above the scope
         # branch, so a probe could still rewrite history rows. A read-only
         # question must not be able to edit the thing being questioned.
-        if: ${{ inputs.scope != 'probe' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' }}
+        if: ${{ inputs.scope != 'probe' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name
@@ -1896,24 +1913,15 @@ jobs:
       - name: Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)
         # CONTRACT is deliberately separate from EXPAND. It is safe only after
         # the exact checked-RPC application SHA is the latest successful
-        # Vercel-bot Production deployment. The pre-connection gate proves that
-        # GitHub deployment identity; the operator separately verifies the exact
-        # Vercel project and signed-in owner journey before attesting.
-        if: ${{ inputs.scope == 'bot-account-binding-contract' }}
-        env:
-          CONTRACT_APP_SHA: ${{ inputs.contract_app_sha }}
-          CONTRACT_ACCEPTANCE: ${{ inputs.contract_acceptance }}
+        # Vercel-bot Production deployment. The pre-connection machine gate
+        # proves that GitHub deployment identity.
+        # Retained only as immutable release evidence. The selectable standalone
+        # scope and its mutation path are retired: 00300 may now land only in
+        # the accepted, atomic 00300 -> 00900 -> 01000 protected chain below.
+        if: ${{ false && inputs.scope == 'bot-account-binding-contract' }}
         run: |
-          CHECKED_OUT_SHA=$(git rev-parse HEAD)
-          if [[ ! "$CONTRACT_APP_SHA" =~ ^[a-f0-9]{40}$ ]] || [ "$CONTRACT_APP_SHA" != "$CHECKED_OUT_SHA" ]; then
-            echo "::error::CONTRACT requires the exact checked-out 40-character application SHA already accepted in Vercel production."
-            exit 1
-          fi
-          if [ "$CONTRACT_ACCEPTANCE" != "exact-app-vercel-accepted" ]; then
-            echo "::error::CONTRACT requires the exact-app-vercel-accepted attestation after signed-in production acceptance."
-            exit 1
-          fi
-          echo "::notice::Operator attests that exact application ${CONTRACT_APP_SHA} is the healthy Vercel production deployment and passed signed-in owner acceptance."
+          echo "::error::The standalone CONTRACT mutation path is retired; use the exact machine-gated atomic scope."
+          exit 1
 
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::The protected bot-account-binding-contract scope requires SUPABASE_DB_PASSWORD for live catalog verification."
@@ -2233,6 +2241,1080 @@ jobs:
           fi
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Exact bot mutator CONTRACT applied, verified, recorded once, and the API schema cache was reloaded."
+
+      - name: Apply the exact factory any-model record-only chain (scope=factory-any-model-record-only)
+        # One fail-closed forward-only transaction: CONTRACT, hosted catalog
+        # repair, and record-only routing. A complete rehearsal (including
+        # linked warning-level lint) rolls back before the only production
+        # transaction can write DDL or three ledger rows. Never repairs
+        # history, broad-pushes, resets, reruns, drops, or down-migrates.
+        if: ${{ inputs.scope == 'factory-any-model-record-only' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::The protected factory-any-model-record-only scope requires SUPABASE_DB_PASSWORD for exact catalog, lint, and containment verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$CHECKED_OUT_SHA" ] \
+            || [ "$PROJECT_REF" != "qpuofpmagrmyamahqwxw" ]; then
+            echo "::error::Protected repair requires the exact SoftwareFactory main checkout and production Supabase project identity."
+            exit 1
+          fi
+
+          CONTRACT_FILE=supabase/migrations/20260822000300_contract_bot_mutator_acls.sql
+          JOB_RESUME_FILE=supabase/migrations/20260822000400_job_seeker_resume_extraction.sql
+          JOB_GRANTS_FILE=supabase/migrations/20260822000500_job_seeker_extraction_grant_contract.sql
+          MODEL_REPAIR_FILE=supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql
+          CLEAR_TYPES_FILE=supabase/migrations/20260822000700_clear_surface_activity_types.sql
+          CLEAR_FUNCTIONS_FILE=supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql
+          REPAIR_FILE=supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql
+          RECORD_ONLY_FILE=supabase/migrations/20260822001000_factory_any_model_record_only.sql
+          CONTRACT_SHA256=79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7
+          JOB_RESUME_SHA256=0faa6d4174f01a43abffda463d4dbe9dc60d82be54d9207011e4c064c4f0b465
+          JOB_GRANTS_SHA256=c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee
+          MODEL_REPAIR_SHA256=c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0
+          CLEAR_TYPES_SHA256=184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b
+          CLEAR_FUNCTIONS_SHA256=e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a
+          REPAIR_SHA256=8f49d0c5077c60872ed9f8962c3807331fda321ce255a0444b5a4e7381c16096
+          RECORD_ONLY_SHA256=bae5b50ac8c054c2ffacb74d9788e759a7254e1703cddd3c59a816f8de0f85a4
+          if [ "$(tr -d '\r' < "$CONTRACT_FILE" | sha256sum | cut -d' ' -f1)" != "$CONTRACT_SHA256" ] \
+            || [ "$(tr -d '\r' < "$JOB_RESUME_FILE" | sha256sum | cut -d' ' -f1)" != "$JOB_RESUME_SHA256" ] \
+            || [ "$(tr -d '\r' < "$JOB_GRANTS_FILE" | sha256sum | cut -d' ' -f1)" != "$JOB_GRANTS_SHA256" ] \
+            || [ "$(tr -d '\r' < "$MODEL_REPAIR_FILE" | sha256sum | cut -d' ' -f1)" != "$MODEL_REPAIR_SHA256" ] \
+            || [ "$(tr -d '\r' < "$CLEAR_TYPES_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_TYPES_SHA256" ] \
+            || [ "$(tr -d '\r' < "$CLEAR_FUNCTIONS_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_FUNCTIONS_SHA256" ] \
+            || [ "$(tr -d '\r' < "$REPAIR_FILE" | sha256sum | cut -d' ' -f1)" != "$REPAIR_SHA256" ] \
+            || [ "$(tr -d '\r' < "$RECORD_ONLY_FILE" | sha256sum | cut -d' ' -f1)" != "$RECORD_ONLY_SHA256" ]; then
+            echo "::error::A protected prerequisite or migration hash does not match frozen 00300/00400/00500/00600/00700/00800/00900/01000 identity."
+            exit 1
+          fi
+
+          HISTORY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where version = '20260822000150'),
+              count(*) filter (where version = '20260822000200'),
+              count(*) filter (where version = '20260822000300'),
+              count(*) filter (where version = '20260822000400'),
+              count(*) filter (where version = '20260822000500'),
+              count(*) filter (where version = '20260822000600'),
+              count(*) filter (where version = '20260822000700'),
+              count(*) filter (where version = '20260822000800'),
+              count(*) filter (where version = '20260822000900'),
+              count(*) filter (where version = '20260822001000')
+            from supabase_migrations.schema_migrations
+            where version in (
+              '20260822000150', '20260822000200', '20260822000300',
+              '20260822000400', '20260822000500', '20260822000600',
+              '20260822000700', '20260822000800', '20260822000900',
+              '20260822001000'
+            );")
+          if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]; then
+            echo "::error::History must record 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800 once, with protected 00300/00900/01000 absent."
+            exit 1
+          fi
+
+          PRECONTRACT_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5) as (values
+              ('public.assign_bot(uuid,uuid,uuid,uuid)',
+               '80b547b7b722c57a9d2a262b67698be8', '4c3a0328e1fd387ec9ead279fafed804'),
+              ('public.assign_bots_to_project(uuid,uuid,jsonb)',
+               '23b260247a4be4f4a8d8aa2497e1b6a2', '972ba462e06d56885860d179ad59706f'),
+              ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)',
+               'daecfeb964d863373a2072cc62e1033e', '1a47048cf178ec01fdc50ba54d5f1209'),
+              ('public.set_bot_assignment_execution(uuid,uuid,text,text)',
+               '55ec15132d903ace0300f2cbe32db6bd', '016c558c50ad586575c3702c44c8baf2'),
+              ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)',
+               '0aaec47295f86adbeec784d288f24400', '6a2ece465f5c9a633cf1638c536840a1'),
+              ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)',
+               '7f51999309b645832d471ccebea94a9c', 'be712da901009204d10cc830be164a9f')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.provolatile,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname,
+                       routine_language.lanname,
+                       pg_get_userbyid(routine.proowner),
+                       routine.prokind::text,
+                       format_type(routine.prorettype, null),
+                       routine.proretset,
+                       routine.pronargs,
+                       routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((
+                         select string_agg(
+                           format_type(argument_type.type_oid, null),
+                           ',' order by argument_type.ordinality
+                         )
+                         from unnest(routine.proallargtypes)
+                           with ordinality argument_type(type_oid, ordinality)
+                       ), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof,
+                       routine.prosecdef, routine.proparallel::text,
+                       routine.provariadic = 0, routine.procost::text,
+                       routine.prorows::text, routine.prosupport = 0,
+                       routine.probin is null, routine.prosqlbody is null,
+                       routine.protrftypes is null, routine.proconfig,
+                       routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 6
+               and bool_and(
+                 actual_source_md5 is not distinct from source_md5
+                 and actual_contract_md5 is not distinct from contract_md5
+                 and provolatile is not distinct from 'v'
+                 and proacl is not null
+                 and (select count(*) from aclexplode(proacl)) = 2
+                 and exists (
+                   select 1 from aclexplode(proacl) acl
+                    where acl.grantor = proowner
+                      and acl.grantee = proowner
+                      and acl.privilege_type = 'EXECUTE'
+                      and not acl.is_grantable
+                 )
+                 and exists (
+                   select 1 from aclexplode(proacl) acl
+                    where acl.grantor = proowner
+                      and acl.grantee = to_regrole('authenticated')::oid
+                      and acl.privilege_type = 'EXECUTE'
+                      and not acl.is_grantable
+                 )
+                 and has_function_privilege('authenticated', signature, 'EXECUTE')
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+                 and not exists (
+                   select 1 from aclexplode(proacl) acl
+                    where acl.grantor <> proowner
+                       or acl.grantee not in (proowner, to_regrole('authenticated')::oid)
+                       or acl.privilege_type <> 'EXECUTE'
+                       or acl.is_grantable
+                 )
+               )
+               and (
+                 select count(*) = 6
+                 from pg_proc routine
+                 join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                 where routine_schema.nspname = 'public'
+                   and routine.proname in (
+                     'assign_bot', 'assign_bots_to_project', 'record_bot_readiness',
+                     'set_bot_assignment_execution', 'update_bot_assignment',
+                     'update_bot_assignment_configuration'
+                   )
+               )
+            from state;")
+          if [ "$PRECONTRACT_READY" != "t" ]; then
+            echo "::error::The six legacy mutators do not match the exact authenticated-only 00200 input to CONTRACT."
+            exit 1
+          fi
+
+          JOB_SEEKER_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog, public;
+            with relation as (
+              select relation.*
+              from pg_class relation
+              where relation.oid = to_regclass('public.job_seeker_resume_extractions')
+            ), columns as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       column_row.attnum, column_row.attname,
+                       format_type(column_row.atttypid, column_row.atttypmod),
+                       column_row.attnotnull, column_row.attidentity,
+                       column_row.attgenerated,
+                       coalesce(pg_get_expr(default_row.adbin, default_row.adrelid), ''),
+                       coalesce(array_to_string(column_row.attacl, ','), '')
+                     ) order by column_row.attnum)::text) as fingerprint,
+                     count(*) as column_count,
+                     bool_and(column_row.attacl is null) as no_column_acl
+              from pg_attribute column_row
+              left join pg_attrdef default_row
+                on default_row.adrelid = column_row.attrelid
+               and default_row.adnum = column_row.attnum
+              where column_row.attrelid = (select oid from relation)
+                and column_row.attnum > 0 and not column_row.attisdropped
+            ), indexes as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       index_relation.relname, pg_get_indexdef(index_row.indexrelid)
+                     ) order by index_relation.relname)::text) as fingerprint,
+                     count(*) as index_count
+              from pg_index index_row
+              join pg_class index_relation on index_relation.oid = index_row.indexrelid
+              where index_row.indrelid = (select oid from relation)
+            ), policies as (
+              select md5(jsonb_agg(jsonb_build_array(
+                       policy.polname, policy.polcmd, policy.polpermissive,
+                       policy.polroles = array[to_regrole('authenticated')::oid],
+                       coalesce(pg_get_expr(policy.polqual, policy.polrelid), ''),
+                       coalesce(pg_get_expr(policy.polwithcheck, policy.polrelid), '')
+                     ) order by policy.polname)::text) as fingerprint,
+                     count(*) as policy_count
+              from pg_policy policy
+              where policy.polrelid = (select oid from relation)
+            ), function_state as (
+              select routine.*, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as source_md5,
+                     md5(jsonb_build_array(
+                       pg_get_userbyid(routine.proowner), routine_language.lanname,
+                       routine.prokind::text, routine.provolatile::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text, routine.prosupport = 0,
+                       routine.probin is null, routine.prosqlbody is null,
+                       routine.protrftypes is null, routine.proconfig,
+                       routine.proacl is null
+                     )::text) as contract_md5
+              from pg_proc routine
+              join pg_language routine_language on routine_language.oid = routine.prolang
+              where routine.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')
+            )
+            select
+              (select count(*) = 1 and bool_and(
+                 relkind = 'r' and pg_get_userbyid(relowner) = 'postgres'
+                 and relrowsecurity and relforcerowsecurity and relacl is not null
+                 and not exists (
+                   select 1 from aclexplode(relacl) acl
+                   where acl.grantor <> relowner
+                      or acl.grantee not in (relowner, to_regrole('authenticated')::oid)
+                      or acl.is_grantable
+                      or (acl.grantee = to_regrole('authenticated')::oid
+                          and acl.privilege_type not in ('SELECT', 'INSERT', 'DELETE'))
+                 )
+                 and has_table_privilege('authenticated', oid, 'SELECT,INSERT,DELETE')
+                 and not has_table_privilege('authenticated', oid, 'UPDATE,TRUNCATE,REFERENCES,TRIGGER')
+                 and not has_table_privilege('anon', oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 and not has_table_privilege('service_role', oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 and not has_any_column_privilege('anon', oid, 'SELECT,INSERT,UPDATE,REFERENCES')
+                 and not has_any_column_privilege('service_role', oid, 'SELECT,INSERT,UPDATE,REFERENCES')
+               ) from relation)
+              and (select column_count = 14 and no_column_acl
+                          and fingerprint = 'a281e579ace481a0dac93f4a81111f01' from columns)
+              and (select index_count = 3 and fingerprint = 'a9be04ba92b6f3d989054059e572e002' from indexes)
+              and (select policy_count = 3 and fingerprint = '3fe31b5b7a33afe12df73da7990267df' from policies)
+              and (select count(*) = 14 from pg_constraint
+                    where conrelid = (select oid from relation)
+                      and contype in ('p', 'f', 'c'))
+              and not exists (
+                select 1
+                from (values
+                  ('job_seeker_resume_extractions_pkey', 'PRIMARY KEY (id)'),
+                  ('job_seeker_resume_extractions_organization_id_fkey', 'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE'),
+                  ('job_seeker_resume_extractions_user_id_fkey', 'FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE'),
+                  ('job_seeker_resume_extractions_upload_id_fkey', 'FOREIGN KEY (upload_id) REFERENCES job_seeker_uploads(id) ON DELETE CASCADE'),
+                  ('job_seeker_resume_extractions_status_check', 'CHECK ((status = ANY (ARRAY[''reviewed''::text, ''pattern_only''::text, ''failed''::text])))'),
+                  ('job_seeker_resume_extractions_model_check', 'CHECK (((model IS NULL) OR ((char_length(btrim(model)) >= 1) AND (char_length(btrim(model)) <= 200))))'),
+                  ('job_seeker_resume_extractions_detail_check', 'CHECK (((char_length(detail) >= 1) AND (char_length(detail) <= 2000)))'),
+                  ('job_seeker_resume_extractions_character_count_check', 'CHECK ((character_count >= 0))'),
+                  ('job_seeker_extraction_proposal_is_object', 'CHECK ((jsonb_typeof(proposal) = ''object''::text))'),
+                  ('job_seeker_extraction_sources_is_object', 'CHECK ((jsonb_typeof(sources) = ''object''::text))'),
+                  ('job_seeker_extraction_applied_fields_shape', 'CHECK (job_seeker_text_list_valid(applied_fields, 20, 40))'),
+                  ('job_seeker_extraction_proposal_bounded', 'CHECK ((octet_length((proposal)::text) <= 200000))'),
+                  ('job_seeker_extraction_reviewed_names_model', 'CHECK (((status = ''reviewed''::text) = (model IS NOT NULL)))'),
+                  ('job_seeker_extraction_applied_together', 'CHECK (((applied_at IS NOT NULL) = (jsonb_array_length(applied_fields) > 0)))')
+                ) expected(name, definition)
+                left join pg_constraint constraint_row
+                  on constraint_row.conrelid = (select oid from relation)
+                 and constraint_row.conname = expected.name
+                where constraint_row.oid is null or not constraint_row.convalidated
+                   or pg_get_constraintdef(constraint_row.oid) is distinct from expected.definition
+              )
+              and not exists (
+                select 1 from pg_trigger trigger_row
+                where trigger_row.tgrelid = (select oid from relation) and not trigger_row.tgisinternal
+              )
+              and not exists (
+                select 1 from pg_rewrite rule_row
+                where rule_row.ev_class = (select oid from relation) and rule_row.rulename <> '_RETURN'
+              )
+              and (select count(*) = 1 and bool_and(
+                source_md5 = '2bc4b362facbea54d3fd0b67c2545682'
+                and contract_md5 = 'f0b1bd6c32a55077dd010d420cd324ab'
+                and proacl is not null and (select count(*) from aclexplode(proacl)) = 2
+                and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                and has_function_privilege('authenticated', oid, 'EXECUTE')
+                and not has_function_privilege('anon', oid, 'EXECUTE')
+                and not has_function_privilege('service_role', oid, 'EXECUTE')
+                and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner,to_regrole('authenticated')::oid) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
+              ) from function_state)
+              and (select count(*) = 1 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname = 'apply_resume_extraction');")
+          if [ "$JOB_SEEKER_READY" != "t" ]; then
+            echo "::error::Immutable job-seeker 00400/00500 catalog, RLS, policies, function, or ACL state drifted."
+            exit 1
+          fi
+
+          CLEAR_CONTROLS_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5) as (values
+              ('public.clear_all_pipelines(uuid,text,boolean)',
+               'bec3779775db79ea9150725a9e5d087f', 'cd91f464350f968f5b11a52f10d127bd'),
+              ('public.clear_backlog_tasks(uuid,text,boolean)',
+               'dcb23b5217f03e5f74da437fe0c3393f', '295424372a8549485dcc9f7b66dfe025')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.prokind, routine.provolatile, routine.prosecdef,
+                     routine.proconfig, routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname, routine_language.lanname,
+                       pg_get_userbyid(routine.proowner), routine.prokind::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 2 and count(distinct oid) = 2
+               and bool_and(
+                 nspname = 'public' and lanname = 'plpgsql'
+                 and pg_get_userbyid(proowner) = 'postgres'
+                 and prokind = 'f' and provolatile = 'v' and prosecdef
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and actual_source_md5 = source_md5
+                 and actual_contract_md5 = contract_md5
+                 and proacl is not null
+                 and (select count(*) from aclexplode(proacl)) = 2
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner, to_regrole('authenticated')::oid) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
+                 and has_function_privilege('authenticated', signature, 'EXECUTE')
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+               )
+               and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in ('clear_all_pipelines','clear_backlog_tasks'))
+               and (select array_agg(enum_value.enumlabel order by enum_value.enumsortorder) @> array['task.backlog_cleared','command.pipelines_cleared']::text[]
+                      from pg_type enum_type join pg_namespace enum_schema on enum_schema.oid = enum_type.typnamespace join pg_enum enum_value on enum_value.enumtypid = enum_type.oid
+                     where enum_schema.nspname = 'public' and enum_type.typname = 'activity_event_type')
+            from state;")
+          if [ "$CLEAR_CONTROLS_READY" != "t" ]; then
+            echo "::error::Immutable clear-controls 00700/00800 catalog, source, enum, or ACL state drifted."
+            exit 1
+          fi
+
+          function_catalog_ready() {
+            if [ "$1" != "pre" ] && [ "$1" != "post" ]; then
+              return 2
+            fi
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              set search_path = pg_catalog;
+              with expected(
+                signature, pre_source_md5, post_source_md5,
+                pre_volatility, post_volatility, contract_md5, execute_role
+              ) as (values
+                ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)',
+                 'cfc8efe543fbebebda8a2e643f91e487', 'cfc8efe543fbebebda8a2e643f91e487',
+                 'v', 'v', 'f75cd9cd32d176e36c7255f121387c97', 'authenticated'),
+                ('public.agentos_export_project_config(uuid,uuid)',
+                 '863ca595c22d6e036032161e2b447315', '863ca595c22d6e036032161e2b447315',
+                 's', 's', '49af7f5da1f63fbb12c52e89c81ae446', 'authenticated'),
+                ('public.agentos_list_agent_grants(uuid,integer)',
+                 'ad0721957db42e486c2dab484cc8260c', 'ad0721957db42e486c2dab484cc8260c',
+                 's', 's', 'c7bdcbf48e76a11da39b5dde14eba14f', 'authenticated'),
+                ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)',
+                 '9aa2f2f83beb0b28e29f2b37e1a91d4e', '0bfcac43568678ee7385f688731b20a1',
+                 'v', 'v', 'c6f6df3c444a98bb57f77d0052da44cb', 'service_role'),
+                ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)',
+                 '5ff06f065e241ad2baf5d7d5f576743a', '0ad5e0fc065a266e2c9a4ccc3734570f',
+                 'v', 'v', '972ba462e06d56885860d179ad59706f', 'authenticated'),
+                ('public.audit_factory_health(uuid)',
+                 '18bbb7f45cb5fe4b9d9d3b45f06076c2', 'e75ea238f2f0b7df01fd6ddf65b1e47d',
+                 's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
+                ('public.capture_improvement_baseline(uuid)',
+                 '2c7693b411e87f73433dcf0b5d117c9c', 'c3033d7c7843d96e13752d625669ee02',
+                 's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
+                ('public.claim_provider_connect_session(text,text)',
+                 '9961e16bbe95da08903caac340633bca', 'aa271ab3d2be6c5f2ce7182670e48099',
+                 'v', 'v', '8992610aa5f3749a013a3bdf9f7d4fef', 'service_role'),
+                ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
+                 '20f9edba1651974ca0ef256293269d81', '2ac0a2a4d51e54d1b0d89f49cf33ba87',
+                 's', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
+                ('public.normalize_bot_assignment_configuration(jsonb)',
+                 '643e307fdd9f98479bbe54d6f29c3623', '643e307fdd9f98479bbe54d6f29c3623',
+                 'i', 's', '451c6919550f1ebe87eb5ec83b50366b', 'none'),
+                ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                 '5c78babb546ecec96e81878a3c02ac0f', '40681f88025a321ea00ca8583651710f',
+                 'v', 'v', '8d7877b6de24358edd3e75981eb5411f', 'authenticated'),
+                ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)',
+                 'd0c11a5c1e57878c9b1b5d8753ecb1fd', 'f9a381c4fab5274262e3a79a49c46c17',
+                 'v', 'v', '813ab274df60a32d50ddeeb5b1d0ca01', 'authenticated'),
+                ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+                 'aea5da3473dd612f066e0e6fa3a76dd0', '7addf177418dea367bce655815915e61',
+                 'v', 'v', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'authenticated'),
+                ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)',
+                 '5323b0adb327f3d3a19c9bdca220922e', 'e0fb88d49063d1d5665b10d610c6a288',
+                 'v', 'v', '7aae20f9ed9251fe3e32530baaf32ddb', 'authenticated'),
+                ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)',
+                 'eabefae63edf3d957ed8a0ad5e10d1bd', '34edb5b2b6c827c5a8eb63f6b282bac2',
+                 'v', 'v', '61cbc7ff7cb5a849b6021cdca5012449', 'authenticated'),
+                ('public.validate_pipeline_template_areas(jsonb)',
+                 'd10799c81d59269ae5cd6bcd2a5e5d27', 'd3318ca7c597e81a15db2e2f0e34bd95',
+                 'i', 's', '0d286e56441a0a9e377719309b75a912', 'none')
+              ), state as (
+                select expected.*, routine.oid, routine.proowner, routine.proacl,
+                       routine.provolatile,
+                       md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) as source_md5,
+                       md5(jsonb_build_array(
+                         routine_schema.nspname,
+                         routine_language.lanname,
+                         pg_get_userbyid(routine.proowner),
+                         routine.prokind::text,
+                         format_type(routine.prorettype, null),
+                         routine.proretset,
+                         routine.pronargs,
+                         routine.pronargdefaults,
+                         coalesce(array_to_string(routine.proargnames, ','), ''),
+                         coalesce(array_to_string(routine.proargmodes, ','), ''),
+                         coalesce((
+                           select string_agg(
+                             format_type(argument_type.type_oid, null),
+                             ',' order by argument_type.ordinality
+                           )
+                           from unnest(routine.proallargtypes)
+                             with ordinality argument_type(type_oid, ordinality)
+                         ), ''),
+                         coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                         routine.proisstrict, routine.proleakproof,
+                         routine.prosecdef, routine.proparallel::text,
+                         routine.provariadic = 0, routine.procost::text,
+                         routine.prorows::text, routine.prosupport = 0,
+                         routine.probin is null, routine.prosqlbody is null,
+                         routine.protrftypes is null, routine.proconfig,
+                         routine.proacl is null
+                       )::text) as actual_contract_md5
+                from expected
+                left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+                left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                left join pg_language routine_language on routine_language.oid = routine.prolang
+              )
+              select count(oid) = 16
+                 and bool_and(
+                   source_md5 is not distinct from
+                     case when '$1' = 'pre' then pre_source_md5 else post_source_md5 end
+                   and provolatile::text is not distinct from
+                     case when '$1' = 'pre' then pre_volatility else post_volatility end
+                   and actual_contract_md5 is not distinct from contract_md5
+                   and proacl is not null
+                   and (select count(*) from aclexplode(proacl)) =
+                     case when execute_role = 'none' then 1 else 2 end
+                   and exists (
+                     select 1 from aclexplode(proacl) acl
+                     where acl.grantor = proowner and acl.grantee = proowner
+                       and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
+                   )
+                   and (
+                     execute_role = 'none'
+                     or exists (
+                       select 1 from aclexplode(proacl) acl
+                       where acl.grantor = proowner
+                         and acl.grantee = to_regrole(execute_role)::oid
+                         and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
+                     )
+                   )
+                   and not exists (
+                     select 1 from aclexplode(proacl) acl
+                     where acl.grantor <> proowner
+                        or acl.privilege_type <> 'EXECUTE'
+                        or acl.is_grantable
+                        or acl.grantee not in (
+                          proowner,
+                          case when execute_role = 'none' then proowner
+                               else to_regrole(execute_role)::oid end
+                        )
+                   )
+                   and not has_function_privilege('anon', signature, 'EXECUTE')
+                   and has_function_privilege('authenticated', signature, 'EXECUTE')
+                         is not distinct from (execute_role = 'authenticated')
+                   and has_function_privilege('service_role', signature, 'EXECUTE')
+                         is not distinct from (execute_role = 'service_role')
+                 )
+                 and (
+                   select count(*) = 16
+                   from pg_proc routine
+                   join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                   where routine_schema.nspname = 'public'
+                     and routine.proname in (
+                       'agentos_list_agent_grants', 'agentos_export_project_config',
+                       'agentos_apply_project_config', 'record_claim_anchoring',
+                       'claim_provider_connect_session', 'normalize_bot_assignment_configuration',
+                       'capture_improvement_baseline', 'audit_factory_health',
+                       'validate_pipeline_template_areas', 'list_factory_command_routing_candidates',
+                       'submit_factory_command', 'assign_bots_to_project_checked',
+                       'update_bot_assignment_configuration_checked',
+                       'update_bot_assignment_checked', 'set_bot_assignment_execution_checked',
+                       'agentos_record_trigger_delivery'
+                     )
+                 )
+              from state;"
+          }
+
+          if [ "$(function_catalog_ready pre)" != "t" ]; then
+            echo "::error::The exact sixteen-function pre-repair source/catalog/ACL state is not present."
+            exit 1
+          fi
+
+          function_contract() {
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              set search_path = pg_catalog;
+              with expected(signature) as (values
+                ('public.agentos_list_agent_grants(uuid,integer)'),
+                ('public.agentos_export_project_config(uuid,uuid)'),
+                ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)'),
+                ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])'),
+                ('public.claim_provider_connect_session(text,text)'),
+                ('public.normalize_bot_assignment_configuration(jsonb)'),
+                ('public.capture_improvement_baseline(uuid)'),
+                ('public.audit_factory_health(uuid)'),
+                ('public.validate_pipeline_template_areas(jsonb)'),
+                ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)'),
+                ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)'),
+                ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)'),
+                ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)'),
+                ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)')
+              )
+              select string_agg(
+                expected.signature || '|' || routine.oid::text || '|' || md5(jsonb_build_array(
+                  pg_get_userbyid(routine.proowner), routine_language.lanname,
+                  routine.prokind, routine.prosecdef, routine.proconfig, routine.proacl,
+                  format_type(routine.prorettype, null), routine.proretset,
+                  routine.pronargs, routine.pronargdefaults,
+                  coalesce(array_to_string(routine.proargnames, ','), ''),
+                  coalesce(array_to_string(routine.proargmodes, ','), ''),
+                  coalesce((
+                    select string_agg(format_type(argument_type.type_oid, null), ',' order by argument_type.ordinality)
+                    from unnest(routine.proallargtypes)
+                      with ordinality argument_type(type_oid, ordinality)
+                  ), ''),
+                  coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                  routine.proisstrict, routine.proleakproof, routine.proparallel::text,
+                  case when routine.provariadic = 0 then '' else format_type(routine.provariadic, null) end,
+                  routine.procost::text, routine.prorows::text,
+                  case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
+                  coalesce(routine.probin, ''), routine.prosqlbody is null,
+                  routine.protrftypes is null,
+                  has_function_privilege('authenticated', expected.signature, 'EXECUTE'),
+                  has_function_privilege('anon', expected.signature, 'EXECUTE'),
+                  has_function_privilege('service_role', expected.signature, 'EXECUTE')
+                )::text), E'\n' order by expected.signature)
+              from expected
+              join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              join pg_language routine_language on routine_language.oid = routine.prolang;"
+          }
+          FUNCTION_CONTRACT_BEFORE=$(function_contract)
+          if [ -z "$FUNCTION_CONTRACT_BEFORE" ]; then
+            echo "::error::Could not freeze the fourteen lint-target identities that 01000 must leave unchanged."
+            exit 1
+          fi
+
+          assert_containment() {
+            CONTAINMENT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected_projects(organization_id, project_id, project_name) as (values
+                ('2614f3b2-ac24-4353-bda6-320a8c254d3b'::uuid,
+                 'b1f23696-437e-4d89-b55f-d7a949980e8f'::uuid, 'SoftwareFactory'),
+                ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
+                 'bd90348c-41f4-487c-9681-6b4a4ca911e4'::uuid, 'SoftwareFactory'),
+                ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
+                 'f8de941d-dc9e-4c66-9d3a-00cd61c2d794'::uuid, 'SoftwareFactory_08.17.2026'),
+                ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
+                 '34afd05b-6550-41ae-a397-913b9f44966a'::uuid, 'SoftwareFactory_08.21.2026')
+              ), target_projects as (
+                select p.*, o.autonomous_mode as org_autonomous_mode,
+                       o.maximum_autonomous_risk as org_maximum_autonomous_risk,
+                       o.auto_plan as org_auto_plan, o.auto_code as org_auto_code,
+                       o.auto_test as org_auto_test, o.auto_repair as org_auto_repair,
+                       o.auto_review as org_auto_review, o.auto_approve as org_auto_approve,
+                       o.auto_merge as org_auto_merge, o.auto_deploy as org_auto_deploy,
+                       o.auto_rollback as org_auto_rollback,
+                       o.autonomy_kill_switch_active
+                from expected_projects expected
+                join public.projects p
+                  on p.id = expected.project_id
+                 and p.organization_id = expected.organization_id
+                 and p.name = expected.project_name
+                join public.organizations o on o.id = p.organization_id
+              ), resolved as (
+                select controls.*
+                from target_projects project
+                cross join lateral public.resolved_autonomy_controls(project.id) controls
+              )
+              select (select count(*) = 4 from target_projects)
+                 and (select count(distinct organization_id) = 2 from target_projects)
+                 and (select count(*) = 4 from public.projects project
+                      where project.name in (
+                        'SoftwareFactory', 'SoftwareFactory_08.17.2026',
+                        'SoftwareFactory_08.21.2026'
+                      ))
+                 and (select bool_and(
+                   org_autonomous_mode is false
+                   and org_maximum_autonomous_risk is not distinct from 'green'::public.risk_level
+                   and org_auto_plan is false and org_auto_code is false and org_auto_test is false
+                   and org_auto_repair is false and org_auto_review is false and org_auto_approve is false
+                   and org_auto_merge is false and org_auto_deploy is false and org_auto_rollback is false
+                   and autonomy_kill_switch_active is true
+                   and autonomous_mode is false
+                   and maximum_autonomous_risk is not distinct from 'green'::public.risk_level
+                   and auto_plan is false and auto_code is false and auto_test is false
+                   and auto_repair is false and auto_review is false and auto_approve is false
+                   and auto_merge is false and auto_deploy is false and auto_rollback is false
+                 ) from target_projects)
+                 and (select count(*) = 4 and bool_and(
+                   autonomous_mode is false
+                   and maximum_autonomous_risk is not distinct from 'green'::public.risk_level
+                   and auto_plan is false and auto_code is false and auto_test is false
+                   and auto_repair is false and auto_review is false and auto_approve is false
+                   and auto_merge is false and auto_deploy is false and auto_rollback is false
+                   and kill_switch_active is true and executor_connected is false
+                 ) from resolved)
+                 and not exists (
+                   select 1
+                   from (select distinct organization_id from expected_projects) expected_org
+                   where not exists (
+                     select 1 from public.activity_events event
+                     where event.organization_id = expected_org.organization_id
+                       and event.event_type::text = 'autonomy.kill_switch_changed'
+                       and event.entity_type = 'organization'
+                       and event.entity_id = expected_org.organization_id
+                       and event.metadata ->> 'active' = 'true'
+                   )
+                 )
+                 and not exists (
+                   select 1 from expected_projects expected
+                   where not exists (
+                     select 1 from public.activity_events event
+                     where event.organization_id = expected.organization_id
+                       and (event.project_id = expected.project_id or event.entity_id = expected.project_id)
+                       and (
+                         (event.event_type::text = 'project.autonomous_mode_changed'
+                          and event.metadata ->> 'to' = 'false')
+                         or
+                         (event.event_type::text = 'autonomy.controls_changed'
+                          and event.metadata ->> 'autonomousMode' = 'false')
+                       )
+                   )
+                 )
+                 and (select relation.relrowsecurity and relation.relforcerowsecurity
+                             and pg_get_userbyid(relation.relowner) = 'postgres'
+                             and not has_table_privilege('anon', relation.oid, 'UPDATE,DELETE,TRUNCATE')
+                             and not has_table_privilege('authenticated', relation.oid, 'UPDATE,DELETE,TRUNCATE')
+                             and not has_table_privilege('service_role', relation.oid, 'UPDATE,DELETE,TRUNCATE')
+                        from pg_class relation
+                       where relation.oid = 'public.activity_events'::regclass)
+                 and (select routine_language.lanname = 'plpgsql'
+                             and routine.prokind = 'f' and routine.provolatile = 'v'
+                             and routine.prorettype = 'trigger'::regtype
+                             and not routine.prosecdef
+                             and routine.proconfig = array['search_path=pg_catalog']::text[]
+                             and pg_get_userbyid(routine.proowner) = 'postgres'
+                             and btrim(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) =
+                               E'begin\\n  raise exception using errcode = ''55000'', message = ''activity events are append-only'';\\nend;'
+                             and not has_function_privilege('anon', routine.oid, 'EXECUTE')
+                             and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
+                             and not has_function_privilege('service_role', routine.oid, 'EXECUTE')
+                        from pg_proc routine
+                        join pg_language routine_language on routine_language.oid = routine.prolang
+                       where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure)
+                 and exists (
+                   select 1 from pg_trigger trigger_row
+                   where trigger_row.tgrelid = 'public.activity_events'::regclass
+                     and trigger_row.tgname = 'activity_events_append_only'
+                     and not trigger_row.tgisinternal and trigger_row.tgenabled = 'O'
+                     and trigger_row.tgtype = 27
+                     and trigger_row.tgfoid = 'public.reject_activity_event_mutation()'::regprocedure
+                     and trigger_row.tgconstraint = 0 and trigger_row.tgparentid = 0
+                     and trigger_row.tgqual is null
+                 )
+                 and not exists (
+                   select 1 from public.phase1c_workers worker
+                   where worker.last_heartbeat_at > now() + interval '1 minute'
+                 )
+                 and not exists (
+                   select 1 from public.phase1c_workers worker
+                   where worker.last_heartbeat_at > now() - interval '10 minutes'
+                 )
+                 and not exists (
+                   select 1 from public.phase1c_workers worker
+                   where worker.current_run_id is not null
+                 );")
+            if [ "$CONTAINMENT" != "t" ]; then
+              echo "::error::Containment gate failed: autonomy/actions must remain OFF, kill switch ON, and executor/worker disconnected."
+              exit 1
+            fi
+          }
+          assert_containment
+
+          EXTENSION_BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where extension_row.oid is not null),
+              count(*) filter (where routine.oid is not null)
+            from (values (1)) seed(value)
+            left join pg_extension extension_row on extension_row.extname = 'plpgsql_check'
+            left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check extension/function residue existed before the transactional lint; refusing to alter extension state."
+            exit 1
+          fi
+
+          # Exercise the entire exact frozen chain and warning-level linked
+          # lint in one transaction, then roll the whole rehearsal back. Any
+          # SQL, catalog, ACL, or lint mismatch therefore stops before commit.
+          LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin;" \
+            -f "$CONTRACT_FILE" \
+            -f "$REPAIR_FILE" \
+            -f "$RECORD_ONLY_FILE" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values
+              ('public.agentos_resolved_agent_grants(uuid)'),
+              ('public.agentos_list_agent_grants(uuid,integer)'),
+              ('public.agentos_export_project_config(uuid,uuid)'),
+              ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)'),
+              ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])'),
+              ('public.claim_provider_connect_session(text,text)'),
+              ('public.normalize_bot_assignment_configuration(jsonb)'),
+              ('public.capture_improvement_baseline(uuid)'),
+              ('public.audit_factory_health(uuid)'),
+              ('public.validate_pipeline_template_areas(jsonb)'),
+              ('public.list_factory_command_routing_candidates(uuid,uuid,text)'),
+              ('public.list_factory_commands(uuid,integer,uuid)'),
+              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)'),
+              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)'),
+              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)'),
+              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)'),
+              ('public.normalize_phase1c_command()'),
+              ('public.plan_phase1c_task_and_run()'),
+              ('public.queue_phase1c_run_for_task()'),
+              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
+              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
+              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'),
+              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)'),
+              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)'),
+              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)'),
+              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)'),
+              ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)')
+            )
+            select expected.signature || '|' || finding.level || '|' || finding.sqlstate || '|' || finding.message
+            from expected
+            cross join lateral extensions.plpgsql_check_function_tb(
+              expected.signature::regprocedure, 0::regclass,
+              false, true, true, false, false, false
+            ) finding
+            where finding.level in ('error', 'warning', 'extra')
+            order by expected.signature, finding.lineno, finding.position;" \
+            -c "rollback;")
+          if [ -n "$LINT_FINDINGS" ]; then
+            echo "::error::Pre-commit linked database lint found error/warning/extra findings in a repaired, restored, record-only, or delegated function."
+            printf '%s\n' "$LINT_FINDINGS"
+            exit 1
+          fi
+
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where extension_row.oid is not null),
+              count(*) filter (where routine.oid is not null)
+            from (values (1)) seed(value)
+            left join pg_extension extension_row on extension_row.extname = 'plpgsql_check'
+            left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Pre-commit transactional lint left extension or function residue."
+            exit 1
+          fi
+
+          echo "Applying exact 00300 -> 00900 -> 01000 protected chain in one production transaction."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -f "$CONTRACT_FILE" \
+            -f "$REPAIR_FILE" \
+            -f "$RECORD_ONLY_FILE" \
+            -c "insert into supabase_migrations.schema_migrations (version) values
+                  ('20260822000300'), ('20260822000900'), ('20260822001000');"
+
+          RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select concat_ws('|',
+               count(*) filter (where version = '20260822000300'),
+               count(*) filter (where version = '20260822000900'),
+               count(*) filter (where version = '20260822001000'))
+             from supabase_migrations.schema_migrations
+             where version in ('20260822000300','20260822000900','20260822001000');")
+          if [ "$RECORDED" != "1|1|1" ]; then
+            echo "::error::The exact protected 00300/00900/01000 chain did not land once each in the ledger."
+            exit 1
+          fi
+          FUNCTION_CONTRACT_AFTER=$(function_contract)
+          if [ "$FUNCTION_CONTRACT_AFTER" != "$FUNCTION_CONTRACT_BEFORE" ]; then
+            echo "::error::00700 changed an OID, signature, owner, language, SECURITY DEFINER, search_path, ACL, return/argument contract, or another field outside its exact renamed/wrapper set."
+            exit 1
+          fi
+
+          RECORD_ONLY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
+               '203f54d969fbc699304e780c1ad68a85', '17919dac57b41b75fe0793ad660063cc', 's', 'authenticated'),
+              ('public.list_factory_commands(uuid,integer,uuid)',
+               'ba62f4f5357cec647d3ff582107710a7', '6abaeb0d885d1335a6c4bb0029497051', 's', 'authenticated'),
+              ('public.normalize_phase1c_command()',
+               'cd28d70a40e860660461700926e97830', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.plan_phase1c_task_and_run()',
+               '2de7070bb9359ce7ad45516da2956a4b', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.queue_phase1c_run_for_task()',
+               '4737eba3e8490632fdd89c6d06fece82', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)',
+               'adb50eb74e1721274f23d0d69b79e2e8', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'none'),
+              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)',
+               '024c3aa1f74d976fb7a8a6d7138cd9fb', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'authenticated'),
+              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '8418fd26e9b1783315a93ffbf4543838', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'none'),
+              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '6008476137a77db33d220be4b14a9c8d', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               'c450eac6987cdd603d2d2511a9fa8833', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none'),
+              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '9dfdfc57f4f8b0965a89fefd927beb26', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '46cee8bec5e12fd4f087ecbeea0c9844', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.provolatile, routine.prosecdef, routine.proconfig,
+                     routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname, routine_language.lanname,
+                       pg_get_userbyid(routine.proowner), routine.prokind::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 12 and count(distinct oid) = 12
+               and bool_and(
+                 nspname = 'public' and lanname = 'plpgsql'
+                 and proowner = (select relowner from pg_class where oid = 'public.projects'::regclass)
+                 and actual_source_md5 = source_md5
+                 and actual_contract_md5 = contract_md5
+                 and provolatile::text = volatility and prosecdef
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and proacl is not null
+                 and (select count(*) from aclexplode(proacl)) =
+                       case when execute_role = 'authenticated' then 2 else 1 end
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and (execute_role = 'none' or exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable))
+                 and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.privilege_type <> 'EXECUTE' or acl.is_grantable or acl.grantee not in (proowner, case when execute_role = 'authenticated' then to_regrole('authenticated')::oid else proowner end))
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+                 and has_function_privilege('authenticated', signature, 'EXECUTE') is not distinct from (execute_role = 'authenticated')
+               )
+               and (select count(*) = 12 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in (
+                 'list_factory_command_routing_candidates', 'list_factory_commands', 'normalize_phase1c_command',
+                 'plan_phase1c_task_and_run', 'queue_phase1c_run_for_task',
+                 'submit_command', 'submit_command_phase1c_normalized_internal',
+                 'submit_factory_command', 'submit_factory_command_routing_internal',
+                 'record_provider_run', 'record_provider_run_phase1c_compatibility_internal',
+                 'record_provider_run_phase2a_internal'))
+            from state;")
+          if [ "$RECORD_ONLY_READY" != "t" ]; then
+            echo "::error::The 01000 public/private wrapper source, catalog, overload, or ACL postflight is not exact."
+            exit 1
+          fi
+
+          RECORD_ONLY_BOUNDARY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select exists (
+              select 1 from pg_class relation
+              where relation.oid = 'public.factory_record_only_submission_guards'::regclass
+                and relation.relkind = 'r' and relation.relrowsecurity and relation.relforcerowsecurity
+                and relation.relowner = (select relowner from pg_class where oid = 'public.projects'::regclass)
+                and relation.relacl is not null
+                and not has_table_privilege('anon', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+            )
+            and (select count(*) = 7 and bool_and(attribute.attacl is null)
+                   from pg_attribute attribute
+                  where attribute.attrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and attribute.attnum > 0 and not attribute.attisdropped)
+            and (select count(*) = 4 from pg_constraint constraint_row
+                  where constraint_row.conrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and constraint_row.contype in ('p','c'))
+            and not exists (select 1 from pg_policy policy where policy.polrelid = 'public.factory_record_only_submission_guards'::regclass)
+            and not exists (select 1 from pg_trigger trigger_row where trigger_row.tgrelid = 'public.factory_record_only_submission_guards'::regclass and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row where rule_row.ev_class = 'public.factory_record_only_submission_guards'::regclass and rule_row.rulename <> '_RETURN')
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0
+                    and routine.oid in (
+                      'public.queue_phase1c_run_for_task()'::regprocedure,
+                      'public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'::regprocedure))
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0)
+            and (select count(*) = 20 from pg_trigger trigger_row
+                  where trigger_row.tgrelid in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row
+                  where rule_row.ev_class in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and rule_row.rulename <> '_RETURN')
+            and not exists (
+              select 1 from public.agent_runs run
+              join public.tasks task on task.id = run.task_id
+              join public.commands command on command.id = task.command_id
+              where command.parameters ->> 'executionMode' = 'record_only'
+            );")
+          if [ "$RECORD_ONLY_BOUNDARY" != "t" ]; then
+            echo "::error::The record-only guard, producer, RLS/ACL, or zero-agent-run boundary is not exact."
+            exit 1
+          fi
+
+          FOUNDATION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected_types(type_name, labels) as (values
+              ('agentos_network_mode', 'open,limited'),
+              ('agentos_skill_kind', 'prompt,file'),
+              ('agentos_repo_permission', 'git_read,git_write')
+            ), type_state as (
+              select expected_types.*, type_row.oid,
+                     string_agg(enum_row.enumlabel, ',' order by enum_row.enumsortorder) as actual_labels
+              from expected_types
+              left join pg_type type_row on type_row.typnamespace = 'public'::regnamespace
+                                        and type_row.typname = expected_types.type_name
+              left join pg_enum enum_row on enum_row.enumtypid = type_row.oid
+              group by expected_types.type_name, expected_types.labels, type_row.oid
+            ), expected_tables(table_name, policy_name) as (values
+              ('agentos_environments', 'agentos_environments_select_members'),
+              ('agentos_mcp_connections', 'agentos_mcp_select_members'),
+              ('agentos_skills', 'agentos_skills_select_members'),
+              ('agentos_agent_grants', 'agentos_agent_grants_select_members'),
+              ('agentos_agent_mcp_grants', 'agentos_agent_mcp_select_members'),
+              ('agentos_agent_skill_grants', 'agentos_agent_skill_select_members'),
+              ('agentos_agent_repo_grants', 'agentos_agent_repo_select_members'),
+              ('agentos_agent_filesystem_grants', 'agentos_agent_fs_select_members'),
+              ('agentos_agent_collaborators', 'agentos_agent_collaborator_select_members')
+            ), table_state as (
+              select expected_tables.*, relation.oid, relation.relowner, relation.relkind,
+                     relation.relrowsecurity, relation.relforcerowsecurity, relation.relacl,
+                     policy.oid as policy_oid, policy.polcmd, policy.polpermissive,
+                     policy.polroles, policy.polqual, policy.polwithcheck
+              from expected_tables
+              left join pg_class relation
+                on relation.relnamespace = 'public'::regnamespace
+               and relation.relname = expected_tables.table_name
+              left join pg_policy policy
+                on policy.polrelid = relation.oid
+               and policy.polname = expected_tables.policy_name
+            ), helper_state as (
+              select routine.oid, routine.proname,
+                     routine.proowner, routine.prokind, routine.provolatile,
+                     routine.prosecdef, routine.proconfig, routine.proacl,
+                     routine_language.lanname
+              from pg_proc routine
+              join pg_language routine_language on routine_language.oid = routine.prolang
+              where routine.oid in (
+                to_regprocedure('public.agentos_hosts_are_bare_hostnames(text[])'),
+                to_regprocedure('public.agentos_resolved_agent_grants(uuid)')
+              )
+            )
+            select (select count(oid) = 3 and bool_and(actual_labels = labels) from type_state)
+               and (select count(oid) = 9 and bool_and(
+                 relkind = 'r' and relrowsecurity and relforcerowsecurity
+                 and pg_get_userbyid(relowner) = 'postgres'
+                 and policy_oid is not null and polcmd = 'r' and polpermissive
+                 and polroles = array[to_regrole('authenticated')::oid]
+                 and polqual is not null and polwithcheck is null
+                 and has_table_privilege('authenticated', oid, 'SELECT')
+                 and not has_table_privilege('authenticated', oid, 'INSERT')
+                 and not has_table_privilege('authenticated', oid, 'UPDATE')
+                 and not has_table_privilege('authenticated', oid, 'DELETE')
+                 and not has_table_privilege('anon', oid, 'SELECT')
+                 and not has_table_privilege('service_role', oid, 'SELECT')
+                 and not exists (
+                   select 1 from aclexplode(relacl) acl
+                    where acl.grantor <> relowner
+                       or acl.grantee not in (relowner, to_regrole('authenticated')::oid)
+                       or acl.is_grantable
+                       or (acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type <> 'SELECT')
+                 )
+               ) from table_state)
+               and (select count(*) = 9 from pg_policy policy
+                    join pg_class relation on relation.oid = policy.polrelid
+                    where relation.relnamespace = 'public'::regnamespace
+                      and relation.relname in (
+                        'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                        'agentos_agent_grants', 'agentos_agent_mcp_grants',
+                        'agentos_agent_skill_grants', 'agentos_agent_repo_grants',
+                        'agentos_agent_filesystem_grants', 'agentos_agent_collaborators'
+                      ))
+               and (select count(oid) = 2 and bool_and(
+                 pg_get_userbyid(proowner) = 'postgres' and prokind = 'f'
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and (
+                   (proname = 'agentos_hosts_are_bare_hostnames'
+                    and lanname = 'sql' and provolatile = 'i' and not prosecdef)
+                   or
+                   (proname = 'agentos_resolved_agent_grants'
+                    and lanname = 'plpgsql' and provolatile = 's' and prosecdef
+                    and has_function_privilege('authenticated', oid, 'EXECUTE')
+                    and not has_function_privilege('anon', oid, 'EXECUTE')
+                    and not has_function_privilege('service_role', oid, 'EXECUTE'))
+                 )
+               ) from helper_state);")
+          if [ "$FOUNDATION_READY" != "t" ]; then
+            echo "::error::The restored three-enum/nine-table/two-helper AgentOS catalog, RLS, policy, or ACL posture is not exact."
+            exit 1
+          fi
+
+          assert_containment
+          DATABASE_HEALTH=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select current_database() = 'postgres' and not pg_is_in_recovery();")
+          if [ "$DATABASE_HEALTH" != "t" ]; then
+            echo "::error::Linked production database health check failed."
+            exit 1
+          fi
+          curl --fail --silent --show-error --location --max-time 30 \
+            --output /dev/null https://www.theagoras.com/
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Exact hosted PL/pgSQL catalog and lint repair applied once; catalog, ACL, transactional lint, health, and containment gates passed."
 
       - name: Apply the Agentic SDLC lifecycle surgically (scope=lifecycle)
         # Exactly two files — 20260821000100 and 20260821000200 — and no others.
@@ -2628,6 +3710,7 @@ jobs:
           fi
           echo "Applied and verified: both clears are SECURITY DEFINER, callable by members only, with their audit labels present."
 
+
       - name: Repair bots onto the executable model (scope=executable-model-repair)
         # One file, and it rewrites data rather than schema: bots whose model
         # came from the catalog's openai list move onto the model the Codex
@@ -2683,11 +3766,13 @@ jobs:
         if: ${{ inputs.scope == 'all' }}
         run: |
           # `db push` has no per-file exclusion. Refuse the broad path until the
-          # protected ACL normalizer, EXPAND, and CONTRACT migrations have each already passed
+          # protected ACL normalizer, EXPAND, immutable job-seeker, executable-model,
+          # and clear-control prerequisites, plus the
+          # atomic CONTRACT/catalog-repair/record-only chain have each passed
           # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
           # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected migrations 20260822000150, 20260822000200, and 20260822000300 are already recorded."
+            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00900/01000 are already recorded."
             exit 1
           fi
           if [ "$MODE" != "dburl" ]; then
@@ -2696,12 +3781,37 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
+          if [ "$(tr -d '\r' < supabase/migrations/20260822000300_contract_bot_mutator_acls.sql | sha256sum | cut -d' ' -f1)" != "79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000400_job_seeker_resume_extraction.sql | sha256sum | cut -d' ' -f1)" != "0faa6d4174f01a43abffda463d4dbe9dc60d82be54d9207011e4c064c4f0b465" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000500_job_seeker_extraction_grant_contract.sql | sha256sum | cut -d' ' -f1)" != "c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql | sha256sum | cut -d' ' -f1)" != "c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000700_clear_surface_activity_types.sql | sha256sum | cut -d' ' -f1)" != "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql | sha256sum | cut -d' ' -f1)" != "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "8f49d0c5077c60872ed9f8962c3807331fda321ce255a0444b5a4e7381c16096" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "bae5b50ac8c054c2ffacb74d9788e759a7254e1703cddd3c59a816f8de0f85a4" ]; then
+            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00900/01000 file hash drifted; broad push is forbidden."
+            exit 1
+          fi
           PROTECTED_NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000150';")
           PROTECTED_EXPAND=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000200';")
           PROTECTED_CONTRACT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000300';")
+          PROTECTED_JOB_RESUME=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000400';")
+          PROTECTED_JOB_GRANTS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000500';")
+          PROTECTED_EXECUTABLE_MODEL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000600';")
+          PROTECTED_CLEAR_TYPES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000700';")
+          PROTECTED_CLEAR_FUNCTIONS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000800';")
+          PROTECTED_REPAIR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000900';")
+          PROTECTED_RECORD_ONLY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822001000';")
           if [ "$PROTECTED_NORMALIZER" != "1" ]; then
             echo "::error::Protected migration 20260822000150 is not recorded exactly once. Apply it only through scope=bot-legacy-acl-normalization; broad push is forbidden."
             exit 1
@@ -2711,9 +3821,474 @@ jobs:
             exit 1
           fi
           if [ "$PROTECTED_CONTRACT" != "1" ]; then
-            echo "::error::Protected migration 20260822000300 is not recorded exactly once. Apply it only through scope=bot-account-binding-contract after exact-app Vercel acceptance; broad push is forbidden."
+            echo "::error::Protected migration 20260822000300 is not recorded exactly once. Apply the atomic chain only through scope=factory-any-model-record-only; broad push is forbidden."
             exit 1
           fi
+          if [ "$PROTECTED_JOB_RESUME" != "1" ] || [ "$PROTECTED_JOB_GRANTS" != "1" ]; then
+            echo "::error::Immutable job-seeker 20260822000400/00500 are not each recorded exactly once; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_EXECUTABLE_MODEL" != "1" ]; then
+            echo "::error::Immutable executable-model repair 20260822000600 is not recorded exactly once; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_CLEAR_TYPES" != "1" ] || [ "$PROTECTED_CLEAR_FUNCTIONS" != "1" ]; then
+            echo "::error::Immutable clear-controls 20260822000700/00800 are not each recorded exactly once; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_REPAIR" != "1" ]; then
+            echo "::error::Protected migration 20260822000900 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_RECORD_ONLY" != "1" ]; then
+            echo "::error::Protected migration 20260822001000 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
+            exit 1
+          fi
+          PROTECTED_CLEAR_CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5) as (values
+              ('public.clear_all_pipelines(uuid,text,boolean)', 'bec3779775db79ea9150725a9e5d087f', 'cd91f464350f968f5b11a52f10d127bd'),
+              ('public.clear_backlog_tasks(uuid,text,boolean)', 'dcb23b5217f03e5f74da437fe0c3393f', '295424372a8549485dcc9f7b66dfe025')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.prokind, routine.provolatile, routine.prosecdef,
+                     routine.proconfig, routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname, routine_language.lanname,
+                       pg_get_userbyid(routine.proowner), routine.prokind::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality) from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 2 and count(distinct oid) = 2
+               and bool_and(
+                 nspname = 'public' and lanname = 'plpgsql'
+                 and pg_get_userbyid(proowner) = 'postgres'
+                 and prokind = 'f' and provolatile = 'v' and prosecdef
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and actual_source_md5 = source_md5 and actual_contract_md5 = contract_md5
+                 and proacl is not null and (select count(*) from aclexplode(proacl)) = 2
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.grantee not in (proowner,to_regrole('authenticated')::oid) or acl.privilege_type <> 'EXECUTE' or acl.is_grantable)
+                 and has_function_privilege('authenticated', signature, 'EXECUTE')
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+               )
+               and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in ('clear_all_pipelines','clear_backlog_tasks'))
+               and (select count(*) = 2 from pg_type enum_type join pg_namespace enum_schema on enum_schema.oid = enum_type.typnamespace join pg_enum enum_value on enum_value.enumtypid = enum_type.oid where enum_schema.nspname = 'public' and enum_type.typname = 'activity_event_type' and enum_value.enumlabel in ('task.backlog_cleared','command.pipelines_cleared'))
+            from state;")
+          if [ "$PROTECTED_CLEAR_CATALOG_READY" != "t" ]; then
+            echo "::error::Clear-controls ledger rows exist but exact 00700/00800 source/catalog/ACL state drifted; broad push is forbidden."
+            exit 1
+          fi
+          protected_repair_function_catalog_ready() {
+            if [ "$1" != "pre" ] && [ "$1" != "post" ]; then
+              return 2
+            fi
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              set search_path = pg_catalog;
+              with expected(
+                signature, pre_source_md5, post_source_md5,
+                pre_volatility, post_volatility, contract_md5, execute_role
+              ) as (values
+                ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)',
+                 'cfc8efe543fbebebda8a2e643f91e487', 'cfc8efe543fbebebda8a2e643f91e487',
+                 'v', 'v', 'f75cd9cd32d176e36c7255f121387c97', 'authenticated'),
+                ('public.agentos_export_project_config(uuid,uuid)',
+                 '863ca595c22d6e036032161e2b447315', '863ca595c22d6e036032161e2b447315',
+                 's', 's', '49af7f5da1f63fbb12c52e89c81ae446', 'authenticated'),
+                ('public.agentos_list_agent_grants(uuid,integer)',
+                 'ad0721957db42e486c2dab484cc8260c', 'ad0721957db42e486c2dab484cc8260c',
+                 's', 's', 'c7bdcbf48e76a11da39b5dde14eba14f', 'authenticated'),
+                ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)',
+                 '9aa2f2f83beb0b28e29f2b37e1a91d4e', '0bfcac43568678ee7385f688731b20a1',
+                 'v', 'v', 'c6f6df3c444a98bb57f77d0052da44cb', 'service_role'),
+                ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)',
+                 '5ff06f065e241ad2baf5d7d5f576743a', '0ad5e0fc065a266e2c9a4ccc3734570f',
+                 'v', 'v', '972ba462e06d56885860d179ad59706f', 'authenticated'),
+                ('public.audit_factory_health(uuid)',
+                 '18bbb7f45cb5fe4b9d9d3b45f06076c2', 'e75ea238f2f0b7df01fd6ddf65b1e47d',
+                 's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
+                ('public.capture_improvement_baseline(uuid)',
+                 '2c7693b411e87f73433dcf0b5d117c9c', 'c3033d7c7843d96e13752d625669ee02',
+                 's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
+                ('public.claim_provider_connect_session(text,text)',
+                 '9961e16bbe95da08903caac340633bca', 'aa271ab3d2be6c5f2ce7182670e48099',
+                 'v', 'v', '8992610aa5f3749a013a3bdf9f7d4fef', 'service_role'),
+                ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
+                 '20f9edba1651974ca0ef256293269d81', '2ac0a2a4d51e54d1b0d89f49cf33ba87',
+                 's', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
+                ('public.normalize_bot_assignment_configuration(jsonb)',
+                 '643e307fdd9f98479bbe54d6f29c3623', '643e307fdd9f98479bbe54d6f29c3623',
+                 'i', 's', '451c6919550f1ebe87eb5ec83b50366b', 'none'),
+                ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                 '5c78babb546ecec96e81878a3c02ac0f', '40681f88025a321ea00ca8583651710f',
+                 'v', 'v', '8d7877b6de24358edd3e75981eb5411f', 'authenticated'),
+                ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)',
+                 'd0c11a5c1e57878c9b1b5d8753ecb1fd', 'f9a381c4fab5274262e3a79a49c46c17',
+                 'v', 'v', '813ab274df60a32d50ddeeb5b1d0ca01', 'authenticated'),
+                ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+                 'aea5da3473dd612f066e0e6fa3a76dd0', '7addf177418dea367bce655815915e61',
+                 'v', 'v', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'authenticated'),
+                ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)',
+                 '5323b0adb327f3d3a19c9bdca220922e', 'e0fb88d49063d1d5665b10d610c6a288',
+                 'v', 'v', '7aae20f9ed9251fe3e32530baaf32ddb', 'authenticated'),
+                ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)',
+                 'eabefae63edf3d957ed8a0ad5e10d1bd', '34edb5b2b6c827c5a8eb63f6b282bac2',
+                 'v', 'v', '61cbc7ff7cb5a849b6021cdca5012449', 'authenticated'),
+                ('public.validate_pipeline_template_areas(jsonb)',
+                 'd10799c81d59269ae5cd6bcd2a5e5d27', 'd3318ca7c597e81a15db2e2f0e34bd95',
+                 'i', 's', '0d286e56441a0a9e377719309b75a912', 'none')
+              ), state as (
+                select expected.*, routine.oid, routine.proowner, routine.proacl,
+                       routine.provolatile,
+                       md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) as source_md5,
+                       md5(jsonb_build_array(
+                         routine_schema.nspname,
+                         routine_language.lanname,
+                         pg_get_userbyid(routine.proowner),
+                         routine.prokind::text,
+                         format_type(routine.prorettype, null),
+                         routine.proretset,
+                         routine.pronargs,
+                         routine.pronargdefaults,
+                         coalesce(array_to_string(routine.proargnames, ','), ''),
+                         coalesce(array_to_string(routine.proargmodes, ','), ''),
+                         coalesce((
+                           select string_agg(
+                             format_type(argument_type.type_oid, null),
+                             ',' order by argument_type.ordinality
+                           )
+                           from unnest(routine.proallargtypes)
+                             with ordinality argument_type(type_oid, ordinality)
+                         ), ''),
+                         coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                         routine.proisstrict, routine.proleakproof,
+                         routine.prosecdef, routine.proparallel::text,
+                         routine.provariadic = 0, routine.procost::text,
+                         routine.prorows::text, routine.prosupport = 0,
+                         routine.probin is null, routine.prosqlbody is null,
+                         routine.protrftypes is null, routine.proconfig,
+                         routine.proacl is null
+                       )::text) as actual_contract_md5
+                from expected
+                left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+                left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                left join pg_language routine_language on routine_language.oid = routine.prolang
+              )
+              select count(oid) = 16
+                 and bool_and(
+                   source_md5 is not distinct from
+                     case when '$1' = 'pre' then pre_source_md5 else post_source_md5 end
+                   and provolatile::text is not distinct from
+                     case when '$1' = 'pre' then pre_volatility else post_volatility end
+                   and actual_contract_md5 is not distinct from contract_md5
+                   and proacl is not null
+                   and (select count(*) from aclexplode(proacl)) =
+                     case when execute_role = 'none' then 1 else 2 end
+                   and exists (
+                     select 1 from aclexplode(proacl) acl
+                     where acl.grantor = proowner and acl.grantee = proowner
+                       and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
+                   )
+                   and (
+                     execute_role = 'none'
+                     or exists (
+                       select 1 from aclexplode(proacl) acl
+                       where acl.grantor = proowner
+                         and acl.grantee = to_regrole(execute_role)::oid
+                         and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
+                     )
+                   )
+                   and not exists (
+                     select 1 from aclexplode(proacl) acl
+                     where acl.grantor <> proowner
+                        or acl.privilege_type <> 'EXECUTE'
+                        or acl.is_grantable
+                        or acl.grantee not in (
+                          proowner,
+                          case when execute_role = 'none' then proowner
+                               else to_regrole(execute_role)::oid end
+                        )
+                   )
+                   and not has_function_privilege('anon', signature, 'EXECUTE')
+                   and has_function_privilege('authenticated', signature, 'EXECUTE')
+                         is not distinct from (execute_role = 'authenticated')
+                   and has_function_privilege('service_role', signature, 'EXECUTE')
+                         is not distinct from (execute_role = 'service_role')
+                 )
+                 and (
+                   select count(*) = 16
+                   from pg_proc routine
+                   join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+                   where routine_schema.nspname = 'public'
+                     and routine.proname in (
+                       'agentos_list_agent_grants', 'agentos_export_project_config',
+                       'agentos_apply_project_config', 'record_claim_anchoring',
+                       'claim_provider_connect_session', 'normalize_bot_assignment_configuration',
+                       'capture_improvement_baseline', 'audit_factory_health',
+                       'validate_pipeline_template_areas', 'list_factory_command_routing_candidates',
+                       'submit_factory_command', 'assign_bots_to_project_checked',
+                       'update_bot_assignment_configuration_checked',
+                       'update_bot_assignment_checked', 'set_bot_assignment_execution_checked',
+                       'agentos_record_trigger_delivery'
+                     )
+                 )
+              from state;"
+          }
+
+
+          if [ "$(protected_repair_function_catalog_ready post)" != "t" ]; then
+            echo "::error::The protected 00900 ledger row exists but the exact repaired function source/catalog/ACL state drifted; broad push is forbidden."
+            exit 1
+          fi
+
+          PROTECTED_RECORD_ONLY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
+               '203f54d969fbc699304e780c1ad68a85', '17919dac57b41b75fe0793ad660063cc', 's', 'authenticated'),
+              ('public.list_factory_commands(uuid,integer,uuid)',
+               'ba62f4f5357cec647d3ff582107710a7', '6abaeb0d885d1335a6c4bb0029497051', 's', 'authenticated'),
+              ('public.normalize_phase1c_command()',
+               'cd28d70a40e860660461700926e97830', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.plan_phase1c_task_and_run()',
+               '2de7070bb9359ce7ad45516da2956a4b', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.queue_phase1c_run_for_task()',
+               '4737eba3e8490632fdd89c6d06fece82', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)',
+               'adb50eb74e1721274f23d0d69b79e2e8', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'none'),
+              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)',
+               '024c3aa1f74d976fb7a8a6d7138cd9fb', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'authenticated'),
+              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '8418fd26e9b1783315a93ffbf4543838', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'none'),
+              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '6008476137a77db33d220be4b14a9c8d', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               'c450eac6987cdd603d2d2511a9fa8833', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none'),
+              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '9dfdfc57f4f8b0965a89fefd927beb26', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '46cee8bec5e12fd4f087ecbeea0c9844', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.provolatile, routine.prosecdef, routine.proconfig,
+                     routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname, routine_language.lanname,
+                       pg_get_userbyid(routine.proowner), routine.prokind::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 12 and count(distinct oid) = 12
+               and bool_and(
+                 nspname = 'public' and lanname = 'plpgsql'
+                 and proowner = (select relowner from pg_class where oid = 'public.projects'::regclass)
+                 and actual_source_md5 = source_md5
+                 and actual_contract_md5 = contract_md5
+                 and provolatile::text = volatility and prosecdef
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and proacl is not null
+                 and (select count(*) from aclexplode(proacl)) =
+                       case when execute_role = 'authenticated' then 2 else 1 end
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and (execute_role = 'none' or exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable))
+                 and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.privilege_type <> 'EXECUTE' or acl.is_grantable or acl.grantee not in (proowner, case when execute_role = 'authenticated' then to_regrole('authenticated')::oid else proowner end))
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+                 and has_function_privilege('authenticated', signature, 'EXECUTE') is not distinct from (execute_role = 'authenticated')
+               )
+               and (select count(*) = 12 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in (
+                 'list_factory_command_routing_candidates', 'list_factory_commands', 'normalize_phase1c_command',
+                 'plan_phase1c_task_and_run', 'queue_phase1c_run_for_task',
+                 'submit_command', 'submit_command_phase1c_normalized_internal',
+                 'submit_factory_command', 'submit_factory_command_routing_internal',
+                 'record_provider_run', 'record_provider_run_phase1c_compatibility_internal',
+                 'record_provider_run_phase2a_internal'))
+            from state;")
+          if [ "$PROTECTED_RECORD_ONLY_READY" != "t" ]; then
+            echo "::error::The protected 01000 public/private wrapper source, catalog, overload, or ACL state drifted; broad push is forbidden."
+            exit 1
+          fi
+
+          PROTECTED_RECORD_ONLY_BOUNDARY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select exists (
+              select 1 from pg_class relation
+              where relation.oid = 'public.factory_record_only_submission_guards'::regclass
+                and relation.relkind = 'r' and relation.relrowsecurity and relation.relforcerowsecurity
+                and relation.relowner = (select relowner from pg_class where oid = 'public.projects'::regclass)
+                and relation.relacl is not null
+                and not has_table_privilege('anon', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+            )
+            and (select count(*) = 7 and bool_and(attribute.attacl is null)
+                   from pg_attribute attribute
+                  where attribute.attrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and attribute.attnum > 0 and not attribute.attisdropped)
+            and (select count(*) = 4 from pg_constraint constraint_row
+                  where constraint_row.conrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and constraint_row.contype in ('p','c'))
+            and not exists (select 1 from pg_policy policy where policy.polrelid = 'public.factory_record_only_submission_guards'::regclass)
+            and not exists (select 1 from pg_trigger trigger_row where trigger_row.tgrelid = 'public.factory_record_only_submission_guards'::regclass and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row where rule_row.ev_class = 'public.factory_record_only_submission_guards'::regclass and rule_row.rulename <> '_RETURN')
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0
+                    and routine.oid in (
+                      'public.queue_phase1c_run_for_task()'::regprocedure,
+                      'public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'::regprocedure))
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0)
+            and (select count(*) = 20 from pg_trigger trigger_row
+                  where trigger_row.tgrelid in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row
+                  where rule_row.ev_class in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and rule_row.rulename <> '_RETURN')
+            and not exists (
+              select 1 from public.agent_runs run
+              join public.tasks task on task.id = run.task_id
+              join public.commands command on command.id = task.command_id
+              where command.parameters ->> 'executionMode' = 'record_only'
+            );")
+          if [ "$PROTECTED_RECORD_ONLY_BOUNDARY" != "t" ]; then
+            echo "::error::The protected 01000 guard, producer, RLS/ACL, or zero-agent-run boundary drifted; broad push is forbidden."
+            exit 1
+          fi
+
+
+          PROTECTED_FOUNDATION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected_types(type_name, labels) as (values
+              ('agentos_network_mode', 'open,limited'),
+              ('agentos_skill_kind', 'prompt,file'),
+              ('agentos_repo_permission', 'git_read,git_write')
+            ), type_state as (
+              select expected_types.*, type_row.oid,
+                     string_agg(enum_row.enumlabel, ',' order by enum_row.enumsortorder) as actual_labels
+              from expected_types
+              left join pg_type type_row on type_row.typnamespace = 'public'::regnamespace
+                                        and type_row.typname = expected_types.type_name
+              left join pg_enum enum_row on enum_row.enumtypid = type_row.oid
+              group by expected_types.type_name, expected_types.labels, type_row.oid
+            ), expected_tables(table_name, policy_name) as (values
+              ('agentos_environments', 'agentos_environments_select_members'),
+              ('agentos_mcp_connections', 'agentos_mcp_select_members'),
+              ('agentos_skills', 'agentos_skills_select_members'),
+              ('agentos_agent_grants', 'agentos_agent_grants_select_members'),
+              ('agentos_agent_mcp_grants', 'agentos_agent_mcp_select_members'),
+              ('agentos_agent_skill_grants', 'agentos_agent_skill_select_members'),
+              ('agentos_agent_repo_grants', 'agentos_agent_repo_select_members'),
+              ('agentos_agent_filesystem_grants', 'agentos_agent_fs_select_members'),
+              ('agentos_agent_collaborators', 'agentos_agent_collaborator_select_members')
+            ), table_state as (
+              select expected_tables.*, relation.oid, relation.relowner, relation.relkind,
+                     relation.relrowsecurity, relation.relforcerowsecurity, relation.relacl,
+                     policy.oid as policy_oid, policy.polcmd, policy.polpermissive,
+                     policy.polroles, policy.polqual, policy.polwithcheck
+              from expected_tables
+              left join pg_class relation
+                on relation.relnamespace = 'public'::regnamespace
+               and relation.relname = expected_tables.table_name
+              left join pg_policy policy
+                on policy.polrelid = relation.oid
+               and policy.polname = expected_tables.policy_name
+            ), helper_state as (
+              select routine.oid, routine.proname,
+                     routine.proowner, routine.prokind, routine.provolatile,
+                     routine.prosecdef, routine.proconfig, routine.proacl,
+                     routine_language.lanname
+              from pg_proc routine
+              join pg_language routine_language on routine_language.oid = routine.prolang
+              where routine.oid in (
+                to_regprocedure('public.agentos_hosts_are_bare_hostnames(text[])'),
+                to_regprocedure('public.agentos_resolved_agent_grants(uuid)')
+              )
+            )
+            select (select count(oid) = 3 and bool_and(actual_labels = labels) from type_state)
+               and (select count(oid) = 9 and bool_and(
+                 relkind = 'r' and relrowsecurity and relforcerowsecurity
+                 and pg_get_userbyid(relowner) = 'postgres'
+                 and policy_oid is not null and polcmd = 'r' and polpermissive
+                 and polroles = array[to_regrole('authenticated')::oid]
+                 and polqual is not null and polwithcheck is null
+                 and has_table_privilege('authenticated', oid, 'SELECT')
+                 and not has_table_privilege('authenticated', oid, 'INSERT')
+                 and not has_table_privilege('authenticated', oid, 'UPDATE')
+                 and not has_table_privilege('authenticated', oid, 'DELETE')
+                 and not has_table_privilege('anon', oid, 'SELECT')
+                 and not has_table_privilege('service_role', oid, 'SELECT')
+                 and not exists (
+                   select 1 from aclexplode(relacl) acl
+                    where acl.grantor <> relowner
+                       or acl.grantee not in (relowner, to_regrole('authenticated')::oid)
+                       or acl.is_grantable
+                       or (acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type <> 'SELECT')
+                 )
+               ) from table_state)
+               and (select count(*) = 9 from pg_policy policy
+                    join pg_class relation on relation.oid = policy.polrelid
+                    where relation.relnamespace = 'public'::regnamespace
+                      and relation.relname in (
+                        'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                        'agentos_agent_grants', 'agentos_agent_mcp_grants',
+                        'agentos_agent_skill_grants', 'agentos_agent_repo_grants',
+                        'agentos_agent_filesystem_grants', 'agentos_agent_collaborators'
+                      ))
+               and (select count(oid) = 2 and bool_and(
+                 pg_get_userbyid(proowner) = 'postgres' and prokind = 'f'
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and (
+                   (proname = 'agentos_hosts_are_bare_hostnames'
+                    and lanname = 'sql' and provolatile = 'i' and not prosecdef)
+                   or
+                   (proname = 'agentos_resolved_agent_grants'
+                    and lanname = 'plpgsql' and provolatile = 's' and prosecdef
+                    and has_function_privilege('authenticated', oid, 'EXECUTE')
+                    and not has_function_privilege('anon', oid, 'EXECUTE')
+                    and not has_function_privilege('service_role', oid, 'EXECUTE'))
+                 )
+               ) from helper_state);")
+          if [ "$PROTECTED_FOUNDATION_READY" != "t" ]; then
+            echo "::error::The protected 00900 ledger row exists but its restored three-enum/nine-table/two-helper AgentOS catalog, RLS, policy, or ACL posture drifted; broad push is forbidden."
+            exit 1
+          fi
+
+
           PROTECTED_CATALOG_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             set search_path = pg_catalog;
             with expected_functions(signature, source_md5, contract_md5, volatility, execute_role) as (values

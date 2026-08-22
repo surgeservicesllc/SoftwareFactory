@@ -12,6 +12,7 @@ import {
   type RefusalCode as AssignmentRefusalCode,
   type RoutableAssignment,
 } from "@/lib/bots/assignment-routing";
+import { classifyFactoryCommandExecutionIdentity } from "@/lib/orchestration/plan";
 import { isWithinRiskCeiling, type RiskLevel } from "@/lib/risk";
 
 /**
@@ -234,11 +235,13 @@ function assignmentRefusal(
 }
 
 /**
- * Select one bot posting for a static Phase 1C draft-PR command.
+ * Select one bot posting for a factory command.
  *
  * Every property besides ordering is a gate.  Priority and headroom can order
  * eligible postings, but they can never compensate for a missing permission,
- * a low role ceiling, unavailable credentials, or a provider/model mismatch.
+ * a low role ceiling or unavailable credentials. The selected posting is the
+ * authoritative execution identity; its provider and effective model are
+ * persisted by the caller and rechecked by the atomic database submit.
  * Final ordering uses the assignment router's ordering policy, so this path
  * and the rest of the bot fabric share one deterministic tie-break policy.
  */
@@ -246,8 +249,6 @@ export function routeFactoryCommand(input: {
   readonly candidates: readonly FactoryCommandRoutingCandidate[];
   readonly pipelineTemplateKey: string;
   readonly effectiveRisk: RiskLevel;
-  readonly provider: string;
-  readonly model: string;
   /**
    * A same-key replay has to reach the atomic RPC: that boundary verifies the
    * immutable existing route before checking capacity. Every non-capacity
@@ -311,47 +312,43 @@ export function routeFactoryCommand(input: {
       continue;
     }
 
-    if (candidate.provider !== input.provider || candidate.model !== input.model) {
-      /*
-       * Name both halves and where to change one.
-       *
-       * "does not match the command's fixed execution provider and model" was
-       * true and useless: it named two internal concepts, neither of which
-       * appears on any screen, and left a person who had done everything
-       * right with nothing to act on. Only one worker claims this queue, so
-       * the mismatch is always concrete — this bot runs X, the executor runs
-       * Y — and saying which is the difference between a dead end and a fix.
-       */
-      const mismatch = candidate.provider !== input.provider
-        ? `runs on ${candidate.provider}, and this command executes on ${input.provider}`
-        : `is set to ${candidate.model}, and this command executes on ${input.model}`;
+    const executionMode = classifyFactoryCommandExecutionIdentity({
+      model: candidate.model,
+      provider: candidate.provider,
+    });
+    if (!executionMode) {
       refused.push(refusal(
         candidate,
         "PROVIDER_MODEL_MISMATCH",
-        `${candidate.botName} ${mismatch}. Change the bot's model in Configure Bot Settings, `
-          + "or assign a bot that already runs it.",
+        "This bot's provider and model are not supported for factory command recording.",
       ));
       continue;
     }
 
     const assignment = routable(candidate);
-    const pullRequest = routeWorkToAssignedBot({
-      assignments: [assignment],
-      work: { kind: "pull_request" },
-    });
-    const pullRequestOnlyHitCapacity = pullRequest.refused.length === 1
-      && pullRequest.refused[0]?.code === "AT_CONCURRENCY_LIMIT";
-    if (
-      !pullRequest.selected
-      && !(input.deferCapacityToAtomicSubmit && pullRequestOnlyHitCapacity)
-    ) {
-      refused.push(assignmentRefusal(candidate, pullRequest));
-      continue;
+    const permissionAssignment = executionMode === "record_only"
+      ? { ...assignment, inFlight: 0 }
+      : assignment;
+    let capacityOnlyRefusal = false;
+    if (executionMode === "manual") {
+      const pullRequest = routeWorkToAssignedBot({
+        assignments: [permissionAssignment],
+        work: { kind: "pull_request" },
+      });
+      const pullRequestOnlyHitCapacity = pullRequest.refused.length === 1
+        && pullRequest.refused[0]?.code === "AT_CONCURRENCY_LIMIT";
+      if (
+        !pullRequest.selected
+        && !(input.deferCapacityToAtomicSubmit && pullRequestOnlyHitCapacity)
+      ) {
+        refused.push(assignmentRefusal(candidate, pullRequest));
+        continue;
+      }
+      capacityOnlyRefusal = !pullRequest.selected && pullRequestOnlyHitCapacity;
     }
-    let capacityOnlyRefusal = !pullRequest.selected && pullRequestOnlyHitCapacity;
 
     const pipeline = routeWorkToAssignedBot({
-      assignments: [assignment],
+      assignments: [permissionAssignment],
       work: {
         kind: "pipeline_run",
         pipelineId: input.pipelineTemplateKey,
@@ -369,7 +366,11 @@ export function routeFactoryCommand(input: {
     // `hasCapacity` is the database's authoritative verdict and may grow to
     // include gates that are not expressible in the local assignment policy.
     // The local router already checked the assignment count; strictest wins.
-    if (!candidate.hasCapacity && !input.deferCapacityToAtomicSubmit) {
+    if (
+      executionMode === "manual"
+      && !candidate.hasCapacity
+      && !input.deferCapacityToAtomicSubmit
+    ) {
       refused.push(refusal(
         candidate,
         "DATABASE_CAPACITY_REFUSED",
@@ -378,7 +379,7 @@ export function routeFactoryCommand(input: {
       continue;
     }
 
-    capacityOnlyRefusal ||= !candidate.hasCapacity;
+    capacityOnlyRefusal ||= executionMode === "manual" && !candidate.hasCapacity;
 
     if (capacityOnlyRefusal) capacityDeferred.push(candidate);
     else eligible.push(candidate);
@@ -395,13 +396,13 @@ export function routeFactoryCommand(input: {
     });
   }
 
-  const routableEligible = selectionPool.map(routable);
-  const selectedId = eligible.length === 0
-    ? orderRoutableAssignments(routableEligible)[0]?.assignmentId
-    : routeWorkToAssignedBot({
-        assignments: routableEligible,
-        work: { kind: "pull_request" },
-      }).selected?.assignmentId;
+  const routableEligible = selectionPool.map((candidate) => {
+    const assignment = routable(candidate);
+    return classifyFactoryCommandExecutionIdentity(candidate) === "record_only"
+      ? { ...assignment, inFlight: 0 }
+      : assignment;
+  });
+  const selectedId = orderRoutableAssignments(routableEligible)[0]?.assignmentId;
   const selected = selectionPool.find((candidate) => candidate.assignmentId === selectedId);
   if (!selected) {
     throw new FactoryCommandCandidateProjectionError(

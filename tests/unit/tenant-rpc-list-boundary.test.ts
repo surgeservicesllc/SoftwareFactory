@@ -43,6 +43,17 @@ async function respond(query = "") {
   });
 }
 
+async function respondWithFallback(query = "") {
+  return tenantRpcListResponse<{ id: string }>({
+    request: request(query),
+    rpc: "list_factory_tasks",
+    fallbackRpc: "list_tasks",
+    unavailableCode: "tasks_unavailable",
+    unavailableMessage: "The backlog could not be loaded.",
+    shape: (rows) => ({ tasks: rows }),
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   harness.rpc.mockResolvedValue({ data: [{ id: "task-1" }], error: null });
@@ -96,6 +107,40 @@ describe("tenant RPC list server boundary", () => {
 
     expect(harness.rpc).toHaveBeenCalledExactlyOnceWith("list_tasks", {
       p_limit: 50,
+      p_organization_id: organizationId,
+    });
+  });
+
+  it("falls back once only when PostgREST has not discovered the additive RPC", async () => {
+    harness.rpc
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST202", message: "missing" } })
+      .mockResolvedValueOnce({ data: [{ id: "legacy-task" }], error: null });
+
+    const response = await respondWithFallback("?limit=7");
+
+    expect(response.status).toBe(200);
+    expect(harness.rpc.mock.calls).toEqual([
+      ["list_factory_tasks", { p_limit: 7, p_organization_id: organizationId }],
+      ["list_tasks", { p_limit: 7, p_organization_id: organizationId }],
+    ]);
+    await expect(response.json()).resolves.toEqual({
+      activeOrganizationId: organizationId,
+      tasks: [{ id: "legacy-task" }],
+    });
+    expectNoStore(response);
+  });
+
+  it("never falls back on an authorization or database failure", async () => {
+    harness.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+    });
+
+    const response = await respondWithFallback("?limit=7");
+
+    expect(response.status).toBe(403);
+    expect(harness.rpc).toHaveBeenCalledExactlyOnceWith("list_factory_tasks", {
+      p_limit: 7,
       p_organization_id: organizationId,
     });
   });

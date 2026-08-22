@@ -22,7 +22,11 @@ import {
   parseFactoryCommandRoutingCandidates,
   routeFactoryCommand,
 } from "@/lib/orchestration/factory-command-routing";
-import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import {
+  classifyFactoryCommandExecutionIdentity,
+  createFactoryCommandExecutionIntent,
+  createPhase1CExecutionPlan,
+} from "@/lib/orchestration/plan";
 import { evaluateConnectionIdentity } from "@/lib/connections/routable-candidates";
 import {
   createGitHubInstallationToken,
@@ -30,7 +34,6 @@ import {
 } from "@/lib/github/client";
 import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
 import { getGitHubBranchReference } from "@/lib/github/repository";
-import { tenantRpcListResponse } from "@/lib/server/tenant-list";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -72,6 +75,7 @@ const submissionResultSchema = z.object({
 });
 
 const replayCommandParametersSchema = z.object({
+  executionMode: z.enum(["manual", "record_only"]),
   provider: z.string().trim().min(1).max(40),
   model: z.string().trim().min(1).max(128),
   repositoryBinding: z.object({
@@ -262,7 +266,7 @@ export async function POST(request: Request) {
         {
           error: {
             code: "owner_required",
-            message: "Only the organization owner can start a Codex engineering command.",
+            message: "Only the organization owner can record a factory engineering command.",
           },
         },
         { status: 403 },
@@ -313,8 +317,14 @@ export async function POST(request: Request) {
       if (replay) {
         const snapshot = replay.routing_snapshot;
         const parameters = replay.command_parameters;
+        const replayExecutionMode = classifyFactoryCommandExecutionIdentity({
+          model: snapshot.assignment.model,
+          provider: snapshot.assignment.provider,
+        });
         if (
-          snapshot.project.organizationId !== activeOrganization.id
+          !replayExecutionMode
+          || parameters.executionMode !== replayExecutionMode
+          || snapshot.project.organizationId !== activeOrganization.id
           || snapshot.project.projectId !== parsed.data.projectId
           || replay.project_pipeline_id !== snapshot.pipeline.selectionId
           || replay.pipeline_template_key !== snapshot.pipeline.templateKey
@@ -339,6 +349,8 @@ export async function POST(request: Request) {
               started: false,
               message: replay.requires_owner_approval
                 ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
+                : replayExecutionMode === "record_only"
+                  ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
                 : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
               workerDispatch: "not_applicable",
             },
@@ -350,6 +362,7 @@ export async function POST(request: Request) {
               connectionRouting: { mode: "persisted_replay" },
               dependencyTaskIds,
               effectiveRisk: snapshot.command.effectiveRisk,
+              executionMode: replayExecutionMode,
               model: snapshot.assignment.model,
               provider: snapshot.assignment.provider,
               repository: replay.repository_full_name ?? "connected repository",
@@ -490,8 +503,6 @@ export async function POST(request: Request) {
       candidates: liveRoutingCandidates,
       pipelineTemplateKey: parsed.data.pipelineTemplateKey,
       effectiveRisk: riskAssessment.effectiveRisk,
-      provider: executionPlan.provider,
-      model: executionPlan.model,
       deferCapacityToAtomicSubmit: parsed.data.idempotencyKey !== undefined,
     });
     if (factoryRouting.outcome === "REFUSED") {
@@ -506,6 +517,16 @@ export async function POST(request: Request) {
       });
     }
     const selectedAssignment = factoryRouting.selected;
+    const commandExecution = createFactoryCommandExecutionIntent({
+      model: selectedAssignment.model,
+      phase1CPlan: executionPlan,
+      provider: selectedAssignment.provider,
+    });
+    if (!commandExecution) {
+      return routingSetupRefusal(
+        "The selected bot's provider and model are not supported for factory command recording.",
+      );
+    }
 
     // Phase 2D seam: the Identity Router is consulted where work is created.
     // A Phase 1C command exercises `repository.write` — the worker pushes a
@@ -621,10 +642,10 @@ export async function POST(request: Request) {
       budget: executionPlan.budget,
       commandType: parsed.data.commandType,
       dependencyTaskIds,
-      executionMode: "manual",
-      model: executionPlan.model,
-      plan: executionPlan.plan,
-      provider: executionPlan.provider,
+      executionMode: commandExecution.executionMode,
+      model: commandExecution.model,
+      plan: commandExecution.plan,
+      provider: commandExecution.provider,
       repositoryBinding: {
         appId: target.app_id,
         baseBranch: target.base_branch,
@@ -706,8 +727,8 @@ export async function POST(request: Request) {
       || snapshot.assignment.assignmentId !== result.assignment_id
       || snapshot.assignment.botId !== result.bot_id
       || snapshot.assignment.roleId !== result.role_id
-      || snapshot.assignment.provider !== executionPlan.provider
-      || snapshot.assignment.model !== executionPlan.model
+      || snapshot.assignment.provider !== selectedAssignment.provider
+      || snapshot.assignment.model !== selectedAssignment.model
       || (snapshot.command.effectiveRisk === "red" && !result.requires_owner_approval)
     ) {
       return unavailableRead(
@@ -730,6 +751,8 @@ export async function POST(request: Request) {
           started: false,
           message: result.requires_owner_approval
             ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
+            : commandExecution.executionMode === "record_only"
+              ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
             : "Persisted only. This request did not dispatch a worker or change autonomy.",
           workerDispatch,
         },
@@ -764,6 +787,7 @@ export async function POST(request: Request) {
           },
           dependencyTaskIds,
           effectiveRisk: snapshot.command.effectiveRisk,
+          executionMode: commandExecution.executionMode,
           model: snapshot.assignment.model,
           provider: snapshot.assignment.provider,
           repository: target.repository_full_name,
@@ -808,7 +832,19 @@ type CommandRow = {
   submitted_at: string;
   completed_at: string | null;
   project_name: string | null;
+  execution_mode?: unknown;
 };
+
+type CommandExecutionMode = "manual" | "record_only" | "unknown";
+
+const commandListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  projectId: z.string().uuid().optional(),
+}).strict();
+
+function commandExecutionMode(value: unknown): CommandExecutionMode {
+  return value === "manual" || value === "record_only" ? value : "unknown";
+}
 
 /**
  * Lists the commands the caller's organization has saved. `parameters` is
@@ -816,23 +852,57 @@ type CommandRow = {
  * has no reason to travel back to the browser in a list view.
  */
 export async function GET(request: Request) {
-  return tenantRpcListResponse<CommandRow>({
-    request,
-    rpc: "list_commands",
-    unavailableCode: "commands_unavailable",
-    unavailableMessage: "Saved requests could not be loaded.",
-    shape: (rows) => ({
-        commands: rows.map((row) => ({
-          id: row.id,
-          prompt: row.prompt,
-          risk: row.requested_risk,
-          status: row.status,
-          submittedAt: row.submitted_at,
-          completedAt: row.completed_at,
-          project: row.project_id
-            ? { id: row.project_id, name: row.project_name ?? "Project" }
-            : null,
-        })),
-      }),
-  });
+  try {
+    const url = new URL(request.url);
+    const parsed = commandListQuerySchema.safeParse({
+      limit: url.searchParams.get("limit") ?? undefined,
+      projectId: url.searchParams.get("projectId") ?? undefined,
+    });
+    if (!parsed.success) {
+      return jsonNoStore(
+        { error: { code: "invalid_query", message: "The query is invalid." } },
+        { status: 400 },
+      );
+    }
+
+    const context = await requireActiveOrganization();
+    let result = await context.client.rpc("list_factory_commands", {
+      p_limit: parsed.data.limit,
+      p_organization_id: context.activeOrganization.id,
+      p_project_id: parsed.data.projectId ?? null,
+    });
+    if (result.error?.code === "PGRST202") {
+      result = await context.client.rpc("list_commands", {
+        p_limit: parsed.data.limit,
+        p_organization_id: context.activeOrganization.id,
+      });
+    }
+    if (result.error) return databaseErrorResponse(result.error);
+
+    const rows = ((result.data ?? []) as CommandRow[]).filter((row) => (
+      parsed.data.projectId === undefined || row.project_id === parsed.data.projectId
+    ));
+    return jsonNoStore({
+      activeOrganizationId: context.activeOrganization.id,
+      commands: rows.map((row) => ({
+        id: row.id,
+        prompt: row.prompt,
+        risk: row.requested_risk,
+        status: row.status,
+        executionMode: commandExecutionMode(row.execution_mode),
+        submittedAt: row.submitted_at,
+        completedAt: row.completed_at,
+        project: row.project_id
+          ? { id: row.project_id, name: row.project_name ?? "Project" }
+          : null,
+      })),
+    });
+  } catch (error) {
+    const boundaryResponse = supabaseBoundaryErrorResponse(error);
+    if (boundaryResponse) return boundaryResponse;
+    return jsonNoStore(
+      { error: { code: "commands_unavailable", message: "Saved requests could not be loaded." } },
+      { status: 500 },
+    );
+  }
 }

@@ -339,9 +339,10 @@ export const COMMANDS = [
     id: "dddddddd-1111-4111-8111-111111111111",
     prompt: LONG_TITLE,
     risk: "GREEN",
-    status: "succeeded",
+    status: "queued",
+    executionMode: "record_only",
     submittedAt: "2026-08-16T09:00:00.000Z",
-    completedAt: "2026-08-16T09:42:00.000Z",
+    completedAt: null,
     project: { id: PROJECT_ID, name: "E-Commerce Platform" },
   },
 ];

@@ -79,6 +79,8 @@ describe("durable command to factory routing", () => {
   let assignmentId = "";
   let botId = "";
   let roleId = "";
+  let anthropicAssignmentId = "";
+  let anthropicBotId = "";
   let firstSubmission: Submission;
 
   async function asUser(userId: string) {
@@ -359,6 +361,37 @@ describe("durable command to factory routing", () => {
       }])],
     );
     assignmentId = assignment.rows[0].id;
+
+    const anthropicBot = await db.query<{ id: string }>(
+      `select id from public.register_bot(
+         $1::uuid, 'Synthetic Claude Recorder', 'anthropic'::public.bot_provider,
+         'claude-opus-5', 'ANTHROPIC_API_KEY', null,
+         'Synthetic record-only routing bot.'
+       )`,
+      [organizationId],
+    );
+    anthropicBotId = anthropicBot.rows[0].id;
+    await markBotReady(anthropicBotId, "Synthetic Anthropic configuration check passed.");
+
+    const anthropicAssignment = await db.query<{ id: string }>(
+      "select id from public.assign_bots_to_project_checked($1::uuid, $2::uuid, $3::jsonb)",
+      [organizationId, projectId, JSON.stringify([{
+        bot_id: anthropicBotId,
+        role_id: roleId,
+        preset: "developer",
+        responsibilities: ["Record selected pipeline work without execution"],
+        repository_access: "read",
+        can_open_pull_request: false,
+        pipeline_access: "assigned",
+        requires_human_approval: true,
+        max_concurrent_tasks: 1,
+        priority: 2,
+        expected_assignment_id: null,
+        expected_project_id: null,
+        expected_revision: null,
+      }])],
+    );
+    anthropicAssignmentId = anthropicAssignment.rows[0].id;
   }, 240_000);
 
   afterAll(async () => {
@@ -370,8 +403,8 @@ describe("durable command to factory routing", () => {
       "select * from public.list_factory_command_routing_candidates($1, $2, $3)",
       [organizationId, projectId, "production_readiness"],
     );
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]).toMatchObject({
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.find((row) => row.assignment_id === assignmentId)).toMatchObject({
       project_pipeline_id: primarySelectionId,
       pipeline_template_key: "production_readiness",
       assignment_id: assignmentId,
@@ -388,12 +421,13 @@ describe("durable command to factory routing", () => {
       max_concurrent_tasks: 1,
       has_capacity: true,
     });
-    expect(result.rows[0].assignment_config).toMatchObject({
+    const executionCandidate = result.rows.find((row) => row.assignment_id === assignmentId);
+    expect(executionCandidate?.assignment_config).toMatchObject({
       repositoryAccess: "write",
       canOpenPullRequest: true,
       pipelineAccess: "assigned",
     });
-    expect(result.rows[0].assigned_pipeline_keys).toEqual([
+    expect(executionCandidate?.assigned_pipeline_keys).toEqual([
       "production_readiness",
       "security_audit",
     ]);
@@ -823,6 +857,625 @@ describe("durable command to factory routing", () => {
     await asOwner();
   });
 
+  it("rejects cross-tenant guessed assignments before any privileged read, lock, or guard write", async () => {
+    const bogusAssignmentId = "00000000-0000-4000-8000-00000000ffff";
+    const guessedKey = "cross-tenant-guessed-assignment";
+    const bogusKey = "cross-tenant-bogus-assignment";
+
+    await asSuperuser();
+    const before = await db.query<{
+      assignment_revision: number;
+      assignment_updated_at: string;
+      bot_revision: number;
+      bot_updated_at: string;
+    }>(
+      `select assignment.revision as assignment_revision,
+              assignment.updated_at::text as assignment_updated_at,
+              bot.revision as bot_revision,
+              bot.updated_at::text as bot_updated_at
+       from public.bot_assignments assignment
+       join public.bots bot on bot.id = assignment.bot_id
+        and bot.organization_id = assignment.organization_id
+       where assignment.id = $1`,
+      [anthropicAssignmentId],
+    );
+    await asOutsider();
+
+    async function rejectedOwnerBoundary(targetAssignmentId: string, key: string) {
+      try {
+        await db.query(
+          `select * from public.submit_factory_command(
+             $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+             'green'::public.risk_level, $6::jsonb, $7::text
+           )`,
+          [
+            organizationId,
+            projectId,
+            secondSelectionId,
+            targetAssignmentId,
+            "Attempt a cross-tenant factory command.",
+            commandParameters(),
+            key,
+          ],
+        );
+        throw new Error("cross-tenant factory submission unexpectedly succeeded");
+      } catch (error) {
+        const databaseError = error as { code?: string; message?: string };
+        expect(databaseError).toMatchObject({
+          code: "42501",
+          message: "only an organization owner may submit a command",
+        });
+        return { code: databaseError.code, message: databaseError.message };
+      }
+    }
+
+    const guessedError = await rejectedOwnerBoundary(anthropicAssignmentId, guessedKey);
+    const bogusError = await rejectedOwnerBoundary(bogusAssignmentId, bogusKey);
+    expect(guessedError).toEqual(bogusError);
+
+    await asSuperuser();
+    const after = await db.query<{
+      assignment_revision: number;
+      assignment_updated_at: string;
+      bot_revision: number;
+      bot_updated_at: string;
+      command_count: number;
+      guard_count: number;
+    }>(
+      `select assignment.revision as assignment_revision,
+              assignment.updated_at::text as assignment_updated_at,
+              bot.revision as bot_revision,
+              bot.updated_at::text as bot_updated_at,
+              (select count(*)::integer from public.commands command
+               where command.idempotency_key in ($2, $3)) as command_count,
+              (select count(*)::integer
+               from public.factory_record_only_submission_guards) as guard_count
+       from public.bot_assignments assignment
+       join public.bots bot on bot.id = assignment.bot_id
+        and bot.organization_id = assignment.organization_id
+       where assignment.id = $1`,
+      [anthropicAssignmentId, guessedKey, bogusKey],
+    );
+    expect(after.rows[0]).toMatchObject({
+      ...before.rows[0],
+      command_count: 0,
+      guard_count: 0,
+    });
+    await asOwner();
+  });
+
+  it("locks an Anthropic posting into a durable record-only queue with no executable run", async () => {
+    const forgedManualParameters = commandParameters();
+    const anthropicPrompt =
+      "Fix the routed interface bug and add a focused regression test.";
+    const submitted = await db.query<Submission>(
+      `select * from public.submit_factory_command(
+         $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+         'green'::public.risk_level, $6::jsonb, $7::text
+       )`,
+      [
+        organizationId,
+        projectId,
+        secondSelectionId,
+        anthropicAssignmentId,
+        anthropicPrompt,
+        forgedManualParameters,
+        "factory-anthropic-record-only-1",
+      ],
+    );
+
+    expect(submitted.rows[0]).toMatchObject({
+      command_state: "queued",
+      task_state: "queued",
+      was_created: true,
+      project_pipeline_id: secondSelectionId,
+      assignment_id: anthropicAssignmentId,
+      bot_id: anthropicBotId,
+      routing_snapshot: {
+        assignment: {
+          assignmentId: anthropicAssignmentId,
+          botId: anthropicBotId,
+          provider: "anthropic",
+          model: "claude-opus-5",
+        },
+      },
+    });
+
+    const replayed = await db.query<Submission>(
+      `select * from public.submit_factory_command(
+         $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+         'green'::public.risk_level, $6::jsonb, $7::text
+       )`,
+      [
+        organizationId,
+        projectId,
+        secondSelectionId,
+        anthropicAssignmentId,
+        anthropicPrompt,
+        forgedManualParameters,
+        "factory-anthropic-record-only-1",
+      ],
+    );
+    expect(replayed.rows[0]).toMatchObject({
+      command_id: submitted.rows[0].command_id,
+      task_id: submitted.rows[0].task_id,
+      route_id: submitted.rows[0].route_id,
+      was_created: false,
+    });
+
+    await expect(
+      db.query(
+        `select * from public.submit_factory_command(
+           $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+           'green'::public.risk_level, $6::jsonb, $7::text
+         )`,
+        [
+          organizationId,
+          projectId,
+          secondSelectionId,
+          anthropicAssignmentId,
+          `${anthropicPrompt} Changed intent.`,
+          forgedManualParameters,
+          "factory-anthropic-record-only-1",
+        ],
+      ),
+    ).rejects.toThrow(/idempotency key was already used for a different command/i);
+
+    await expect(
+      submit(
+        secondSelectionId,
+        assignmentId,
+        "factory-anthropic-record-only-1",
+        anthropicPrompt,
+      ),
+    ).rejects.toThrow(/idempotency key was already used for a different command/i);
+
+    await asSuperuser();
+    const evidence = await db.query<{
+      assigned_agent_id: string | null;
+      command_state: string;
+      guard_count: number;
+      parameters: Record<string, unknown>;
+      route_count: number;
+      run_count: number;
+      task_state: string;
+    }>(
+      `select command.status::text as command_state,
+              task.status::text as task_state,
+              task.assigned_agent_id,
+              command.parameters,
+              (select count(*)::integer from public.factory_command_routes route
+               where route.command_id = command.id) as route_count,
+              (select count(*)::integer from public.agent_runs run
+               where run.command_id = command.id) as run_count,
+              (select count(*)::integer
+               from public.factory_record_only_submission_guards) as guard_count
+       from public.commands command
+       join public.tasks task on task.command_id = command.id
+        and task.organization_id = command.organization_id
+       where command.id = $1`,
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0]).toMatchObject({
+      command_state: "queued",
+      task_state: "queued",
+      assigned_agent_id: null,
+      route_count: 1,
+      run_count: 0,
+      guard_count: 0,
+      parameters: {
+        provider: "anthropic",
+        model: "claude-opus-5",
+        executionMode: "record_only",
+        plan: {
+          requiresDraftPullRequest: false,
+          stages: ["record"],
+          workflow: "factory_record_only",
+        },
+      },
+    });
+    expect(evidence.rows[0].parameters).not.toHaveProperty(
+      "_factoryRecordOnlyAuthorization",
+    );
+
+    const providerAgent = await db.query<{ id: string }>(
+      `select id from public.agents
+       where organization_id = $1
+       order by created_at asc, id asc
+       limit 1`,
+      [organizationId],
+    );
+    await asOwner();
+
+    await expect(
+      db.query(
+        `select routing_decision_id, agent_run_id
+         from public.record_provider_run(
+           $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+           'yellow'::public.risk_level, $6::text, $7::text, $8::text,
+           $9::text, $10::text, $11::text, $12::jsonb, $13::jsonb,
+           $14::text, 'succeeded'::public.run_status, $15::text,
+           $16::jsonb, $17::jsonb, $18::jsonb, $19::integer,
+           $20::text, $21::jsonb
+         )`,
+        [
+          organizationId,
+          projectId,
+          submitted.rows[0].task_id,
+          providerAgent.rows[0].id,
+          "implementation_review",
+          "anthropic",
+          "phase2a-routing-v1",
+          "ROUTED",
+          "AUTO_SCORE",
+          "anthropic",
+          "claude-opus-5",
+          JSON.stringify([{ code: "SELECTED", provider: "anthropic" }]),
+          JSON.stringify([{ provider: "anthropic", eligible: true }]),
+          null,
+          "forbidden_record_only_run",
+          JSON.stringify({ taskKind: "implementation_review" }),
+          JSON.stringify({ summary: "This must never be recorded." }),
+          JSON.stringify({ input_tokens: 1, output_tokens: 1 }),
+          1,
+          null,
+          JSON.stringify([{ type: "run_created", message: "Must not persist." }]),
+        ],
+      ),
+    ).rejects.toMatchObject({
+      code: "55000",
+      message: expect.stringMatching(/record-only tasks cannot create provider runs/i),
+    });
+
+    await asSuperuser();
+    const bypassEvidence = await db.query<{ decision_count: number; run_count: number }>(
+      `select
+         (select count(*)::integer from public.provider_routing_decisions decision
+          where decision.task_id = $1) as decision_count,
+         (select count(*)::integer from public.agent_runs run
+          where run.task_id = $1) as run_count`,
+      [submitted.rows[0].task_id],
+    );
+    expect(bypassEvidence.rows[0]).toEqual({ decision_count: 0, run_count: 0 });
+    await asOwner();
+
+    for (const sequence of [2, 3]) {
+      const repeated = await db.query<Submission>(
+        `select * from public.submit_factory_command(
+           $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+           'green'::public.risk_level, $6::jsonb, $7::text
+         )`,
+        [
+          organizationId,
+          projectId,
+          secondSelectionId,
+          anthropicAssignmentId,
+          `Fix routed interface defect ${sequence} and add a focused regression test.`,
+          forgedManualParameters,
+          `factory-anthropic-record-only-${sequence}`,
+        ],
+      );
+      expect(repeated.rows[0]).toMatchObject({
+        command_state: "queued",
+        task_state: "queued",
+        was_created: true,
+        assignment_id: anthropicAssignmentId,
+      });
+    }
+
+    const candidates = await db.query<Candidate>(
+      "select * from public.list_factory_command_routing_candidates($1, $2, $3)",
+      [organizationId, projectId, "security_audit"],
+    );
+    expect(
+      candidates.rows.find((row) => row.assignment_id === anthropicAssignmentId),
+    ).toMatchObject({
+      in_flight: 0,
+      max_concurrent_tasks: 1,
+      has_capacity: true,
+    });
+
+    await asSuperuser();
+    const repeatedEvidence = await db.query<{ route_count: number; run_count: number }>(
+      `select
+         (select count(*)::integer from public.factory_command_routes route
+          where route.assignment_id = $1) as route_count,
+         (select count(*)::integer from public.agent_runs run
+          join public.commands command on command.id = run.command_id
+           and command.organization_id = run.organization_id
+          where command.parameters ->> 'executionMode' = 'record_only') as run_count`,
+      [anthropicAssignmentId],
+    );
+    expect(repeatedEvidence.rows[0]).toEqual({ route_count: 3, run_count: 0 });
+    await asOwner();
+  });
+
+  it("keeps direct unsupported Anthropic execution rejected outside the factory lock", async () => {
+    const parameters = JSON.parse(commandParameters()) as Record<string, unknown>;
+    parameters.provider = "anthropic";
+    parameters.model = "claude-opus-5";
+    parameters.executionMode = "record_only";
+    parameters.plan = {
+      requiresDraftPullRequest: false,
+      stages: ["record"],
+      workflow: "factory_record_only",
+    };
+
+    await expect(
+      db.query(
+        `select * from public.submit_command(
+           $1::uuid, 'Record a direct unsupported Anthropic command.',
+           'green'::public.risk_level, $2::jsonb, $3::text
+         )`,
+        [projectId, JSON.stringify(parameters), "direct-anthropic-rejected-1"],
+      ),
+    ).rejects.toMatchObject({
+      code: "22023",
+      message: expect.stringMatching(/execution configuration is not supported/i),
+    });
+
+    await asSuperuser();
+    const persisted = await db.query<{ total: number }>(
+      `select count(*)::integer as total from public.commands
+       where idempotency_key = 'direct-anthropic-rejected-1'`,
+    );
+    expect(persisted.rows[0].total).toBe(0);
+    await asOwner();
+  });
+
+  it("keeps every final agent_run insert producer private", async () => {
+    await asSuperuser();
+    const paths = await db.query<{
+      authenticated_can_execute: boolean;
+      function_name: string;
+      service_can_execute: boolean;
+    }>(
+      `select procedure.proname as function_name,
+              pg_catalog.has_function_privilege(
+                'authenticated', procedure.oid, 'EXECUTE'
+              ) as authenticated_can_execute,
+              pg_catalog.has_function_privilege(
+                'service_role', procedure.oid, 'EXECUTE'
+              ) as service_can_execute
+       from pg_catalog.pg_proc procedure
+       join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+       where namespace.nspname = 'public'
+         and pg_catalog.strpos(
+           pg_catalog.lower(procedure.prosrc),
+           'insert into public.agent_runs'
+         ) > 0
+       order by procedure.proname`,
+    );
+    expect(paths.rows).toEqual([
+      {
+        function_name: "queue_phase1c_run_for_task",
+        authenticated_can_execute: false,
+        service_can_execute: false,
+      },
+      {
+        function_name: "record_provider_run_phase2a_internal",
+        authenticated_can_execute: false,
+        service_can_execute: false,
+      },
+    ]);
+    await asOwner();
+  });
+
+  it("accepts the published 128-character Anthropic model boundary and rejects 129", async () => {
+    const boundaryModel = "m".repeat(128);
+    await asSuperuser();
+    let revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [anthropicAssignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::text, null
+       )`,
+      [organizationId, anthropicAssignmentId, projectId, revision, boundaryModel],
+    );
+
+    const submitted = await submit(
+      secondSelectionId,
+      anthropicAssignmentId,
+      "factory-anthropic-model-boundary-128",
+      "Record a regression test for the longest supported Anthropic model identifier.",
+    );
+    expect(submitted.rows[0].routing_snapshot).toMatchObject({
+      assignment: { model: boundaryModel, provider: "anthropic" },
+    });
+
+    await asSuperuser();
+    const evidence = await db.query<{ run_count: number }>(
+      `select count(*)::integer as run_count
+         from public.agent_runs
+        where command_id = $1::uuid`,
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0].run_count).toBe(0);
+    revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [anthropicAssignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await expect(
+      db.query(
+        `select * from public.set_bot_assignment_execution_checked(
+           $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::text, null
+         )`,
+        [organizationId, anthropicAssignmentId, projectId, revision, "m".repeat(129)],
+      ),
+    ).rejects.toThrow(/model must be a plain identifier of up to 128 characters/i);
+
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, ''::text, null
+       )`,
+      [organizationId, anthropicAssignmentId, projectId, revision],
+    );
+  });
+
+  it("records an alternate OpenAI model from the selected posting with zero runs", async () => {
+    await asSuperuser();
+    let revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [assignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, 'gpt-4.1'::text, null
+       )`,
+      [organizationId, assignmentId, projectId, revision],
+    );
+
+    const submitted = await submit(
+      secondSelectionId,
+      assignmentId,
+      "factory-openai-alternate-model-record-only",
+      "Record a regression test for the posting's alternate OpenAI model.",
+    );
+    expect(submitted.rows[0].routing_snapshot).toMatchObject({
+      assignment: { model: "gpt-4.1", provider: "openai" },
+    });
+
+    await asSuperuser();
+    const evidence = await db.query<{ run_count: number }>(
+      "select count(*)::integer as run_count from public.agent_runs where command_id = $1::uuid",
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0].run_count).toBe(0);
+    revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [assignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, ''::text, null
+       )`,
+      [organizationId, assignmentId, projectId, revision],
+    );
+  });
+
+  it("keeps Anthropic RED record-only work awaiting approval with zero runs across replay", async () => {
+    const forgedManualParameters = commandParameters();
+    const idempotencyKey = "factory-anthropic-red-record-only-1";
+    const submitted = await db.query<Submission>(
+      `select * from public.submit_factory_command(
+         $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+         'green'::public.risk_level, $6::jsonb, $7::text
+       )`,
+      [
+        organizationId,
+        projectId,
+        secondSelectionId,
+        anthropicAssignmentId,
+        securityPrompt,
+        forgedManualParameters,
+        idempotencyKey,
+      ],
+    );
+    expect(submitted.rows[0]).toMatchObject({
+      command_state: "awaiting_approval",
+      task_state: "awaiting_approval",
+      requires_owner_approval: true,
+      was_created: true,
+      project_pipeline_id: secondSelectionId,
+      assignment_id: anthropicAssignmentId,
+      bot_id: anthropicBotId,
+      routing_snapshot: {
+        command: { effectiveRisk: "red" },
+        assignment: {
+          assignmentId: anthropicAssignmentId,
+          botId: anthropicBotId,
+          provider: "anthropic",
+          model: "claude-opus-5",
+        },
+      },
+    });
+
+    const replayed = await db.query<Submission>(
+      `select * from public.submit_factory_command(
+         $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
+         'green'::public.risk_level, $6::jsonb, $7::text
+       )`,
+      [
+        organizationId,
+        projectId,
+        secondSelectionId,
+        anthropicAssignmentId,
+        securityPrompt,
+        forgedManualParameters,
+        idempotencyKey,
+      ],
+    );
+    expect(replayed.rows[0]).toMatchObject({
+      command_id: submitted.rows[0].command_id,
+      task_id: submitted.rows[0].task_id,
+      route_id: submitted.rows[0].route_id,
+      command_state: "awaiting_approval",
+      task_state: "awaiting_approval",
+      requires_owner_approval: true,
+      was_created: false,
+    });
+
+    await asSuperuser();
+    const evidence = await db.query<{
+      assigned_agent_id: string | null;
+      command_state: string;
+      guard_count: number;
+      parameters: Record<string, unknown>;
+      route_count: number;
+      run_count: number;
+      task_state: string;
+    }>(
+      `select command.status::text as command_state,
+              task.status::text as task_state,
+              task.assigned_agent_id,
+              command.parameters,
+              (select count(*)::integer from public.factory_command_routes route
+               where route.command_id = command.id) as route_count,
+              (select count(*)::integer from public.agent_runs run
+               where run.command_id = command.id) as run_count,
+              (select count(*)::integer
+               from public.factory_record_only_submission_guards) as guard_count
+       from public.commands command
+       join public.tasks task on task.command_id = command.id
+        and task.organization_id = command.organization_id
+       where command.id = $1`,
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0]).toMatchObject({
+      command_state: "awaiting_approval",
+      task_state: "awaiting_approval",
+      assigned_agent_id: null,
+      route_count: 1,
+      run_count: 0,
+      guard_count: 0,
+      parameters: {
+        provider: "anthropic",
+        model: "claude-opus-5",
+        executionMode: "record_only",
+        plan: {
+          requiresDraftPullRequest: false,
+          stages: ["record"],
+          workflow: "factory_record_only",
+        },
+        riskAssessment: {
+          effectiveRisk: "red",
+          classificationSource: "database_policy",
+        },
+      },
+    });
+    expect(evidence.rows[0].parameters).not.toHaveProperty(
+      "_factoryRecordOnlyAuthorization",
+    );
+    await asOwner();
+  });
+
   it("never fabricates routing evidence for a legacy idempotent command", async () => {
     await db.query(
       `select * from public.submit_command(
@@ -855,6 +1508,25 @@ describe("durable command to factory routing", () => {
        where command.idempotency_key = 'factory-legacy-idem-1'`,
     );
     expect(routes.rows[0].total).toBe(0);
+    const executableRun = await db.query<{
+      execution_mode: string;
+      model: string;
+      provider: string;
+      status: string;
+    }>(
+      `select command.parameters ->> 'executionMode' as execution_mode,
+              run.provider, run.model, run.status::text
+       from public.commands command
+       join public.agent_runs run on run.command_id = command.id
+        and run.organization_id = command.organization_id
+       where command.idempotency_key = 'factory-legacy-idem-1'`,
+    );
+    expect(executableRun.rows[0]).toEqual({
+      execution_mode: "manual",
+      provider: "openai",
+      model: "gpt-5.3-codex",
+      status: "queued",
+    });
     await asOwner();
   });
 

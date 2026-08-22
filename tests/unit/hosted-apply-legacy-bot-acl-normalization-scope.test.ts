@@ -62,6 +62,7 @@ function normalizationStep(): WorkflowStep {
 
 function canRunForNormalization(step: WorkflowStep): boolean {
   const guard = step.if ?? "";
+  if (/\bfalse\b/.test(guard)) return false;
   const excludedScopes = [
     ...guard.matchAll(/inputs\.scope\s*!=\s*'([^']+)'/g),
   ].map((match) => match[1]);
@@ -314,24 +315,31 @@ describe("the hosted legacy bot ACL normalization scope", () => {
     expect(expand.indexOf('-f "$FILE"')).toBeGreaterThan(catalogStart);
   });
 
-  it("makes CONTRACT require normalizer and EXPAND once with CONTRACT absent", () => {
-    const contract =
-      stepByName(
-        "Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)",
-      ).run ?? "";
-    const gateStart = contract.indexOf("NORMALIZER=");
-    const catalogStart = contract.indexOf("CATALOG_READY=");
-    const gate = contract.slice(gateStart, catalogStart);
-
-    expect(gateStart).toBeGreaterThanOrEqual(0);
-    expect(catalogStart).toBeGreaterThan(gateStart);
-    expect(gate).toContain("version = '20260822000150'");
-    expect(gate).toContain("version = '20260822000200'");
-    expect(gate).toContain("version = '20260822000300'");
-    expect(gate).toContain(
-      'if [ "$NORMALIZER" != "1" ] || [ "$PREDECESSOR" != "1" ] || [ "$TARGET" != "0" ]',
+  it("retires standalone CONTRACT and requires it absent in the atomic chain", () => {
+    const options = workflow.on.workflow_dispatch.inputs.scope.options;
+    const retired = stepByName(
+      "Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)",
     );
-    expect(contract.indexOf('-f "$FILE"')).toBeGreaterThan(catalogStart);
+    const refusal = stepByName(
+      "Refuse the retired standalone bot mutator CONTRACT scope",
+    );
+    const contract = stepByName(
+      "Apply the exact factory any-model record-only chain (scope=factory-any-model-record-only)",
+    ).run ?? "";
+    const historyStart = contract.indexOf("HISTORY=");
+    const precontractStart = contract.indexOf("PRECONTRACT_READY=");
+
+    expect(options).not.toContain("bot-account-binding-contract");
+    expect(retired.if).toBe(
+      "${{ false && inputs.scope == 'bot-account-binding-contract' }}",
+    );
+    expect(refusal.run).toContain("scope=factory-any-model-record-only");
+    expect(historyStart).toBeGreaterThanOrEqual(0);
+    expect(precontractStart).toBeGreaterThan(historyStart);
+    expect(contract).toContain(
+      'if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0" ]',
+    );
+    expect(contract.indexOf('-f "$CONTRACT_FILE"')).toBeGreaterThan(precontractStart);
   });
 
   it("makes scope=all prove normalizer, EXPAND, and CONTRACT once before push", () => {
@@ -353,7 +361,7 @@ describe("the hosted legacy bot ACL normalization scope", () => {
         "bot-legacy-acl-normalization",
       ],
       ["PROTECTED_EXPAND", "20260822000200", "bot-account-binding"],
-      ["PROTECTED_CONTRACT", "20260822000300", "bot-account-binding-contract"],
+      ["PROTECTED_CONTRACT", "20260822000300", "factory-any-model-record-only"],
     ]) {
       expect(gate).toContain(
         `select count(*) from supabase_migrations.schema_migrations where version = '${version}'`,
