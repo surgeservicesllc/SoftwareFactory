@@ -18,8 +18,23 @@ import { expect, test } from "@playwright/test";
  * recorded result is the only honest way to test what depends on it; seeding
  * anything further would be testing the seed.
  *
+ * **What this lane can and cannot reach.** Steps 1 to 6 are performed here in
+ * the browser. Step 7 is refused by the server on purpose — before queueing it
+ * re-resolves the repository and its base commit from the live GitHub API, and
+ * the seeded repository does not exist there — so what is asserted is that the
+ * refusal is stated rather than swallowed. Step 8 is Not Connected, because
+ * nothing executes commands in this phase, and the page must say so.
+ *
+ * Two product gates stop the journey short of a finished assignment, and both
+ * are correct, so they are asserted rather than seeded past:
+ *   - a bot cannot be assigned unless its credential reference resolves on the
+ *     server (this is what caught the catalogue/allowlist mismatch);
+ *   - an assignment needs a role, and a new workspace has none.
+ *
  * Running it: see .github/workflows/ai-factory-journey.yml, which is the same
- * sequence a person would type.
+ * sequence a person would type. Locally, reset between runs — the journey
+ * creates a project and a pipeline selection, and a second run finds them
+ * already there.
  */
 test.describe("AI Factory live journey", () => {
   test.skip(!process.env.AI_FACTORY_E2E, "needs the local Supabase stack (AI_FACTORY_E2E=1)");
@@ -37,16 +52,17 @@ test.describe("AI Factory live journey", () => {
   test("walks all eight steps with fake data and reads them back from Supabase", async ({ page }) => {
     test.setTimeout(420_000);
 
-    // ── The gate, from outside ────────────────────────────────────────────
-    await page.goto("/solutions/ai-factory");
-    const signInLink = page.getByRole("link", { name: /sign in/i }).first();
-    await expect(signInLink).toBeVisible({ timeout: 30_000 });
-    await signInLink.click();
-
     // ── Sign in (user admin-created and pre-confirmed by the runner) ──────
+    // Straight to the form: the gate's own link is covered by
+    // ai-factory-live.spec.ts, and the header carries a second "Sign In" that
+    // makes a by-role click here ambiguous.
+    await page.goto("/auth/sign-in");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
+    // Wait for the session to land. Navigating straight on raced the POST and
+    // arrived at the journey still signed out.
+    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 45_000 });
 
     // ── The journey, with the seeded installation already behind step 1 ───
     await page.goto("/solutions/ai-factory");
@@ -72,7 +88,9 @@ test.describe("AI Factory live journey", () => {
     const pipelineStep = stepCard(page, "Configure Pipeline");
     await pipelineStep.getByRole("button", { name: /choose a pipeline|change pipelines/i }).click();
     const pipelineDialog = page.getByRole("dialog");
-    const use = pipelineDialog.getByRole("button", { name: /^use$/i }).first();
+    // The accessible name names the template ("Use Agentic SDLC"); the visible
+    // label is just "Use".
+    const use = pipelineDialog.getByRole("button", { name: /^Use / }).first();
     await expect(use).toBeVisible({ timeout: 20_000 });
     await use.click();
     await page.keyboard.press("Escape");
@@ -81,9 +99,118 @@ test.describe("AI Factory live journey", () => {
     await expect(pipelineStep.getByRole("list", { name: "Selected pipelines" })).toBeVisible();
 
     // ── Step 4: Connect Bots ──────────────────────────────────────────────
-    // Signing into a provider is an external account action, like step 1. What
-    // is testable here is that the step is honest about not being done.
-    await expect(stepCard(page, "Connect Bots").getByText("Done")).toHaveCount(0);
+    // Signing into Claude or Codex is an external account action, like step 1,
+    // so the runner seeds the account row that sign-in would have recorded.
+    // Creating the bot on top of it is done here, in the browser.
+    const botsStep = stepCard(page, "Connect Bots");
+    await expect(botsStep.getByText("Done")).toBeVisible();
+    await botsStep.getByRole("button", { name: "Connect a bot" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Create Bot" }).click();
+    const accountChoice = page.getByRole("dialog").last().getByRole("button", { name: /Fake Claude Account/ });
+    await expect(accountChoice).toBeVisible({ timeout: 20_000 });
+    await accountChoice.click();
+    await expect(page.getByRole("dialog").last().getByText(/Active Bots/)).toBeVisible({ timeout: 20_000 });
+    await page.keyboard.press("Escape");
+
+    // ── Step 5: Assign Bots, through the Select → Configure → Review wizard ─
+    const assignStep = stepCard(page, "Assign Bots to Project");
+    await assignStep.getByRole("button", { name: "Assign bots" }).click();
+    const roster = page.getByRole("dialog").last();
+    await roster.getByRole("button", { name: "Assign Bots" }).click();
+    const wizard = page.getByRole("dialog").last();
+    const selectAll = wizard.getByRole("button", { name: "Select All" });
+    await expect(selectAll).toBeVisible({ timeout: 20_000 });
+
+    // The bot is selectable, which is the half this journey can prove: its
+    // credential reference resolves on the server. Before the catalogue and
+    // the allowlist were reconciled it read "Needs credential" and this
+    // checkbox was disabled, so a bot made from a connected subscription
+    // account could never be assigned at all.
+    // Enablement is the functional gate: a disabled checkbox cannot be
+    // assigned at all. (The card's readiness badge is a separate, persisted
+    // signal recorded when the bot was registered, so it is not asserted here.)
+    await expect(wizard.getByRole("checkbox", { name: /^Select / }).first()).toBeEnabled();
+    await selectAll.click();
+    await wizard.getByRole("button", { name: "Next" }).click();
+
+    // ── Step 6: Configure Bot Settings, every field on the pane ───────────
+    await expect(wizard.getByRole("combobox", { name: /^Role for / })).toBeVisible({ timeout: 20_000 });
+    await wizard.getByRole("button", { name: "Reviewer" }).click();
+    // The preset shapes responsibilities and access; the role is a separate
+    // required choice, and the database refuses an assignment without one.
+    const role = wizard.getByRole("combobox", { name: /^Role for / });
+    const roleOptions = await role.locator("option").evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLOptionElement).value).filter(Boolean));
+
+    if (roleOptions.length === 0) {
+      // A workspace has no roles until somebody creates one, and the database
+      // requires one on every assignment. The wizard cannot finish here — what
+      // it must not do is leave Confirm dead with nothing said, which is what
+      // it did before this journey found it.
+      await expect(wizard.getByText(/No roles yet/)).toBeVisible();
+      await expect(wizard.getByRole("link", { name: "Bot Manager" })).toBeVisible();
+      await wizard.getByRole("button", { name: "Next" }).click();
+      // Whatever Confirm does here, it must not silently look like success.
+      await wizard.getByRole("button", { name: "Confirm" }).click();
+      await page.waitForTimeout(2500);
+      await page.keyboard.press("Escape");
+      // With no role there can be no assignment, so the step stays open.
+      await expect(assignStep.getByText("Done")).toHaveCount(0);
+    } else {
+      await role.selectOption(roleOptions[0]);
+      await wizard.getByRole("combobox", { name: /^Repository access for / }).selectOption("write");
+      await wizard.getByRole("combobox", { name: /^Branch strategy for / }).selectOption("per_task_branch");
+      await wizard.getByRole("combobox", { name: /^Pipeline access for / }).selectOption("assigned");
+      await wizard.getByRole("combobox", { name: /^Priority for / }).selectOption({ index: 1 });
+      await wizard.getByRole("spinbutton", { name: /^Concurrent tasks for / }).fill("2");
+
+      await wizard.getByRole("button", { name: "Next" }).click();
+      const confirm = wizard.getByRole("button", { name: "Confirm" });
+      await expect(confirm).toBeEnabled({ timeout: 20_000 });
+      await confirm.click();
+      await page.keyboard.press("Escape");
+
+
+      await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+      await expect(stepCard(page, "Configure Bot Settings").getByText("Done"))
+        .toBeVisible({ timeout: 30_000 });
+    }
+
+    // ── Step 7: Issue a Command ───────────────────────────────────────────
+    const commandStep = stepCard(page, "Issue a Command");
+    await commandStep.getByRole("button", { name: "Give a bot work" }).click();
+    const composer = page.getByRole("dialog").last();
+    const prompt = composer.getByRole("textbox").first();
+    await expect(prompt).toBeVisible({ timeout: 20_000 });
+    await prompt.fill("Add a fake health endpoint and cover it with a test.");
+
+    // Submit, then insist on an answer either way: the command is recorded, or
+    // the composer says why not. Silence here is the failure mode that matters,
+    // because the step would simply stay open with nothing explaining it.
+    const submit = composer.getByRole("button", { name: /queue|submit|send|start|run/i }).last();
+    await expect(submit).toBeVisible({ timeout: 10_000 });
+    await submit.click();
+    await page.waitForTimeout(3000);
+
+    const composerStillOpen = await composer.isVisible().catch(() => false);
+    if (composerStillOpen) {
+      /*
+       * The expected outcome here, and it is the right one.
+       *
+       * Before queueing, the server re-resolves the repository and its base
+       * commit from the live GitHub API. The seeded repository does not exist
+       * on github.com — nothing in this lane does — so the binding cannot be
+       * verified and the command is refused. What matters is that the refusal
+       * is stated rather than swallowed: the composer says so, and no command
+       * row is written.
+       */
+      await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
+        .toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await expect(commandStep.getByText("Done")).toHaveCount(0);
+    } else {
+      await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    }
 
     // ── Step 8: Watch It Ship says what actually executes ─────────────────
     const watchStep = stepCard(page, "Watch It Ship");
