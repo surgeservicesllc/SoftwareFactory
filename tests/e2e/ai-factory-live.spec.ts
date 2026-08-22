@@ -8,10 +8,11 @@ import { expect, test } from "@playwright/test";
  * Supabase, which is what makes the width sweep possible and what makes it
  * blind to the page's own gates. This exercises those gates on the real route.
  *
- * The local Supabase foundation journey carries the signed-in half and skips
- * without its stack. These gates are the half that can be proved anywhere,
- * and they are the half a wrong answer misleads hardest, because an empty
- * journey and a finished one otherwise share the same layout.
+ * The populated journey needs a signed-in tenant, which needs a running
+ * Supabase — `tests/e2e/journey.spec.ts` and `auth-lifecycle.spec.ts` carry
+ * that half and skip without a local stack. The gates are the half that can be
+ * proved anywhere, and they are the half a wrong answer misleads hardest,
+ * because an empty journey and a finished one are the same layout.
  */
 test.describe("the AI Factory page without a readable tenant", () => {
   test("renders, and never claims a factory it could not read", async ({ page }) => {
@@ -35,10 +36,19 @@ test.describe("the AI Factory page without a readable tenant", () => {
 
   test("offers a way forward instead of a dead end", async ({ page }) => {
     await page.goto("/solutions/ai-factory");
+    // A link out for the states with somewhere to go, a Retry for the state
+    // whose way forward is reading again.
     const action = page
-      .getByRole("link", { name: /Sign in|Open connections/i })
+      .getByRole("link", { name: /^Sign in$|Open connections/i })
       .or(page.getByRole("button", { name: "Retry" }))
       .first();
     await expect(action).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("keeps the page's own heading whatever it can render", async ({ page }) => {
+    await page.goto("/solutions/ai-factory");
+    await expect(page.getByRole("heading", { level: 1, name: "AI Factory" })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 });

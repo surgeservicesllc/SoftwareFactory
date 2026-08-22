@@ -73,6 +73,15 @@ afterEach(() => {
 });
 
 describe("AiFactoryConsole", () => {
+  it("keeps the page heading visible while the workspace snapshot is loading", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
+    expect(screen.getByLabelText("Loading the factory")).toBeInTheDocument();
+  });
+
   it("starts an empty workspace at Connect Repository, with nothing opening uninvited", async () => {
     stubFactory();
 
@@ -88,6 +97,7 @@ describe("AiFactoryConsole", () => {
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("keeps Connect Repository incomplete until at least one repository is authorized", async () => {
@@ -541,7 +551,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "AI Factory" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
     expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -567,6 +577,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("recognizes a 409 from any required read", async () => {
@@ -575,6 +586,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Finish setting up")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("fails closed for a signed-out visitor", async () => {
@@ -583,6 +595,22 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
+  });
+
+  it("keeps the page's heading in every state it can render in", async () => {
+    // A blocked state used to replace the page, h1 and all: the console that
+    // could not read its data rendered a titleless panel with no place in the
+    // heading outline. Caught by the /solutions/ai-factory page check once the
+    // unavailable state made a blocked state reachable without a session.
+    for (const status of [401, 409, 503]) {
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, status)));
+      const view = render(<AiFactoryConsole builtIns={BUILT_INS} />);
+      expect(
+        await within(view.container).findByRole("heading", { level: 1, name: "AI Factory" }),
+        `status ${status} renders no page heading`,
+      ).toBeInTheDocument();
+      view.unmount();
+    }
   });
 });
 

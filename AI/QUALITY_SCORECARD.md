@@ -13,6 +13,24 @@ sweep completed, so it proves no fresh worker or end-to-end bot health.
 Production Create Bot still fails and leaves zero bots. The proven mismatch is
 that the Bot Manager sends raw broker purposes `claude`/`claude_N` (or
 `codex`/`codex_N`) to a provision contract that accepts provider-neutral
+`subscription`/`subscription_N`. PR #309 exact head
+`db1958f8b501e865a9e741a21298683e0f88f969` normalizes every account-backed
+path and fails closed on missing/mismatched metadata; 99 focused tests, lint,
+typecheck, the production build, and the secret/protected-path audit pass. The full Windows run
+passed 3,763 tests but retained one unrelated timing failure that passed 13/13
+immediately in isolation, plus the existing `script`-binary runner errors. The
+exact-head CI gate failed in run `32545138211`: browser shards 1/3 through 3/3 could not
+find the `AI Factory` H1 while required reads were pending. The forward
+candidate keeps the page H1 in loading and all fail-closed states and adds a
+direct regression test.
+
+The candidate still is not release-ready: the protected credential normalizer
+rejects the catalog-declared Claude/Codex subscription reference that
+provisioning stores, the manual readiness endpoint checks and serializes
+environment presence only, and provisioning leaves `bots.ai_account_id` null.
+No protected fix was made without exact owner approval. Bot creation, assignment,
+configuration, readiness, identity binding, and reload stickiness therefore
+remain unproved. Production is also still unsafe/not fully
 `subscription`/`subscription_N`. The branch candidate now normalizes every
 account-backed path and fails closed on missing/mismatched metadata; 100 focused
 tests, lint, typecheck, and the production build pass. The full Windows run

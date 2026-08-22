@@ -45,6 +45,10 @@ import { cn } from "@/lib/cn";
  * disagree with the rest of the console.
  */
 
+/** One description for the page, whatever state it is able to render in. */
+const PAGE_DESCRIPTION =
+  "From new project to shipped pull request: the whole journey, one guided path over your live workspace.";
+
 type StepId =
   | "connect_github"
   | "create_project"
@@ -79,8 +83,8 @@ type FactoryData = {
 type State =
   | { kind: "loading" }
   | { kind: "signed-out" }
-  | { kind: "setup" }
   | { kind: "unavailable" }
+  | { kind: "setup" }
   | { kind: "ready"; data: FactoryData; stale: boolean };
 
 function staleOrUnavailable(current: State): State {
@@ -206,7 +210,6 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         setState({ kind: "setup" });
         return;
       }
-
       // A factory view is one snapshot, not seven independently optional
       // cards. If even one request rejected or returned a non-success status,
       // retain the last complete snapshot instead of turning that slice into a
@@ -346,61 +349,54 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     void load();
   }, [load]);
 
+  /*
+   * Every state keeps the page's own heading.
+   *
+   * The blocked states used to replace the whole page, h1 included, so a
+   * console that could not read its data rendered a panel with no page title
+   * and no place in the heading outline. Nobody noticed while the only
+   * reachable blocked state needed a session the browser suite never has;
+   * the unavailable state made it reachable, and the /solutions/ai-factory
+   * page check caught it.
+   */
+  const framed = (children: React.ReactNode) => (
+    <div className="space-y-6">
+      <PageHeader title="AI Factory" description={PAGE_DESCRIPTION} />
+      {children}
+    </div>
+  );
+
   if (state.kind === "loading") {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="AI Factory"
-          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
-        />
-        <Card className="grid min-h-64 place-items-center">
-          <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
-        </Card>
-      </div>
+    return framed(
+      <Card className="grid min-h-64 place-items-center">
+        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory" />
+      </Card>,
     );
   }
   if (state.kind === "signed-out") {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="AI Factory"
-          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
-        />
-        <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />
-      </div>
+    return framed(
+      <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />,
     );
   }
   if (state.kind === "setup") {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="AI Factory"
-          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
-        />
-        <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />
-      </div>
+    return framed(
+      <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />,
     );
   }
   if (state.kind === "unavailable") {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="AI Factory"
-          description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
-        />
-        <Card className="grid min-h-64 place-items-center p-6 text-center">
-          <div className="max-w-md">
-            <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
-            <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
-            <p className="mt-1 text-sm text-muted">
-              We could not read a complete workspace snapshot. No progress was inferred from missing data.
-            </p>
-            <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
-              Retry
-            </button>
-          </div>
-        </Card>
-      </div>
+    return framed(
+      <Card className="grid min-h-64 place-items-center p-6 text-center">
+        <div className="max-w-md">
+          <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
+          <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
+          <p className="mt-1 text-sm text-muted">
+            We could not read a complete workspace snapshot. No progress was inferred from missing data.
+          </p>
+          <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      </Card>,
     );
   }
 
@@ -762,7 +758,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     <div className="space-y-6">
       <PageHeader
         title="AI Factory"
-        description="From new project to shipped pull request: the whole journey, one guided path over your live workspace."
+        description={PAGE_DESCRIPTION}
         action={
           <div className="flex flex-wrap items-center gap-2">
             {data.projects.length > 1 || (isStartingNew && data.projects.length > 0) ? (

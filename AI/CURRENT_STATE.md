@@ -16,6 +16,27 @@ worker sweep completed, so it is not fresh worker evidence. Creating a bot
 still fails and leaves the roster at zero: the Bot Manager sends the broker's
 raw `claude`/`claude_N` purpose (and would do the same for `codex`/`codex_N`)
 where the provisioning boundary accepts the provider-neutral
+`subscription`/`subscription_N` choice. PR #309 isolates the normalization at
+exact head `db1958f8b501e865a9e741a21298683e0f88f969`, rejects
+provider/purpose mismatches, and carries real-purpose regression fixtures. Its
+focused 99-test run, lint, typecheck, production build, and secret/protected-
+path audit pass. It is not deployed and no production bot stickiness claim is
+made.
+
+PR #309 did not satisfy its merge gate. Browser/accessibility shards 1/3, 2/3,
+and 3/3 in CI run `32545138211` failed because the client-only console rendered a spinner
+without the page's `AI Factory` H1 while required workspace reads were pending.
+The forward candidate keeps the H1 in loading and all fail-closed states and
+adds a direct regression test. A separate release blocker remains at the
+protected credential-resolution boundary: provisioning stores the catalog's
+Claude/Codex subscription reference, but `normalizeCredentialRef` currently
+allowlists provider API-key references only, so a created subscription bot
+would read Not Connected even when its vault credential exists. The manual
+readiness endpoint also evaluates and serializes environment presence only,
+creating the same false negative for vault-backed accounts. No protected file
+has been changed without the requested exact owner approval. Provisioning
+also does not set `bots.ai_account_id`; credential-reference persistence is not
+yet full account-identity binding.
 `subscription`/`subscription_N` choice. The branch candidate now normalizes
 every account-backed provisioning path, rejects provider/purpose mismatches,
 and carries real-purpose regression fixtures. Its focused 100-test run, lint,
@@ -28,6 +49,7 @@ organization with `autonomous_mode = true`, one raw organization with
 `autonomy_kill_switch_active = false`, two projects with effective kill off,
 no connected/fresh worker, and hosted migration/application drift
 (`20260821000300` rather than candidate `20260821000400`).
+
 
 **Release addendum, 2026-08-21 (Factory command routing, ADR-106):** the
 rebased candidate adds `20260821000400_command_factory_routing.sql`, an exact

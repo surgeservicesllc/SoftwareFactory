@@ -74,6 +74,162 @@ daemon, so `supabase start` (GoTrue + PostgREST + Mailpit) cannot run either.
 Real PostgreSQL with the real migrations is what remains, and it is what every
 row above was proved against.
 
+## Round 3 — the journey in a real browser, against a real stack
+
+`supabase start` needs a Docker daemon. This container ships `dockerd` and runs
+as root, so the daemon can simply be started — which turns the whole full-stack
+lane on: real Postgres carrying the production migration chain, real PostgREST,
+real GoTrue, the production Next build in front, driven in Chromium.
+`tests/e2e/ai-factory-journey.spec.ts` is the walk;
+`.github/workflows/ai-factory-journey.yml` is the same sequence on a runner.
+
+Only two things are seeded, both being external systems whose *recorded result*
+is the honest fixture: the GitHub App installation (step 1) and the AI account
+sign-in (step 4). Everything else is performed in the browser.
+
+| # | Step | Result | Issue found | Resolution |
+|---|------|--------|-------------|------------|
+| 30 | 2 Create Project | PASS live | None | Filled and submitted in the browser; Postgres holds `Storefront Rebuild -> fake-owner/storefront` |
+| 31 | 3 Configure Pipeline | PASS live | None | "Use" on a built-in recorded `agentic_sdlc` in `project_pipelines`, and the selection survived closing the overlay |
+| 32 | 4 Connect Bots | PASS live | None | Create Bot on a connected account registered a real bot row |
+| 33 | 5 Assign Bots | **FIXED — the round's most serious defect** | The bot's checkbox was **permanently disabled**. `ALLOWED_CREDENTIAL_REFS` was built from the catalogue's `defaultCredentialRef` alone, so the two `subscriptionCredentialRef` values *the same catalogue declares* were rejected: `normalizeCredentialRef` threw, `isCredentialPresent` returned false, and a bot made from a connected subscription account read "Needs credential" forever. The path the product recommends over API keys could never reach an assignment | Both fields are sourced from the catalogue now, and `tests/unit/credential-ref-catalogue-parity.test.ts` walks every reference it declares. The denylist and the "not declared" refusal are unchanged and asserted |
+| 34 | 6 Configure Bot Settings | **FIXED** | With no roles in the workspace the role select was blank, Confirm stayed dead, and nothing said an assignment needs a role or where to make one | The wizard names the gap and links to Bot Manager. The underlying requirement is correct and is asserted, not seeded past |
+| 35 | 7 Issue a Command | PASS — an honest refusal | None | The server re-resolves the repository and base commit from the live GitHub API before queueing; the seeded repository does not exist there, so it refuses and **says** "Command submission failed safely". No command row is written. The journey asserts the refusal is stated rather than swallowed |
+| 36 | 8 Watch It Ship | PASS live | None | Reads **Not Connected** from `/api/bots`, as fixed in round 2 |
+| 37 | Signed-out visitor | PASS live | None | A fresh browser context sees the gate, no tenant content, and not one 200 from `/api/*` |
+
+Read back from Postgres after the run: the project bound to its repository, the
+pipeline selection, one bot, **zero** assignments, **zero** commands, four
+activity events — the refusals left no phantom rows.
+
+### The live deployed site
+
+Not reachable from this sandbox, measured three ways rather than assumed:
+
+1. `www.theagoras.com/solutions/ai-factory` returns 200 and renders only the
+   sign-in gate to an unauthenticated visitor.
+2. **Sign-up on production is failing.** `POST /api/auth/sign-up` returns
+   `503 authentication_unavailable` on every attempt, while sign-in correctly
+   returns `401 invalid_credentials` for a bad password — GoTrue is up,
+   registration is not. `scripts/configure-auth-email.sh` documents the cause:
+   the hosted project requires email confirmation and has no custom SMTP.
+   **No new user can register on the live site right now**, and only project
+   configuration can fix it.
+3. A browser in this sandbox cannot reach any external host — Chromium gets
+   `ERR_CONNECTION_RESET` on `example.com` exactly as on `theagoras.com`,
+   through every proxy configuration, while `curl` through the same relay
+   returns 200.
+
+The deployed bundle does confirm round 2's fixes are live: it contains
+`assignmentIsConfigured`, `LEAST_PRIVILEGE_CONFIG`, `When an executor is
+connected`, and the pipeline-templates read.
+
+## Round 4 — what the honest state cost the page's heading
+
+The unavailable state added in round 3 made a blocked state reachable without
+a session, and the repository's own page check caught what had been hiding
+behind that: `AiFactoryConsole` returned its blocked states *instead of* the
+page, `PageHeader` included. `/solutions/ai-factory renders its heading, stays
+in the viewport, and passes axe` failed on all three browser shards — the page
+had no `h1` and no place in the heading outline, only an `h2` inside a card.
+
+Main landed a stronger unavailable state of its own while this branch was open
+(any of the eight reads can discover signed-out or setup; an incomplete
+snapshot keeps the last complete one and marks it stale; the panel carries a
+Retry that re-reads). That is the one kept here — this branch's narrower
+version was dropped in the merge, and the heading fix now frames it.
+
+8. **A blocked console dropped the page's title.** Every early return now
+   renders inside the same header ("AI Factory" plus its one description),
+   so loading, signed-out, unavailable, and setup all keep the page's
+   heading. A unit test walks 401, 409, and 503 and asserts the level-1
+   heading survives each.
+
+## Round 5 — the deployed page, signed in as the approved fake account
+
+Round 3 reported the deployed journey as undrivable: sign-up answered `503`,
+so no fake identity existed to sign in with. That changed while this branch was
+open — `journey-prod-user.yml` (owner-approved, 2026-08-22) confirmed
+`jordan.seeker.prod1@example.org` in hosted GoTrue for exactly this purpose.
+Measured against `https://www.theagoras.com` on 2026-08-22 with that account:
+
+| Probe | Result |
+| --- | --- |
+| `POST /api/auth/sign-in` | **200** `{"authenticated":true,"next":"/solutions"}` — a real session on production |
+| The eight reads the page makes (`github/connections`, `projects`, `ai-accounts`, `bots`, `commands`, `project-pipelines`, `pipeline-templates`, `worker/status`) | **200 each**, every one scoped to that account's own organization |
+| What the page therefore renders | The live journey, not the sign-in gate and not the unreadable-snapshot panel |
+| The factory itself | Genuinely empty: no connection, no project, no bot, no command. Step 1 is the current step |
+| `worker/status` | `Worker Stale`, 0 active — consistent with **Not Connected** on step 8 |
+
+So the deployed page is wired to Supabase end to end for reads: a real session
+reaches real tenant-scoped rows through the production edge, and the page
+derives its state from them.
+
+**What stops the deployed walk at step 1, and why it is not a defect.** Steps
+2-8 all hang off a project, and `POST /api/projects` requires a
+`connectionId` and a `repositoryId` from a real GitHub App installation. That
+installation is an account action against github.com that no agent and no
+runner can perform, and a deployed target cannot be seeded past it: nothing
+here has write access to the hosted database, and nothing should. The local
+lane seeds exactly those rows and walks all eight steps in a browser; the
+deployed target gets the half a deployment can regress on its own.
+
+`.github/workflows/ai-factory-journey.yml` now carries that second half as a
+remote mode, following the Job Seeker lane: dispatched with
+`base_url=https://www.theagoras.com` it skips the local stack and drives the
+deployed site with the fake account, running the signed-in read
+(`AI_FACTORY_E2E_SEEDED` unset, so the eight-step walk skips itself). It cannot
+be dispatched until the workflow file reaches `main` — `workflow_dispatch`
+reads the default branch — so that dispatch waits on this pull request landing.
+
+## Round 6 — the eight-step walk, run for real, against a reset stack
+
+Rounds 3-5 wrote the lane; nothing had executed it end to end, because the
+workflow is not on `main` yet and so has never run in CI. Running it here —
+`supabase db reset`, the workflow's own seed, the production build, the spec —
+found that it could not have passed, and then found a defect in the product.
+
+8. **The Bot Manager could not create a bot at all.** Its account chooser sent
+   the account row's *vault purpose* (`claude`, `claude_2`, `codex_47`) to
+   `/api/bots/connect/provision`, whose schema accepts only the catalogue's
+   *choice* (`default`, `subscription`, `subscription_N`). Measured against a
+   real stack on 2026-08-22:
+
+   ```
+   credential=claude       -> 400 invalid_request
+   credential=subscription -> 200 {"provisioned":true,"outcome":"created"}
+   ```
+
+   Every attempt failed, and the console answered "The bot could not be
+   created. Try again from the accounts list" — from the list that had just
+   failed. `project-bots.tsx` translated between the two vocabularies;
+   `bot-manager/home.tsx` did not, at three call sites. The translation is now
+   one shared `credentialChoiceForPurpose` beside the purposes it translates,
+   used by both, with a test walking 60 slots per provider against the route's
+   own pattern — and asserting a raw purpose fails it, which is the drift that
+   caused this. **This was live on production**, on the Connect Bots step of
+   this very journey.
+
+Two gaps in the lane itself, both invisible while it had never run:
+
+- The seed created no AI account, so step 4 could never read done. It now
+  seeds the row a real Claude sign-in records — identity and the name of its
+  vault slot, `claude`, never a credential.
+- The runner's `.env.local` set no credential slot, so the server-side
+  reference check had nothing to resolve. It now writes a labelled fake
+  placeholder; it authenticates nothing and no provider is ever called.
+
+And one racy assertion dropped: the spec waited for the add-project form's own
+confirmation, but creating a project calls back into the page, which closes the
+overlay and re-reads, so that message can be gone before an assertion sees it.
+
+**The run, after the fixes** — 3 passed, and read back from Postgres rather
+than from the page: 1 project, 1 pipeline selection, **1 bot** (0 before the
+fix), 0 assignments, 0 commands, 7 activity events. The two zeros are the
+product gates the spec asserts rather than seeds past: a new workspace has no
+role to assign, and step 7 re-resolves the repository against the live GitHub
+API, which the seeded repository is not in. The refusals left no phantom rows.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
@@ -84,6 +240,11 @@ tests, build).
 
 Blocked on something no agent may do:
 
+0. **A GitHub App installation for the fake journey account** — without it the
+   deployed AI Factory cannot get past step 1 for that account, so steps 2-8
+   are provable only against a seeded local stack. One install on
+   `jordan.seeker.prod1@example.org`'s workspace would let the remote lane walk
+   the whole journey on production.
 1. **Four migrations outstanding on hosted** (row 10) — needs
    `scripts/hosted-state-report.sql` to separate absent from ungranted, then an
    owner-approved apply. One of the four is already costing a user-facing path

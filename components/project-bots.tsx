@@ -1337,8 +1337,20 @@ function ConfigureCard({
             ))}
           </select>
           {roles.length === 0 ? (
+            /*
+             * A workspace has no roles until somebody makes one, and every
+             * assignment needs one -- the database requires it. With the list
+             * empty this select was simply blank and Confirm stayed disabled
+             * with nothing said, which is where the AI Factory's Assign Bots
+             * step dead-ended for a first-time owner: the wizard would not
+             * finish and did not explain why.
+             *
+             * The link goes to /solutions/bot-manager. It pointed at
+             * /solutions/bots, which is neither a route nor a redirect -- the
+             * one instruction offered to an owner who cannot proceed was a 404.
+             */
             <span className="mt-1.5 block text-xs text-faint">
-              No roles yet. A posting needs one. Create it in the{" "}
+              No roles yet. A posting needs one — create it in{" "}
               <Link
                 href="/solutions/bot-manager"
                 className="underline underline-offset-2 hover:text-foreground"
