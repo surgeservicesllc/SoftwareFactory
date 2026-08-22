@@ -1329,6 +1329,20 @@ function ConfigureCard({
               </option>
             ))}
           </select>
+          {roles.length === 0 ? (
+            /*
+             * A workspace has no roles until somebody makes one, and every
+             * assignment needs one — the database requires it. With the list
+             * empty this select was simply blank and Confirm stayed disabled
+             * with nothing said, which is where the AI Factory's Assign Bots
+             * step dead-ended for a first-time owner: the wizard would not
+             * finish and did not explain why.
+             */
+            <span className="mt-1.5 block text-xs text-faint">
+              No roles yet. A posting needs one — create it in{" "}
+              <Link href="/solutions/bots" className="underline">Bot Manager</Link>, then come back.
+            </span>
+          ) : null}
         </label>
 
         <label className="block">

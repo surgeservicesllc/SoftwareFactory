@@ -569,6 +569,22 @@ describe("AiFactoryConsole", () => {
 
     expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
   });
+
+  it("keeps the page's heading in every state it can render in", async () => {
+    // A blocked state used to replace the page, h1 and all: the console that
+    // could not read its data rendered a titleless panel with no place in the
+    // heading outline. Caught by the /solutions/ai-factory page check once the
+    // unavailable state made a blocked state reachable without a session.
+    for (const status of [401, 409, 503]) {
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, status)));
+      const view = render(<AiFactoryConsole builtIns={BUILT_INS} />);
+      expect(
+        await within(view.container).findByRole("heading", { level: 1, name: "AI Factory" }),
+        `status ${status} renders no page heading`,
+      ).toBeInTheDocument();
+      view.unmount();
+    }
+  });
 });
 
 describe("Create New AI Factory", () => {
