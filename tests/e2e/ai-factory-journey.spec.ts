@@ -18,18 +18,18 @@ import { expect, test } from "@playwright/test";
  * recorded result is the only honest way to test what depends on it; seeding
  * anything further would be testing the seed.
  *
- * **What this lane can and cannot reach.** Steps 1 to 6 are performed here in
- * the browser. Step 7 is refused by the server on purpose — before queueing it
+ * **What this lane can and cannot reach.** Steps 1 to 7 are performed here in
+ * the browser. Step 8 is refused by the server on purpose — before queueing it
  * re-resolves the repository and its base commit from the live GitHub API, and
  * the seeded repository does not exist there — so what is asserted is that the
- * refusal is stated rather than swallowed. Step 8 is Not Connected, because
+ * refusal is stated rather than swallowed. Step 9 is Not Connected, because
  * nothing executes commands in this phase, and the page must say so.
  *
- * Two product gates stop the journey short of a finished assignment, and both
- * are correct, so they are asserted rather than seeded past:
- *   - a bot cannot be assigned unless its credential reference resolves on the
- *     server (this is what caught the catalogue/allowlist mismatch);
- *   - an assignment needs a role, and a new workspace has none.
+ * The credential gate remains structural: a bot cannot be assigned unless its
+ * credential reference resolves on the server (this is what caught the
+ * catalogue/allowlist mismatch). A fresh workspace also has no authored bot
+ * role; the browser now adopts a reviewed starter through the real audited role
+ * API in the Configure pane, then completes and reads back the assignment.
  *
  * Running it: see .github/workflows/ai-factory-journey.yml, which is the same
  * sequence a person would type. Locally, reset between runs — the journey
@@ -49,7 +49,7 @@ test.describe("AI Factory live journey", () => {
    * The local lane seeds them, because installing a GitHub App is an account
    * action against github.com that no runner can perform. A deployed target
    * cannot be seeded at all -- nothing here has write access to a hosted
-   * database, and nothing should. So against a deployed site the eight-step
+   * database, and nothing should. So against a deployed site the nine-step
    * walk below does not run: what runs is the signed-in read, which is the
    * part a deployment can genuinely regress.
    */
@@ -60,7 +60,7 @@ test.describe("AI Factory live journey", () => {
     return page.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::li[1]");
   }
 
-  test("walks all eight steps with fake data and reads them back from Supabase", async ({ page }) => {
+  test("walks all nine steps with fake data and reads them back from Supabase", async ({ page }) => {
     test.skip(!seeded, "needs step 1's installation rows seeded (AI_FACTORY_E2E_SEEDED=1)");
     test.setTimeout(420_000);
 
@@ -113,26 +113,46 @@ test.describe("AI Factory live journey", () => {
     await expect(pipelineStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
     await expect(pipelineStep.getByRole("list", { name: "Selected pipelines" })).toBeVisible();
 
-    // ── Step 4: Connect Bots ──────────────────────────────────────────────
+    // ── Step 4: Select Agents ─────────────────────────────────────────────
+    const agentsStep = stepCard(page, "Select Agents");
+    await agentsStep.getByRole("button", { name: /choose agents|change agents/i }).click();
+    const agentsDialog = page.getByRole("dialog", { name: "Select Agents" });
+    const includeAgent = agentsDialog.getByRole("button", { name: "Include in AI Factory" }).first();
+    await expect(includeAgent).toBeVisible({ timeout: 20_000 });
+    await includeAgent.click();
+    await expect(agentsDialog.getByText("Included").first()).toBeVisible({ timeout: 20_000 });
+    await page.keyboard.press("Escape");
+    await expect(agentsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    await expect(agentsStep.getByRole("list", { name: "Included agents" })).toBeVisible();
+
+    // ── Step 5: Connect Bots ──────────────────────────────────────────────
     // Signing into Claude or Codex is an external account action, like step 1,
     // so the runner seeds the account row that sign-in would have recorded.
     // Creating the bot on top of it is done here, in the browser.
     const botsStep = stepCard(page, "Connect Bots");
-    await expect(botsStep.getByText("Done")).toBeVisible();
-    await botsStep.getByRole("button", { name: "Connect a bot" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Create Bot" }).click();
-    const accountChoice = page.getByRole("dialog").last().getByRole("button", { name: /Fake Claude Account/ });
+    await expect(botsStep.getByText("Done")).toHaveCount(0);
+    await expect(botsStep.getByText(/no bot linked to those accounts yet/i)).toBeVisible();
+    await botsStep.getByRole("button", { name: "Create a bot" }).click();
+    const connectDialog = page.getByRole("dialog", { name: "Connect Bots" });
+    await connectDialog.getByRole("button", { name: "Create Bot" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    const accountChoice = connectDialog.getByRole("button", { name: /Fake Claude Account/ });
     await expect(accountChoice).toBeVisible({ timeout: 20_000 });
     await accountChoice.click();
-    await expect(page.getByRole("dialog").last().getByText(/Active Bots/)).toBeVisible({ timeout: 20_000 });
+    await expect(connectDialog.getByText(/Active Bots/)).toBeVisible({ timeout: 20_000 });
     await page.keyboard.press("Escape");
+    await expect(botsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    await expect(botsStep.getByText(/ready bot.*linked to.*connected account/i)).toBeVisible();
 
-    // ── Step 5: Assign Bots, through the Select → Configure → Review wizard ─
+    // ── Step 6: Assign Bots, through the Select → Configure → Review wizard ─
     const assignStep = stepCard(page, "Assign Bots to Project");
     await assignStep.getByRole("button", { name: "Assign bots" }).click();
     const roster = page.getByRole("dialog").last();
     await roster.getByRole("button", { name: "Assign Bots" }).click();
     const wizard = page.getByRole("dialog").last();
+    // AI Factory owns the one modal/focus boundary. The shared project roster
+    // renders its wizard inside it instead of stacking another dialog.
+    await expect(page.getByRole("dialog")).toHaveCount(1);
     const selectAll = wizard.getByRole("button", { name: "Select All" });
     await expect(selectAll).toBeVisible({ timeout: 20_000 });
 
@@ -148,50 +168,145 @@ test.describe("AI Factory live journey", () => {
     await selectAll.click();
     await wizard.getByRole("button", { name: "Next" }).click();
 
-    // ── Step 6: Configure Bot Settings, every field on the pane ───────────
+    // ── Step 7: Configure Bot Settings, every field on the pane ───────────
+    const assignmentInstructions =
+      "Review every fake journey change carefully and record the evidence before handoff.";
+    const assignmentModel = "claude-fable-5";
+    const assignmentEffort = "high";
+
     await expect(wizard.getByRole("combobox", { name: /^Role for / })).toBeVisible({ timeout: 20_000 });
     await wizard.getByRole("button", { name: "Reviewer" }).click();
     // The preset shapes responsibilities and access; the role is a separate
     // required choice, and the database refuses an assignment without one.
     const role = wizard.getByRole("combobox", { name: /^Role for / });
-    const roleOptions = await role.locator("option").evaluateAll((nodes) =>
+    let roleOptions = await role.locator("option").evaluateAll((nodes) =>
       nodes.map((node) => (node as HTMLOptionElement).value).filter(Boolean));
 
     if (roleOptions.length === 0) {
-      // A workspace has no roles until somebody creates one, and the database
-      // requires one on every assignment. The wizard cannot finish here — what
-      // it must not do is leave Confirm dead with nothing said, which is what
-      // it did before this journey found it.
-      await expect(wizard.getByText(/No roles yet/)).toBeVisible();
-      await expect(wizard.getByRole("link", { name: "Bot Manager" })).toBeVisible();
-      await wizard.getByRole("button", { name: "Next" }).click();
-      // Whatever Confirm does here, it must not silently look like success.
-      await wizard.getByRole("button", { name: "Confirm" }).click();
-      await page.waitForTimeout(2500);
-      await page.keyboard.press("Escape");
-      // With no role there can be no assignment, so the step stays open.
-      await expect(assignStep.getByText("Done")).toHaveCount(0);
-    } else {
-      await role.selectOption(roleOptions[0]);
-      await wizard.getByRole("combobox", { name: /^Repository access for / }).selectOption("write");
-      await wizard.getByRole("combobox", { name: /^Branch strategy for / }).selectOption("per_task_branch");
-      await wizard.getByRole("combobox", { name: /^Pipeline access for / }).selectOption("assigned");
-      await wizard.getByRole("combobox", { name: /^Priority for / }).selectOption({ index: 1 });
-      await wizard.getByRole("spinbutton", { name: /^Concurrent tasks for / }).fill("2");
-
-      await wizard.getByRole("button", { name: "Next" }).click();
-      const confirm = wizard.getByRole("button", { name: "Confirm" });
-      await expect(confirm).toBeEnabled({ timeout: 20_000 });
-      await confirm.click();
-      await page.keyboard.press("Escape");
-
-
-      await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
-      await expect(stepCard(page, "Configure Bot Settings").getByText("Done"))
-        .toBeVisible({ timeout: 30_000 });
+      // Fresh organizations deliberately own their role definitions. Adopt a
+      // reviewed starter through the audited role API without abandoning this
+      // assignment or navigating away.
+      await expect(wizard.getByText("Add your first bot role")).toBeVisible();
+      await wizard.getByRole("button", { name: "Add starter role" }).click();
+      await expect(role.locator("option")).not.toHaveCount(0, { timeout: 20_000 });
+      roleOptions = await role.locator("option").evaluateAll((nodes) =>
+        nodes.map((node) => (node as HTMLOptionElement).value).filter(Boolean));
     }
 
-    // ── Step 7: Issue a Command ───────────────────────────────────────────
+    await role.selectOption(roleOptions[0]);
+    await wizard.getByRole("combobox", { name: /^Repository access for / }).selectOption("write");
+    await wizard.getByRole("combobox", { name: /^Branch strategy for / }).selectOption("per_task_branch");
+    await wizard.getByRole("combobox", { name: /^Pipeline access for / }).selectOption("assigned");
+    // Preview is the widest safe environment in this execution-inert lane.
+    // Production is deliberately not selected, and assignment remains routing
+    // intent: this journey never connects or dispatches a worker.
+    await wizard.getByRole("combobox", { name: /^Environment access for / }).selectOption("preview");
+    await wizard.getByRole("combobox", { name: /^Priority for / }).selectOption({ index: 1 });
+    await wizard.getByRole("spinbutton", { name: /^Concurrent tasks for / }).fill("2");
+
+    const canOpenPullRequest = wizard.getByRole("checkbox", { name: /^Can open pull requests/ });
+    const canMergePullRequest = wizard.getByRole("checkbox", { name: /^Can merge pull requests/ });
+    const requiresHumanApproval = wizard.getByRole("checkbox", {
+      name: /^Work needs a person to approve it before it lands/,
+    });
+
+    // Exercise the human-approval control itself before merge locks it on.
+    // The saved posting always requires a person, preserving containment.
+    await expect(requiresHumanApproval).toBeChecked();
+    await requiresHumanApproval.uncheck();
+    await expect(requiresHumanApproval).not.toBeChecked();
+    await requiresHumanApproval.check();
+    await canOpenPullRequest.check();
+    await canMergePullRequest.check();
+    await expect(canOpenPullRequest).toBeChecked();
+    await expect(canMergePullRequest).toBeChecked();
+    await expect(requiresHumanApproval).toBeChecked();
+    await expect(requiresHumanApproval).toBeDisabled();
+
+    const instructions = wizard.getByRole("textbox", { name: /^Instructions for / });
+    await instructions.fill(assignmentInstructions);
+    await expect(instructions).toHaveValue(assignmentInstructions);
+
+    await wizard.getByRole("button", { name: "Next" }).click();
+    await expect(wizard.getByText(/Write to the repository.*Assigned pipelines only.*Preview only/))
+      .toBeVisible();
+    await expect(wizard.getByText(/Can open pull requests.*Can merge pull requests, with approval/))
+      .toBeVisible();
+    await expect(wizard.getByText("1 of 1")).toBeVisible();
+    const confirm = wizard.getByRole("button", { name: "Confirm" });
+    await expect(confirm).toBeEnabled({ timeout: 20_000 });
+    await confirm.click();
+
+    // Confirmation returns to the real project roster inside the same outer
+    // AI Factory modal. Model and effort are posting-level controls, so drive
+    // them here and wait for each database write plus roster read-back before
+    // touching the next revision-checked field.
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    const model = roster.getByLabel("Model");
+    await expect(model).toBeVisible({ timeout: 30_000 });
+    await expect(model.locator(`option[value="${assignmentModel}"]`)).toHaveCount(1);
+    const modelWrite = page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+    const modelReadback = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    await model.selectOption(assignmentModel);
+    expect((await modelWrite).ok()).toBeTruthy();
+    expect((await modelReadback).ok()).toBeTruthy();
+    await expect(model).toHaveValue(assignmentModel);
+    await expect(model).toBeEnabled();
+
+    const effort = roster.getByLabel("Work effort");
+    const effortWrite = page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+    const effortReadback = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    await effort.selectOption(assignmentEffort);
+    expect((await effortWrite).ok()).toBeTruthy();
+    expect((await effortReadback).ok()).toBeTruthy();
+    await expect(effort).toHaveValue(assignmentEffort);
+    await expect(effort).toBeEnabled();
+
+    // Pause and resume the same posting. Never remove it: the journey must end
+    // with exactly the active route it created, and no worker is connected.
+    const pause = roster.getByRole("button", { name: /^Pause / });
+    const pauseWrite = page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
+    const pauseReadback = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    await pause.click();
+    expect((await pauseWrite).ok()).toBeTruthy();
+    expect((await pauseReadback).ok()).toBeTruthy();
+    const resume = roster.getByRole("button", { name: /^Resume / });
+    await expect(resume).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+
+    const resumeWrite = page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
+    const resumeReadback = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    await resume.click();
+    expect((await resumeWrite).ok()).toBeTruthy();
+    expect((await resumeReadback).ok()).toBeTruthy();
+    await expect(roster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    await expect(roster.getByText("1 bot assigned")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    await expect(assignStep.getByText(/ready bot route.*on this factory/i)).toBeVisible();
+    await expect(stepCard(page, "Configure Bot Settings").getByText("Done"))
+      .toBeVisible({ timeout: 30_000 });
+
+    // ── Step 8: Issue a Command ───────────────────────────────────────────
     const commandStep = stepCard(page, "Issue a Command");
     await commandStep.getByRole("button", { name: "Give a bot work" }).click();
     const composer = page.getByRole("dialog").last();
@@ -227,7 +342,7 @@ test.describe("AI Factory live journey", () => {
       await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
     }
 
-    // ── Step 8: Watch It Ship says what actually executes ─────────────────
+    // ── Step 9: Watch It Ship says what actually executes ─────────────────
     const watchStep = stepCard(page, "Watch It Ship");
     await expect(watchStep.getByText("Done")).toHaveCount(0);
     await watchStep.getByRole("button", { name: "Watch execution" }).click();
@@ -242,13 +357,65 @@ test.describe("AI Factory live journey", () => {
       .toBeVisible({ timeout: 45_000 });
     await expect(stepCard(page, "Create Project").getByText("Done")).toBeVisible();
     await expect(stepCard(page, "Configure Pipeline").getByText("Done")).toBeVisible();
+    await expect(stepCard(page, "Select Agents").getByText("Done")).toBeVisible();
+    await expect(stepCard(page, "Connect Bots").getByText("Done")).toBeVisible();
+    await expect(stepCard(page, "Assign Bots to Project").getByText("Done")).toBeVisible();
+    await expect(stepCard(page, "Configure Bot Settings").getByText("Done")).toBeVisible();
     await expect(page.getByText("Storefront Rebuild").first()).toBeVisible();
+
+    // Reopen the real roster after a whole-page reload. These values now come
+    // from Supabase, not React state or the wizard draft that wrote them.
+    const persistedConfigureStep = stepCard(page, "Configure Bot Settings");
+    await persistedConfigureStep.getByRole("button", { name: "Configure", exact: true }).click();
+    const persistedRoster = page.getByRole("dialog");
+    await expect(persistedRoster).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(persistedRoster.getByText("1 bot assigned")).toBeVisible();
+    await expect(persistedRoster.getByLabel("Model")).toHaveValue(assignmentModel);
+    await expect(persistedRoster.getByLabel("Work effort")).toHaveValue(assignmentEffort);
+    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+
+    await persistedRoster.getByRole("button", { name: /^Configure / }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(persistedRoster.getByRole("combobox", { name: /^Role for / }))
+      .toHaveValue(roleOptions[0]);
+    await expect(persistedRoster.getByRole("combobox", { name: /^Repository access for / }))
+      .toHaveValue("write");
+    await expect(persistedRoster.getByRole("combobox", { name: /^Branch strategy for / }))
+      .toHaveValue("per_task_branch");
+    await expect(persistedRoster.getByRole("combobox", { name: /^Pipeline access for / }))
+      .toHaveValue("assigned");
+    await expect(persistedRoster.getByRole("combobox", { name: /^Environment access for / }))
+      .toHaveValue("preview");
+    await expect(persistedRoster.getByRole("combobox", { name: /^Priority for / }))
+      .toHaveValue("1");
+    await expect(persistedRoster.getByRole("spinbutton", { name: /^Concurrent tasks for / }))
+      .toHaveValue("2");
+    await expect(persistedRoster.getByRole("checkbox", { name: /^Can open pull requests/ }))
+      .toBeChecked();
+    await expect(persistedRoster.getByRole("checkbox", { name: /^Can merge pull requests/ }))
+      .toBeChecked();
+    const persistedApproval = persistedRoster.getByRole("checkbox", {
+      name: /^Work needs a person to approve it before it lands/,
+    });
+    await expect(persistedApproval).toBeChecked();
+    await expect(persistedApproval).toBeDisabled();
+    await expect(persistedRoster.getByRole("textbox", { name: /^Instructions for / }))
+      .toHaveValue(assignmentInstructions);
+
+    // Returning from inline configuration keeps one modal and the sole active
+    // assignment. Close only the outer surface after proving that read-back.
+    await persistedRoster.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
   test("renders a live journey for a signed-in tenant, never a state it could not read", async ({ page }) => {
     /*
      * The half that holds against a deployed site as well as a local stack:
-     * a real sign-in, then the page derived from eight live reads.
+     * a real sign-in, then the page derived from nine live reads.
      *
      * Every failure this catches is one a deployment can cause on its own --
      * a read answering 503 behind a CDN, a session cookie the edge drops, a
@@ -277,12 +444,13 @@ test.describe("AI Factory live journey", () => {
     await expect(page.getByText("Sign in to run your factory")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "AI Factory is unavailable" })).toHaveCount(0);
 
-    // All eight steps present, and a completion count derived from the live
+    // All nine steps present, and a completion count derived from the live
     // records rather than from a step the page assumed.
     for (const title of [
       "Connect Repository",
       "Create Project",
       "Configure Pipeline",
+      "Select Agents",
       "Connect Bots",
       "Assign Bots to Project",
       "Configure Bot Settings",
@@ -291,7 +459,7 @@ test.describe("AI Factory live journey", () => {
     ]) {
       await expect(stepCard(page, title)).toBeVisible();
     }
-    await expect(page.getByText(/\d of 8 complete/)).toBeVisible();
+    await expect(page.getByText(/\d of 9 complete/)).toBeVisible();
   });
 
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {

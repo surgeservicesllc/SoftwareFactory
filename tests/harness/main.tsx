@@ -169,6 +169,20 @@ function serveFixtures() {
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
+    if (url.includes("/api/project-agents")) {
+      return json({
+        available: true,
+        canManage: true,
+        selections: [{
+          id: "dddddddd-2222-4222-8222-222222222222",
+          projectId: PROJECT_ID,
+          agentId: AGENTS[0].id,
+          agentName: AGENTS[0].name,
+          agentRole: AGENTS[0].role,
+          selectedAt: "2026-08-22T00:00:00.000Z",
+        }],
+      });
+    }
     if (url.includes("/api/agents?limit=100")) return json({ agents: FACTORY_BRIEFING_AGENTS });
     if (url.includes("/api/agents")) return json({ agents: AGENTS });
     if (url.includes("/api/activity")) return json({ events: ACTIVITY });

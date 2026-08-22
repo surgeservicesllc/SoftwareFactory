@@ -1,0 +1,2 @@
+supabase/migrations/20260822000200_register_bot_for_ai_account.sql text eol=lf
+supabase/migrations/20260822000300_contract_bot_mutator_acls.sql text eol=lf

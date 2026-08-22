@@ -50,6 +50,31 @@ describe("registerBotSchema", () => {
     ).toBe(false);
   });
 
+  it.each(["selfhosted", "custom"] as const)(
+    "requires a nonempty HTTPS endpoint for %s",
+    (provider) => {
+      const registration = { name: "Gateway", provider, model: "local" };
+
+      for (const baseUrl of [undefined, "", "   "]) {
+        const parsed = registerBotSchema.safeParse({ ...registration, baseUrl });
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          expect(parsed.error.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ path: ["baseUrl"], message: expect.stringMatching(/HTTPS endpoint/) }),
+          ]));
+        }
+      }
+
+      expect(registerBotSchema.safeParse({
+        ...registration,
+        baseUrl: " https://gateway.internal/v1 ",
+      })).toMatchObject({
+        success: true,
+        data: { baseUrl: "https://gateway.internal/v1" },
+      });
+    },
+  );
+
   it("rejects an empty name or model", () => {
     expect(
       registerBotSchema.safeParse({ name: "  ", provider: "anthropic", model: "m" }).success,

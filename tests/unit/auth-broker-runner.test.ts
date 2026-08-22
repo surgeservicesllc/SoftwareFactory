@@ -378,17 +378,23 @@ describe("the verification sweep", () => {
 
 describe("productionAuthBrokerDependencies", () => {
   it("drives a Codex login instead of refusing it", async () => {
-    // The localhost-callback limitation is solved by the address relay: the
-    // worker replays the pasted callback against its own listener. Here we
-    // only prove the driver starts and exposes the login surface.
-    const dependencies = productionAuthBrokerDependencies(makeStore());
-    const cli = await dependencies.startLogin({
+    // Prove the production router selects the Codex driver without starting
+    // a real provider CLI in a unit test (or depending on a Unix pseudo-TTY).
+    const expectedCli = makeCli();
+    const openai = vi.fn(async () => expectedCli);
+    const anthropic = vi.fn(async () => makeCli());
+    const dependencies = productionAuthBrokerDependencies(makeStore(), {
+      openai,
+      anthropic,
+    });
+    const startedCli = await dependencies.startLogin({
       ...session, provider: "openai", purpose: "codex",
     });
-    expect(typeof cli.waitForLoginUrl).toBe("function");
-    expect(typeof cli.submitCode).toBe("function");
-    expect(typeof cli.waitForToken).toBe("function");
-    await cli.dispose();
+    expect(startedCli).toBe(expectedCli);
+    expect(openai).toHaveBeenCalledWith({
+      ...session, provider: "openai", purpose: "codex",
+    });
+    expect(anthropic).not.toHaveBeenCalled();
   });
 });
 

@@ -2,6 +2,56 @@
 
 Last triaged: 2026-08-21
 
+## Claude bot identity and Role assignment release (2026-08-22, ADR-108/ADR-109)
+
+- [x] Remove the zero-role assignment dead end inside the Assign Bots wizard.
+  The inline starter selector defaults to the reviewed Backend engineer
+  template, creates it through the existing manager-only audited role API, and
+  places the exact returned UUID into only blank selected drafts. The Role
+  field then has a real selectable value and Configure can advance. Developer
+  remains a separate permission preset; existing posting role/configuration is
+  preserved.
+- [x] Keep AI Factory on one full-app modal/focus/close boundary, complete the
+  open-assignment roster through terminal-proven UUID keyset pagination, and
+  serialize/fence broker start, retry, close, and cleanup races.
+- [x] Freeze forward migration
+  `20260822000200_register_bot_for_ai_account.sql` at SHA-256
+  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+  It binds a subscription bot to the exact tenant AI account, introduces
+  monotonic bot/assignment revisions, rejects stale or released-posting
+  writes, and records exact-config readiness through a service-role-only
+  boundary while preserving a management-authored Disabled state.
+- [x] Make `20260822000200` an EXPAND migration: preserve exact legacy function
+  definitions/signatures/security/search paths and authenticated-only execute
+  ACLs while adding authenticated revision-checked wrappers plus the
+  service-only readiness recorder. The temporary bypass is explicit; revoke
+  legacy execution only in a separately approved forward CONTRACT migration
+  after the exact replacement app is deployed and accepted.
+- [x] Gate the combined final-candidate working tree: lint, typecheck, production build, 331
+  Vitest files / 3,934 tests (7 skipped), and 1,207 serialized browser passes
+  with 545 intentional viewport skips. The one unknown-resource status defect
+  repeated across three viewports was fixed forward; its exact 404 and
+  generated-social-image regression passes 6/6 across desktop/tablet/mobile.
+  The all-fields audit additionally proves every assignment field and reload
+  readback, preserves spaces while Instructions are typed, and refuses a
+  required custom/self-hosted endpoint in both UI and API. Independent security,
+  broker, UI, and proxy reviews report no unresolved P0/P1/P2.
+- [ ] Freeze the final rebased commit and obtain fresh exact RED approval for
+  direct-main production publication plus the protected single-file
+  `scope=bot-account-binding` apply. No push, hosted apply, or production
+  mutation has occurred in this candidate yet.
+- [ ] After approval, verify exact main/CI/Vercel identities, hosted predecessor
+  `20260822000100`, one new `20260822000200` ledger row, and exact catalog/ACL
+  invariants. Then run the distinct post-apply gates: runtime create/bind/
+  assign/configure/readiness/audit behavior, linked-database lint, health, and
+  signed-in Claude create/assign/Role/configure/reload stickiness. Stop on any
+  mismatch and contain only with a new forward change.
+- [ ] After exact-app production acceptance, separately review and authorize a
+  forward CONTRACT migration that revokes the six legacy authenticated execute
+  grants. Do not fold revocation into the EXPAND apply or infer approval for it.
+  Keep the global kill switch ON, raw autonomy and all automatic actions OFF,
+  and the worker/executor disconnected.
+
 ## Agents selectable into the AI Factory (2026-08-22, ADR-107, owner goal)
 
 - [x] Migration `20260822000100_project_agent_selection.sql`: project_agents

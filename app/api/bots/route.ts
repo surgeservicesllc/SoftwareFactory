@@ -23,6 +23,9 @@ export async function GET() {
       activeOrganizationId: activeOrganization.id,
       canManage: canManageBotFabric(activeOrganization.role),
       ...snapshot,
+      // Kept explicit at the HTTP boundary: clients from a rolling deployment
+      // must require this positive proof before deriving assignment progress.
+      assignmentsComplete: snapshot.assignmentsComplete === true,
       executor: {
         connected: false,
         label: "Not Connected",
@@ -49,7 +52,8 @@ export async function POST(request: Request) {
         {
           error: {
             code: "invalid_bot",
-            message: "Choose a provider, then set a name and model identifier.",
+            message:
+              "Choose a provider, then set a valid name, model identifier, and any required HTTPS endpoint.",
           },
         },
         { status: 400 },

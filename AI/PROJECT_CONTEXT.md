@@ -6,6 +6,47 @@ SoftwareFactory is a tenant-scoped software-engineering control plane. It joins 
 
 ## Active delivery tracks
 
+The current local release candidate repairs the Claude Bot Space and guided AI
+Factory journey without claiming production delivery. Exact identity is tenant
+AI account -> account-bound bot -> selected project -> revision-checked open
+assignment; provider/credential similarity is never a substitute. Bot and
+assignment revisions advance monotonically, checked writes refuse stale or
+released postings, and a service-role-only readiness recorder compares the
+exact bot revision/account/provider/model/credential reference/base URL while
+preserving management-authored Disabled. Complete keyset pagination fails the
+roster and assignment-derived Factory progress closed rather than treating a
+prefix as truth.
+
+The UI has one application modal and no nested assignment/configuration/role
+dialogs. A zero-role organization defaults to the reviewed Backend engineer
+starter through the audited role API and uses its returned UUID; the separate
+Developer permission preset remains the new-posting configuration default, and
+existing posting role/configuration is preserved. Broker start/retry/close and
+cleanup are serialized and generation-fenced. Forward migration
+`20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981` and the
+single-file `scope=bot-account-binding` is not hosted. This migration is the
+EXPAND half of a rolling cutover: legacy function definitions, signatures,
+security/search paths, and exact authenticated-only execute ACLs remain so the
+currently deployed application keeps working while the checked boundaries are
+added. The legacy grants may be revoked only by a separately approved forward
+CONTRACT migration after the exact replacement application is deployed and
+accepted. Until then, those legacy calls remain a bounded bypass of revision
+tokens and the service-only readiness boundary; worker/autonomy containment
+stays in force.
+The combined final-candidate working tree passes lint, typecheck, production build, 331
+Vitest files / 3,934 tests (7 skipped), 1,207 serialized browser cases (545
+intentional viewport skips), and the repaired resource-status/social-image
+regression 6/6 across desktop/tablet/mobile. The final semantic field audit
+also covers every assignment, manual bot, authored role, and advanced-command
+input; it fixed Instructions editing and fail-closed custom endpoint handling.
+Independent security, broker, UI, and proxy reviews report no unresolved
+P0/P1/P2 findings. The candidate is not deployed,
+and final rebased-commit gates plus fresh exact RED approval remain pending. It
+does not connect a worker or enable autonomous action, approval, merge,
+deployment, or rollback; containment remains kill switch ON with autonomy and
+all automatic actions OFF.
+
 The published default branch contains the Phase 2A advisory provider layer and the execution-inert Phase 1D decision layer. Hosted Supabase is reconciled through migration `20260813001400_resolve_emergency_stop.sql`; local migration `20260813001500_expose_bounded_run_routing.sql` is not hosted and awaits its own exact RED approval. `130015` restores the original 128-character provider catalogue/API bound for assignment/run model checks, rejects credential-shaped catalogue model/display-name, assignment model, and routing policy-version/selected-model text in browser-readable rows, adds bounded run-detail routing evidence, and closes raw authenticated reads of routing decisions/events while retaining RLS-scoped model-configuration reads. Provider execution remains OFF, provider credentials/live calls are unverified, the global kill switch remains ON, all nine automatic actions remain OFF, and no autonomous executor exists. Both provider execution and Phase 1D execution remain **Not Connected**.
 
 The published repository contains a **Phase 1C implementation** for a manually requested Codex execution path:

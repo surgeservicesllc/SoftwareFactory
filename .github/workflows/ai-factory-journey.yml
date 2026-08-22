@@ -1,6 +1,6 @@
 name: AI Factory live journey
 
-# The eight-step guided journey at /solutions/ai-factory, driven in a real
+# The nine-step guided journey at /solutions/ai-factory, driven in a real
 # browser against a real Supabase stack (supabase start: real Postgres carrying
 # the full migration chain, real PostgREST, real GoTrue) with the production
 # Next build in front — tests/e2e/ai-factory-journey.spec.ts.
@@ -24,7 +24,7 @@ name: AI Factory live journey
 # only: step 1 cannot be seeded on a deployed target, because nothing here has
 # write access to a hosted database and nothing should. What it proves is the
 # half a deployment can regress on its own — a real session against the real
-# edge, and eight live reads rendering the journey rather than a gate or an
+# edge, and nine live reads rendering the journey rather than a gate or an
 # unreadable snapshot.
 
 on:
@@ -194,6 +194,18 @@ jobs:
             'claude', now(), :user_id
           );
 
+          -- A completed broker sign-in also leaves a sealed credential row.
+          -- This inert envelope is shape-valid but cannot authenticate or be
+          -- opened; the fake environment placeholder above is what makes the
+          -- local readiness check resolve without any provider call.
+          insert into public.provider_credentials (
+            organization_id, purpose, sealed_envelope, source, created_by
+          ) values (
+            '10000000-0000-4000-8000-0000000fa001', 'claude',
+            'v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'connect_session', :user_id
+          );
+
           insert into public.github_repositories (
             id, organization_id, installation_id, external_repository_id, owner_login, name,
             full_name, default_branch, html_url, private, visibility, selected, github_updated_at
@@ -227,7 +239,7 @@ jobs:
         run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
 
       - name: Run the journey (remote target)
-        # No AI_FACTORY_E2E_SEEDED: the eight-step walk skips itself, and what
+        # No AI_FACTORY_E2E_SEEDED: the nine-step walk skips itself, and what
         # runs is the signed-in read against the deployed site.
         if: ${{ inputs.base_url != '' && inputs.base_url != null }}
         env:

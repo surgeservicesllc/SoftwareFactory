@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   BRANCH_STRATEGIES,
@@ -41,7 +41,8 @@ import {
   type RepositoryAccess,
 } from "@/lib/bots/assignment-config";
 import { accountProvisionCredentialChoice } from "@/lib/bots/account-credential-choice";
-import { findBotProvider } from "@/lib/bots/catalog";
+import { BOT_ROLE_TEMPLATES, findBotProvider } from "@/lib/bots/catalog";
+import { ModalDialog } from "@/components/modal-dialog";
 import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -77,7 +78,12 @@ type ProjectBot = {
   alreadyOnThisProject: boolean;
   currentProjectId: string | null;
   currentProjectName: string | null;
+  currentAssignmentId: string | null;
+  currentAssignmentProjectId: string | null;
+  currentAssignmentRevision: number | null;
   currentRoleId: string | null;
+  currentRole: ProjectRole | null;
+  currentAssignmentConfig: AssignmentConfig | null;
   workload: number;
 };
 
@@ -115,7 +121,9 @@ type ProjectRole = { id: string; name: string; slug: string; summary: string };
 
 type Posting = {
   id: string;
+  revision: number;
   botId: string;
+  projectId: string;
   roleId: string;
   status: "active" | "paused" | "released";
   assignedAt: string;
@@ -168,10 +176,18 @@ export function ProjectBots({
    * same rule reads as a stray line directly under the card's own border.
    */
   divided = true,
+  /**
+   * AI Factory already supplies the modal shell for this control. In that
+   * surface the assignment/configuration flows render in place so opening one
+   * never stacks a second modal, backdrop, close button, or focus boundary on
+   * top of the first.
+   */
+  embedded = false,
 }: {
   projectId: string;
   projectName: string;
   divided?: boolean;
+  embedded?: boolean;
 }) {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [usage, setUsage] = useState<UsageByAccount>({});
@@ -200,12 +216,14 @@ export function ProjectBots({
        * with it. The panel is one section of a page; it does not get to be the
        * reason the rest disappears.
        */
-      setRoster({
+      const normalized: Roster = {
         canManage: body.canManage === true,
         assigned: Array.isArray(body.assigned) ? body.assigned : [],
         available: Array.isArray(body.available) ? body.available : [],
         roles: Array.isArray(body.roles) ? body.roles : [],
-      });
+      };
+      setRoster(normalized);
+      return normalized;
     } catch {
       setFailed(true);
     }
@@ -266,7 +284,11 @@ export function ProjectBots({
         const response = await fetch(`/api/bot-assignments/${posting.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({
+            ...patch,
+            expectedProjectId: posting.projectId,
+            expectedRevision: posting.revision,
+          }),
         });
         if (!response.ok) {
           const body = (await response.json()) as { error?: { message?: string } };
@@ -293,7 +315,11 @@ export function ProjectBots({
           headers: { "content-type": "application/json" },
           // The configuration travels with the status so a pause cannot land
           // without the permissions it was paired with.
-          body: JSON.stringify({ status, config: toConfigInput(posting.config) }),
+          body: JSON.stringify({
+            status,
+            config: toConfigInput(posting.config),
+            expectedRevision: posting.revision,
+          }),
         });
         if (!response.ok) {
           const body = (await response.json()) as { error?: { message?: string } };
@@ -317,6 +343,8 @@ export function ProjectBots({
       try {
         const response = await fetch(`/api/projects/${projectId}/bots/${posting.id}`, {
           method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ expectedRevision: posting.revision }),
         });
         if (!response.ok) {
           const body = (await response.json()) as { error?: { message?: string } };
@@ -347,6 +375,46 @@ export function ProjectBots({
   if (!roster) return null;
 
   const assigned = roster.assigned;
+
+  if (embedded && wizardOpen) {
+    return (
+      <div className={cn("p-5", divided && "border-t border-line")}>
+        <AssignWizard
+          projectId={projectId}
+          projectName={projectName}
+          bots={roster.available}
+          roles={roster.roles}
+          usage={usage}
+          accounts={accounts}
+          inline
+          onRosterRefresh={load}
+          onClose={() => setWizardOpen(false)}
+          onAssigned={async () => {
+            setWizardOpen(false);
+            await load();
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (embedded && editing) {
+    return (
+      <div className={cn("p-5", divided && "border-t border-line")}>
+        <EditPostingDialog
+          projectId={projectId}
+          posting={editing}
+          roles={roster.roles}
+          inline
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("p-5", divided && "border-t border-line")}>
@@ -414,6 +482,7 @@ export function ProjectBots({
           roles={roster.roles}
           usage={usage}
           accounts={accounts}
+          inline={false}
           onRosterRefresh={load}
           onClose={() => setWizardOpen(false)}
           onAssigned={async () => {
@@ -428,6 +497,7 @@ export function ProjectBots({
           projectId={projectId}
           posting={editing}
           roles={roster.roles}
+          inline={false}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -627,7 +697,10 @@ function toConfigInput(config: AssignmentConfig) {
   return {
     preset: config.preset ?? undefined,
     responsibilities: [...config.responsibilities],
-    instructions: config.instructions ?? undefined,
+    // Keep the controlled textarea byte-for-byte while somebody is typing.
+    // Normalization belongs at the write boundary: trimming in `onChange`
+    // removes a trailing space before the next word can be entered.
+    instructions: config.instructions?.trim() || undefined,
     repositoryAccess: config.repositoryAccess,
     branchStrategy: config.branchStrategy,
     canOpenPullRequest: config.canOpenPullRequest,
@@ -645,38 +718,54 @@ function toConfigInput(config: AssignmentConfig) {
  * Picks the role whose slug matches a preset, so choosing "Tester" lands on
  * the organization's own Tester role rather than whichever one sorts first.
  */
-function roleForPreset(roles: ProjectRole[], presetId: string): string {
-  return (roles.find((role) => role.slug === presetId) ?? roles[0])?.id ?? "";
+function matchingRoleForPreset(roles: ProjectRole[], presetId: string): string | null {
+  return roles.find((role) => role.slug === presetId)?.id ?? null;
+}
+
+function initialRoleForPreset(roles: ProjectRole[], presetId: string): string {
+  return matchingRoleForPreset(roles, presetId) ?? roles[0]?.id ?? "";
+}
+
+function botCanBeSelected(bot: ProjectBot): boolean {
+  return bot.assignable && !bot.alreadyOnThisProject;
 }
 
 function DialogShell({
   label,
   onClose,
   children,
+  inline = false,
 }: {
   label: string;
   onClose: () => void;
   children: React.ReactNode;
+  inline?: boolean;
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  if (inline) {
+    return <section aria-label={label}>{children}</section>;
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={label}
+    <ModalDialog
+      label={label}
+      onRequestClose={onClose}
+      initialFocusRef={closeButtonRef}
+      className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
+      panelClassName="relative my-auto w-full max-w-2xl rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6"
     >
-      <div className="relative my-auto w-full max-w-2xl rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6">
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn btn-secondary btn-sm absolute right-3 top-3 size-9 px-0 sm:right-4 sm:top-4"
-          aria-label="Close"
-        >
-          <X className="size-4" aria-hidden="true" />
-        </button>
-        {children}
-      </div>
-    </div>
+      <button
+        ref={closeButtonRef}
+        type="button"
+        onClick={onClose}
+        className="btn btn-secondary btn-sm absolute right-3 top-3 size-9 px-0 sm:right-4 sm:top-4"
+        aria-label="Close"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </button>
+      {children}
+    </ModalDialog>
   );
 }
 
@@ -687,6 +776,7 @@ function AssignWizard({
   roles,
   usage,
   accounts,
+  inline,
   onRosterRefresh,
   onClose,
   onAssigned,
@@ -697,7 +787,8 @@ function AssignWizard({
   roles: ProjectRole[];
   usage: UsageByAccount;
   accounts: LinkableAccount[];
-  onRosterRefresh: () => Promise<void> | void;
+  inline: boolean;
+  onRosterRefresh: () => Promise<Roster | void> | Roster | void;
   onClose: () => void;
   onAssigned: () => Promise<void> | void;
 }) {
@@ -712,6 +803,17 @@ function AssignWizard({
   // whether a linking round-trip is in flight.
   const [linkSelected, setLinkSelected] = useState<string[]>([]);
   const [linking, setLinking] = useState(false);
+  const [starterRoleSlug, setStarterRoleSlug] = useState("backend");
+  const [starterRoleBusy, setStarterRoleBusy] = useState(false);
+  const [createdRoles, setCreatedRoles] = useState<ProjectRole[]>([]);
+
+  const effectiveRoles = useMemo(
+    () => [
+      ...roles,
+      ...createdRoles.filter((created) => !roles.some((role) => role.id === created.id)),
+    ],
+    [roles, createdRoles],
+  );
 
   /**
    * Connected accounts from the Bot Manager that no bot reads yet. Each is
@@ -722,12 +824,15 @@ function AssignWizard({
     () =>
       accounts.filter((account) => {
         const ref = accountCredentialRef(account);
-        return ref !== null && !bots.some((bot) => bot.credentialRef === ref);
+        return ref !== null && !bots.some(
+          (bot) => bot.aiAccountId === account.id
+            || (!bot.aiAccountId && bot.credentialRef === ref),
+        );
       }),
     [accounts, bots],
   );
 
-  const assignable = useMemo(() => bots.filter((bot) => bot.assignable), [bots]);
+  const assignable = useMemo(() => bots.filter(botCanBeSelected), [bots]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -739,7 +844,7 @@ function AssignWizard({
 
   const toggle = useCallback(
     (bot: ProjectBot) => {
-      if (!bot.assignable) return;
+      if (!botCanBeSelected(bot)) return;
       setSelected((current) => {
         if (current.includes(bot.id)) return current.filter((id) => id !== bot.id);
         if (current.length >= MAX_BOTS_PER_ASSIGNMENT) return current;
@@ -750,22 +855,102 @@ function AssignWizard({
         // A bot's existing role is the better starting point than a guess; only
         // fall back to a preset when it has none.
         const preset = ROLE_PRESETS[0];
+        const preservedConfig = bot.currentAssignmentConfig
+          ? normalizeAssignmentConfig(toConfigInput(bot.currentAssignmentConfig))
+          : null;
         return {
           ...current,
           [bot.id]: {
-            roleId: bot.currentRoleId ?? roleForPreset(roles, preset.id),
-            config: normalizeAssignmentConfig({
-              ...preset.config,
-              responsibilities: [...preset.config.responsibilities],
-              tools: [...preset.config.tools],
-              preset: preset.id,
-            }),
+            roleId: bot.currentRoleId ?? initialRoleForPreset(effectiveRoles, preset.id),
+            config: preservedConfig ?? normalizeAssignmentConfig({
+                ...preset.config,
+                responsibilities: [...preset.config.responsibilities],
+                tools: [...preset.config.tools],
+                preset: preset.id,
+              }),
           },
         };
       });
     },
-    [roles],
+    [effectiveRoles],
   );
+
+  /**
+   * A newly onboarded organization intentionally owns its role definitions,
+   * but that used to leave the first assignment at a blank required select
+   * with a link away from the wizard. Adopt one of the existing, reviewed
+   * starter templates through the same authorized and audited role API used by
+   * Bot Manager, then apply its exact returned id to every selected draft.
+   */
+  const createStarterRole = useCallback(async () => {
+    const template = BOT_ROLE_TEMPLATES.find((entry) => entry.slug === starterRoleSlug);
+    if (!template) return;
+
+    setStarterRoleBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/bot-roles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          roleId: null,
+          name: template.name,
+          slug: template.slug,
+          summary: template.summary,
+          instructions: template.instructions,
+          riskCeiling: template.riskCeiling,
+          capabilities: [...template.capabilities],
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        role?: ProjectRole;
+        error?: { code?: string; message?: string };
+      };
+      if (!response.ok || !body.role?.id) {
+        if (response.status === 409 && body.error?.code === "bot_fabric_conflict") {
+          const refreshed = await onRosterRefresh();
+          const concurrentRole = refreshed?.roles.find((role) => role.slug === template.slug);
+          if (concurrentRole) {
+            setCreatedRoles((current) => (
+              current.some((entry) => entry.id === concurrentRole.id)
+                ? current
+                : [...current, concurrentRole]
+            ));
+            setDrafts((current) => {
+              const next = { ...current };
+              for (const id of selected) {
+                const draft = next[id];
+                if (draft && !draft.roleId) {
+                  next[id] = { ...draft, roleId: concurrentRole.id };
+                }
+              }
+              return next;
+            });
+            return;
+          }
+        }
+        throw new Error(body.error?.message ?? "The starter role could not be added.");
+      }
+
+      const role = body.role;
+      setCreatedRoles((current) => (
+        current.some((entry) => entry.id === role.id) ? current : [...current, role]
+      ));
+      setDrafts((current) => {
+        const next = { ...current };
+        for (const id of selected) {
+          const draft = next[id];
+          if (draft && !draft.roleId) next[id] = { ...draft, roleId: role.id };
+        }
+        return next;
+      });
+      await onRosterRefresh();
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : "The starter role could not be added.");
+    } finally {
+      setStarterRoleBusy(false);
+    }
+  }, [starterRoleSlug, selected, onRosterRefresh]);
 
   const selectAll = useCallback(() => {
     const everything = assignable.slice(0, MAX_BOTS_PER_ASSIGNMENT);
@@ -781,14 +966,14 @@ function AssignWizard({
   /**
    * Create a bot for each ticked account — the same provision call the Bot
    * Manager's own Create Bot uses, aimed at that account's credential slot —
-   * then read the roster back and select the bots those accounts produced,
-   * recognized by their credential variable. "Link" means exactly what it
-   * says: those Bot Manager accounts become selected, staffable bots here.
+   * then read the roster back and select the exact bot ids the server returned.
+   * "Link" means exactly what it says: those Bot Manager accounts become
+   * selected, staffable bots here without credential-ref inference.
    */
   const linkAccounts = useCallback(async () => {
     setLinking(true);
     setError("");
-    const refs: string[] = [];
+    const botIds: string[] = [];
     try {
       for (const id of linkSelected) {
         const account = linkable.find((entry) => entry.id === id);
@@ -803,26 +988,28 @@ function AssignWizard({
           body: JSON.stringify({
             provider: account.provider,
             credential,
-            additional: true,
+            aiAccountId: account.id,
+            additional: false,
           }),
         });
         const body = (await response.json().catch(() => ({}))) as {
           provisioned?: boolean;
           outcome?: string;
+          botId?: string;
           reason?: string;
           error?: { message?: string };
         };
         // "skipped" arrives as a 200 with a reason; celebrating it is how a
         // linked account produced no bot and no sentence.
-        if (!response.ok || body.provisioned !== true) {
+        if (!response.ok || !body.botId
+          || (body.outcome !== "created" && body.outcome !== "bound" && body.outcome !== "exists")) {
           throw new Error(
             body.reason
               ?? body.error?.message
               ?? `A bot for ${account.displayName} could not be created.`,
           );
         }
-        const ref = accountCredentialRef(account);
-        if (ref) refs.push(ref);
+        botIds.push(body.botId);
       }
     } catch (linkError) {
       setError(linkError instanceof Error ? linkError.message : "Those accounts could not be linked.");
@@ -830,13 +1017,13 @@ function AssignWizard({
     // Whatever succeeded before a failure is real: read the roster back,
     // select the bots the linked accounts produced, and let the parent
     // refresh so the list behind the wizard agrees.
-    if (refs.length) {
+    if (botIds.length) {
       try {
         const response = await fetch(`/api/projects/${projectId}/bots`, { cache: "no-store" });
         if (response.ok) {
           const body = (await response.json()) as { available?: ProjectBot[] };
           for (const created of (body.available ?? []).filter(
-            (entry) => entry.credentialRef && refs.includes(entry.credentialRef) && entry.assignable,
+            (entry) => botIds.includes(entry.id) && botCanBeSelected(entry),
           )) {
             toggle(created);
           }
@@ -878,23 +1065,90 @@ function AssignWizard({
   async function confirm() {
     setBusy(true);
     setError("");
+    const requested = selected.map((id) => ({
+      botId: id,
+      roleId: drafts[id].roleId,
+      config: drafts[id].config,
+      expectedAssignmentId: bots.find((bot) => bot.id === id)?.currentAssignmentId ?? null,
+      expectedProjectId: bots.find((bot) => bot.id === id)?.currentAssignmentProjectId ?? null,
+      expectedAssignmentRevision: bots.find((bot) => bot.id === id)?.currentAssignmentRevision ?? null,
+    }));
     try {
       const response = await fetch(`/api/projects/${projectId}/bots`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          bots: selected.map((id) => ({
-            botId: id,
-            roleId: drafts[id].roleId,
-            config: toConfigInput(drafts[id].config),
+          bots: requested.map((entry) => ({
+            botId: entry.botId,
+            roleId: entry.roleId,
+            config: toConfigInput(entry.config),
+            expectedAssignmentId: entry.expectedAssignmentId,
+            expectedProjectId: entry.expectedProjectId,
+            expectedAssignmentRevision: entry.expectedAssignmentRevision,
           })),
         }),
       });
+      const body = (await response.json().catch(() => ({}))) as {
+        assignments?: Array<{
+          id: string;
+          botId: string;
+          projectId: string;
+          roleId: string;
+          status: string;
+          config: AssignmentConfig;
+        }>;
+        error?: { message?: string };
+      };
       if (!response.ok) {
-        const body = (await response.json()) as { error?: { message?: string } };
         setError(body.error?.message ?? "These bots could not be assigned.");
         return;
       }
+
+      const returnedByBot = new Map(
+        (body.assignments ?? []).map((assignment) => [assignment.botId, assignment]),
+      );
+      const exactResponse = (body.assignments ?? []).length === requested.length
+        && returnedByBot.size === requested.length
+        && requested.every((expected) => {
+          const actual = returnedByBot.get(expected.botId);
+          return Boolean(actual?.id)
+            && actual?.projectId === projectId
+            && actual.roleId === expected.roleId
+            && actual.status === "active"
+            && JSON.stringify(toConfigInput(actual.config))
+              === JSON.stringify(toConfigInput(expected.config));
+        });
+      if (!exactResponse) {
+        setError("The server did not confirm the exact assignments. Reload the roster before trying again.");
+        await onRosterRefresh();
+        return;
+      }
+
+      // Verify the committed read model too. A 201 response is not enough if
+      // the roster immediately reads back a different role or grant.
+      const readbackResponse = await fetch(`/api/projects/${projectId}/bots`, { cache: "no-store" });
+      const readbackBody = (await readbackResponse.json().catch(() => ({}))) as {
+        assigned?: Posting[];
+      };
+      const readbackByBot = new Map(
+        (readbackBody.assigned ?? []).map((assignment) => [assignment.botId, assignment]),
+      );
+      const exactReadback = readbackResponse.ok && requested.every((expected) => {
+        const returned = returnedByBot.get(expected.botId);
+        const actual = readbackByBot.get(expected.botId);
+        return actual?.id === returned?.id
+          && actual?.projectId === projectId
+          && actual.roleId === expected.roleId
+          && actual.status === "active"
+          && JSON.stringify(toConfigInput(actual.config))
+            === JSON.stringify(toConfigInput(expected.config));
+      });
+      if (!exactReadback) {
+        setError("The assignments were saved but their exact readback could not be verified. Reload the roster before trying again.");
+        await onRosterRefresh();
+        return;
+      }
+
       await onAssigned();
     } catch {
       setError("These bots could not be assigned.");
@@ -906,9 +1160,9 @@ function AssignWizard({
   const stepIndex = STEPS.indexOf(step);
 
   return (
-    <DialogShell label={`Assign bots to ${projectName}`} onClose={onClose}>
-      <div className="pr-10">
-        <h3 className="text-base font-semibold text-foreground">Assign Bots</h3>
+    <DialogShell label={`Assign bots to ${projectName}`} onClose={onClose} inline={inline}>
+      <div className={inline ? undefined : "pr-10"}>
+        {inline ? null : <h3 className="text-base font-semibold text-foreground">Assign Bots</h3>}
         <p className="mt-1 text-sm text-muted">
           Choose bots for {projectName}, then set what each one is responsible for.
         </p>
@@ -1016,11 +1270,52 @@ function AssignWizard({
 
         {step === "Configure" ? (
           <div className="space-y-4">
+            {effectiveRoles.length === 0 ? (
+              <section
+                className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-surface)] p-4"
+                aria-label="Add a starter bot role"
+              >
+                <h4 className="text-sm font-semibold text-foreground">Add your first bot role</h4>
+                <p className="mt-1 text-xs text-muted">
+                  Every project posting needs an organization role. Choose a reviewed starter;
+                  it is saved through the same audited role control as Bot Manager and remains
+                  yours to edit.
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-2">
+                  <label className="min-w-0 flex-1">
+                    <span className="label">Starter role</span>
+                    <select
+                      aria-label="Starter role"
+                      value={starterRoleSlug}
+                      onChange={(event) => setStarterRoleSlug(event.target.value)}
+                      className="input mt-1.5 w-full"
+                    >
+                      {BOT_ROLE_TEMPLATES.map((template) => (
+                        <option key={template.slug} value={template.slug}>{template.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void createStarterRole()}
+                    disabled={starterRoleBusy}
+                    className="btn btn-primary btn-sm"
+                  >
+                    {starterRoleBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Plus className="size-3.5" aria-hidden="true" />
+                    )}
+                    Add starter role
+                  </button>
+                </div>
+              </section>
+            ) : null}
             {selectedBots.map((bot) => (
               <ConfigureCard
                 key={bot.id}
                 bot={bot}
-                roles={roles}
+                roles={effectiveRoles}
                 draft={drafts[bot.id]}
                 onChange={(draft) => setDrafts((current) => ({ ...current, [bot.id]: draft }))}
                 onRemove={() => toggle(bot)}
@@ -1034,7 +1329,7 @@ function AssignWizard({
             projectName={projectName}
             bots={selectedBots}
             drafts={drafts}
-            roles={roles}
+            roles={effectiveRoles}
             moving={moving}
             totalConcurrency={totalConcurrency}
           />
@@ -1067,6 +1362,11 @@ function AssignWizard({
           {selected.length} {selected.length === 1 ? "bot" : "bots"} selected
         </p>
         <div className="flex flex-wrap gap-2">
+          {inline && stepIndex === 0 ? (
+            <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">
+              Cancel
+            </button>
+          ) : null}
           {stepIndex > 0 ? (
             <button
               type="button"
@@ -1168,12 +1468,13 @@ function SelectStep({
           {bots.map((bot) => {
             const checked = selected.includes(bot.id);
             const windows = bot.aiAccountId ? usage[bot.aiAccountId] ?? [] : [];
+            const selectable = botCanBeSelected(bot);
             return (
               <li key={bot.id}>
                 <label
                   className={cn(
                     "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-                    bot.assignable
+                    selectable
                       ? checked
                         ? "border-[var(--accent)] bg-surface-raised"
                         : "border-line hover:border-line-strong"
@@ -1183,7 +1484,7 @@ function SelectStep({
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={!bot.assignable}
+                    disabled={!selectable}
                     onChange={() => onToggle(bot)}
                     aria-label={`Select ${bot.name}`}
                     className="mt-0.5 size-4 shrink-0"
@@ -1203,7 +1504,7 @@ function SelectStep({
                         between an informed choice and a surprise. */}
                     {bot.alreadyOnThisProject ? (
                       <span className="mt-1 block text-sm text-muted">
-                        Already on this project — selecting it updates its configuration.
+                        Already on this project — use Configure, Pause, or Resume on its posting.
                       </span>
                     ) : bot.currentProjectName ? (
                       <span className="mt-1 block text-sm text-[var(--warning)]">
@@ -1211,7 +1512,7 @@ function SelectStep({
                       </span>
                     ) : null}
 
-                    {!bot.assignable && bot.blockedReason ? (
+                    {!selectable && bot.blockedReason ? (
                       <span className="mt-1 block text-sm text-[var(--warning)]">
                         {bot.blockedReason}
                       </span>
@@ -1259,7 +1560,14 @@ function ConfigureCard({
     try {
       const next = normalizeAssignmentConfig(toConfigInput({ ...draft.config, ...partial }));
       setInvalid("");
-      onChange({ ...draft, config: next });
+      // `normalizeAssignmentConfig` protects every coupled permission choice,
+      // but the Instructions textarea is still an in-progress editor value.
+      // Preserve it across changes to neighboring controls; it is normalized
+      // only when `toConfigInput` serializes the eventual write.
+      onChange({
+        ...draft,
+        config: { ...next, instructions: draft.config.instructions },
+      });
     } catch (error) {
       setInvalid(error instanceof Error ? error.message : "That combination is not allowed.");
     }
@@ -1270,12 +1578,13 @@ function ConfigureCard({
     if (!preset) return;
     setInvalid("");
     onChange({
-      roleId: roleForPreset(roles, preset.id) || draft.roleId,
+      roleId: matchingRoleForPreset(roles, preset.id) ?? draft.roleId,
       config: normalizeAssignmentConfig({
         ...preset.config,
         responsibilities: [...preset.config.responsibilities],
         tools: [...preset.config.tools],
         preset: preset.id,
+        instructions: draft.config.instructions,
       }),
     });
   }
@@ -1338,26 +1647,19 @@ function ConfigureCard({
           </select>
           {roles.length === 0 ? (
             /*
-             * A workspace has no roles until somebody makes one, and every
-             * assignment needs one -- the database requires it. With the list
-             * empty this select was simply blank and Confirm stayed disabled
-             * with nothing said, which is where the AI Factory's Assign Bots
-             * step dead-ended for a first-time owner: the wizard would not
-             * finish and did not explain why.
-             *
-             * The link goes to /solutions/bot-manager. It pointed at
-             * /solutions/bots, which is neither a route nor a redirect -- the
-             * one instruction offered to an owner who cannot proceed was a 404.
+             * The parent wizard offers the inline, audited starter-role action.
+             * Keep the custom-role route visible here too without telling a
+             * first-time owner to abandon this assignment and "come back."
              */
             <span className="mt-1.5 block text-xs text-faint">
-              No roles yet. A posting needs one — create it in{" "}
+              No roles yet. Add a starter role above to continue, or manage custom roles in{" "}
               <Link
                 href="/solutions/bot-manager"
                 className="underline underline-offset-2 hover:text-foreground"
               >
                 Bot Manager
               </Link>
-              , then come back.
+              .
             </span>
           ) : null}
         </label>
@@ -1531,7 +1833,10 @@ function ConfigureCard({
         <span className="label">Instructions</span>
         <textarea
           value={draft.config.instructions ?? ""}
-          onChange={(event) => apply({ instructions: event.target.value.trim() || null })}
+          onChange={(event) => onChange({
+            ...draft,
+            config: { ...draft.config, instructions: event.target.value },
+          })}
           rows={2}
           maxLength={4000}
           placeholder="Anything this bot should always do on this project."
@@ -1650,12 +1955,14 @@ function EditPostingDialog({
   projectId,
   posting,
   roles,
+  inline,
   onClose,
   onSaved,
 }: {
   projectId: string;
   posting: Posting;
   roles: ProjectRole[];
+  inline: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
@@ -1674,6 +1981,7 @@ function EditPostingDialog({
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedRevision: posting.revision,
           roleId: draft.roleId,
           config: toConfigInput(draft.config),
         }),
@@ -1695,8 +2003,8 @@ function EditPostingDialog({
   if (!bot) return null;
 
   return (
-    <DialogShell label={`Configure ${bot.name}`} onClose={onClose}>
-      <div className="pr-10">
+    <DialogShell label={`Configure ${bot.name}`} onClose={onClose} inline={inline}>
+      <div className={inline ? undefined : "pr-10"}>
         <h3 className="text-base font-semibold text-foreground">Configure {bot.name}</h3>
         <p className="mt-1 text-sm text-muted">
           Change what this bot is responsible for and what it may reach.

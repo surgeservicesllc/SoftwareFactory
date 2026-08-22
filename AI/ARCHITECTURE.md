@@ -1,5 +1,94 @@
 # Architecture
 
+## Current release boundary — exact AI-account bot identity (ADR-108/ADR-109)
+
+The local, not-yet-deployed candidate makes subscription identity a database
+fact. Authenticated managers call `ensure_ai_account_bot` with the exact tenant
+AI-account UUID; PostgreSQL derives the provider and credential slot, returns
+the exact bot UUID, and enforces organization/account/provider/reference
+coherence. A default/non-additional request reuses that account's bound bot or
+may adopt one and only one unambiguous matching legacy bot in place, preserving
+its UUID, assignments, and history. An explicit additional request creates a
+distinct bot with the same exact account binding. Similar provider names or
+credential references never substitute for the account identity.
+
+Both `bots` and `bot_assignments` carry positive revisions initialized at 1;
+BEFORE UPDATE triggers increment them monotonically and refuse overflow. The
+checked assignment boundaries lock the current open posting and compare its
+assignment UUID, project UUID, and revision before delegating inside the same
+transaction to the established audited mutation. Configuration, lifecycle,
+and execution-preference edits use the same comparison, and all checked edit
+paths refuse released rows. Client-callable history is therefore immutable and
+stale managers fail instead of restoring an obsolete role, grant, status,
+model, or work effort.
+
+Readiness is computed from environment-or-vault credential presence on the
+server and persisted only by
+`record_bot_readiness_preserving_disabled`. That RPC is executable only by
+`service_role`, carries the initiating owner/admin user for authorization and
+audit, locks the bot, and compares the exact revision, account UUID, provider,
+model, credential reference, and base URL that were evaluated. A stale check
+fails; a check cannot author `Disabled`; an already Disabled bot is returned
+unchanged. No opened credential value enters a bot/readiness response,
+readiness detail, bot row, or activity row. Ready remains configuration
+evidence, not a live provider call or executor.
+
+This is deliberately an EXPAND compatibility change. Legacy registration,
+assignment, and readiness mutation definitions, signatures, security mode,
+pinned search paths, and exact ACLs stay unchanged. In particular, all six
+legacy assignment/readiness RPCs retain their authenticated-only execute grant
+and their public/anon/service-role denials while checked wrappers and the
+service-only readiness recorder are added. This keeps the currently deployed
+application working across a migration-first cutover, at the bounded cost that
+old callers can still bypass revision tokens and service-only readiness. A
+separately approved forward CONTRACT migration may revoke those grants only
+after the exact replacement application is deployed and accepted.
+
+The read side obtains the complete open-assignment roster: released history is
+filtered in PostgreSQL, results are keyset-paged by assignment UUID until an
+empty terminal page even when an intermediate response is short, and invalid
+cursor progress or the bounded 100-data-page guard fails the whole read. Only
+then does the snapshot assert `assignmentsComplete`. The assignment-derived
+Assign and Configure steps therefore fail closed without that proof; Connect
+separately requires a connected account and its exact bound Ready bot. Overall
+Factory completion requires that identity to continue through the exact
+selected project and an active configured assignment.
+
+The role and modal flows preserve that identity. A new posting starts from the
+Developer permission preset and prefers an organization role with the matching
+slug; existing postings retain their authored role/configuration. With zero
+roles, the inline starter control defaults to the reviewed Backend engineer
+template, saves its complete definition through `/api/bot-roles`, and assigns
+the returned UUID only to blank selected drafts. AI Factory owns the sole
+full-app modal/focus boundary; embedded roster, assignment, configuration, and
+starter-role surfaces replace content inside it and never nest another dialog.
+
+The account-connect component serializes start, retry, close, and unmount
+cleanup. Every async read is fenced by exact session UUID and generation, so a
+late superseded poll cannot mutate state or report Connected. Close blocks a
+racing retry and waits for an in-flight start before cancelling its exact
+session; a failed cancellation keeps the overlay open and resumes polling.
+
+Migration `20260822000200_register_bot_for_ai_account.sql` is local and
+unapplied at SHA-256
+`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+Its protected `scope=bot-account-binding` verifies and applies only that exact
+file after predecessor/absence and clean-catalog checks; broad apply refuses to
+introduce it. The scope proves catalog, definition, security, search-path, ACL,
+and ledger invariants. Runtime behavior, linked-database lint, application
+health, and containment are separate mandatory post-apply release gates.
+The combined final-candidate working tree passes lint, typecheck, production build, 331
+Vitest files / 3,934 tests (7 skipped), and the corrected resource 404/social-
+image browser regression across desktop/tablet/mobile. Its serialized broader
+browser matrix passed 1,207 cases with 545 intentional viewport skips before
+the one repeated resource-status defect was repaired. The final field audit also
+fixed controlled Instructions editing and made required self-hosted/custom HTTPS
+endpoints fail closed in both the form and registration API. Independent security,
+broker, UI, and proxy reviews report no unresolved P0/P1/P2 findings. Final rebased-commit
+gates, direct-main publication, and production apply remain pending exact RED
+approval. No worker, graph executor, provider-login protocol, autonomy control,
+approval, merge, deploy, or rollback authority changes.
+
 ## Current release boundary — immutable Factory command routing (ADR-106)
 
 `POST /api/commands/route` is an authenticated, same-origin, organization-

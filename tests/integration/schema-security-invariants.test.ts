@@ -233,7 +233,7 @@ describe("SECURITY DEFINER functions", () => {
     expect(result.rows.map((row) => row.proname)).toEqual(["subscribe_to_newsletter"]);
   });
 
-  it("limits service_role to the GitHub ingress and Phase 1C worker RPCs", async () => {
+  it("limits service_role to the reviewed trusted-server and worker RPCs", async () => {
     const result = await db.query<{ proname: string }>(`
       select distinct proc.proname
       from pg_catalog.pg_proc proc
@@ -313,6 +313,10 @@ describe("SECURITY DEFINER functions", () => {
       // an account the worker just probed. Insert-only into an append-only
       // table; the definer function revalidates the account/organization pair.
       "record_ai_account_usage",
+      // Server-only credential evaluation records a verdict only when the
+      // exact bot identity/configuration/revision still matches under row lock.
+      // Browser-authenticated managers cannot execute this RPC directly.
+      "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",

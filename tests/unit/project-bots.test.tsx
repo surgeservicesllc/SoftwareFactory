@@ -1,9 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectBots } from "@/components/project-bots";
-import { LEAST_PRIVILEGE_CONFIG } from "@/lib/bots/assignment-config";
+import { LEAST_PRIVILEGE_CONFIG, type AssignmentConfig } from "@/lib/bots/assignment-config";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 
@@ -28,7 +28,12 @@ function bot(
     alreadyOnThisProject: false,
     currentProjectId: null,
     currentProjectName: null,
+    currentAssignmentId: null,
+    currentAssignmentProjectId: null,
+    currentAssignmentRevision: null,
     currentRoleId: null,
+    currentRole: null,
+    currentAssignmentConfig: null,
     workload: 0,
     ...overrides,
   };
@@ -47,7 +52,9 @@ function roster(overrides: Record<string, unknown> = {}) {
     assigned: [
       {
         id: "as-1",
+        revision: 7,
         botId: "bot-1",
+        projectId,
         roleId: "role-dev",
         status: "active",
         assignedAt: "2026-08-17T00:00:00.000Z",
@@ -57,7 +64,15 @@ function roster(overrides: Record<string, unknown> = {}) {
       },
     ],
     available: [
-      bot("bot-1", "Auditor", { alreadyOnThisProject: true, currentRoleId: "role-dev" }),
+      bot("bot-1", "Auditor", {
+        alreadyOnThisProject: true,
+        currentAssignmentId: "as-1",
+        currentAssignmentProjectId: projectId,
+        currentAssignmentRevision: 7,
+        currentRoleId: "role-dev",
+        currentRole: roles[0],
+        currentAssignmentConfig: { ...LEAST_PRIVILEGE_CONFIG, maxConcurrentTasks: 2 },
+      }),
       bot("bot-2", "Code Master"),
       bot("bot-3", "Test Engineer"),
       bot("bot-4", "Offline Bot", {
@@ -104,6 +119,47 @@ afterEach(() => {
 });
 
 describe("the project's bot roster", () => {
+  it("contains standalone wizard focus and restores its opener after Escape or backdrop", async () => {
+    stub(roster());
+    const user = userEvent.setup();
+    const { container } = render(
+      <>
+        <button type="button">Outside control</button>
+        <ProjectBots projectId={projectId} projectName="SoftwareFactory" />
+      </>,
+    );
+
+    const outside = screen.getByRole("button", { name: "Outside control" });
+    const opener = await screen.findByRole("button", { name: "Assign More" });
+    await user.click(opener);
+
+    let dialog = await screen.findByRole("dialog", { name: /assign bots/i });
+    let close = within(dialog).getByRole("button", { name: "Close" });
+    await waitFor(() => expect(close).toHaveFocus());
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog).toHaveClass("z-[110]");
+    expect(container).toHaveAttribute("inert", "");
+    expect(container).toHaveAttribute("aria-hidden", "true");
+
+    outside.focus();
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /assign bots/i }))
+      .not.toBeInTheDocument());
+    expect(container).not.toHaveAttribute("inert");
+    expect(container).not.toHaveAttribute("aria-hidden");
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    dialog = await screen.findByRole("dialog", { name: /assign bots/i });
+    close = within(dialog).getByRole("button", { name: "Close" });
+    await waitFor(() => expect(close).toHaveFocus());
+    fireEvent.mouseDown(dialog);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /assign bots/i }))
+      .not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+
   it("lists the bots serving this project with their configuration", async () => {
     stub(roster());
 
@@ -168,6 +224,151 @@ describe("assigning several bots at once", () => {
     expect((post?.body as { bots: unknown[] }).bots).toHaveLength(2);
   });
 
+  it("excludes an existing paused posting from Assign More and Select All", async () => {
+    const authoredConfig = {
+      ...LEAST_PRIVILEGE_CONFIG,
+      preset: "reviewer",
+      responsibilities: ["Review only the migration boundary"],
+      instructions: "Keep the existing review instructions byte-for-byte.",
+      repositoryAccess: "read" as const,
+      pipelineAccess: "assigned" as const,
+      maxConcurrentTasks: 4,
+      priority: 2,
+    };
+    const initial = roster({
+      assigned: [{
+        id: "as-existing",
+        botId: "bot-1",
+        projectId,
+        roleId: "role-test",
+        status: "paused",
+        revision: 7,
+        assignedAt: "2026-08-17T00:00:00.000Z",
+        config: authoredConfig,
+        bot: bot("bot-1", "Auditor"),
+        role: roles[1],
+      }],
+      available: [
+        bot("bot-1", "Auditor", {
+          alreadyOnThisProject: true,
+          currentAssignmentId: "as-existing",
+          currentAssignmentProjectId: projectId,
+          currentAssignmentRevision: 7,
+          currentRoleId: "role-test",
+          currentRole: roles[1],
+          currentAssignmentConfig: authoredConfig,
+        }),
+        bot("bot-2", "Code Master"),
+        bot("bot-3", "Test Engineer"),
+      ],
+    });
+    let submitted: Array<{
+      botId: string;
+      roleId: string;
+      config: AssignmentConfig;
+      expectedAssignmentId: string | null;
+      expectedProjectId: string | null;
+      expectedAssignmentRevision: number | null;
+    }> | null = null;
+    const calls = stub(null, (url, init) => {
+      if (url.endsWith("/bots") && init?.method === "POST") {
+        submitted = (JSON.parse(String(init.body)) as {
+          bots: Array<{
+            botId: string;
+            roleId: string;
+            config: AssignmentConfig;
+            expectedAssignmentId: string | null;
+            expectedProjectId: string | null;
+            expectedAssignmentRevision: number | null;
+          }>;
+        }).bots;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            assigned: submitted?.length ?? 0,
+            assignments: (submitted ?? []).map((entry, index) => ({
+              id: entry.botId === "bot-1" ? "as-existing" : `as-new-${index}`,
+              botId: entry.botId,
+              projectId,
+              roleId: entry.roleId,
+              status: "active",
+              config: entry.config,
+            })),
+          }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        const assigned = (submitted ?? []).map((entry, index) => ({
+          id: entry.botId === "bot-1" ? "as-existing" : `as-new-${index}`,
+          botId: entry.botId,
+          projectId,
+          roleId: entry.roleId,
+          status: "active",
+          assignedAt: "2026-08-22T00:00:00.000Z",
+          config: entry.config,
+          bot: initial.available.find((candidate) => candidate.id === entry.botId) ?? null,
+          role: roles.find((candidate) => candidate.id === entry.roleId) ?? null,
+        }));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => submitted ? { ...initial, assigned } : initial,
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByRole("button", { name: "Select All" }));
+
+    expect(within(dialog).getByLabelText("Select Auditor")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Select Auditor")).not.toBeChecked();
+    expect(within(dialog).getByText(/2 bots selected/)).toBeInTheDocument();
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  });
+
+  it("does not claim success when the committed assignment reads back differently", async () => {
+    const calls = stub(roster(), (url, init) => {
+      if (url.endsWith("/bots") && init?.method === "POST") {
+        const entry = (JSON.parse(String(init.body)) as {
+          bots: Array<{ botId: string; roleId: string; config: AssignmentConfig }>;
+        }).bots[0];
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            assigned: 1,
+            assignments: [{
+              id: "as-written",
+              botId: entry.botId,
+              projectId,
+              roleId: entry.roleId,
+              status: "active",
+              config: entry.config,
+            }],
+          }),
+        } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByLabelText("Select Code Master"));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Security" }));
+    await user.click(within(dialog).getByRole("button", { name: "Next" }));
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/exact readback could not be verified/i);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: /assign bots/i })).toBeInTheDocument();
+  });
+
   it("carries a different configuration for each bot", async () => {
     const calls = stub(roster(), (_url, init) =>
       init?.method === "POST"
@@ -198,6 +399,36 @@ describe("assigning several bots at once", () => {
     };
     expect(body.bots[0].config.repositoryAccess).toBe("write");
     expect(body.bots[1].config.repositoryAccess).toBe("read");
+  });
+
+  it("keeps a manually selected role and instructions when a preset role is absent", async () => {
+    const backendRole = {
+      id: "role-backend",
+      name: "Backend engineer",
+      slug: "backend",
+      summary: "Builds server code.",
+    };
+    stub(roster({
+      assigned: [],
+      roles: [backendRole],
+      available: [bot("bot-2", "Code Master")],
+    }));
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByLabelText("Select Code Master"));
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+
+    const role = within(dialog).getByLabelText("Role for Code Master");
+    const instructions = within(dialog).getByLabelText("Instructions for Code Master");
+    expect(role).toHaveValue(backendRole.id);
+    await user.clear(instructions);
+    await user.type(instructions, "Keep the custom backend review boundary.");
+    await user.click(within(dialog).getByRole("button", { name: "Reviewer" }));
+
+    expect(role).toHaveValue(backendRole.id);
+    expect(instructions).toHaveValue("Keep the custom backend review boundary.");
   });
 
   it("cannot select a bot that is not connected, and says why", async () => {
@@ -244,8 +475,10 @@ describe("assigning several bots at once", () => {
     const dialog = await openWizard(user);
     await user.click(within(dialog).getByRole("button", { name: /select all/i }));
 
-    // Three connected bots; the offline one is not among them.
-    expect(within(dialog).getByText(/3 bots selected/)).toBeInTheDocument();
+    // The existing project posting and offline bot are both excluded.
+    expect(within(dialog).getByText(/2 bots selected/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Select Auditor")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Select Auditor")).not.toBeChecked();
     expect(within(dialog).getByLabelText("Select Offline Bot")).not.toBeChecked();
   });
 
@@ -270,8 +503,52 @@ describe("assigning several bots at once", () => {
     expect(within(dialog).getByRole("button", { name: /next/i })).toBeDisabled();
   });
 
-  it("explains how to create a required role and does not advance without one", async () => {
-    stub(roster({ assigned: [], roles: [] }));
+  it("adopts an audited starter role in place and unblocks a fresh workspace", async () => {
+    let current = roster({ assigned: [], roles: [] });
+    const returnedRole = {
+      id: "role-backend",
+      name: "Backend engineer",
+      slug: "backend",
+      summary: "Implements server logic, contracts, and validation.",
+    };
+    const calls = stub(current, (url, init) => {
+      if (url === "/api/bot-roles" && init?.method === "POST") {
+        current = roster({ assigned: [], roles: [returnedRole] });
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ role: returnedRole }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots") && init?.method === "POST") {
+        const request = JSON.parse(String(init.body)) as {
+          bots: Array<{ botId: string; roleId: string; config: AssignmentConfig }>;
+        };
+        const submitted = request.bots[0];
+        const assignment = {
+          id: "as-new",
+          revision: 1,
+          botId: submitted.botId,
+          projectId,
+          roleId: submitted.roleId,
+          status: "active",
+          assignedAt: "2026-08-22T00:00:00.000Z",
+          config: submitted.config,
+          bot: bot(submitted.botId, "Code Master"),
+          role: returnedRole,
+        };
+        current = roster({ assigned: [assignment], roles: [returnedRole] });
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ assignments: [assignment] }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        return { ok: true, status: 200, json: async () => current } as unknown as Response;
+      }
+      return null;
+    });
     const user = userEvent.setup();
     render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
 
@@ -279,9 +556,101 @@ describe("assigning several bots at once", () => {
     await user.click(within(dialog).getByLabelText("Select Code Master"));
     await user.click(within(dialog).getByRole("button", { name: /next/i }));
 
-    const managerLink = within(dialog).getByRole("link", { name: "Bot Manager" });
-    expect(managerLink).toHaveAttribute("href", "/solutions/bot-manager");
-    expect(within(dialog).getByText(/a posting needs one/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/every project posting needs an organization role/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /next/i })).toBeDisabled();
+    expect(within(dialog).getByRole("combobox", { name: "Starter role" })).toHaveValue("backend");
+    expect(within(dialog).getByRole("option", { name: "Backend engineer" })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Add starter role" }));
+
+    await within(dialog).findByRole("option", { name: "Backend engineer" });
+    expect(within(dialog).getByLabelText("Role for Code Master")).toHaveValue("role-backend");
+    expect(within(dialog).getByRole("button", { name: /next/i })).toBeEnabled();
+
+    const roleSave = calls.find((call) => call.url === "/api/bot-roles" && call.method === "POST");
+    expect(roleSave?.body).toMatchObject({
+      roleId: null,
+      name: "Backend engineer",
+      slug: "backend",
+      riskCeiling: "YELLOW",
+    });
+
+    // Complete the screenshot path. The exact id returned by the audited role
+    // boundary is the id sent in the assignment and read back before close.
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+    const acknowledgement = within(dialog).queryByRole("checkbox", {
+      name: /reviewed what each bot may do/i,
+    });
+    if (acknowledgement) await user.click(acknowledgement);
+    await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /assign bots/i }))
+      .not.toBeInTheDocument());
+
+    const assignmentSave = calls.find((call) => (
+      call.url.endsWith("/bots") && call.method === "POST"
+    ));
+    expect(assignmentSave?.body).toMatchObject({
+      bots: [{ botId: "bot-2", roleId: returnedRole.id }],
+    });
+  });
+
+  it("adopts the exact starter role after a concurrent-create conflict", async () => {
+    const returnedRole = {
+      id: "role-backend",
+      name: "Backend engineer",
+      slug: "backend",
+      summary: "Implements server logic, contracts, and validation.",
+    };
+    let current = roster({ assigned: [], roles: [] });
+    stub(null, (url, init) => {
+      if (url === "/api/bot-roles" && init?.method === "POST") {
+        current = roster({ assigned: [], roles: [returnedRole] });
+        return {
+          ok: false,
+          status: 409,
+          json: async () => ({
+            error: { code: "bot_fabric_conflict", message: "That role already exists." },
+          }),
+        } as unknown as Response;
+      }
+      if (url.endsWith("/bots")) {
+        return { ok: true, status: 200, json: async () => current } as unknown as Response;
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByLabelText("Select Code Master"));
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+    await user.click(within(dialog).getByRole("button", { name: "Add starter role" }));
+
+    await within(dialog).findByRole("option", { name: "Backend engineer" });
+    expect(within(dialog).getByLabelText("Role for Code Master")).toHaveValue(returnedRole.id);
+    expect(within(dialog).getByRole("button", { name: /next/i })).toBeEnabled();
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps a fresh workspace blocked and shows the audited role refusal", async () => {
+    stub(roster({ assigned: [], roles: [] }), (url, init) => (
+      url === "/api/bot-roles" && init?.method === "POST"
+        ? ({
+          ok: false,
+          status: 403,
+          json: async () => ({ error: { message: "Owner or administrator access is required." } }),
+        } as unknown as Response)
+        : null
+    ));
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    const dialog = await openWizard(user);
+    await user.click(within(dialog).getByLabelText("Select Code Master"));
+    await user.click(within(dialog).getByRole("button", { name: /next/i }));
+    await user.click(within(dialog).getByRole("button", { name: "Add starter role" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/owner or administrator/i);
     expect(within(dialog).getByRole("button", { name: /next/i })).toBeDisabled();
   });
 
@@ -356,9 +725,14 @@ describe("assigning several bots at once", () => {
     const calls = stub(null, (url, init) => {
       if (url === "/api/bots/connect/provision" && init?.method === "POST") {
         provisioned += 1;
+        const request = JSON.parse(String(init.body)) as { aiAccountId: string };
         return {
           ok: true, status: 200,
-          json: async () => ({ provisioned: true, outcome: "created" }),
+          json: async () => ({
+            provisioned: true,
+            outcome: "created",
+            botId: request.aiAccountId === "acc-1" ? "bot-new-1" : "bot-new-2",
+          }),
         } as unknown as Response;
       }
       if (url === "/api/ai-accounts") {
@@ -379,8 +753,8 @@ describe("assigning several bots at once", () => {
             assigned: [],
             available: provisioned >= 2
               ? [
-                bot("bot-new-1", "Claude", { credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN" }),
-                bot("bot-new-2", "Claude 2", { credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2" }),
+                bot("bot-new-1", "Claude", { aiAccountId: "acc-1", credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN" }),
+                bot("bot-new-2", "Claude 2", { aiAccountId: "acc-2", credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2" }),
               ]
               : [],
           }),
@@ -398,11 +772,11 @@ describe("assigning several bots at once", () => {
     await user.click(within(dialog).getByRole("checkbox", { name: /claude nwv/i }));
     await user.click(within(dialog).getByRole("button", { name: /link 2 bots from bot manager/i }));
 
-    // Both provisions aim at the account's own slot, as additional bots.
+    // Both provisions carry the exact account id and are idempotent.
     const provisions = calls.filter((call) => call.url === "/api/bots/connect/provision");
     expect(provisions.map((call) => call.body)).toEqual([
-      { provider: "anthropic", credential: "subscription", additional: true },
-      { provider: "anthropic", credential: "subscription_2", additional: true },
+      { provider: "anthropic", credential: "subscription", aiAccountId: "acc-1", additional: false },
+      { provider: "anthropic", credential: "subscription_2", aiAccountId: "acc-2", additional: false },
     ]);
 
     // The refreshed roster's new bots arrive selected, ready for Configure.
@@ -454,6 +828,7 @@ describe("managing an assigned bot", () => {
     // defaults, quietly widening or narrowing what the bot may do.
     expect(patch?.body).toMatchObject({
       status: "paused",
+      expectedRevision: 7,
       config: expect.objectContaining({ maxConcurrentTasks: 2 }),
     });
   });
@@ -471,7 +846,10 @@ describe("managing an assigned bot", () => {
 
     await user.click(await screen.findByRole("button", { name: /resume auditor/i }));
 
-    expect(calls.find((call) => call.method === "PATCH")?.body).toMatchObject({ status: "active" });
+    expect(calls.find((call) => call.method === "PATCH")?.body).toMatchObject({
+      status: "active",
+      expectedRevision: 7,
+    });
   });
 
   it("removes it with DELETE, so the posting stays as evidence", async () => {
@@ -488,6 +866,7 @@ describe("managing an assigned bot", () => {
     expect(calls.find((call) => call.method === "DELETE")?.url).toBe(
       `/api/projects/${projectId}/bots/as-1`,
     );
+    expect(calls.find((call) => call.method === "DELETE")?.body).toEqual({ expectedRevision: 7 });
   });
 
   it("reconfigures it through the configure dialog", async () => {
@@ -505,7 +884,34 @@ describe("managing an assigned bot", () => {
     await user.click(within(dialog).getByRole("button", { name: /save changes/i }));
 
     expect(calls.find((call) => call.method === "PATCH")?.body).toMatchObject({
+      expectedRevision: 7,
       config: expect.objectContaining({ priority: 0 }),
+    });
+  });
+
+  it("keeps spaces while instructions are typed and trims only the submitted value", async () => {
+    const calls = stub(roster(), (_url, init) =>
+      init?.method === "PATCH"
+        ? ({ ok: true, status: 200, json: async () => ({ updated: true }) } as unknown as Response)
+        : null,
+    );
+    const user = userEvent.setup();
+    render(<ProjectBots projectId={projectId} projectName="SoftwareFactory" />);
+
+    await user.click(await screen.findByRole("button", { name: /configure auditor/i }));
+    const dialog = screen.getByRole("dialog", { name: /configure auditor/i });
+    const instructions = within(dialog).getByLabelText("Instructions for Auditor");
+    await user.clear(instructions);
+    await user.type(instructions, "Always run tests before review   ");
+
+    expect(instructions).toHaveValue("Always run tests before review   ");
+    await user.selectOptions(within(dialog).getByLabelText("Priority for Auditor"), "0");
+    expect(instructions).toHaveValue("Always run tests before review   ");
+    await user.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(calls.find((call) => call.method === "PATCH")?.body).toMatchObject({
+      expectedRevision: 7,
+      config: expect.objectContaining({ instructions: "Always run tests before review" }),
     });
   });
 
@@ -552,8 +958,16 @@ describe("managing an assigned bot", () => {
       (call) => call.url === "/api/bot-assignments/as-1" && call.method === "PATCH",
     );
     expect(patches.map((call) => call.body)).toEqual([
-      { model: "claude-fable-5" },
-      { workEffort: "high" },
+      {
+        model: "claude-fable-5",
+        expectedProjectId: projectId,
+        expectedRevision: 7,
+      },
+      {
+        workEffort: "high",
+        expectedProjectId: projectId,
+        expectedRevision: 7,
+      },
     ]);
   });
 });

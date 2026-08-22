@@ -2,6 +2,57 @@
 
 Roadmap order follows safety dependencies. A later phase never inherits authority implicitly.
 
+## Current release increment — Claude bot identity and Bot Space (ADR-108/ADR-109)
+
+Status: **Implemented and locally gated; final rebased-commit gates, publication, hosted apply, and live acceptance are pending.**
+
+- Keep one full-application modal/focus boundary in AI Factory. Embedded roster,
+  assignment, configuration, and role onboarding replace content inside it;
+  no nested dialog is opened.
+- Keep role and permission defaults explicit: a new posting starts from the
+  Developer permission preset and preserves any existing posting role/config;
+  a zero-role organization is offered the reviewed Backend engineer starter by
+  default, saved through `/api/bot-roles`, and the exact returned UUID fills
+  only blank selected drafts.
+- Bind each subscription bot to its exact tenant AI account through
+  `20260822000200_register_bot_for_ai_account.sql` (SHA-256
+  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`),
+  preserving one unambiguous legacy bot UUID and enforcing the exact
+  account/provider/credential-slot identity.
+- Add monotonic bot and assignment revisions. Lock and compare exact posting
+  id/project/revision for assign, move, configuration, lifecycle, and execution
+  edits; refuse released-history edits; retain exact response plus committed
+  readback verification.
+- Record readiness only through a service-role RPC that carries the owner/admin
+  actor and compares exact bot revision/account/provider/model/credential
+  reference/base URL. Keep a management-authored Disabled state durable.
+- Ship `20260822000200` as the EXPAND half of a rolling cutover: preserve exact
+  legacy definitions/signatures/security/search paths and authenticated-only
+  execute ACLs while adding authenticated checked wrappers plus the
+  service-only readiness recorder. Revoke the legacy grants only in a
+  separately approved forward CONTRACT migration after the exact replacement
+  application is deployed and accepted.
+- Read every open assignment via terminal-proven keyset pagination and fail the
+  entire roster plus assignment-derived Assign/Configure progress closed on
+  invalid or bounded-out pagination.
+- Serialize broker start/retry/close/unmount cleanup and fence async results by
+  exact session plus generation so superseded polls cannot change UI state.
+- Derive Factory progress from the coherent connected-account, Ready linked
+  bot, active project assignment, and configured-posting chain; persist the
+  selected factory per organization across reload.
+- Preserve the green combined final-candidate evidence: lint, typecheck, production build,
+  331 Vitest files / 3,934 tests (7 skipped), 1,207 serialized browser passes
+  (545 intentional viewport skips), the forward resource-status repair's exact
+  6/6 browser regression, and independent security/broker/UI/proxy reviews with
+  no unresolved P0/P1/P2 findings. Re-run the required gates after the final rebase.
+- Freeze the final rebased commit, obtain exact RED approval, push that commit
+  directly to `main`, apply only migration `20260822000200` through the
+  hash-checked `scope=bot-account-binding`, then separately gate runtime create/
+  assign/configure/readiness/audit behavior, linked-database lint, health, and
+  containment. Wait for exact-SHA CI and Vercel, then perform signed-in create/
+  assign/configure/reload and audit acceptance.
+  Keep kill switch ON, autonomy/actions OFF, and worker/executor disconnected.
+
 ## Current release increment — Factory command routing (ADR-106)
 
 Status: **Implemented and locally gated; not hosted or deployed.**

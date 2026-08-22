@@ -88,7 +88,7 @@ export function AddProjectForm({
   onCreated,
 }: {
   id?: string;
-  onCreated?: () => Promise<void> | void;
+  onCreated?: (projectId: string) => Promise<void> | void;
 }) {
   const [readState, setReadState] = useState<ReadState>("loading");
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -181,14 +181,30 @@ export function AddProjectForm({
           defaultBranch: selectedRepository.defaultBranch,
         }),
       });
-      const body = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) throw new Error(body.error?.message ?? "The project could not be added.");
+      const body: unknown = await response.json();
+      const errorMessage = isRecord(body)
+        && isRecord(body.error)
+        && typeof body.error.message === "string"
+        ? body.error.message
+        : "The project could not be added.";
+      if (!response.ok) throw new Error(errorMessage);
+      const createdProjectId = isRecord(body)
+        && isRecord(body.project)
+        && typeof body.project.id === "string"
+        && body.project.id.trim().length > 0
+        ? body.project.id
+        : null;
+      if (!createdProjectId) {
+        throw new Error(
+          "The project was saved, but its exact identity could not be confirmed. Reload Projects before continuing.",
+        );
+      }
       setMessage(`${name} is connected. Its live GitHub data is on Projects.`);
       setName("");
       setDescription("");
       setRepositoryId("");
       await load();
-      await onCreated?.();
+      await onCreated?.(createdProjectId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The project could not be added.");
     } finally {

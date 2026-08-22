@@ -36,6 +36,7 @@ async function resetRole(db: PGlite) {
 
 type AssignmentRow = {
   id: string;
+  revision: number;
   bot_id: string;
   project_id: string;
   role_id: string;
@@ -71,9 +72,27 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
   ) {
     await assumeRole(db, actor);
     try {
+      const checkedEntries = [];
+      for (const entry of entries) {
+        const botId = entry.bot_id;
+        let current: { id: string; project_id: string; revision: number } | undefined;
+        if (typeof botId === "string" && /^[0-9a-f-]{36}$/i.test(botId)) {
+          const selected = await db.query<{ id: string; project_id: string; revision: number }>(`
+            select id, project_id, revision from public.bot_assignments
+            where organization_id = $1::uuid and bot_id = $2::uuid and status <> 'released'
+          `, [organizationId, botId]);
+          current = selected.rows[0];
+        }
+        checkedEntries.push({
+          ...entry,
+          expected_assignment_id: current?.id ?? null,
+          expected_project_id: current?.project_id ?? null,
+          expected_revision: current ? Number(current.revision) : null,
+        });
+      }
       const result = await db.query<AssignmentRow>(
-        "select * from public.assign_bots_to_project($1::uuid, $2::uuid, $3::jsonb)",
-        [organizationId, targetProjectId, JSON.stringify(entries)],
+        "select * from public.assign_bots_to_project_checked($1::uuid, $2::uuid, $3::jsonb)",
+        [organizationId, targetProjectId, JSON.stringify(checkedEntries)],
       );
       return result.rows;
     } finally {
@@ -172,9 +191,9 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
     }
     await resetRole(db);
 
-    // `disabled` is the durable "do not give this work" state. It is reached
-    // through a readiness check, not through retiring — `retire_bot` deletes
-    // the row outright, so a retired bot is absent rather than disabled.
+    // `disabled` is the durable "do not give this work" state. This fixture
+    // writes it as the migration owner; server readiness checks are deliberately
+    // unable to author that management state.
     await assumeRole(db, ownerId);
     const disabled = await db.query<{ id: string }>(
       `select id from public.register_bot(
@@ -184,13 +203,14 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
       [organizationId],
     );
     bots.disabled = disabled.rows[0].id;
+    await resetRole(db);
     await db.query(
-      `select public.record_bot_readiness(
-         $1::uuid, $2::uuid, 'disabled'::public.bot_readiness, 'Turned off by the owner.'
-       )`,
+      `update public.bots
+       set readiness = 'disabled'::public.bot_readiness,
+           readiness_detail = 'Turned off by the owner.'
+       where organization_id = $1::uuid and id = $2::uuid`,
       [organizationId, bots.disabled],
     );
-    await resetRole(db);
   });
 
   afterAll(async () => {
@@ -585,6 +605,40 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
     let managedAssignmentId: string;
 
     beforeEach(async () => {
+      // A prior case may deliberately leave this bot paused. Assignment is no
+      // longer allowed to double as Resume, so restore that lifecycle state
+      // explicitly through the row-locked checked mutation before reusing the
+      // shared fixture. This keeps cases isolated without weakening the
+      // production guard against an implicit resume/move.
+      await assumeRole(db, ownerId);
+      try {
+        const current = await db.query<{
+          id: string;
+          project_id: string;
+          revision: number;
+          status: string;
+        }>(`
+          select id, project_id, revision, status
+          from public.bot_assignments
+          where organization_id = $1::uuid
+            and bot_id = $2::uuid
+            and status <> 'released'
+          limit 1
+        `, [organizationId, bots.managed]);
+        const posting = current.rows[0];
+        if (posting?.status === "paused") {
+          await db.query(
+            `select * from public.update_bot_assignment_checked(
+               $1::uuid, $2::uuid, $3::uuid, $4::bigint,
+               'active'::public.bot_assignment_status
+             )`,
+            [organizationId, posting.id, posting.project_id, Number(posting.revision)],
+          );
+        }
+      } finally {
+        await resetRole(db);
+      }
+
       const [posting] = await assign(secondProjectId, [
         { bot_id: bots.managed, role_id: roles.developer, max_concurrent_tasks: 4 },
       ]);
@@ -599,11 +653,24 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
     ) {
       await assumeRole(db, actor);
       try {
+        const selected = await db.query<{ project_id: string; revision: number }>(`
+          select project_id, revision from public.bot_assignments
+          where organization_id = $1::uuid and id = $2::uuid
+        `, [organizationId, assignmentId]);
+        const current = selected.rows[0];
         const result = await db.query<AssignmentRow>(
-          `select * from public.update_bot_assignment_configuration(
-             $1::uuid, $2::uuid, $3::jsonb, null, $4::public.bot_assignment_status
+          `select * from public.update_bot_assignment_configuration_checked(
+             $1::uuid, $2::uuid, $3::uuid, $4::bigint,
+             $5::jsonb, null, $6::public.bot_assignment_status
            )`,
-          [organizationId, assignmentId, JSON.stringify(configuration), status],
+          [
+            organizationId,
+            assignmentId,
+            current?.project_id ?? secondProjectId,
+            Number(current?.revision ?? 1),
+            JSON.stringify(configuration),
+            status,
+          ],
         );
         return result.rows[0];
       } finally {
@@ -664,10 +731,10 @@ describe("assigning several configured bots to one project", { timeout: 240_000 
       await assumeRole(db, outsiderId);
       await expect(
         db.query(
-          `select * from public.update_bot_assignment_configuration(
-             $1::uuid, $2::uuid, '{}'::jsonb, null, null
+          `select * from public.update_bot_assignment_configuration_checked(
+             $1::uuid, $2::uuid, $3::uuid, 1::bigint, '{}'::jsonb, null, null
            )`,
-          [otherOrganizationId, managedAssignmentId],
+          [otherOrganizationId, managedAssignmentId, secondProjectId],
         ),
       ).rejects.toThrow();
       await resetRole(db);

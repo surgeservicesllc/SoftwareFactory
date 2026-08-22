@@ -16,12 +16,14 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AddProjectForm } from "@/components/add-project-form";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { CommandComposer } from "@/components/command-composer";
 import { ConnectionsConsole } from "@/components/connections-console";
+import { ModalDialog } from "@/components/modal-dialog";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
 import { ProjectAgentSelector } from "@/components/project-agent-selection";
@@ -51,6 +53,27 @@ import { cn } from "@/lib/cn";
 const PAGE_DESCRIPTION =
   "From new project to shipped pull request: the whole journey, one guided path over your live workspace.";
 
+const FACTORY_SELECTION_STORAGE_PREFIX = "softwarefactory:ai-factory:selected-project:";
+
+function readFactorySelection(organizationId: string): string | null {
+  if (!organizationId || typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(`${FACTORY_SELECTION_STORAGE_PREFIX}${organizationId}`);
+  } catch {
+    return null;
+  }
+}
+
+function writeFactorySelection(organizationId: string, projectId: string) {
+  if (!organizationId || !projectId || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${FACTORY_SELECTION_STORAGE_PREFIX}${organizationId}`, projectId);
+  } catch {
+    // Storage can be disabled. The live project records remain authoritative;
+    // only the convenience of restoring this view is lost.
+  }
+}
+
 type StepId =
   | "connect_github"
   | "create_project"
@@ -63,12 +86,26 @@ type StepId =
   | "watch";
 
 type FactoryData = {
+  activeOrganizationId: string;
   connectedInstallations: number;
   repositories: number;
   projects: Array<{ id: string; name: string }>;
-  connectedAccounts: number;
-  bots: number;
-  assignments: Array<{ projectId: string | null; configured: boolean }>;
+  accounts: Array<{ id: string; status: string }>;
+  bots: Array<{
+    id: string;
+    name: string;
+    aiAccountId: string | null;
+    currentReadiness: string;
+  }>;
+  assignments: Array<{
+    id: string;
+    botId: string;
+    projectId: string | null;
+    status: string;
+    configured: boolean;
+  }>;
+  /** Missing/false means assignment-derived progress must fail closed. */
+  assignmentsComplete: boolean;
   commands: Array<{ id: string; prompt: string; status: string; project: { id: string; name: string } | null }>;
   pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
   /** Which logical agents each project's factory includes, and whether the
@@ -123,50 +160,73 @@ function StepOverlay({
 }: {
   title: string;
   description: string;
-  onClose: () => void;
+  onClose: () => boolean | void | Promise<boolean | void>;
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const closingRef = useRef(false);
+  const [closePending, setClosePending] = useState(false);
+  const [closeError, setCloseError] = useState("");
+
+  const requestClose = useCallback(async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosePending(true);
+    setCloseError("");
+    try {
+      const canClose = await onClose();
+      if (canClose === false) {
+        closingRef.current = false;
+        setClosePending(false);
+      }
+    } catch {
+      closingRef.current = false;
+      setClosePending(false);
+      setCloseError("The dialog could not close safely. Try again.");
+    }
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <ModalDialog
+      label={title}
+      onRequestClose={() => void requestClose()}
+      initialFocusRef={closeButtonRef}
+      ariaBusy={closePending}
+      className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
+      panelClassName="relative my-auto w-full max-w-3xl rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6"
     >
-      <div className="relative my-auto w-full max-w-3xl rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6">
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn btn-secondary btn-sm absolute right-3 top-3 z-10 size-9 px-0 sm:right-4 sm:top-4"
-          aria-label="Close"
-        >
-          <X className="size-4" aria-hidden="true" />
-        </button>
-        <h3 className="pr-12 text-lg font-semibold text-foreground">{title}</h3>
-        <p className="mt-1 pr-12 text-sm text-muted">{description}</p>
-        <div className="mt-4">{children}</div>
-      </div>
-    </div>
+      <button
+        type="button"
+        ref={closeButtonRef}
+        onClick={() => void requestClose()}
+        disabled={closePending}
+        className="btn btn-secondary btn-sm absolute right-3 top-3 z-10 size-9 px-0 sm:right-4 sm:top-4"
+        aria-label="Close"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </button>
+      <h3 className="pr-12 text-lg font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 pr-12 text-sm text-muted">{description}</p>
+      {closeError ? <p className="mt-2 text-sm text-danger" role="alert">{closeError}</p> : null}
+      <div className="mt-4">{children}</div>
+    </ModalDialog>
   );
 }
 
 export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
+  const router = useRouter();
   const [state, setState] = useState<State>({ kind: "loading" });
   // Which step's control is open as an overlay. Nothing opens on its own —
   // an uninvited modal is a trap, not a guide — and closing always lands
   // back on the journey with the fresh records already read.
   const [openStep, setOpenStep] = useState<StepId | null>(null);
+  // Most embedded controls can close immediately. Account connection is the
+  // exception: while its broker POST/session is live it registers a guard
+  // that must confirm server cancellation before this owner unmounts it.
+  const overlayCloseGuardRef = useRef<(() => Promise<boolean>) | null>(null);
+  const setOverlayCloseGuard = useCallback((guard: (() => Promise<boolean>) | null) => {
+    overlayCloseGuardRef.current = guard;
+  }, []);
   /**
    * Which factory the journey is showing, and whether a brand-new one is being
    * started. Both are a *view* over live records, never a substitute for them:
@@ -174,21 +234,28 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
    * project that still exists, it only stops pointing at that project.
    */
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  // Refs let an in-flight refresh consult the latest selection/new-factory
+  // intent without rebuilding the polling callback or restoring an older
+  // project over a choice the person just made.
+  const activeProjectIdRef = useRef<string | null>(null);
+  const activeOrganizationIdRef = useRef<string | null>(null);
+  // Refreshes can overlap (polling, closing an overlay, and a control's own
+  // completion all call `load`). Only the newest complete snapshot may win;
+  // otherwise a slower older response can visibly undo just-saved progress.
+  const loadGenerationRef = useRef(0);
   const [startingNewFactory, setStartingNewFactory] = useState(false);
-  /**
-   * Project ids that existed when the new-factory flow began.
-   *
-   * `AddProjectForm` is shared with the rest of the console and reports only
-   * that it finished, not what it made. Rather than widen that contract for
-   * every caller, the new project is identified by being the one that was not
-   * here a moment ago.
-   */
-  const [projectIdsBeforeNew, setProjectIdsBeforeNew] = useState<readonly string[] | null>(null);
-  // Which project the roster steps operate on. Empty until projects load;
-  // falls back to the factory currently shown if the chosen one disappears.
-  const [rosterProjectId, setRosterProjectId] = useState("");
+  const startingNewFactoryRef = useRef(false);
+  // Creation returns an exact server-issued id. Keep that identity paired with
+  // its organization until the live project snapshot contains that same row;
+  // another tab or member may create a different project in the meantime.
+  const pendingCreatedProjectRef = useRef<{
+    organizationId: string;
+    projectId: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
+    const isCurrent = () => loadGenerationRef.current === generation;
     try {
       const results = await Promise.allSettled([
         fetch("/api/github/connections", { cache: "no-store" }),
@@ -201,6 +268,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         fetch("/api/worker/status", { cache: "no-store" }),
         fetch("/api/project-agents", { cache: "no-store" }),
       ]);
+      if (!isCurrent()) return;
 
       const responses = results.map((result) => (
         result.status === "fulfilled" ? result.value : null
@@ -246,16 +314,25 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           }>;
         }>(responses[0]!),
         readJson<{ projects?: Array<{ id: string; name: string }> }>(responses[1]!),
-        readJson<{ accounts?: Array<{ status: string }> }>(responses[2]!),
+        readJson<{ accounts?: Array<{ id?: string; status?: string }> }>(responses[2]!),
         readJson<{
-          bots?: unknown[];
+          activeOrganizationId?: string;
+          bots?: Array<{
+            id?: string;
+            name?: string;
+            aiAccountId?: string | null;
+            currentReadiness?: string;
+          }>;
           assignments?: Array<{
+            id?: string;
+            botId?: string;
             projectId?: string | null;
             status?: string;
             config?: Partial<AssignmentConfig>;
             model?: string | null;
             workEffort?: string | null;
           }>;
+          assignmentsComplete?: boolean;
           executor?: { connected?: boolean; label?: string; detail?: string };
         }>(responses[3]!),
         readJson<{ commands?: FactoryData["commands"] }>(responses[4]!),
@@ -275,6 +352,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           selections?: Array<{ projectId: string; agentId: string; agentName: string }>;
         }>(responses[8]!),
       ]);
+      if (!isCurrent()) return;
 
       if (
         connectionsBody === null
@@ -285,12 +363,22 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         || pipelinesBody === null
         || templatesBody === null
         || workerBody === null
+        || agentSelectionsBody === null
       ) {
         setState(staleOrUnavailable);
         return;
       }
 
+      const projects = (projectsBody.projects ?? []).map((project) => ({
+        id: project.id,
+        name: project.name,
+      }));
+      const activeOrganizationId = typeof botsBody.activeOrganizationId === "string"
+        ? botsBody.activeOrganizationId
+        : "";
+
       const data: FactoryData = {
+        activeOrganizationId,
         connectedInstallations: (connectionsBody.connections ?? []).filter(
           (connection) => connection.status === "connected" && connection.installation,
         ).length,
@@ -301,16 +389,24 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
               .filter((repository) => repository.selected && !repository.archived).length,
             0,
           ),
-        projects: (projectsBody.projects ?? []).map((project) => ({
-          id: project.id,
-          name: project.name,
+        projects,
+        accounts: (accountsBody.accounts ?? []).map((account) => ({
+          id: typeof account.id === "string" ? account.id : "",
+          status: typeof account.status === "string" ? account.status : "unknown",
         })),
-        connectedAccounts: (accountsBody.accounts ?? [])
-          .filter((account) => account.status === "connected").length,
-        bots: (botsBody.bots ?? []).length,
+        bots: (botsBody.bots ?? []).map((bot) => ({
+          id: typeof bot.id === "string" ? bot.id : "",
+          name: typeof bot.name === "string" && bot.name.trim() ? bot.name : "Unnamed bot",
+          aiAccountId: typeof bot.aiAccountId === "string" ? bot.aiAccountId : null,
+          currentReadiness: typeof bot.currentReadiness === "string"
+            ? bot.currentReadiness
+            : "not_connected",
+        })),
         assignments: (botsBody.assignments ?? [])
           .filter((assignment) => assignment.status !== "released")
           .map((assignment) => ({
+            id: typeof assignment.id === "string" ? assignment.id : "",
+            botId: typeof assignment.botId === "string" ? assignment.botId : "",
             // Read from `config`, where the API actually puts these fields,
             // and measure it against the least-privilege baseline.
             configured: assignmentPostingIsConfigured({
@@ -322,7 +418,12 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
               workEffort: assignment.workEffort,
             }),
             projectId: assignment.projectId ?? null,
+            status: typeof assignment.status === "string" ? assignment.status : "unknown",
           })),
+        // This is a positive completeness proof, not a default. An older API
+        // or a truncated projection may still carry plausible rows, but those
+        // rows cannot truthfully complete Assign or Configure.
+        assignmentsComplete: botsBody.assignmentsComplete === true,
         commands: commandsBody.commands ?? [],
         pipelines: (pipelinesBody.pipelines ?? []).map((pipeline) => ({
           name: pipeline.name,
@@ -346,9 +447,57 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         customTemplates: (templatesBody.templates ?? []).length,
       };
 
+      // Restore the selected factory while the page is still showing its
+      // loading state. The key is organization-scoped, and a stale/deleted
+      // project id is ignored in favor of the first live project.
+      if (
+        activeOrganizationId
+        && activeOrganizationIdRef.current !== activeOrganizationId
+      ) {
+        activeOrganizationIdRef.current = activeOrganizationId;
+        activeProjectIdRef.current = null;
+        const pendingProject = pendingCreatedProjectRef.current;
+        if (pendingProject && pendingProject.organizationId !== activeOrganizationId) {
+          pendingCreatedProjectRef.current = null;
+          startingNewFactoryRef.current = false;
+          setStartingNewFactory(false);
+        }
+      }
+
+      const pendingProject = pendingCreatedProjectRef.current;
+      const newProject = startingNewFactoryRef.current
+        && pendingProject?.organizationId === activeOrganizationId
+        ? projects.find((project) => project.id === pendingProject.projectId) ?? null
+        : null;
+
+      if (newProject) {
+        activeProjectIdRef.current = newProject.id;
+        startingNewFactoryRef.current = false;
+        pendingCreatedProjectRef.current = null;
+        setActiveProjectId(newProject.id);
+        setStartingNewFactory(false);
+        writeFactorySelection(activeOrganizationId, newProject.id);
+      } else if (!startingNewFactoryRef.current) {
+        const currentProjectId = activeProjectIdRef.current;
+        const currentStillExists = currentProjectId !== null
+          && projects.some((project) => project.id === currentProjectId);
+        const storedProjectId = readFactorySelection(activeOrganizationId);
+        const storedStillExists = storedProjectId !== null
+          && projects.some((project) => project.id === storedProjectId);
+        const nextProjectId = currentStillExists
+          ? currentProjectId
+          : storedStillExists
+            ? storedProjectId
+            : projects[0]?.id ?? null;
+
+        activeProjectIdRef.current = nextProjectId;
+        setActiveProjectId(nextProjectId);
+        if (nextProjectId) writeFactorySelection(activeOrganizationId, nextProjectId);
+      }
+
       setState({ kind: "ready", data, stale: false });
     } catch {
-      setState(staleOrUnavailable);
+      if (isCurrent()) setState(staleOrUnavailable);
     }
   }, []);
 
@@ -358,14 +507,42 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     return () => {
       window.clearTimeout(kickoff);
       window.clearInterval(interval);
+      loadGenerationRef.current += 1;
     };
   }, [load]);
 
   // Return to the page with whatever was just selected already read back in.
-  const closeOverlay = useCallback(() => {
+  const closeOverlay = useCallback(async (): Promise<boolean> => {
+    const guard = overlayCloseGuardRef.current;
+    if (guard && !(await guard())) return false;
+    overlayCloseGuardRef.current = null;
     setOpenStep(null);
     void load();
+    return true;
   }, [load]);
+
+  /**
+   * The footer link leaves this route, so it is another close path whenever a
+   * broker sign-in is mounted inside the overlay. Keep ordinary primary-click
+   * navigation behind the same awaited cancellation guard as X, Escape, and
+   * backdrop; modified clicks open another tab and do not unmount this one.
+   */
+  const followOverlayPageLink = useCallback(async (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+    ) return;
+
+    event.preventDefault();
+    if (await closeOverlay()) router.push(href);
+  }, [closeOverlay, router]);
 
   /*
    * Every state keeps the page's own heading.
@@ -424,7 +601,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   /**
    * The factory being built right now.
    *
-   * Steps 2-8 are properties of one project, so with two projects the journey
+   * Steps 2-9 are properties of one project, so with two projects the journey
    * has to say *which*. GitHub stays out of it: an installation is account
    * level, so it is genuinely done for every factory once it is done for one.
    *
@@ -433,55 +610,36 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
    * project that does not exist yet, which keeps completion derived from live
    * records rather than from a wizard remembering it was reset.
    */
-  // A project created during the new-factory flow is adopted by derivation
-  // rather than by an effect writing state back: it is simply the project that
-  // was not here when the flow started. That keeps this a pure read of live
-  // records, and avoids a render pass that exists only to catch up with one.
-  const adoptedProject = startingNewFactory && projectIdsBeforeNew !== null
-    ? data.projects.find((project) => !projectIdsBeforeNew.includes(project.id)) ?? null
-    : null;
-
   const activeProject = activeProjectId
     ? data.projects.find((project) => project.id === activeProjectId) ?? null
-    : adoptedProject
-      ?? (startingNewFactory ? null : data.projects[0] ?? null);
+    : startingNewFactory
+      ? null
+      : data.projects[0] ?? null;
 
-  // The roster opens on the factory the journey is showing, not on whichever
-  // project happens to be first. With two projects those differ, and the
-  // person was sent to configure one project while the step counted another,
-  // so assigning a bot in the overlay left the step's evidence unmoved.
-  const rosterProject = startingNewFactory
-    ? activeProject
-    : data.projects.find((project) => project.id === rosterProjectId)
-      ?? activeProject
-      ?? data.projects[0]
-      ?? null;
+  const handleProjectCreated = async (projectId: string) => {
+    const organizationId = data.activeOrganizationId;
+    pendingCreatedProjectRef.current = { organizationId, projectId };
+    activeProjectIdRef.current = projectId;
+    startingNewFactoryRef.current = true;
+    setActiveProjectId(projectId);
+    setStartingNewFactory(true);
+    writeFactorySelection(organizationId, projectId);
+    setOpenStep(null);
+    await load();
+  };
 
   /* The roster — assigning bots and configuring each posting's role,
      responsibilities, repository access, model, and work effort — is one
-     control serving two steps, scoped to one project at a time. */
-  const rosterEmbed = rosterProject ? (
+     control serving two steps. It receives exactly the factory the journey is
+     measuring; there is no second project selector that can diverge from it. */
+  const rosterEmbed = activeProject ? (
     <div className="space-y-4">
-      {data.projects.length > 1 ? (
-        <div className="max-w-xs">
-          <label htmlFor="factory-roster-project" className="field-label">Project</label>
-          <select
-            id="factory-roster-project"
-            value={rosterProject.id}
-            onChange={(event) => setRosterProjectId(event.target.value)}
-            className="input"
-          >
-            {data.projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-        </div>
-      ) : null}
       <ProjectBots
-        key={rosterProject.id}
-        projectId={rosterProject.id}
-        projectName={rosterProject.name}
+        key={activeProject.id}
+        projectId={activeProject.id}
+        projectName={activeProject.name}
         divided={false}
+        embedded
       />
     </div>
   ) : (
@@ -505,12 +663,34 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const scopedAgentSelections = activeProject
     ? data.agentSelections.filter((selection) => selection.projectId === activeProject.id)
     : [];
+  const connectedAccounts = data.accounts.filter(
+    (account) => account.id.length > 0 && account.status === "connected",
+  );
+  const connectedAccountIds = new Set(connectedAccounts.map((account) => account.id));
+  const linkedBots = data.bots.filter(
+    (bot) => bot.id.length > 0
+      && bot.aiAccountId !== null
+      && connectedAccountIds.has(bot.aiAccountId),
+  );
+  const readyLinkedBots = linkedBots.filter((bot) => bot.currentReadiness === "ready");
+  const readyLinkedBotIds = new Set(readyLinkedBots.map((bot) => bot.id));
   const scopedAssignments = activeProject
     ? data.assignments.filter((assignment) => assignment.projectId === activeProject.id)
     : [];
-  const scopedConfigured = scopedAssignments.filter((assignment) => assignment.configured);
-  const allScopedAssignmentsConfigured = scopedAssignments.length > 0
-    && scopedConfigured.length === scopedAssignments.length;
+  const activeScopedAssignments = scopedAssignments.filter(
+    (assignment) => assignment.status === "active",
+  );
+  const routedAssignments = activeScopedAssignments.filter(
+    (assignment) => readyLinkedBotIds.has(assignment.botId),
+  );
+  const configuredRoutedAssignments = routedAssignments.filter(
+    (assignment) => assignment.configured,
+  );
+  const unusableActiveAssignments = activeScopedAssignments.length - routedAssignments.length;
+  const allScopedAssignmentsConfigured = routedAssignments.length > 0
+    && data.assignmentsComplete
+    && unusableActiveAssignments === 0
+    && configuredRoutedAssignments.length === routedAssignments.length;
   const scopedCommands = activeProject
     ? data.commands.filter((command) => command.project?.id === activeProject.id)
     : [];
@@ -556,7 +736,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         : "No project yet for this factory",
       action: "Create a project",
       icon: Factory,
-      body: <AddProjectForm onCreated={closeOverlay} />,
+      body: <AddProjectForm onCreated={handleProjectCreated} />,
       pageHref: "/solutions/projects",
       pageLabel: "All Projects",
     },
@@ -611,6 +791,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           builtIns={builtIns}
           onSelectionChanged={() => void load()}
           projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : null}
+          embedded
         />
       ),
       pageHref: "/solutions/pipelines?view=templates",
@@ -657,13 +838,38 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "connect_bots",
       title: "Connect Bots",
-      description: "Sign in with the AI accounts you already pay for — Claude and Codex today.",
-      done: data.connectedAccounts > 0,
-      evidence: data.connectedAccounts > 0
-        ? `${data.connectedAccounts} account${data.connectedAccounts === 1 ? "" : "s"} connected · ${data.bots} bot${data.bots === 1 ? "" : "s"}`
-        : "No AI account connected yet",
-      action: "Connect a bot",
+      description: "Sign in with an AI account, create the bot bound to that exact account, and verify its current readiness.",
+      // Account count and bot count are not a relationship. Done requires one
+      // exact aiAccountId binding whose current server-side readiness is ready.
+      done: readyLinkedBots.length > 0,
+      evidence: connectedAccounts.length === 0
+        ? "No AI account connected yet"
+        : linkedBots.length === 0
+          ? `${connectedAccounts.length} account${connectedAccounts.length === 1 ? "" : "s"} connected · no bot linked to those accounts yet`
+          : readyLinkedBots.length === 0
+            ? `${linkedBots.length} linked bot${linkedBots.length === 1 ? "" : "s"} · none currently ready`
+            : `${readyLinkedBots.length} ready bot${readyLinkedBots.length === 1 ? "" : "s"} linked to ${connectedAccounts.length} connected account${connectedAccounts.length === 1 ? "" : "s"}`,
+      action: connectedAccounts.length === 0
+        ? "Connect an account"
+        : linkedBots.length === 0
+          ? "Create a bot"
+          : readyLinkedBots.length === 0
+            ? "Check bot readiness"
+            : "Manage bots",
       icon: PlugZap,
+      detail: readyLinkedBots.length > 0 ? (
+        <ul aria-label="Ready connected bots" className="mt-2 flex flex-wrap gap-1.5">
+          {readyLinkedBots.map((bot) => (
+            <li
+              key={bot.id}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-[var(--surface-raised)] px-2.5 py-1 text-xs text-muted"
+            >
+              <Check className="size-3.5 shrink-0 text-[var(--accent-text)]" aria-hidden="true" />
+              {bot.name}
+            </li>
+          ))}
+        </ul>
+      ) : null,
       /*
        * The project this journey is building, handed to the step.
        *
@@ -673,8 +879,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
        */
       body: (
         <BotManagerHome
-          projectContext={rosterProject ? { id: rosterProject.id, name: rosterProject.name } : null}
+          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : null}
           onFinished={closeOverlay}
+          embedded
+          onBeforeOuterCloseChange={setOverlayCloseGuard}
         />
       ),
       pageHref: "/solutions/bot-manager",
@@ -684,11 +892,17 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "assign_bots",
       title: "Assign Bots to Project",
       description: "Put one or many bots on the project. The wizard walks Select → Configure → Review.",
-      done: scopedAssignments.length > 0,
-      evidence: scopedAssignments.length > 0
-        ? `${scopedAssignments.length} active assignment${scopedAssignments.length === 1 ? "" : "s"} on this factory`
-        : "No bot is assigned to this factory yet",
-      action: "Assign bots",
+      done: data.assignmentsComplete && routedAssignments.length > 0,
+      evidence: !data.assignmentsComplete
+        ? "Assignment roster is incomplete · reload before trusting this step"
+        : activeScopedAssignments.length === 0
+        ? "No active bot assignment on this factory yet"
+        : routedAssignments.length === 0
+          ? `${activeScopedAssignments.length} active assignment${activeScopedAssignments.length === 1 ? "" : "s"} exist${activeScopedAssignments.length === 1 ? "s" : ""}, but none route a ready bot linked to a connected account`
+          : unusableActiveAssignments > 0
+            ? `${routedAssignments.length} ready route${routedAssignments.length === 1 ? "" : "s"} on this factory · ${unusableActiveAssignments} assignment${unusableActiveAssignments === 1 ? "" : "s"} unavailable`
+            : `${routedAssignments.length} ready bot route${routedAssignments.length === 1 ? "" : "s"} on this factory`,
+      action: routedAssignments.length > 0 ? "Change assignments" : "Assign bots",
       icon: Bot,
       body: rosterEmbed,
       pageHref: "/solutions/myprojects",
@@ -699,11 +913,15 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       title: "Configure Bot Settings",
       description: "On each posting card: role, responsibilities, repository access, the model it runs (Fable 5, Opus 5, …), and work effort.",
       done: allScopedAssignmentsConfigured,
-      evidence: scopedConfigured.length > 0
-        ? `${scopedConfigured.length} of ${scopedAssignments.length} assignment${scopedAssignments.length === 1 ? "" : "s"} configured`
-        : scopedAssignments.length > 0
-          ? "Assignments exist; every one is still on the default least-privilege settings"
-          : "Assign a bot first",
+      evidence: !data.assignmentsComplete
+        ? "Assignment roster is incomplete · reload before trusting this step"
+        : activeScopedAssignments.length === 0
+        ? "Assign a ready bot first"
+        : unusableActiveAssignments > 0
+          ? `${unusableActiveAssignments} of ${activeScopedAssignments.length} active assignment${activeScopedAssignments.length === 1 ? "" : "s"} are not backed by a ready bot linked to a connected account`
+          : configuredRoutedAssignments.length > 0
+            ? `${configuredRoutedAssignments.length} of ${routedAssignments.length} assignment${routedAssignments.length === 1 ? "" : "s"} configured`
+            : "Ready assignments exist; every one is still on the default least-privilege settings",
       action: "Configure",
       icon: Settings2,
       body: rosterEmbed,
@@ -804,11 +1022,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     // Nothing is deleted. The journey stops pointing at the current project,
     // so every project-scoped step reads empty because it genuinely is empty
     // for a factory that has no project yet.
-    setProjectIdsBeforeNew(
-      state.kind === "ready" ? state.data.projects.map((project) => project.id) : [],
-    );
+    pendingCreatedProjectRef.current = null;
+    activeProjectIdRef.current = null;
     setActiveProjectId(null);
-    setRosterProjectId("");
+    startingNewFactoryRef.current = true;
     setStartingNewFactory(true);
     setOpenStep("create_project");
   };
@@ -829,9 +1046,16 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                   value={activeProject?.id ?? ""}
                   onChange={(event) => {
                     const next = event.target.value;
-                    setStartingNewFactory(next === "");
-                    setActiveProjectId(next === "" ? null : next);
-                    setRosterProjectId(next);
+                    const nextProjectId = next === "" ? null : next;
+                    const newFactory = nextProjectId === null;
+                    startingNewFactoryRef.current = newFactory;
+                    setStartingNewFactory(newFactory);
+                    activeProjectIdRef.current = nextProjectId;
+                    setActiveProjectId(nextProjectId);
+                    if (nextProjectId) {
+                      pendingCreatedProjectRef.current = null;
+                      writeFactorySelection(data.activeOrganizationId, nextProjectId);
+                    }
                   }}
                 >
                   {isStartingNew ? <option value="">New factory…</option> : null}
@@ -880,7 +1104,11 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           {open.body}
           <p className="mt-4 text-xs text-faint">
             This is the same control as{" "}
-            <Link href={open.pageHref} className="underline underline-offset-2 hover:text-foreground">
+            <Link
+              href={open.pageHref}
+              onClick={(event) => void followOverlayPageLink(event, open.pageHref)}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
               {open.pageLabel}
             </Link>
             {" "}— finish it in either place, then close to come back to the journey.

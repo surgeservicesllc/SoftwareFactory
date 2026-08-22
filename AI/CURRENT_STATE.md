@@ -2,6 +2,101 @@
 
 Last reviewed: 2026-08-21
 
+**Release-candidate addendum, 2026-08-22 (Claude bot identity and Bot Space,
+ADR-108/ADR-109):** the current local candidate closes the screenshot path without
+claiming a release. AI Factory owns one application modal, backdrop, focus
+trap, and close/back path. Its project roster, assignment wizard, posting edit,
+and zero-role onboarding render inline in that overlay; they do not open a
+nested dialog. When an organization has no roles, the starter selector defaults
+to the reviewed **Backend engineer** template and sends that complete template
+through the existing same-origin, manager-only, audited `/api/bot-roles`
+boundary. The exact returned role UUID fills only selected drafts that still
+lack a role. This is separate from the **Developer** permission preset used for
+a new posting; an existing posting keeps its authored role and configuration,
+and a new posting with existing roles prefers a role whose slug matches the
+preset before falling back to the first available organization role.
+
+Forward migration `20260822000200_register_bot_for_ai_account.sql` is frozen at
+SHA-256
+`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+Its authenticated manager boundary binds every subscription bot it returns to
+the exact tenant `ai_accounts.id` and derived provider/credential slot. A
+default/non-additional request reuses that account's existing bound bot or may
+adopt one unambiguous matching legacy bot without changing its identity; an
+explicit additional request creates another distinct bot bound to the same
+account. Cross-tenant or provider/credential drift is refused. The exact
+account is the identity; provider or credential-reference similarity is not.
+`bots.revision` and
+`bot_assignments.revision` start at 1 and advance monotonically on every row
+update, with overflow refused. Assignment, status, configuration, and execution
+preference writes lock the open posting and compare its exact assignment UUID,
+  project UUID, and revision before delegating to the established audited
+  mutation. Checked edits refuse a released posting, so released history cannot
+  be reopened or rewritten through a client-callable mutation boundary. Checked
+  bulk assignment also refuses a current paused posting under lock; it must be
+  explicitly resumed through the checked status boundary before assignment or move.
+
+Readiness is server evidence. The service-role-only
+`record_bot_readiness_preserving_disabled` function also carries an owner/admin
+actor and, under the bot row lock, requires the exact bot revision, AI-account
+UUID, provider, model, credential reference, and base URL that were evaluated.
+A stale verdict fails instead of overwriting a newer configuration; a readiness
+check cannot author `Disabled`, and an already Disabled bot is returned
+unchanged. The legacy registration and mutation function definitions,
+signatures, `SECURITY DEFINER` attributes, and pinned `search_path` values are
+unchanged. This is an EXPAND migration: the exact existing authenticated-only
+execute ACLs on all six legacy assignment/readiness RPCs remain unchanged while
+authenticated revision-checked wrappers and the service-role-only readiness
+recorder are added. That temporary compatibility means the old application can
+still call unchecked mutations and the legacy readiness path; revocation is
+deferred to a separately approved forward CONTRACT migration after exact-app
+deployment and signed-in acceptance.
+
+The roster now proves completeness rather than treating a prefix as the whole
+fleet. It filters released postings in PostgreSQL, keyset-pages open postings
+by assignment UUID until an empty terminal page (including after a short
+server-capped page), and fails the entire read on invalid progress or its
+bounded page guard. Only that terminal proof sets `assignmentsComplete`; AI
+Factory fails the assignment-derived Assign and Configure steps closed without
+it. Connect remains the separate exact connected-account -> account-bound Ready
+bot proof. The combined identity continues through the exact selected project
+and revision-checked active assignment, with posting configuration evaluated
+from that same chain across reload.
+
+Broker start, retry, close, and unmount cleanup are serialized through one
+lifecycle queue. Session UUID plus generation gates discard late polls and
+callbacks from a superseded attempt. Retry cancels the exact prior session
+before starting another; close blocks a racing retry, waits for an in-flight
+start to reveal its session UUID, and keeps the overlay open/resumes polling if
+cancellation cannot be confirmed. This changes no provider login protocol or
+credential format.
+
+The combined final-candidate working tree passes lint, typecheck, the production
+build, and 331 Vitest files / 3,934 tests (7 skipped). The serialized production
+browser matrix passed 1,207 cases with 545 intentional viewport skips; its only
+three failures were the same unknown-resource HTTP-status defect in desktop,
+tablet, and mobile. The forward fix now returns a branded 404 and its exact
+desktop/tablet/mobile regression plus generated social-image contract passes
+6/6. The all-fields audit also covers every assignment, manual-bot, role, and
+advanced-command field and fixed Instructions editing plus required endpoint
+gating. Focused security, broker-lifecycle, modal/role/roster, and resource-proxy
+reviews report no unresolved P0/P1/P2 findings. These are local working-tree results, not
+final rebased-commit, CI, deployment, or hosted-database evidence.
+
+Nothing in this candidate has been pushed, deployed, or applied to hosted
+Supabase. The protected hosted workflow exposes only
+`scope=bot-account-binding` for this migration: it verifies the exact hash,
+predecessor/absence state, clean pre-apply catalog, legacy definition/security/
+search-path/ACL identity, new catalog/ACL state, and one ledger row while
+applying only `20260822000200`; broad apply refuses to carry the protected file
+first. The scope does not prove runtime behavior, linked-database lint,
+application health, or kill-switch/autonomy/worker containment. Those remain
+explicit post-apply release gates. Final rebase/commit identity, direct-main
+publication, workflow changes, frozen-auth changes, and production migration
+remain RED and require fresh exact owner approval after the final commit is
+frozen. Worker/executor dispatch remains disconnected, all automatic actions
+and raw autonomous mode remain OFF, and the global kill switch remains ON.
+
 **Production acceptance addendum, 2026-08-21 (AI Factory):** exact candidate
 head `a020e8192d8512a1bb65112e01017047087f0528` passed all four Linux CI jobs in
 run `32543409160`: quality plus browser shards 1/3, 2/3, and 3/3. This is

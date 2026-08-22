@@ -2,6 +2,70 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-22 — Claude bot identity and Bot Space release
+candidate (ADR-108/ADR-109):** this is local candidate evidence only. Migration
+`20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+`39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+It binds each returned subscription bot to the exact tenant AI account and
+derived provider/credential slot. A default/non-additional request reuses the
+account's bot or permits only one unambiguous in-place legacy adoption; an
+explicit additional request creates a distinct bot with that same exact account
+binding. Future coherence is enforced. Positive bot and assignment revisions
+start at 1, increment on every update, and make stale exact-config/readiness or
+exact-posting writes fail under row lock. Checked mutation paths refuse
+released history.
+
+Readiness recording is service-role-only, carries the audited owner/admin actor,
+and compares exact bot revision, AI account, provider, model, credential
+reference, and base URL. A check cannot author Disabled and cannot overwrite an
+existing Disabled management state. `bot.registered` and adoption-path
+`bot.updated` immutable events include the exact `ai_account_id`. This is an
+EXPAND migration: legacy function definitions, signatures, security attributes,
+search paths, and exact authenticated-only execute ACLs remain unchanged while
+checked wrappers and the service-only recorder are added. The accepted rolling-
+cutover risk is that the old application can still use unchecked assignment and
+legacy readiness calls. Revocation requires a separately approved forward
+CONTRACT migration after exact-app deployment and acceptance.
+
+The visible path also closes coherently. AI Factory supplies one application
+modal/focus boundary and embeds the roster, assignment/configuration flow, and
+starter-role control without nested dialogs. With zero roles, Backend engineer
+is the reviewed starter default and its full template is saved through the
+audited role API; the exact returned UUID fills only blank selected drafts.
+Developer remains the separate default permission preset for a new posting,
+while existing posting role/configuration is preserved. The account connector
+serializes start/retry/close/unmount operations and fences async results by
+session UUID plus generation. The roster filters released rows before a
+terminal-proven keyset traversal, continues after short pages, and fails closed
+on invalid progress or the page guard. Factory completion therefore follows
+one complete connected-account -> exact account bot -> selected project ->
+revision-checked active configured posting chain.
+
+Focused coverage exists for migration behavior, hosted-scope guards, exact bot
+and readiness synchronization, revision/stale/released handling, complete-
+roster pagination, one-modal/zero-role onboarding, assignment preservation and
+readback, broker races, and Factory progress/reload. The final semantic audit
+also covers every assignment, manual-bot, authored-role, and advanced-command
+field; it fixed controlled Instructions editing and required endpoint gating.
+The combined final-candidate working tree passes lint, typecheck, the production
+build, and 337 Vitest files / 4,030 tests with 7 skipped. The serialized production-browser matrix passed
+1,207 cases with 545 intentional viewport skips; the sole defect, repeated in
+three viewports, was the unknown-resource HTTP 200 status. After its forward
+proxy/page fix, the exact desktop/tablet/mobile 404 and generated-social-image
+regression passes 6/6. Independent security, broker, UI, and proxy reviews
+report no unresolved P0/P1/P2 findings.
+
+No production claim is made: final rebased-commit gates and CI remain pending,
+and no candidate push, matching deployment, or hosted `20260822000200` apply
+has occurred. The dedicated protected `scope=bot-account-binding` is the only
+permitted first apply path and is limited to the exact hash-checked migration;
+broad apply refuses it. Its automated proof is limited to predecessor/target,
+clean catalog, definition/security/search-path/ACL, new catalog, and ledger
+invariants. Runtime behavior, linked-database lint, application health, and
+containment are explicit post-apply gates. Promotion remains RED. Kill switch stays ON, raw
+autonomy and all automatic actions stay OFF, and worker/executor remains
+disconnected.
+
 **Addendum, 2026-08-21 — AI Factory production acceptance:** exact candidate
 head `a020e8192d8512a1bb65112e01017047087f0528` passed all four jobs in CI run
 `32543409160` (quality plus browser shards 1/3, 2/3, and 3/3). Production-browser

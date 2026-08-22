@@ -422,6 +422,9 @@ export function CommandComposer({
   const dependencyOptions = tasks.filter(
     (task) => task.project?.id === projectId && !["cancelled", "failed"].includes(task.status),
   );
+  const selectedProjectName = projects.find((project) => project.id === projectId)?.name
+    ?? projectContext?.name
+    ?? "This project";
   const selectedPipeline = pipelines.find(
     (pipeline) => pipeline.templateKey === pipelineTemplateKey,
   );
@@ -512,6 +515,13 @@ export function CommandComposer({
               setPipelineTemplateKey(event.target.value);
               markEdited();
             }}
+            aria-describedby={
+              pipelinesState === "unavailable"
+                ? "command-pipeline-unavailable"
+                : pipelinesState === "ready" && pipelines.length === 0 && projectId
+                  ? "command-pipeline-guidance"
+                  : undefined
+            }
             disabled={pipelinesState !== "ready" || pipelines.length === 0}
             className="input"
           >
@@ -535,7 +545,10 @@ export function CommandComposer({
             ))}
           </select>
           {pipelinesState === "unavailable" ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--warning)]">
+            <div
+              id="command-pipeline-unavailable"
+              className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--warning)]"
+            >
               <span>Selected pipelines could not be verified. Queueing is paused.</span>
               <button
                 type="button"
@@ -549,8 +562,8 @@ export function CommandComposer({
               </button>
             </div>
           ) : pipelinesState === "ready" && pipelines.length === 0 && projectId ? (
-            <p className="mt-2 text-sm text-muted">
-              Select a pipeline for this project in{" "}
+            <p id="command-pipeline-guidance" className="mt-2 text-sm text-muted">
+              {selectedProjectName} has no selected pipelines. Select one in{" "}
               <Link href="/solutions/pipelines" className="font-medium text-accent">
                 Pipelines
               </Link>{" "}

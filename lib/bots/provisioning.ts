@@ -1,6 +1,10 @@
 import "server-only";
 
 import { findBotProvider } from "@/lib/bots/catalog";
+import {
+  isMissingDatabaseColumn,
+  isMissingDatabaseFunction,
+} from "@/lib/bots/schema-compat";
 import { isClientSafeDatabaseErrorCode } from "@/lib/server/http";
 
 /**
@@ -25,14 +29,27 @@ import { isClientSafeDatabaseErrorCode } from "@/lib/server/http";
  *   itself succeeded and the person can always add a bot by hand.
  */
 
-type ProviderBotRow = { id: string; provider: string; name: string };
+type ProviderBotRow = {
+  id: string;
+  provider: string;
+  name: string;
+  credential_ref?: string | null;
+  ai_account_id?: string | null;
+  created_at?: string;
+};
+
+type ProvisioningQuery = {
+  order: (
+    column: string,
+    options: { ascending: boolean },
+  ) => ProvisioningQuery;
+  limit: (count: number) => PromiseLike<{ data: unknown; error: unknown }>;
+};
 
 type ProvisioningClient = {
   from: (table: string) => {
     select: (columns: string) => {
-      eq: (column: string, value: string) => {
-        limit: (count: number) => PromiseLike<{ data: unknown; error: unknown }>;
-      };
+      eq: (column: string, value: string) => ProvisioningQuery;
     };
   };
   rpc: (
@@ -45,11 +62,19 @@ type ProvisioningClient = {
 
 export type ProvisionOutcome =
   | { readonly outcome: "created"; readonly botId: string }
-  | { readonly outcome: "exists" }
+  | { readonly outcome: "bound"; readonly botId: string }
+  | { readonly outcome: "exists"; readonly botId: string }
   | { readonly outcome: "unsupported" }
   | { readonly outcome: "skipped"; readonly reason: string };
 
 export type ProvisionOptions = {
+  /**
+   * The exact subscription account this bot executes as. When present, the
+   * database derives the credential reference from that tenant-scoped account
+   * and returns the exact bot id; the browser never gets to bind an arbitrary
+   * account id to an arbitrary credential variable.
+   */
+  readonly aiAccountId?: string;
   /**
    * The credential variable the new bot should reference, when the connect
    * flow knows better than the provider default — a signed-in subscription
@@ -97,18 +122,32 @@ export async function ensureProviderBot(
      * Read every name in the organization and pick the first genuinely free
      * one instead of predicting.
      */
-    const existing = await client
+    let existing = await client
       .from("bots")
-      .select("id,provider,name")
+      .select("id,provider,name,credential_ref,ai_account_id,created_at")
       .eq("organization_id", organizationId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(200);
+    if (isMissingDatabaseColumn(existing.error, "ai_account_id")) {
+      existing = await client
+        .from("bots")
+        .select("id,provider,name,credential_ref,created_at")
+        .eq("organization_id", organizationId)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(200);
+    }
     if (existing.error) {
       return { outcome: "skipped", reason: "Existing bots could not be read." };
     }
-    const rows = (existing.data as ProviderBotRow[] | null) ?? [];
-    const providerCount = rows.filter((row) => row.provider === providerId).length;
-    if (providerCount > 0 && !options.additional) {
-      return { outcome: "exists" };
+    const rows = [...((existing.data as ProviderBotRow[] | null) ?? [])].sort((left, right) => {
+      const created = (left.created_at ?? "").localeCompare(right.created_at ?? "");
+      return created !== 0 ? created : left.id.localeCompare(right.id);
+    });
+    const providerBots = rows.filter((row) => row.provider === providerId);
+    if (providerBots.length > 0 && !options.additional && !options.aiAccountId) {
+      return { outcome: "exists", botId: providerBots[0]!.id };
     }
     const taken = new Set(rows.map((row) => row.name));
     let name = provider.label;
@@ -119,24 +158,64 @@ export async function ensureProviderBot(
       name = `${provider.label} ${n}`;
     }
 
-    const { data, error } = await client
-      .rpc("register_bot", {
-        p_organization_id: organizationId,
-        p_name: name,
-        p_provider: providerId,
-        p_model: provider.suggestedModels[0] ?? provider.label,
-        p_credential_ref: options.credentialRef !== undefined
-          ? options.credentialRef
-          : provider.defaultCredentialRef,
-        p_base_url: null,
-        p_notes: "Created automatically when this provider was connected.",
-      })
-      .single();
+    const legacyCredentialRef = options.credentialRef !== undefined
+      ? options.credentialRef
+      : provider.defaultCredentialRef;
+    const legacyArguments = {
+      p_organization_id: organizationId,
+      p_name: name,
+      p_provider: providerId,
+      p_model: provider.suggestedModels[0] ?? provider.label,
+      p_credential_ref: legacyCredentialRef,
+      p_base_url: null,
+      p_notes: "Created automatically when this provider was connected.",
+    };
 
-    if (error) {
-      return { outcome: "skipped", reason: registerRefusalReason(error) };
+    if (options.aiAccountId) {
+      const exactArguments = {
+          p_organization_id: organizationId,
+          p_ai_account_id: options.aiAccountId,
+          p_provider: providerId,
+          p_name: name,
+          p_model: provider.suggestedModels[0] ?? provider.label,
+          p_additional: options.additional ?? false,
+          p_base_url: null,
+          p_notes: "Created automatically when this provider was connected.",
+      };
+      const exact = await client.rpc("ensure_ai_account_bot", exactArguments).single();
+      if (!exact.error) {
+        const row = exact.data as { bot_id?: string; provision_outcome?: string } | null;
+        if (!row?.bot_id) return { outcome: "skipped", reason: "No bot id was returned." };
+        if (row.provision_outcome === "created"
+          || row.provision_outcome === "bound"
+          || row.provision_outcome === "exists") {
+          return { outcome: row.provision_outcome, botId: row.bot_id };
+        }
+        return { outcome: "skipped", reason: "The database returned an unknown bot outcome." };
+      }
+      if (!isMissingDatabaseFunction(exact.error, "ensure_ai_account_bot")) {
+        return { outcome: "skipped", reason: registerRefusalReason(exact.error) };
+      }
+
+      // Without the account-aware RPC the server cannot validate that an
+      // arbitrary UUID belongs to this tenant/account. Never infer identity
+      // from a credential slot and never create an unbound row. An already
+      // exact-bound row came from a validated prior write and is safe to reuse
+      // deterministically; additional creation waits for the upgrade.
+      const exactAccountRows = providerBots.filter(
+        (row) => row.ai_account_id === options.aiAccountId,
+      );
+      if (!options.additional && exactAccountRows.length > 0) {
+        return { outcome: "exists", botId: exactAccountRows[0]!.id };
+      }
+      return {
+        outcome: "skipped",
+        reason: "Exact account bot creation is waiting for the account-binding database upgrade.",
+      };
     }
 
+    const { data, error } = await client.rpc("register_bot", legacyArguments).single();
+    if (error) return { outcome: "skipped", reason: registerRefusalReason(error) };
     const row = data as { id?: string } | null;
     return row?.id
       ? { outcome: "created", botId: row.id }

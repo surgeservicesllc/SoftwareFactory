@@ -811,3 +811,179 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: the owner's goal "make the agents on /solutions/agents selectable into the AI Factory" ships as the exact mirror of pipeline selection (the hosted-proven 20260821000300 pattern): migration `20260822000100_project_agent_selection.sql` adds `project_agents` (RLS + FORCE RLS, every table privilege revoked from anon/authenticated/service_role) with three definer functions — owner/administrator `select_project_agent`/`deselect_project_agent` and member `list_project_agents` — each audit-evented ('agent.selected'/'agent.deselected') and advisory-locked per project-and-agent. An agent is selectable into a project when it belongs to the same organization and is either organization-wide (the standard roster) or already bound to that project; an agent bound to another project is refused in the database. `/api/project-agents` exposes GET/POST/DELETE, reporting the unapplied-migration state as itself (Not Connected, 503 on writes) rather than as an empty list. One shared component, `ProjectAgentSelector`, renders the toggles on /solutions/agents (standalone, with its own project picker) and inside the AI Factory's new "Select Agents" step (the journey hands in its project), so the two surfaces read and write the same records and cannot disagree. The step is done when at least one agent is included, with the included names as its on-page evidence.
 - Rationale: the Agents page defined the eleven standard roles and their per-agent provider/model assignment, but nothing connected the roster to the factory: there was no record saying "this factory uses these agents" for the journey to read. The pipeline-selection precedent already answers every design question this raises — where authority lives (definer functions under the caller's identity), what selection means (routing intent, never execution), how absence is reported (Not Connected, never a vacuous empty), and how the factory consumes it (scoped to the journey's project, evidence on the page).
 - Consequence: `project-agent-selection.behavior.test.ts` proves the contract against the real migration chain (16 cases: stickiness, idempotency, per-project scoping, audit events, cross-project and cross-tenant refusals, member read-only, outsider/anonymous denial, no direct table path, archive semantics); `project-agents-routes.test.ts` pins the route boundary (10 cases) and `project-agent-selection.test.tsx` the component (5 cases). The factory journey grows to nine steps and its suite pins the new step's done/evidence semantics. The apply workflow gains `scope=agent-selection` (one file, replay-safe) for the hosted database; until it runs there, the page says Not Connected and the step's evidence names the missing migration.
+
+## ADR-108 - A subscription bot is the exact AI account it runs as
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; protected publication and hosted migration pending
+- Decision: provisioning from an AI account carries that exact tenant
+  `ai_accounts.id` into `ensure_ai_account_bot`. PostgreSQL derives provider and
+  credential slot, returns the exact bot UUID, and enforces tenant/account/
+  provider/reference coherence on later bot writes. A default/non-additional
+  request reuses that account's bot or may adopt one unambiguous matching
+  legacy bot in place and never guesses among several; an explicit additional
+  request creates another distinct bot with the same exact account binding.
+  `bots.revision` and `bot_assignments.revision` initialize at 1, increment on
+  every update, and refuse overflow. An existing posting may be assigned,
+  moved, configured, paused/released, or have model/work effort changed only
+  when its expected assignment UUID, project UUID, and revision still match
+  under the same row lock and transaction; checked edits refuse released
+  history. Existing role/configuration is preserved unless explicitly changed,
+  and the client verifies both the write result and committed read model.
+
+  Readiness is persisted only by the service-role-only
+  `record_bot_readiness_preserving_disabled`, which carries an owner/admin actor
+  and compares exact bot revision, account UUID, provider, model, credential
+  reference, and base URL under lock. A stale check fails, a check cannot author
+  Disabled, and an already Disabled bot is returned unchanged. Legacy
+  registration/assignment/readiness mutation definitions, signatures,
+  `SECURITY DEFINER` attributes, and pinned search paths remain unchanged;
+  `register_bot` also retains its ACL. Legacy assignment/readiness mutation
+  execute ACLs are intentionally revoked and replaced with authenticated
+  checked wrappers plus the service-only readiness recorder.
+
+  The roster filters released history before keyset-paging open assignments by
+  UUID until an empty terminal page. Short pages are not terminal; invalid
+  progress or the page bound fails the entire read. AI Factory uses one modal
+  and embeds its roster/editor/starter flow. With no roles, Backend engineer is
+  the starter default saved through the audited role API, and the returned UUID
+  fills blank selected drafts; Developer is the separate new-posting permission
+  preset, while an existing posting retains its role/configuration. Broker
+  start/retry/close/unmount cleanup is serialized and every async result is
+  fenced by exact session UUID plus generation.
+- Rationale: provider plus credential-variable name is not an execution
+  identity. Two accounts may share a provider, credential slots are numbered,
+  and a legacy bot may already carry assignments that must not move to a newly
+  generated id. Likewise, checking a posting before the RPC is a time-of-check/
+  time-of-use race: another manager can move or tighten it between the read and
+  the row lock, after which a stale wizard silently restores old permissions.
+  Readiness calculated only from environment variables reports a valid sealed
+  subscription credential missing, while readiness calculated without
+  respecting Disabled grants an implicit re-enable. All four are identity
+  failures, not presentation defects.
+- Consequence: migration
+  `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+  Its protected `scope=bot-account-binding` verifies predecessor/absence state
+  and the exact hash, applies only that file, performs catalog/runtime checks,
+  and records one ledger row; broad apply refuses to introduce it. Until a
+  final rebased head passes all gates, receives fresh exact RED approval, is
+  published, hosted, deployed, and accepted in an authenticated owner session,
+  this remains a candidate and production retains the old behavior. None of
+  it executes a bot or changes provider-login protocol, worker, autonomy,
+  approval, merge, deploy, or rollback authority.
+
+## ADR-109 - Bot-account binding ships EXPAND before legacy mutation grants CONTRACT
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; supersedes ADR-108 only for migration promotion order and legacy assignment/readiness ACL handling
+- Decision: `20260822000200_register_bot_for_ai_account.sql` is the EXPAND half
+  of a rolling database/application cutover. It adds exact AI-account binding,
+  revisions, triggers, checked assignment boundaries, and the service-only
+  readiness recorder without changing the definitions, signatures,
+  `SECURITY DEFINER` attributes, pinned search paths, or exact ACLs of the six
+  legacy RPCs used by the currently deployed application: `assign_bot`,
+  `assign_bots_to_project`, `update_bot_assignment_configuration`,
+  `update_bot_assignment`, `set_bot_assignment_execution`, and
+  `record_bot_readiness`. Each retains authenticated execution and the existing
+  public/anon/service-role denials. Revocation is deferred to a separately
+  reviewed, owner-approved forward CONTRACT migration after the exact
+  replacement application SHA is deployed and its signed-in create, bind,
+  assign, configure, readiness, audit, and reload behavior is accepted.
+
+  The immutable `bot.registered` event for a newly bound bot and the
+  `bot.updated` event for an adopted legacy bot both carry the exact
+  `ai_account_id`. Before applying, the migration and protected workflow refuse
+  any pre-existing new helper/checked function, revision trigger, revision
+  column, or revision constraint rather than replacing or normalizing unknown
+  catalog state. Before any DDL they also pin exact definition hashes, owner,
+  language, kind, volatility, security, search path, overload set, and ACL for
+  `register_bot` plus all six delegated legacy mutators; a missing, cross-tenant,
+  non-subscription, or otherwise incoherent historical binding is refused.
+  After DDL, the migration itself proves the exact ten-function catalog and
+  exact revision/default/constraint/trigger catalog, including rejection of an
+  unexpected grantee inherited from custom default privileges. The protected scope proves migration identity, predecessor/
+  target ledger state, clean pre-apply catalog, exact legacy definition/
+  security/search-path/ACL preservation, new catalog/ACL state, and one ledger
+  row. The DDL and direct version-only ledger insert share one protected psql
+  transaction; a later history repair is forbidden, closing the commit-to-ledger
+  crash window. Runtime behavior, linked-database lint, application health, and global
+  kill-switch/autonomy/worker containment are explicit post-apply release gates,
+  not claims made by that scope.
+- Rationale: the migration is intentionally applied before the matching Vercel
+  application during this release procedure, and `origin/main` calls all six
+  legacy RPCs. Revoking their authenticated grants in the database migration
+  would make the live old application fail immediately during the cutover
+  window. Additive checked boundaries allow the new application to adopt the
+  stronger contracts while the old copy continues to function. Refusing dirty
+  pre-existing catalog state keeps `CREATE OR REPLACE` and trigger replacement
+  from laundering an unexpected partial apply or manual change into the
+  approved migration identity.
+- Consequence: between EXPAND apply and the later CONTRACT migration, an
+  authenticated manager can still use the legacy assignment functions without
+  an expected revision, and legacy readiness remains authenticated rather than
+  service-only. This is a real, bounded compatibility risk, contained by keeping
+  worker/executor disconnected, raw autonomy and automatic actions OFF, and the
+  global kill switch ON. It must not become permanent through omission: the
+  follow-up revocation remains open release work, requires its own exact source
+  identity and approval, and may proceed only after the deployed application no
+  longer depends on the legacy execute grants.
+
+## ADR-110 - CONTRACT is an independently pinned, exact-app-gated ACL migration
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; protected publication and hosted execution pending
+- Decision: the CONTRACT half is the new forward migration
+  `20260822000300_contract_bot_mutator_acls.sql`, frozen at SHA-256
+  `e3bad45af18ed07d3ab7adcfc9a326103fc09fd2b398f664c733de73fac7c1e2`.
+  It contains one atomic `DO` statement and changes only `EXECUTE` ACLs for the
+  six legacy direct mutators named in ADR-109. Before the first revoke it
+  requires the complete frozen `20260822000200` catalog: exact definitions,
+  signatures, owners, `SECURITY DEFINER`, search paths, and ACLs for all helper,
+  checked, readiness, and legacy functions; exact revision columns and positive
+  constraints; and exact enabled triggers. The six legacy functions must still
+  have authenticated-only execution, with PUBLIC, anon, and service-role denied.
+  Unexpected overloads, missing objects, definition drift, ACL drift, history
+  mismatch, or replay stop the transaction. After revocation, the same six
+  definitions and security metadata must be unchanged and authenticated,
+  PUBLIC, anon, and service-role execution must all be denied; the function
+  owner remains able to execute so checked `SECURITY DEFINER` wrappers can
+  delegate internally.
+
+  `assign_bots_to_project_checked` also refuses an exact current `paused`
+  posting while holding its row lock. Moving or bulk-assigning cannot implicitly
+  reactivate it through the legacy delegate; a manager must first use the
+  explicit revision-checked status transition to resume it.
+
+  The independently hash-pinned
+  `scope=bot-account-binding-contract` requires predecessor `20260822000200`
+  exactly once, target `20260822000300` absent, one-file application, and one
+  target ledger row inserted in the same transaction as the revokes (never by a
+  later `migration repair`). Because the workflow cannot prove an authenticated browser
+  journey by itself, it also requires the exact checked-out 40-character
+  application SHA and the manual attestation
+  `exact-app-vercel-accepted` before any database access. The pre-connection
+  machine gate also requires `refs/heads/main` and the latest GitHub `Production`
+  deployment created by `vercel[bot]` to have exact matching SHA/ref, task
+  `deploy`, and a latest successful Vercel-bot status with a Vercel URL. The
+  operator separately verifies exact Vercel project
+  `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, which GitHub deployment metadata does not
+  expose; no `VERCEL_TOKEN` Actions secret is added. Broad `scope=all` refuses
+  both protected versions until EXPAND and CONTRACT have each been separately
+  recorded by their dedicated scopes, then re-proves the full live contracted
+  function/ACL/revision/default/constraint/trigger catalog before `db push`.
+- Rationale: a predecessor ledger row proves history, not live catalog identity,
+  and revoking the compatibility grants before the replacement server is the
+  exact accepted Vercel deployment would break the migration-first release.
+  Conversely, leaving the grants indefinitely preserves revision-free writes
+  and browser-owned readiness. The only safe sequence is **EXPAND -> exact
+  application/Vercel acceptance -> CONTRACT**, with a clean catalog stop at
+  both database boundaries.
+- Consequence: cached old-shaped requests remain supported by the candidate
+  server only by deriving the missing identity/revision tuple server-side and
+  calling checked RPCs. Legacy fallbacks are limited to exact missing-function
+  evidence from a genuinely pre-EXPAND database; once checked functions exist,
+  a revoked legacy RPC is never retried. Applying CONTRACT still requires a new
+  exact RED authorization and post-apply ledger/catalog/ACL/lint/health/
+  containment verification. It enables no worker, autonomous action, provider
+  execution, merge, deployment, rollback, or secret path.
