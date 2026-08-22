@@ -1109,11 +1109,9 @@ describe("managing an assigned bot", () => {
       },
     ]);
   });
-  it("says which model can run a command, and which cannot", async () => {
-    // The defect this guards: the picker offered every model the catalog
-    // lists for a provider, and exactly one of them can be claimed by the
-    // worker. Choosing any other one is refused at submission — the last step
-    // of the journey, after a project, a pipeline and a bot are all chosen.
+  it("distinguishes the executable model from safe record-only models", async () => {
+    // Every catalog model is accepted at submission. Exactly one can be
+    // claimed by the worker; the rest persist safely without dispatch.
     stub(roster({
       assigned: [{
         id: "as-1",
@@ -1134,18 +1132,17 @@ describe("managing an assigned bot", () => {
 
     const model = await screen.findByLabelText("Model") as HTMLSelectElement;
     const labels = [...model.options].map((option) => option.textContent ?? "");
-    expect(labels.some((label) => label.includes("gpt-5.3-codex · runs"))).toBe(true);
-    expect(labels.some((label) => label.includes("gpt-5.1 · cannot run"))).toBe(true);
+    expect(labels.some((label) => label.includes("gpt-5.3-codex · can execute"))).toBe(true);
+    expect(labels.some((label) => label.includes("gpt-5.1 · records only"))).toBe(true);
 
-    // And the posting's current, unrunnable setting is called out rather than
-    // left to be discovered at the end.
+    // The posting's current record-only behavior is explicit before Step 8.
     expect(
-      await screen.findByText(/gpt-5\.1-codex cannot run a command/),
+      await screen.findByText(/gpt-5\.1-codex accepts commands as recorded-only work/),
     ).toBeInTheDocument();
   });
 
-  it("says nothing about runnability when the server did not say", async () => {
-    // An older deployment does not send `execution`. A guessed "runs" label
+  it("says nothing about execution disposition when the server did not say", async () => {
+    // An older deployment does not send `execution`. A guessed execution label
     // would be worse than none, so the picker stays quiet.
     stub(roster({ execution: undefined }));
 
@@ -1153,8 +1150,8 @@ describe("managing an assigned bot", () => {
 
     const model = await screen.findByLabelText("Model") as HTMLSelectElement;
     const labels = [...model.options].map((option) => option.textContent ?? "");
-    expect(labels.every((label) => !label.includes("· runs"))).toBe(true);
-    expect(labels.every((label) => !label.includes("· cannot run"))).toBe(true);
-    expect(screen.queryByText(/cannot run a command/)).not.toBeInTheDocument();
+    expect(labels.every((label) => !label.includes("· can execute"))).toBe(true);
+    expect(labels.every((label) => !label.includes("· records only"))).toBe(true);
+    expect(screen.queryByText(/accepts commands as recorded-only work/)).not.toBeInTheDocument();
   });
 });

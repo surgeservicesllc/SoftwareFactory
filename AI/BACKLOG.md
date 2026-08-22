@@ -2,7 +2,45 @@
 
 Last triaged: 2026-08-22
 
-## Bot-account binding forward containment (2026-08-22, ADR-111)
+## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
+
+- [x] Keep exact `openai` / `gpt-5.3-codex` as the sole executable Factory
+  identity and classify every other valid bounded provider/model pair as
+  `record_only`.
+- [x] Make `record_only` persist command/task/route disposition with zero
+  `agent_runs`, no worker dispatch, and no branch/commit/PR/deployment path.
+- [x] Fail closed when `SOFTWAREFACTORY_CODEX_MODEL` names any nondefault model;
+  changing an environment pin cannot grant execution support.
+- [x] Advance Step 8 after durable recording and make Step 9 distinguish
+  `record_only` from execution, using project-scoped safe history that does not
+  expose raw parameters and survives reload.
+- [x] Record the hosted prerequisite truth:
+  `20260822000600_route_bots_onto_the_executable_model.sql` is applied, but it
+  makes only the exact Codex identity executable.
+- [x] Remove the repository-only magic RED release approval/expiry ceremony
+  (ADR-116). The owner's direct instruction in the active task authorizes the
+  release; exact technical identity, CI, deployment, migration, containment,
+  and audit gates remain mandatory.
+- [ ] Freeze the final application commit and all migration hashes, push only
+  that exact head, and require all exact-head quality plus browser/accessibility
+  jobs green and an exact READY Vercel Production identity. No such release
+  evidence exists yet.
+- [ ] Apply only the protected atomic `00300 -> 00900 -> 01000` chain through
+  `scope=factory-any-model-record-only`, including rollback rehearsal, exact
+  prerequisite/ledger/catalog/ACL/lint/health checks, and one-transaction ledger
+  recording. Never use the retired standalone CONTRACT scope or a broad push.
+- [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
+  executors, and zero runs for all `record_only` commands before and after apply.
+- [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful
+  Step 9 -> reload acceptance, prove project isolation, and only then update
+  continuity documents with exact deployment, apply-run, ledger, and runtime
+  evidence.
+
+## Historical bot-account binding containment (2026-08-22, ADR-111; superseded)
+
+This preserves the earlier release checklist as evidence. Do not execute its
+separate release sequence; the current pending database action is the atomic
+ADR-115 `00300 -> 00900 -> 01000` scope above.
 
 - [x] Push exact approved commit
   `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` to `main` and verify exact
