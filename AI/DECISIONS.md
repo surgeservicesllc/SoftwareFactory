@@ -1159,7 +1159,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   input; revoke function access from PUBLIC, anon, authenticated, and
   service_role; then grant EXECUTE only to authenticated and require exactly
   owner plus authenticated in postflight. Rehearse and apply the complete
-  `00300 -> 00900 -> 01000 -> 01100 -> 01200` chain in the same protected
+  `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain in the same protected
   transaction.
 - Rationale: hosted probe `32587973532` proved that every Job Seeker table,
   column, index, policy, constraint, RLS, source, and catalog fingerprint was
@@ -1195,7 +1195,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   `clear_all_pipelines(uuid,text,boolean)`; revoke function access from PUBLIC,
   anon, authenticated, and service_role; then grant EXECUTE only to
   authenticated and require exactly owner plus authenticated in postflight.
-  Rehearse and apply the complete `00300 -> 00900 -> 01000 -> 01100 -> 01200`
+  Rehearse and apply the complete `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200`
   chain in the same protected transaction.
 - Rationale: read-only hosted probe `32590061431` proved both clear-control
   functions retained direct `service_role EXECUTE` from Supabase function
@@ -1209,3 +1209,33 @@ Use this append-only log for decisions that constrain future implementation. Cha
   owner-plus-authenticated ACL before the atomic transaction becomes visible.
   Workers, autonomy, and automatic actions remain OFF and the global kill
   switch remains ON.
+
+## ADR-121 - Normalize the measured hosted pre-repair function ACLs without replacing identities
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: add forward migration
+  `20260822000850_normalize_hosted_pre_repair_function_acls.sql` immediately
+  before pending `00900` in the protected chain. Freeze the exact catalog and
+  ACL state measured by read-only run `32591774367`: twelve guarded routines are
+  already exact; `normalize_bot_assignment_configuration`,
+  `record_claim_anchoring`, and `validate_pipeline_template_areas` have the
+  Supabase-default `service_role EXECUTE` overgrant; and
+  `claim_provider_connect_session` is owner-only although its server boundary
+  requires service-role execution. Revoke and rebuild only those four ACLs.
+  Preserve every routine OID, source, signature, owner, language, volatility,
+  SECURITY DEFINER setting, search path, argument/result contract, and comment.
+- Rationale: the earlier sixteen-function gate described the intended ACLs as
+  though they were already hosted, so the protected run stopped safely before
+  DDL. The claim function also retains the hosted legacy OUT names
+  `organization_id` and `purpose`. Recreating it merely to adopt newer local OUT
+  labels would change its OID and external row contract without fixing the ACL
+  defect. Pending, unapplied `00900` therefore freezes the measured claim result
+  hash `3b2b93799687f2d2de6b154376542759` and catalog hash
+  `a7ca5a02b1faa50ebba452c4a4f46195`.
+- Consequence: the one protected transaction is now
+  `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200`. Its exact hosted-input
+  gate, rollback rehearsal, migration postflight, 00900 preflight, ledger,
+  catalog, lint, health, and containment checks stop on any mixed or unexpected
+  state. No applied migration is edited or replayed, and workers, autonomy, and
+  automatic actions remain OFF with the global kill switch ON.

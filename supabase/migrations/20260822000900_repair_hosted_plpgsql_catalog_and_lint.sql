@@ -1214,8 +1214,8 @@ begin
     ('public.claim_provider_connect_session(text,text)',
      '9961e16bbe95da08903caac340633bca', 'v', true,
      array['search_path=pg_catalog']::text[], 'service_role',
-     '6c4654f1612525e6c5b714ddea7050f1', 'd39f7431a65f34513eed0e6ad46e5ab0',
-     '8992610aa5f3749a013a3bdf9f7d4fef'),
+     '6c4654f1612525e6c5b714ddea7050f1', '3b2b93799687f2d2de6b154376542759',
+     'a7ca5a02b1faa50ebba452c4a4f46195'),
     ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
      '20f9edba1651974ca0ef256293269d81', 's', true,
      array['search_path=pg_catalog']::text[], 'authenticated',
@@ -1282,8 +1282,17 @@ begin
           p.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) <> expected.source_md5
      or pg_catalog.md5(pg_catalog.pg_get_function_identity_arguments(p.oid))
           <> expected.arguments_md5
-     or pg_catalog.md5(pg_catalog.pg_get_function_result(p.oid))
-          <> expected.result_md5
+     -- Hosted legacy output names and clean-replay prefixed output names are
+     -- both frozen; select the full contract from the result hash so hybrids fail.
+     or (
+       pg_catalog.md5(pg_catalog.pg_get_function_result(p.oid))
+         is distinct from expected.result_md5
+       and not (
+         expected.signature = 'public.claim_provider_connect_session(text,text)'
+         and pg_catalog.md5(pg_catalog.pg_get_function_result(p.oid))
+           = 'd39f7431a65f34513eed0e6ad46e5ab0'
+       )
+     )
      or pg_catalog.md5(pg_catalog.jsonb_build_array(
           n.nspname,
           l.lanname,
@@ -1317,7 +1326,13 @@ begin
           p.protrftypes is null,
           p.proconfig,
           p.proacl is null
-        )::text) is distinct from expected.contract_md5
+        )::text) is distinct from case
+          when expected.signature = 'public.claim_provider_connect_session(text,text)'
+           and pg_catalog.md5(pg_catalog.pg_get_function_result(p.oid))
+             = 'd39f7431a65f34513eed0e6ad46e5ab0'
+          then '8992610aa5f3749a013a3bdf9f7d4fef'
+          else expected.contract_md5
+        end
      or p.proacl is null
      or (select pg_catalog.count(*) from pg_catalog.aclexplode(p.proacl))
           <> case when expected.execute_role = 'none' then 1 else 2 end

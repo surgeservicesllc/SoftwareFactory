@@ -118,7 +118,7 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     expect(command).toContain(`CONTRACT_SHA256=${frozenSha256}`);
     expect(command.match(/\s-f\s+"\$CONTRACT_FILE"/g)).toHaveLength(2);
     expect(command).toContain(
-      "('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200')",
+      "('20260822000300'), ('20260822000850'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200')",
     );
     expect(command).not.toMatch(/\bsupabase(?:@\S+)?\s+(?:db\s+push|migration\s+up)\b/);
   });
@@ -178,7 +178,7 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     const transaction = command.indexOf("--single-transaction", precontract);
 
     expect(history).toBeGreaterThanOrEqual(0);
-    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0" ]');
+    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0|0" ]');
     expect(precontract).toBeGreaterThan(history);
     expect(command.slice(precontract, transaction)).toContain("count(oid) = 6");
     expect(command.slice(precontract, transaction)).toContain("aclexplode(proacl)");
@@ -211,7 +211,8 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     const broad = stepByName("Push the outstanding migrations (scope=all)");
     const command = broad.run ?? "";
     const contract = command.indexOf("where version = '20260822000300'");
-    const repair = command.indexOf("where version = '20260822000900'", contract);
+    const hostedFunctionAcl = command.indexOf("where version = '20260822000850'", contract);
+    const repair = command.indexOf("where version = '20260822000900'", hostedFunctionAcl);
     const recordOnly = command.indexOf("where version = '20260822001000'", repair);
     const functionAcl = command.indexOf("where version = '20260822001100'", recordOnly);
     const clearFunctionAcl = command.indexOf("where version = '20260822001200'", functionAcl);
@@ -219,7 +220,8 @@ describe("the hosted bot mutator CONTRACT release path", () => {
     const push = command.search(/\bsupabase\s+db\s+push\b/);
 
     expect(contract).toBeGreaterThanOrEqual(0);
-    expect(repair).toBeGreaterThan(contract);
+    expect(hostedFunctionAcl).toBeGreaterThan(contract);
+    expect(repair).toBeGreaterThan(hostedFunctionAcl);
     expect(recordOnly).toBeGreaterThan(repair);
     expect(functionAcl).toBeGreaterThan(recordOnly);
     expect(clearFunctionAcl).toBeGreaterThan(functionAcl);

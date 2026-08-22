@@ -52,9 +52,9 @@ same project-only history without exposing raw parameters. The executable Codex
 path remains distinct and unchanged.
 
 Hosted `20260822000600_route_bots_onto_the_executable_model.sql` is already
-applied. The protected `20260822000300` -> `20260822000900` ->
-`20260822001000` -> `20260822001100` -> `20260822001200` chain is still pending
-and may be applied only atomically through
+applied. The protected `20260822000300` -> `20260822000850` ->
+`20260822000900` -> `20260822001000` -> `20260822001100` -> `20260822001200`
+chain is still pending and may be applied only atomically through
 `scope=factory-any-model-record-only` after exact-head CI, exact READY Vercel
 identity, the owner's direct release request in this active task, and all
 ledger/catalog/safety preflights. ADR-116 removes the repository's magic RED
@@ -82,6 +82,23 @@ their exact identities and known ACL inputs, removes only the unintended
 function access, and requires owner plus authenticated as the final ACL. It
 extends the protected rollback rehearsal and atomic production transaction;
 it has not yet been hosted.
+
+Read-only hosted probe `32591774367` found the final pre-repair catalog delta
+without writing DDL or history. Twelve of the sixteen guarded routines were
+exact. `normalize_bot_assignment_configuration(jsonb)`,
+`record_claim_anchoring(uuid,anchored_claim,uuid[])`, and
+`validate_pipeline_template_areas(jsonb)` carried an unintended direct
+`service_role EXECUTE` grant, while
+`claim_provider_connect_session(text,text)` had the inverse drift: owner-only
+ACL instead of its required owner-plus-service-role ACL. Forward migration
+`20260822000850_normalize_hosted_pre_repair_function_acls.sql` accepts only
+that exact four-function input and converges the ACLs before `00900` runs.
+It does not replace a function or change an OID, source, signature, owner,
+SECURITY DEFINER setting, search path, argument/result contract, or comment.
+In particular, the hosted claim function keeps its legacy OUT names
+`organization_id` and `purpose`; pending `00900` now freezes that measured
+result contract (`3b2b93799687f2d2de6b154376542759`) and complete catalog
+contract (`a7ca5a02b1faa50ebba452c4a4f46195`) rather than renaming it.
 
 **Historical release checkpoint before ADR-115, 2026-08-22 (ADR-111,
 superseded):** exact commit

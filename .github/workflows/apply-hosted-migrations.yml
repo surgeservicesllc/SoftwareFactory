@@ -26,7 +26,7 @@ on:
           20260822000150, 20260822000200, the job-seeker 20260822000400/00500
           pair, executable-model repair 20260822000600,
           clear-controls 20260822000700/00800, and protected
-          20260822000300/00900/01000/01100/01200 are each recorded by
+          20260822000300/00850/00900/01000/01100/01200 are each recorded by
           their dedicated
           scopes; "broker-functions"
           applies only the idempotent broker migrations
@@ -46,7 +46,8 @@ on:
           "bot-account-binding" applies only 20260822000200, which binds a
           subscription bot to its exact tenant-scoped AI account;
           "factory-any-model-record-only" atomically applies the exact
-          20260822000300/00900/01000/01100/01200 protected chain, restoring the AgentOS
+          20260822000300/00850/00900/01000/01100/01200 protected chain, normalizing the exact hosted
+          pre-repair function ACLs, restoring the AgentOS
           isolation catalog, repairing the frozen PL/pgSQL lint set, and
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
@@ -99,7 +100,7 @@ jobs:
       - name: Refuse the retired standalone bot mutator CONTRACT scope
         if: ${{ inputs.scope == 'bot-account-binding-contract' }}
         run: |
-          echo "::error::The standalone 00300 CONTRACT path is retired. Use scope=factory-any-model-record-only so 00300/00900/01000/01100/01200 remain one exact, accepted, forward-only transaction."
+          echo "::error::The standalone 00300 CONTRACT path is retired. Use scope=factory-any-model-record-only so 00300/00850/00900/01000/01100/01200 remain one exact, accepted, forward-only transaction."
           exit 1
 
       - name: Verify exact green application release before protected database preflight
@@ -958,7 +959,7 @@ jobs:
               ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', 'v', '972ba462e06d56885860d179ad59706f', 'authenticated'),
               ('public.audit_factory_health(uuid)', '18bbb7f45cb5fe4b9d9d3b45f06076c2', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
               ('public.capture_improvement_baseline(uuid)', '2c7693b411e87f73433dcf0b5d117c9c', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
-              ('public.claim_provider_connect_session(text,text)', '9961e16bbe95da08903caac340633bca', 'v', '8992610aa5f3749a013a3bdf9f7d4fef', 'service_role'),
+              ('public.claim_provider_connect_session(text,text)', '9961e16bbe95da08903caac340633bca', 'v', 'a7ca5a02b1faa50ebba452c4a4f46195', 'service_role'),
               ('public.list_factory_command_routing_candidates(uuid,uuid,text)', '20f9edba1651974ca0ef256293269d81', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
               ('public.normalize_bot_assignment_configuration(jsonb)', '643e307fdd9f98479bbe54d6f29c3623', 'i', '451c6919550f1ebe87eb5ec83b50366b', 'none'),
               ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])', '5c78babb546ecec96e81878a3c02ac0f', 'v', '8d7877b6de24358edd3e75981eb5411f', 'authenticated'),
@@ -2016,7 +2017,7 @@ jobs:
         # proves that GitHub deployment identity.
         # Retained only as immutable release evidence. The selectable standalone
         # scope and its mutation path are retired: 00300 may now land only in
-        # the accepted, atomic 00300 -> 00900 -> 01000 -> 01100 -> 01200 protected chain below.
+        # the accepted, atomic 00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200 protected chain below.
         if: ${{ false && inputs.scope == 'bot-account-binding-contract' }}
         run: |
           echo "::error::The standalone CONTRACT mutation path is retired; use the exact machine-gated atomic scope."
@@ -2375,6 +2376,7 @@ jobs:
           MODEL_REPAIR_FILE=supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql
           CLEAR_TYPES_FILE=supabase/migrations/20260822000700_clear_surface_activity_types.sql
           CLEAR_FUNCTIONS_FILE=supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql
+          HOSTED_FUNCTION_ACL_FILE=supabase/migrations/20260822000850_normalize_hosted_pre_repair_function_acls.sql
           REPAIR_FILE=supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql
           RECORD_ONLY_FILE=supabase/migrations/20260822001000_factory_any_model_record_only.sql
           FUNCTION_ACL_FILE=supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql
@@ -2385,7 +2387,8 @@ jobs:
           MODEL_REPAIR_SHA256=c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0
           CLEAR_TYPES_SHA256=184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b
           CLEAR_FUNCTIONS_SHA256=e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a
-          REPAIR_SHA256=87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b
+          HOSTED_FUNCTION_ACL_SHA256=8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce
+          REPAIR_SHA256=64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f
           RECORD_ONLY_SHA256=b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255
           FUNCTION_ACL_SHA256=dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789
           CLEAR_FUNCTION_ACL_SHA256=ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e
@@ -2395,11 +2398,12 @@ jobs:
             || [ "$(tr -d '\r' < "$MODEL_REPAIR_FILE" | sha256sum | cut -d' ' -f1)" != "$MODEL_REPAIR_SHA256" ] \
             || [ "$(tr -d '\r' < "$CLEAR_TYPES_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_TYPES_SHA256" ] \
             || [ "$(tr -d '\r' < "$CLEAR_FUNCTIONS_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_FUNCTIONS_SHA256" ] \
+            || [ "$(tr -d '\r' < "$HOSTED_FUNCTION_ACL_FILE" | sha256sum | cut -d' ' -f1)" != "$HOSTED_FUNCTION_ACL_SHA256" ] \
             || [ "$(tr -d '\r' < "$REPAIR_FILE" | sha256sum | cut -d' ' -f1)" != "$REPAIR_SHA256" ] \
             || [ "$(tr -d '\r' < "$RECORD_ONLY_FILE" | sha256sum | cut -d' ' -f1)" != "$RECORD_ONLY_SHA256" ] \
             || [ "$(tr -d '\r' < "$FUNCTION_ACL_FILE" | sha256sum | cut -d' ' -f1)" != "$FUNCTION_ACL_SHA256" ] \
             || [ "$(tr -d '\r' < "$CLEAR_FUNCTION_ACL_FILE" | sha256sum | cut -d' ' -f1)" != "$CLEAR_FUNCTION_ACL_SHA256" ]; then
-            echo "::error::A protected prerequisite or migration hash does not match frozen 00300/00400/00500/00600/00700/00800/00900/01000/01100/01200 identity."
+            echo "::error::A protected prerequisite or migration hash does not match frozen 00300/00400/00500/00600/00700/00800/00850/00900/01000/01100/01200 identity."
             exit 1
           fi
 
@@ -2413,6 +2417,7 @@ jobs:
               count(*) filter (where version = '20260822000600'),
               count(*) filter (where version = '20260822000700'),
               count(*) filter (where version = '20260822000800'),
+              count(*) filter (where version = '20260822000850'),
               count(*) filter (where version = '20260822000900'),
               count(*) filter (where version = '20260822001000'),
               count(*) filter (where version = '20260822001100'),
@@ -2421,11 +2426,11 @@ jobs:
             where version in (
               '20260822000150', '20260822000200', '20260822000300',
               '20260822000400', '20260822000500', '20260822000600',
-              '20260822000700', '20260822000800', '20260822000900',
+              '20260822000700', '20260822000800', '20260822000850', '20260822000900',
               '20260822001000', '20260822001100', '20260822001200'
             );")
-          if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0" ]; then
-            echo "::error::History must record 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800 once, with protected 00300/00900/01000/01100/01200 absent."
+          if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0|0" ]; then
+            echo "::error::History must record 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800 once, with protected 00300/00850/00900/01000/01100/01200 absent."
             exit 1
           fi
 
@@ -2749,7 +2754,7 @@ jobs:
           fi
 
           function_catalog_ready() {
-            if [ "$1" != "pre" ] && [ "$1" != "post" ]; then
+            if [ "$1" != "input" ] && [ "$1" != "pre" ] && [ "$1" != "post" ]; then
               return 2
             fi
             psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
@@ -2781,9 +2786,9 @@ jobs:
                  's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
                 ('public.claim_provider_connect_session(text,text)',
                  '9961e16bbe95da08903caac340633bca', 'aa271ab3d2be6c5f2ce7182670e48099',
-                 'v', 'v', '8992610aa5f3749a013a3bdf9f7d4fef', 'service_role'),
+                 'v', 'v', 'a7ca5a02b1faa50ebba452c4a4f46195', 'service_role'),
                 ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
-                 '20f9edba1651974ca0ef256293269d81', '2ac0a2a4d51e54d1b0d89f49cf33ba87',
+                 '20f9edba1651974ca0ef256293269d81', '203f54d969fbc699304e780c1ad68a85',
                  's', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
                 ('public.normalize_bot_assignment_configuration(jsonb)',
                  '643e307fdd9f98479bbe54d6f29c3623', '643e307fdd9f98479bbe54d6f29c3623',
@@ -2795,7 +2800,7 @@ jobs:
                  'd0c11a5c1e57878c9b1b5d8753ecb1fd', 'f9a381c4fab5274262e3a79a49c46c17',
                  'v', 'v', '813ab274df60a32d50ddeeb5b1d0ca01', 'authenticated'),
                 ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
-                 'aea5da3473dd612f066e0e6fa3a76dd0', '7addf177418dea367bce655815915e61',
+                 'aea5da3473dd612f066e0e6fa3a76dd0', '6008476137a77db33d220be4b14a9c8d',
                  'v', 'v', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'authenticated'),
                 ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)',
                  '5323b0adb327f3d3a19c9bdca220922e', 'e0fb88d49063d1d5665b10d610c6a288',
@@ -2842,28 +2847,54 @@ jobs:
                 left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
                 left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
                 left join pg_language routine_language on routine_language.oid = routine.prolang
+              ), expected_state as (
+                select state.*,
+                       execute_role = 'authenticated' as expected_authenticated,
+                       case
+                         when '$1' = 'input'
+                              and signature = 'public.claim_provider_connect_session(text,text)'
+                           then false
+                         when '$1' = 'input'
+                              and signature in (
+                                'public.normalize_bot_assignment_configuration(jsonb)',
+                                'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                                'public.validate_pipeline_template_areas(jsonb)'
+                              )
+                           then true
+                         else execute_role = 'service_role'
+                       end as expected_service
+                  from state
               )
               select count(oid) = 16
                  and bool_and(
                    source_md5 is not distinct from
-                     case when '$1' = 'pre' then pre_source_md5 else post_source_md5 end
+                     case when '$1' = 'post' then post_source_md5 else pre_source_md5 end
                    and provolatile::text is not distinct from
-                     case when '$1' = 'pre' then pre_volatility else post_volatility end
+                     case when '$1' = 'post' then post_volatility else pre_volatility end
                    and actual_contract_md5 is not distinct from contract_md5
                    and proacl is not null
                    and (select count(*) from aclexplode(proacl)) =
-                     case when execute_role = 'none' then 1 else 2 end
+                     1 + expected_authenticated::integer + expected_service::integer
                    and exists (
                      select 1 from aclexplode(proacl) acl
                      where acl.grantor = proowner and acl.grantee = proowner
                        and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
                    )
                    and (
-                     execute_role = 'none'
+                     not expected_authenticated
                      or exists (
                        select 1 from aclexplode(proacl) acl
                        where acl.grantor = proowner
-                         and acl.grantee = to_regrole(execute_role)::oid
+                         and acl.grantee = to_regrole('authenticated')::oid
+                         and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
+                     )
+                   )
+                   and (
+                     not expected_service
+                     or exists (
+                       select 1 from aclexplode(proacl) acl
+                       where acl.grantor = proowner
+                         and acl.grantee = to_regrole('service_role')::oid
                          and acl.privilege_type = 'EXECUTE' and not acl.is_grantable
                      )
                    )
@@ -2872,17 +2903,17 @@ jobs:
                      where acl.grantor <> proowner
                         or acl.privilege_type <> 'EXECUTE'
                         or acl.is_grantable
-                        or acl.grantee not in (
-                          proowner,
-                          case when execute_role = 'none' then proowner
-                               else to_regrole(execute_role)::oid end
+                        or (
+                          acl.grantee <> proowner
+                          and not (expected_authenticated and acl.grantee = to_regrole('authenticated')::oid)
+                          and not (expected_service and acl.grantee = to_regrole('service_role')::oid)
                         )
                    )
                    and not has_function_privilege('anon', signature, 'EXECUTE')
                    and has_function_privilege('authenticated', signature, 'EXECUTE')
-                         is not distinct from (execute_role = 'authenticated')
+                         is not distinct from expected_authenticated
                    and has_function_privilege('service_role', signature, 'EXECUTE')
-                         is not distinct from (execute_role = 'service_role')
+                         is not distinct from expected_service
                  )
                  and (
                    select count(*) = 16
@@ -2901,11 +2932,11 @@ jobs:
                        'agentos_record_trigger_delivery'
                      )
                  )
-              from state;"
+              from expected_state;"
           }
 
-          if [ "$(function_catalog_ready pre)" != "t" ]; then
-            echo "::error::The exact sixteen-function pre-repair source/catalog/ACL state is not present."
+          if [ "$(function_catalog_ready input)" != "t" ]; then
+            echo "::error::The exact sixteen-function hosted input source/catalog/ACL state is not present."
             exit 1
           fi
 
@@ -2931,7 +2962,13 @@ jobs:
               select string_agg(
                 expected.signature || '|' || routine.oid::text || '|' || md5(jsonb_build_array(
                   pg_get_userbyid(routine.proowner), routine_language.lanname,
-                  routine.prokind, routine.prosecdef, routine.proconfig, routine.proacl,
+                  routine.prokind, routine.prosecdef, routine.proconfig,
+                  case when expected.signature in (
+                    'public.claim_provider_connect_session(text,text)',
+                    'public.normalize_bot_assignment_configuration(jsonb)',
+                    'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                    'public.validate_pipeline_template_areas(jsonb)'
+                  ) then null else routine.proacl end,
                   format_type(routine.prorettype, null), routine.proretset,
                   routine.pronargs, routine.pronargdefaults,
                   coalesce(array_to_string(routine.proargnames, ','), ''),
@@ -2948,9 +2985,24 @@ jobs:
                   case when routine.prosupport = 0 then '' else routine.prosupport::regproc::text end,
                   coalesce(routine.probin, ''), routine.prosqlbody is null,
                   routine.protrftypes is null,
-                  has_function_privilege('authenticated', expected.signature, 'EXECUTE'),
-                  has_function_privilege('anon', expected.signature, 'EXECUTE'),
-                  has_function_privilege('service_role', expected.signature, 'EXECUTE')
+                  case when expected.signature in (
+                    'public.claim_provider_connect_session(text,text)',
+                    'public.normalize_bot_assignment_configuration(jsonb)',
+                    'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                    'public.validate_pipeline_template_areas(jsonb)'
+                  ) then null else has_function_privilege('authenticated', expected.signature, 'EXECUTE') end,
+                  case when expected.signature in (
+                    'public.claim_provider_connect_session(text,text)',
+                    'public.normalize_bot_assignment_configuration(jsonb)',
+                    'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                    'public.validate_pipeline_template_areas(jsonb)'
+                  ) then null else has_function_privilege('anon', expected.signature, 'EXECUTE') end,
+                  case when expected.signature in (
+                    'public.claim_provider_connect_session(text,text)',
+                    'public.normalize_bot_assignment_configuration(jsonb)',
+                    'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])',
+                    'public.validate_pipeline_template_areas(jsonb)'
+                  ) then null else has_function_privilege('service_role', expected.signature, 'EXECUTE') end
                 )::text), E'\n' order by expected.signature)
               from expected
               join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
@@ -3116,6 +3168,7 @@ jobs:
           LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
             -c "begin;" \
             -f "$CONTRACT_FILE" \
+            -f "$HOSTED_FUNCTION_ACL_FILE" \
             -f "$REPAIR_FILE" \
             -f "$RECORD_ONLY_FILE" \
             -f "$FUNCTION_ACL_FILE" \
@@ -3177,27 +3230,29 @@ jobs:
             exit 1
           fi
 
-          echo "Applying exact 00300 -> 00900 -> 01000 -> 01100 -> 01200 protected chain in one production transaction."
+          echo "Applying exact 00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200 protected chain in one production transaction."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
             -f "$CONTRACT_FILE" \
+            -f "$HOSTED_FUNCTION_ACL_FILE" \
             -f "$REPAIR_FILE" \
             -f "$RECORD_ONLY_FILE" \
             -f "$FUNCTION_ACL_FILE" \
             -f "$CLEAR_FUNCTION_ACL_FILE" \
             -c "insert into supabase_migrations.schema_migrations (version) values
-                  ('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200');"
+                  ('20260822000300'), ('20260822000850'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200');"
 
           RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
             "select concat_ws('|',
                count(*) filter (where version = '20260822000300'),
+               count(*) filter (where version = '20260822000850'),
                count(*) filter (where version = '20260822000900'),
                count(*) filter (where version = '20260822001000'),
                count(*) filter (where version = '20260822001100'),
                count(*) filter (where version = '20260822001200'))
              from supabase_migrations.schema_migrations
-             where version in ('20260822000300','20260822000900','20260822001000','20260822001100','20260822001200');")
-          if [ "$RECORDED" != "1|1|1|1|1" ]; then
-            echo "::error::The exact protected 00300/00900/01000/01100/01200 chain did not land once each in the ledger."
+             where version in ('20260822000300','20260822000850','20260822000900','20260822001000','20260822001100','20260822001200');")
+          if [ "$RECORDED" != "1|1|1|1|1|1" ]; then
+            echo "::error::The exact protected 00300/00850/00900/01000/01100/01200 chain did not land once each in the ledger."
             exit 1
           fi
           if [ "$(job_seeker_ready post)" != "t" ]; then
@@ -3210,7 +3265,7 @@ jobs:
           fi
           FUNCTION_CONTRACT_AFTER=$(function_contract)
           if [ "$FUNCTION_CONTRACT_AFTER" != "$FUNCTION_CONTRACT_BEFORE" ]; then
-            echo "::error::00700 changed an OID, signature, owner, language, SECURITY DEFINER, search_path, ACL, return/argument contract, or another field outside its exact renamed/wrapper set."
+            echo "::error::The protected chain changed an OID, signature, owner, language, SECURITY DEFINER, search_path, ACL outside the exact 00850 targets, return/argument contract, or another guarded field."
             exit 1
           fi
 
@@ -3910,7 +3965,7 @@ jobs:
           # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
           # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00900/01000/01100/01200 are already recorded."
+            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00850/00900/01000/01100/01200 are already recorded."
             exit 1
           fi
           if [ "$MODE" != "dburl" ]; then
@@ -3925,11 +3980,12 @@ jobs:
             || [ "$(tr -d '\r' < supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql | sha256sum | cut -d' ' -f1)" != "c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000700_clear_surface_activity_types.sql | sha256sum | cut -d' ' -f1)" != "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql | sha256sum | cut -d' ' -f1)" != "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a" ] \
-            || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000850_normalize_hosted_pre_repair_function_acls.sql | sha256sum | cut -d' ' -f1)" != "8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql | sha256sum | cut -d' ' -f1)" != "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001200_contract_clear_function_acls.sql | sha256sum | cut -d' ' -f1)" != "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e" ]; then
-            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00900/01000/01100/01200 file hash drifted; broad push is forbidden."
+            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00850/00900/01000/01100/01200 file hash drifted; broad push is forbidden."
             exit 1
           fi
           PROTECTED_NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -3948,6 +4004,8 @@ jobs:
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000700';")
           PROTECTED_CLEAR_FUNCTIONS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000800';")
+          PROTECTED_HOSTED_FUNCTION_ACL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260822000850';")
           PROTECTED_REPAIR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000900';")
           PROTECTED_RECORD_ONLY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -3978,6 +4036,10 @@ jobs:
           fi
           if [ "$PROTECTED_CLEAR_TYPES" != "1" ] || [ "$PROTECTED_CLEAR_FUNCTIONS" != "1" ]; then
             echo "::error::Immutable clear-controls 20260822000700/00800 are not each recorded exactly once; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_HOSTED_FUNCTION_ACL" != "1" ]; then
+            echo "::error::Protected migration 20260822000850 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
             exit 1
           fi
           if [ "$PROTECTED_REPAIR" != "1" ]; then
@@ -4130,9 +4192,9 @@ jobs:
                  's', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
                 ('public.claim_provider_connect_session(text,text)',
                  '9961e16bbe95da08903caac340633bca', 'aa271ab3d2be6c5f2ce7182670e48099',
-                 'v', 'v', '8992610aa5f3749a013a3bdf9f7d4fef', 'service_role'),
+                 'v', 'v', 'a7ca5a02b1faa50ebba452c4a4f46195', 'service_role'),
                 ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
-                 '20f9edba1651974ca0ef256293269d81', '2ac0a2a4d51e54d1b0d89f49cf33ba87',
+                 '20f9edba1651974ca0ef256293269d81', '203f54d969fbc699304e780c1ad68a85',
                  's', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
                 ('public.normalize_bot_assignment_configuration(jsonb)',
                  '643e307fdd9f98479bbe54d6f29c3623', '643e307fdd9f98479bbe54d6f29c3623',
@@ -4144,7 +4206,7 @@ jobs:
                  'd0c11a5c1e57878c9b1b5d8753ecb1fd', 'f9a381c4fab5274262e3a79a49c46c17',
                  'v', 'v', '813ab274df60a32d50ddeeb5b1d0ca01', 'authenticated'),
                 ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
-                 'aea5da3473dd612f066e0e6fa3a76dd0', '7addf177418dea367bce655815915e61',
+                 'aea5da3473dd612f066e0e6fa3a76dd0', '6008476137a77db33d220be4b14a9c8d',
                  'v', 'v', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'authenticated'),
                 ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)',
                  '5323b0adb327f3d3a19c9bdca220922e', 'e0fb88d49063d1d5665b10d610c6a288',

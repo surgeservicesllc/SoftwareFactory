@@ -33,9 +33,13 @@ artifacts, or deployment. Invalid identities and every nondefault
 Step 8 durable-record advancement and truthful Step 9 are implemented against a
 project-scoped safe history projection; raw parameters are not part of that
 projection, and reload persistence is covered locally. Hosted `00600` is
-already applied. Protected `00300/00900/01000/01100/01200` remain pending as
-one atomic scope, with rollback rehearsal and exact ledger/catalog/ACL/lint/
-health and safety gates.
+already applied. Protected `00300/00850/00900/01000/01100/01200` remain pending
+as one atomic scope, with rollback rehearsal and exact ledger/catalog/ACL/lint/
+health and safety gates. Read-only hosted probe `32591774367` measured twelve
+exact guarded functions and four exact ACL deltas. `00850` converges only those
+ACLs, preserving every OID and the claim function's hosted
+`organization_id`/`purpose` OUT contract; `00900` freezes that legacy contract
+instead of replacing it.
 
 ADR-116 removes only the repository release ceremony: a direct owner request in
 the active task is sufficient release authority, without a magic RED phrase,

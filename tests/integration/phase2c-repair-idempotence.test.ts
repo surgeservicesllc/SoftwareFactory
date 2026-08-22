@@ -112,6 +112,7 @@ async function presentTables(db: PGlite): Promise<string[]> {
  */
 const ANCHORS = "20260814002200_graph_anchors.sql";
 const HOSTED_CATALOG_CONTAINMENT = [
+  "20260822000850_normalize_hosted_pre_repair_function_acls.sql",
   "20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
   "20260822001000_factory_any_model_record_only.sql",
 ] as const;

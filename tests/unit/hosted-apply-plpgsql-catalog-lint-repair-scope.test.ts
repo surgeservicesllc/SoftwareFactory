@@ -19,6 +19,8 @@ const files = {
   modelRepair: "supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql",
   clearTypes: "supabase/migrations/20260822000700_clear_surface_activity_types.sql",
   clearFunctions: "supabase/migrations/20260822000800_clear_backlog_and_pipelines.sql",
+  hostedFunctionAcl:
+    "supabase/migrations/20260822000850_normalize_hosted_pre_repair_function_acls.sql",
   repair: "supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
   recordOnly: "supabase/migrations/20260822001000_factory_any_model_record_only.sql",
   functionAcl: "supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql",
@@ -32,7 +34,8 @@ const hashes = {
   modelRepair: "c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0",
   clearTypes: "184b942ef3511d1774ba6a26b9e93daf19326804d41e507ad6c48f1f6447b42b",
   clearFunctions: "e85444206c1e9c290d305e60812d47f32e9342dfd920749116ab7df143532a5a",
-  repair: "87edd68827bf2845e0df8a6774e6fbc14da6a97f45399891ceca79f393cb354b",
+  hostedFunctionAcl: "8cb197e922294234035e8abfb6864bb695bd9dbef021c05464519054e2e5abce",
+  repair: "64bb2754bd87bac747e7924f338bb7ed91df575845e7ff4ce6eb8a4273c0b49f",
   recordOnly: "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255",
   functionAcl: "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789",
   clearFunctionAcl: "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e",
@@ -87,6 +90,10 @@ interface HostedApplyWorkflow {
 }
 
 const source = readFileSync(workflowPath, "utf8");
+const hostedFunctionAclSource = readFileSync(
+  resolve(repositoryRoot, files.hostedFunctionAcl),
+  "utf8",
+);
 const repairSource = readFileSync(resolve(repositoryRoot, files.repair), "utf8");
 const recordOnlySource = readFileSync(resolve(repositoryRoot, files.recordOnly), "utf8");
 const workflow = parse(source) as HostedApplyWorkflow;
@@ -129,14 +136,14 @@ describe("the protected factory any-model record-only chain", () => {
     expect(reachableWrites).toEqual([protectedStepName]);
   });
 
-  it("pins immutable prerequisites and the five-file protected chain", () => {
+  it("pins immutable prerequisites and the six-file protected chain", () => {
     const command = protectedStep().run ?? "";
     const referenced = command.match(/supabase\/migrations\/[A-Za-z0-9_.-]+\.sql/g) ?? [];
     expect(referenced).toEqual(Object.values(files));
     for (const hash of Object.values(hashes)) expect(command).toContain(hash);
     for (const variable of [
       "CONTRACT_FILE", "JOB_RESUME_FILE", "JOB_GRANTS_FILE", "MODEL_REPAIR_FILE", "CLEAR_TYPES_FILE",
-      "CLEAR_FUNCTIONS_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE",
+      "CLEAR_FUNCTIONS_FILE", "HOSTED_FUNCTION_ACL_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE",
       "CLEAR_FUNCTION_ACL_FILE",
     ]) {
       expect(command).toContain(`tr -d '\\r' < "$${variable}" | sha256sum`);
@@ -168,6 +175,28 @@ describe("the protected factory any-model record-only chain", () => {
     );
   });
 
+  it("normalizes only the measured hosted ACL cohort and preserves the legacy claim contract", () => {
+    for (const signature of [
+      "public.claim_provider_connect_session(text,text)",
+      "public.normalize_bot_assignment_configuration(jsonb)",
+      "public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])",
+      "public.validate_pipeline_template_areas(jsonb)",
+    ]) {
+      expect(hostedFunctionAclSource).toContain(signature);
+    }
+    for (const identity of [
+      "9961e16bbe95da08903caac340633bca",
+      "3b2b93799687f2d2de6b154376542759",
+      "a7ca5a02b1faa50ebba452c4a4f46195",
+    ]) {
+      expect(hostedFunctionAclSource).toContain(identity);
+      expect(repairSource).toContain(identity);
+    }
+    expect(hostedFunctionAclSource).toContain("array_agg(oid order by signature)");
+    expect(hostedFunctionAclSource).toContain("v_after_oids is distinct from v_before_oids");
+    expect(hostedFunctionAclSource).not.toMatch(/\b(?:create|drop)\s+(?:or\s+replace\s+)?function\s+public\./i);
+  });
+
   it("keeps every record-only guard alive in psql autocommit and cleans it", () => {
     for (const table of [
       "_sf_20260822001000_input_expectations",
@@ -187,13 +216,14 @@ describe("the protected factory any-model record-only chain", () => {
     );
   });
 
-  it("requires exact history and applies 00300 -> 00900 -> 01000 -> 01100 -> 01200 atomically", () => {
+  it("requires exact history and applies 00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200 atomically", () => {
     const command = protectedStep().run ?? "";
-    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0" ]');
+    expect(command).toContain('if [ "$HISTORY" != "1|1|0|1|1|1|1|1|0|0|0|0|0" ]');
     for (const version of [
       "20260822000150", "20260822000200", "20260822000300", "20260822000400",
       "20260822000500", "20260822000600", "20260822000700", "20260822000800",
-      "20260822000900", "20260822001000", "20260822001100", "20260822001200",
+      "20260822000850", "20260822000900", "20260822001000", "20260822001100",
+      "20260822001200",
     ]) {
       expect(command).toContain(version);
     }
@@ -203,40 +233,45 @@ describe("the protected factory any-model record-only chain", () => {
     const rehearsal = command.indexOf("LINT_FINDINGS=");
     const begin = command.indexOf('-c "begin;"', rehearsal);
     const rehearsalContract = command.indexOf('-f "$CONTRACT_FILE"', begin);
-    const rehearsalRepair = command.indexOf('-f "$REPAIR_FILE"', rehearsalContract);
+    const rehearsalHostedFunctionAcl = command.indexOf('-f "$HOSTED_FUNCTION_ACL_FILE"', rehearsalContract);
+    const rehearsalRepair = command.indexOf('-f "$REPAIR_FILE"', rehearsalHostedFunctionAcl);
     const rehearsalRecordOnly = command.indexOf('-f "$RECORD_ONLY_FILE"', rehearsalRepair);
     const rehearsalFunctionAcl = command.indexOf('-f "$FUNCTION_ACL_FILE"', rehearsalRecordOnly);
     const rehearsalClearFunctionAcl = command.indexOf('-f "$CLEAR_FUNCTION_ACL_FILE"', rehearsalFunctionAcl);
     const rollback = command.indexOf('-c "rollback;"', rehearsalClearFunctionAcl);
     const actual = command.indexOf("--single-transaction", rollback);
     const actualContract = command.indexOf('-f "$CONTRACT_FILE"', actual);
-    const actualRepair = command.indexOf('-f "$REPAIR_FILE"', actualContract);
+    const actualHostedFunctionAcl = command.indexOf('-f "$HOSTED_FUNCTION_ACL_FILE"', actualContract);
+    const actualRepair = command.indexOf('-f "$REPAIR_FILE"', actualHostedFunctionAcl);
     const actualRecordOnly = command.indexOf('-f "$RECORD_ONLY_FILE"', actualRepair);
     const actualFunctionAcl = command.indexOf('-f "$FUNCTION_ACL_FILE"', actualRecordOnly);
     const actualClearFunctionAcl = command.indexOf('-f "$CLEAR_FUNCTION_ACL_FILE"', actualFunctionAcl);
-    const ledger = command.indexOf("('20260822000300'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200')", actualClearFunctionAcl);
+    const ledger = command.indexOf("('20260822000300'), ('20260822000850'), ('20260822000900'), ('20260822001000'), ('20260822001100'), ('20260822001200')", actualClearFunctionAcl);
 
     expect(begin).toBeGreaterThan(rehearsal);
     expect(rehearsalContract).toBeGreaterThan(begin);
-    expect(rehearsalRepair).toBeGreaterThan(rehearsalContract);
+    expect(rehearsalHostedFunctionAcl).toBeGreaterThan(rehearsalContract);
+    expect(rehearsalRepair).toBeGreaterThan(rehearsalHostedFunctionAcl);
     expect(rehearsalRecordOnly).toBeGreaterThan(rehearsalRepair);
     expect(rehearsalFunctionAcl).toBeGreaterThan(rehearsalRecordOnly);
     expect(rehearsalClearFunctionAcl).toBeGreaterThan(rehearsalFunctionAcl);
     expect(rollback).toBeGreaterThan(rehearsalClearFunctionAcl);
     expect(actual).toBeGreaterThan(rollback);
     expect(actualContract).toBeGreaterThan(actual);
-    expect(actualRepair).toBeGreaterThan(actualContract);
+    expect(actualHostedFunctionAcl).toBeGreaterThan(actualContract);
+    expect(actualRepair).toBeGreaterThan(actualHostedFunctionAcl);
     expect(actualRecordOnly).toBeGreaterThan(actualRepair);
     expect(actualFunctionAcl).toBeGreaterThan(actualRecordOnly);
     expect(actualClearFunctionAcl).toBeGreaterThan(actualFunctionAcl);
     expect(ledger).toBeGreaterThan(actualClearFunctionAcl);
     for (const variable of [
-      "CONTRACT_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE",
+      "CONTRACT_FILE", "HOSTED_FUNCTION_ACL_FILE", "REPAIR_FILE", "RECORD_ONLY_FILE", "FUNCTION_ACL_FILE",
       "CLEAR_FUNCTION_ACL_FILE",
     ]) {
       expect(command.match(new RegExp(`\\s-f\\s+"\\$${variable}"`, "g"))).toHaveLength(2);
     }
-    expect(command).toContain('if [ "$RECORDED" != "1|1|1|1|1" ]');
+    expect(command).toContain('if [ "$RECORDED" != "1|1|1|1|1|1" ]');
+    expect(command).toContain("function_catalog_ready input");
     expect(command).toContain("job_seeker_ready pre");
     expect(command).toContain("job_seeker_ready post");
     expect(command).toContain("clear_controls_ready pre");
@@ -371,11 +406,12 @@ describe("the protected factory any-model record-only chain", () => {
     const command = broad?.run ?? "";
     for (const variable of [
       "PROTECTED_NORMALIZER", "PROTECTED_EXPAND", "PROTECTED_CONTRACT",
-      "PROTECTED_EXECUTABLE_MODEL", "PROTECTED_REPAIR", "PROTECTED_RECORD_ONLY",
+      "PROTECTED_EXECUTABLE_MODEL", "PROTECTED_HOSTED_FUNCTION_ACL", "PROTECTED_REPAIR", "PROTECTED_RECORD_ONLY",
       "PROTECTED_RESUME_FUNCTION_ACL", "PROTECTED_CLEAR_FUNCTION_ACL",
     ]) expect(command).toContain(`if [ "$${variable}"`);
     expect(command).toContain('if [ "$PROTECTED_JOB_RESUME" != "1" ] || [ "$PROTECTED_JOB_GRANTS" != "1" ]');
     expect(command).toContain('if [ "$PROTECTED_CLEAR_TYPES" != "1" ] || [ "$PROTECTED_CLEAR_FUNCTIONS" != "1" ]');
+    expect(command).toContain("version = '20260822000850'");
     expect(command).toContain("version = '20260822000900'");
     expect(command).toContain("version = '20260822001000'");
     expect(command).toContain("version = '20260822001100'");
