@@ -27,13 +27,15 @@ was observed. These facts supersede older blanket claims in this file that
 linked lint is clean or that every hosted autonomy flag/kill switch is safely
 OFF/ON. Release must stop until those conditions are contained and remeasured.
 
-Candidate lint, typecheck, and production build pass. The latest full local
-test command recorded 3,747 passing tests, one Supabase-wiring timeout under
-parallel load, and one known Windows spawn-script `ENOENT` unhandled error.
-The wiring timeout cleared on isolated retry:
-`tests/integration/supabase-wiring.contract.test.ts` passed 2/2 in 0.603s with
-`maxWorkers=1`. The full Windows suite is therefore not green solely because
-of the known spawn-script ENOENT/unhandled error. The separate hosted-runbook/
+Candidate lint, typecheck, and production build pass. The default unbounded
+Windows run exposed contention-only Supabase-wiring and pipeline failures;
+both cleared on isolated retry (the wiring contract passed 2/2 in 0.603s with
+`maxWorkers=1`). The bounded current-head non-frozen command
+`vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+passes 317 files / 3,729 tests with 7 skipped in 140.74s. The owner-frozen
+19-test auth-broker file is excluded locally solely because Windows lacks the
+Unix `script` executable. This is not a full-suite waiver: Linux CI must run
+the complete suite including that file. The separate hosted-runbook/
 repository-memory guards remain 21/21 passing.
 
 **Addendum, 2026-08-21 (Factory Briefing, ADR-104):** the Dashboard now has

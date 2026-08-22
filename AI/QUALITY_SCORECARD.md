@@ -28,13 +28,15 @@ hosted. Submission dispatches no worker and changes no autonomy control; no
 connected/fresh worker was observed, while merge, deploy, and rollback remain
 not connected.
 
-Current candidate evidence is lint, typecheck, and production build passing.
-The latest full local test command recorded 3,747 passes, one Supabase-wiring
-timeout under parallel load, and one known Windows spawn-script `ENOENT`
-unhandled error. The wiring contract passes its isolated retry 2/2 in 0.603s
-with `maxWorkers=1`, clearing the contention timeout. The full Windows suite is
-not green solely because of the known spawn-script ENOENT/unhandled error.
-Hosted-runbook/repository-memory guards separately pass 21/21. Production still hosts
+Current candidate lint, typecheck, and production build pass. Default
+unbounded-run Supabase-wiring and pipeline failures were contention-only and
+both clear on isolated retry; the wiring contract passes 2/2 in 0.603s with
+`maxWorkers=1`. The bounded current-head non-frozen command
+`vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+passes 317 files / 3,729 tests, 7 skipped, in 140.74s. The excluded owner-
+frozen auth-broker file has 19 tests and is excluded locally solely because
+Windows lacks Unix `script`; Linux CI must run the complete suite. Hosted-
+runbook/repository-memory guards separately pass 21/21. Production still hosts
 `20260821000300`, not `20260821000400`, and serves the old application copy.
 Hosted quality is blocked by five linked lint errors/ten findings, one raw
 organization with `autonomous_mode = true`, one with

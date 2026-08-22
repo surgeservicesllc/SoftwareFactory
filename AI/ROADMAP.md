@@ -15,11 +15,12 @@ Status: **Implemented and locally gated; not hosted or deployed.**
 - Exact replay resolves before mutable state. Missing hosted schema fails
   closed. No worker dispatch, autonomous action, merge, deploy, or rollback is
   introduced.
-- Lint, typecheck, and build pass. The latest full local run has 3,747 passing
-  tests, one Supabase-wiring timeout under parallel load, and one known Windows
-  spawn-script `ENOENT` unhandled error. The wiring contract clears on isolated
-  retry (2/2 in 0.603s, `maxWorkers=1`). The full Windows suite is not green
-  solely because of the known spawn-script ENOENT/unhandled error.
+- Lint, typecheck, and build pass. Default unbounded-run Supabase-wiring and
+  pipeline contention failures both clear in isolation. The bounded
+  current-head non-frozen Windows suite passes 317 files / 3,729 tests with 7
+  skipped in 140.74s under `maxWorkers=4`; only the owner-frozen 19-test
+  auth-broker file is excluded because Windows lacks Unix `script`. Linux CI
+  must run the complete suite before release.
 - Production remains on hosted `20260821000300` and the old copy. Before
   hosting `20260821000400`, contain and remeasure five linked lint errors/ten
   findings, one raw organization with `autonomous_mode = true`, one with

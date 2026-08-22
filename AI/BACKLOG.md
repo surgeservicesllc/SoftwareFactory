@@ -23,13 +23,16 @@ Last triaged: 2026-08-21
   release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
   and prove the matching production copy. Production remains on hosted
   `20260821000300` and the old application until then.
-- [x] Clear the full-run Supabase-wiring contention timeout with an isolated
-  retry: `tests/integration/supabase-wiring.contract.test.ts` passes 2/2 in
-  0.603s with `maxWorkers=1`.
-- [ ] Resolve or safely classify the sole remaining full-Windows-suite issue:
-  the known spawn-script `ENOENT` unhandled error. The full run has 3,747
-  passing tests and lint/typecheck/build are green, but the Windows test gate
-  is not green while that error remains.
+- [x] Classify the default unbounded-run Supabase-wiring and pipeline failures
+  as contention-only by clearing both on isolated retry; the wiring contract
+  passes 2/2 in 0.603s with `maxWorkers=1`.
+- [x] Run the bounded current-head non-frozen Windows suite:
+  `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+  passes 317 files / 3,729 tests, 7 skipped, in 140.74s. Lint, typecheck, and
+  build are green.
+- [ ] Require Linux CI to run the complete suite, including the owner-frozen
+  19-test `tests/unit/auth-broker-runner.test.ts`. Its local exclusion is only
+  because Windows lacks the Unix `script` executable; it is not a test waiver.
 
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 

@@ -54,13 +54,15 @@ that linked lint is clean or that hosted controls are universally all-OFF and
 kill-ON. Contain and remeasure them before any hosted apply or production
 promotion.
 
-Candidate lint, typecheck, and build pass. The latest full local test command
-recorded 3,747 passing tests, one Supabase-wiring timeout under parallel load,
-and one known Windows spawn-script `ENOENT` unhandled error. The timeout is
-cleared by the isolated retry: `supabase-wiring.contract.test.ts` passes 2/2 in
-0.603s with `maxWorkers=1`. The full Windows suite remains not green solely
-because of the spawn-script ENOENT/unhandled error. The independent hosted-
-runbook/repository-memory guards remain 21/21 passing.
+Candidate lint, typecheck, and build pass. The default unbounded Windows run's
+Supabase-wiring and pipeline failures were contention-only and both cleared on
+isolated retry; the wiring contract passed 2/2 in 0.603s with `maxWorkers=1`.
+The bounded current-head non-frozen command
+`vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+passes 317 files / 3,729 tests with 7 skipped in 140.74s. The excluded
+owner-frozen auth-broker file contains 19 tests and is excluded locally solely
+because Windows lacks Unix `script`. Linux CI must run it as part of the full
+suite. The independent hosted-runbook/repository-memory guards remain 21/21.
 
 ## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-104)
 
@@ -640,7 +642,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 ## Verification state
 
 - The prior verified production baseline before this update passed supported Node `24.19.0` lint/typecheck, 117 files/1,282 tests, a production build with 74 page/route entries, prior coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration/security suites, production dependency audit 0, and safe disabled-worker smoke. Baseline commit `0c662a24393f682073e6002c5aff9339292226d8` passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY.
-- Current routing candidate: lint/typecheck/build pass; the latest full command recorded 3,747 passes, a Supabase-wiring timeout that then cleared 2/2 in 0.603s under isolated `maxWorkers=1`, and one known Windows spawn-script `ENOENT` unhandled error. The full Windows suite remains not green solely because of that ENOENT. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, a green final test gate, hosted apply, matching deployment, and owner acceptance remain pending.
+- Current routing candidate: lint/typecheck/build pass. Default unbounded-run wiring/pipeline contention failures both clear in isolation. The bounded current-head non-frozen Windows suite passes 317 files / 3,729 tests, 7 skipped, in 140.74s with `maxWorkers=4`; it excludes only the owner-frozen 19-test auth-broker file because Windows lacks Unix `script`. Linux CI must run the complete suite. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, Linux full-suite evidence, hosted apply, matching deployment, and owner acceptance remain pending.
 - First acceptance evidence: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, durable run `f4594556-6f72-4763-a480-6993939e3651`, and worker Actions run `31746057998`. A real heartbeat and provider thread identifier were recorded, then Codex startup failed. No changed file, factory branch, commit, PR, validation, or exact-head CI evidence was created. Its planned base is now stale against current `main`, so the failed row must not be retried. Activation is OFF.
 - Published provider-only diagnostic `31748582858` skipped Docker preload and durable claim. The exact-model GET passed; the bounded non-stored Responses call returned only the safe machine-readable code `credit_balance_exhausted`. The stale failed run was not touched and activation is OFF.
 - The exact blocker is no longer funding. The paid dependency was removed from the execution path; the blocker is the owner-supplied `SOFTWAREFACTORY_CODEX_AUTH_JSON`. Configure it, rerun the no-claim diagnostic, then submit a new current-base command. Never retry the stale failed run. No production-monitor journey or successful live Phase 1C provider result exists.
