@@ -2,6 +2,51 @@
 
 Last triaged: 2026-08-21
 
+## AI Factory production acceptance (2026-08-21)
+
+- [x] Verify exact candidate head
+  `a020e8192d8512a1bb65112e01017047087f0528`: CI run `32543409160` passed
+  quality and all three browser shards.
+- [x] Advance and reload production at 4/8: **Agentic SDLC** remains selected,
+  its immutable `pipeline.selected` Activity event is visible, and the owner's
+  reconnected Claude account reports Connected.
+- [ ] Complete the account Refresh with a real worker sweep. It remains pending
+  and is not connected/fresh-worker evidence.
+- [x] Implement and locally verify the downstream bot-purpose normalization:
+  translate
+  broker `claude`/`claude_N` and `codex`/`codex_N` purposes into provision
+  choices `subscription`/`subscription_N`, reject mismatches, and pin the real
+  broker-purpose fixtures in regression tests. PR #309 at exact head
+  `db1958f8b501e865a9e741a21298683e0f88f969` passes 99 focused tests,
+  lint, typecheck, a production build, and the secret/protected-path audit. It
+  is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [x] Diagnose PR #309 CI run `32545138211` browser shards 1/3 through 3/3: the async
+  loading state omitted the page H1. Keep `AI Factory` visible in loading and
+  every fail-closed state and pin the initial-loading state in a component
+  regression test. This is a forward candidate; it invalidates the prior exact-
+  head merge approval.
+- [ ] Obtain exact owner approval before changing the protected
+  `lib/bots/credentials.ts` boundary. It must admit only catalog-declared
+  subscription reference bases and valid `_2` through `_9999` slots, while
+  continuing to reject arbitrary, malformed, browser-public, and privileged
+  references. Until this lands, a subscription bot can be created but cannot
+  read ready from its vault credential.
+- [ ] Make the manager-only manual readiness check use the same boolean-only
+  environment-or-vault presence predicate as the bot-fabric read. It currently
+  checks and serializes with environment presence only, so a vault-backed bot
+  can be persisted and returned as Not Connected. This protected readiness
+  change also requires exact owner approval.
+- [ ] Bind a provisioned bot to its exact `ai_accounts.id` through a separately
+  reviewed forward schema/RPC design. `bots.ai_account_id` currently remains
+  null, so credential-slot stickiness is not full identity stickiness.
+- [ ] After an authorized release, repeat Create Bot, assignment, settings, and
+  reload checks before claiming that a connected bot is usable and sticky.
+- [ ] Keep production promotion stopped until the five linked-lint errors/ten
+  findings, raw autonomy/kill-switch drift, two effective-kill-off projects,
+  absent fresh worker, and hosted `20260821000300`/candidate `20260821000400`
+  drift are contained and remeasured.
+
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 
 - [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`

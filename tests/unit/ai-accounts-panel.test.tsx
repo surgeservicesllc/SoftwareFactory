@@ -8,7 +8,7 @@ const connectedAccount = {
   id: "acc-1",
   provider: "anthropic",
   providerLabel: "Claude",
-  credentialPurpose: "subscription",
+  credentialPurpose: "claude",
   displayName: "Claude account 1",
   status: "connected",
   lastVerifiedAt: "2026-08-16T12:00:00.000Z",
@@ -19,7 +19,7 @@ const reauthAccount = {
   id: "acc-2",
   provider: "anthropic",
   providerLabel: "Claude",
-  credentialPurpose: "subscription_2",
+  credentialPurpose: "claude_2",
   displayName: "Claude account 2",
   status: "needs_reauth",
   lastVerifiedAt: null,
@@ -84,8 +84,8 @@ describe("AiAccountsPanel", () => {
     await user.click(screen.getByRole("button", { name: /create 2 bots/i }));
 
     expect(onCreateBots).toHaveBeenCalledWith([
-      { id: "acc-1", provider: "anthropic", credentialPurpose: "subscription" },
-      { id: "acc-2", provider: "anthropic", credentialPurpose: "subscription_2" },
+      { id: "acc-1", provider: "anthropic", credentialPurpose: "claude" },
+      { id: "acc-2", provider: "anthropic", credentialPurpose: "claude_2" },
     ]);
   });
 

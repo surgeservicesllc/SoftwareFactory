@@ -73,6 +73,15 @@ afterEach(() => {
 });
 
 describe("AiFactoryConsole", () => {
+  it("keeps the page heading visible while the workspace snapshot is loading", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
+    expect(screen.getByLabelText("Loading the factory")).toBeInTheDocument();
+  });
+
   it("starts an empty workspace at Connect Repository, with nothing opening uninvited", async () => {
     stubFactory();
 
@@ -88,6 +97,7 @@ describe("AiFactoryConsole", () => {
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("keeps Connect Repository incomplete until at least one repository is authorized", async () => {
@@ -514,6 +524,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
     expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -539,6 +550,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("recognizes a 409 from any required read", async () => {
@@ -547,6 +559,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     expect(await screen.findByText("Finish setting up")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "AI Factory" })).toHaveLength(1);
   });
 
   it("fails closed for a signed-out visitor", async () => {
