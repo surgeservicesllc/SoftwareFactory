@@ -47,11 +47,14 @@ Last triaged: 2026-08-22
   global kill switch and turned Autonomous Mode OFF via the Safety page
   (~21:11Z), and probe run 32599024205 read every state, census, worker, and
   event clause green afterwards.
-- [ ] Dispatch `scope=audit-guard-acl-contract` so hosted
-  `reject_activity_event_mutation()` drops its Supabase-default
-  `service_role EXECUTE` grant — probe run 32599284961 isolated it as the one
-  red containment clause (ADR-122; the gate's space-only btrim source
-  comparison is fixed in the same change).
+- [x] Dispatch `scope=audit-guard-acl-contract`: run 32599987697 measured the
+  hosted `{postgres, service_role}` ACL, contracted it to owner-only, and read
+  it back (ADR-122; the gate's space-only btrim source comparison fixed in the
+  same change).
+- [ ] Dispatch `scope=agentos-foundation-cleanup` so the empty 4-object
+  remnant of the partial 20260814000300 apply is dropped and 20260822000900
+  can restore the foundation from proven absence (ADR-123; chain run
+  32600709789 stopped exactly there).
 - [ ] Apply only the protected atomic
   `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
   `scope=factory-any-model-record-only`, including rollback rehearsal, exact
