@@ -1035,3 +1035,12 @@ Use this append-only log for decisions that constrain future implementation. Cha
   repair, broad push, worker, or autonomous execution is authorized. The
   repaired commit requires green exact-head CI and fresh RED authorization
   before any hosted execution.
+
+## ADR-112 - The signed-in header names the products, not the pages
+
+- Date: 2026-08-19
+- Status: Accepted
+- Decision: `SIGNED_IN_NAV` becomes two entries — `AI Factory` at `/solutions` and `Job Seeker` at `/job-seeker` — with `Admin` still appended for a confirmed super administrator. Projects, Runs and Activity are removed from the global header. `SiteHeader` resolves the current destination by the longest matching href rather than by any prefix match.
+- Rationale: the owner's reference shows exactly these three entries, and named both addresses explicitly. `AI Factory` is wired to `/solutions`, the console entry point, and deliberately not to `/solutions/ai-factory` — a page inside the console that happens to share the name. The three removed entries were a short, arbitrary excerpt of the console's own column, which lists them beside everything else it holds, so the header was repeating a fraction of the menu one row above it. `Job Seeker` sits outside `/solutions` because it is the one person-scoped surface: the page hard-gates on the server and every row is RLS-scoped to organization membership *and* row ownership.
+- Also: the entries now nest, which the old active test could not express. `/solutions` is a prefix of `/solutions/admin`, so on the admin page both entries matched and the header rendered two links with `aria-current="page"` and two underlines at once. The longest match is the entry a person is actually on; a set without nesting — the public navigation — behaves exactly as before.
+- Consequence: the signed-in header had no browser coverage at all, because the whole e2e suite browses signed out. A `site-header` harness case renders it as a signed-in super administrator and one test reads the rendered entries, their two hrefs, and the account controls beside them. That case is deliberately absent from the layout sweep's `CASES`: the sweep clicks every control it finds, and this one contains sign-out. The nesting fix is mutation-checked — restoring the prefix test fails the admin case.

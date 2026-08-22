@@ -36,6 +36,7 @@ import { SafetyControls } from "@/components/safety-controls";
 import { AgentsConsole } from "@/components/agents-console";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { AppShell } from "@/components/app-shell";
+import { SiteHeader } from "@/components/marketing/site-header";
 import { BacklogConsole } from "@/components/backlog-console";
 import { ConnectionsConsole } from "@/components/connections-console";
 import { ProjectBots } from "@/components/project-bots";
@@ -387,6 +388,26 @@ const CASES: Record<string, () => React.ReactElement> = {
     <div className="bg-background p-4">
       <AiAccountsPanel canManage onChanged={() => {}} />
     </div>
+  ),
+  /*
+   * The global header as a signed-in super administrator sees it.
+   *
+   * The browser suite browses signed out, so this state had no coverage above
+   * the unit tests at all — and it is the one the owner specified: AI Factory,
+   * Job Seeker, Admin, then the badge, the address and the account controls.
+   * Deliberately not in the layout sweep's CASES: it is checked by one test
+   * that reads the entries, rather than by the click-everything measurement,
+   * whose sweep would find the sign-out button.
+   */
+  "site-header": () => (
+    <SiteHeader
+      viewer={{
+        signedIn: true,
+        email: "owner@example.org",
+        displayName: null,
+        isSuperAdmin: true,
+      }}
+    />
   ),
   "app-shell": () => (
     <AppShell viewer={{ signedIn: true, email: "owner@example.org", isSuperAdmin: true }}>
