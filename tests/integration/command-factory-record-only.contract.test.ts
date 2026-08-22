@@ -7,10 +7,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const migrationPath = resolve(
   import.meta.dirname,
-  "../../supabase/migrations/20260822001000_factory_anthropic_record_only.sql",
+  "../../supabase/migrations/20260822001000_factory_any_model_record_only.sql",
 );
 
-describe("factory Anthropic record-only migration contract", () => {
+describe("factory any-model record-only migration contract", () => {
   let migration = "";
 
   beforeAll(async () => {
@@ -63,7 +63,7 @@ describe("factory Anthropic record-only migration contract", () => {
     );
   });
 
-  it("pins the one canonical non-executing Anthropic plan", () => {
+  it("pins one canonical non-executing plan for every bounded non-Codex identity", () => {
     const normalize = functionDefinition("normalize_phase1c_command");
     const factorySubmit = functionDefinition("submit_factory_command");
     for (const body of [normalize, factorySubmit]) {
@@ -72,9 +72,11 @@ describe("factory Anthropic record-only migration contract", () => {
       expect(body).toMatch(/'stages', (?:pg_catalog\.)?jsonb_build_array\('record'\)/i);
       expect(body).toMatch(/'workflow', 'factory_record_only'/i);
     }
-    expect(normalize).toMatch(/new\.parameters ->> 'provider' <> 'anthropic'/i);
     expect(normalize).toMatch(
-      /char_length\(btrim\(coalesce\(new\.parameters ->> 'model', ''\)\)\) not between 1 and 120/i,
+      /char_length\(btrim\(coalesce\(new\.parameters ->> 'provider', ''\)\)\) not between 1 and 40/i,
+    );
+    expect(normalize).toMatch(
+      /char_length\(btrim\(coalesce\(new\.parameters ->> 'model', ''\)\)\) not between 1 and 128/i,
     );
   });
 
@@ -179,7 +181,40 @@ describe("factory Anthropic record-only migration contract", () => {
       ),
     ).toHaveLength(1);
     expect(atomicSubmit).toMatch(
-      /if v_in_flight >= v_assignment\.max_concurrent_tasks then[\s\S]*selected bot assignment is at its concurrency limit/i,
+      /if v_execution_mode <> 'record_only'[\s\S]*?v_in_flight >= v_assignment\.max_concurrent_tasks then[\s\S]*selected bot assignment is at its concurrency limit/i,
+    );
+  });
+
+  it("keeps only exact OpenAI Codex executable and canonicalizes every other model", () => {
+    const factorySubmit = functionDefinition("submit_factory_command");
+    expect(factorySubmit).toMatch(
+      /not \([\s\S]*?v_bot\.provider = 'openai'::public\.bot_provider[\s\S]*?v_resolved_model = 'gpt-5\.3-codex'[\s\S]*?\) then/i,
+    );
+    expect(factorySubmit).toMatch(/'executionMode', 'record_only'/i);
+  });
+
+  it("does not demand write or pull-request authority for non-executing work", () => {
+    const atomicSubmit = functionDefinition("submit_factory_command_routing_internal");
+    expect(atomicSubmit).toMatch(
+      /v_execution_mode <> 'record_only'[\s\S]*?repository_access <> 'write'/i,
+    );
+    expect(atomicSubmit).toMatch(
+      /v_execution_mode <> 'record_only'[\s\S]*?not v_assignment\.can_open_pull_request/i,
+    );
+    expect(atomicSubmit).toMatch(
+      /pipeline_access not in \('assigned', 'all'\)/i,
+    );
+  });
+
+  it("publishes only the safe execution disposition needed for truthful Step 9", () => {
+    expect(migration).toMatch(
+      /create function public\.list_factory_commands\([\s\S]*?execution_mode text[\s\S]*?command\.parameters ->> 'executionMode' = 'record_only'[\s\S]*?from public\.commands command/i,
+    );
+    expect(migration).toMatch(
+      /revoke all on function public\.list_factory_commands\(uuid, integer\)[\s\S]*?from public, anon, authenticated, service_role[\s\S]*?grant execute on function public\.list_factory_commands\(uuid, integer\)[\s\S]*?to authenticated/i,
+    );
+    expect(migration).toContain(
+      "01000 safe command disposition list catalog, source, or ACL mismatch",
     );
   });
 

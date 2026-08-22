@@ -364,8 +364,8 @@ describe("durable command to factory routing", () => {
         role_id: roleId,
         preset: "developer",
         responsibilities: ["Record selected pipeline work without execution"],
-        repository_access: "write",
-        can_open_pull_request: true,
+        repository_access: "read",
+        can_open_pull_request: false,
         pipeline_access: "assigned",
         requires_human_approval: true,
         max_concurrent_tasks: 1,
@@ -1244,6 +1244,104 @@ describe("durable command to factory routing", () => {
       },
     ]);
     await asOwner();
+  });
+
+  it("accepts the published 128-character Anthropic model boundary and rejects 129", async () => {
+    const boundaryModel = "m".repeat(128);
+    await asSuperuser();
+    let revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [anthropicAssignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::text, null
+       )`,
+      [organizationId, anthropicAssignmentId, projectId, revision, boundaryModel],
+    );
+
+    const submitted = await submit(
+      secondSelectionId,
+      anthropicAssignmentId,
+      "factory-anthropic-model-boundary-128",
+      "Record a regression test for the longest supported Anthropic model identifier.",
+    );
+    expect(submitted.rows[0].routing_snapshot).toMatchObject({
+      assignment: { model: boundaryModel, provider: "anthropic" },
+    });
+
+    await asSuperuser();
+    const evidence = await db.query<{ run_count: number }>(
+      `select count(*)::integer as run_count
+         from public.agent_runs
+        where command_id = $1::uuid`,
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0].run_count).toBe(0);
+    revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [anthropicAssignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await expect(
+      db.query(
+        `select * from public.set_bot_assignment_execution_checked(
+           $1::uuid, $2::uuid, $3::uuid, $4::bigint, $5::text, null
+         )`,
+        [organizationId, anthropicAssignmentId, projectId, revision, "m".repeat(129)],
+      ),
+    ).rejects.toThrow(/model must be a plain identifier of up to 128 characters/i);
+
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, ''::text, null
+       )`,
+      [organizationId, anthropicAssignmentId, projectId, revision],
+    );
+  });
+
+  it("records an alternate OpenAI model from the selected posting with zero runs", async () => {
+    await asSuperuser();
+    let revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [assignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, 'gpt-4.1'::text, null
+       )`,
+      [organizationId, assignmentId, projectId, revision],
+    );
+
+    const submitted = await submit(
+      secondSelectionId,
+      assignmentId,
+      "factory-openai-alternate-model-record-only",
+      "Record a regression test for the posting's alternate OpenAI model.",
+    );
+    expect(submitted.rows[0].routing_snapshot).toMatchObject({
+      assignment: { model: "gpt-4.1", provider: "openai" },
+    });
+
+    await asSuperuser();
+    const evidence = await db.query<{ run_count: number }>(
+      "select count(*)::integer as run_count from public.agent_runs where command_id = $1::uuid",
+      [submitted.rows[0].command_id],
+    );
+    expect(evidence.rows[0].run_count).toBe(0);
+    revision = (await db.query<{ revision: number }>(
+      "select revision from public.bot_assignments where id = $1::uuid",
+      [assignmentId],
+    )).rows[0].revision;
+    await asOwner();
+    await db.query(
+      `select * from public.set_bot_assignment_execution_checked(
+         $1::uuid, $2::uuid, $3::uuid, $4::bigint, ''::text, null
+       )`,
+      [organizationId, assignmentId, projectId, revision],
+    );
   });
 
   it("keeps Anthropic RED record-only work awaiting approval with zero runs across replay", async () => {

@@ -833,7 +833,14 @@ type CommandRow = {
   submitted_at: string;
   completed_at: string | null;
   project_name: string | null;
+  execution_mode?: unknown;
 };
+
+type CommandExecutionMode = "manual" | "record_only" | "unknown";
+
+function commandExecutionMode(value: unknown): CommandExecutionMode {
+  return value === "manual" || value === "record_only" ? value : "unknown";
+}
 
 /**
  * Lists the commands the caller's organization has saved. `parameters` is
@@ -843,7 +850,8 @@ type CommandRow = {
 export async function GET(request: Request) {
   return tenantRpcListResponse<CommandRow>({
     request,
-    rpc: "list_commands",
+    rpc: "list_factory_commands",
+    fallbackRpc: "list_commands",
     unavailableCode: "commands_unavailable",
     unavailableMessage: "Saved requests could not be loaded.",
     shape: (rows) => ({
@@ -852,6 +860,7 @@ export async function GET(request: Request) {
           prompt: row.prompt,
           risk: row.requested_risk,
           status: row.status,
+          executionMode: commandExecutionMode(row.execution_mode),
           submittedAt: row.submitted_at,
           completedAt: row.completed_at,
           project: row.project_id

@@ -13,8 +13,12 @@ export function classifyFactoryCommandExecutionIdentity(input: {
   readonly provider: string;
 }): "manual" | "record_only" | null {
   if (input.provider === "openai" && input.model === DEFAULT_CODEX_MODEL) return "manual";
-  if (input.provider === "anthropic") return "record_only";
-  return null;
+  const provider = input.provider.trim();
+  const model = input.model.trim();
+  if (provider.length < 1 || provider.length > 40 || model.length < 1 || model.length > 128) {
+    return null;
+  }
+  return "record_only";
 }
 
 export type Phase1CAgentRole =
@@ -84,9 +88,8 @@ export function createPhase1CExecutionPlan(
 /**
  * A Factory posting owns the provider/model identity selected for the command.
  * Only the existing Codex identity is claimable by the Phase 1C worker. A
- * reviewed Anthropic posting is durable routing intent only: it creates no
- * execution run and cannot be claimed by a worker. Every other identity is
- * refused until it receives its own reviewed recording contract.
+ * every other bounded posting is durable routing intent only: it creates no
+ * execution run and cannot be claimed by a worker.
  */
 export function createFactoryCommandExecutionIntent(input: {
   readonly model: string;

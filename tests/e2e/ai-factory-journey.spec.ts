@@ -314,33 +314,19 @@ test.describe("AI Factory live journey", () => {
     await expect(prompt).toBeVisible({ timeout: 20_000 });
     await prompt.fill("Add a fake health endpoint and cover it with a test.");
 
-    // Submit, then insist on an answer either way: the command is recorded, or
-    // the composer says why not. Silence here is the failure mode that matters,
-    // because the step would simply stay open with nothing explaining it.
+    // This local lane deliberately binds a nonexistent GitHub repository, so
+    // immutable base-SHA verification must refuse the submission. The normal
+    // browser lane separately requires the persisted record-only success path
+    // to advance Step 8 and render the non-execution Step 9 contract.
     const submit = composer.getByRole("button", { name: /queue|submit|send|start|run/i }).last();
     await expect(submit).toBeVisible({ timeout: 10_000 });
     await submit.click();
     await page.waitForTimeout(3000);
 
-    const composerStillOpen = await composer.isVisible().catch(() => false);
-    if (composerStillOpen) {
-      /*
-       * The expected outcome here, and it is the right one.
-       *
-       * Before queueing, the server re-resolves the repository and its base
-       * commit from the live GitHub API. The seeded repository does not exist
-       * on github.com — nothing in this lane does — so the binding cannot be
-       * verified and the command is refused. What matters is that the refusal
-       * is stated rather than swallowed: the composer says so, and no command
-       * row is written.
-       */
-      await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
-        .toBeVisible({ timeout: 10_000 });
-      await page.keyboard.press("Escape");
-      await expect(commandStep.getByText("Done")).toHaveCount(0);
-    } else {
-      await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
-    }
+    await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
+      .toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+    await expect(commandStep.getByText("Done")).toHaveCount(0);
 
     // ── Step 9: Watch It Ship says what actually executes ─────────────────
     const watchStep = stepCard(page, "Watch It Ship");

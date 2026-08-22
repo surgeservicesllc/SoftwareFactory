@@ -13,7 +13,7 @@ const listRoutes = [
   { name: "tasks", path: "app/api/tasks/route.ts", rpc: "list_tasks" },
   { name: "runs", path: "app/api/runs/route.ts", rpc: "list_agent_runs" },
   { name: "reports", path: "app/api/reports/route.ts", rpc: "list_reports" },
-  { name: "commands", path: "app/api/commands/route.ts", rpc: "list_commands" },
+  { name: "commands", path: "app/api/commands/route.ts", rpc: "list_factory_commands" },
 ] as const;
 
 describe("tenant list boundary", () => {
@@ -67,6 +67,14 @@ describe("list routes withhold sensitive columns", () => {
   it("omits caller-supplied command parameters", () => {
     const getHandler = read("app/api/commands/route.ts").split("export async function GET")[1] ?? "";
     expect(getHandler).not.toMatch(/\bparameters\b/);
+  });
+
+  it("falls back to the legacy command list only while the additive RPC is undiscovered", () => {
+    const route = read("app/api/commands/route.ts");
+    const helper = read("lib/server/tenant-list.ts");
+    expect(route).toContain('rpc: "list_factory_commands"');
+    expect(route).toContain('fallbackRpc: "list_commands"');
+    expect(helper).toMatch(/result\.error\?\.code === "PGRST202" && fallbackRpc/);
   });
 });
 

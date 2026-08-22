@@ -312,10 +312,11 @@ export function routeFactoryCommand(input: {
       continue;
     }
 
-    if (!classifyFactoryCommandExecutionIdentity({
+    const executionMode = classifyFactoryCommandExecutionIdentity({
       model: candidate.model,
       provider: candidate.provider,
-    })) {
+    });
+    if (!executionMode) {
       refused.push(refusal(
         candidate,
         "PROVIDER_MODEL_MISMATCH",
@@ -325,23 +326,29 @@ export function routeFactoryCommand(input: {
     }
 
     const assignment = routable(candidate);
-    const pullRequest = routeWorkToAssignedBot({
-      assignments: [assignment],
-      work: { kind: "pull_request" },
-    });
-    const pullRequestOnlyHitCapacity = pullRequest.refused.length === 1
-      && pullRequest.refused[0]?.code === "AT_CONCURRENCY_LIMIT";
-    if (
-      !pullRequest.selected
-      && !(input.deferCapacityToAtomicSubmit && pullRequestOnlyHitCapacity)
-    ) {
-      refused.push(assignmentRefusal(candidate, pullRequest));
-      continue;
+    const permissionAssignment = executionMode === "record_only"
+      ? { ...assignment, inFlight: 0 }
+      : assignment;
+    let capacityOnlyRefusal = false;
+    if (executionMode === "manual") {
+      const pullRequest = routeWorkToAssignedBot({
+        assignments: [permissionAssignment],
+        work: { kind: "pull_request" },
+      });
+      const pullRequestOnlyHitCapacity = pullRequest.refused.length === 1
+        && pullRequest.refused[0]?.code === "AT_CONCURRENCY_LIMIT";
+      if (
+        !pullRequest.selected
+        && !(input.deferCapacityToAtomicSubmit && pullRequestOnlyHitCapacity)
+      ) {
+        refused.push(assignmentRefusal(candidate, pullRequest));
+        continue;
+      }
+      capacityOnlyRefusal = !pullRequest.selected && pullRequestOnlyHitCapacity;
     }
-    let capacityOnlyRefusal = !pullRequest.selected && pullRequestOnlyHitCapacity;
 
     const pipeline = routeWorkToAssignedBot({
-      assignments: [assignment],
+      assignments: [permissionAssignment],
       work: {
         kind: "pipeline_run",
         pipelineId: input.pipelineTemplateKey,
@@ -359,7 +366,11 @@ export function routeFactoryCommand(input: {
     // `hasCapacity` is the database's authoritative verdict and may grow to
     // include gates that are not expressible in the local assignment policy.
     // The local router already checked the assignment count; strictest wins.
-    if (!candidate.hasCapacity && !input.deferCapacityToAtomicSubmit) {
+    if (
+      executionMode === "manual"
+      && !candidate.hasCapacity
+      && !input.deferCapacityToAtomicSubmit
+    ) {
       refused.push(refusal(
         candidate,
         "DATABASE_CAPACITY_REFUSED",
@@ -368,7 +379,7 @@ export function routeFactoryCommand(input: {
       continue;
     }
 
-    capacityOnlyRefusal ||= !candidate.hasCapacity;
+    capacityOnlyRefusal ||= executionMode === "manual" && !candidate.hasCapacity;
 
     if (capacityOnlyRefusal) capacityDeferred.push(candidate);
     else eligible.push(candidate);
@@ -385,13 +396,13 @@ export function routeFactoryCommand(input: {
     });
   }
 
-  const routableEligible = selectionPool.map(routable);
-  const selectedId = eligible.length === 0
-    ? orderRoutableAssignments(routableEligible)[0]?.assignmentId
-    : routeWorkToAssignedBot({
-        assignments: routableEligible,
-        work: { kind: "pull_request" },
-      }).selected?.assignmentId;
+  const routableEligible = selectionPool.map((candidate) => {
+    const assignment = routable(candidate);
+    return classifyFactoryCommandExecutionIdentity(candidate) === "record_only"
+      ? { ...assignment, inFlight: 0 }
+      : assignment;
+  });
+  const selectedId = orderRoutableAssignments(routableEligible)[0]?.assignmentId;
   const selected = selectionPool.find((candidate) => candidate.assignmentId === selectedId);
   if (!selected) {
     throw new FactoryCommandCandidateProjectionError(

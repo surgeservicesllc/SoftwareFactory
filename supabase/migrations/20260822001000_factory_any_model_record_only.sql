@@ -1,7 +1,7 @@
 -- Provider-aware AI Factory command recording without provider execution.
 --
 -- The existing Phase 1C path remains an executable, manually requested
--- OpenAI/Codex draft-PR path. An Anthropic bot selected by the AI Factory may
+-- OpenAI/Codex draft-PR path. Any other bot/model selected by the AI Factory may
 -- now record the same durable command/task/routing intent, but it receives the
 -- explicit `record_only` disposition and can never create an agent_run. This
 -- migration does not register, claim, heartbeat, or otherwise alter a worker,
@@ -161,6 +161,9 @@ begin
   end if;
 
   if pg_catalog.to_regclass('public.factory_record_only_submission_guards') is not null
+    or pg_catalog.to_regprocedure(
+      'public.list_factory_commands(uuid,integer)'
+    ) is not null
     or pg_catalog.to_regprocedure(
       'public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)'
     ) is not null
@@ -543,7 +546,7 @@ create table public.factory_record_only_submission_guards (
 );
 
 comment on table public.factory_record_only_submission_guards is
-  'Transaction-local capability rows consumed by submit_command so only the locked AI Factory boundary can persist an Anthropic record-only command. Successful calls leave this table empty.';
+  'Transaction-local capability rows consumed by submit_command so only the locked AI Factory boundary can persist a non-Codex record-only command. Successful calls leave this table empty.';
 
 alter table public.factory_record_only_submission_guards enable row level security;
 alter table public.factory_record_only_submission_guards force row level security;
@@ -586,7 +589,7 @@ comment on function public.submit_factory_command_routing_internal(
 
 -- The command trigger continues to be the last-resort SQL policy boundary.
 -- Manual execution remains byte-for-byte the fixed OpenAI/Codex plan. The new
--- record-only branch accepts only Anthropic, a bounded model, and one canonical
+-- record-only branch accepts a bounded provider/model and one canonical
 -- plan that advertises no pull request and no executable stages.
 create or replace function public.normalize_phase1c_command()
 returns trigger
@@ -655,8 +658,8 @@ begin
     or (
       execution_mode_value = 'record_only'
       and (
-        new.parameters ->> 'provider' <> 'anthropic'
-        or char_length(btrim(coalesce(new.parameters ->> 'model', ''))) not between 1 and 120
+        char_length(btrim(coalesce(new.parameters ->> 'provider', ''))) not between 1 and 40
+        or char_length(btrim(coalesce(new.parameters ->> 'model', ''))) not between 1 and 128
         or new.parameters -> 'plan' is distinct from expected_record_only_plan
       )
     ) then
@@ -727,7 +730,8 @@ begin
     or execution_mode_value not in ('manual', 'record_only')
     or (execution_mode_value = 'manual' and (provider_text <> 'openai' or model_text <> 'gpt-5.3-codex'))
     or (execution_mode_value = 'record_only' and (
-      provider_text <> 'anthropic' or char_length(btrim(coalesce(model_text, ''))) not between 1 and 120
+      char_length(btrim(coalesce(provider_text, ''))) not between 1 and 40
+      or char_length(btrim(coalesce(model_text, ''))) not between 1 and 128
     ))
     or coalesce(binding ->> 'repositoryId', '') !~ '^[0-9a-fA-F-]{36}$'
     or coalesce(binding ->> 'connectionId', '') !~ '^[0-9a-fA-F-]{36}$'
@@ -829,7 +833,7 @@ revoke all on function public.plan_phase1c_task_and_run()
   from public, anon, authenticated, service_role;
 
 comment on function public.plan_phase1c_task_and_run() is
-  'Validates queued command bindings. Manual Codex tasks bind a project-scoped logical agent; Anthropic record-only tasks deliberately bind no executable agent.';
+  'Validates queued command bindings. Manual Codex tasks bind a project-scoped logical agent; every other record-only task deliberately binds no executable agent.';
 
 -- This is the decisive non-execution boundary: even a queued GREEN/YELLOW
 -- record-only task returns before the only trigger that inserts agent_runs.
@@ -880,7 +884,7 @@ revoke all on function public.queue_phase1c_run_for_task()
   from public, anon, authenticated, service_role;
 
 comment on function public.queue_phase1c_run_for_task() is
-  'Queues an executable agent_run only for the fixed manual Codex path. Anthropic record-only tasks are durable commands/tasks with no run.';
+  'Queues an executable agent_run only for the fixed manual Codex path. Other provider/model selections are durable record-only commands/tasks with no run.';
 
 -- Original public signature, now explicitly fixed to manual Codex unless one
 -- exact unguessable capability row was created and consumed inside the locked
@@ -954,7 +958,7 @@ grant execute on function public.submit_command(
 comment on function public.submit_command(
   uuid, text, public.risk_level, jsonb, text
 ) is
-  'Persists fixed manual Codex commands. Anthropic record-only persistence is accepted only with a one-use capability created inside submit_factory_command; direct unsupported execution remains rejected.';
+  'Persists fixed manual Codex commands. Any other bounded provider/model is accepted record-only only with a one-use capability created inside submit_factory_command; direct unsupported execution remains rejected.';
 
 create or replace function public.submit_factory_command(
   p_organization_id uuid,
@@ -1030,7 +1034,10 @@ begin
   end if;
   v_resolved_model := coalesce(v_assignment.model, v_bot.model);
 
-  if v_bot.provider = 'anthropic'::public.bot_provider then
+  if not (
+    v_bot.provider = 'openai'::public.bot_provider
+    and v_resolved_model = 'gpt-5.3-codex'
+  ) then
     v_canonical_parameters := coalesce(p_parameters, '{}'::jsonb)
       || pg_catalog.jsonb_build_object(
         'provider', v_bot.provider::text,
@@ -1098,7 +1105,7 @@ grant execute on function public.submit_factory_command(
 comment on function public.submit_factory_command(
   uuid, uuid, uuid, uuid, text, public.risk_level, jsonb, text
 ) is
-  'Locks the selected bot provider/model. OpenAI/Codex retains the executable manual route; Anthropic persists canonical record-only command/task/route evidence and creates no agent_run.';
+  'Locks the selected bot provider/model. Exact OpenAI/Codex retains the executable manual route; every other bounded identity persists canonical record-only command/task/route evidence and creates no agent_run.';
 
 
 -- Record-only history is durable intent, not executable in-flight work. Keep
@@ -1325,6 +1332,7 @@ declare
   v_role public.bot_roles%rowtype;
   v_account_status text;
   v_current_readiness public.bot_readiness;
+  v_execution_mode text := coalesce(p_parameters ->> 'executionMode', '');
   v_resolved_model text;
   v_effective_risk public.risk_level;
   v_configuration jsonb;
@@ -1412,11 +1420,13 @@ begin
     raise exception using errcode = '55000',
       message = 'selected bot assignment is not configured';
   end if;
-  if v_assignment.repository_access <> 'write' then
+  if v_execution_mode <> 'record_only'
+    and v_assignment.repository_access <> 'write' then
     raise exception using errcode = '55000',
       message = 'selected bot assignment cannot write the repository';
   end if;
-  if not v_assignment.can_open_pull_request then
+  if v_execution_mode <> 'record_only'
+    and not v_assignment.can_open_pull_request then
     raise exception using errcode = '55000',
       message = 'selected bot assignment cannot open pull requests';
   end if;
@@ -1595,7 +1605,8 @@ begin
       raise exception using errcode = '55000',
         message = 'selected bot role risk ceiling is too low';
     end if;
-    if v_in_flight >= v_assignment.max_concurrent_tasks then
+    if v_execution_mode <> 'record_only'
+      and v_in_flight >= v_assignment.max_concurrent_tasks then
       raise exception using errcode = '55000',
         message = 'selected bot assignment is at its concurrency limit';
     end if;
@@ -1654,7 +1665,7 @@ end;
 $function$;
 
 comment on function public.list_factory_command_routing_candidates(uuid, uuid, text) is
-  'Member-scoped candidates. Durable Anthropic record-only history is excluded from executable in-flight capacity; all executable command states retain the original capacity accounting.';
+  'Member-scoped candidates. Durable record-only history is excluded from executable in-flight capacity; all executable command states retain the original capacity accounting.';
 comment on function public.submit_factory_command_routing_internal(
   uuid, uuid, uuid, uuid, text, public.risk_level, jsonb, text
 ) is
@@ -1815,6 +1826,60 @@ comment on function public.record_provider_run(
 ) is
   'Records Phase 2A routing evidence and completed attempts while refusing every ROUTED record-only factory task before the private agent_run producer.';
 
+-- The browser needs this one non-sensitive disposition to describe a durable
+-- record-only command truthfully. Raw parameters and idempotency data remain
+-- private; every other field matches the established safe command list.
+create function public.list_factory_commands(
+  p_organization_id uuid,
+  p_limit integer default 50
+)
+returns table (
+  id uuid,
+  prompt text,
+  requested_risk public.risk_level,
+  status public.command_status,
+  submitted_at timestamptz,
+  completed_at timestamptz,
+  project_id uuid,
+  project_name text,
+  execution_mode text
+)
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog
+as $function$
+begin
+  if not public.is_organization_member(p_organization_id) then
+    return;
+  end if;
+
+  return query
+    select command.id, command.prompt, command.requested_risk, command.status,
+      command.submitted_at, command.completed_at, project.id, project.name,
+      case
+        when command.parameters ->> 'executionMode' = 'record_only'
+          then 'record_only'::text
+        else 'manual'::text
+      end
+    from public.commands command
+    left join public.projects project
+      on project.id = command.project_id
+     and project.organization_id = command.organization_id
+    where command.organization_id = p_organization_id
+    order by command.submitted_at desc
+    limit greatest(1, least(coalesce(p_limit, 50), 100));
+end;
+$function$;
+
+revoke all on function public.list_factory_commands(uuid, integer)
+  from public, anon, authenticated, service_role;
+grant execute on function public.list_factory_commands(uuid, integer)
+  to authenticated;
+
+comment on function public.list_factory_commands(uuid, integer) is
+  'Caller-bound tenant command list with a canonical manual or record_only disposition and no raw parameters or idempotency data.';
+
 -- Prove the entire replacement landed as one exact catalog transition. The
 -- three prior public entrypoint OIDs must now be the three private delegates;
 -- trigger functions and the Phase 2A sink retain their live OIDs; each new
@@ -1839,11 +1904,11 @@ insert into _sf_20260822001000_output_expectations (
    '17919dac57b41b75fe0793ad660063cc', 's', 'authenticated',
    'list_candidates'),
   ('normalize_command', 'public.normalize_phase1c_command()',
-   'a71084768f50b0917f535433d0011159',
+   'cd28d70a40e860660461700926e97830',
    '32b955c1d25380d6e075024ee98f8530', 'v', 'none',
    'normalize_command'),
   ('plan_task', 'public.plan_phase1c_task_and_run()',
-   '0d12db60288187fb359f7528834c1771',
+   '2de7070bb9359ce7ad45516da2956a4b',
    '32b955c1d25380d6e075024ee98f8530', 'v', 'none', 'plan_task'),
   ('queue_run', 'public.queue_phase1c_run_for_task()',
    '4737eba3e8490632fdd89c6d06fece82',
@@ -1859,12 +1924,12 @@ insert into _sf_20260822001000_output_expectations (
    'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'authenticated', null),
   ('submit_factory_internal',
    'public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
-   '4d46507dd6968fe03c2525672a86d55d',
+   '8418fd26e9b1783315a93ffbf4543838',
    'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'none',
    'submit_factory'),
   ('submit_factory_public',
    'public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
-   '6b95c10ee89991b1eef81e457c104886',
+   '6008476137a77db33d220be4b14a9c8d',
    'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'authenticated', null),
   ('record_provider_compatibility',
    'public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
@@ -2018,6 +2083,64 @@ begin
     raise exception using errcode = '55000',
       message = '01000 output function catalog, source, OID, or ACL mismatch',
       detail = v_bad;
+  end if;
+
+  if (select pg_catalog.count(*)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      join pg_catalog.pg_language language
+        on language.oid = procedure.prolang
+      where procedure.oid = pg_catalog.to_regprocedure(
+        'public.list_factory_commands(uuid,integer)'
+      )
+        and namespace.nspname = 'public'
+        and language.lanname = 'plpgsql'
+        and procedure.proowner = v_owner
+        and procedure.prokind = 'f'::"char"
+        and procedure.provolatile = 's'::"char"
+        and procedure.prosecdef
+        and procedure.proconfig = array['search_path=pg_catalog']::text[]
+        and not procedure.proisstrict
+        and not procedure.proleakproof
+        and procedure.proparallel = 'u'::"char"
+        and procedure.provariadic = 0
+        and procedure.prosupport = 0
+        and procedure.probin is null
+        and procedure.prosqlbody is null
+        and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(
+          procedure.prosrc, E'\r\n', E'\n'), E'\r', E'\n'))
+          = '8ecb481cc9ccb47ed915ae24e102fc20'
+        and procedure.proacl is not null
+        and (select pg_catalog.count(*)
+             from pg_catalog.aclexplode(procedure.proacl)) = 2
+        and pg_catalog.has_function_privilege(
+          'authenticated', procedure.oid, 'EXECUTE'
+        )
+        and not pg_catalog.has_function_privilege(
+          'anon', procedure.oid, 'EXECUTE'
+        )
+        and not pg_catalog.has_function_privilege(
+          'service_role', procedure.oid, 'EXECUTE'
+        )
+        and not exists (
+          select 1 from pg_catalog.aclexplode(procedure.proacl) acl
+          where acl.grantor <> procedure.proowner
+             or acl.privilege_type <> 'EXECUTE'
+             or acl.is_grantable
+             or acl.grantee not in (
+               procedure.proowner,
+               pg_catalog.to_regrole('authenticated')::oid
+             )
+        )) <> 1
+    or (select pg_catalog.count(*)
+        from pg_catalog.pg_proc procedure
+        join pg_catalog.pg_namespace namespace
+          on namespace.oid = procedure.pronamespace
+        where namespace.nspname = 'public'
+          and procedure.proname = 'list_factory_commands') <> 1 then
+    raise exception using errcode = '55000',
+      message = '01000 safe command disposition list catalog, source, or ACL mismatch';
   end if;
 
   select pg_catalog.string_agg(

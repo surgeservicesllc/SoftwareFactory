@@ -48,6 +48,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 
+const FORWARD_REPAIR_TABLES = new Set([
+  "agentos_environments",
+  "agentos_mcp_connections",
+  "agentos_skills",
+  "agentos_agent_grants",
+  "agentos_agent_mcp_grants",
+  "agentos_agent_skill_grants",
+  "agentos_agent_repo_grants",
+  "agentos_agent_filesystem_grants",
+  "agentos_agent_collaborators",
+]);
+
 async function migrationFiles(): Promise<string[]> {
   return (await readdir(migrationsDirectory)).filter((file) => /^\d+.*\.sql$/.test(file)).sort();
 }
@@ -75,7 +87,14 @@ async function creationsByName(keyword: "table" | "type"): Promise<Map<string, s
 
 function collisionsIn(byName: Map<string, string[]>): string[] {
   return [...byName.entries()]
-    .filter(([, files]) => files.length > 1)
+    .filter(([name, files]) => {
+      if (files.length <= 1) return false;
+      return !(FORWARD_REPAIR_TABLES.has(name)
+        && files.join("|") === [
+          "20260814000300_agentos_isolation_model.sql",
+          "20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
+        ].join("|"));
+    })
     .map(([name, files]) => `${name}: ${files.join(" and ")}`);
 }
 

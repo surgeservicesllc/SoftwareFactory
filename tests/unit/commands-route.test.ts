@@ -36,7 +36,7 @@ vi.mock("@/lib/supabase/tenant", async (importOriginal) => ({
   requireActiveOrganization,
 }));
 
-import { POST } from "@/app/api/commands/route";
+import { GET, POST } from "@/app/api/commands/route";
 import { GitHubApiError } from "@/lib/github/client";
 
 const organizationId = "44444444-4444-4444-8444-444444444444";
@@ -351,6 +351,89 @@ function routableConnection(id: string, overrides: RegistryRow = {}): RegistryRo
     ...overrides,
   };
 }
+
+describe("GET /api/commands", () => {
+  beforeEach(() => {
+    requireActiveOrganization.mockReset();
+  });
+
+  it("lists canonical record-only disposition without exposing raw parameters", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{
+        id: commandId,
+        project_id: projectId,
+        prompt: "Fix high-priority bugs.",
+        requested_risk: "yellow",
+        status: "queued",
+        submitted_at: "2026-08-22T12:00:00.000Z",
+        completed_at: null,
+        project_name: "SoftwareFactory",
+        execution_mode: "record_only",
+        parameters: { secret: "must-not-escape" },
+      }],
+      error: null,
+    });
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: { rpc },
+    });
+
+    const response = await GET(new Request("https://factory.example/api/commands?limit=7"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("list_factory_commands", {
+      p_limit: 7,
+      p_organization_id: organizationId,
+    });
+    expect(body).toEqual({
+      activeOrganizationId: organizationId,
+      commands: [{
+        id: commandId,
+        prompt: "Fix high-priority bugs.",
+        risk: "yellow",
+        status: "queued",
+        submittedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: null,
+        executionMode: "record_only",
+        project: { id: projectId, name: "SoftwareFactory" },
+      }],
+    });
+    expect(JSON.stringify(body)).not.toContain("parameters");
+    expect(JSON.stringify(body)).not.toContain("must-not-escape");
+  });
+
+  it("uses the legacy list only for PGRST202 and reports its mode as unknown", async () => {
+    const legacyRow = {
+      id: commandId,
+      project_id: projectId,
+      prompt: "Legacy command",
+      requested_risk: "green",
+      status: "queued",
+      submitted_at: "2026-08-22T11:00:00.000Z",
+      completed_at: null,
+      project_name: "SoftwareFactory",
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST202", message: "missing" } })
+      .mockResolvedValueOnce({ data: [legacyRow], error: null });
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: { rpc },
+    });
+
+    const response = await GET(new Request("https://factory.example/api/commands"));
+
+    expect(response.status).toBe(200);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "list_factory_commands",
+      "list_commands",
+    ]);
+    await expect(response.json()).resolves.toMatchObject({
+      commands: [{ id: commandId, executionMode: "unknown" }],
+    });
+  });
+});
 
 describe("POST /api/commands", () => {
   beforeEach(() => {

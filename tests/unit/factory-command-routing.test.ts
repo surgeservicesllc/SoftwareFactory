@@ -132,16 +132,6 @@ describe("factory command routing", () => {
       code: "BOT_NOT_READY",
     },
     {
-      label: "unsupported provider",
-      overrides: { provider: "google" },
-      code: "PROVIDER_MODEL_MISMATCH",
-    },
-    {
-      label: "unsupported OpenAI model",
-      overrides: { model: "gpt-5.3" },
-      code: "PROVIDER_MODEL_MISMATCH",
-    },
-    {
       label: "repository is read-only",
       overrides: {
         assignment_config: {
@@ -281,13 +271,31 @@ describe("factory command routing", () => {
     });
   });
 
-  it("skips an unsupported higher-priority posting for a supported Claude posting", () => {
+  it("records with a least-privilege Claude posting that cannot write or open a pull request", () => {
+    const decision = decide({
+      bot_name: "Claude - Daniel",
+      provider: "anthropic",
+      model: "claude-opus-5",
+      assignment_config: {
+        ...configuredGrant,
+        repositoryAccess: "read",
+        canOpenPullRequest: false,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      outcome: "SELECTED",
+      selected: { botName: "Claude - Daniel", provider: "anthropic" },
+    });
+  });
+
+  it("uses the highest-priority bounded provider/model as record-only routing", () => {
     const decision = routeFactoryCommand({
       candidates: [
         candidate({
           assignment_id: "00000000-0000-4000-8000-000000000099",
           bot_id: "00000000-0000-4000-8000-000000000098",
-          bot_name: "Unsupported",
+          bot_name: "Future provider",
           provider: "google",
           assignment_config: { ...configuredGrant, priority: 0 },
         }),
@@ -306,7 +314,7 @@ describe("factory command routing", () => {
 
     expect(decision).toMatchObject({
       outcome: "SELECTED",
-      selected: { botName: "Claude - Daniel", provider: "anthropic" },
+      selected: { botName: "Future provider", provider: "google" },
     });
   });
 

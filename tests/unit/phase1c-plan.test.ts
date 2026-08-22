@@ -80,14 +80,18 @@ describe("Phase 1C execution plan", () => {
     });
   });
 
-  it("rejects providers and OpenAI models outside the two reviewed lanes", () => {
+  it("records every other bounded provider and model without execution", () => {
     expect(classifyFactoryCommandExecutionIdentity({
       model: "gemini-pro",
       provider: "google",
-    })).toBeNull();
+    })).toBe("record_only");
     expect(classifyFactoryCommandExecutionIdentity({
       model: "gpt-5.3",
       provider: "openai",
+    })).toBe("record_only");
+    expect(classifyFactoryCommandExecutionIdentity({
+      model: "m".repeat(129),
+      provider: "future-provider",
     })).toBeNull();
   });
 });
