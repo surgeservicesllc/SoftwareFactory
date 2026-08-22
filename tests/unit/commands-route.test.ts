@@ -134,6 +134,35 @@ function routingCandidate(overrides: RegistryRow = {}): RegistryRow {
   };
 }
 
+function freshRoutingSnapshot(
+  candidate: RegistryRow,
+  effectiveRisk: "green" | "yellow" | "red" = "green",
+  workEffort = String(candidate.work_effort),
+): RegistryRow {
+  return {
+    schemaVersion: 1,
+    command: { effectiveRisk },
+    project: { organizationId, projectId },
+    pipeline: {
+      selectionId: String(candidate.project_pipeline_id),
+      templateKey: String(candidate.pipeline_template_key),
+      templateId: typeof candidate.pipeline_template_id === "string"
+        ? candidate.pipeline_template_id
+        : null,
+    },
+    assignment: {
+      assignmentId: String(candidate.assignment_id),
+      botId: String(candidate.bot_id),
+      roleId: String(candidate.role_id),
+      provider: String(candidate.provider),
+      model: typeof candidate.assignment_model === "string"
+        ? candidate.assignment_model
+        : String(candidate.model),
+      workEffort,
+    },
+  };
+}
+
 function factoryReplay(overrides: RegistryRow = {}): RegistryRow {
   return {
     command_id: commandId,
@@ -260,7 +289,10 @@ function configuredClient(options: {
         assignment_id: selected.assignment_id,
         bot_id: selected.bot_id,
         role_id: selected.role_id,
-        routing_snapshot: {},
+        routing_snapshot: freshRoutingSnapshot(
+          selected,
+          options.requiresApproval ? "red" : "green",
+        ),
         ...options.submissionOverrides,
       };
       const atCapacity = selected.has_capacity === false
@@ -642,6 +674,45 @@ describe("POST /api/commands", () => {
           workEffort: "high",
         },
       },
+    });
+  });
+
+  it("reports the locked SQL routing snapshot when authoritative risk and effort differ", async () => {
+    const rpc = configuredClient({
+      requiresApproval: true,
+      submissionOverrides: {
+        routing_snapshot: freshRoutingSnapshot(routingCandidate(), "red", "max"),
+      },
+    });
+
+    const response = await POST(commandRequest("https://factory.example", {
+      prompt: "Review tokenization behavior.",
+    }));
+
+    expect(response.status).toBe(202);
+    expect(rpc).toHaveBeenCalledWith("submit_factory_command", expect.objectContaining({
+      p_requested_risk: "green",
+    }));
+    expect(await response.json()).toMatchObject({
+      requiresOwnerApproval: true,
+      execution: {
+        message: expect.stringContaining("did not dispatch a worker"),
+      },
+      orchestration: {
+        effectiveRisk: "red",
+        factoryRouting: { workEffort: "max" },
+      },
+    });
+  });
+
+  it("fails closed when a fresh submission omits its authoritative routing snapshot", async () => {
+    configuredClient({ submissionOverrides: { routing_snapshot: {} } });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "factory_submission_projection_invalid" },
     });
   });
 

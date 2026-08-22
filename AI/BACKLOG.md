@@ -2,6 +2,32 @@
 
 Last triaged: 2026-08-21
 
+## Factory command routing release (2026-08-21, ADR-106)
+
+- [x] Persist one immutable route for every owner-submitted factory command,
+  including selected pipeline/template, bot assignment, bot, provider/model,
+  work effort, effective risk, and the routing/configuration snapshot.
+- [x] Resolve exact idempotent replay before any mutable pipeline, roster,
+  readiness, or capacity read; recheck stored effective risk in the database.
+- [x] Keep submission and replay owner-only, fail closed when the routing RPC
+  is absent, and leave worker dispatch, autonomy, merge, deploy, and rollback
+  unavailable.
+- [x] Freeze `20260821000400_command_factory_routing.sql` at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- [ ] Remediate and remeasure the hosted release blockers: five linked lint
+  errors/ten findings; one raw organization with `autonomous_mode = true`; one
+  raw organization with `autonomy_kill_switch_active = false`; two projects with effective
+  kill off; and no connected/fresh worker.
+- [ ] Apply `20260821000400` only through a separately authorized hosted
+  release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
+  and prove the matching production copy. Production remains on hosted
+  `20260821000300` and the old application until then.
+- [ ] Rerun the complete suite after the two pre-documentation bookkeeping
+  failures are corrected. The candidate already has 3,744 passing tests plus
+  passing lint/typecheck/build; retain the known Windows ENOENT warning as a
+  warning, not as evidence.
+
 ## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
 
 - [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`

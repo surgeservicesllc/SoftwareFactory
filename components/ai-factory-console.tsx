@@ -658,7 +658,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     {
       id: "command",
       title: "Issue a Command",
-      description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route; workers remain off.",
+      description: "Describe the outcome you want in plain words. The server verifies and records its pipeline and bot route without dispatching a worker.",
       done: scopedCommands.length > 0,
       evidence: scopedCommands.length > 0
         ? `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} on this factory`

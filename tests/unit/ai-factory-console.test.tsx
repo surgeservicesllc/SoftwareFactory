@@ -405,7 +405,7 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const command = (await screen.findByText("Issue a Command")).closest("li") as HTMLElement;
-    expect(within(command).getByText(/workers remain off/i)).toBeInTheDocument();
+    expect(within(command).getByText(/without dispatching a worker/i)).toBeInTheDocument();
     expect(within(command).queryByText(/a worker builds it/i)).not.toBeInTheDocument();
 
     const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;

@@ -338,8 +338,8 @@ export async function POST(request: Request) {
             execution: {
               started: false,
               message: replay.requires_owner_approval
-                ? "Persisted only. Owner approval remains required; factory command workers and autonomous execution remain off."
-                : "Persisted only. This exact replay returned its stored route; factory command workers and autonomous execution remain off.",
+                ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
+                : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
               workerDispatch: "not_applicable",
             },
             orchestration: {
@@ -683,6 +683,14 @@ export async function POST(request: Request) {
       );
     }
     const result = parsedSubmission.data;
+    const parsedSnapshot = replayRoutingSnapshotSchema.safeParse(result.routing_snapshot);
+    if (!parsedSnapshot.success) {
+      return unavailableRead(
+        "factory_submission_projection_invalid",
+        "Factory command submission returned an invalid routing snapshot.",
+      );
+    }
+    const snapshot = parsedSnapshot.data;
     if (
       result.project_pipeline_id !== selectedAssignment.projectPipelineId
       || result.pipeline_template_key !== selectedAssignment.pipelineTemplateKey
@@ -690,6 +698,17 @@ export async function POST(request: Request) {
       || result.assignment_id !== selectedAssignment.assignmentId
       || result.bot_id !== selectedAssignment.botId
       || result.role_id !== selectedAssignment.roleId
+      || snapshot.project.organizationId !== activeOrganization.id
+      || snapshot.project.projectId !== parsed.data.projectId
+      || snapshot.pipeline.selectionId !== result.project_pipeline_id
+      || snapshot.pipeline.templateKey !== result.pipeline_template_key
+      || snapshot.pipeline.templateId !== result.pipeline_template_id
+      || snapshot.assignment.assignmentId !== result.assignment_id
+      || snapshot.assignment.botId !== result.bot_id
+      || snapshot.assignment.roleId !== result.role_id
+      || snapshot.assignment.provider !== executionPlan.provider
+      || snapshot.assignment.model !== executionPlan.model
+      || (snapshot.command.effectiveRisk === "red" && !result.requires_owner_approval)
     ) {
       return unavailableRead(
         "factory_submission_route_mismatch",
@@ -710,8 +729,8 @@ export async function POST(request: Request) {
         execution: {
           started: false,
           message: result.requires_owner_approval
-            ? "Persisted only. RED Codex execution remains blocked; owner approval does not widen the worker ceiling."
-            : "Persisted only. Factory command workers and autonomous execution remain off.",
+            ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
+            : "Persisted only. This request did not dispatch a worker or change autonomy.",
           workerDispatch,
         },
         orchestration: {
@@ -739,13 +758,14 @@ export async function POST(request: Request) {
             assignmentId: result.assignment_id,
             botId: result.bot_id,
             roleId: result.role_id,
-            provider: executionPlan.provider,
-            model: executionPlan.model,
-            workEffort: selectedAssignment.workEffort,
+            provider: snapshot.assignment.provider,
+            model: snapshot.assignment.model,
+            workEffort: snapshot.assignment.workEffort,
           },
           dependencyTaskIds,
-          effectiveRisk: riskAssessment.effectiveRisk.toLowerCase(),
-          model: executionPlan.model,
+          effectiveRisk: snapshot.command.effectiveRisk,
+          model: snapshot.assignment.model,
+          provider: snapshot.assignment.provider,
           repository: target.repository_full_name,
         },
         requiresOwnerApproval: result.requires_owner_approval,

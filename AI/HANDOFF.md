@@ -1,6 +1,40 @@
 # Handoff
 
 Last updated: 2026-08-21
+
+## Newest (2026-08-21): immutable Factory command routing (ADR-106)
+
+The rebased release candidate adds
+`20260821000400_command_factory_routing.sql` (34,999 bytes; SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`).
+Only an authenticated organization owner may submit or replay. The database
+uses the existing command/task/run transaction, rechecks the stored effective
+risk, and freezes the selected pipeline/template, assignment, bot, role,
+provider, resolved model, work effort, and configuration/risk snapshot in an
+immutable route. Exact replay resolves that route before any mutable project,
+pipeline, roster, readiness, or capacity state is read. This release creates
+no worker dispatch or autonomy change; no connected/fresh worker was observed,
+and approve, merge, deploy, and rollback remain unavailable. If the RPC is
+absent, the API fails closed as Not Connected/503.
+
+Do not describe this candidate as live. Hosted production includes
+`20260821000300` and still serves the old copy; `20260821000400` is unhosted.
+The current release blockers are measured adverse state, not assumptions:
+five linked-database lint errors across ten findings; one raw organization
+with `autonomous_mode = true`; one raw organization with
+`autonomy_kill_switch_active = false`; two projects whose effective kill switch is off;
+and no connected/fresh worker. These measurements supersede older claims below
+that linked lint is clean or that hosted controls are universally all-OFF and
+kill-ON. Contain and remeasure them before any hosted apply or production
+promotion.
+
+Candidate lint, typecheck, and build pass. The full test command recorded
+3,744 passing tests and two stale documentation-bookkeeping failures before
+this update, plus the known Windows `TAR_ENTRY_ERROR ENOENT` warning. Run the
+focused count guards after this edit and rerun the complete suite before
+release; the focused hosted-runbook/repository-memory guards are now 21/21
+passing. Do not translate the pre-doc full-run failures into an all-green claim.
+
 ## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-104)
 
 FirstMate was reviewed at exact commit
@@ -433,7 +467,7 @@ sign into this app; the session travels in a fragment the app ignores).
 Two environment blockers were hit and are not code defects: Vercel's free-tier `api-deployments-free-per-day` limit, and GitHub Actions failing to assign a runner at all (`runner_id: 0`, no logs, two attempts). The second matters for Phase 1D, whose goal item 12 requires gates to rest on real CI evidence.
 
 
-Finish the Phase 1C routing projection and live acceptance without overstating status. Provider-credit recovery is no longer the task: Phase 1C was re-architected to zero-token subscription-authenticated Codex execution, so there is nothing to fund. The protected Supabase ledger reconciliation and forward-only chain through `130014` are complete on exact project `qpuofpmagrmyamahqwxw`; linked lint and focused runtime/catalog/ACL checks pass. Migration `20260813001500_expose_bounded_run_routing.sql` is local and unhosted; no earlier approval authorizes applying it. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Distinct no-claim diagnostic Actions run `31748582858` passed the exact-model GET, then the bounded non-stored Responses probe returned the safe code `credit_balance_exhausted`; Docker preload and durable claim were skipped. Durable run `f4594556-6f72-4763-a480-6993939e3651` remains failed after attempt 1 of 2, but its immutable base predates the verified production baseline; do not retry it. Activation is absent/OFF. The user-pasted OpenAI key is treated as compromised and `SOFTWAREFACTORY_OPENAI_API_KEY` has been removed from repository Actions secrets; it stays absent permanently, because Phase 1C has no paid-API path to restore it to. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected**. All automatic actions remain OFF and the global kill switch remains ON.
+Finish Phase 1C live acceptance without overstating status. Historical reconciliation and verification below remain useful, but the current hosted release gate is adverse: five linked lint errors/ten findings, raw autonomy/kill-switch drift, and no connected/fresh worker. Production is on `20260821000300`; factory command routing in `20260821000400` is local and fails closed until hosted. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected** and no command routing may dispatch work.
 
 ## Phase 1D state for the next agent
 
@@ -461,7 +495,7 @@ Rules that must survive any future change:
 5. **The Phase 1D control migration relaxes nothing.** Enabling any automatic action is a RED action
    requiring an owner-approved migration. Do not do it as a side effect of anything else.
 
-Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is applied to hosted Supabase as part of the owner-approved, ledger-reconciled forward chain through `130014`. Hosted resolution confirms all nine actions OFF and the global kill switch ON. Applying that execution-inert decision schema did not authorize or execute an automatic action.
+Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` remains part of the historical hosted chain, but its old all-OFF/kill-ON observation is no longer current evidence. Raw hosted data now includes one organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects with effective kill off. No connected/fresh worker or executor was observed, so nothing is dispatched; contain the drift before any routing migration or promotion.
 
 Manual Phase 1C execution may handle only authenticated owner-submitted GREEN/YELLOW commands. RED remains non-executable. Autonomous Mode is OFF, the global kill switch is ON, and auto approve/merge/deploy/rollback are OFF. The worker ends at an open draft PR plus observed CI; it never writes the default branch or performs delivery.
 
@@ -546,7 +580,7 @@ Next Phase 1E steps: configure an owner-authorized monitor target and record the
 
 ### Published Phase 2A/Phase 1C and provider-startup recovery
 
-- Command route/composer: connected-project selection, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, opaque dispatch, dispatch evidence, truthful RED/delayed states.
+- Command route/composer: connected-project and exact selected-pipeline admission, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, immutable bot-route evidence, database-authoritative response snapshot, and truthful persisted-only/no-dispatch states.
 - Orchestration: provider `openai`, model `gpt-5.3-codex`, role mapping, 45-minute/four-turn/token/one-repair/15-minute-CI budgets, and fixed inspect-to-report draft-PR workflow.
 - Provider layer already on `main`: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; `130001` schema and its reconciled ledger row are hosted, while advisory execution remains OFF/**Not Connected**.
 - Schema: `130006` Phase 1D decision-only interlocks; `130007` provider compatibility; `130008` enum-only commit; `130009` core command/task/run/worker/evidence/RLS/RPC schema; `130010` provider-neutral roster, owner/risk/ACL/recovery/report hardening; and `130011` canonical dependencies, derived criteria, idempotent replay, and cumulative retry budgets. All are hosted; `130012`-`130014` are forward-only containment/lint/emergency-stop corrections. Only `130007`-`130013` contain Phase 1C changes.
@@ -579,7 +613,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 ## Verification state
 
 - The prior verified production baseline before this update passed supported Node `24.19.0` lint/typecheck, 117 files/1,282 tests, a production build with 74 page/route entries, prior coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration/security suites, production dependency audit 0, and safe disabled-worker smoke. Baseline commit `0c662a24393f682073e6002c5aff9339292226d8` passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY.
-- Hosted history is reconciled through `130014`, and linked lint is clean. The frozen current candidate passes local final gates on Node `24.19.0`: lint/typecheck, 118 files/1,311 tests, coverage 76.70/71.47/74.04/78.11, 74/74 routes, Playwright/axe 117/117, audit 0, and clean diff-check. Publication/CI/Vercel and hosted `130015` evidence remain pending.
+- Current routing candidate: lint/typecheck/build pass; the full command recorded 3,744 passes and two pre-doc bookkeeping failures plus the known Windows ENOENT warning. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, complete post-doc test rerun, hosted apply, matching deployment, and owner acceptance remain pending.
 - First acceptance evidence: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, durable run `f4594556-6f72-4763-a480-6993939e3651`, and worker Actions run `31746057998`. A real heartbeat and provider thread identifier were recorded, then Codex startup failed. No changed file, factory branch, commit, PR, validation, or exact-head CI evidence was created. Its planned base is now stale against current `main`, so the failed row must not be retried. Activation is OFF.
 - Published provider-only diagnostic `31748582858` skipped Docker preload and durable claim. The exact-model GET passed; the bounded non-stored Responses call returned only the safe machine-readable code `credit_balance_exhausted`. The stale failed run was not touched and activation is OFF.
 - The exact blocker is no longer funding. The paid dependency was removed from the execution path; the blocker is the owner-supplied `SOFTWAREFACTORY_CODEX_AUTH_JSON`. Configure it, rerun the no-claim diagnostic, then submit a new current-base command. Never retry the stale failed run. No production-monitor journey or successful live Phase 1C provider result exists.
@@ -607,7 +641,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 
 ## Completion checklist
 
-- [x] Hosted migration history is reconciled/current through `130014`; linked lint, focused RLS/catalog/ACL/runtime checks, and live `027` owner approval/execution/rebind behavior pass.
+- [ ] Re-establish a current hosted release baseline: resolve 5 linked lint errors/10 findings and the measured autonomy/kill-switch drift, then verify raw/effective controls and worker freshness before applying `20260821000400`.
 - [x] Migration `026` is hosted; exact ACL mismatch count is zero, with four intended `service_role` ingress tables and no table privileges on the other 19.
 - [x] Historical candidate lint/typecheck, 56 files/436 tests, 38-route build, and 48/48 E2E evidence is retained only as historical Phase 1B evidence.
 - [ ] Run and record the complete final gate set for the current routing/UI update; no prior count is current-update evidence.
@@ -623,7 +657,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - [x] Owner handoff, project/history continuity, candidate-backed reads, draft-only PR `#8`, and cleanup pass.
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
-- [x] Documentation and scorecard distinguish hosted `130014`, local/unhosted `130015`, the prior verified production baseline, proven owner/anonymous reads, and remaining unrelated-authenticated/mutation/provider acceptance without claiming Phase 1C Connected.
+- [x] Documentation and scorecard distinguish hosted `20260821000300`, unhosted `20260821000400`, the old production copy, and the current linked-lint/control/worker blockers without claiming Phase 1C Connected.
 - [x] Phase 1E control plane passes lint, typecheck, 143 files/1621 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [x] Migration `028` is hosted in the reconciled ledger. No real production target has been observed, so every Phase 1E monitoring surface remains **Not Connected** or **Unknown**.
 - [x] The control plane is served under `/solutions` and verified live: twelve pages serve both navigation landmarks, every former path returns `308`, and the console stays `noindex` and out of the sitemap. See ADR-041.

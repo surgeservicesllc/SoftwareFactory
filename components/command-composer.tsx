@@ -388,7 +388,7 @@ export function CommandComposer({
             ? `Command ${id} is queued durably for ${repository}; it starts only when a connected worker claims it.`
             : workerDispatch === "requested"
               ? `Command ${id} is queued for ${repository} as ${effectiveRisk}.`
-              : `Command ${id} is recorded only; automated workers remain off.`;
+              : `Command ${id} is recorded only; this request did not dispatch a worker.`;
       pendingIntent.current = null;
       setState({
         kind: "success",
@@ -726,12 +726,12 @@ export function CommandComposer({
               <dd className="font-medium text-foreground">
                 {riskLevel === "RED"
                   ? "Intake → Waiting for your approval"
-                  : "Intake → Recorded (worker off)"}
+                  : "Intake → Recorded (no worker dispatch)"}
               </dd>
             </div>
           </dl>
           <p className="mt-2 text-xs text-faint">
-            This command is recorded against the selected pipeline. Automated workers remain off;
+            This command is recorded against the selected pipeline. Submitting it does not dispatch a worker;
             a draft pull request exists only after separately authorized execution. Watch status on{" "}
             <Link href="/solutions/pipelines" className="font-medium text-accent">Pipelines</Link>.
           </p>

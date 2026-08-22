@@ -116,7 +116,7 @@ describe("CommandComposer", () => {
         return jsonResponse({
           command: { id: "44444444-4444-4444-8444-444444444444" },
           execution: {
-            message: "Persisted only. Factory command workers and autonomous execution remain off.",
+            message: "Persisted only. This request did not dispatch a worker or change autonomy.",
             workerDispatch: "not_applicable",
           },
           orchestration: { effectiveRisk: "green", repository: "example/second" },
@@ -146,10 +146,10 @@ describe("CommandComposer", () => {
     expect(screen.getByRole("button", { name: "Queue command" })).toBeDisabled();
     await user.selectOptions(pipelinePicker, "security_audit");
     expect(screen.queryByText(/every outcome lands as a draft pull request/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Recorded \(worker off\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded \(no worker dispatch\)/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Queue command" }));
     expect(await screen.findByText(
-      /Persisted only\. Factory command workers and autonomous execution remain off\./,
+      /Persisted only\. This request did not dispatch a worker or change autonomy\./,
     )).toBeInTheDocument();
 
     const commandCall = fetchMock.mock.calls.find(
@@ -221,7 +221,8 @@ describe("CommandComposer", () => {
     render(<CommandComposer />);
 
     await screen.findByRole("option", { name: "Application" });
-    expect(await screen.findByRole("combobox", { name: "Pipeline" })).toHaveValue("security_audit");
+    await screen.findByRole("option", { name: "Security audit" });
+    expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("security_audit");
     await user.type(screen.getByLabelText("What do you want done?"), "Fix the mobile overflow");
     await user.click(screen.getByRole("button", { name: /Advanced options/ }));
     await user.selectOptions(screen.getByLabelText("Work type"), "mobile");
@@ -472,7 +473,8 @@ describe("CommandComposer", () => {
     render(<CommandComposer />);
 
     await screen.findByRole("option", { name: "Application" });
-    expect(await screen.findByRole("combobox", { name: "Pipeline" })).toHaveValue("security_audit");
+    await screen.findByRole("option", { name: "Security audit" });
+    expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("security_audit");
     await user.click(screen.getByRole("button", { name: /Advanced options/ }));
     const dependencyB = await screen.findByRole("checkbox", { name: /Foundation B/ });
     const dependencyA = screen.getByRole("checkbox", { name: /Foundation A/ });

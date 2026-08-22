@@ -2,6 +2,31 @@
 
 Last reviewed: 2026-08-21
 
+**Release addendum, 2026-08-21 — Factory command routing (ADR-106):**
+implementation is locally complete but not live. Migration
+`20260821000400_command_factory_routing.sql` is 34,999 bytes with SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+It makes owner-only submit/replay durable and immutable, stores the selected
+pipeline, bot/assignment, provider/model, work effort, effective-risk and
+configuration evidence, rechecks stored effective risk, and resolves replay
+before mutable state. The API fails closed as Not Connected until the RPC is
+hosted. Submission dispatches no worker and changes no autonomy control; no
+connected/fresh worker was observed, while merge, deploy, and rollback remain
+not connected.
+
+Current candidate evidence is lint, typecheck, and production build passing;
+the full test command recorded 3,744 passes and two pre-documentation
+bookkeeping failures, plus the known Windows `TAR_ENTRY_ERROR ENOENT` warning.
+Focused hosted-runbook/repository-memory guards pass 21/21 after this update;
+a complete post-doc suite rerun remains the release gate. Production still hosts
+`20260821000300`, not `20260821000400`, and serves the old application copy.
+Hosted quality is blocked by five linked lint errors/ten findings, one raw
+organization with `autonomous_mode = true`, one with
+`autonomy_kill_switch_active = false`, two
+projects with effective kill off, and no connected/fresh worker. Older clean-
+lint/all-OFF/kill-ON statements below are historical and are not current
+hosted evidence.
+
 **Addendum, 2026-08-21 — Job Seeker, live-stack certified (ADR-097):** the
 surface's strongest evidence tier so far: one continuous browser journey
 (`tests/e2e/job-seeker-journey.spec.ts`, guarded by `JOB_SEEKER_E2E=1`)
@@ -183,9 +208,9 @@ Phase 1E decision: **Production-operations control plane implemented, hosted, an
 
 Reason: migration `028` adds ten RLS/FORCE-RLS operations tables and owner-scoped workflows with zero new `service_role` table privileges. Its schema effect and reconciled ledger row are hosted, but no monitor has observed a real production target. Every Phase 1E surface therefore reports **Not Connected** or **Unknown**. Rollback and repair execution remain absent by design.
 
-Phase 1D decision: **Decision layer complete and proven against a migrated database; every automatic action remains constrained OFF and no executor exists**
+Phase 1D decision: **Decision layer exists and no executor is connected; current hosted control drift blocks an all-OFF quality claim**
 
-Reason: hosted migration `130006` completes the nine-action control model at organization and project scope, extends both interlocks, and relaxes nothing — every flag remains `false`, constrained `false`, and refused by the trigger. Hosted resolution through `130014` confirms all actions OFF and the global kill switch ON. The decision modules classify an actual diff, require the correct gate set, run deterministic reviewing agents, and return the approval tri-state with absolute no-self-approval. Merge, deploy, and autonomous Codex execution are blocked by name.
+Reason: migration `130006` defines the intended nine-action, two-scope interlock model and the decision modules still classify diffs, require gates, and prohibit self-approval. Current hosted evidence, however, contains one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects with effective kill off. No connected/fresh worker or merge/deploy executor was observed, so execution remains inert; the data drift must be contained and remeasured before the intended all-OFF policy can regain a Pass.
 
 ### Phase 1D completion
 
@@ -330,7 +355,7 @@ committed; the repository is consistent with that account.
 | Secret/client boundary | Prior full source/rebuilt-static scan plus current CI secret-boundary contracts and production 20-asset marker scan | Pass - no secret/helper committed; 20 deployed JavaScript assets clean |
 | Hosted Supabase identity | Exact project `qpuofpmagrmyamahqwxw`, ledger current through `130014`; earlier wrong/unauthorized CLI profile was not used for mutation | Reconciled history, linked lint, focused runtime/catalog/ACL, and hosted autonomy resolver checks pass; reconfirm identity before any future linked command |
 | Hosted migrations | Catalog-proven `028`/`130001`-`130005` repaired history-only; forward migrations `130006`-`130014` applied without reset, down-migration, or DDL replay | Hosted through `130014` |
-| Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; linked lint clean | Pass |
+| Hosted database identity/lint | Exact `qpuofpmagrmyamahqwxw`; 5 linked lint errors across 10 findings | Blocked pending remediation and remeasurement |
 | Hosted RLS/catalog/browser grants | Post-`027`: 25/25 RLS+FORCE, 34 policies, zero policyless; narrow owner-read/no-browser-mutation grants on both handoff-evidence tables; 22 secret guards and raw browser denials retained | Pass |
 | Hosted service-role table grants | Verified pre-`027`: SELECT/INSERT/UPDATE on four GitHub ingress tables; no table privileges on other 19; `027` revokes direct access on its new evidence tables | Pass baseline; live `027` path uses narrow RPCs |
 | Safe browser projections | Base-table SELECT revoked for five sensitive domains; bounded caller-member RPCs; allowlisted activity evidence | Hosted; owner Activity caller path passes; live second-tenant matrix pending |
@@ -355,7 +380,7 @@ committed; the repository is consistent with that account.
 | OpenAI/Codex | Published worker claimed one real run and emitted a transient heartbeat/provider thread, then failed before repository mutation. No-claim diagnostic `31748582858` passed exact-model lookup and returned `credit_balance_exhausted`; no successful run or draft PR exists. | **Not Connected** |
 | Anthropic/Claude | Advisory adapter source exists; no hosted schema, verified credential, enabled switch, or live run | **Not Connected** |
 | Automation safety | No merge/deploy/rollback executor; controls OFF | Pass |
-| Phase 1D observation scaffold | Autonomous Mode OFF, GREEN-only observation, global kill switch ON | Execution remains blocked |
+| Phase 1D observation scaffold | Intended OFF/kill-ON policy; current raw/effective rows have measured drift | Execution remains blocked because no connected/fresh worker or executor exists; control remediation required |
 
 ## Phase 2A and Phase 1C reconciliation evidence
 
@@ -364,7 +389,7 @@ committed; the repository is consistent with that account.
 | Command/orchestration | Connected-project-only intent; command type/criteria; stable idempotency; exact base SHA; fixed provider/model/role/budgets/workflow; independent SQL risk/config enforcement | Published and hosted; first live command persisted and was claimed safely |
 | Phase 2A advisory providers | Official Anthropic/OpenAI adapters; consent-gated health/model discovery; deterministic routing; bounded fallback; independent review; advisory artifacts only | Published on `main`; `130001` hosted and ledger-reconciled. Execution OFF returns local Disabled status, suppresses outbound discovery/probes, and no successful live advisory run exists; **Not Connected** |
 | RED ceiling | SQL and worker exclude RED; owner approval does not widen Phase 1C | Published and hosted; all autonomy controls remain OFF |
-| Durable schema | History-only reconciliation for schema-present `028`/`130001`-`130005`; Phase 1D `130006`; Phase 1C compatibility `130007`, enums `130008`, execution `130009`, roster/recovery `130010`, dependencies/cumulative budgets `130011`; forward corrections `130012`-`130014` | Hosted through `130014`; linked lint and focused runtime/catalog/ACL checks pass |
+| Durable schema | Existing hosted chain plus `20260821000300`; immutable Factory routing `20260821000400` remains local | Production has `210003` and the old copy; `210004` fails closed until hosted. Linked lint is currently 5 errors/10 findings |
 | Logical agent identity | Eleven standard logical roles for existing/future organizations; provider-account identity remains separate; general Phase 1C work maps to Orchestrator | Implemented and hosted in `130010`; authenticated production owner reads prove all eleven roles. No successful provider run exists. |
 | Dependency and budget integrity | Canonical same-project pre-existing dependencies, atomic/idempotent persistence, derived criteria, total turn/input/output budgets across retries | Implemented and hosted in `130011`; focused hosted runtime/catalog checks pass. Live retry/provider acceptance remains pending. |
 | Recovery/report integrity | Coherent artifact replay, draft projection, bounded retry/resume, stale-lease/cancel terminalization, structured success/failure/cancellation reports | Implemented and hosted in `130010`/`130011`; authenticated owner failure-detail/report reads pass. Live branch/PR recovery success remains pending. |
@@ -385,7 +410,7 @@ committed; the repository is consistent with that account.
 | Production dependency audit | Frozen current-update `npm audit --omit=dev` | Pass - 0 vulnerabilities |
 | Disabled worker smoke | Prior verified baseline worker disabled/incomplete configuration | Prior evidence passed safely; current-update smoke remains pending |
 | Diff and independent severity audit | Frozen current update | Pass - clean diff-check and independent frozen-tree review found no remaining P0/P1 source blocker |
-| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | Ledger reconciled/current through `130014`; linked lint clean; forward-only containment preserved |
+| Hosted migrations | Exact project `qpuofpmagrmyamahqwxw` | `20260821000300` hosted; `20260821000400` unhosted. Current lint/control blockers prevent a release-ready claim |
 | GitHub Actions secrets | Six non-OpenAI names currently present; OpenAI absent | The user-pasted OpenAI key is treated as compromised and `SOFTWAREFACTORY_OPENAI_API_KEY` is deleted. It must remain absent until a fresh funded replacement is available; configuration alone is not connectivity. |
 | Worker activation gate | Repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` | Enabled only for the approved first claim, then removed; currently absent/OFF |
 | Required CI checks | `SOFTWAREFACTORY_REQUIRED_CHECKS` exact names for both CI jobs; complete stable set; required conclusions `success`; PR base/head recheck | Implemented locally; live proof pending |

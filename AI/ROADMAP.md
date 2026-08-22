@@ -2,6 +2,29 @@
 
 Roadmap order follows safety dependencies. A later phase never inherits authority implicitly.
 
+## Current release increment — Factory command routing (ADR-106)
+
+Status: **Implemented and locally gated; not hosted or deployed.**
+
+- `20260821000400_command_factory_routing.sql` is frozen at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- Owner-only submit/replay durably selects one pipeline and configured bot,
+  model, and work effort; the database rechecks stored effective risk and
+  stores immutable routing/configuration evidence.
+- Exact replay resolves before mutable state. Missing hosted schema fails
+  closed. No worker dispatch, autonomous action, merge, deploy, or rollback is
+  introduced.
+- Lint, typecheck, and build pass; 3,744 tests pass in the pre-doc full run,
+  which ended with two documentation-bookkeeping failures and the known
+  Windows ENOENT warning. The full suite must be rerun after bookkeeping fixes.
+- Production remains on hosted `20260821000300` and the old copy. Before
+  hosting `20260821000400`, contain and remeasure five linked lint errors/ten
+  findings, one raw organization with `autonomous_mode = true`, one with
+  `autonomy_kill_switch_active = false`, two
+  projects with effective kill off, and the absence of a connected/fresh
+  worker. Do not infer a healthy/all-off hosted control plane.
+
 ## Phase 1A - trustworthy control-plane foundation
 
 Status: **Complete baseline; deployed evidence retained.**
@@ -53,7 +76,7 @@ Phase 1C ends at a human-reviewable draft PR. RED remains non-executable; no mer
 
 ## Phase 1D - autonomous-loop controls
 
-Status: **Decision layer published and hosted; every automatic action remains constrained OFF and no executor exists.**
+Status: **Decision layer published and hosted; no executor is connected, but hosted raw/effective controls have drift and must not be described as universally OFF.**
 
 Implemented in source and proven against the migrated schema:
 
@@ -69,9 +92,9 @@ Not implemented, and blocked rather than simulated:
 
 - **Enabling any automatic action.** Both scopes are held by validated CHECK constraints and a trigger. Relaxing them is a RED action requiring an owner-approved migration.
 - **Merge, deploy, and Codex execution.** Each is reached, evaluated, and blocked by name (`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED`, `CODEX_WORKER_NOT_CONNECTED`). Tests assert the blockers, so connecting an executor fails them deliberately rather than silently granting authority.
-- No Phase 1D executor is connected. Hosted control migration `130006` and forward resolver correction `130014` retain all nine actions OFF and the global kill switch ON.
+- No Phase 1D executor is connected. The intended migration policy is all actions OFF/kill ON, but current evidence finds one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects effective-kill-off; containment and remeasurement are release blockers.
 
-This is an execution-inert decision layer, not authorization to begin autonomous operation. The global kill switch remains ON, Autonomous Mode remains OFF, the maximum hypothetical autonomous risk remains GREEN, and every automatic action remains OFF. The published manual Phase 1C path does not change these interlocks.
+This remains execution-inert because no worker/executor is connected, not because the current hosted rows are clean. It is not authorization to begin autonomous operation. Restore and verify the intended kill-ON/autonomy-OFF/action-OFF policy before any hosted routing apply or production promotion.
 
 ## Phase 1E - production operations
 

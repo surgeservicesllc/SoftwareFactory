@@ -17,6 +17,15 @@ describe("command factory routing migration contract", () => {
     migration = await readFile(migrationPath, "utf8");
   });
 
+  function functionDefinition(name: string): string {
+    return migration.match(
+      new RegExp(
+        `create or replace function public\\.${name}\\([\\s\\S]*?\\$function\\$;`,
+        "i",
+      ),
+    )?.[0] ?? "";
+  }
+
   it("adds one immutable, tenant/project-scoped route per command", () => {
     expect(migration).toMatch(/create table public\.factory_command_routes\s*\(/i);
     expect(migration).toMatch(
@@ -71,9 +80,7 @@ describe("command factory routing migration contract", () => {
   });
 
   it("revalidates every server-only gate before delegating to submit_command", () => {
-    const submitBody = migration.match(
-      /create or replace function public\.submit_factory_command\([\s\S]*?\$function\$;\n\nrevoke all/i,
-    )?.[0] ?? "";
+    const submitBody = functionDefinition("submit_factory_command");
     const delegatedAt = submitBody.indexOf("from public.submit_command(");
     expect(delegatedAt).toBeGreaterThan(0);
     for (const gate of [
@@ -105,9 +112,7 @@ describe("command factory routing migration contract", () => {
   });
 
   it("gates the role against submit_command's persisted effective risk", () => {
-    const submitBody = migration.match(
-      /create or replace function public\.submit_factory_command\([\s\S]*?\$function\$;\n\nrevoke all/i,
-    )?.[0] ?? "";
+    const submitBody = functionDefinition("submit_factory_command");
     const delegatedAt = submitBody.indexOf("from public.submit_command(");
     const persistedRiskAt = submitBody.indexOf(
       "select command.requested_risk into v_effective_risk",
@@ -132,9 +137,7 @@ describe("command factory routing migration contract", () => {
   });
 
   it("resolves exact replays without consulting mutable routing or base state", () => {
-    const replayBody = migration.match(
-      /create or replace function public\.resolve_factory_command_replay\([\s\S]*?\$function\$;\n\nrevoke all/i,
-    )?.[0] ?? "";
+    const replayBody = functionDefinition("resolve_factory_command_replay");
 
     expect(replayBody).toMatch(
       /returns table \([\s\S]*command_id uuid,[\s\S]*routing_snapshot jsonb,\s+command_parameters jsonb,\s+repository_full_name text\s*\)/i,
