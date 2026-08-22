@@ -2,6 +2,24 @@
 
 Last triaged: 2026-08-22
 
+## Clearing the Backlog and All Pipelines pages (2026-08-22, ADR-119)
+
+- [x] Add `clear_backlog_tasks` and `clear_all_pipelines` as SECURITY DEFINER
+  functions that check owner/admin, require a reason of at least ten
+  characters, skip live work, and skip rows whose deletion would cascade into
+  `agent_runs` unless the caller opts in.
+- [x] Add the two `activity_event_type` labels those audit rows use, in their
+  own migration, because an enum value cannot be used in the transaction that
+  added it.
+- [x] Give both pages one shared confirm-reason-clear control that reports what
+  was kept and why.
+- [x] Apply to hosted with a dedicated narrow scope, hash-pinned, with a ledger
+  preflight and a post-apply readback that fails the run on a mismatch.
+- [ ] Dispatch `scope=probe` for the independent second read of the two
+  functions' privileges. The apply's own gate passed; a step that grades its
+  own work is the weaker evidence, and the probe read exists but has not been
+  run.
+
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 
 - [x] Keep exact `openai` / `gpt-5.3-codex` as the sole executable Factory

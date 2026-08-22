@@ -2,6 +2,39 @@
 
 Last reviewed: 2026-08-22
 
+## 2026-08-22: the Backlog and All Pipelines pages can be cleared
+
+`/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear
+control (ADR-119), landed on `main` as `9761055` (#317). One component,
+`components/clear-surface-button.tsx`, serves both: press, confirm, give a
+reason of at least ten characters, optionally tick the checkbox that also
+deletes rows carrying run history.
+
+The authority is entirely in the database. `clear_backlog_tasks` and
+`clear_all_pipelines` (migration `20260822000800`) are SECURITY DEFINER, refuse
+a caller who is not an owner or admin, refuse a short reason, skip live work,
+and skip anything whose deletion would cascade into `agent_runs` unless the
+caller opts in. Every call writes an audit row, including one that deleted
+nothing. The two labels those rows use — `task.backlog_cleared` and
+`command.pipelines_cleared` — are added in `20260822000700`, a separate file
+because PostgreSQL refuses to use an enum value in the transaction that added
+it.
+
+**Hosted: applied.** Run `32582241930`, `scope=clear-controls`, both versions
+absent from the ledger beforehand. The post-apply readback measured:
+
+```
+       proname       | security_definer | member_may_execute | anon_may_execute
+ --------------------+------------------+--------------------+------------------
+  clear_all_pipelines| t                | t                  | f
+  clear_backlog_tasks| t                | t                  | f
+```
+
+Both enum labels present. That readback came from the step that ran the DDL, so
+`scope=probe` now carries the same read independently, plus `service_role`
+EXECUTE and the two labels asked of `pg_enum` directly. An apply grading its own
+work cannot tell a wrong assertion apart from a wrong migration.
+
 **Unpublished any-model command candidate, 2026-08-22 (ADR-115):** Factory
 command admission now follows the selected posting instead of forcing every bot
 to impersonate the one executable worker. Exact `openai` / `gpt-5.3-codex`

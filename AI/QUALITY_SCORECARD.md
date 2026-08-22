@@ -2,6 +2,27 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-22 — Backlog and All Pipelines clear controls
+(ADR-119):** `main` commit `9761055` (#317). Local verification before merge is
+**PASS**: 345 test files, 4168 tests passed, 0 failed, 2 skipped, with lint,
+typecheck and production build green. `tests/integration/clear-backlog-and-pipelines.behavior.test.ts`
+is **PASS** at 15 cases against real PostgreSQL, covering the owner/admin check,
+the ten-character reason floor, the live-work skip, the cascade-into-run-history
+skip and its explicit opt-in, replay, and the audit row written by a clear that
+deleted nothing.
+
+Hosted application is **PASS**: run `32582241930`, `scope=clear-controls`,
+ledger empty for both `20260822000700` and `20260822000800` beforehand. The
+post-apply readback measured `security_definer t`, `member_may_execute t`,
+`anon_may_execute f` for `clear_backlog_tasks` and `clear_all_pipelines`, and
+both `activity_event_type` labels present.
+
+That evidence is **self-graded**: the step that applied the DDL also asserted
+it. `scope=probe` now reads the same catalogue independently — the definer
+flag, owner, and EXECUTE for `authenticated`, `anon` and `service_role`, plus
+the two labels from `pg_enum` — so a wrong assertion and a wrong migration can
+no longer cancel out. The independent read has not yet been dispatched.
+
 **Any-model safe command candidate (ADR-115): LOCAL/PENDING RELEASE.** Exact
 `openai` / `gpt-5.3-codex` remains the only executable identity. All other valid
 bounded provider/models are `record_only` and are contractually limited to
