@@ -10,6 +10,7 @@ import { JobSeekerApplicationsPanel } from "@/components/job-seeker/applications
 import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerPreferencesForm, type PreferencesView } from "@/components/job-seeker/preferences-form";
 import { JobSeekerProfileForm, type ProfileView } from "@/components/job-seeker/profile-form";
+import { ResumeUploadButton } from "@/components/job-seeker/resume-upload-button";
 import { Card, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -95,6 +96,15 @@ export function JobSeekerConsole() {
       <PageHeader
         title="Job Seeker"
         description="Your AI-powered job search command center: one verified career profile, clear preferences, and a pipeline you approve at every gate."
+        action={
+          /*
+           * In the header rather than inside the Career Profile form, where the
+           * old control sat below the fold on one tab. Filling a profile from a
+           * resume is the fastest route to a usable profile, and it should be
+           * the most visible thing on the page rather than the hardest to find.
+           */
+          state === "ready" ? <ResumeUploadButton onApplied={load} /> : undefined
+        }
       />
 
       <nav aria-label="Job Seeker sections" className="mb-6 flex flex-wrap gap-1.5">
@@ -138,7 +148,16 @@ export function JobSeekerConsole() {
           </Link>
         </Card>
       ) : section === "profile" ? (
-        <JobSeekerProfileForm initial={profile} onSaved={setProfile} />
+        <JobSeekerProfileForm
+          // Remounted when the stored profile changes, because the form
+          // seeds its fields from `initial` on first render only. Without
+          // this, applying a resume would update Supabase and leave the
+          // editor showing the old values — which the person could then
+          // save straight back over what they just applied.
+          key={profile?.updatedAt ?? "new"}
+          initial={profile}
+          onSaved={setProfile}
+        />
       ) : section === "preferences" ? (
         <JobSeekerPreferencesForm initial={preferences} onSaved={setPreferences} />
       ) : section === "discovery" ? (

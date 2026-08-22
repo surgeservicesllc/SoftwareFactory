@@ -66,12 +66,33 @@ export const proposalSchema = z
     certifications: textList(100, 200).optional(),
     technologies: textList(200, 120).optional(),
     industries: textList(50, 120).optional(),
+    /*
+     * The five below are not things a resume states outright, and the pattern
+     * pass never proposes them. They are here because the profile has them and
+     * a completed profile needs them filled — the completion pass supplies
+     * them as inferences, labelled as such. Bounds mirror the columns:
+     * salary_target 0..100000000, salary_currency ^[A-Z]{3}$, and
+     * work_arrangement the job_seeker_arrangement enum.
+     */
+    salaryTarget: z.number().int().min(0).max(100000000).optional(),
+    salaryCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    workArrangement: z.enum(["remote", "hybrid", "onsite", "any"]).optional(),
+    openToTravel: z.boolean().optional(),
+    openToRelocation: z.boolean().optional(),
   })
   .strict();
 
 export type ResumeProposal = z.infer<typeof proposalSchema>;
 export type ProposalField = keyof ResumeProposal;
-export type FieldSource = "pattern" | "model";
+/**
+ * Where a proposed value came from, in descending order of trust.
+ *
+ * `inferred` is the important one. The owner asked for every field to be
+ * filled, and a resume does not state a salary target or a travel preference —
+ * so those are guesses. Labelling them differently is what keeps "we filled
+ * this in for you" from being read as "your resume said this".
+ */
+export type FieldSource = "pattern" | "model" | "inferred";
 
 export type ExtractionOutcome = Readonly<{
   proposal: ResumeProposal;
