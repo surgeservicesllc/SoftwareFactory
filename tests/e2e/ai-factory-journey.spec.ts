@@ -43,6 +43,17 @@ test.describe("AI Factory live journey", () => {
 
   const email = process.env.AI_FACTORY_E2E_EMAIL ?? "factory.owner@example.com";
   const password = process.env.AI_FACTORY_E2E_PASSWORD ?? "fake-data-journey-2026!";
+  /*
+   * Whether step 1's installation rows are already in the database.
+   *
+   * The local lane seeds them, because installing a GitHub App is an account
+   * action against github.com that no runner can perform. A deployed target
+   * cannot be seeded at all -- nothing here has write access to a hosted
+   * database, and nothing should. So against a deployed site the eight-step
+   * walk below does not run: what runs is the signed-in read, which is the
+   * part a deployment can genuinely regress.
+   */
+  const seeded = process.env.AI_FACTORY_E2E_SEEDED === "1";
 
   /** The card for one step, found by its title. */
   function stepCard(page: import("@playwright/test").Page, title: string) {
@@ -50,6 +61,7 @@ test.describe("AI Factory live journey", () => {
   }
 
   test("walks all eight steps with fake data and reads them back from Supabase", async ({ page }) => {
+    test.skip(!seeded, "needs step 1's installation rows seeded (AI_FACTORY_E2E_SEEDED=1)");
     test.setTimeout(420_000);
 
     // ── Sign in (user admin-created and pre-confirmed by the runner) ──────
@@ -228,6 +240,55 @@ test.describe("AI Factory live journey", () => {
     await expect(stepCard(page, "Create Project").getByText("Done")).toBeVisible();
     await expect(stepCard(page, "Configure Pipeline").getByText("Done")).toBeVisible();
     await expect(page.getByText("Storefront Rebuild").first()).toBeVisible();
+  });
+
+  test("renders a live journey for a signed-in tenant, never a state it could not read", async ({ page }) => {
+    /*
+     * The half that holds against a deployed site as well as a local stack:
+     * a real sign-in, then the page derived from eight live reads.
+     *
+     * Every failure this catches is one a deployment can cause on its own --
+     * a read answering 503 behind a CDN, a session cookie the edge drops, a
+     * gate that renders for a signed-in tenant. The step list is asserted to
+     * exist, not to be complete: what is complete depends on the workspace,
+     * and a test that demanded more would only be testing its own fixture.
+     */
+    test.setTimeout(180_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+
+    await page.goto("/solutions/ai-factory");
+
+    // The page's own heading, in whatever state it renders.
+    await expect(page.getByRole("heading", { level: 1, name: "AI Factory" }))
+      .toBeVisible({ timeout: 45_000 });
+
+    // Not the signed-out gate, and not the panel for a snapshot it could not
+    // read: a signed-in tenant whose reads answer must get the journey.
+    await expect(page.getByRole("heading", { name: "Your factory, step by step" }))
+      .toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("Sign in to run your factory")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "AI Factory is unavailable" })).toHaveCount(0);
+
+    // All eight steps present, and a completion count derived from the live
+    // records rather than from a step the page assumed.
+    for (const title of [
+      "Connect Repository",
+      "Create Project",
+      "Configure Pipeline",
+      "Connect Bots",
+      "Assign Bots to Project",
+      "Configure Bot Settings",
+      "Issue a Command",
+      "Watch It Ship",
+    ]) {
+      await expect(stepCard(page, title)).toBeVisible();
+    }
+    await expect(page.getByText(/\d of 8 complete/)).toBeVisible();
   });
 
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {

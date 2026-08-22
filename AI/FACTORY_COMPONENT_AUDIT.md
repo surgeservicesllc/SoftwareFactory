@@ -145,6 +145,43 @@ version was dropped in the merge, and the heading fix now frames it.
    heading. A unit test walks 401, 409, and 503 and asserts the level-1
    heading survives each.
 
+## Round 5 — the deployed page, signed in as the approved fake account
+
+Round 3 reported the deployed journey as undrivable: sign-up answered `503`,
+so no fake identity existed to sign in with. That changed while this branch was
+open — `journey-prod-user.yml` (owner-approved, 2026-08-22) confirmed
+`jordan.seeker.prod1@example.org` in hosted GoTrue for exactly this purpose.
+Measured against `https://www.theagoras.com` on 2026-08-22 with that account:
+
+| Probe | Result |
+| --- | --- |
+| `POST /api/auth/sign-in` | **200** `{"authenticated":true,"next":"/solutions"}` — a real session on production |
+| The eight reads the page makes (`github/connections`, `projects`, `ai-accounts`, `bots`, `commands`, `project-pipelines`, `pipeline-templates`, `worker/status`) | **200 each**, every one scoped to that account's own organization |
+| What the page therefore renders | The live journey, not the sign-in gate and not the unreadable-snapshot panel |
+| The factory itself | Genuinely empty: no connection, no project, no bot, no command. Step 1 is the current step |
+| `worker/status` | `Worker Stale`, 0 active — consistent with **Not Connected** on step 8 |
+
+So the deployed page is wired to Supabase end to end for reads: a real session
+reaches real tenant-scoped rows through the production edge, and the page
+derives its state from them.
+
+**What stops the deployed walk at step 1, and why it is not a defect.** Steps
+2-8 all hang off a project, and `POST /api/projects` requires a
+`connectionId` and a `repositoryId` from a real GitHub App installation. That
+installation is an account action against github.com that no agent and no
+runner can perform, and a deployed target cannot be seeded past it: nothing
+here has write access to the hosted database, and nothing should. The local
+lane seeds exactly those rows and walks all eight steps in a browser; the
+deployed target gets the half a deployment can regress on its own.
+
+`.github/workflows/ai-factory-journey.yml` now carries that second half as a
+remote mode, following the Job Seeker lane: dispatched with
+`base_url=https://www.theagoras.com` it skips the local stack and drives the
+deployed site with the fake account, running the signed-in read
+(`AI_FACTORY_E2E_SEEDED` unset, so the eight-step walk skips itself). It cannot
+be dispatched until the workflow file reaches `main` — `workflow_dispatch`
+reads the default branch — so that dispatch waits on this pull request landing.
+
 ## Where this leaves the factory
 
 Working, with live evidence from tonight: the Claude bot job, the graph
@@ -155,6 +192,11 @@ tests, build).
 
 Blocked on something no agent may do:
 
+0. **A GitHub App installation for the fake journey account** — without it the
+   deployed AI Factory cannot get past step 1 for that account, so steps 2-8
+   are provable only against a seeded local stack. One install on
+   `jordan.seeker.prod1@example.org`'s workspace would let the remote lane walk
+   the whole journey on production.
 1. **Four migrations outstanding on hosted** (row 10) — needs
    `scripts/hosted-state-report.sql` to separate absent from ungranted, then an
    owner-approved apply. One of the four is already costing a user-facing path

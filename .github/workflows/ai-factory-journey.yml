@@ -17,9 +17,34 @@ name: AI Factory live journey
 # No deployment, no production credentials, no provider usage: everything is
 # local to the runner, and the only keys involved are the Supabase CLI's public
 # local-development defaults.
+#
+# Remote mode (owner-directed): dispatching with base_url set skips the local
+# stack entirely and drives the deployed site with the named fake account —
+# the same pattern the Job Seeker lane uses. It runs the signed-in read half
+# only: step 1 cannot be seeded on a deployed target, because nothing here has
+# write access to a hosted database and nothing should. What it proves is the
+# half a deployment can regress on its own — a real session against the real
+# edge, and eight live reads rendering the journey rather than a gate or an
+# unreadable snapshot.
 
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Remote target (e.g. https://www.theagoras.com). Empty = provision a local stack."
+        required: false
+        type: string
+        default: ""
+      email:
+        description: "Fake journey account email (remote mode)"
+        required: false
+        type: string
+        default: "jordan.seeker.prod1@example.org"
+      password:
+        description: "Fake journey account password (remote mode; throwaway test identity)"
+        required: false
+        type: string
+        default: "fake-data-journey-2026x"
   schedule:
     # Daily, clear of the other scheduled lanes.
     - cron: "53 8 * * *"
@@ -33,7 +58,7 @@ concurrency:
 
 jobs:
   journey:
-    name: Eight steps of fake data against a local stack
+    name: Fake-data journey (local stack, or a deployed target)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -77,6 +102,7 @@ jobs:
           exit 1
 
       - name: Start the local Supabase stack
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         # Only db, auth, rest and kong; the rest is excluded so the stack boots
         # lean. config.toml reads SMTP through env(), so dummies must exist for
         # auth to start — no mail is ever sent, because the journey's user is
@@ -91,6 +117,7 @@ jobs:
           npx --yes supabase@2 start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Mint the owner and point the app at the stack
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         # The local stack's keys are the Supabase CLI's public development
         # defaults, not secrets.
         run: |
@@ -111,6 +138,7 @@ jobs:
           } > .env.local
 
       - name: Seed the workspace and the GitHub installation
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         # Step 1 of the journey only: the rows a real App installation records.
         # Everything after this is performed in the browser by the spec.
         run: |
@@ -157,6 +185,7 @@ jobs:
           SEED
 
       - name: Build and serve the production app
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         run: |
           npm run build
           nohup npx next start > next-start.log 2>&1 &
@@ -168,12 +197,25 @@ jobs:
           tail -50 next-start.log
           exit 1
 
-      - name: Run the journey
+      - name: Run the journey (local stack)
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         env:
           AI_FACTORY_E2E: 1
+          AI_FACTORY_E2E_SEEDED: 1
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
 
+      - name: Run the journey (remote target)
+        # No AI_FACTORY_E2E_SEEDED: the eight-step walk skips itself, and what
+        # runs is the signed-in read against the deployed site.
+        if: ${{ inputs.base_url != '' && inputs.base_url != null }}
+        env:
+          AI_FACTORY_E2E: 1
+          PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
+          AI_FACTORY_E2E_EMAIL: ${{ inputs.email }}
+          AI_FACTORY_E2E_PASSWORD: ${{ inputs.password }}
+        run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
+
       - name: Report what the app logged if the journey failed
-        if: failure()
+        if: failure() && (inputs.base_url == '' || inputs.base_url == null)
         run: tail -80 next-start.log || true
