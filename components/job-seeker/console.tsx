@@ -24,7 +24,7 @@ import { cn } from "@/lib/cn";
  * never a mockup of one.
  */
 
-type SectionKey = "profile" | "preferences" | "discovery" | "applications" | "follow-up" | "analytics";
+export type SectionKey = "profile" | "preferences" | "discovery" | "applications" | "follow-up" | "analytics";
 
 const SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "profile", label: "Career Profile" },
@@ -37,12 +37,19 @@ const SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
 
 type State = "loading" | "ready" | "error" | "onboarding";
 
-export function JobSeekerConsole() {
+export function JobSeekerConsole({ section: fixedSection }: { section?: SectionKey } = {}) {
   const searchParams = useSearchParams();
   const requested = searchParams.get("section");
-  const section: SectionKey = SECTIONS.some((entry) => entry.key === requested)
-    ? (requested as SectionKey)
-    : "profile";
+  /*
+   * A route page names its own section; the query parameter is the fallback
+   * for the single-page form this console started as. Both are kept because
+   * links to `?section=` exist in the wild and should not break.
+   */
+  const section: SectionKey = fixedSection
+    ?? (SECTIONS.some((entry) => entry.key === requested) ? (requested as SectionKey) : "profile");
+  // The left navigation is the wayfinding now, so the in-page tab strip would
+  // be a second, competing copy of it.
+  const showTabs = fixedSection === undefined;
 
   const [state, setState] = useState<State>("loading");
   const [profile, setProfile] = useState<ProfileView | null>(null);
@@ -97,6 +104,7 @@ export function JobSeekerConsole() {
         description="Your AI-powered job search command center: one verified career profile, clear preferences, and a pipeline you approve at every gate."
       />
 
+      {showTabs ? (
       <nav aria-label="Job Seeker sections" className="mb-6 flex flex-wrap gap-1.5">
         {SECTIONS.map((entry) => (
           <Link
@@ -114,6 +122,7 @@ export function JobSeekerConsole() {
           </Link>
         ))}
       </nav>
+      ) : null}
 
       {state === "loading" ? (
         <Card className="min-h-48 animate-pulse">
