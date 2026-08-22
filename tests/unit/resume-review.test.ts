@@ -100,10 +100,14 @@ describe("with a credential configured", () => {
   });
 
   it("sends the extraction instruction, not a free-form request", async () => {
-    const create = vi.fn(async () => ({ content: [{ type: "text", text: "{}" }] }));
+    const create = vi.fn(
+      async (_body: Record<string, unknown>, _options?: Record<string, unknown>) => ({
+        content: [{ type: "text", text: "{}" }],
+      }),
+    );
     await reviewResume(RESUME, () => ({ messages: { create } }));
 
-    const [body] = create.mock.calls[0] as [Record<string, unknown>];
+    const [body] = create.mock.calls[0];
     expect(String(body.system)).toContain("never invent");
     expect(body.max_tokens).toBe(4096);
   });
