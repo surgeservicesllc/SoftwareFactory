@@ -40,6 +40,7 @@ type AccountView = {
   provider: string;
   providerLabel: string;
   authMethod: string;
+  credentialPurpose: string;
   displayName: string;
   providerIdentity: string | null;
   status: string;
@@ -81,7 +82,11 @@ export function AiAccountsPanel({
 }: {
   canManage: boolean;
   onChanged: () => Promise<void> | void;
-  onCreateBots?: (accounts: readonly { id: string; provider: string }[]) => Promise<void> | void;
+  onCreateBots?: (accounts: readonly {
+    id: string;
+    provider: string;
+    credentialPurpose: string;
+  }[]) => Promise<void> | void;
   selectedIds?: readonly string[];
   onSelectedChange?: (ids: readonly string[]) => void;
 }) {
@@ -308,6 +313,7 @@ export function AiAccountsPanel({
       await onCreateBots(connectableSelection.map((account) => ({
         id: account.id,
         provider: account.provider,
+        credentialPurpose: account.credentialPurpose,
       })));
       setSelected([]);
     } finally {

@@ -12,6 +12,19 @@ export const HARNESS_URL = process.env.PLAYWRIGHT_HARNESS_URL ?? "http://localho
 const launchOptions = chromiumExecutable
   ? { executablePath: chromiumExecutable }
   : undefined;
+/*
+ * Sandboxes that mandate an egress proxy export HTTPS_PROXY and trust its
+ * CA in the browser's NSS store — but Chromium only routes through it when
+ * told. Engage the proxy only for a remote HTTPS target: local runs
+ * (localhost app + harness) stay direct, and environments without a
+ * mandated proxy see no change.
+ */
+const proxyServer = baseURL.startsWith("https://")
+  ? process.env.HTTPS_PROXY ?? process.env.https_proxy
+  : undefined;
+const proxy = proxyServer
+  ? { server: proxyServer, bypass: "localhost,127.0.0.1" }
+  : undefined;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -31,6 +44,7 @@ export default defineConfig({
   timeout: 45_000,
   use: {
     baseURL,
+    ...(proxy ? { proxy } : {}),
     /*
      * No locator action waits forever.
      *

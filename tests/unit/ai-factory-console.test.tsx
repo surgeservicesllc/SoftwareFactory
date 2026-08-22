@@ -41,11 +41,29 @@ function stubFactory(overrides: Partial<Record<string, unknown>> = {}) {
     "/api/bots": { bots: [], assignments: [] },
     "/api/commands": { commands: [] },
     "/api/project-pipelines": { pipelines: [], canManage: true },
+    "/api/pipeline-templates": { templates: [] },
+    "/api/worker/status": {
+      worker: {
+        connectionStatus: "not_connected",
+        statusLabel: "Worker Not Connected",
+        lastHeartbeatAt: null,
+        activeWorkers: 0,
+        availableWorkers: 0,
+      },
+    },
   };
   const bodies = { ...defaults, ...overrides };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url in bodies) return jsonResponse(bodies[url]);
+    if (url in bodies) {
+      const configured = bodies[url];
+      const value = typeof configured === "function"
+        ? await (configured as () => unknown | Promise<unknown>)()
+        : configured;
+      if (value instanceof Error) throw value;
+      if (value instanceof Response) return value;
+      return jsonResponse(value);
+    }
     return jsonResponse({});
   }));
 }
@@ -72,6 +90,25 @@ describe("AiFactoryConsole", () => {
     expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
   });
 
+  it("keeps Connect Repository incomplete until at least one repository is authorized", async () => {
+    stubFactory({
+      "/api/github/connections": {
+        connections: [{
+          status: "connected",
+          installation: { id: 1 },
+          repositories: [],
+        }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Connect Repository")).closest("li") as HTMLElement;
+    expect(within(step).getByText(/1 installation · 0 repositories authorized/)).toBeInTheDocument();
+    expect(within(step).queryByText("Done")).not.toBeInTheDocument();
+    expect(screen.getByText("0 of 8 complete")).toBeInTheDocument();
+  });
+
   it("derives progress from the live records and shows the live evidence in its overlay", async () => {
     stubFactory({
       "/api/github/connections": {
@@ -95,7 +132,15 @@ describe("AiFactoryConsole", () => {
           status: "active",
           config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Ship search"] },
         }],
-        executor: { connected: true, label: "Connected", detail: "" },
+      },
+      "/api/worker/status": {
+        worker: {
+          connectionStatus: "connected",
+          statusLabel: "Worker Connected",
+          lastHeartbeatAt: "2026-08-21T20:00:00.000Z",
+          activeWorkers: 1,
+          availableWorkers: 1,
+        },
       },
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "running", project: { id: "p1", name: "SoftwareFactory" } }],
@@ -119,7 +164,7 @@ describe("AiFactoryConsole", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Command execution")).toBeInTheDocument();
-    expect(within(dialog).getByText("Connected")).toBeInTheDocument();
+    expect(within(dialog).getByText("Worker Connected")).toBeInTheDocument();
     expect(within(dialog).getByText("Ship search")).toBeInTheDocument();
     expect(within(dialog).getByText("Building")).toBeInTheDocument();
   });
@@ -221,6 +266,37 @@ describe("AiFactoryConsole", () => {
     expect(within(configure).getByText(/1 of 1 assignment configured/)).toBeInTheDocument();
   });
 
+  it("keeps configure incomplete until every active posting is configured", async () => {
+    stubFactory({
+      "/api/bots": {
+        assignments: [
+          {
+            id: "a1",
+            projectId: "p1",
+            roleId: "role-1",
+            status: "active",
+            config: { ...LEAST_PRIVILEGE_CONFIG, responsibilities: ["Review migrations"] },
+          },
+          {
+            id: "a2",
+            projectId: "p1",
+            roleId: "role-2",
+            status: "active",
+            config: LEAST_PRIVILEGE_CONFIG,
+          },
+        ],
+        bots: [{ id: "b1" }, { id: "b2" }],
+      },
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const configure = (await screen.findByText("Configure Bot Settings")).closest("li") as HTMLElement;
+    expect(within(configure).getByText(/1 of 2 assignments configured/)).toBeInTheDocument();
+    expect(within(configure).queryByText("Done")).not.toBeInTheDocument();
+  });
+
   it("opens the roster on the factory the journey is showing, not the first project", async () => {
     // With two projects these differ: the roster fell back to `projects[0]`
     // while the steps counted the active factory, so a person sent to
@@ -288,10 +364,14 @@ describe("AiFactoryConsole", () => {
       "/api/bots": {
         bots: [{ id: "b1" }],
         assignments: [],
-        executor: {
-          connected: false,
-          label: "Not Connected",
-          detail: "No worker executes them in this phase.",
+      },
+      "/api/worker/status": {
+        worker: {
+          connectionStatus: "not_connected",
+          statusLabel: "Worker Not Connected",
+          lastHeartbeatAt: null,
+          activeWorkers: 0,
+          availableWorkers: 0,
         },
       },
       "/api/commands": {
@@ -302,22 +382,23 @@ describe("AiFactoryConsole", () => {
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
     const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
-    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
+    expect(within(watch).getByText(/1 command queued; Worker Not Connected/)).toBeInTheDocument();
     expect(within(watch).queryByText(/Work is in flight/)).not.toBeInTheDocument();
     expect(within(watch).getByText(/When an executor is connected/)).toBeInTheDocument();
 
     fireEvent.click(within(watch).getByRole("button", { name: /watch execution/i }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Not Connected")).toBeInTheDocument();
+    expect(within(dialog).getByText("Worker Not Connected")).toBeInTheDocument();
     expect(within(dialog).getByText(/will not start until an executor is connected/)).toBeInTheDocument();
   });
 
-  it("treats a missing executor field as Not Connected", async () => {
+  it("treats a missing worker field as Not Connected", async () => {
     // Absent must never read as connected: an older payload, a partial
     // response, or a failed read all land here.
     stubFactory({
       "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
       "/api/bots": { bots: [{ id: "b1" }], assignments: [] },
+      "/api/worker/status": {},
       "/api/commands": {
         commands: [{ id: "c1", prompt: "Ship search", status: "queued", project: { id: "p1", name: "SoftwareFactory" } }],
       },
@@ -325,7 +406,7 @@ describe("AiFactoryConsole", () => {
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
     const watch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
-    expect(within(watch).getByText(/the executor is Not Connected/)).toBeInTheDocument();
+    expect(within(watch).getByText(/1 command queued; Worker Not Connected/)).toBeInTheDocument();
   });
 
   it("does not call Configure Pipeline done until a pipeline is actually selected", async () => {
@@ -370,21 +451,102 @@ describe("AiFactoryConsole", () => {
     expect(within(chips).queryByText("Bug Sweep")).not.toBeInTheDocument();
   });
 
-  it("shows nothing rather than zeros it cannot stand behind", async () => {
-    // Measured on the real route on 2026-08-21: with the reads answering 503,
-    // the page rendered the full eight-step journey with every step incomplete
-    // -- a backend blip telling an owner with all eight steps done that they
-    // had none, in exactly the layout the truth uses.
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(
-      { error: { code: "connections_unavailable", message: "GitHub connections could not be loaded." } },
-      503,
-    )));
+  it("keeps the selected factory and progress when a later projects read fails", async () => {
+    let projectReads = 0;
+    stubFactory({
+      "/api/github/connections": {
+        connections: [{
+          installation: { id: 1 },
+          repositories: [{ archived: false, selected: true }],
+          status: "connected",
+        }],
+      },
+      "/api/projects": () => {
+        projectReads += 1;
+        return projectReads === 1
+          ? {
+              projects: [
+                { id: "p1", name: "First Project" },
+                { id: "p2", name: "Second Project" },
+              ],
+            }
+          : jsonResponse({ error: "temporarily unavailable" }, 503);
+      },
+      "/api/project-pipelines": {
+        pipelines: [{ projectId: "p2", templateKey: "general_audit", name: "General Audit" }],
+      },
+    });
 
     render(<AiFactoryConsole builtIns={BUILT_INS} />);
 
-    expect(await screen.findByText("Your factory's state could not be read")).toBeInTheDocument();
-    expect(screen.queryByText(/of 8 complete/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Connect Repository")).not.toBeInTheDocument();
+    const picker = await screen.findByLabelText("Factory");
+    fireEvent.change(picker, { target: { value: "p2" } });
+    expect(screen.getByText("This factory: Second Project")).toBeInTheDocument();
+    expect(screen.getByText("3 of 8 complete")).toBeInTheDocument();
+
+    // Closing a real step refreshes all eight slices. The second projects read
+    // fails, so the selected p2 snapshot must remain intact instead of becoming
+    // a fabricated empty factory.
+    const connect = screen.getByText("Connect Repository").closest("li") as HTMLElement;
+    fireEvent.click(within(connect).getByRole("button", { name: /connect github/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    const warning = await screen.findByRole("alert");
+    expect(within(warning).getByText("Factory data may be out of date")).toBeInTheDocument();
+    expect(within(warning).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Factory")).toHaveValue("p2");
+    expect(screen.getByText("This factory: Second Project")).toBeInTheDocument();
+    expect(screen.getByText("3 of 8 complete")).toBeInTheDocument();
+  });
+
+  it("shows unavailable with Retry when the first snapshot is incomplete", async () => {
+    let projectReads = 0;
+    stubFactory({
+      "/api/projects": () => {
+        projectReads += 1;
+        return projectReads === 1
+          ? jsonResponse({ error: "temporarily unavailable" }, 503)
+          : { projects: [] };
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
+    expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("0 of 8 complete")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "AI Factory is unavailable" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["a rejected read", new Error("network down")],
+    ["unreadable JSON", new Response("{", { status: 200 })],
+  ])("shows unavailable instead of partial progress for %s", async (_label, failure) => {
+    stubFactory({ "/api/commands": failure });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(await screen.findByRole("heading", { name: "AI Factory is unavailable" })).toBeInTheDocument();
+    expect(screen.queryByText("0 of 8 complete")).not.toBeInTheDocument();
+  });
+
+  it("recognizes a 401 from any required read", async () => {
+    stubFactory({ "/api/projects": jsonResponse({}, 401) });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(await screen.findByText("Sign in to run your factory")).toBeInTheDocument();
+  });
+
+  it("recognizes a 409 from any required read", async () => {
+    stubFactory({ "/api/commands": jsonResponse({}, 409) });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    expect(await screen.findByText("Finish setting up")).toBeInTheDocument();
   });
 
   it("fails closed for a signed-out visitor", async () => {
@@ -472,5 +634,62 @@ describe("Create New AI Factory", () => {
     await waitFor(() => {
       expect(screen.getByText(/1 installation/)).toBeInTheDocument();
     });
+  });
+
+  it("does not carry another factory's queued command count into a new factory", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "First" }] },
+      "/api/commands": {
+        commands: Array.from({ length: 6 }, (_, index) => ({
+          id: `c${index + 1}`,
+          project: { id: "p1", name: "First" },
+          prompt: `queued command ${index + 1}`,
+          status: "queued",
+        })),
+      },
+    });
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const originalWatch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(originalWatch).getByText(/6 commands queued/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Create New AI Factory/i }));
+    const createDialog = await screen.findByRole("dialog");
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Close" }));
+
+    const newWatch = (await screen.findByText("Watch It Ship")).closest("li") as HTMLElement;
+    expect(within(newWatch).getByText("Nothing has run yet")).toBeInTheDocument();
+    expect(within(newWatch).queryByText(/6 commands queued/)).not.toBeInTheDocument();
+
+    fireEvent.click(within(newWatch).getByRole("button", { name: /watch execution/i }));
+    const watchDialog = await screen.findByRole("dialog");
+    expect(within(watchDialog).getByText(/No commands yet/)).toBeInTheDocument();
+  });
+
+  it("does not let a new factory fall back to an existing project", async () => {
+    stubFactory(twoProjects);
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Create New AI Factory/i }));
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    const assign = (await screen.findByText("Assign Bots to Project")).closest("li") as HTMLElement;
+    fireEvent.click(within(assign).getByRole("button", { name: /assign bots/i }));
+    dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/opens once your first project exists/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    const command = (await screen.findByText("Issue a Command")).closest("li") as HTMLElement;
+    fireEvent.click(within(command).getByRole("button", { name: /give a bot work/i }));
+    dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByRole("option", {
+      name: "Create this factory's project first",
+    })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Queue command" })).toBeDisabled();
+
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => (
+      String(input).includes("/api/projects/p1/bots")
+    ))).toBe(false);
   });
 });

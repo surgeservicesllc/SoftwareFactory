@@ -8,6 +8,7 @@ const connectedAccount = {
   id: "acc-1",
   provider: "anthropic",
   providerLabel: "Claude",
+  credentialPurpose: "subscription",
   displayName: "Claude account 1",
   status: "connected",
   lastVerifiedAt: null,
@@ -273,6 +274,7 @@ const disconnectedAccount = {
   id: "acc-4",
   provider: "openai",
   providerLabel: "Codex",
+  credentialPurpose: "subscription",
   displayName: "Codex Daniel",
   status: "disconnected",
   lastVerifiedAt: null,
@@ -283,6 +285,7 @@ const needsReauthAccount = {
   id: "acc-2",
   provider: "anthropic",
   providerLabel: "Claude",
+  credentialPurpose: "subscription_2",
   displayName: "Claude Blackstone",
   status: "needs_reauth",
   lastVerifiedAt: null,
@@ -504,7 +507,7 @@ describe("BotManagerHome — selecting one or many", () => {
     // being told one already exists.
     expect(provisioned).toEqual([
       { provider: "anthropic", credential: "subscription", additional: false },
-      { provider: "anthropic", credential: "subscription", additional: true },
+      { provider: "anthropic", credential: "subscription_2", additional: true },
     ]);
   });
 
@@ -547,7 +550,7 @@ describe("BotManagerHome — selecting one or many", () => {
 });
 
 describe("BotManagerHome — inside the AI Factory", () => {
-  const project2 = { id: "00000000-0000-4000-8000-000000000099", name: "Storefront" };
+  const project2 = { id: "00000000-0000-4000-8000-000000000099", name: "Factory Two" };
 
   it("adds the selected bots to the journey's project and returns", async () => {
     const user = userEvent.setup();
@@ -591,19 +594,19 @@ describe("BotManagerHome — inside the AI Factory", () => {
      */
     const user = userEvent.setup();
     const assigned: unknown[] = [];
-    let provisioned = 0;
+    const provisioned: unknown[] = [];
     let botsRead = 0;
-    const newBot = { ...secondBot, id: "bot-new", name: "Claude Builder 2" };
+    const newBot = { ...readyBot, id: "bot-new", name: "Claude Builder 2" };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/ai-accounts") {
         return {
           ok: true, status: 200,
-          json: async () => ({ accounts: [connectedAccount], canManage: true }),
+          json: async () => ({ accounts: [needsReauthAccount], canManage: true }),
         } as unknown as Response;
       }
       if (url === "/api/bots/connect/provision") {
-        provisioned += 1;
+        provisioned.push(JSON.parse(String(init?.body)));
         return {
           ok: true, status: 200,
           json: async () => ({ provisioned: true, outcome: "created" }),
@@ -614,7 +617,7 @@ describe("BotManagerHome — inside the AI Factory", () => {
         return {
           ok: true, status: 200,
           json: async () => ({
-            bots: provisioned > 0 && botsRead > 1 ? [readyBot, newBot] : [readyBot],
+            bots: provisioned.length > 0 && botsRead > 1 ? [readyBot, newBot] : [readyBot],
             assignments: [], roles: [role], projects: [project], canManage: true,
           }),
         } as unknown as Response;
@@ -629,12 +632,91 @@ describe("BotManagerHome — inside the AI Factory", () => {
     render(<BotManagerHome projectContext={project2} onFinished={() => {}} />);
 
     await user.click(
-      await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }),
+      await screen.findByRole("button", { name: `Select ${needsReauthAccount.displayName}` }),
     );
     await user.click(screen.getByRole("button", { name: /^add bots$/i }));
 
-    expect(provisioned).toBe(1);
+    expect(provisioned).toEqual([{
+      provider: "anthropic",
+      credential: "subscription_2",
+      additional: true,
+    }]);
     expect(assigned).toEqual([{ bots: [{ botId: newBot.id, roleId: role.id }] }]);
+  });
+
+  it("scopes the per-bot assignment dialog to the journey's project", async () => {
+    const user = userEvent.setup();
+    const assigned: Array<{ url: string; body: unknown }> = [];
+    let finished = 0;
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [role],
+      // The fabric's first project must never become the scoped target.
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes("/api/projects/")) {
+          assigned.push({ url, body: JSON.parse(String(init.body)) });
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(
+      <BotManagerHome projectContext={project2} onFinished={() => { finished += 1; }} />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /^add to project$/i }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /add claude builder 1 to a project/i,
+    });
+    expect(within(dialog).getByText(project2.name)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: /^project$/i })).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: /^add to project$/i }));
+
+    expect(assigned).toEqual([{
+      url: `/api/projects/${project2.id}/bots`,
+      body: { bots: [{ botId: readyBot.id, roleId: role.id }] },
+    }]);
+    expect(finished).toBe(1);
+  });
+
+  it("keeps account and bot management but exposes no assignment path without a project", async () => {
+    const user = userEvent.setup();
+    const projectPosts: string[] = [];
+    stub({
+      accounts: [connectedAccount],
+      bots: [readyBot],
+      roles: [role],
+      projects: [project],
+      extra: (url, init) => {
+        if (init?.method === "POST" && url.includes("/api/projects/")) {
+          projectPosts.push(url);
+          return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        }
+        return null;
+      },
+    });
+    render(<BotManagerHome projectContext={null} />);
+
+    expect(await screen.findByRole("button", { name: /add ai account/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create bot/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Rename ${readyBot.name}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove ${readyBot.name}` })).toBeInTheDocument();
+
+    expect(screen.queryByRole("button", { name: `Select ${readyBot.name}` })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^add to project$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /add \d+ to a project/i })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /^project$/i })).toBeNull();
+
+    // Account selection still supports creating bots; it does not reveal the
+    // fabric's unrelated project as an assignment target.
+    await user.click(
+      await screen.findByRole("button", { name: `Select ${connectedAccount.displayName}` }),
+    );
+    expect(screen.getByRole("button", { name: /create 1 bot/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^add bots$/i })).toBeNull();
+    expect(projectPosts).toEqual([]);
   });
 
   it("asks for a project when there is no journey to supply one", async () => {

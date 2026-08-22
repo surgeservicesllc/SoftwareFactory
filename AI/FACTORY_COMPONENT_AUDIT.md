@@ -133,6 +133,12 @@ page, `PageHeader` included. `/solutions/ai-factory renders its heading, stays
 in the viewport, and passes axe` failed on all three browser shards — the page
 had no `h1` and no place in the heading outline, only an `h2` inside a card.
 
+Main landed a stronger unavailable state of its own while this branch was open
+(any of the eight reads can discover signed-out or setup; an incomplete
+snapshot keeps the last complete one and marks it stale; the panel carries a
+Retry that re-reads). That is the one kept here — this branch's narrower
+version was dropped in the merge, and the heading fix now frames it.
+
 8. **A blocked console dropped the page's title.** Every early return now
    renders inside the same header ("AI Factory" plus its one description),
    so loading, signed-out, unavailable, and setup all keep the page's

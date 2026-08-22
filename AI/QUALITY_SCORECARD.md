@@ -1,6 +1,20 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
+
+**Addendum, 2026-08-22 — Job Seeker, production-behavior certified:** the
+evidence tier above local-stack certification now exists: the full
+fake-data journey ran against https://www.theagoras.com itself (journey
+lane remote mode, run 32540879299 — first attempt timed out on a
+production cold start immediately after sign-in; the CI retry completed
+the entire spec, so the run is recorded flaky-then-green). Confirmed
+independently by signing in to production as the fake account and
+reading the production API back: 42 jobs in its RLS-isolated workspace
+(2 manual + 40 imported live from Greenhouse in production), all 42
+scored, analytics recomputed from the walked rows (1 application, 100%
+measured response rate, 1 interview-stage count, 1 offer). Every
+capability on /job-seeker has now been observed working in production,
+wired to hosted Supabase end to end.
 
 **Addendum, 2026-08-21 — Job Seeker, live-stack certified (ADR-097):** the
 surface's strongest evidence tier so far: one continuous browser journey
@@ -97,13 +111,18 @@ direct browser write path), `tests/unit/project-pipelines-routes.test.ts` (14
 cases) and the two component suites. Lint, typecheck, the full 3258-test suite
 and a production build are green on this change.
 
-**The migration is unhosted**, so no production claim is made and none is
-implied by the console: `/api/project-pipelines` reports PGRST202 as **Not
-Connected** with its own code, and the Use button is disabled naming that
-reason rather than rendering an empty selection set. The hosted evidence class
-for this feature is therefore *none* until
-`.github/workflows/apply-hosted-migrations.yml` (`scope=broker-functions`, which
-now carries the file) is run by the owner.
+**Hosted evidence class: schema present, behaviour unobserved.** Run
+`32536895799` (2026-08-21 23:27Z, `scope=pipeline-selection`) applied the
+migration to the hosted project and its after-ledger listing shows
+`20260821000300` local and remote. That proves the DDL ran — the table, the
+three definer functions, and the ledger row — and nothing more. No one has yet
+pressed Use on the live site and watched the selection survive a refresh, so no
+production *behavioural* claim is made here.
+
+The Not Connected path is retained and still correct for any database without
+the migration: `/api/project-pipelines` reports PGRST202 with its own code and
+the Use button is disabled naming that reason, rather than rendering an empty
+selection set that would make a working button look broken.
 
 **Addendum, 2026-08-18 — hosted evidence, measured (ADR-081):** the "the
 migration is unhosted, so no hosted claim is made" qualifier attached to

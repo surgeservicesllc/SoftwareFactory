@@ -56,6 +56,8 @@ type ProjectOption = {
   status: string;
 };
 
+type ProjectContext = Pick<ProjectOption, "id" | "name">;
+
 type TaskOption = {
   id: string;
   project: { id: string; name: string } | null;
@@ -85,7 +87,19 @@ function canonicalTaskIds(taskIds: readonly string[]) {
   return [...new Set(taskIds)].sort((left, right) => left.localeCompare(right));
 }
 
-export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
+export function CommandComposer({
+  onSaved,
+  projectContext,
+}: {
+  onSaved?: () => void;
+  /**
+   * The project the caller is already operating on. `null` deliberately
+   * means that caller has a project concept but no project yet; it must not
+   * fall through to the first project in the workspace. `undefined` keeps
+   * the standalone composer behaviour and lets the person choose.
+   */
+  projectContext?: ProjectContext | null;
+} = {}) {
   const [instruction, setInstruction] = useState("");
   const [commandType, setCommandType] = useState<CommandType>("other");
   const [acceptanceText, setAcceptanceText] = useState("");
@@ -111,7 +125,32 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
 
   useEffect(() => {
     let active = true;
+
+    async function loadTasks() {
+      try {
+        const tasksResponse = await fetch("/api/tasks?limit=100", { cache: "no-store" });
+        const tasksBody = (await tasksResponse.json()) as { tasks?: TaskOption[] };
+        if (!tasksResponse.ok) throw new Error("Dependency selection unavailable");
+        if (!active) return;
+        setTasks(tasksBody.tasks ?? []);
+        setTasksState("ready");
+      } catch {
+        if (active) setTasksState("unavailable");
+      }
+    }
+
     async function loadProjects() {
+      if (projectContext !== undefined) {
+        const contextualProjects: ProjectOption[] = projectContext
+          ? [{ ...projectContext, connectionStatus: "connected", status: "active" }]
+          : [];
+        setProjects(contextualProjects);
+        setProjectId(projectContext?.id ?? "");
+        setProjectsState("ready");
+        await loadTasks();
+        return;
+      }
+
       try {
         const response = await fetch("/api/projects", { cache: "no-store" });
         const body = (await response.json()) as { projects?: ProjectOption[] };
@@ -132,17 +171,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
           : availableProjects[0]?.id ?? "";
         setProjectId(preselected);
         setProjectsState("ready");
-
-        try {
-          const tasksResponse = await fetch("/api/tasks?limit=100", { cache: "no-store" });
-          const tasksBody = (await tasksResponse.json()) as { tasks?: TaskOption[] };
-          if (!tasksResponse.ok) throw new Error("Dependency selection unavailable");
-          if (!active) return;
-          setTasks(tasksBody.tasks ?? []);
-          setTasksState("ready");
-        } catch {
-          if (active) setTasksState("unavailable");
-        }
+        await loadTasks();
       } catch {
         if (active) {
           setProjectsState("unavailable");
@@ -154,7 +183,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [projectContext]);
 
   async function submitCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -252,7 +281,9 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
   }
 
   const projectPlaceholder =
-    projectsState === "loading"
+    projectContext === null
+      ? "Create this factory's project first"
+      : projectsState === "loading"
       ? "Loading projects…"
       : projectsState === "unavailable"
         ? "Sign in to choose a project"
@@ -322,7 +353,7 @@ export function CommandComposer({ onSaved }: { onSaved?: () => void } = {}) {
               setDependencyTaskIds([]);
               markEdited();
             }}
-            disabled={projectsState !== "ready" || projects.length === 0}
+            disabled={projectContext !== undefined || projectsState !== "ready" || projects.length === 0}
             className="input"
           >
             {projects.length === 0 ? <option>{projectPlaceholder}</option> : null}

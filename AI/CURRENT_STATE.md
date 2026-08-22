@@ -27,6 +27,18 @@ shell/session code, state files, credentials, relay, merge path, or execution
 authority was imported. No schema, RLS, workflow, provider, autonomy, or
 production change is part of this increment.
 
+**Addendum, 2026-08-21 late (Job Discovery operational — ADR-105):**
+discovery on /job-seeker now has two real ways in: manual recording and
+public-board import. Greenhouse and Lever are identifier-driven public
+adapters (their public APIs need no credential — only which board to
+read, typed on the card); `POST /api/job-seeker/import` fetches up to 40
+postings per request, records each through the same evaluate → job →
+match → application chain as manual entry, counts duplicates against the
+unique index, and states the board's true total. Rows carry `via
+{source}` attribution; LinkedIn remains Not Connected pending real OAuth.
+The journey proves the live provider round-trip (missing-board refusal
+verbatim, then a real board imported and scored end to end).
+
 **Addendum, 2026-08-21 (Job Seeker verified live — ADR-097):** the whole
 /job-seeker surface has now been driven in a real browser against a real
 Supabase stack (`supabase start` with the full migration chain + the
@@ -53,7 +65,8 @@ across reloads instead of vanishing after the upload moment.
 
 **Addendum, 2026-08-18 (a project's selected pipelines):** Configure Pipeline
 is a step that can be worked on. `project_pipelines` (migration
-`20260821000300`, **unhosted**) records which templates a project runs — many
+`20260821000300`, applied on production by run `32536895799`) records which
+templates a project runs — many
 per project, built-in or custom — behind RLS with FORCE RLS, every table
 privilege revoked from `anon`, `authenticated` and `service_role`, and three
 definer functions as the only path: owner/administrator
@@ -64,9 +77,10 @@ and advisory-locked per project-and-key) and member `list_project_pipelines`.
 not — and the journey reads it back: the step is done only when at least one
 pipeline is selected, and the chosen names render on the page rather than only
 inside the overlay. Planning a real graph, which Use used to do, is now its own
-**Plan graph** button. Until the migration is applied on the hosted project the
-route reports PGRST202 as **Not Connected** and the console disables Use naming
-that reason (ADR-098).
+**Plan graph** button. On a database *without* the migration — a fresh preview
+branch, a restored snapshot — the route reports PGRST202 as **Not Connected**
+and the console disables Use naming that reason, so a missing migration can
+never present as an empty selection set (ADR-098).
 
 **Addendum, 2026-08-17 (AI Factory guided journey):** `/solutions/ai-factory`
 ("AI Factory" in the left navigation under Overview) is the owner's guided

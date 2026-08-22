@@ -66,18 +66,30 @@ Last triaged: 2026-08-21
   gaps closed: the CRM details editor (notes / application URL /
   follow-up date had PATCH support but no UI) and the persistent
   current-resume link (the `resume_upload_id` pointer went unread).
-- [ ] Open (needs external credentials/decisions): activate an import
-  adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
-  _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
-  model-polished document variants through the job_search_pipeline graph
-  template (live and launchable from Pipelines → Templates), QA-lens-checked
-  against the deterministic baseline.
+- [x] Greenhouse + Lever imports (2026-08-21, ADR-105): the two public
+  adapters turned out to need identifiers, not credentials — real
+  `fetchPostings` against the providers' keyless APIs, identifier-driven
+  from the page, recorded and scored through the shared chain, journey-
+  proven live (40/40 imported rows scored and in the pipeline).
+- [ ] Open (needs external credentials/decisions): LinkedIn import
+  (SOFTWAREFACTORY_LINKEDIN_CLIENT_ID+SECRET — real OAuth app, reviewed
+  integration); model-polished document variants through the
+  job_search_pipeline graph template (live and launchable from
+  Pipelines → Templates), QA-lens-checked against the deterministic
+  baseline.
 - [x] CI lane (2026-08-21): `.github/workflows/job-seeker-journey.yml` —
   workflow_dispatch + daily schedule; provisions `supabase start` (lean
   exclusion set) on the runner, mints the pre-confirmed journey user
   through GoTrue's admin API, builds and serves the production app, and
   runs the JOB_SEEKER_E2E journey. No deployment, no production
   credentials, no provider usage.
+- [x] Production run (2026-08-22, owner goal): the lane's remote mode
+  (`base_url` dispatch input) drove the whole journey against
+  https://www.theagoras.com as the owner-approved fake account — run
+  32540879299 green (flaky first attempt on a cold start, full pass on
+  the CI retry), verified by reading production's API back as that user
+  (42 jobs, 40 imported live via Greenhouse, all scored, analytics
+  correct). Fake-account cleanup is one dashboard delete.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 
@@ -108,11 +120,12 @@ Last triaged: 2026-08-21
 - [x] Cover the migration against the real chain (owner allowed, member read-only,
   outsider denied, anonymous denied, no direct browser write path), the route boundary,
   the toggle, and the selected-state layout at every swept width.
-- [ ] Apply `20260821000300` to hosted Supabase: run the apply workflow with
-  `confirm=apply`, `scope=pipeline-selection` — a one-file scope added for it, so
-  production is reached without re-running twenty-three unrelated migrations. Until
-  then `/api/project-pipelines` reports PGRST202 as **Not Connected** and the Use
-  button is disabled naming that reason.
+- [x] Apply `20260821000300` to hosted Supabase — run `32536895799`, 2026-08-21
+  23:27Z, `confirm=apply` `scope=pipeline-selection`; the after-ledger listing shows
+  the version local and remote, and the step reloaded the PostgREST schema cache.
+- [ ] Observe the behaviour on production: press Use on `/solutions/ai-factory`,
+  refresh, and confirm the selection is still there. The ledger row proves the DDL
+  ran; it does not prove the journey reads it back on the live site.
 
 ## Project repository picker (2026-08-16)
 

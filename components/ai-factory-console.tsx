@@ -85,7 +85,13 @@ type State =
   | { kind: "signed-out" }
   | { kind: "unavailable" }
   | { kind: "setup" }
-  | { kind: "ready"; data: FactoryData };
+  | { kind: "ready"; data: FactoryData; stale: boolean };
+
+function staleOrUnavailable(current: State): State {
+  return current.kind === "ready"
+    ? { ...current, stale: true }
+    : { kind: "unavailable" };
+}
 
 async function readJson<T>(response: Response): Promise<T | null> {
   try {
@@ -172,12 +178,12 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
    */
   const [projectIdsBeforeNew, setProjectIdsBeforeNew] = useState<readonly string[] | null>(null);
   // Which project the roster steps operate on. Empty until projects load;
-  // falls back to the first project if the chosen one disappears.
+  // falls back to the factory currently shown if the chosen one disappears.
   const [rosterProjectId, setRosterProjectId] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [connections, projects, accounts, bots, commands, pipelines, templates] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         fetch("/api/github/connections", { cache: "no-store" }),
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/ai-accounts", { cache: "no-store" }),
@@ -185,60 +191,54 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         fetch("/api/commands", { cache: "no-store" }),
         fetch("/api/project-pipelines", { cache: "no-store" }),
         fetch("/api/pipeline-templates", { cache: "no-store" }),
+        fetch("/api/worker/status", { cache: "no-store" }),
       ]);
 
-      const first = connections.status === "fulfilled" ? connections.value : null;
-      if (first && first.status === 401) {
+      const responses = results.map((result) => (
+        result.status === "fulfilled" ? result.value : null
+      ));
+
+      // Authentication and tenant setup are whole-page states. Any one of the
+      // eight routes can discover that state first, so none of them is allowed
+      // to masquerade as an empty slice while only the connections route is
+      // inspected.
+      if (responses.some((response) => response?.status === 401)) {
         setState({ kind: "signed-out" });
         return;
       }
-      if (first && first.status === 409) {
+      if (responses.some((response) => response?.status === 409)) {
         setState({ kind: "setup" });
         return;
       }
-      // Anything else that is not a readable answer is unknown, not empty.
-      // The page used to fall through to a zeroed journey: a 503 from Supabase
-      // told an owner with all eight steps done that they had none, in the same
-      // confident layout as the truth. Measured against the real route on
-      // 2026-08-21, when the reads answered 503 and the journey rendered
-      // "0 of 8 complete".
-      if (!first || !first.ok) {
-        setState({ kind: "unavailable" });
+      // A factory view is one snapshot, not seven independently optional
+      // cards. If even one request rejected or returned a non-success status,
+      // retain the last complete snapshot instead of turning that slice into a
+      // synthetic zero. On first load there is no honest progress to render.
+      if (responses.some((response) => !response?.ok)) {
+        setState(staleOrUnavailable);
         return;
       }
 
-      const data: FactoryData = {
-        connectedInstallations: 0,
-        repositories: 0,
-        projects: [],
-        connectedAccounts: 0,
-        bots: 0,
-        assignments: [],
-        commands: [],
-        pipelines: [],
-        executor: { connected: false, label: "Not Connected", detail: "" },
-        customTemplates: 0,
-      };
-
-      if (first?.ok) {
-        const body = await readJson<{ connections?: Array<{ status: string; installation: unknown; repositories?: Array<{ selected: boolean; archived: boolean }> }> }>(first);
-        const live = (body?.connections ?? []).filter((connection) => connection.status === "connected" && connection.installation);
-        data.connectedInstallations = live.length;
-        data.repositories = live.reduce(
-          (sum, connection) => sum + (connection.repositories ?? []).filter((repository) => repository.selected && !repository.archived).length,
-          0,
-        );
-      }
-      if (projects.status === "fulfilled" && projects.value.ok) {
-        const body = await readJson<{ projects?: Array<{ id: string; name: string }> }>(projects.value);
-        data.projects = (body?.projects ?? []).map((project) => ({ id: project.id, name: project.name }));
-      }
-      if (accounts.status === "fulfilled" && accounts.value.ok) {
-        const body = await readJson<{ accounts?: Array<{ status: string }> }>(accounts.value);
-        data.connectedAccounts = (body?.accounts ?? []).filter((account) => account.status === "connected").length;
-      }
-      if (bots.status === "fulfilled" && bots.value.ok) {
-        const body = await readJson<{
+      const [
+        connectionsBody,
+        projectsBody,
+        accountsBody,
+        botsBody,
+        commandsBody,
+        pipelinesBody,
+        templatesBody,
+        workerBody,
+      ] = await Promise.all([
+        readJson<{
+          connections?: Array<{
+            status: string;
+            installation: unknown;
+            repositories?: Array<{ selected: boolean; archived: boolean }>;
+          }>;
+        }>(responses[0]!),
+        readJson<{ projects?: Array<{ id: string; name: string }> }>(responses[1]!),
+        readJson<{ accounts?: Array<{ status: string }> }>(responses[2]!),
+        readJson<{
           bots?: unknown[];
           assignments?: Array<{
             projectId?: string | null;
@@ -246,50 +246,85 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
             config?: Partial<AssignmentConfig>;
           }>;
           executor?: { connected?: boolean; label?: string; detail?: string };
-        }>(bots.value);
-        // Absent or unreadable reads as Not Connected. The one direction this
-        // must never fail is claiming an executor that is not there.
-        data.executor = {
-          connected: body?.executor?.connected === true,
-          label: body?.executor?.label ?? "Not Connected",
-          detail: body?.executor?.detail ?? "",
-        };
-        data.bots = (body?.bots ?? []).length;
-        data.assignments = (body?.assignments ?? [])
+        }>(responses[3]!),
+        readJson<{ commands?: FactoryData["commands"] }>(responses[4]!),
+        readJson<{ pipelines?: FactoryData["pipelines"] }>(responses[5]!),
+        readJson<{ templates?: unknown[] }>(responses[6]!),
+        readJson<{
+          worker?: {
+            connectionStatus?: string;
+            statusLabel?: string;
+            lastHeartbeatAt?: string | null;
+            activeWorkers?: number;
+            availableWorkers?: number;
+          };
+        }>(responses[7]!),
+      ]);
+
+      if (
+        connectionsBody === null
+        || projectsBody === null
+        || accountsBody === null
+        || botsBody === null
+        || commandsBody === null
+        || pipelinesBody === null
+        || templatesBody === null
+        || workerBody === null
+      ) {
+        setState(staleOrUnavailable);
+        return;
+      }
+
+      const data: FactoryData = {
+        connectedInstallations: (connectionsBody.connections ?? []).filter(
+          (connection) => connection.status === "connected" && connection.installation,
+        ).length,
+        repositories: (connectionsBody.connections ?? [])
+          .filter((connection) => connection.status === "connected" && connection.installation)
+          .reduce(
+            (sum, connection) => sum + (connection.repositories ?? [])
+              .filter((repository) => repository.selected && !repository.archived).length,
+            0,
+          ),
+        projects: (projectsBody.projects ?? []).map((project) => ({
+          id: project.id,
+          name: project.name,
+        })),
+        connectedAccounts: (accountsBody.accounts ?? [])
+          .filter((account) => account.status === "connected").length,
+        bots: (botsBody.bots ?? []).length,
+        assignments: (botsBody.assignments ?? [])
           .filter((assignment) => assignment.status !== "released")
           .map((assignment) => ({
-            // Read from `config`, where the API actually puts these fields, and
-            // measured against the least-privilege baseline. The previous check
-            // (`roleId || responsibilities.length`) read a field that is not on
-            // the payload and a column that is NOT NULL, so it was true of every
-            // assignment and this step could never be shown as outstanding.
+            // Read from `config`, where the API actually puts these fields,
+            // and measure it against the least-privilege baseline.
             configured: assignmentIsConfigured({
               ...LEAST_PRIVILEGE_CONFIG,
               ...(assignment.config ?? {}),
             }),
             projectId: assignment.projectId ?? null,
-          }));
-      }
-      if (templates.status === "fulfilled" && templates.value.ok) {
-        const body = await readJson<{ templates?: unknown[] }>(templates.value);
-        data.customTemplates = (body?.templates ?? []).length;
-      }
-      if (commands.status === "fulfilled" && commands.value.ok) {
-        const body = await readJson<{ commands?: FactoryData["commands"] }>(commands.value);
-        data.commands = body?.commands ?? [];
-      }
-      if (pipelines.status === "fulfilled" && pipelines.value.ok) {
-        const body = await readJson<{ pipelines?: FactoryData["pipelines"] }>(pipelines.value);
-        data.pipelines = (body?.pipelines ?? []).map((pipeline) => ({
+          })),
+        commands: commandsBody.commands ?? [],
+        pipelines: (pipelinesBody.pipelines ?? []).map((pipeline) => ({
           name: pipeline.name,
           projectId: pipeline.projectId,
           templateKey: pipeline.templateKey,
-        }));
-      }
+        })),
+        // Command execution has its own live readiness route. Bot-fabric
+        // readiness is a separate control-plane fact and must not overwrite it.
+        executor: {
+          connected: workerBody.worker?.connectionStatus === "connected",
+          label: workerBody.worker?.statusLabel ?? "Worker Not Connected",
+          detail: workerBody.worker?.lastHeartbeatAt
+            ? `Last heartbeat: ${workerBody.worker.lastHeartbeatAt}`
+            : "No fresh worker heartbeat is available.",
+        },
+        customTemplates: (templatesBody.templates ?? []).length,
+      };
 
-      setState({ kind: "ready", data });
+      setState({ kind: "ready", data, stale: false });
     } catch {
-      setState((current) => (current.kind === "ready" ? current : { kind: "signed-out" }));
+      setState(staleOrUnavailable);
     }
   }, []);
 
@@ -337,20 +372,25 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       <BlockedState icon={Factory} title="Sign in to run your factory" description="The guided journey reads your workspace's live state." href="/auth/sign-in?next=/solutions/ai-factory" label="Sign in" />,
     );
   }
-  if (state.kind === "unavailable") {
-    return framed(
-      <BlockedState
-        icon={Factory}
-        title="Your factory's state could not be read"
-        description="The journey derives every step from live records, so it shows nothing rather than showing zeros it cannot stand behind. Try again in a moment."
-        href="/solutions/ai-factory"
-        label="Try again"
-      />,
-    );
-  }
   if (state.kind === "setup") {
     return framed(
       <BlockedState icon={Factory} title="Finish setting up" description="Create or choose a workspace first." href="/solutions/connections" label="Open connections" />,
+    );
+  }
+  if (state.kind === "unavailable") {
+    return framed(
+      <Card className="grid min-h-64 place-items-center p-6 text-center">
+        <div className="max-w-md">
+          <Factory className="mx-auto size-7 text-muted" aria-hidden="true" />
+          <h2 className="mt-3 text-lg font-semibold text-foreground">AI Factory is unavailable</h2>
+          <p className="mt-1 text-sm text-muted">
+            We could not read a complete workspace snapshot. No progress was inferred from missing data.
+          </p>
+          <button type="button" className="btn btn-primary mt-4" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      </Card>,
     );
   }
 
@@ -386,11 +426,12 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   // project happens to be first. With two projects those differ, and the
   // person was sent to configure one project while the step counted another,
   // so assigning a bot in the overlay left the step's evidence unmoved.
-  const rosterProject =
-    data.projects.find((project) => project.id === rosterProjectId)
-    ?? activeProject
-    ?? data.projects[0]
-    ?? null;
+  const rosterProject = startingNewFactory
+    ? activeProject
+    : data.projects.find((project) => project.id === rosterProjectId)
+      ?? activeProject
+      ?? data.projects[0]
+      ?? null;
 
   /* The roster — assigning bots and configuring each posting's role,
      responsibilities, repository access, model, and work effort — is one
@@ -441,6 +482,8 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
     ? data.assignments.filter((assignment) => assignment.projectId === activeProject.id)
     : [];
   const scopedConfigured = scopedAssignments.filter((assignment) => assignment.configured);
+  const allScopedAssignmentsConfigured = scopedAssignments.length > 0
+    && scopedConfigured.length === scopedAssignments.length;
   const scopedCommands = activeProject
     ? data.commands.filter((command) => command.project?.id === activeProject.id)
     : [];
@@ -466,7 +509,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "connect_github",
       title: "Connect Repository",
       description: "Authorize GitHub and choose the repositories your factory may work on.",
-      done: data.connectedInstallations > 0,
+      done: data.connectedInstallations > 0 && data.repositories > 0,
       evidence: data.connectedInstallations > 0
         ? `${data.connectedInstallations} installation${data.connectedInstallations === 1 ? "" : "s"} · ${data.repositories} repositor${data.repositories === 1 ? "y" : "ies"} authorized`
         : "No GitHub installation yet",
@@ -565,7 +608,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
        */
       body: (
         <BotManagerHome
-          projectContext={rosterProject ? { id: rosterProject.id, name: rosterProject.name } : undefined}
+          projectContext={rosterProject ? { id: rosterProject.id, name: rosterProject.name } : null}
           onFinished={closeOverlay}
         />
       ),
@@ -590,7 +633,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "configure_bots",
       title: "Configure Bot Settings",
       description: "On each posting card: role, responsibilities, repository access, the model it runs (Fable 5, Opus 5, …), and work effort.",
-      done: scopedConfigured.length > 0,
+      done: allScopedAssignmentsConfigured,
       evidence: scopedConfigured.length > 0
         ? `${scopedConfigured.length} of ${scopedAssignments.length} assignment${scopedAssignments.length === 1 ? "" : "s"} configured`
         : scopedAssignments.length > 0
@@ -612,7 +655,12 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
         : "No command yet for this factory",
       action: "Give a bot work",
       icon: Terminal,
-      body: <CommandComposer onSaved={closeOverlay} />,
+      body: (
+        <CommandComposer
+          projectContext={activeProject ? { id: activeProject.id, name: activeProject.name } : null}
+          onSaved={closeOverlay}
+        />
+      ),
       pageHref: "/solutions/bot-manager",
       pageLabel: "Bot Manager",
     },
@@ -625,10 +673,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       done: hasSucceededCommand,
       evidence: hasSucceededCommand
         ? "At least one command has completed end to end"
-        : data.commands.length > 0
+        : scopedCommands.length > 0
           ? data.executor.connected
             ? "Work is in flight — watch it on Pipelines"
-            : `${data.commands.length} command${data.commands.length === 1 ? "" : "s"} queued; the executor is ${data.executor.label}`
+            : `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} queued; ${data.executor.label}`
           : "Nothing has run yet",
       action: "Watch execution",
       icon: Workflow,
@@ -695,6 +743,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       state.kind === "ready" ? state.data.projects.map((project) => project.id) : [],
     );
     setActiveProjectId(null);
+    setRosterProjectId("");
     setStartingNewFactory(true);
     setOpenStep("create_project");
   };
@@ -717,6 +766,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                     const next = event.target.value;
                     setStartingNewFactory(next === "");
                     setActiveProjectId(next === "" ? null : next);
+                    setRosterProjectId(next);
                   }}
                 >
                   {isStartingNew ? <option value="">New factory…</option> : null}
@@ -733,6 +783,22 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           </div>
         }
       />
+
+      {state.stale ? (
+        <div role="alert">
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-amber-400/40 bg-amber-400/10 p-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Factory data may be out of date</p>
+              <p className="mt-0.5 text-xs text-muted">
+                The latest refresh was incomplete, so this is the last complete snapshot.
+              </p>
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>
+              Retry
+            </button>
+          </Card>
+        </div>
+      ) : null}
 
       {isStartingNew ? (
         <Card className="border-[var(--accent-border)] bg-[var(--accent-surface)] p-4">

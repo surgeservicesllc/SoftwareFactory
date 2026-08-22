@@ -1,0 +1,93 @@
+name: Confirm the production journey user
+
+# One-shot, dispatch-only, owner-approved (2026-08-22): marks the FAKE
+# test account jordan.seeker.prod1@example.org (an RFC-reserved,
+# undeliverable domain) as email-confirmed in hosted GoTrue so the
+# owner-requested remote journey can sign in to production, and deletes
+# the other unconfirmed probe residues earlier gate measurements left.
+#
+# What this deliberately does NOT do: it changes no auth configuration —
+# email confirmation stays ON for real users — creates no user, touches
+# no key, and cannot be pointed at any other account: the addresses are
+# hardcoded below, and dispatching requires typing the confirm phrase.
+# Reversal is one dashboard action (delete the user), which cascades away
+# the fake account and its workspace rows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "confirm-fake-user" to proceed'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: journey-prod-user
+  cancel-in-progress: false
+
+jobs:
+  confirm:
+    name: Confirm the fake journey account
+    if: ${{ inputs.confirm == 'confirm-fake-user' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+    steps:
+      - name: Confirm the fake user and sweep probe residues
+        # Same pooler path the migration apply uses; the URL-encoded
+        # password and the URL are masked because this repository is
+        # public. Output is counts only — never a credential, never a row.
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is not set."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          FOUND=""
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -q -c "select 1" >/dev/null 2>&1; then
+              DB_URL="$URL"
+              FOUND="yes"
+              echo "Reached the database through ${HOST}."
+              break
+            fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "::error::Could not reach the database through the pooler."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+          -- The one fake journey account becomes confirmed (idempotent).
+          update auth.users
+             set email_confirmed_at = now()
+           where email = 'jordan.seeker.prod1@example.org'
+             and email_confirmed_at is null;
+
+          -- Unconfirmed probe residues from the gate measurements are
+          -- removed; each is a fake address on an RFC-reserved domain
+          -- with no workspace and no way to sign in.
+          delete from auth.users
+           where email in (
+             'jordan.journey.2026@example.com',
+             'jordan.journey.b@example.org',
+             'jordan.seeker.prod2@example.org',
+             'jordan.seeker.prod3@example.org',
+             'jordan.prod.a1@example.org',
+             'jordan.go.2026@example.org'
+           )
+             and email_confirmed_at is null;
+          SQL
+
+          psql "$DB_URL" -t -q -c "
+            select 'journey user confirmed: ' || count(*)
+              from auth.users
+             where email = 'jordan.seeker.prod1@example.org'
+               and email_confirmed_at is not null;"

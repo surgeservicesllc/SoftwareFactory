@@ -24,7 +24,7 @@ test.describe("the AI Factory page without a readable tenant", () => {
     // full eight-step journey with every step incomplete -- indistinguishable
     // from a genuinely empty workspace, in the same confident layout.
     const gate = page.getByRole("heading", {
-      name: /Sign in to run your factory|could not be read|Finish setting up/i,
+      name: /Sign in to run your factory|AI Factory is unavailable|Finish setting up/i,
     });
     await expect(gate).toBeVisible({ timeout: 20_000 });
 
@@ -36,8 +36,19 @@ test.describe("the AI Factory page without a readable tenant", () => {
 
   test("offers a way forward instead of a dead end", async ({ page }) => {
     await page.goto("/solutions/ai-factory");
-    const action = page.getByRole("link", { name: /Sign in|Try again|Open connections/i }).first();
+    // A link out for the states with somewhere to go, a Retry for the state
+    // whose way forward is reading again.
+    const action = page
+      .getByRole("link", { name: /^Sign in$|Open connections/i })
+      .or(page.getByRole("button", { name: "Retry" }))
+      .first();
     await expect(action).toBeVisible({ timeout: 20_000 });
-    await expect(action).toHaveAttribute("href", /.+/);
+  });
+
+  test("keeps the page's own heading whatever it can render", async ({ page }) => {
+    await page.goto("/solutions/ai-factory");
+    await expect(page.getByRole("heading", { level: 1, name: "AI Factory" })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 });

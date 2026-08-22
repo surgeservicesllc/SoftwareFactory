@@ -24,12 +24,64 @@ type Repository = {
 
 type Connection = {
   id: string;
-  name?: string;
+  name?: string | null;
   status: string;
-  account: { login: string; type: string } | null;
+  account: { login: string; type: string | null } | null;
   installation: { id: number; suspendedAt: string | null } | null;
   repositories: Repository[];
 };
+
+type ProjectSummary = { githubRepositoryId: number | null };
+type ReadState = "loading" | "ready" | "error";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isRepository(value: unknown): value is Repository {
+  return isRecord(value)
+    && typeof value.id === "number"
+    && typeof value.fullName === "string"
+    && typeof value.defaultBranch === "string"
+    && typeof value.archived === "boolean"
+    && (value.disabled === undefined || typeof value.disabled === "boolean")
+    && typeof value.selected === "boolean";
+}
+
+function isConnection(value: unknown): value is Connection {
+  if (!isRecord(value)
+    || typeof value.id !== "string"
+    || typeof value.status !== "string"
+    || !Array.isArray(value.repositories)
+    || !value.repositories.every(isRepository)) {
+    return false;
+  }
+  const account = value.account;
+  const installation = value.installation;
+  return (account === null
+      || (isRecord(account)
+        && typeof account.login === "string"
+        && (typeof account.type === "string" || account.type === null)))
+    && (installation === null
+      || (isRecord(installation)
+        && typeof installation.id === "number"
+        && (typeof installation.suspendedAt === "string" || installation.suspendedAt === null)));
+}
+
+function parseProjectsPayload(value: unknown): ProjectSummary[] | null {
+  if (!isRecord(value) || !Array.isArray(value.projects)) return null;
+  return value.projects.every(
+    (project) => isRecord(project)
+      && (typeof project.githubRepositoryId === "number" || project.githubRepositoryId === null),
+  )
+    ? value.projects as ProjectSummary[]
+    : null;
+}
+
+function parseConnectionsPayload(value: unknown): Connection[] | null {
+  if (!isRecord(value) || !Array.isArray(value.connections)) return null;
+  return value.connections.every(isConnection) ? value.connections : null;
+}
 
 export function AddProjectForm({
   id,
@@ -38,7 +90,7 @@ export function AddProjectForm({
   id?: string;
   onCreated?: () => Promise<void> | void;
 }) {
-  const [loaded, setLoaded] = useState(false);
+  const [readState, setReadState] = useState<ReadState>("loading");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [projectRepositoryIds, setProjectRepositoryIds] = useState<number[]>([]);
   const [hasProjects, setHasProjects] = useState(false);
@@ -50,29 +102,33 @@ export function AddProjectForm({
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
+    setReadState("loading");
     try {
       const [projectsResponse, connectionsResponse] = await Promise.all([
         fetch("/api/projects", { cache: "no-store" }),
         fetch("/api/github/connections", { cache: "no-store" }),
       ]);
       if (!projectsResponse.ok || !connectionsResponse.ok) {
-        setLoaded(true);
-        return;
+        throw new Error("Project setup reads failed.");
       }
-      const projectsBody = (await projectsResponse.json()) as {
-        projects?: Array<{ githubRepositoryId: number | null }>;
-      };
-      const connectionsBody = (await connectionsResponse.json()) as { connections?: Connection[] };
-      setHasProjects((projectsBody.projects ?? []).length > 0);
+      const [projectsBody, connectionsBody] = await Promise.all([
+        projectsResponse.json() as Promise<unknown>,
+        connectionsResponse.json() as Promise<unknown>,
+      ]);
+      const projects = parseProjectsPayload(projectsBody);
+      const nextConnections = parseConnectionsPayload(connectionsBody);
+      if (!projects || !nextConnections) throw new Error("Project setup reads were invalid.");
+
+      setHasProjects(projects.length > 0);
       setProjectRepositoryIds(
-        (projectsBody.projects ?? [])
+        projects
           .map((project) => project.githubRepositoryId)
           .filter((value): value is number => typeof value === "number"),
       );
-      setConnections(connectionsBody.connections ?? []);
-      setLoaded(true);
+      setConnections(nextConnections);
+      setReadState("ready");
     } catch {
-      setLoaded(true);
+      setReadState("error");
     }
   }, []);
 
@@ -140,10 +196,26 @@ export function AddProjectForm({
     }
   }
 
-  if (!loaded) {
+  if (readState === "loading") {
     return (
       <Card className="grid min-h-24 place-items-center">
         <Loader2 className="size-5 animate-spin text-accent" aria-label="Loading the project form" />
+      </Card>
+    );
+  }
+
+  if (readState === "error") {
+    return (
+      <Card className="grid min-h-64 place-items-center p-8 text-center">
+        <div className="max-w-md">
+          <h2 className="text-lg font-semibold text-foreground">Project setup is unavailable</h2>
+          <p className="mt-2 text-muted">
+            We could not verify your current projects and GitHub connections. No empty state was inferred from missing data.
+          </p>
+          <button type="button" className="btn btn-primary mt-5" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
       </Card>
     );
   }

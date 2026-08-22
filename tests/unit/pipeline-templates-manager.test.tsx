@@ -69,6 +69,75 @@ afterEach(() => {
 });
 
 describe("PipelineTemplatesManager", () => {
+  it("does not call an unparseable custom-template read an empty list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/pipeline-templates") return new Response("{", { status: 200 });
+      if (url === "/api/project-pipelines") return jsonResponse({ pipelines: [], canManage: true });
+      return jsonResponse({});
+    }));
+
+    render(<PipelineTemplatesManager builtIns={builtIns} projectContext={{ id: "p1", name: "One" }} />);
+
+    expect(await screen.findByText("Custom templates are unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/No custom templates yet/)).not.toBeInTheDocument();
+  });
+
+  it("does not call a failed pipeline-selection read no selections", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/project-pipelines") return jsonResponse({}, 503);
+      if (url === "/api/pipeline-templates") return jsonResponse({ templates: [], canManage: true });
+      return jsonResponse({});
+    }));
+
+    render(<PipelineTemplatesManager builtIns={builtIns} projectContext={{ id: "p1", name: "One" }} />);
+
+    expect(await screen.findByText(/Pipeline setup is unavailable because/)).toBeInTheDocument();
+    expect(screen.queryByText(/No pipeline selected for One/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Not Connected —/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use Feature Build" })).toBeDisabled();
+  });
+
+  it("does not call an unparseable standalone project read an empty workspace", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") return new Response("{", { status: 200 });
+      if (url === "/api/project-pipelines") return jsonResponse({ pipelines: [], canManage: true });
+      if (url === "/api/pipeline-templates") return jsonResponse({ templates: [], canManage: true });
+      return jsonResponse({});
+    }));
+
+    render(<PipelineTemplatesManager builtIns={builtIns} />);
+
+    expect(await screen.findByText(/Pipeline setup is unavailable because/)).toBeInTheDocument();
+    expect(screen.queryByText(/this workspace has none yet/i)).not.toBeInTheDocument();
+  });
+
+  it("checks the standalone project response status inside the plan dialog", async () => {
+    let projectReads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/projects") {
+        projectReads += 1;
+        return projectReads === 1
+          ? jsonResponse({ projects: [{ id: "p1", name: "One" }] })
+          : jsonResponse({}, 503);
+      }
+      if (url === "/api/project-pipelines") return jsonResponse({ pipelines: [], canManage: true });
+      if (url === "/api/pipeline-templates") return jsonResponse({ templates: [], canManage: true });
+      return jsonResponse({});
+    }));
+
+    render(<PipelineTemplatesManager builtIns={builtIns} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Plan a graph from Feature Build" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Plan a graph from Feature Build" });
+    expect(await within(dialog).findByText(/Graph planning is unavailable/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/this workspace has none yet/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it("lists custom templates with compiled facts and full CRUD, and built-ins as clone-only", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -212,6 +281,43 @@ describe("PipelineTemplatesManager", () => {
     // The result repeats the endpoint's honesty: recorded, not dispatched.
     expect(await within(dialog).findByText(/No node has been dispatched/)).toBeInTheDocument();
   });
+
+  it("plans an embedded graph only against the caller's project", async () => {
+    const launches: unknown[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/graphs" && init?.method === "POST") {
+        launches.push(JSON.parse(String(init.body)));
+        return jsonResponse({ graphId: "g2", topology: "DAG", nodeCount: 6 });
+      }
+      if (url === "/api/project-pipelines") {
+        return jsonResponse({ pipelines: [], canManage: true });
+      }
+      if (url === "/api/pipeline-templates") {
+        return jsonResponse({ templates: [], canManage: true });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PipelineTemplatesManager
+        builtIns={builtIns}
+        projectContext={{ id: "p2", name: "Second factory" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Plan a graph from Feature Build" }));
+    const dialog = await screen.findByRole("dialog", { name: "Plan a graph from Feature Build" });
+    const picker = within(dialog).getByLabelText("Project");
+    expect(picker).toHaveValue("p2");
+    expect(picker).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: /plan graph/i }));
+
+    await waitFor(() => expect(launches).toEqual([{ projectId: "p2", templateKey: "feature_build" }]));
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/projects", expect.anything());
+  });
+
   it("selects a template for the project and turns its Use button grey", async () => {
     let stored: Array<{ projectId: string; templateKey: string; name: string }> = [];
     const posted: unknown[] = [];
@@ -448,5 +554,10 @@ describe("PipelineTemplatesManager", () => {
     expect(screen.getByRole("button", { name: "Use Feature Build" })).toBeDisabled();
     expect(screen.queryByText("Some other factory")).not.toBeInTheDocument();
     expect(posted).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan a graph from Feature Build" }));
+    const dialog = await screen.findByRole("dialog", { name: "Plan a graph from Feature Build" });
+    expect(within(dialog).getByText(/this workspace has none yet/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /plan graph/i })).not.toBeInTheDocument();
   });
 });
