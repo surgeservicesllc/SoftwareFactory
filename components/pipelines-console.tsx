@@ -18,6 +18,7 @@ import { GraphRunsPanel } from "@/components/graph-runs-panel";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { ClearSurfaceButton } from "@/components/clear-surface-button";
 
 /**
  * Pipelines: the lifecycle view over the records that already govern work.
@@ -189,6 +190,25 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
           </Link>
         ))}
       </nav>
+
+      {/*
+        * Owner instruction, 2026-08-22: only on All Pipelines. Active is the
+        * live lane — a clear button beside work in flight invites exactly the
+        * press the function then refuses — and Templates and Graph runs are
+        * different rows entirely.
+        */}
+      {view === "all" ? (
+        <div className="flex justify-end">
+          <ClearSurfaceButton
+            endpoint="/api/commands/clear"
+            label="Clear all pipelines"
+            noun="pipeline"
+            includeFlagName="includeCommandsWithRuns"
+            includeFlagLabel="Also clear pipelines that already have run history. Deleting these removes their work items and those runs too."
+            onCleared={load}
+          />
+        </div>
+      ) : null}
 
       {view !== "templates" && view !== "graphs" ? (
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
