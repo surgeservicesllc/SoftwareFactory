@@ -2,6 +2,29 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-21 — AI Factory production acceptance:** exact candidate
+head `a020e8192d8512a1bb65112e01017047087f0528` passed all four jobs in CI run
+`32543409160` (quality plus browser shards 1/3, 2/3, and 3/3). Production-browser
+evidence is separately **4/8**: **Agentic SDLC** persisted after reload and its
+immutable `pipeline.selected` event appeared in Activity; the owner-reconnected
+Claude account reports Connected. Refresh remains pending because no worker
+sweep completed, so it proves no fresh worker or end-to-end bot health.
+
+Production Create Bot still fails and leaves zero bots. The proven mismatch is
+that the Bot Manager sends raw broker purposes `claude`/`claude_N` (or
+`codex`/`codex_N`) to a provision contract that accepts provider-neutral
+`subscription`/`subscription_N`. The branch candidate now normalizes every
+account-backed path and fails closed on missing/mismatched metadata; 100 focused
+tests, lint, typecheck, and the production build pass. The full Windows run
+passed 3,763 tests but retained one unrelated timing failure that passed 13/13
+immediately in isolation, plus the existing `script`-binary runner errors. The
+fix is not deployed. Bot creation, assignment, configuration, and reload
+stickiness therefore remain unproved. Production is also still unsafe/not fully
+live because of five linked lint errors/ten
+findings, raw autonomy and kill-switch drift, two projects with effective kill
+off, no connected/fresh worker, and hosted
+`20260821000300`/candidate `20260821000400` migration/application drift.
+
 **Addendum, 2026-08-22 — Job Seeker, production-behavior certified:** the
 evidence tier above local-stack certification now exists: the full
 fake-data journey ran against https://www.theagoras.com itself (journey

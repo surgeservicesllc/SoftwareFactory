@@ -366,8 +366,8 @@ describe("assigning several bots at once", () => {
           ok: true, status: 200,
           json: async () => ({
             accounts: [
-              { id: "acc-1", provider: "anthropic", providerLabel: "Claude", displayName: "Claude Blackstone", status: "connected", credentialPurpose: "subscription" },
-              { id: "acc-2", provider: "anthropic", providerLabel: "Claude", displayName: "Claude NWV", status: "connected", credentialPurpose: "subscription_2" },
+              { id: "acc-1", provider: "anthropic", providerLabel: "Claude", displayName: "Claude Blackstone", status: "connected", credentialPurpose: "claude" },
+              { id: "acc-2", provider: "anthropic", providerLabel: "Claude", displayName: "Claude NWV", status: "connected", credentialPurpose: "claude_2" },
             ],
           }),
         } as unknown as Response;
