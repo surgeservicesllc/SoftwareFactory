@@ -78,6 +78,18 @@ Last triaged: 2026-08-22
   green RECORD_ONLY_READY / RECORD_ONLY_BOUNDARY / FOUNDATION_READY, healthy
   database, reachable site, and requested the PostgREST reload — "Record-only
   chain postflights verified on the applied production database."
+- [x] Owner-confirmed acceptance (screenshots 2026-08-23 ~00:27Z): Step 8
+  "Issue a Command" Done — 1 command recorded only; Step 9 "Watch It Ship"
+  shows the truthful record-only view with the command record modal.
+- [ ] Step 9 real run (owner goal, owner-gated enablement): connect the
+  ChatGPT/Codex account in Bot Manager, create an `openai`/`gpt-5.3-codex`
+  bot on it, assign + configure it on SoftwareFactory_08.21.2026, set GitHub
+  repo variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`, then issue a
+  Step 8 command with that bot. Execution-path readiness measured by probe
+  32608500364; worker auth last green 2026-08-21 21:54Z; the 2026-08-13
+  stdin-era run failure is structurally gone (SDK adapter; claim takes only
+  queued runs). Then verify the queued run -> claim -> branch -> draft PR ->
+  CI -> Step 9 execution view, and record the evidence.
 - [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
   executors, and zero runs for all `record_only` commands before and after apply.
 - [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful
