@@ -60,6 +60,10 @@ on:
           sdlc_stage type as the ten stages the product presents and widens
           list_graph_runs to carry each node's dependencies, attempts and
           anchored evidence;
+          "stage-handoffs" applies only 20260823001000, which adds the SECURITY
+          DEFINER writer for graph_handoffs — a table present since
+          20260814000100 that nothing has ever written to — plus its two read
+          indexes; no schema change to any existing object;
           "audit-guard-acl-contract" applies only 20260822001300, which
           removes the hosted Supabase default service_role EXECUTE grant from
           the append-only audit guard reject_activity_event_mutation();
@@ -123,6 +127,7 @@ on:
           - factory-any-model-record-only
           - lifecycle
           - ten-stage-lifecycle
+          - stage-handoffs
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
@@ -4568,6 +4573,80 @@ jobs:
           echo "The drop takes the grants with it, so the file restates them: authenticated"
           echo "t, anon f, service_role f. A true service_role here means the restatement"
           echo "did not run and Supabase default privileges filled the gap."
+
+      - name: Record the handoff a stage makes to the next one (scope=stage-handoffs)
+        # Exactly one file — 20260823001000 — and no others.
+        #
+        # This scope adds a writer and two indexes. It alters no existing
+        # column, drops nothing, and does not touch sdlc_stage, so unlike
+        # scope=ten-stage-lifecycle it carries no ordering dependency on the
+        # backfill and can run before or after it.
+        #
+        # `graph_handoffs` has existed since 20260814000100 with nothing
+        # writing to it. The preflight below reads that fact off the live
+        # database rather than trusting this comment, because "the table is
+        # empty" is the assumption the whole change rests on: if rows already
+        # exist, something is writing them by a path this repository does not
+        # know about, and that wants explaining before another writer is added.
+        #
+        # Replay-safe by construction: `create or replace function` with its
+        # grants restated, and two `create index if not exists`.
+        if: ${{ inputs.scope == 'stage-handoffs' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          echo "Preflight: the table this writes to must already exist, and assert_graph_worker_id"
+          echo "must exist because the function calls it on every write."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select to_regclass('public.graph_handoffs') is not null as handoffs_table_present,
+                   exists (
+                     select 1 from pg_proc routine
+                     join pg_namespace space on space.oid = routine.pronamespace
+                     where space.nspname = 'public'
+                       and routine.proname = 'assert_graph_worker_id'
+                   ) as worker_assertion_present,
+                   (select count(*) from public.graph_handoffs) as rows_before;"
+          echo "handoffs_table_present f stops here — apply 20260814000100 first."
+          echo "worker_assertion_present f stops here — the function body would fail at runtime."
+          echo "rows_before is expected to be 0. A non-zero count is not fatal, but it"
+          echo "contradicts the premise that nothing has ever written to this table."
+          FILE=supabase/migrations/20260823001000_structured_stage_handoffs.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823001000
+          else
+            npx supabase migration repair --status applied 20260823001000 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo ""
+          echo "What the run actually produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select routine.prosecdef as is_security_definer,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_role_may_execute,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname = 'record_graph_handoff_as_worker';"
+          echo "Expected: is_security_definer t, service_role t, authenticated f, anon f."
+          echo "An authenticated or anon t means the revoke did not take and a browser"
+          echo "session could fabricate a provenance record."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select indexname from pg_indexes
+             where schemaname = 'public' and tablename = 'graph_handoffs'
+             order by indexname;"
+          echo "Expected to include graph_handoffs_run_idx and graph_handoffs_to_node_idx."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select relrowsecurity as rls_enabled, relforcerowsecurity as rls_forced
+              from pg_class where oid = 'public.graph_handoffs'::regclass;"
+          echo "Both must stay t. This scope does not change them; it reads them back"
+          echo "because a new writer on a table is the moment to prove they are still on."
 
       - name: Apply the job-seeker resume extraction migration (scope=job-seeker-resume)
         # Exactly one file — 20260822000400 — and no others. Every other
