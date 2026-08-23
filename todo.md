@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, latest)
+## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4 — PICK UP HERE)
 
 **Applied.** `scope=graph-stage-backfill` ran against production —
 [run 32660207022](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32660207022),
@@ -58,7 +58,7 @@ nothing.
    (`20260821000400` among them, its table demonstrably present). Each wants
    the probe-first discipline the vault repair used.
 
-## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, latest)
+## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, round 3)
 
 Follows the round below, which made new graphs carry a stage. Existing rows
 still stored null, so the graph-runs **Stage** column read as an em dash for the
@@ -115,7 +115,7 @@ test. Typecheck, lint, full suite, production build all green.
    reports status and code, so one more tap separates origin (403) from wrong
    active organization (404) from a database refusal (409).
 
-## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
+## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, round 2)
 
 The graph-runs panel has had a **Stage** column since the Agentic SDLC
 migration (`20260821000200`, `sdlc_stage` enum, `graph_nodes.lifecycle_stage`).
@@ -261,7 +261,7 @@ one before it was removed:
    `update refused=t delete refused=t` (run 32652305439).
 
 
-## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, latest)
+## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, round 1)
 
 Step 9 is resolved above — a real run COMPLETED with 7 artifacts, and the
 application's own launch path is working again. What that section leaves open
