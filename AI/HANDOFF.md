@@ -2,6 +2,52 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-23): `supabase start` fails, and the protected release will too
+
+**Local development is broken on a fresh checkout.** `supabase start` applies
+the chain and aborts at `20260822000900`:
+
+```
+ERROR: AgentOS foundation table security catalog is not exact (SQLSTATE 55000)
+agentos_agent_collaborators, agentos_agent_filesystem_grants, agentos_agent_grants,
+agentos_agent_mcp_grants, agentos_agent_repo_grants, agentos_agent_skill_grants,
+agentos_environments, agentos_mcp_connections, agentos_skills
+```
+
+That validator refuses when `anon` or `service_role` holds any privilege on
+those nine tables. Hosted Supabase grants exactly that at CREATE TABLE time,
+and `20260814000300` revokes only `from anon, authenticated` — never
+`service_role`. Measured on a database carrying Supabase's default privileges:
+`service_role` holds SELECT and UPDATE on all nine.
+
+**The same gate runs against hosted.** `scope=factory-any-model-record-only`
+applies `20260822000900` to a database with those identical default
+privileges, so on this evidence that dispatch fails at the foundation gate.
+Worth knowing before the release, not during it.
+
+**The root cause is ordering, and it is bigger than nine tables.**
+`20260812002600` narrows `service_role` across every public table and its
+contract test proves it works — but that migration sits at ordinal position
+`20260812002600` and **121 migrations run after it**. It narrowed only what
+existed at the time. Every table created later keeps the hosted grant unless
+its own migration revokes it. Measured: **60 of 128 public tables** retain
+service_role write privileges.
+
+`hosted-service-role-table-grants.test.ts` cannot see this. It skips the
+narrowing migration in order and applies it *last*, so in the test it runs
+after everything exists and narrows all of them. Production never does that.
+The guard has been passing on a database shape that does not occur.
+
+Severity, stated carefully: `service_role` is Supabase's trusted backend role
+and its key is a server-side secret, so this is not an open door. It is that
+the repository's own stated narrowing policy covers 68 of 128 tables while
+reading as though it covers all of them.
+
+**What is fixed here:** the sweep now ratchets the table set, so a new table
+that forgets to revoke fails CI by name. **What needs you:** closing the
+existing 60 means re-running the narrowing across the current schema, which
+changes hosted privileges broadly and is an owner's decision, not a test's.
+
 ## Newest (2026-08-23): the ninth step was covered nowhere that runs
 
 A QA pass over the nine-step AI Factory found that Select Agents — step 4 —

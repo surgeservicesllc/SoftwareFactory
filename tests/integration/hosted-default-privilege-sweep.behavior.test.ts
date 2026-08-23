@@ -64,6 +64,90 @@ const PROTECTED_CHAIN = new Set([
  */
 const ANON_MAY_EXECUTE = new Set(["subscribe_to_newsletter"]);
 
+/**
+ * Tables `service_role` can still write under hosted default privileges.
+ *
+ * Not an approval — a ratchet. 20260812002600 narrowed service_role across
+ * every public table, and the repository's contract test proves it works. But
+ * that migration sits at ordinal position 20260812002600 and 121 migrations
+ * run after it, so it narrowed only the tables that existed at the time.
+ * Every table created later keeps the grant hosted hands out at CREATE TABLE
+ * time unless its own migration revokes it.
+ *
+ * hosted-service-role-table-grants.test.ts cannot see this: it skips the
+ * narrowing migration in order and applies it last, so in that test it runs
+ * after everything exists and narrows all of them. Production never does that.
+ *
+ * The 60 names below are the measured state on a database carrying
+ * Supabase's default privileges, recorded so the list cannot grow quietly.
+ * Shrinking it is the goal; a new entry is a new instance of the same defect
+ * and fails this test. Closing the existing 60 means re-running the
+ * narrowing across the current schema, which changes hosted privileges broadly
+ * and is an owner's call, not a test's.
+ */
+const SERVICE_ROLE_WRITABLE_BASELINE = new Set([
+  "agent_handoffs",
+  "agentos_agent_collaborators",
+  "agentos_agent_filesystem_grants",
+  "agentos_agent_grants",
+  "agentos_agent_mcp_grants",
+  "agentos_agent_repo_grants",
+  "agentos_agent_skill_grants",
+  "agentos_automations",
+  "agentos_environments",
+  "agentos_goal_dod_items",
+  "agentos_goal_progress",
+  "agentos_goals",
+  "agentos_inbox_messages",
+  "agentos_mcp_connections",
+  "agentos_skills",
+  "agentos_task_chain_steps",
+  "agentos_task_chains",
+  "agentos_task_template_steps",
+  "agentos_task_templates",
+  "agentos_trigger_deliveries",
+  "agentos_triggers",
+  "autonomy_decisions",
+  "claim_acceptable_anchors",
+  "claim_anchors",
+  "connection_capability_types",
+  "github_change_requests",
+  "github_installations",
+  "github_repositories",
+  "github_webhook_deliveries",
+  "graph_anchors",
+  "graph_artifacts",
+  "graph_budgets",
+  "graph_edges",
+  "graph_events",
+  "graph_gates",
+  "graph_handoffs",
+  "graph_nodes",
+  "graph_runs",
+  "graph_templates",
+  "graph_verifications",
+  "graphs",
+  "job_seeker_applications",
+  "job_seeker_contacts",
+  "job_seeker_documents",
+  "job_seeker_jobs",
+  "job_seeker_matches",
+  "job_seeker_outreach",
+  "job_seeker_preferences",
+  "job_seeker_profiles",
+  "job_seeker_uploads",
+  "node_contracts",
+  "node_run_claims",
+  "node_runs",
+  "resource_assignments",
+  "resource_breaker_events",
+  "resource_breakers",
+  "resource_rate_events",
+  "resource_reservations",
+  "task_work_locks",
+  "work_locks",
+]);
+
 let db: PGlite;
 
 beforeAll(async () => {
@@ -135,6 +219,28 @@ describe("the chain, under hosted default privileges", () => {
       unexpected.map((row) => `${row.proname}(${row.args})`),
       "a volatile SECURITY DEFINER function is reachable by anon; the migration that "
       + "created it revoked the roles it remembered rather than the roles that exist",
+    ).toEqual([]);
+  });
+
+  it("does not widen the set of tables service_role may write", async () => {
+    const { rows } = await db.query<{ relname: string }>(`
+      select c.relname
+        from pg_class c
+       where c.relnamespace = 'public'::regnamespace
+         and c.relkind = 'r'
+         and (has_table_privilege('service_role', c.oid, 'UPDATE')
+           or has_table_privilege('service_role', c.oid, 'DELETE'))
+       order by 1
+    `);
+
+    const added = rows
+      .map((row) => row.relname)
+      .filter((name) => !SERVICE_ROLE_WRITABLE_BASELINE.has(name));
+
+    expect(
+      added,
+      "a new table keeps the write grant hosted Supabase hands out at CREATE TABLE "
+      + "time; revoke service_role in the migration that creates it",
     ).toEqual([]);
   });
 
