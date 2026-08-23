@@ -317,6 +317,86 @@ describe("a stage handoff", () => {
   });
 });
 
+describe("the orchestrator's verdict on a finished run", () => {
+  it("is reported for every run, and refuses to call an unevidenced stage done", async () => {
+    /*
+     * The rule this whole module exists to enforce, finally applied: a
+     * lifecycle is not done because its nodes finished. TEST and DISCOVER
+     * require an observation, and a MODEL node's output is a claim however
+     * confident — `anchorsFor` counts only what an ANCHOR recorded, so a run of
+     * MODEL nodes cannot satisfy them.
+     */
+    const store = storeSpy();
+    const summary = await runClaimedGraph(
+      claimFor([
+        { key: "requirement", stage: "REQUIREMENT" as SdlcStage },
+        { key: "discover_a", stage: "DISCOVER" as SdlcStage, dependsOn: ["requirement"] },
+      ]),
+      compiledFor([{ key: "requirement" }, { key: "discover_a", dependsOn: ["requirement"] }]),
+      store,
+      async () => ({ status: "SUCCEEDED", output: REQUIREMENT_PACKAGE }),
+      { sleep: async () => {} },
+    );
+
+    expect(summary.orchestration.acceptance.met).toBe(false);
+    expect(summary.orchestration.acceptance.unmet.join(" "))
+      .toContain("DISCOVER requires anchored evidence");
+    // REQUIREMENT declares an automatic gate that this graph never opened, so
+    // it is unmet for a second, different reason — and both are named.
+    expect(summary.orchestration.acceptance.unmet.join(" "))
+      .toContain("REQUIREMENT has a automatic gate that was never opened");
+  });
+
+  it("answers for a graph with no stages at all rather than going silent", async () => {
+    // Most graphs are audits with no lifecycle. A vacuous acceptance report is
+    // a true statement about them, not an absence.
+    const summary = await runClaimedGraph(
+      claimFor([{ key: "authn", stage: null }, { key: "reduce", stage: null, dependsOn: ["authn"] }]),
+      compiledFor([{ key: "authn" }, { key: "reduce", dependsOn: ["authn"] }]),
+      storeSpy(),
+      async () => ({ status: "SUCCEEDED", output: {} }),
+      { sleep: async () => {} },
+    );
+    expect(summary.orchestration.action).toBe("COMPLETE");
+    expect(summary.orchestration.acceptance).toEqual({ met: true, satisfied: [], unmet: [] });
+  });
+
+  it("sends a failure back to the stage where the mistake was made", async () => {
+    const summary = await runClaimedGraph(
+      claimFor([
+        { key: "review", stage: "REVIEW" as SdlcStage, maxAttempts: 1 },
+      ]),
+      compiledFor([{ key: "review", maxAttempts: 1 }]),
+      storeSpy(),
+      async () => ({ status: "FAILED", error: "the change does not match", retryable: false }),
+      { sleep: async () => {} },
+    );
+    expect(summary.orchestration.action).toBe("REPAIR");
+    // Not REVIEW: re-reviewing a wrong change reproduces the finding.
+    expect(summary.orchestration.repairs[0]).toMatchObject({ returnsTo: "BUILD" });
+  });
+
+  it("writes its verdict into the run's closing sentence", async () => {
+    const closings: (string | null)[] = [];
+    const store: GraphRunStore = {
+      recordNodeState: async () => {},
+      recordArtifact: async () => {},
+      completeRun: async (_id, _state, _partial, detail) => { closings.push(detail ?? null); },
+    };
+    await runClaimedGraph(
+      claimFor([{ key: "monitor", stage: "MONITOR" as SdlcStage }]),
+      compiledFor([{ key: "monitor" }]),
+      store,
+      async () => ({ status: "SUCCEEDED", output: {} }),
+      { sleep: async () => {} },
+    );
+    // MONITOR needs an observation and a MODEL node cannot give one, so the
+    // lifecycle iterates rather than completing — and the run says so.
+    expect(closings[0]).toContain("ITERATE");
+    expect(closings[0]).toContain("MONITOR requires anchored evidence");
+  });
+});
+
 describe("the default clock", () => {
   it("is a real one, so a caller that injects nothing still waits", async () => {
     // Guards against the delay quietly becoming a no-op if the default is ever

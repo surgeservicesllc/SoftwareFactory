@@ -9,7 +9,12 @@ import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
 import type { VerificationLens, VerificationVerdict } from "@/lib/graph/verification";
 import { validateStageArtifact } from "@/lib/sdlc/artifacts";
-import { isSdlcStage, stageDefinition } from "@/lib/sdlc/lifecycle";
+import { isSdlcStage, nodeDisplayStatus, stageDefinition } from "@/lib/sdlc/lifecycle";
+import {
+  decideNextAction,
+  type OrchestratorDecision,
+  type OrchestratorNode,
+} from "@/lib/sdlc/orchestrator";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
@@ -89,6 +94,16 @@ const claimedGraphSchema = z.object({
   }).nullish(),
   nodes: z.array(claimedNodeSchema).min(1),
   edges: z.array(claimedEdgeSchema),
+  /*
+   * The lifecycle's own counters, all tolerant of a projection that predates
+   * them for the same reason the node's lifecycle fields are: a worker running
+   * against a database where 20260821000200 has not been applied must drive the
+   * graph rather than refuse to parse it. A graph that says nothing is not a
+   * lifecycle, which is what these defaults say.
+   */
+  is_lifecycle: z.boolean().nullish().catch(false),
+  iteration: z.number().int().positive().nullish().catch(1),
+  max_iterations: z.number().int().positive().nullish().catch(1),
 });
 
 export type ClaimedGraph = z.infer<typeof claimedGraphSchema>;
@@ -303,6 +318,15 @@ export type GraphRunSummary = {
    * a decision is owed, not because anything went wrong.
    */
   readonly awaitingGate: readonly string[];
+  /**
+   * What the lifecycle should do next, and whether it has earned the right to
+   * be called complete.
+   *
+   * Present for every graph, lifecycle or not — an audit template's answer is
+   * simply `COMPLETE` or `HALTED` with a vacuous acceptance report, which is a
+   * true statement about a graph with no stages rather than an absence.
+   */
+  readonly orchestration: OrchestratorDecision;
 };
 
 /**
@@ -369,6 +393,14 @@ export async function runClaimedGraph(
   }
   const claimedByKey = new Map(claim.nodes.map((node) => [node.node_key, node]));
   const completedOutputs = new Map<string, unknown>();
+  /*
+   * Observations per node, recorded as they happen.
+   *
+   * The orchestrator asks this at the end, and it cannot be recovered then:
+   * `anchorsFor` needs the node's *output*, which is gone once the run has
+   * moved on. Counted here, where the output is still in hand.
+   */
+  const anchorsByNode = new Map<string, number>();
 
   // Final-attempt failures, split by kind: a run whose every failure was a
   // capacity refusal never truly executed and must not spend a chance.
@@ -417,6 +449,7 @@ export async function runClaimedGraph(
       const outcome = await executeNode(node, attempt, { outputs, missing });
       if (outcome.status === "SUCCEEDED") {
         completedOutputs.set(node.nodeKey, outcome.output);
+        anchorsByNode.set(node.nodeKey, anchorsFor(node, outcome.output));
       }
       if (nodeRunId) {
         if (outcome.status === "SUCCEEDED") {
@@ -622,13 +655,63 @@ export async function runClaimedGraph(
           ? "BUDGET_STOPPED"
           : "PARTIAL";
 
+  /*
+   * What the lifecycle should do next, decided rather than assumed.
+   *
+   * The orchestrator existed and nothing called it, which meant the rule it
+   * enforces — that a lifecycle is not done because its nodes finished, and
+   * every stage needing anchored evidence must have some — was written down and
+   * unapplied. This is the call. Its answer is recorded in the run's closing
+   * sentence and returned to the caller.
+   *
+   * What it deliberately does not do is *act*. `advance_graph_iteration` is
+   * granted to `authenticated` and to nobody else — the worker holds
+   * `service_role` and cannot execute it — so an ITERATE decision is reported
+   * here and acted on by a member. Making the worker able to iterate a graph on
+   * its own authority is a widening of what a background job may do, and it
+   * belongs in a reviewed change rather than smuggled in beside this one.
+   */
+  const orchestratorNodes: OrchestratorNode[] = [];
+  for (const [nodeKey, nodeState] of result.states) {
+    const claimed = claimedByKey.get(nodeKey);
+    const stage = isSdlcStage(claimed?.lifecycle_stage) ? claimed.lifecycle_stage : null;
+    const held = awaitingGate.includes(nodeKey);
+    orchestratorNodes.push({
+      nodeKey,
+      stage,
+      status: nodeDisplayStatus({ state: nodeState, stage, gateOpen: held }),
+      anchorCount: anchorsByNode.get(nodeKey) ?? 0,
+      gate: claimed?.gate_kind
+        ? {
+          id: claimed.node_id ?? nodeKey,
+          kind: claimed.gate_kind,
+          // A node the worker just halted at has an OPEN gate whatever the
+          // claim said, because the claim was read before it opened.
+          state: held ? "OPEN" : (claimed.gate_state ?? "PENDING"),
+          anchorCount: anchorsByNode.get(nodeKey) ?? 0,
+        }
+        : null,
+    });
+  }
+
+  const orchestration = decideNextAction({
+    nodes: orchestratorNodes,
+    iteration: claim.iteration ?? 1,
+    maxIterations: claim.max_iterations ?? 1,
+    isLifecycle: claim.is_lifecycle === true,
+  });
+
+  const closingDetail = capacityVoided
+    ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
+    : [result.incompleteness, `${orchestration.action}: ${orchestration.detail}`]
+      .filter((part) => part !== null && part !== "")
+      .join(" ");
+
   await store.completeRun(
     claim.graph_run_id,
     finalState,
     result.incompleteness !== null,
-    capacityVoided
-      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
-      : result.incompleteness,
+    closingDetail === "" ? null : closingDetail,
     { tokensUsed: result.spend.tokensUsed, costMicros: result.spend.costMicros },
   );
 
@@ -640,6 +723,7 @@ export async function runClaimedGraph(
     incompleteness: result.incompleteness,
     capacityWithheld: capacityVoided,
     awaitingGate,
+    orchestration,
   };
 }
 

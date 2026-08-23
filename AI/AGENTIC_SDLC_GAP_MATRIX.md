@@ -30,11 +30,11 @@ satisfy.
 | 4 | Fan-in synthesis | **Have** | `lib/graph/fan-in.ts`, with partial-input tolerance |
 | 5 | Planner → workers → reviewers → verifier | **Have** | capabilities in `lib/graph/contracts.ts`; `graph_verifications` |
 | 6 | Conditional branches | **Gap** | edges carry a reason, never a condition; nothing evaluates one at run time |
-| 7 | Retries with backoff | **Partial** | attempts bounded per node; no delay between them |
+| 7 | Retries with backoff | **Have** | `lib/graph/backoff.ts`, applied in the worker's `executeNode` wrapper; exponential, capped, jittered downward |
 | 8 | Checkpoints and resume | **Have** | every claim rebuilds from persisted rows; a dead worker's run is reclaimed after two hours |
 | 9 | Failure isolation | **Have** | a failed node blocks only its dependents |
 | 10 | Shared artifacts between nodes | **Have** | `record_graph_artifact_as_worker`; edges deliver upstream outputs |
-| 11 | Handoffs between agents | **Partial** | `graph_handoffs` exists; the worker passes outputs along edges instead |
+| 11 | Handoffs between agents | **Have** | `record_graph_handoff_as_worker` (`20260823000300`); one row per edge that leaves a stage, with the sending stage's contract checked at the handoff |
 | 12 | Ownership and status per node | **Have** | `node_runs.state` |
 | 13 | Confidence and risk scores | **Partial** | risk per node; `node_runs.confidence` exists and the worker does not yet report one |
 | 14 | Execution history | **Have** | `graph_events`, one row per transition |
@@ -43,11 +43,26 @@ satisfy.
 | 17 | **Feedback edges** | **Have** | `graph_edges.is_feedback`, validated against stage order in `lib/graph/launch-plan.ts` |
 | 18 | **Loop prevention and max iterations** | **Have** | `graphs.iteration`/`max_iterations`, `advance_graph_iteration` |
 | 19 | An executor | **Have** | `lib/worker/graph-run.ts` — main's, not this branch's |
-| 20 | **Agentic SDLC stages** | **Have** | `lib/sdlc/lifecycle.ts`; `graph_nodes.lifecycle_stage`; the `agentic_sdlc` template |
-| 21 | Orchestrator over the lifecycle | **Partial** | `lib/sdlc/orchestrator.ts` decides the next move and reports acceptance; nothing calls it from the worker yet |
+| 20 | **Agentic SDLC stages** | **Have** | ten of them: `lib/sdlc/lifecycle.ts`; `graph_nodes.lifecycle_stage`; the `agentic_sdlc` template |
+| 20b | Typed, versioned stage artifacts | **Have** | `lib/sdlc/artifacts.ts`, one package schema per stage, bound to the node that produces it |
+| 21 | Orchestrator over the lifecycle | **Partial** | `decideNextAction` is now consulted when a claimed run closes and its verdict is in the run's closing sentence; it still cannot *act* — `advance_graph_iteration` is granted to `authenticated` only, so ITERATE is reported and a member performs it |
 | 22 | **Completion requires verified evidence** | **Have** | three independent refusals, below |
 | 23 | Live node status | **Have** | `components/graph-runs-panel.tsx` with stage and gate |
-| 24 | Integration with Projects and Pipelines | **Partial** | runs are listed and decidable; no project view links to them |
+| 24 | Integration with Projects and Pipelines | **Partial** | runs are listed and decidable, ten stage pages read them, and one sentence launches a lifecycle; no project view links to a run yet |
+
+## What changed since this matrix was first written
+
+The lifecycle widened from eight stages to ten — one for the request, three for
+the build-or-borrow question that previously happened inside ARCHITECTURE if it
+happened at all — and grew a navigation, ten landing pages over live records, a
+one-sentence intake, typed stage packages, retry backoff and a handoff writer.
+
+Three bugs came out of the widening, all the same shape: a rule written per node
+when the thing it describes belongs to a stage. DISCOVER's reducer observes
+nothing and failed a per-node evidence rule; REVIEW's ungated sibling failed a
+gate check it never carried; MONITOR requires evidence and has no gate to carry
+it. Each made `acceptanceReport` unreachable — the worst way for that function
+to be wrong, because "not met" is also what an in-progress run looks like.
 
 ## Where "completion requires verified evidence" actually lives
 

@@ -83,21 +83,28 @@ nothing happened.
 `tests/unit/graph-run-backoff-handoff.test.ts` covers both (11 cases), including
 that the default clock is a real one, so a caller injecting nothing still waits.
 
+**The orchestrator is consulted now.** `decideNextAction` runs when a claimed
+run closes; its verdict goes into the run's closing sentence and onto
+`GraphRunSummary.orchestration`. Anchors are counted per node as outputs arrive,
+because `anchorsFor` needs the output and it is gone by the end.
+
+It deliberately does not *act*. `advance_graph_iteration` is granted to
+`authenticated` and to nobody else — the worker holds `service_role` — so an
+ITERATE decision is reported and a member performs it. Letting a background job
+iterate a graph on its own authority is a widening of what a worker may do, and
+belongs in a reviewed change rather than beside this one.
+
 **Still open:**
 
-1. **Call the orchestrator from the worker.** `lib/sdlc/orchestrator.ts`
-   `decideNextAction` is still called by nothing. At the end of
-   `runClaimedGraph`, build `OrchestratorState` from `result.states` + the
-   claim's gates + `anchorsFor`, and use the decision to choose the final run
-   state and whether to call `advance_graph_iteration`. Note
-   `OrchestratorNode.anchorCount` is a top-level field — pass it, do not rely on
-   `gate.anchorCount`.
-2. **Conditional branches remain a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
+1. **Conditional branches remain a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
-3. **`20260823000300` needs a hosted scope of its own** in
+2. **`20260823000300` needs a hosted scope of its own** in
    `.github/workflows/apply-hosted-migrations.yml`, after the two below.
+3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
+   still reports none.
+4. **No project view links to a run** (row 24).
 
 ### Hosted apply — two scopes, in this order
 
