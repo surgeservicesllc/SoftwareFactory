@@ -882,8 +882,17 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   evaluate → decide), every package node contract-enforced.
 - [x] `SDLC_STAGES` grown to eleven; migrations 20260823000800/000900 replay
   green in PGlite; workflow scope `discovery-stages` sha-pinned and one-shot.
-- [ ] Apply `scope=discovery-stages` on hosted and verify the eleven-label
-  readback. Until then a hosted scout launch fails at the stage cast.
+- [x] **Applied on hosted** (run 32665300909): both migrations applied, both
+  in-file postflights passed on the production database — 20260823000800's
+  hard-fails unless the enum reads exactly the eleven labels in order, and it
+  did not — and both ledger rows recorded. The run itself shows **failure**
+  because the workflow's own readback query compared `name[]` to `text[]`
+  after everything real had succeeded; the query is fixed (`enumlabel::text`)
+  and is now executed verbatim against the replayed database in
+  `tests/integration/discovery-stages.behavior.test.ts`, so a verifier that
+  cannot parse fails at commit time instead of after a production apply. The
+  scope is one-shot and correctly refuses a re-run now that the versions are
+  recorded.
 - [ ] Owner-gated: WebSearch/WebFetch on discovery nodes would make ecosystem
   candidates live-verifiable; today they are honestly MODEL_KNOWLEDGE.
 - [ ] Round 6+: scout→agentic_sdlc chaining (the one-request experience);
