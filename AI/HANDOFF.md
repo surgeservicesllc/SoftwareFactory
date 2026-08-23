@@ -2,6 +2,33 @@
 
 Last updated: 2026-08-22
 
+## Newest (2026-08-23): the ninth step was covered nowhere that runs
+
+A QA pass over the nine-step AI Factory found that Select Agents — step 4 —
+had no executed coverage in any lane that runs on a commit. The server-side
+walk went Configure Pipeline straight to Connect Bots and numbered its steps to
+eight; the browser harness rendered the step from a fixture that always
+supplied a real selection and asserted nothing about it. The one lane that did
+cover it needs a local Supabase stack and skips itself against a deployed
+target.
+
+The same shape appeared again in `dialogs.spec.ts`: two tests gate on an
+element that only exists with Supabase configured, and CI's browser shards
+configure none, so they skip in all three projects of every run. A check that
+has never measured anything was reporting as "skipped".
+
+Four fixes, each mutation-proven, all coverage rather than product repairs.
+Five further hypotheses — step 7 completing from an untrusted roster, "Done"
+co-existing with "Not Connected", silent expired-session writes, dead buttons,
+and `scopedCommands[0]` not being the newest command — were checked against the
+code and rejected.
+
+**What still needs you:** the full nine-step walk in a browser against a live
+stack has not been executed. It needs either Docker for a local Supabase stack,
+or the GitHub App installed on the fake account's workspace with
+`walk_all_steps` ticked at dispatch. Until one of those happens, steps 2-9 are
+verified at the server and component layers but not clicked through end to end.
+
 ## Newest (2026-08-22): the Backlog and All Pipelines pages can be cleared
 
 `/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear

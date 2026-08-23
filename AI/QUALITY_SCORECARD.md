@@ -2,6 +2,39 @@
 
 Last reviewed: 2026-08-22
 
+**Addendum, 2026-08-23 — nine-step AI Factory QA pass:** four coverage
+defects found and closed, each mutation-proven. All were in one dimension —
+which lane actually executes — rather than in the product code, and five
+further hypotheses were investigated and rejected rather than filed.
+
+- **Step 4 (Select Agents) had no executed coverage in any lane that runs on a
+  commit.** `ai-factory-journey.behavior.test.ts` walked eight steps and
+  misnumbered 5-9; `component-layout.spec.ts` rendered the step from a fixture
+  that has always supplied a real selection and never asserted it. The lane
+  that did cover it, `ai-factory-journey.spec.ts`, needs a local Supabase stack
+  and skips against a deployed target. Both closed; the server walk is now
+  **PASS** at 20 cases in order.
+- **The two mandated trust labels were unpinned** — Select Agents' "Not
+  Connected" wording and the roster's incompleteness line, including the case
+  where an incomplete roster must hold two steps open. **PASS**.
+- **Two tests in `dialogs.spec.ts` have never executed.** CI's browser shards
+  configure no Supabase, so `/solutions/pipelines` gates, the opener is never
+  visible, and both skip in all three projects of every run while reporting as
+  "skipped". The reachability assertion now also runs in the harness lane, on
+  every commit. **PASS**.
+
+Gates at these commits: lint **PASS**; `tsc --noEmit` **PASS**; vitest **PASS**
+at 352 files / 4266 tests; browser harness **PASS** at 1131 across three
+viewports; accessibility, routing and responsive lanes **PASS** at 185; the
+production build **PASS**.
+
+**Not executed, and not claimed:** the full nine-step browser walk against a
+live stack. Docker is unavailable in the session that ran this pass, so no
+local Supabase; against production the same lane skips because step 1 is a
+GitHub App installation no runner can perform. Everything above was executed
+through layers that do run — real route handlers and SECURITY DEFINER
+functions against real PostgreSQL, and the browser harness.
+
 **Addendum, 2026-08-22 — Backlog and All Pipelines clear controls
 (ADR-119):** `main` commit `9761055` (#317). Local verification before merge is
 **PASS**: 345 test files, 4168 tests passed, 0 failed, 2 skipped, with lint,
