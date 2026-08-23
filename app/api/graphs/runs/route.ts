@@ -35,6 +35,7 @@ type GraphRunRow = {
   started_at: string | null;
   completed_at: string | null;
   nodes: unknown;
+  edges: unknown;
   artifact_counts: unknown;
   verifications: unknown;
   is_lifecycle: boolean | null;
@@ -111,6 +112,9 @@ export async function GET(request: Request) {
         startedAt: row.started_at,
         completedAt: row.completed_at,
         nodes: Array.isArray(row.nodes) ? row.nodes : [],
+        // The graph's shape, so a reader can see which nodes wait on which
+        // without a second query the browser is not granted.
+        edges: Array.isArray(row.edges) ? row.edges : [],
         artifactCounts:
           typeof row.artifact_counts === "object" && row.artifact_counts !== null
             ? row.artifact_counts

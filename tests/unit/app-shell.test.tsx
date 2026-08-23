@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/app-shell";
+import { SDLC_LIFECYCLE } from "@/lib/sdlc/lifecycle";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/solutions",
@@ -19,25 +20,20 @@ describe("AppShell navigation", () => {
     const navigation = screen.getByRole("navigation", { name: "Console" });
     const links = within(navigation).getAllByRole("link").map((link) => link.textContent);
 
-    // The exact structure the owner specified, now closed on arrival: the
-    // top-level destinations in order, with each group's subpages behind its
-    // chevron rather than listed. Subpages with no backing page (per-user
-    // project lists, a secrets store) are deliberately absent rather than
-    // linked to nothing.
+    // Five destinations, in the order a person meets them: where things stand,
+    // what they are working on, the factory itself, the machinery underneath
+    // it, and the settings that configure all of it. Each group's subpages sit
+    // behind its chevron rather than being listed on arrival.
+    //
+    // This replaced a flat list of thirteen — Bots beside Secrets beside
+    // Advanced — which described the pages that happened to exist rather than
+    // the product.
     expect(links).toEqual([
       "Overview",
-      "AI Factory",
       "Projects",
-      "Pipelines",
-      "Bots",
-      "Job Seeker",
-      "Runs",
+      "AI Factory",
       "Operations",
-      "Reports",
-      "Integrations",
-      "Secrets",
-      "Settings",
-      "Advanced",
+      "System",
       // The list ends at the navigation. The owner marked the whole action
       // block on the live page — New Project, the Quick actions shortcuts and
       // the promotional card — and asked for it gone, so the column is
@@ -52,7 +48,7 @@ describe("AppShell navigation", () => {
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
 
-    for (const group of [/projects/i, /bots/i, /settings/i]) {
+    for (const group of [/projects/i, /operations/i, /system/i]) {
       await user.click(
         within(navigation).getByRole("button", { name: new RegExp(`expand ${group.source} subpages`, "i") }),
       );
@@ -62,20 +58,50 @@ describe("AppShell navigation", () => {
       "href",
       "/solutions/projects?filter=archived",
     );
-    // The design subpages that survive are the ones with a real surface
-    // behind them; each lands on the page (or page section) that exists.
-    expect(within(navigation).getByRole("link", { name: "Connect Bot" })).toHaveAttribute(
+    // The subpages that survive are the ones with a real surface behind them;
+    // each lands on the page (or page section) that exists.
+    expect(within(navigation).getByRole("link", { name: "Artifacts" })).toHaveAttribute(
       "href",
-      "/solutions/bot-manager#connect",
+      "/solutions/artifacts",
     );
-    expect(within(navigation).getByRole("link", { name: "Bots & Integrations" })).toHaveAttribute(
+    expect(within(navigation).getByRole("link", { name: "Bots" })).toHaveAttribute(
+      "href",
+      "/solutions/bot-manager",
+    );
+    expect(within(navigation).getByRole("link", { name: "Secrets" })).toHaveAttribute(
       "href",
       "/solutions/settings#providers",
     );
-    expect(within(navigation).getByRole("link", { name: "Bot Activity" })).toHaveAttribute(
+    expect(within(navigation).getByRole("link", { name: "Activity" })).toHaveAttribute(
       "href",
       "/solutions/activity",
     );
+  });
+
+  it("opens AI Factory onto the ten stages, numbered and in lifecycle order", async () => {
+    /*
+     * The numbering is the navigation's whole claim to being organised around
+     * the lifecycle, and it is derived from the lifecycle table rather than
+     * restated in the shell — so this asserts against that table. A stage
+     * renamed in one place and not the other would otherwise surface as a link
+     * to a page that 404s.
+     */
+    const user = userEvent.setup();
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+
+    await user.click(
+      within(navigation).getByRole("button", { name: /expand ai factory subpages/i }),
+    );
+
+    expect(SDLC_LIFECYCLE).toHaveLength(10);
+    for (const definition of SDLC_LIFECYCLE) {
+      expect(
+        within(navigation).getByRole("link", {
+          name: `${definition.number} ${definition.title}`,
+        }),
+      ).toHaveAttribute("href", `/solutions/factory/${definition.slug}`);
+    }
   });
 
   it("lets a person open a subpage group and fold it again", () => {
@@ -89,7 +115,7 @@ describe("AppShell navigation", () => {
     expect(within(navigation).getByRole("link", { name: "All Projects" })).toBeInTheDocument();
     // Opening one group leaves the others closed: expanding is a choice about
     // that group, not a mode the whole menu enters.
-    expect(within(navigation).queryByRole("link", { name: "Templates" })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole("link", { name: "Artifacts" })).not.toBeInTheDocument();
 
     fireEvent.click(within(navigation).getByRole("button", { name: "Collapse Projects subpages" }));
     expect(within(navigation).queryByRole("link", { name: "All Projects" })).not.toBeInTheDocument();
@@ -99,7 +125,8 @@ describe("AppShell navigation", () => {
     const { unmount } = render(<AppShell viewer={{ signedIn: true, isSuperAdmin: true }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
     expect(within(navigation).getByText("Administration")).toBeInTheDocument();
-    expect(within(navigation).getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin");
+    expect(within(navigation).getByRole("link", { name: "Admin" }))
+      .toHaveAttribute("href", "/solutions/admin");
     unmount();
 
     render(<AppShell viewer={{ signedIn: true }}>content</AppShell>);
@@ -225,101 +252,134 @@ describe("the navigation column against the owner's reference", () => {
 
 describe("what the navigation takes from the reference, and what it does not", () => {
   /**
-   * The owner's reference lists nine top-level destinations. This records how
-   * ours relates to it, so the differences read as decisions rather than as
-   * drift — and so a future session cannot quietly re-litigate either one.
+   * The current reference is the ten-stage lifecycle brief: five primary
+   * destinations, the ten stages under AI Factory, five named surfaces under
+   * Operations, and three under System. This records how ours relates to it, so
+   * the differences read as decisions rather than as drift — and so a future
+   * session cannot quietly re-litigate either one.
    */
-  const REFERENCE_ORDER = [
-    "Overview",
-    "Projects",
-    "Pipelines",
-    "Bots",
-    "Runs",
-    "Reports",
-    "Integrations",
-    "Secrets",
-    "Settings",
-  ] as const;
+  const PRIMARY = ["Overview", "Projects", "AI Factory", "Operations", "System"] as const;
+  const OPERATIONS = ["Runs", "Agents", "Pipelines", "Artifacts", "Reports"] as const;
+  const SYSTEM = ["Integrations", "Secrets", "Settings"] as const;
 
-  it("carries every destination the reference names, in its order", () => {
+  async function openGroup(name: RegExp) {
+    const user = userEvent.setup();
+    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
+    const navigation = screen.getByRole("navigation", { name: "Console" });
+    await user.click(within(navigation).getByRole("button", { name }));
+    return navigation;
+  }
+
+  it("carries the five primary destinations in the reference's order", () => {
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
 
     const labels = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent ?? "");
-    const positions = REFERENCE_ORDER.map((label) => labels.indexOf(label));
+    expect(labels).toEqual([...PRIMARY]);
+  });
+
+  it("puts the reference's five operational surfaces first, in its order", async () => {
+    const navigation = await openGroup(/expand operations subpages/i);
+    const labels = within(navigation)
+      .getAllByRole("link")
+      .map((link) => link.textContent ?? "");
+    const positions = OPERATIONS.map((label) => labels.indexOf(label));
 
     expect(positions.some((index) => index < 0), `missing: ${
-      REFERENCE_ORDER.filter((_, index) => positions[index] < 0).join(", ")
+      OPERATIONS.filter((_, index) => positions[index] < 0).join(", ")
     }`).toBe(false);
-    // Same relative order as the reference, whatever sits between them.
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it("points Secrets at the surface that manages credentials", () => {
-    // Added once the provider credential vault existed. Before that the entry
-    // would have been a link to a page invented to justify the label.
-    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
-
-    expect(
-      within(screen.getByRole("navigation", { name: "Console" }))
-        .getByRole("link", { name: "Secrets" }),
-    ).toHaveAttribute("href", "/solutions/settings#providers");
-  });
-
-  it("keeps Advanced, which the reference does not show", () => {
+  it("keeps four surfaces under Operations that the reference does not name", async () => {
     /*
      * A deliberate departure, and the reason is the other half of the same
-     * instruction: this holds Files, Agents, Resources, AgentOS and Autonomy,
-     * all of which are real pages. Matching the image exactly would mean
-     * deleting the only way to reach them, and "do not remove functionality"
-     * is not a rule the picture overrides.
-     *
-     * `Watch` was the other such group and is gone (2026-08-19, owner
-     * instruction). It is not the same case: its two children both survived
-     * the removal, so nothing became unreachable — see below.
+     * instruction. Bots, Bot Usage, Templates and Health are real pages with
+     * real records behind them. Listing only the reference's five would have
+     * been closer to the brief and would have left four working pages
+     * reachable by URL alone — and "do not remove functionality" is not a rule
+     * the list overrides.
      */
-    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
-    const navigation = screen.getByRole("navigation", { name: "Console" });
-
-    expect(within(navigation).getByRole("link", { name: "Advanced" })).toBeInTheDocument();
+    const navigation = await openGroup(/expand operations subpages/i);
+    for (const label of ["Bots", "Bot Usage", "Templates", "Activity", "Health"]) {
+      expect(within(navigation).getByRole("link", { name: label }), label).toBeInTheDocument();
+    }
   });
 
-  it("drops the Watch group without stranding either page it held", () => {
+  it("carries the reference's three System entries, and the four it does not name", async () => {
+    const navigation = await openGroup(/expand system subpages/i);
+    for (const label of SYSTEM) {
+      expect(within(navigation).getByRole("link", { name: label }), label).toBeInTheDocument();
+    }
+    // Files, Resources, AgentOS and Autonomy were what the old "Advanced"
+    // group held. They configure the system, so this is where they went rather
+    // than out of the column.
+    for (const label of ["Files", "Resources", "AgentOS", "Autonomy"]) {
+      expect(within(navigation).getByRole("link", { name: label }), label).toBeInTheDocument();
+    }
+  });
+
+  it("points Secrets at the surface that manages credentials", async () => {
+    // Added once the provider credential vault existed. Before that the entry
+    // would have been a link to a page invented to justify the label.
+    const navigation = await openGroup(/expand system subpages/i);
+    expect(within(navigation).getByRole("link", { name: "Secrets" }))
+      .toHaveAttribute("href", "/solutions/settings#providers");
+  });
+
+  it("strands nothing the flat list used to reach", async () => {
     /*
-     * Removing a group is only safe if its destinations survive it, and these
-     * did, by two different routes:
+     * The regrouping's one real risk. Every page that had a link before must
+     * still have one, or the reorganisation quietly deleted a destination while
+     * looking like a tidy-up.
      *
-     *   Operations was promoted to a top-level destination of its own, above
-     *   Reports, which is where the owner asked for it.
-     *
-     *   Activity is still reached from Bots as "Bot Activity" — the same
-     *   `/solutions/activity` page under the name that says whose activity it
-     *   is. That entry pre-dates this change and is why removing the
-     *   duplicate costs nothing.
+     * Job Seeker is the single deliberate exception and it is not stranded: it
+     * is a different product with its own navigation that replaces this column
+     * while you are inside it, and the global header carries it for everyone
+     * signed in. Listing it here as well was the header and the column
+     * disagreeing about what the console contains.
      */
+    const user = userEvent.setup();
     render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
     const navigation = screen.getByRole("navigation", { name: "Console" });
+    for (const group of [/projects/i, /ai factory/i, /operations/i, /system/i]) {
+      await user.click(
+        within(navigation).getByRole("button", { name: new RegExp(`expand ${group.source} subpages`, "i") }),
+      );
+    }
 
-    expect(within(navigation).queryByRole("link", { name: "Watch" })).not.toBeInTheDocument();
-    expect(within(navigation).queryByRole("button", { name: /watch subpages/i }))
-      .not.toBeInTheDocument();
+    const hrefs = new Set(
+      within(navigation).getAllByRole("link").map((link) => link.getAttribute("href")),
+    );
+    for (const href of [
+      "/solutions",
+      "/solutions/projects",
+      "/solutions/myprojects",
+      "/solutions/portfolio",
+      "/solutions/backlog",
+      "/solutions/ai-factory",
+      "/solutions/pipelines",
+      "/solutions/workflows",
+      "/solutions/bot-manager",
+      "/solutions/bot-usage",
+      "/solutions/activity",
+      "/solutions/runs",
+      "/solutions/reports",
+      "/solutions/operations",
+      "/solutions/connections",
+      "/solutions/settings",
+      "/solutions/files",
+      "/solutions/agents",
+      "/solutions/resources",
+      "/solutions/agentos",
+      "/solutions/autonomy",
+    ]) {
+      expect(hrefs.has(href), `${href} lost its only link`).toBe(true);
+    }
 
-    expect(within(navigation).getByRole("link", { name: "Operations" }))
-      .toHaveAttribute("href", "/solutions/operations");
-  });
-
-  it("puts Operations directly above Reports", () => {
-    // The position is the instruction, so it is asserted as adjacency rather
-    // than as mere presence somewhere in the column.
-    render(<AppShell viewer={{ signedIn: false }}>content</AppShell>);
-
-    const labels = within(screen.getByRole("navigation", { name: "Console" }))
-      .getAllByRole("link")
-      .map((link) => link.textContent);
-
-    expect(labels.indexOf("Reports")).toBe(labels.indexOf("Operations") + 1);
+    expect(within(navigation).queryByRole("link", { name: "Job Seeker" })).not.toBeInTheDocument();
   });
 });
 
@@ -473,7 +533,10 @@ describe("retracting the column on a pointer device", () => {
     await user.click(screen.getByRole("button", { name: /collapse navigation/i }));
     const navigation = screen.getByRole("navigation", { name: "Console" });
 
-    for (const label of ["Overview", "Projects", "Runs", "Settings"]) {
+    // The retracted rail carries the five primary destinations. Their
+    // subpages are behind a chevron the rail deliberately does not render —
+    // a submenu there would have nowhere to open but over the content.
+    for (const label of ["Overview", "Projects", "AI Factory", "Operations", "System"]) {
       expect(within(navigation).getByRole("link", { name: label })).toBeInTheDocument();
     }
   });

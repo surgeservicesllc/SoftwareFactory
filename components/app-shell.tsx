@@ -4,27 +4,36 @@ import {
   Activity,
   Bot,
   Boxes,
-  BriefcaseBusiness,
   ChevronDown,
   CircleGauge,
   ClipboardList,
+  Compass,
   Cpu,
+  DraftingCompass,
   FileText,
+  FlaskConical,
   FolderKanban,
   FolderOpen,
   Gauge,
   Fingerprint,
   GitBranch,
+  Hammer,
   HeartPulse,
   KeyRound,
   type LucideIcon,
   Menu,
+  Package,
   PanelLeft,
   PlugZap,
-  Plus,
+  Radar,
+  Rocket,
+  Scale,
+  ScanEye,
   ScrollText,
   Settings,
   ShieldCheck,
+  SignpostBig,
+  Target,
   Workflow,
   X,
 } from "lucide-react";
@@ -35,6 +44,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
+import { SDLC_LIFECYCLE, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
 import { JobSeekerSidebarProfile } from "@/components/job-seeker/sidebar-profile";
 
@@ -55,116 +65,129 @@ const SIGNED_OUT_VIEWER: ShellViewer = { signedIn: false };
 /** Destinations only a confirmed super administrator sees. */
 const superAdminGroup = {
   heading: "Administration",
-  items: [{ label: "Admin", href: "/admin", icon: ShieldCheck }],
+  items: [{ label: "Admin", href: "/solutions/admin", icon: ShieldCheck }],
 } as const;
 
 /**
- * Owner-ordered structure (2026-08-17): top-level destinations with
- * expandable subpage groups, mirroring the provided design. Labels follow
- * that design — Overview, Bots, Integrations — while every href stays a real,
- * existing page; the design's subpages with no backing capability (per-user
- * project lists, a secrets store) are deliberately absent rather than linked
- * to nothing.
+ * The console navigation, organised around the lifecycle the product runs.
  *
- * Every destination reads live tenant records; an empty page says it is
- * empty rather than showing illustrative rows.
+ * Five destinations, in the order a person meets them: where things stand,
+ * what they are working on, the factory itself, the machinery underneath it,
+ * and the settings that configure all of it.
+ *
+ * The shape it replaced was a flat list of thirteen top-level entries — Bots
+ * beside Secrets beside Advanced — which is a list of the pages that happen to
+ * exist rather than a description of the product. Nothing was deleted in the
+ * regrouping: every destination that had a page still has a link, and the ones
+ * the lifecycle framing has no natural slot for (Files, Resources, AgentOS,
+ * Autonomy) sit under System, which is what they configure.
+ *
+ * The one entry that genuinely leaves is Job Seeker, and only from *here*: it
+ * is a different product, it has its own navigation that replaces this one
+ * while you are inside it, and the global header carries it for everyone signed
+ * in. Listing it in the console column as well was the header and the column
+ * disagreeing about what the console contains.
+ *
+ * Every href is a real, existing page. A subpage the reference names and no
+ * surface backs is deliberately absent rather than linked to nothing.
  */
 type NavigationItem = { label: string; href: string; icon: LucideIcon };
 type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] };
 
+/** The path a stage's landing page lives at. Exported for the pages themselves. */
+export function stageHref(slug: string): string {
+  return `/solutions/factory/${slug}`;
+}
+
+const STAGE_ICONS: Readonly<Record<SdlcStage, LucideIcon>> = {
+  REQUIREMENT: Target,
+  DISCOVER: Compass,
+  EVALUATE: Scale,
+  DECIDE: SignpostBig,
+  ARCHITECT: DraftingCompass,
+  BUILD: Hammer,
+  REVIEW: ScanEye,
+  TEST: FlaskConical,
+  DEPLOY: Rocket,
+  MONITOR: Radar,
+};
+
+/**
+ * The ten stages, derived from the lifecycle table rather than restated.
+ *
+ * Restating them would let the navigation and the engine disagree — a stage
+ * renamed in one place and not the other — and the disagreement would show up
+ * as a link to a page that 404s, which is precisely the class of defect this
+ * navigation is not allowed to have.
+ */
+const stageSubpages: readonly NavigationItem[] = SDLC_LIFECYCLE.map((stage) => ({
+  label: `${stage.number} ${stage.title}`,
+  href: stageHref(stage.slug),
+  icon: STAGE_ICONS[stage.stage],
+}));
+
 const navigationEntries: readonly NavigationEntry[] = [
   { label: "Overview", href: "/solutions", icon: CircleGauge },
-  // The guided end-to-end journey over the live flows (owner order,
-  // 2026-08-17): sits directly under Overview.
-  { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
   {
     label: "Projects",
     href: "/solutions/projects",
     icon: FolderKanban,
     subpages: [
       { label: "All Projects", href: "/solutions/projects", icon: FolderKanban },
-      // The portfolio as collapsible rows; same live records, reached from a
-      // list-first posture. Shared with Me / Starred still have no backing
-      // model and stay absent.
       { label: "My Projects", href: "/solutions/myprojects", icon: FolderOpen },
+      { label: "Portfolio", href: "/solutions/portfolio", icon: Boxes },
+      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
       { label: "Archived", href: "/solutions/projects?filter=archived", icon: ClipboardList },
     ],
   },
   {
-    label: "Pipelines",
-    href: "/solutions/pipelines",
+    label: "AI Factory",
+    href: "/solutions/ai-factory",
     icon: Workflow,
-    subpages: [
-      // Active and All are live lifecycle views over saved commands; the
-      // workflows page carries each template's full compiled preview. The
-      // design's Schedules subpage has no scheduler model yet and stays out.
-      { label: "Active", href: "/solutions/pipelines", icon: HeartPulse },
-      { label: "All Pipelines", href: "/solutions/pipelines?view=all", icon: Workflow },
-      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
-      { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
-    ],
+    subpages: stageSubpages,
   },
   {
-    label: "Bots",
-    href: "/solutions/bot-manager",
-    icon: Bot,
+    /*
+     * The lifecycle's five operational surfaces come first, in the order the
+     * reference names them, and the four that follow are the existing pages
+     * the regrouping must not strand: the bot roster and its usage windows,
+     * the pipeline templates, and the two live feeds. Listing only the first
+     * five would have been closer to the reference and would have left four
+     * working pages reachable by URL alone.
+     */
+    label: "Operations",
+    href: "/solutions/runs",
+    icon: HeartPulse,
     subpages: [
-      { label: "Connect Bot", href: "/solutions/bot-manager#connect", icon: Plus },
-      { label: "My Bots", href: "/solutions/bot-manager", icon: Bot },
-      // Recorded provider-subscription windows per account (ADR-076).
+      { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+      { label: "Agents", href: "/solutions/agents", icon: Boxes },
+      { label: "Pipelines", href: "/solutions/pipelines", icon: Workflow },
+      { label: "Artifacts", href: "/solutions/artifacts", icon: Package },
+      { label: "Reports", href: "/solutions/reports", icon: ScrollText },
+      { label: "Bots", href: "/solutions/bot-manager", icon: Bot },
       { label: "Bot Usage", href: "/solutions/bot-usage", icon: Gauge },
-      // Bot work lands in the activity feed; the same page also sits under
-      // Watch, which is deliberate — both readings are true.
-      { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
+      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
+      { label: "Activity", href: "/solutions/activity", icon: Activity },
+      { label: "Health", href: "/solutions/operations", icon: HeartPulse },
     ],
   },
-  // The personal job-search command center. Lives outside /solutions on
-  // purpose: it is the one hard-gated, person-scoped surface (the page
-  // redirects signed-out visitors), and its data is private to the person
-  // even within the organization.
-  { label: "Job Seeker", href: "/job-seeker", icon: BriefcaseBusiness },
-  { label: "Runs", href: "/solutions/runs", icon: GitBranch },
-  /*
-   * Operations, promoted out of a group and placed above Reports by owner
-   * instruction (2026-08-19).
-   *
-   * It was the first subpage of a "Watch" group whose only other child was
-   * Activity. A group holding one destination anybody wants costs a click and
-   * a disclosure to reach it, and names a category rather than a place. The
-   * group is gone; Activity went with it, and is still reached from Bots as
-   * "Bot Activity", which points at the same page.
-   */
-  { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
-  { label: "Reports", href: "/solutions/reports", icon: ScrollText },
-  { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
-  /*
-   * The reference lists Secrets, and an earlier revision left it out on the
-   * grounds that nothing backed it. That was true then and is not now: the
-   * provider credential vault (migrations `20260814002500`/`002600`) stores
-   * sealed material, and the settings page's `#providers` section is where an
-   * owner connects and rotates it. The entry points at the surface that
-   * actually manages secrets rather than at a page invented to justify it.
-   */
-  { label: "Secrets", href: "/solutions/settings#providers", icon: KeyRound },
   {
-    label: "Settings",
+    label: "System",
     href: "/solutions/settings",
     icon: Settings,
     subpages: [
-      { label: "General", href: "/solutions/settings", icon: Settings },
-      // Provider configuration lives on the settings page; the anchor lands
-      // there. Members/Teams/Permissions/Billing from the design have no
-      // backing surfaces yet and are deliberately absent.
-      { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
-    ],
-  },
-  {
-    label: "Advanced",
-    href: "/solutions/files",
-    icon: Boxes,
-    subpages: [
+      { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
+      /*
+       * The reference lists Secrets. Nothing backed a standalone page then and
+       * nothing does now: the provider credential vault (migrations
+       * `20260814002500`/`002600`) stores sealed material, and the settings
+       * page's `#providers` section is where an owner connects and rotates it.
+       * The entry points at the surface that actually manages secrets rather
+       * than at a page invented to justify the label.
+       */
+      { label: "Secrets", href: "/solutions/settings#providers", icon: KeyRound },
+      { label: "Settings", href: "/solutions/settings", icon: Settings },
       { label: "Files", href: "/solutions/files", icon: FileText },
-      { label: "Agents", href: "/solutions/agents", icon: Boxes },
       { label: "Resources", href: "/solutions/resources", icon: Cpu },
       { label: "AgentOS", href: "/solutions/agentos", icon: Fingerprint },
       { label: "Autonomy", href: "/solutions/autonomy", icon: Gauge },
