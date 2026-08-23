@@ -1405,6 +1405,19 @@ jobs:
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
 
           echo ""
+          echo "The Pipelines page's selection delete, as the database actually"
+          echo "declares it: which output columns it returns tells you whether a"
+          echo "selected pipeline is stopped before removal (stopped_count) or"
+          echo "merely skipped (kept_running). Tolerant of either era."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select coalesce(
+              (select array_to_string(proargnames, ', ')
+                 from pg_proc
+                where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')),
+              'delete_selected_pipelines absent (pre-20260823000200 database)'
+            ) as selection_delete_arguments;" || true
+
+          echo ""
           echo "Analysis graphs and their command links - the record-only execution"
           echo "surface. Tolerant of a database that predates the link migration."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
@@ -5203,9 +5216,13 @@ jobs:
                         where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
                     ) with ordinality as arg(oid, ord)
                     where ord > 4)
-               and 'stopped_count' = any(
-                      (select proargnames from pg_proc
-                        where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')))
+               -- Array containment, not \`= any(subquery)\`: that form compares
+               -- against each ROW of the subquery, so a single text[] row made
+               -- PostgreSQL coerce the scalar to an array and fail with
+               -- 'malformed array literal' after the DDL had already landed.
+               and (select proargnames from pg_proc
+                     where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+                   @> array['stopped_count']::text[]
                and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
                and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
                and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE');")
