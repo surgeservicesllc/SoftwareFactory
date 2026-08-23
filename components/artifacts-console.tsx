@@ -210,7 +210,7 @@ export function ArtifactsConsole() {
                         <td className="py-1.5 pr-4 text-muted">
                           {producer.stage ? (
                             <Link
-                              className="link"
+                              className="font-medium text-accent-text underline underline-offset-4"
                               href={`/solutions/factory/${stageDefinition(producer.stage).slug}`}
                             >
                               {stageDefinition(producer.stage).number} {stageDefinition(producer.stage).title}

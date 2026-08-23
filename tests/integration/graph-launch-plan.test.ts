@@ -90,9 +90,9 @@ describe("the graph launch payload", () => {
     await db?.close();
   });
 
-  async function launch(templateKey: string): Promise<string> {
+  async function launch(templateKey: string, goal?: string): Promise<string> {
     const template = findTemplate(templateKey)!;
-    const built = buildLaunchPlan(template, DEFAULT_GRAPH_BUDGET);
+    const built = buildLaunchPlan(template, DEFAULT_GRAPH_BUDGET, { goal });
     if (!built.ok) throw new Error(`template did not compile: ${built.errors.join("; ")}`);
     const plan = built.plan;
 
@@ -137,6 +137,80 @@ describe("the graph launch payload", () => {
     if (!built.ok) throw new Error("feature_build did not compile");
     expect(nodes.rows[0].count).toBe(built.plan.nodes.length);
     expect(edges.rows[0].count).toBe(built.plan.edges.length);
+  }, 120_000);
+
+  it("stores the request in the person's own words, not the template's summary", async () => {
+    /*
+     * `graphs.goal` is what every downstream surface shows as "what this run is
+     * for" — the runs list, the stage pages, the artifacts page. A launch that
+     * recorded the template's summary there would give ten runs of the same
+     * template ten identical descriptions, and the one-sentence intake would
+     * have nowhere to put the sentence.
+     */
+    await asMember(db);
+    const asked = "Add world-class backtesting to my trading platform.";
+    const graphId = await launch("agentic_sdlc", asked);
+
+    await asCatalogue(db);
+    const stored = await db.query<{ goal: string; is_lifecycle: boolean }>(
+      "select goal, is_lifecycle from public.graphs where id = $1",
+      [graphId],
+    );
+    expect(stored.rows[0].goal).toBe(asked);
+    expect(stored.rows[0].is_lifecycle).toBe(true);
+  }, 120_000);
+
+  it("falls back to the template's summary when no request was typed", async () => {
+    // Launching a template from the pipelines page is still a legitimate way
+    // in and has no sentence behind it. Recording an empty goal would violate
+    // the column's own check constraint; recording the summary says truthfully
+    // that a template was run rather than a request made.
+    await asMember(db);
+    const graphId = await launch("security_audit");
+
+    await asCatalogue(db);
+    const stored = await db.query<{ goal: string }>(
+      "select goal from public.graphs where id = $1",
+      [graphId],
+    );
+    expect(stored.rows[0].goal).toBe(findTemplate("security_audit")!.summary);
+  }, 120_000);
+
+  it("treats a goal of nothing but spaces as no goal at all", async () => {
+    await asMember(db);
+    const graphId = await launch("security_audit", "   ");
+
+    await asCatalogue(db);
+    const stored = await db.query<{ goal: string }>(
+      "select goal from public.graphs where id = $1",
+      [graphId],
+    );
+    expect(stored.rows[0].goal).toBe(findTemplate("security_audit")!.summary);
+  }, 120_000);
+
+  it("stages every node of the lifecycle template, and no node of the others", async () => {
+    await asMember(db);
+    const lifecycle = await launch("agentic_sdlc", "Ship the thing.");
+    const audit = await launch("security_audit");
+
+    await asCatalogue(db);
+    const staged = await db.query<{ stage: string | null; count: number }>(
+      `select lifecycle_stage::text as stage, count(*)::int as count
+         from public.graph_nodes where graph_id = $1 group by 1 order by 1`,
+      [lifecycle],
+    );
+    expect(staged.rows.every((row) => row.stage !== null)).toBe(true);
+    expect(new Set(staged.rows.map((row) => row.stage))).toEqual(new Set([
+      "REQUIREMENT", "DISCOVER", "EVALUATE", "DECIDE", "ARCHITECT",
+      "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR",
+    ]));
+
+    const unstaged = await db.query<{ count: number }>(
+      `select count(*)::int as count from public.graph_nodes
+        where graph_id = $1 and lifecycle_stage is not null`,
+      [audit],
+    );
+    expect(unstaged.rows[0].count).toBe(0);
   }, 120_000);
 
   it("records the compiler's topology and risk rather than a default", async () => {

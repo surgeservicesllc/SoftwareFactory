@@ -49,6 +49,16 @@ const launchSchema = z
   .object({
     projectId: z.string().uuid(),
     templateKey: z.string().trim().min(1).max(64),
+    /*
+     * What the person actually asked for, in their words.
+     *
+     * Optional, because launching a template from the pipelines page is still
+     * a legitimate way in and has no sentence behind it. Bounded at 4000 to
+     * match `graphs.goal`'s own check constraint — a longer one would be
+     * refused by PostgreSQL with a message about a check constraint, which
+     * tells the person nothing about what to do.
+     */
+    goal: z.string().trim().min(1).max(4000).optional(),
   })
   .strict();
 
@@ -58,7 +68,9 @@ export async function POST(request: Request) {
 
     const parsed = launchSchema.safeParse(await readBoundedJson(request, 4 * 1024));
     if (!parsed.success) {
-      return invalidRequest("Provide a projectId and a templateKey.");
+      return invalidRequest(
+        "Provide a projectId and a templateKey, and a goal of at most 4000 characters if you send one.",
+      );
     }
 
     const context = await operationsContext();
@@ -109,7 +121,9 @@ export async function POST(request: Request) {
      * ceiling for a graph that declared it needs a hundred and fifty — the
      * guard would pass, and production would stop the run as overspending.
      */
-    const built = buildLaunchPlan(template, budgetForTemplate(template));
+    const built = buildLaunchPlan(template, budgetForTemplate(template), {
+      goal: parsed.data.goal,
+    });
     if (!built.ok) {
       // The compiler refused. That is a real answer about the template, not a
       // server fault, so it reaches the caller intact.
@@ -143,6 +157,11 @@ export async function POST(request: Request) {
 
     return jsonNoStore({
       graphId: data,
+      // Echoed back so the caller can show what was recorded rather than what
+      // it sent — the two differ when no goal was supplied and the template's
+      // summary stood in.
+      goal: plan.goal,
+      isLifecycle: plan.isLifecycle,
       template: { key: template.key, name: template.name, version: template.version },
       topology: plan.topology,
       nodeCount: plan.nodes.length,

@@ -90,9 +90,23 @@ function resourcePayload(
 export function buildLaunchPlan(
   template: GraphTemplate,
   budget: GraphBudget,
+  options: {
+    /**
+     * The request in the person's own words.
+     *
+     * Absent, the goal is the template's summary — a description of the
+     * machinery, which is the right thing to record when someone launched a
+     * template rather than asked for something. Present, it is what they typed,
+     * stored verbatim in `graphs.goal`, because that column is what every
+     * downstream surface shows as "what this run is for" and a paraphrase there
+     * would be this system telling someone what they meant.
+     */
+    readonly goal?: string;
+  } = {},
 ): LaunchPlanResult {
+  const requested = options.goal?.trim();
   const result = compileGraph({
-    goal: template.summary,
+    goal: requested && requested.length > 0 ? requested : template.summary,
     nodes: templateNodeContracts(template),
     proposedEdges: template.proposedEdges,
     risk: template.risk,

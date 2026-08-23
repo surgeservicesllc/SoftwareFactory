@@ -322,7 +322,7 @@ export function StageConsole({ stage }: { readonly stage: SdlcStage }) {
           <p className="mt-3 text-sm text-muted">
             It hands the next stage a <strong className="text-foreground">{definition.artifact}</strong>
             {following
-              ? <> , which is what <Link className="link" href={`/solutions/factory/${stageDefinition(following).slug}`}>{stageDefinition(following).number} {stageDefinition(following).title}</Link> reads.</>
+              ? <> , which is what <Link className="font-medium text-accent-text underline underline-offset-4" href={`/solutions/factory/${stageDefinition(following).slug}`}>{stageDefinition(following).number} {stageDefinition(following).title}</Link> reads.</>
               : <> . It is the last stage of a pass; what it finds becomes the next request.</>}
           </p>
           <p className="mt-2 text-sm text-muted">
@@ -444,7 +444,7 @@ export function StageConsole({ stage }: { readonly stage: SdlcStage }) {
                   </ul>
                 ) : null}
                 {run.input ? (
-                  <Link className="link mt-3 inline-block text-sm" href={`/solutions/factory/${run.input.slug}`}>
+                  <Link className="mt-3 inline-block text-sm font-medium text-accent-text underline underline-offset-4" href={`/solutions/factory/${run.input.slug}`}>
                     Open {run.input.title}
                   </Link>
                 ) : null}
@@ -466,7 +466,7 @@ export function StageConsole({ stage }: { readonly stage: SdlcStage }) {
                       + `${run.anchorCount} anchored.`}
                 </p>
                 {run.output ? (
-                  <Link className="link mt-3 inline-block text-sm" href={`/solutions/factory/${run.output.slug}`}>
+                  <Link className="mt-3 inline-block text-sm font-medium text-accent-text underline underline-offset-4" href={`/solutions/factory/${run.output.slug}`}>
                     Open {run.output.title}
                   </Link>
                 ) : null}
