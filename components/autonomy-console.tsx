@@ -1,7 +1,9 @@
 "use client";
 
 import { Gauge, ScrollText } from "lucide-react";
+import { useState } from "react";
 
+import { ClearProjectsButton } from "@/components/clear-projects-button";
 import {
   formatDateTime,
   TenantListShell,
@@ -58,9 +60,17 @@ function decisionTone(decision: string) {
   return "danger" as const;
 }
 
-function AutonomyStatusList() {
+function AutonomyStatusList({
+  refreshToken,
+  onCleared,
+}: {
+  refreshToken: number;
+  onCleared: () => void;
+}) {
   const { state, reload } = useTenantList<AutonomyStatus>(
-    "/api/autonomy/status",
+    // The token is part of the path key so clearing re-reads the list without
+    // this component needing to know how the clear works.
+    `/api/autonomy/status${refreshToken ? `?_=${refreshToken}` : ""}`,
     (body) => (body.status as AutonomyStatus[]) ?? [],
     "Autonomy status could not be loaded.",
   );
@@ -78,6 +88,8 @@ function AutonomyStatusList() {
       emptyDescription="This page shows what each project is allowed to do on its own. Add a project first and its permissions appear here."
       emptyActionHref="/solutions/projects"
       emptyActionLabel="Add a project"
+      /* Sits beside Refresh, which is where the owner marked it. */
+      action={<ClearProjectsButton onCleared={onCleared} />}
     >
       {(items) => (
         <ul className="divide-y divide-line">
@@ -118,9 +130,11 @@ function AutonomyStatusList() {
   );
 }
 
-function AutonomyDecisions() {
+function AutonomyDecisions({ refreshToken }: { refreshToken: number }) {
   const { state, reload } = useTenantList<AutonomyDecision>(
-    "/api/autonomy/decisions",
+    // Decisions cascade away with their project, so the same token re-reads
+    // this list too rather than leaving it describing rows that are gone.
+    `/api/autonomy/decisions${refreshToken ? `?_=${refreshToken}` : ""}`,
     (body) => (body.decisions as AutonomyDecision[]) ?? [],
     "Autonomy decisions could not be loaded.",
   );
@@ -183,10 +197,13 @@ function AutonomyDecisions() {
 }
 
 export function AutonomyConsole() {
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refresh = () => setRefreshToken((previous) => previous + 1);
+
   return (
     <div className="mt-4 space-y-4">
-      <AutonomyStatusList />
-      <AutonomyDecisions />
+      <AutonomyStatusList refreshToken={refreshToken} onCleared={refresh} />
+      <AutonomyDecisions refreshToken={refreshToken} />
     </div>
   );
 }

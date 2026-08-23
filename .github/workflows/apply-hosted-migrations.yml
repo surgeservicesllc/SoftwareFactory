@@ -84,6 +84,10 @@ on:
           "stop-and-delete-pipelines" applies only 20260823000300, which makes
           that selection stop live work before removing it and detach an
           analysis graph rather than being refused by its foreign key;
+          "clear-autonomy-projects" applies only 20260823000600, which adds the
+          Autonomy page's Clear control as an archive sweep and excludes
+          archived projects from the autonomy list; it deletes nothing and
+          leaves the project deletion guard in place;
           "finish-credential-vault" applies only 20260823000500, which creates
           the one function 20260814002500 died before creating - the reason a
           correct bot sign-in code reads invalid - and then records
@@ -124,6 +128,7 @@ on:
           - stop-and-delete-pipelines
           - release-routing-evidence
           - finish-credential-vault
+          - clear-autonomy-projects
           - probe
 permissions:
   checks: read
@@ -5495,6 +5500,94 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a correct sign-in code can resolve again, and the preview branch has nothing left to replay for this file."
+
+      - name: Add the Autonomy Clear control (scope=clear-autonomy-projects)
+        # Exactly one file — 20260823000600 — which adds clear_autonomy_projects
+        # and narrows list_autonomy_status to the projects the loop can still
+        # act on. It deletes nothing: the clear archives, through
+        # archive_project, because refuse_project_deletion states by name that
+        # a project's append-only trail makes it permanent and that archiving
+        # is the supported end of its life. The file's own postflight re-checks
+        # that the deletion guard is still on the table.
+        if: ${{ inputs.scope == 'clear-autonomy-projects' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000600_clear_autonomy_projects.sql
+          EXPECTED_SHA256=e61025245831b13afb488097660f6c2f6b5cf958c289537d0f2303c2adc3223f
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000600';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000600 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000600
+          else
+            npx supabase migration repair --status applied 20260823000600 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo "Rolled-back proof that a project still cannot be deleted."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
+          begin;
+          do $guardcheck$
+          declare
+            v_project uuid;
+            v_refused boolean := false;
+          begin
+            select id into v_project from public.projects limit 1;
+            if v_project is null then
+              raise notice 'GUARD: no project to test against';
+              return;
+            end if;
+            begin
+              delete from public.projects where id = v_project;
+            exception when others then
+              v_refused := (SQLERRM like '%projects cannot be deleted%');
+            end;
+            if not v_refused then
+              raise exception using errcode = '55000',
+                message = 'the project deletion guard no longer refuses';
+            end if;
+            raise notice 'GUARD: project deletion still refused';
+          end
+          $guardcheck$;
+          rollback;
+          GUARD_SQL
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.clear_autonomy_projects(uuid,text)') is not null
+               and not has_function_privilege('anon', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and exists (select 1 from pg_trigger
+                            where tgrelid = 'public.projects'::regclass
+                              and tgname = 'projects_guarded_deletion'
+                              and not tgisinternal);")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The autonomy clear did not read back with the intended posture."
+            exit 1
+          fi
+          echo "Applied and verified: Clear archives, the list hides archived projects, and nothing can delete one."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
