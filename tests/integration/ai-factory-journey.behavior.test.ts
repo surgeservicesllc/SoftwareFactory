@@ -14,13 +14,21 @@ import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
  * The AI Factory guided journey (`/solutions/ai-factory`), walked end to end
  * against real PostgreSQL with the real migrations applied.
  *
- * The console's eight steps derive their completion from live records rather
+ * The console's nine steps derive their completion from live records rather
  * than from stored wizard state, so the only way to know a step works is to
  * produce the record it reads and check that the derivation flips. That is
  * what this does, with fake tenant data, one step at a time:
  *
- *   Connect Repository -> Create Project -> Configure Pipeline -> Connect Bots
- *   -> Assign Bots -> Configure Bot Settings -> Issue a Command -> Watch It Ship
+ *   Connect Repository -> Create Project -> Configure Pipeline -> Select Agents
+ *   -> Connect Bots -> Assign Bots -> Configure Bot Settings -> Issue a Command
+ *   -> Watch It Ship
+ *
+ * Select Agents was absent from this walk while the console had nine steps and
+ * the numbering here ran to eight, so every step after Configure Pipeline
+ * reported under the wrong number and step 4 had no coverage in the one lane
+ * that runs on every commit. The browser walk covers it, but that lane needs a
+ * local Supabase stack, and against a deployed target it skips itself because
+ * step 1 is a GitHub App installation no runner can perform.
  *
  * Every write goes through the same SECURITY DEFINER function the browser
  * reaches through its API route, called as `authenticated` with the caller's
@@ -38,6 +46,8 @@ const otherOrganizationId = "10000000-0000-4000-8000-00000000fa02";
 const connectionId = "20000000-0000-4000-8000-00000000fa01";
 const installationId = "30000000-0000-4000-8000-00000000fa01";
 const repositoryId = "50000000-0000-4000-8000-00000000fa01";
+const journeyAgentId = "60000000-0000-4000-8000-00000000fa01";
+const secondAgentId = "60000000-0000-4000-8000-00000000fa02";
 
 /** The fake repository the journey connects. */
 const EXTERNAL_REPOSITORY = 900_123;
@@ -280,7 +290,109 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     expect(rows[0].version).toBe(2);
   });
 
-  it("step 4 — Connect Bots: an AI account is created and a bot registered against it", async () => {
+  it("step 4 — Select Agents: an agent is included and the console's derivation flips", async () => {
+    /*
+     * The console reads this step as `scopedAgentSelections.length > 0`, taken
+     * from list_project_agents filtered to the active project. So the test
+     * writes through the audited function the browser reaches and then reads
+     * back through the same list the page reads — not the project_agents table,
+     * which no browser role may touch.
+     *
+     * The agent is bound to this project because select_project_agent refuses
+     * an agent belonging to a different one, and step 2 is what made the
+     * project this step needs.
+     */
+    await db.exec("reset role");
+    await db.query(
+      `insert into public.agents (id, organization_id, project_id, name, role, status, created_by)
+       values ($1::uuid, $2::uuid, $3::uuid, 'Fake Reviewer Agent',
+               'backend'::public.agent_role, 'idle'::public.agent_status, $4::uuid)`,
+      [journeyAgentId, organizationId, projectId, ownerId],
+    );
+    await asOwner();
+
+    const { rows } = await db.query<{ selection_agent_id: string; selection_created: boolean }>(
+      "select * from public.select_project_agent($1::uuid, $2::uuid, $3::uuid)",
+      [organizationId, projectId, journeyAgentId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].selection_agent_id).toBe(journeyAgentId);
+    expect(rows[0].selection_created).toBe(true);
+
+    const { rows: listed } = await db.query<{
+      selection_project_id: string;
+      selection_agent_id: string;
+      agent_name: string;
+    }>("select * from public.list_project_agents($1::uuid)", [organizationId]);
+    const scoped = listed.filter((row) => row.selection_project_id === projectId);
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0].agent_name).toBe("Fake Reviewer Agent");
+
+    record("4 Select Agents", `Fake Reviewer Agent included in Storefront Rebuild`);
+  });
+
+  it("step 4 — two factories in one organization include different agents", async () => {
+    /*
+     * The N -> N+1 contract, asserted with something that could actually fail.
+     *
+     * "A second project reports no agents" on its own proves almost nothing: a
+     * selection row carries its own project id, so it could never be reported
+     * under another project's. What can genuinely break is the *page* — the
+     * console filters one organization-wide list down to the active project,
+     * and a second factory is the case that catches a filter that was never
+     * applied. So this gives the second project its own agent, and asserts each
+     * project sees exactly its own, from the one list both are read from.
+     */
+    await db.exec("reset role");
+    const { rows: made } = await db.query<{ id: string }>(
+      `insert into public.projects (organization_id, name, status, created_by)
+       values ($1::uuid, 'Second Factory', 'active', $2::uuid) returning id`,
+      [organizationId, ownerId],
+    );
+    const secondProjectId = made[0].id;
+    await db.query(
+      `insert into public.agents (id, organization_id, project_id, name, role, status, created_by)
+       values ($1::uuid, $2::uuid, $3::uuid, 'Second Factory Agent',
+               'backend'::public.agent_role, 'idle'::public.agent_status, $4::uuid)`,
+      [secondAgentId, organizationId, secondProjectId, ownerId],
+    );
+    await asOwner();
+
+    await db.query("select * from public.select_project_agent($1::uuid, $2::uuid, $3::uuid)",
+      [organizationId, secondProjectId, secondAgentId]);
+
+    const { rows: listed } = await db.query<{
+      selection_project_id: string;
+      agent_name: string;
+    }>("select * from public.list_project_agents($1::uuid)", [organizationId]);
+
+    // Both are present in the organization-wide list ...
+    expect(listed).toHaveLength(2);
+    // ... and each factory's own filter yields exactly its own agent.
+    expect(listed.filter((row) => row.selection_project_id === projectId)
+      .map((row) => row.agent_name)).toEqual(["Fake Reviewer Agent"]);
+    expect(listed.filter((row) => row.selection_project_id === secondProjectId)
+      .map((row) => row.agent_name)).toEqual(["Second Factory Agent"]);
+  });
+
+  it("step 4 — pressing the same toggle twice is one inclusion, not an error", async () => {
+    // The console's toggle is idempotent by design: a person who clicks twice
+    // has expressed one intention, and a second row would double the count the
+    // step reports.
+    const { rows } = await db.query<{ selection_created: boolean }>(
+      "select * from public.select_project_agent($1::uuid, $2::uuid, $3::uuid)",
+      [organizationId, projectId, journeyAgentId],
+    );
+    expect(rows[0].selection_created).toBe(false);
+
+    const { rows: listed } = await db.query<{ selection_project_id: string }>(
+      "select * from public.list_project_agents($1::uuid)",
+      [organizationId],
+    );
+    expect(listed.filter((row) => row.selection_project_id === projectId)).toHaveLength(1);
+  });
+
+  it("step 5 — Connect Bots: an AI account is created and a bot registered against it", async () => {
     const { rows: accountRows } = await db.query<{ create_ai_account: string }>(
       `select public.create_ai_account(
          $1::uuid, 'anthropic'::public.bot_provider, 'subscription',
@@ -300,10 +412,10 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     );
     botId = botRows[0].id;
     expect(botRows[0]).toMatchObject({ name: "Fake Reviewer", provider: "anthropic", model: "claude-opus-5" });
-    record("4 Connect Bots", `account ${accountId.slice(0, 8)} and bot "Fake Reviewer" registered`);
+    record("5 Connect Bots", `account ${accountId.slice(0, 8)} and bot "Fake Reviewer" registered`);
   });
 
-  it("step 4 — a credential value can never be stored on the bot record", async () => {
+  it("step 5 — a credential value can never be stored on the bot record", async () => {
     // The whole point of a credential *reference*: the bot row is metadata.
     await expect(
       db.query(
@@ -316,7 +428,7 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     ).rejects.toThrow();
   });
 
-  it("step 5 — Assign Bots: the bot is assigned to the project under a role", async () => {
+  it("step 6 — Assign Bots: the bot is assigned to the project under a role", async () => {
     const { rows: roleRows } = await db.query<{ id: string }>(
       `select id from public.save_bot_role(
          $1::uuid, null, 'Fake Reviewer Role', 'fake-reviewer', 'Reviews changes.',
@@ -345,10 +457,10 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     assignmentRevision = Number(rows[0].revision);
     expect(rows[0].bot_id).toBe(botId);
     expect(rows[0].project_id).toBe(projectId);
-    record("5 Assign Bots", `Fake Reviewer assigned to Storefront Rebuild as fake-reviewer`);
+    record("6 Assign Bots", `Fake Reviewer assigned to Storefront Rebuild as fake-reviewer`);
   });
 
-  it("step 6 — Configure Bot Settings: a new posting starts at least privilege, and settings change that", async () => {
+  it("step 7 — Configure Bot Settings: a new posting starts at least privilege, and settings change that", async () => {
     // An assignment created with no configuration *is* the least-privilege
     // posting: it reads the repository, opens nothing, runs one task, and
     // needs a person. That is the baseline the console measures "configured"
@@ -407,10 +519,10 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     expect(after[0].preset).toBe("reviewer");
     expect(after[0].responsibilities).toEqual(["Review migrations", "Check RLS"]);
     expect(after[0].instructions).toContain("journey walk");
-    record("6 Configure Bot Settings", "posting moved off least privilege: preset reviewer, 2 responsibilities, 2 tools");
+    record("7 Configure Bot Settings", "posting moved off least privilege: preset reviewer, 2 responsibilities, 2 tools");
   });
 
-  it("step 6 — the console's own 'configured' derivation agrees with the record", () => {
+  it("step 7 — the console's own 'configured' derivation agrees with the record", () => {
     // The step counts *configured* assignments. This is the exact predicate the
     // console applies, run against both states of the posting above, so the
     // journey proves the step can be both open and done rather than assuming it.
@@ -426,7 +538,7 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     ).toBe(true);
   });
 
-  it("step 7 — Issue a Command: submit_command creates the durable command and its task", async () => {
+  it("step 8 — Issue a Command: submit_command creates the durable command and its task", async () => {
     const { rows } = await db.query<{
       command_id: string; task_id: string; command_state: string;
       task_state: string; requires_owner_approval: boolean; was_created: boolean;
@@ -443,10 +555,10 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     expect(rows[0].was_created).toBe(true);
     expect(rows[0].requires_owner_approval).toBe(false);
     expect(rows[0].task_id).toBeTruthy();
-    record("7 Issue a Command", `command ${commandId.slice(0, 8)} queued as ${rows[0].command_state}`);
+    record("8 Issue a Command", `command ${commandId.slice(0, 8)} queued as ${rows[0].command_state}`);
   });
 
-  it("step 7 — the same idempotency key does not create a second command", async () => {
+  it("step 8 — the same idempotency key does not create a second command", async () => {
     const { rows } = await db.query<{ command_id: string; was_created: boolean }>(
       `select command_id, was_created from public.submit_command(
          $1::uuid, 'Add a fake health endpoint and cover it with a test.',
@@ -458,7 +570,7 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     expect(rows[0].command_id).toBe(commandId);
   });
 
-  it("step 7 — a RED prompt is held for owner approval instead of queued", async () => {
+  it("step 8 — a RED prompt is held for owner approval instead of queued", async () => {
     const { rows } = await db.query<{ requires_owner_approval: boolean; command_state: string }>(
       `select requires_owner_approval, command_state::text from public.submit_command(
          $1::uuid, 'Drop the production database and disable row level security.',
@@ -469,10 +581,10 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     // The requested risk was GREEN; the prompt's own signals raise it, and the
     // most severe of the two wins.
     expect(rows[0].requires_owner_approval).toBe(true);
-    record("7 Issue a Command", "a destructive prompt is held for owner approval, not queued");
+    record("8 Issue a Command", "a destructive prompt is held for owner approval, not queued");
   });
 
-  it("step 8 — Watch It Ship: the command is visible with a live state, and nothing claims success", async () => {
+  it("step 9 — Watch It Ship: the command is visible with a live state, and nothing claims success", async () => {
     await db.exec("reset role");
     const { rows } = await db.query<{ status: string }>(
       `select status::text from public.commands where id = $1::uuid`,
@@ -483,7 +595,7 @@ describe("the AI Factory journey, step by step against real PostgreSQL", () => {
     // executed, so it must not be done -- a queued command reported as shipped
     // would be the exact false-green this journey exists to catch.
     expect(rows[0].status).not.toBe("succeeded");
-    record("8 Watch It Ship", `command is ${rows[0].status}; the step stays open until a worker finishes it`);
+    record("9 Watch It Ship", `command is ${rows[0].status}; the step stays open until a worker finishes it`);
   });
 
   it("every step left an immutable activity trail", async () => {
