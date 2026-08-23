@@ -256,6 +256,7 @@ and the panel.
    on that; leave it alone unless it is handed over.
 
 Verified this round: typecheck, lint, production build, full suite.
+
 ## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4)
 
 **Applied.** `scope=graph-stage-backfill` ran against production —
