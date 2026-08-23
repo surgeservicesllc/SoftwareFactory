@@ -664,7 +664,7 @@ describe("POST /api/commands", () => {
     });
   });
 
-  it("returns an Anthropic record-only replay without claiming an execution run", async () => {
+  it("launches the idempotent analysis graph on an Anthropic record-only replay, never an execution run", async () => {
     const stored = factoryReplay();
     const routingSnapshot = stored.routing_snapshot as RegistryRow;
     const assignment = routingSnapshot.assignment as RegistryRow;
@@ -695,14 +695,24 @@ describe("POST /api/commands", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       idempotentReplay: true,
-      execution: { started: false, workerDispatch: "not_applicable" },
+      // Replaying a recorded Claude command launches (or returns) its one
+      // analysis graph — this is how a command recorded before the launch
+      // feature existed gains its run.
+      execution: {
+        started: true,
+        workerDispatch: "not_applicable",
+        analysisGraph: { launched: true, graphId: analysisGraphId },
+      },
       orchestration: {
         executionMode: "record_only",
         provider: "anthropic",
         model: "claude-opus-5",
       },
     });
-    expect(body.execution.message).toContain("No execution run was created");
+    expect(body.execution.message).toContain("analysis graph is planned");
+    expect(rpc).toHaveBeenCalledWith("launch_command_analysis_graph", expect.objectContaining({
+      p_organization_id: organizationId,
+    }));
     expect(rpc).not.toHaveBeenCalledWith("submit_factory_command", expect.anything());
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
   });
