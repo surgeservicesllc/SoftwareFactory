@@ -34,7 +34,7 @@ satisfy.
 | 8 | Checkpoints and resume | **Have** | every claim rebuilds from persisted rows; a dead worker's run is reclaimed after two hours |
 | 9 | Failure isolation | **Have** | a failed node blocks only its dependents |
 | 10 | Shared artifacts between nodes | **Have** | `record_graph_artifact_as_worker`; edges deliver upstream outputs |
-| 11 | Handoffs between agents | **Have** | `record_graph_handoff_as_worker` (`20260823000800`); one row per edge that leaves a stage, with the sending stage's contract checked at the handoff |
+| 11 | Handoffs between agents | **Have** | `record_graph_handoff_as_worker` (`20260823001000`); one row per edge that leaves a stage, with the sending stage's contract checked at the handoff |
 | 12 | Ownership and status per node | **Have** | `node_runs.state` |
 | 13 | Confidence and risk scores | **Partial** | risk per node; `node_runs.confidence` exists and the worker does not yet report one |
 | 14 | Execution history | **Have** | `graph_events`, one row per transition |

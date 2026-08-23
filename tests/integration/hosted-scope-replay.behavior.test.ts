@@ -113,7 +113,7 @@ describe("the workflow's surgical scopes", () => {
       "20260821000100_agentic_sdlc_activity_types.sql",
       "20260821000200_agentic_sdlc_lifecycle.sql",
     ]);
-    expect(widening).toEqual(["20260823000700_ten_stage_lifecycle.sql"]);
+    expect(widening).toEqual(["20260823000900_ten_stage_lifecycle.sql"]);
     expect([...broker, ...lifecycle, ...widening].filter((file) => !known.has(file))).toEqual([]);
   });
 
@@ -204,6 +204,36 @@ describe("the workflow's surgical scopes", () => {
       // The console's launch: authenticated, through RLS and its own checks.
       { name: "create_graph_from_plan", worker: false, member: true },
     ]);
+  });
+
+  it("keeps the stage backfill ahead of the widening, which is the only thing ordering them", async () => {
+    /*
+     * `20260823000700` backfills `graph_nodes.lifecycle_stage` for rows recorded
+     * before the capability rule existed, and it writes the eight-stage
+     * vocabulary — `'IMPLEMENTATION'::public.sdlc_stage`, `'ARCHITECTURE'`,
+     * `'PRD'`. The widening drops all three labels.
+     *
+     * In this order the two compose exactly: the backfill fills the old
+     * vocabulary and the widening's map carries every row forward. Reversed,
+     * the backfill dies on `invalid input value for enum sdlc_stage` and takes
+     * the rest of the chain with it.
+     *
+     * Nothing but the version numbers enforces that, and both files have
+     * already been renumbered once by a merge — so this asserts the order
+     * rather than trusting whoever renumbers next. The `beforeAll` above is the
+     * proof it actually applies; this is the proof it will keep doing so.
+     */
+    const files = (await readdir(migrationsRoot)).filter((name) => /^\d+.*\.sql$/.test(name)).sort();
+    const backfill = files.findIndex((name) => name.includes("backfill_graph_node_lifecycle_stage"));
+    const widening = files.findIndex((name) => name.includes("ten_stage_lifecycle"));
+
+    expect(backfill, "the backfill migration is missing").toBeGreaterThanOrEqual(0);
+    expect(widening, "the ten-stage widening is missing").toBeGreaterThanOrEqual(0);
+    expect(
+      backfill,
+      "the ten-stage widening must run AFTER the backfill, or the backfill writes "
+        + "three enum labels the widening has already dropped",
+    ).toBeLessThan(widening);
   });
 
   it("leaves the stage vocabulary widened, because the lifecycle file guards its own type", async () => {

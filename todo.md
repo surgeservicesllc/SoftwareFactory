@@ -18,7 +18,7 @@ the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
 1. **`eca6ccc` — the stage model is ten, not eight.**
    `lib/sdlc/lifecycle.ts` rewritten: ten stages with number, title, slug,
    plain-English purpose, produced artifact, capability, gate and anchor rule.
-   Migration `20260823000700_ten_stage_lifecycle.sql` rebuilds the
+   Migration `20260823000900_ten_stage_lifecycle.sql` rebuilds the
    `public.sdlc_stage` enum (rename could not carry it — PRD had to *merge*
    into REQUIREMENT) and widens `list_graph_runs` with per-node
    `depends_on`/`attempts`/`anchor_count`/`artifact_count`/timings plus a
@@ -58,7 +58,7 @@ the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
 
 ### Wired since, and what is left
 
-`lib/graph/backoff.ts` and `20260823000800_structured_stage_handoffs.sql` are
+`lib/graph/backoff.ts` and `20260823001000_structured_stage_handoffs.sql` are
 now called by something.
 
 **Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
@@ -100,7 +100,7 @@ belongs in a reviewed change rather than beside this one.
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
-2. **`20260823000800` needs a hosted scope of its own** in
+2. **`20260823001000` needs a hosted scope of its own** in
    `.github/workflows/apply-hosted-migrations.yml`, after the two below.
 3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
    still reports none.
@@ -122,11 +122,27 @@ this branch used. The Supabase ledger keys on the 14-digit prefix, so two files
 at one version silently orphan DDL. Mine moved to the tail, since main's are
 merged and closer to hosted:
 
-- `20260823000700_ten_stage_lifecycle.sql`
-- `20260823000800_structured_stage_handoffs.sql`
+- `20260823000900_ten_stage_lifecycle.sql`
+- `20260823001000_structured_stage_handoffs.sql`
 
-Neither of main's new migrations touches `sdlc_stage` or `list_graph_runs`, so
-running after them is safe. Renumbering by blanket substitution damaged three
+**They were renumbered twice.** The first move (to 000700/000800) collided again
+within the hour: `#366` shipped `20260823000700_backfill_graph_node_lifecycle_stage.sql`.
+That is the treadmill this repository warns about — main takes several merges an
+hour, so a branch clean when you opened it goes conflicted while you work.
+
+**And the second collision was load-bearing, not just a number.** The backfill
+fills `graph_nodes.lifecycle_stage` for every row recorded before the capability
+rule existed, and it writes the *eight-stage* vocabulary:
+`'IMPLEMENTATION'::public.sdlc_stage`, `'ARCHITECTURE'`, `'PRD'`. The widening
+drops all three.
+
+Ordered backfill-then-widening the two compose exactly: the backfill fills the
+old vocabulary, and the widening's map carries every one of its rows forward.
+Reversed, the backfill dies on `invalid input value for enum sdlc_stage` and
+takes the rest of the chain with it. Nothing but the version numbers enforces
+that, so it is stated in the migration's own header and asserted by
+`hosted-scope-replay.behavior.test.ts` — renumbering the widening below 000700
+would be a silent production break, not a merge tidy-up. Renumbering by blanket substitution damaged three
 lines of *main's* own scopes before it was caught — a version string is not a
 unique token in that workflow, and the same mistake shape had already bitten
 this branch once on a test pin.
@@ -169,7 +185,7 @@ widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a lab
 that exists in both vocabularies, so the lifecycle rows keep answering the
 question they are actually about.
 
-`20260823000800` (handoffs) is wired now and needs a scope of its own. It is
+`20260823001000` (handoffs) is wired now and needs a scope of its own. It is
 additive — two guarded indexes and one `create or replace function` with its
 grants restated — so it carries none of the type-drop risk the scope above has.
 
@@ -220,7 +236,7 @@ completed run for a while; let a run finish before pushing again.
 
 ### Wired since, and what is left
 
-`lib/graph/backoff.ts` and `20260823000800_structured_stage_handoffs.sql` are
+`lib/graph/backoff.ts` and `20260823001000_structured_stage_handoffs.sql` are
 now called by something.
 
 **Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
@@ -262,7 +278,7 @@ belongs in a reviewed change rather than beside this one.
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
-2. **`20260823000800` needs a hosted scope of its own** in
+2. **`20260823001000` needs a hosted scope of its own** in
    `.github/workflows/apply-hosted-migrations.yml`, after the two below.
 3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
    still reports none.
@@ -287,7 +303,7 @@ widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a lab
 that exists in both vocabularies, so the lifecycle rows keep answering the
 question they are actually about.
 
-`20260823000800` (handoffs) is wired now and needs a scope of its own. It is
+`20260823001000` (handoffs) is wired now and needs a scope of its own. It is
 additive — two guarded indexes and one `create or replace function` with its
 grants restated — so it carries none of the type-drop risk the scope above has.
 
@@ -323,6 +339,62 @@ moment another migration lands.
 
 
 ## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)
+## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, latest)
+
+Follows the round below, which made new graphs carry a stage. Existing rows
+still stored null, so the graph-runs **Stage** column read as an em dash for the
+whole of this workspace's history — including the first real Step 9 run. That
+is now derivable rather than lost: `capability` is already on every row, and the
+stage is a property of the work the node does.
+
+**Shipped:** `20260823000700_backfill_graph_node_lifecycle_stage.sql` — data
+only, no schema change. `update ... where lifecycle_stage is null and capability
+in (the nine the application defines)`.
+
+Three properties, each of which is the reason it is safe, and each tested:
+
+- **Replay is a no-op.** The null guard means a second run changes nothing.
+- **A declared stage is never overwritten.** A template that names its own
+  stage keeps it; only stageless rows are filled.
+- **An unrecognised capability is left alone.** The column is free text, not an
+  enum, so a value this system never defined stays null. An honest em dash
+  beats a confident wrong stage.
+
+**Drift is guarded, because the rule now exists twice.** `stageForCapability()`
+in TypeScript for new graphs, and the CASE in SQL for old rows.
+`tests/unit/graph-stage-mapping-agreement.test.ts` reads the migration and holds
+it to the function for every capability in `NODE_CAPABILITIES` — a capability
+added to the code without a branch in the migration fails there rather than
+silently backfilling null.
+
+**It can actually reach production.** `scope=graph-stage-backfill` in
+`apply-hosted-migrations.yml` applies that one file: hash-pinned, refuses if
+the ledger already records 20260823000700, refuses unless
+`graph_nodes.lifecycle_stage` and the `sdlc_stage` type are really present
+(the object, not merely a ledger row), prints the stage distribution before and
+after, and verifies no node with a known capability is left stageless. The hash
+pin is itself tested — editing the migration without repinning fails at commit
+time instead of turning the scope into a step that always refuses.
+
+**Verified:** four behaviour tests against the real migrated schema (derivation
+across all nine capabilities, unknown capability untouched, declared stage
+preserved, replay no-op); mutation-checked — dropping the null guard fails
+three of them, and making the SQL disagree with the code fails the agreement
+test. Typecheck, lint, full suite, production build all green.
+
+**Next bot, in the Graph lane:**
+
+1. **Run `scope=graph-stage-backfill`** — it is staged and not yet applied. It
+   writes production rows, so read the before/after distribution it prints.
+2. The goal document's ten stages (REQUIREMENT → MONITOR) are still **not** the
+   shipped 8-value `sdlc_stage` enum (GOAL, PRD, ARCHITECTURE, IMPLEMENTATION,
+   REVIEW, TEST, DEPLOYMENT, MONITORING). Nothing reconciles them. Decide
+   deliberately whether the enum grows or the ten map onto these eight before
+   building per-stage pages — `/solutions/ai-factory` today is the setup
+   journey, not the lifecycle.
+3. Still open: why the two silent Run analysis taps left no row. The alert now
+   reports status and code, so one more tap separates origin (403) from wrong
+   active organization (404) from a database refusal (409).
 ## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
 
 The graph-runs panel has had a **Stage** column since the Agentic SDLC
@@ -576,7 +648,7 @@ Two loose ends for whoever picks this up:
   symptom, not a separate bug.
 
 Also shipped 2026-08-23: **multi-select delete on the Pipelines page**
-(ADR-130). `20260823000700` is applied on hosted (run 32647755059);
+(ADR-130). `20260823000900` is applied on hosted (run 32647755059);
 `delete_selected_pipelines` keeps every refusal `clear_all_pipelines` makes
 and adds organization scoping plus a 200-row cap. Not yet exercised against
 a real production row — the backlog item says so.

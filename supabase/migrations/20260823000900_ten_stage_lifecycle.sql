@@ -57,6 +57,21 @@
 --      such a stage permanently unsatisfiable. Anchors are evidence about the
 --      work, not about the decision.
 --
+-- ## Why this file's version must stay above 20260823000700
+--
+-- That migration backfills `graph_nodes.lifecycle_stage` for every row recorded
+-- before the capability rule existed, and it writes the *eight-stage*
+-- vocabulary: `'IMPLEMENTATION'::public.sdlc_stage`, `'ARCHITECTURE'`, `'PRD'`.
+-- Three of those labels do not survive this file.
+--
+-- Run in this order the two compose exactly: the backfill fills the old
+-- vocabulary, and the map below carries every one of its rows forward.
+-- Reversed, the backfill dies on `invalid input value for enum sdlc_stage` and
+-- takes the rest of the chain with it. The version numbers are the only thing
+-- enforcing that, which is why it is written here rather than left to be
+-- rediscovered — and why renumbering this file below 000700 would be a silent
+-- production break rather than a merge tidy-up.
+--
 -- Forward-only and replay-safe: the enum rebuild is guarded on whether it has
 -- already happened, and the function is dropped before it is created because
 -- its return type changes and `create or replace` refuses that (ADR-103).
@@ -105,6 +120,10 @@ begin
   -- The map, applied to both columns. REVIEW and TEST are unchanged and are
   -- listed anyway, because a mapping that silently passes some values through
   -- is a mapping nobody can check by reading.
+  --
+  -- IMPLEMENTATION, ARCHITECTURE and PRD are the three 20260823000700's
+  -- backfill writes, so these lines are what carry that migration's work
+  -- across rather than stranding it.
   update public.graph_nodes set lifecycle_stage = case lifecycle_stage
     when 'GOAL' then 'REQUIREMENT'
     when 'PRD' then 'REQUIREMENT'
