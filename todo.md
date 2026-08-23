@@ -77,7 +77,64 @@ version order and dies on the earliest unrecorded file whose objects already
 exist. Each wants the measure-then-finish discipline the vault got: probe
 first, finish only what is missing, record the ledger row only once every
 declared object is present. Applying them blind is how this began.
-## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4 — PICK UP HERE)
+## GRAPH — A RUN NOW READS AS A LIFECYCLE, NOT JUST A NODE LIST (2026-08-23, round 5 — PICK UP HERE)
+
+Three bots are on this repository. This round stayed inside the Graph lane
+(`lib/graph/*`, `components/graph-runs-panel.tsx`) — the other two were on
+sign-in/chooser, navigation and the unrecorded-migration backlog, so nothing
+collided. Keep to that split.
+
+Round 4 made every node's stage real and applied the backfill to production.
+The only thing reading it was one column of a node table, which says *what ran*
+but not *how far through the lifecycle the run got*. That is the gap this
+closes — it consumes the data rather than adding more of it.
+
+**Shipped:** `lib/graph/stage-summary.ts` (`summariseRunStages`) plus a
+`StageSummary` block above the node table on each expanded run. Per stage, in
+lifecycle order: completed/total, and failed / running / skipped when non-zero.
+
+Three deliberate refusals, each tested:
+
+- **No percentage.** A stage with three completed and one failed is not 75% of
+  anything a person can act on, and a bar would imply otherwise.
+- **A stage the run never contained is absent, not zeroed.** An audit graph is
+  REVIEW work; a row reading `DEPLOYMENT 0/0` would invent a stage the graph was
+  never going to enter.
+- **Nodes with no recognised stage are counted and stated** ("N with no stage"),
+  because otherwise the summary's totals silently fail to add up to the table
+  directly beneath it. A run where *nothing* has a stage renders no summary at
+  all rather than an empty frame — on a deployment that has not been backfilled
+  that is the honest answer.
+
+Mutation-checked both ways: deleting the render call fails the panel tests
+(a summary computed and never shown passes every unit test the summariser has),
+and dropping unstaged nodes instead of counting them fails both the summariser
+and the panel.
+
+**Next bot, in the Graph lane, highest value first:**
+
+1. **Per-stage pages, for the eight** (ADR-136 settled the vocabulary; do not
+   build ten — DISCOVER/EVALUATE/DECIDE have nothing that produces them and
+   would render live-looking and always empty). `summariseRunStages` is the
+   grouping those pages want; a stage page is that filtered to one stage plus
+   the nodes behind it. Note `/solutions/ai-factory` is the *setup journey*
+   (connect a repository, assign bots, issue a command), not the lifecycle —
+   naming it the lifecycle surface would be the same untruth in the navigation.
+2. **Clicking a node still reveals nothing.** The goal document asks for owner,
+   inputs, dependencies, attempts, logs, artifacts, timing and output per node.
+   `list_graph_runs` already returns state/provider/model/latency/error; inputs,
+   dependencies and artifacts per node are not projected yet. That is a read
+   path to widen, not a new table.
+3. Still open, needs the owner: why the two silent Run analysis taps left no
+   row. The alert now reports status and code, so one more tap separates origin
+   (403) from wrong active organization (404) from a database refusal (409).
+4. Not Graph: 19 migration versions remain unrecorded on hosted
+   (`20260821000400` among them, its table demonstrably present). Another bot is
+   on that; leave it alone unless it is handed over.
+
+Verified this round: typecheck, lint, production build, full suite.
+
+## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4)
 
 **Applied.** `scope=graph-stage-backfill` ran against production —
 [run 32660207022](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32660207022),
