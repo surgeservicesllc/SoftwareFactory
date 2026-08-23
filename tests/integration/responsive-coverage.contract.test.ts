@@ -106,16 +106,18 @@ describe("every route is swept at every supported width", () => {
     /**
      * Routes with no layout: a bare redirect has nothing to lay out.
      *
-     * `/sign-in` is one. The whole `/job-seeker` subtree is the other: it is
-     * hard-gated in its layout, so signed out — which is how the sweep runs —
-     * every one of its routes redirects, and the redirect is asserted by its
-     * own e2e case. Adding them to the overflow sweep does not measure them;
+     * `/sign-in` is one. The `/job-seeker` subtree and `/decision` are the
+     * others: both are hard-gated in the page or layout, so signed out — which
+     * is how the sweep runs — they redirect, and the redirect is asserted by
+     * its own case. Adding them to the overflow sweep does not measure them;
      * it navigates away mid-`evaluate` and destroys the execution context,
      * which is what happened when they were listed there. The populated
-     * layouts are measured through the harness cases named "job-seeker-*".
+     * layouts are measured through the harness cases named "job-seeker-*",
+     * and for the chooser through "decision-products" and
+     * "decision-overview".
      */
     const REDIRECT_ONLY = new Set(["/sign-in"]);
-    const GATED_SUBTREES = ["/job-seeker"];
+    const GATED_SUBTREES = ["/job-seeker", "/decision"];
 
     const missing = routes.filter((route) => {
       if (REDIRECT_ONLY.has(route)) return false;

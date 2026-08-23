@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { DECISION_PATH, openDecisionGate } from "@/lib/auth/decision-gate";
 import { takeAuthReturnPath } from "@/lib/supabase/auth-return";
 import { normalizeReturnPath } from "@/lib/supabase/request";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -81,9 +82,13 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get("code");
   // A query parameter still wins when one survives, but the emailed link
   // cannot carry one, so the remembered path is the real source here.
+  // `/decision` is the default rather than `/auth/onboarding`: the decision
+  // page sends someone with no workspace through onboarding and brings them
+  // straight back, so a returning person stops being shown "Name your
+  // workspace" for a workspace they already have.
   const next = requestUrl.searchParams.get("next")
-    ? normalizeReturnPath(requestUrl.searchParams.get("next"), "/auth/onboarding")
-    : await takeAuthReturnPath("/auth/onboarding");
+    ? normalizeReturnPath(requestUrl.searchParams.get("next"), DECISION_PATH)
+    : await takeAuthReturnPath(DECISION_PATH);
 
   // The emailed lane: verify the token hash server-side. No cookie from the
   // requesting browser is needed, so the link works wherever it is opened.
@@ -103,6 +108,7 @@ export async function GET(request: Request) {
       const { data, error: verificationError } = await supabase.auth.getUser();
       if (verificationError || !data.user) throw verificationError ?? new Error("no user after verification");
 
+      await openDecisionGate();
       return redirectNoStore(new URL(next, requestUrl.origin));
     } catch (error) {
       logCallbackFailure("token_hash", error);
@@ -123,6 +129,7 @@ export async function GET(request: Request) {
     const { data, error: verificationError } = await supabase.auth.getUser();
     if (verificationError || !data.user) throw verificationError ?? new Error("no user after exchange");
 
+    await openDecisionGate();
     return redirectNoStore(new URL(next, requestUrl.origin));
   } catch (error) {
     logCallbackFailure("code", error);

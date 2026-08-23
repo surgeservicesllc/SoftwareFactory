@@ -67,11 +67,11 @@ export function SiteHeader({
   /*
    * One current destination, decided by the most specific match.
    *
-   * The entries nest now: `AI Factory` is `/solutions` and `Admin` is
-   * `/solutions/admin`, so a prefix test alone marks both as current on the
-   * admin page — two links carrying `aria-current="page"`, and two underlines
-   * drawn at once. The longest matching href wins, which is the entry a person
-   * is actually on; a set with no nesting behaves exactly as it did before.
+   * The signed-in set no longer nests — `Admin` was `/solutions/admin` under
+   * `Software Factory`'s `/solutions`, and a prefix test alone marked both as
+   * current on the admin page, drawing two underlines at once. The rule stays
+   * because it is the correct one whether or not the set nests today: the
+   * longest matching href wins, which is the entry a person is actually on.
    */
   const activeHref = navItems.reduce<string | null>((best, item) => {
     const matches = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -152,8 +152,14 @@ export function SiteHeader({
             </>
           ) : (
             <>
+          {/*
+            No `next`. This is the generic entry point, so the destination is
+            whatever a fresh sign-in decides — the decision page. A "sign in to
+            see your pipelines" prompt still carries its own `next`, because
+            that person asked for somewhere specific.
+          */}
           <Link
-            href="/auth/sign-in?next=/solutions"
+            href="/auth/sign-in"
             className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
           >
             Sign In
@@ -251,7 +257,7 @@ export function SiteHeader({
                 Get Started Free
               </Link>
               <Link
-                href="/auth/sign-in?next=/solutions"
+                href="/auth/sign-in"
                 onClick={() => setMobileOpen(false)}
                 className="rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
               >

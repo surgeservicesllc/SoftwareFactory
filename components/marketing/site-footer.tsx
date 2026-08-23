@@ -26,7 +26,7 @@ const FOOTER_COLUMNS = [
       { label: "About", href: "/about" },
       { label: "Leadership", href: "/about" },
       { label: "Contact Sales", href: "/about" },
-      { label: "Sign In", href: "/auth/sign-in?next=/solutions" },
+      { label: "Sign In", href: "/auth/sign-in" },
     ],
   },
 ] as const;

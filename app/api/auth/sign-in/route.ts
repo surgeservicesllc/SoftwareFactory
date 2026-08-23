@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DECISION_PATH, openDecisionGate } from "@/lib/auth/decision-gate";
 import {
   ApiRequestError,
   jsonNoStore,
@@ -66,10 +67,19 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * A session now exists, so this is the moment "initial login" refers to.
+     * Opening the gate here rather than on the decision page keeps the page
+     * itself incapable of granting its own access.
+     */
+    await openDecisionGate();
+
     return jsonNoStore({
       authenticated: true,
-      // The console, not the public home page, is where a signed-in caller belongs.
-      next: normalizeReturnPath(parsed.data.returnTo, "/solutions"),
+      // The chooser, not the public home page and not a console page picked
+      // for them. A caller who asked for somewhere specific still gets it —
+      // that is what makes a shared link to a protected page work.
+      next: normalizeReturnPath(parsed.data.returnTo, DECISION_PATH),
     });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);

@@ -7,6 +7,18 @@ vi.mock("server-only", () => ({}));
 const takeAuthReturnPath = vi.fn(async (fallback: string) => fallback);
 vi.mock("@/lib/supabase/auth-return", () => ({ takeAuthReturnPath }));
 
+/*
+ * The chooser gate. A successful callback is one of the two moments a session
+ * comes into existence, so it is where the one-time `/decision` marker is set;
+ * asserting the call keeps that from being quietly dropped, which would leave
+ * everyone landing on a page that immediately redirects them away.
+ */
+const openDecisionGate = vi.fn(async () => undefined);
+vi.mock("@/lib/auth/decision-gate", () => ({
+  DECISION_PATH: "/decision",
+  openDecisionGate,
+}));
+
 const verifyOtp = vi.fn();
 const exchangeCodeForSession = vi.fn();
 const getUser = vi.fn();
@@ -48,7 +60,11 @@ describe("GET /auth/callback", () => {
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThan(400);
     const location = response.headers.get("location") ?? "";
-    expect(location).toBe(`${ORIGIN}/auth/onboarding`);
+    // The chooser, not onboarding: `/decision` sends someone with no
+    // workspace through onboarding and brings them back, so a returning
+    // person is no longer shown "Name your workspace".
+    expect(location).toBe(`${ORIGIN}/decision`);
+    expect(openDecisionGate).toHaveBeenCalledTimes(1);
     // The one-time material never travels onward.
     expect(location).not.toContain(TOKEN_HASH);
     expect(response.headers.get("cache-control")).toContain("no-store");
@@ -58,8 +74,10 @@ describe("GET /auth/callback", () => {
     const onSite = await callback(`?token_hash=${TOKEN_HASH}&type=magiclink&next=%2Fsolutions`);
     expect(onSite.headers.get("location")).toBe(`${ORIGIN}/solutions`);
 
+    // An off-site `next` is discarded, and what it falls back to is the same
+    // default a callback with no `next` at all uses.
     const offSite = await callback(`?token_hash=${TOKEN_HASH}&type=magiclink&next=https%3A%2F%2Fevil.test%2F`);
-    expect(offSite.headers.get("location")).toBe(`${ORIGIN}/auth/onboarding`);
+    expect(offSite.headers.get("location")).toBe(`${ORIGIN}/decision`);
   });
 
   it("refuses an unsupported verification type without calling the provider", async () => {
@@ -95,7 +113,8 @@ describe("GET /auth/callback", () => {
 
     expect(exchangeCodeForSession).toHaveBeenCalledWith("one-time-code");
     expect(verifyOtp).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/auth/onboarding`);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/decision`);
+    expect(openDecisionGate).toHaveBeenCalledTimes(1);
   });
 
   it("treats a callback with neither token nor code as a failed sign-in", async () => {
