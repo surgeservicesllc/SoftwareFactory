@@ -787,6 +787,111 @@ describe("AiFactoryConsole", () => {
     expect(within(configure).queryByText("Done")).not.toBeInTheDocument();
   });
 
+  /*
+   * The two labels this console must never lose.
+   *
+   * AGENTS.md requires the exact words "Not Connected" wherever something is
+   * not live, and the roster's completeness line is the same promise in a
+   * different place: a step must not be completed from a projection the page
+   * has just said not to trust.
+   *
+   * Both branches render in the existing suite already — the default stub
+   * answers /api/project-agents with {} — but nothing asserted either one, so
+   * rewording "Not Connected — the project_agents migration is not applied on
+   * this database" into "No agents included yet" would break the policy and
+   * pass every test.
+   */
+  it("says Select Agents is Not Connected, in those words, when the migration is absent", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/project-agents": { available: false, canManage: false, selections: [] },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Select Agents")).closest("li") as HTMLElement;
+    expect(
+      within(step).getByText(
+        "Not Connected — the project_agents migration is not applied on this database",
+      ),
+    ).toBeInTheDocument();
+    // Not Connected is not a kind of done.
+    expect(within(step).queryByText("Done")).not.toBeInTheDocument();
+    // And it must not be reported as an ordinary empty state, which is the
+    // wording a person would read as "nothing selected yet".
+    expect(within(step).queryByText("No agents included yet")).not.toBeInTheDocument();
+  });
+
+  it("reports an included agent as included, not as Not Connected", async () => {
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/project-agents": {
+        available: true,
+        canManage: true,
+        selections: [{
+          id: "sel-1",
+          projectId: "p1",
+          agentId: "agent-1",
+          agentName: "Backend Reviewer",
+          agentRole: "backend",
+          selectedAt: "2026-08-22T00:00:00.000Z",
+        }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const step = (await screen.findByText("Select Agents")).closest("li") as HTMLElement;
+    expect(within(step).getByText(/1 agent included: Backend Reviewer/)).toBeInTheDocument();
+    expect(within(step).getByText("Done")).toBeInTheDocument();
+    expect(within(step).queryByText(/Not Connected/)).not.toBeInTheDocument();
+  });
+
+  it("refuses to complete Assign or Configure from an incomplete roster", async () => {
+    /*
+     * The rows below would otherwise complete both steps: an active assignment
+     * routing a ready bot on a connected account, configured well past least
+     * privilege. assignmentsComplete:false is the only thing standing in the
+     * way, and it has to be enough — a truncated projection can carry
+     * plausible rows, and completing a step from them would state a roster the
+     * server never confirmed.
+     */
+    stubFactory({
+      "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
+      "/api/ai-accounts": { accounts: [CONNECTED_ACCOUNT] },
+      "/api/bots": {
+        assignmentsComplete: false,
+        bots: [READY_BOT],
+        assignments: [{
+          id: "assignment-1",
+          botId: READY_BOT.id,
+          projectId: "p1",
+          roleId: "role-1",
+          status: "active",
+          config: {
+            ...LEAST_PRIVILEGE_CONFIG,
+            responsibilities: ["Review changes", "Write tests"],
+            tools: ["read", "comment"],
+          },
+        }],
+      },
+    });
+
+    render(<AiFactoryConsole builtIns={BUILT_INS} />);
+
+    const assign = (await screen.findByText("Assign Bots to Project")).closest("li") as HTMLElement;
+    expect(
+      within(assign).getByText("Assignment roster is incomplete · reload before trusting this step"),
+    ).toBeInTheDocument();
+    expect(within(assign).queryByText("Done")).not.toBeInTheDocument();
+
+    const configure = screen.getByText("Configure Bot Settings").closest("li") as HTMLElement;
+    expect(
+      within(configure).getByText("Assignment roster is incomplete · reload before trusting this step"),
+    ).toBeInTheDocument();
+    expect(within(configure).queryByText("Done")).not.toBeInTheDocument();
+  });
+
   it("keeps assignment inside the AI Factory dialog instead of stacking a second modal", async () => {
     stubFactory({
       "/api/projects": { projects: [{ id: "p1", name: "SoftwareFactory" }] },
