@@ -1814,3 +1814,41 @@ Use this append-only log for decisions that constrain future implementation. Cha
   enforced by the contract layer, so prose or a skipped path routes into a
   retry instead of downstream. The per-stage pages the other session's lane
   is building against SDLC_STAGES will pick the three up automatically.
+
+## ADR-138 - One request through all ten phases is one template, not a second engine
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner's boards state the product's headline - "One Request In.
+  Multiple Bots. Full Automation Out." - as an execution graph whose nodes
+  are the ten steps, and directed that it be built out of existing code. The
+  pieces all existed and none of them walked the whole road: the scout
+  stopped at DECISION, and the agentic SDLC jumped from PRD to ARCHITECTURE.
+- Decision: `full_lifecycle`, a fourteen-node BUILD template that stitches
+  the scout's look-before-you-build chain into the SDLC's build half. Goal
+  and requirements (REQUIREMENT as GOAL+PRD), three parallel scans into a
+  tolerant consolidation (DISCOVER), the fixed rubric (EVALUATE), the five
+  paths (DECIDE, AUTOMATIC gate), then design against the decision
+  (ARCHITECT, HUMAN gate), implement, fresh-eyes review, anchored test
+  evidence, deploy behind the owner's gate, and monitor with the feedback
+  edge back to the goal. `isLifecycle: true`, so the orchestrator may
+  iterate it. No new capability, contract, gate kind, executor, table or
+  column - the entire template is existing machinery in a new arrangement,
+  which is what the owner asked for.
+- Budget honesty: thirteen sequential levels at the measured eight-minute
+  model envelope, attempted twice, is 208 minutes of worst case, so the
+  template declares 220 and the graph worker's job timeout rises from 180 to
+  240 minutes (GitHub caps a hosted job at 360). The budget-fit suite pins
+  the whole chain: node envelope → template budget → workflow timeout.
+- What "working" means within this repository's own policies: MODEL nodes run
+  through the proven record-only worker path; the ANCHOR test node demands
+  recorded evidence; ARCHITECTURE and DEPLOYMENT stop at HUMAN gates because
+  Phase 1 keeps externally visible acts owner-approved, and the kill switch
+  stays ON. A graph that reaches the deploy gate and waits for the owner is
+  the design succeeding, not falling short.
+- Proof: tests/integration/full-lifecycle.behavior.test.ts launches the
+  template through the same `create_graph_from_plan` the product uses and
+  asserts: at least one stored node in every one of the eleven stages, no
+  forward edge running backwards through the stage order, HUMAN gates at
+  exactly ARCHITECTURE and DEPLOYMENT, AUTOMATIC at PRD/DECISION/REVIEW/TEST,
+  and the recorded MONITOR→goal feedback edge.

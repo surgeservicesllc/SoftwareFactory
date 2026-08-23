@@ -43,7 +43,10 @@ describe("template lifecycle stages", () => {
      */
     const iterating = GRAPH_TEMPLATES.filter((template) => template.isLifecycle === true);
 
-    expect(iterating.map((template) => template.key)).toEqual(["agentic_sdlc"]);
+    // Two lifecycles now: the classic nine-stage SDLC and the ten-phase
+    // process from the owner's boards, which folds look-before-you-build in.
+    // Every audit template still must not appear here.
+    expect(iterating.map((template) => template.key)).toEqual(["full_lifecycle", "agentic_sdlc"]);
   });
 
   it("places a node's stage by the work it does, not by its template", () => {

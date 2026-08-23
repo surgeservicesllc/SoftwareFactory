@@ -41,6 +41,20 @@ fixture omitted `startedAt`, `completedAt` and `verifications`, and the
 briefing correctly reported itself incomplete. The fixture now matches the
 route's projection.
 
+## 2026-08-23: one request can traverse all ten phases in one graph
+
+`full_lifecycle` (ADR-138) stitches the scout's look-before-you-build chain
+into the agentic SDLC: GOAL, PRD, three parallel DISCOVERY scans, EVALUATION,
+DECISION, then ARCHITECTURE (HUMAN gate), IMPLEMENTATION, REVIEW, TEST
+(anchor), DEPLOYMENT (anchor + HUMAN gate), MONITORING (anchor), with the
+monitor→goal feedback edge. Launches through the same
+`create_graph_from_plan` as every graph; proven in PGlite to store nodes in
+all eleven stages with gates exactly where the policies put them. The graph
+worker's job timeout rose to 240 minutes to outlive the template's 220-minute
+budget. No live full_lifecycle run has executed yet; MODEL nodes run the
+record-only worker path, and the two HUMAN gates mean a live run stops for
+the owner at architecture and again before deploy — by design.
+
 ## 2026-08-23: the lifecycle has DISCOVERY, EVALUATION and DECISION, and a template that populates them
 
 ADR-136's precondition is met and its prescribed growth executed (ADR-137).

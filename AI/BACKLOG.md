@@ -897,3 +897,16 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   candidates live-verifiable; today they are honestly MODEL_KNOWLEDGE.
 - [ ] Round 6+: scout→agentic_sdlc chaining (the one-request experience);
   the DECIDE package is shaped for the ARCHITECT handoff already.
+
+
+## Graph round 9: one request through all ten phases (2026-08-23, owner /goal, ADR-138)
+
+- [x] `full_lifecycle` template: the scout's chain stitched into the SDLC's
+  build half; 14 nodes, all eleven stages, two HUMAN gates
+  (ARCHITECTURE, DEPLOYMENT), monitor→goal feedback. Zero new machinery.
+- [x] Worker job timeout 180→240min to outlive the 220min template budget;
+  the budget-fit suite pins node envelope → budget → workflow timeout.
+- [x] Behaviour proof against real PostgreSQL through create_graph_from_plan:
+  stage coverage, forward-only stage order, gate placement, feedback loop.
+- [ ] Live drain of a full_lifecycle launch (owner-initiated) — the graph
+  halts at the ARCHITECTURE human gate by design; deciding it is the owner's.
