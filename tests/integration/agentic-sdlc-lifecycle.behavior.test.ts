@@ -240,10 +240,15 @@ describe("the Agentic SDLC on the graph worker", () => {
       `select node_key, lifecycle_stage from public.graph_nodes where graph_id = $1`,
       [graphId],
     );
-    expect(staged.rows).toHaveLength(12);
+    expect(staged.rows).toHaveLength(19);
     expect(staged.rows.every((row) => row.lifecycle_stage !== null)).toBe(true);
+    // All ten, and nothing else. A template that staged only the stages it
+    // found convenient would still pass a "every node has a stage" check.
     expect(new Set(staged.rows.map((row) => row.lifecycle_stage))).toEqual(
-      new Set(["GOAL", "PRD", "ARCHITECTURE", "IMPLEMENTATION", "REVIEW", "TEST", "DEPLOYMENT", "MONITORING"]),
+      new Set([
+        "REQUIREMENT", "DISCOVER", "EVALUATE", "DECIDE", "ARCHITECT",
+        "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR",
+      ]),
     );
   });
 
@@ -256,8 +261,8 @@ describe("the Agentic SDLC on the graph worker", () => {
     );
     const feedback = Number(stored.rows.find((r) => r.is_feedback === true)?.count ?? 0);
     const forward = Number(stored.rows.find((r) => r.is_feedback === false)?.count ?? 0);
-    expect(feedback).toBe(4);
-    expect(forward).toBe(14);
+    expect(feedback).toBe(6);
+    expect(forward).toBe(24);
 
     const claimed = await claim(db);
     expect(claimed).not.toBeNull();
@@ -274,7 +279,7 @@ describe("the Agentic SDLC on the graph worker", () => {
     // Only a decision reopens it, so one is made here to observe the projection.
     await db.exec("reset role");
     const goalNode = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'prd'`,
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'requirement'`,
       [graphId],
     );
     const priorRunId = await latestRunId(db, graphId);
@@ -293,15 +298,15 @@ describe("the Agentic SDLC on the graph worker", () => {
     expect(reclaimed!.max_iterations).toBe(3);
 
     const byKey = new Map(reclaimed!.nodes.map((node) => [node.node_key, node]));
-    expect(byKey.get("goal")?.lifecycle_stage).toBe("GOAL");
-    expect(byKey.get("goal")?.gate_kind).toBeNull();
-    expect(byKey.get("architecture")?.gate_kind).toBe("HUMAN");
+    expect(byKey.get("requirement")?.lifecycle_stage).toBe("REQUIREMENT");
+    expect(byKey.get("discover_internal")?.gate_kind).toBeNull();
+    expect(byKey.get("architect")?.gate_kind).toBe("HUMAN");
     expect(byKey.get("test")?.gate_kind).toBe("AUTOMATIC");
     // Never opened yet, which is different from opened-and-undecided.
-    expect(byKey.get("architecture")?.gate_state).toBeNull();
+    expect(byKey.get("architect")?.gate_state).toBeNull();
     // The node id is what a gate is keyed to; without it the worker cannot
     // open one that outlives this run.
-    expect(byKey.get("architecture")?.node_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(byKey.get("architect")?.node_id).toMatch(/^[0-9a-f-]{36}$/);
     await closeRunAsPartial(db, reclaimed!.graph_run_id);
   });
 
@@ -322,7 +327,7 @@ describe("the Agentic SDLC on the graph worker", () => {
   it("refuses a human gate to a plain member, and takes it from an owner", async () => {
     await db.exec("reset role");
     const node = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architect'`,
       [graphId],
     );
     const runId = await latestRunId(db, graphId);
@@ -368,7 +373,7 @@ describe("the Agentic SDLC on the graph worker", () => {
     expect(claimed).not.toBeNull();
     expect(claimed!.graph_run_id).not.toBe(before.rows[0].graph_run_id);
 
-    const architecture = claimed!.nodes.find((node) => node.node_key === "architecture");
+    const architecture = claimed!.nodes.find((node) => node.node_key === "architect");
     expect(architecture?.gate_state).toBe("APPROVED");
 
     // And a fresh node_run: the approval outlived the run, the run did not.
@@ -378,7 +383,7 @@ describe("the Agentic SDLC on the graph worker", () => {
   it("will not reopen a decided gate on a later claim", async () => {
     await db.exec("reset role");
     const node = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architect'`,
       [graphId],
     );
     const runId = await latestRunId(db, graphId);
@@ -481,11 +486,11 @@ describe("the Agentic SDLC on the graph worker", () => {
         organizationId, projectId,
         JSON.stringify([
           { node_key: "goal", job: "State it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "GOAL" },
+            lifecycle_stage: "REQUIREMENT" },
           { node_key: "prd", job: "Write it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC" },
+            lifecycle_stage: "DISCOVER", gate_kind: "AUTOMATIC" },
           { node_key: "architecture", job: "Design it.", executor: "MODEL", capability: "architecture",
-            lifecycle_stage: "ARCHITECTURE" },
+            lifecycle_stage: "ARCHITECT" },
         ]),
         JSON.stringify([
           { from_node_key: "goal", to_node_key: "prd", reason: "DATA", detail: "d", is_feedback: false },
@@ -555,7 +560,7 @@ describe("the Agentic SDLC on the graph worker", () => {
         where n.graph_id = $1`,
       [freshGraphId],
     );
-    expect(gate.rows).toEqual([{ state: "OPEN", stage: "PRD" }]);
+    expect(gate.rows).toEqual([{ state: "OPEN", stage: "DISCOVER" }]);
   });
 
   it("refuses to store a node output carrying something secret-shaped", async () => {

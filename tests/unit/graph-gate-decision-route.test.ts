@@ -34,7 +34,7 @@ beforeEach(() => {
     client: { rpc: harness.rpc },
   });
   harness.rpc.mockResolvedValue({
-    data: { id: gateId, state: "APPROVED", stage: "ARCHITECTURE", kind: "HUMAN", reason: null },
+    data: { id: gateId, state: "APPROVED", stage: "ARCHITECT", kind: "HUMAN", reason: null },
     error: null,
   });
 });

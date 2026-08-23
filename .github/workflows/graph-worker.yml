@@ -35,14 +35,19 @@ jobs:
     runs-on: ubuntu-latest
     # Must exceed the graph duration budget, or the workflow kills a run the
     # budget still considers live — leaving it RUNNING until the two-hour
-    # reclaim sweep. The ceiling is now the *widest* template budget rather
-    # than the default: templates declare what they need, and the Agentic SDLC
-    # lifecycle asks for 150 minutes because nine sequential stages at the
-    # measured eight-minute model envelope genuinely take that in the worst
-    # case. This allows that plus setup and a second graph's start. The
-    # relationship is pinned by tests/unit/graph-budget-fit.test.ts, which
-    # reads this number and compares it against every template.
-    timeout-minutes: 180
+    # reclaim sweep. The ceiling is the *widest* template budget rather than
+    # the default: templates declare what they need, and the Agentic SDLC
+    # lifecycle asks for 240 minutes because thirteen sequential levels at the
+    # measured eight-minute model envelope, attempted twice, genuinely take
+    # that in the worst case. It asked for 150 while it had nine levels; the
+    # three stages that answer "does this already exist" added four more, and
+    # this number moved with them rather than the envelope being shrunk to fit
+    # a number nobody revisited. 300 allows the widest budget plus setup and a
+    # second graph's start, and stays inside the six-hour hosted-runner
+    # ceiling. The relationship is pinned by
+    # tests/unit/graph-budget-fit.test.ts, which reads this number and compares
+    # it against every template.
+    timeout-minutes: 300
     env:
       CI: true
       NEXT_TELEMETRY_DISABLED: 1

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineNode, type NodeCapability, type NodeContract } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { DEFAULT_GRAPH_BUDGET, type GraphBudget } from "@/lib/graph/budgets";
+import { stageArtifactSchema } from "@/lib/sdlc/artifacts";
 import type { GateKind, SdlcStage } from "@/lib/sdlc/lifecycle";
 import type { ResourceRef, RiskLevel } from "@/lib/graph/types";
 
@@ -46,6 +47,17 @@ export type TemplateNode = {
   readonly lifecycleStage?: SdlcStage;
   /** The gate the node waits at once its work is done. Absent means it does not wait. */
   readonly gate?: GateKind;
+  /**
+   * True on the one node per stage that emits the stage's package.
+   *
+   * A stage is usually several nodes and only its last one produces the thing
+   * the next stage reads: DISCOVER's three observers each report candidates,
+   * and the shortlist that reduces them is the discovery package. Marking every
+   * node in the stage would hold the observers to a contract describing work
+   * they do not do, so the flag is explicit rather than derived from position —
+   * a template that fans in twice would defeat any positional rule.
+   */
+  readonly producesStagePackage?: boolean;
 };
 
 export type GraphTemplate = {
@@ -123,6 +135,15 @@ const planSchema = z.object({
  */
 function schemaFor(node: TemplateNode): z.ZodTypeAny {
   if (node.prose) return z.string();
+  /*
+   * A stage's terminal node is held to the stage's own contract, not to the
+   * generic shape its capability implies. This is what makes a handoff between
+   * stages deterministic: DECIDE receives an evaluation package with scores and
+   * a recommendation, rather than a findings array it has to interpret.
+   */
+  if (node.producesStagePackage && node.lifecycleStage) {
+    return stageArtifactSchema(node.lifecycleStage);
+  }
   switch (node.capability) {
     case "planning":
     case "architecture":
@@ -261,144 +282,259 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
     name: "Agentic SDLC",
     category: "BUILD",
     summary:
-      "The full lifecycle: state the goal, write the requirements, design it, build it in parallel where the files genuinely differ, review it with a reader who never saw the reasoning, prove it with evidence, deploy behind an owner's decision, then watch it and report back.",
-    version: 1,
+      "The whole lifecycle: state what is wanted as criteria that can be checked, find what already exists before writing anything, score the candidates, decide whether to use or build, design it, build it in parallel where the files genuinely differ, review it with a reader who never saw the reasoning, prove it with evidence, deploy behind an owner's decision, then watch it and report back.",
+    version: 2,
     risk: "YELLOW",
     /*
-     * Nine sequential stages at eight minutes an attempt, attempted twice, is
-     * 144 minutes of worst case — and the estimator applies the slowest node to
-     * every level, so this is deliberately pessimistic rather than expected.
-     * Two things it must not be answered with: shrinking the model envelope,
-     * which a live drain measured at eight minutes for a reason, or widening
-     * the default for every graph that does not need it.
+     * Thirteen sequential levels at eight minutes an attempt, attempted twice,
+     * is 208 minutes of worst case — and the estimator applies the slowest node
+     * to every level, so this is deliberately pessimistic rather than expected.
+     * The number moved with the template: version 1 was nine levels and 150
+     * minutes, and the three stages that answer "does this already exist"
+     * genuinely added four more. Two things it must not be answered with:
+     * shrinking the model envelope, which a live drain measured at eight
+     * minutes for a reason, or widening the default for every graph that does
+     * not need it. `tests/unit/graph-budget-fit.test.ts` holds this number
+     * against what the compiled graph actually needs.
      */
-    budget: { maxDurationMs: 150 * 60_000 },
+    budget: { maxDurationMs: 240 * 60_000 },
     nodes: [
       {
-        nodeId: "goal",
-        job: "State the goal as acceptance criteria that can be checked rather than admired.",
+        nodeId: "requirement",
+        job: "State the request as objective, scope, constraints, acceptance criteria, assumptions and risks that can be checked rather than admired.",
         capability: "planning",
         executor: "MODEL",
-        lifecycleStage: "GOAL",
-      },
-      {
-        nodeId: "prd",
-        job: "Write the requirements: scope, non-goals, and the behaviour each acceptance criterion implies.",
-        capability: "planning",
-        executor: "MODEL",
-        dependsOn: ["goal"],
-        lifecycleStage: "PRD",
+        lifecycleStage: "REQUIREMENT",
         gate: "AUTOMATIC",
+        producesStagePackage: true,
+      },
+
+      /*
+       * DISCOVER fans out because its three questions are genuinely
+       * independent — what this repository already has, what the package
+       * ecosystem has, and what an external service would do — and nothing is
+       * learned by asking them in sequence.
+       *
+       * All three are ANCHOR nodes, and that is the load-bearing choice in this
+       * stage. Every answer here is a claim about the world outside this
+       * repository: that a package exists, that its licence is what it says,
+       * that it was maintained this year. Those are exactly the claims a model
+       * produces fluently and sometimes wrongly, and `anchorsFor` counts only
+       * what an ANCHOR observed — so a DISCOVER built from MODEL nodes could
+       * never satisfy the stage's evidence requirement, which is the point.
+       */
+      {
+        nodeId: "discover_internal",
+        job: "Search this repository for code, components, migrations and routes that already do part of the job.",
+        capability: "extraction",
+        executor: "ANCHOR",
+        dependsOn: ["requirement"],
+        lifecycleStage: "DISCOVER",
       },
       {
-        nodeId: "architecture",
-        job: "Design the change: components, boundaries, and the decisions a reviewer would want recorded.",
+        nodeId: "discover_packages",
+        job: "Find published packages and open-source projects that solve this, recording each one's source, licence, last activity and documentation.",
+        capability: "extraction",
+        executor: "ANCHOR",
+        dependsOn: ["requirement"],
+        lifecycleStage: "DISCOVER",
+      },
+      {
+        nodeId: "discover_services",
+        job: "Find APIs and hosted services that would remove the need to build this, recording what each one requires to connect.",
+        capability: "extraction",
+        executor: "ANCHOR",
+        dependsOn: ["requirement"],
+        lifecycleStage: "DISCOVER",
+      },
+      {
+        nodeId: "discover_shortlist",
+        job: "Deduplicate the candidates and drop the ones the constraints already rule out.",
+        capability: "extraction",
+        executor: "DETERMINISTIC",
+        dependsOn: ["discover_internal", "discover_packages", "discover_services"],
+        lifecycleStage: "DISCOVER",
+        producesStagePackage: true,
+      },
+
+      {
+        nodeId: "evaluate_fit",
+        job: "Score each candidate on completeness, performance, scalability, documentation and what it would take to integrate.",
+        capability: "review",
+        executor: "MODEL",
+        dependsOn: ["discover_shortlist"],
+        lifecycleStage: "EVALUATE",
+      },
+      {
+        nodeId: "evaluate_risk",
+        job: "Score each candidate on licence compatibility, security posture, maintenance and the risk of depending on it.",
+        capability: "security_review",
+        executor: "MODEL",
+        dependsOn: ["discover_shortlist"],
+        lifecycleStage: "EVALUATE",
+      },
+      {
+        nodeId: "evaluate_matrix",
+        job: "Build the comparison matrix from both scorings and state the recommendation the scores support.",
+        capability: "review",
+        executor: "MODEL",
+        dependsOn: ["evaluate_fit", "evaluate_risk"],
+        lifecycleStage: "EVALUATE",
+        gate: "AUTOMATIC",
+        producesStagePackage: true,
+      },
+
+      {
+        nodeId: "decide",
+        job: "Choose use, connect, adapt, fork or build, and record the evidence, the trade-offs accepted and the integration boundary.",
         capability: "architecture",
         executor: "MODEL",
-        dependsOn: ["prd"],
-        lifecycleStage: "ARCHITECTURE",
+        dependsOn: ["evaluate_matrix"],
+        lifecycleStage: "DECIDE",
+        gate: "AUTOMATIC",
+        producesStagePackage: true,
+      },
+
+      {
+        nodeId: "architect",
+        job: "Design the change the decision commits to: components, boundaries, contracts, data model, security, observability and failure handling.",
+        capability: "architecture",
+        executor: "MODEL",
+        dependsOn: ["decide"],
+        lifecycleStage: "ARCHITECT",
         gate: "HUMAN",
+        producesStagePackage: true,
       },
+
       {
-        nodeId: "implement_server",
-        job: "Implement the server side the architecture named: routes, validation, and the database boundary.",
+        nodeId: "build_server",
+        job: "Build the server side the architecture named: routes, validation, and the database boundary.",
         capability: "implementation",
         executor: "MODEL",
-        dependsOn: ["architecture"],
+        dependsOn: ["architect"],
         writes: [file("app/api"), file("lib")],
-        lifecycleStage: "IMPLEMENTATION",
+        lifecycleStage: "BUILD",
       },
       {
-        nodeId: "implement_client",
-        job: "Implement the interface the architecture named.",
+        nodeId: "build_client",
+        job: "Build the interface the architecture named, including its loading, empty and error states.",
         capability: "implementation",
         executor: "MODEL",
-        dependsOn: ["architecture"],
+        dependsOn: ["architect"],
         writes: [file("components")],
-        lifecycleStage: "IMPLEMENTATION",
+        lifecycleStage: "BUILD",
       },
       {
-        nodeId: "implement_tests",
+        nodeId: "build_tests",
         job: "Write the tests for the behaviour the requirements describe, including its failure states.",
         capability: "qa",
         executor: "MODEL",
-        dependsOn: ["architecture"],
+        dependsOn: ["architect"],
         writes: [file("tests")],
-        lifecycleStage: "IMPLEMENTATION",
+        lifecycleStage: "BUILD",
       },
       {
-        nodeId: "integrate",
+        nodeId: "build_integrate",
         job: "Integrate the three branches and resolve what they share.",
         capability: "implementation",
         executor: "DETERMINISTIC",
-        dependsOn: ["implement_server", "implement_client", "implement_tests"],
-        lifecycleStage: "IMPLEMENTATION",
+        dependsOn: ["build_server", "build_client", "build_tests"],
+        lifecycleStage: "BUILD",
+        producesStagePackage: true,
       },
+
       {
         nodeId: "review",
         job: "Review the integrated change without the implementation transcript.",
         capability: "review",
         executor: "MODEL",
-        dependsOn: ["integrate"],
+        dependsOn: ["build_integrate"],
         lifecycleStage: "REVIEW",
         gate: "AUTOMATIC",
+        producesStagePackage: true,
       },
       {
         nodeId: "security_review",
-        job: "Read the change for authorization, tenancy, secret handling and row security.",
+        job: "Read the change for authorization, tenancy, secret handling, dependency licences and row security.",
         capability: "security_review",
         executor: "MODEL",
-        dependsOn: ["integrate"],
+        dependsOn: ["build_integrate"],
         lifecycleStage: "REVIEW",
       },
+
       {
         nodeId: "test",
-        job: "Run lint, typecheck, tests and build, and record the results as evidence rather than describing them.",
+        job: "Run lint, typecheck, tests, accessibility and build, and record the results as evidence rather than describing them.",
         capability: "qa",
         executor: "ANCHOR",
         dependsOn: ["review", "security_review"],
         lifecycleStage: "TEST",
         gate: "AUTOMATIC",
+        producesStagePackage: true,
       },
+
       {
         nodeId: "deploy",
-        job: "Deploy the verified change and record what the deployment API reported.",
+        job: "Deploy the verified change and record what the deployment API reported, including the rollback that stands ready.",
         capability: "implementation",
         executor: "ANCHOR",
         dependsOn: ["test"],
-        lifecycleStage: "DEPLOYMENT",
+        lifecycleStage: "DEPLOY",
         gate: "HUMAN",
+        producesStagePackage: true,
       },
+
       {
         nodeId: "monitor",
-        job: "Observe the running system and report whether it met the acceptance criteria the goal stated.",
+        job: "Observe the running system and report whether it met the acceptance criteria the requirement stated.",
         capability: "synthesis",
         executor: "ANCHOR",
         dependsOn: ["deploy"],
-        lifecycleStage: "MONITORING",
+        lifecycleStage: "MONITOR",
+        producesStagePackage: true,
       },
     ],
     proposedEdges: [
-      { from: "goal", to: "prd", reason: "DATA", detail: "The requirements are written from the acceptance criteria." },
-      { from: "prd", to: "architecture", reason: "DATA", detail: "The design answers the requirements." },
-      { from: "architecture", to: "implement_server", reason: "DATA", detail: "The design names the server work." },
-      { from: "architecture", to: "implement_client", reason: "DATA", detail: "The design names the interface work." },
-      { from: "architecture", to: "implement_tests", reason: "DATA", detail: "The design names the behaviour to test." },
-      { from: "implement_server", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
-      { from: "implement_client", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
-      { from: "implement_tests", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
-      { from: "integrate", to: "review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Review reads the integrated tree." },
-      { from: "integrate", to: "security_review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "The security read is of the integrated tree." },
+      { from: "requirement", to: "discover_internal", reason: "DATA", detail: "What to look for here comes from the requirement." },
+      { from: "requirement", to: "discover_packages", reason: "DATA", detail: "What to look for outside comes from the requirement." },
+      { from: "requirement", to: "discover_services", reason: "DATA", detail: "Which services could serve this comes from the requirement." },
+      { from: "discover_internal", to: "discover_shortlist", reason: "DATA", detail: "The shortlist consumes what the repository already has." },
+      { from: "discover_packages", to: "discover_shortlist", reason: "DATA", detail: "The shortlist consumes the package candidates." },
+      { from: "discover_services", to: "discover_shortlist", reason: "DATA", detail: "The shortlist consumes the service candidates." },
+      { from: "discover_shortlist", to: "evaluate_fit", reason: "DATA", detail: "Fit is scored over the shortlist." },
+      { from: "discover_shortlist", to: "evaluate_risk", reason: "DATA", detail: "Risk is scored over the same shortlist." },
+      { from: "evaluate_fit", to: "evaluate_matrix", reason: "DATA", detail: "The matrix consumes the fit scores." },
+      { from: "evaluate_risk", to: "evaluate_matrix", reason: "DATA", detail: "The matrix consumes the risk scores." },
+      { from: "evaluate_matrix", to: "decide", reason: "DATA", detail: "The decision is made against the comparison." },
+      { from: "decide", to: "architect", reason: "DATA", detail: "The design implements what was decided, and nothing wider." },
+      { from: "architect", to: "build_server", reason: "DATA", detail: "The design names the server work." },
+      { from: "architect", to: "build_client", reason: "DATA", detail: "The design names the interface work." },
+      { from: "architect", to: "build_tests", reason: "DATA", detail: "The design names the behaviour to test." },
+      { from: "build_server", to: "build_integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "build_client", to: "build_integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "build_tests", to: "build_integrate", reason: "DATA", detail: "Integration consumes the branch." },
+      { from: "build_integrate", to: "review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Review reads the integrated tree." },
+      { from: "build_integrate", to: "security_review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "The security read is of the integrated tree." },
       { from: "review", to: "test", reason: "VERIFICATION", detail: "Tests run against a reviewed change." },
       { from: "security_review", to: "test", reason: "VERIFICATION", detail: "Tests run against a change the security read cleared." },
       { from: "test", to: "deploy", reason: "VERIFICATION", detail: "Only a change with test evidence is deployed." },
       { from: "deploy", to: "monitor", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Monitoring observes what was deployed." },
     ],
+    /*
+     * Each feedback edge points at the stage where the mistake was actually
+     * made, which is rarely the stage that noticed it. Returning a rejected
+     * comparison to EVALUATE would re-score the same wrong shortlist; it goes
+     * back to DISCOVER instead. `REJECTION_RETURNS_TO` is the same table stated
+     * for the orchestrator, and `buildLaunchPlan` checks every edge here really
+     * does point backwards through the lifecycle before recording it.
+     */
     feedbackEdges: [
-      { from: "monitor", to: "goal", reason: "DATA", detail: "What the running system reported becomes the next goal." },
-      { from: "test", to: "implement_server", reason: "VERIFICATION", detail: "A failed test returns the work to implementation." },
-      { from: "review", to: "implement_server", reason: "VERIFICATION", detail: "A rejected review returns the work to implementation." },
-      { from: "architecture", to: "prd", reason: "POLICY", detail: "A rejected design returns the work to the requirements." },
+      { from: "monitor", to: "requirement", reason: "DATA", detail: "What the running system reported becomes the next request." },
+      { from: "test", to: "build_server", reason: "VERIFICATION", detail: "A failed test returns the work to the build." },
+      { from: "review", to: "build_server", reason: "VERIFICATION", detail: "A rejected review returns the work to the build." },
+      { from: "architect", to: "decide", reason: "POLICY", detail: "A rejected design returns the work to the decision it was implementing." },
+      { from: "decide", to: "evaluate_matrix", reason: "POLICY", detail: "A decision with no evidence behind it returns to the comparison." },
+      { from: "evaluate_matrix", to: "discover_shortlist", reason: "POLICY", detail: "A comparison of the wrong candidates returns to discovery." },
     ],
   },
   auditTemplate({

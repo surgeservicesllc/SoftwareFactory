@@ -52,6 +52,10 @@ on:
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
           (20260821000100 and 20260821000200) and records them in history;
+          "ten-stage-lifecycle" applies only 20260823000200, which rebuilds the
+          sdlc_stage type as the ten stages the product presents and widens
+          list_graph_runs to carry each node's dependencies, attempts and
+          anchored evidence;
           "audit-guard-acl-contract" applies only 20260822001300, which
           removes the hosted Supabase default service_role EXECUTE grant from
           the append-only audit guard reject_activity_event_mutation();
@@ -94,6 +98,7 @@ on:
           - bot-account-binding
           - factory-any-model-record-only
           - lifecycle
+          - ten-stage-lifecycle
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
@@ -849,15 +854,26 @@ jobs:
                  'update_agent_run_review','delete_agent_run')
             order by 1, 2;"
           echo ""
-          echo "The Agentic SDLC lifecycle (20260821000100 and 20260821000200), asked about"
-          echo "directly. These two files are newer than the measured ledger table in"
-          echo "AI/HOSTED_APPLY_RUNBOOK.md, so they are deliberately kept out of the query"
-          echo "above: that one reports a measurement, and appending an unmeasured version"
-          echo "to it would turn evidence into assertion. present = f for every row is the"
-          echo "expected reading before scope=lifecycle runs, and t for every row after."
+          echo "The Agentic SDLC lifecycle (20260821000100, 20260821000200 and the"
+          echo "ten-stage widening 20260823000200), asked about directly. These files are"
+          echo "newer than the measured ledger table in AI/HOSTED_APPLY_RUNBOOK.md, so they"
+          echo "are deliberately kept out of the query above: that one reports a"
+          echo "measurement, and appending an unmeasured version to it would turn evidence"
+          echo "into assertion."
+          echo ""
+          echo "Read the last three rows first. sdlc_stage is asked about with TEST, a label"
+          echo "that exists in both the eight-stage and ten-stage vocabularies, so the"
+          echo "lifecycle rows answer the question they are actually about — did"
+          echo "scope=lifecycle run — rather than changing their answer when the widening"
+          echo "renames five labels underneath them. DISCOVER and DECIDE exist only after"
+          echo "the widening, and list_graph_runs gains depends_on with it."
+          echo ""
+          echo "Before scope=lifecycle: f for every row. After it: t for the first fourteen"
+          echo "and f for the last three. After scope=ten-stage-lifecycle: t for all"
+          echo "seventeen."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
             with lifecycle(kind, object, marker) as (values
-              ('enum',     'sdlc_stage',                  'MONITORING'),
+              ('enum',     'sdlc_stage',                  'TEST'),
               ('enum',     'gate_kind',                   'HUMAN'),
               ('enum',     'gate_state',                  'APPROVED'),
               ('enum',     'activity_event_type',         'lifecycle.gate_approved'),
@@ -870,7 +886,10 @@ jobs:
               ('function', 'decide_node_gate',            null),
               ('function', 'advance_graph_iteration',     null),
               ('body',     'claim_planned_graph',         'graph_gates'),
-              ('body',     'list_graph_runs',             'gate_anchor_count')
+              ('body',     'list_graph_runs',             'gate_anchor_count'),
+              ('enum',     'sdlc_stage',                  'DISCOVER'),
+              ('enum',     'sdlc_stage',                  'DECIDE'),
+              ('body',     'list_graph_runs',             'depends_on')
             )
             select lifecycle.kind,
                    lifecycle.object,
@@ -4377,6 +4396,88 @@ jobs:
               join pg_namespace space on space.oid = routine.pronamespace
               where space.nspname = 'public'
                 and routine.proname = 'claim_planned_graph';"
+
+      - name: Widen the lifecycle to ten stages (scope=ten-stage-lifecycle)
+        # Exactly one file — 20260823000200 — and no others. It requires
+        # scope=lifecycle to have run first, because it rebuilds the type that
+        # file created and alters the two columns that hold it.
+        #
+        # This is the one scope in this workflow that DROPS a type in
+        # production, so what it does is worth stating plainly. `sdlc_stage` is
+        # carried to text on both columns, dropped, recreated with the ten
+        # values in lifecycle order, mapped row by row, and carried back. No
+        # function takes or returns the type — the casts live inside bodies,
+        # which plpgsql resolves at execution — so the drop has no dependency to
+        # fight. `list_graph_runs` is dropped and recreated for the ordinary
+        # reason: its return type gains columns, and `create or replace` refuses
+        # that with 42P13.
+        #
+        # Replay-safe: the whole rebuild sits inside a DO block that returns
+        # early when the type already holds REQUIREMENT, so a second run is a
+        # no-op rather than a second drop. The function is `drop function if
+        # exists` then `create`, which is idempotent by construction.
+        if: ${{ inputs.scope == 'ten-stage-lifecycle' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          echo "The stage vocabulary before the change, so the mapping can be checked after."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select label.enumlabel, count(node.id) as nodes
+              from pg_type kind_type
+              join pg_namespace space on space.oid = kind_type.typnamespace
+              join pg_enum label on label.enumtypid = kind_type.oid
+              left join public.graph_nodes node on node.lifecycle_stage::text = label.enumlabel
+             where space.nspname = 'public' and kind_type.typname = 'sdlc_stage'
+             group by label.enumlabel, label.enumsortorder
+             order by label.enumsortorder;" \
+            || echo "sdlc_stage does not exist yet — run scope=lifecycle first."
+          FILE=supabase/migrations/20260823000200_ten_stage_lifecycle.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000200
+          else
+            npx supabase migration repair --status applied 20260823000200 --db-url "$DB_URL"
+          fi
+          # The return type changed, so a browser holding the old shape must not
+          # keep resolving against it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo ""
+          echo "What the run actually produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select label.enumsortorder::int as position, label.enumlabel
+              from pg_type kind_type
+              join pg_namespace space on space.oid = kind_type.typnamespace
+              join pg_enum label on label.enumtypid = kind_type.oid
+             where space.nspname = 'public' and kind_type.typname = 'sdlc_stage'
+             order by label.enumsortorder;"
+          echo "Expected exactly ten rows: REQUIREMENT, DISCOVER, EVALUATE, DECIDE,"
+          echo "ARCHITECT, BUILD, REVIEW, TEST, DEPLOY, MONITOR. Any of GOAL, PRD,"
+          echo "ARCHITECTURE, IMPLEMENTATION, DEPLOYMENT or MONITORING still present means"
+          echo "the rebuild did not run and the guard took the early return."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select node.lifecycle_stage::text as stage, count(*) as nodes
+              from public.graph_nodes node
+             where node.lifecycle_stage is not null
+             group by 1 order by 1;"
+          echo "Every staged node must name one of the ten. A row naming anything else is"
+          echo "impossible — the column is the enum — so an empty result simply means no"
+          echo "lifecycle graph has been planned on this database yet."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_role_may_execute,
+                   strpos(pg_get_functiondef(routine.oid), 'depends_on') > 0 as has_dependency_projection
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public' and routine.proname = 'list_graph_runs';"
+          echo "The drop takes the grants with it, so the file restates them: authenticated"
+          echo "t, anon f, service_role f. A true service_role here means the restatement"
+          echo "did not run and Supabase default privileges filled the gap."
 
       - name: Apply the job-seeker resume extraction migration (scope=job-seeker-resume)
         # Exactly one file — 20260822000400 — and no others. Every other

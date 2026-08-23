@@ -30,6 +30,17 @@ export type OrchestratorNode = {
   readonly nodeKey: string;
   readonly stage: SdlcStage | null;
   readonly status: NodeDisplayStatus;
+  /**
+   * Observations recorded for this node by something that cannot be persuaded.
+   *
+   * Deliberately *not* read off the gate. Anchors are evidence about the work;
+   * a gate is a decision about it, and the two do not always coexist — MONITOR
+   * requires anchored evidence and has no gate at all, so a run whose anchors
+   * were counted through its gates could never satisfy that stage however much
+   * evidence it produced. Optional so a caller that has not measured it says
+   * so rather than asserting zero.
+   */
+  readonly anchorCount?: number;
   readonly gate: {
     readonly id: string;
     readonly kind: GateKind;
@@ -83,6 +94,11 @@ export type AcceptanceReport = {
   readonly unmet: readonly string[];
 };
 
+/** Anchors recorded for a node, from wherever the caller could measure them. */
+function anchorsOn(node: OrchestratorNode): number {
+  return node.anchorCount ?? node.gate?.anchorCount ?? 0;
+}
+
 /**
  * Has this run earned the right to be called complete?
  *
@@ -104,31 +120,66 @@ export function acceptanceReport(state: OrchestratorState): AcceptanceReport {
     unmet.push(`${node.nodeKey} is ${node.status}.`);
   }
 
+  /*
+   * Evidence is asked for per *stage*, not per node.
+   *
+   * A stage is a fan-out: DISCOVER asks three independent questions and then
+   * reduces the answers, and the reducing node observes nothing itself. Demand
+   * an anchor from every node and that reducer fails a rule it structurally
+   * cannot satisfy, so the only staged lifecycle that could ever be accepted
+   * would be one with no parallelism in an anchored stage — which is the shape
+   * this engine exists to avoid.
+   *
+   * What the rule actually means is "this stage's claim rests on something
+   * observed", and that is a question about the stage.
+   */
+  const stages = new Map<SdlcStage, OrchestratorNode[]>();
   for (const node of state.nodes) {
     if (node.stage === null) continue;
-    const definition = stageDefinition(node.stage);
+    const group = stages.get(node.stage);
+    if (group) group.push(node);
+    else stages.set(node.stage, [node]);
+  }
 
-    if (definition.requiresAnchor) {
-      const anchors = node.gate?.anchorCount ?? 0;
-      if (anchors === 0) {
-        unmet.push(
-          `${node.stage} requires anchored evidence and ${node.nodeKey} has none, so its claim is unverified.`,
-        );
-      } else if (node.status === "passed" || node.status === "deployed") {
-        satisfied.push({ stage: node.stage, anchorCount: anchors });
-      }
-    } else if (node.status === "passed" || node.status === "deployed") {
-      satisfied.push({ stage: node.stage, anchorCount: node.gate?.anchorCount ?? 0 });
+  for (const [stage, nodes] of stages) {
+    const definition = stageDefinition(stage);
+    const anchors = nodes.reduce((total, node) => total + anchorsOn(node), 0);
+    const finished = nodes.every(
+      (node) => node.status === "passed" || node.status === "deployed" || node.status === "skipped",
+    );
+
+    if (definition.requiresAnchor && anchors === 0) {
+      unmet.push(
+        `${stage} requires anchored evidence and none of its ${nodes.length} node(s) recorded any, `
+        + "so its claim is unverified.",
+      );
+    } else if (finished) {
+      satisfied.push({ stage, anchorCount: anchors });
     }
 
-    if (definition.gate !== null) {
-      const gateState = node.gate?.state ?? null;
-      if (gateState === null) {
-        unmet.push(`${node.stage} has a ${definition.gate.toLowerCase()} gate that was never opened.`);
-      } else if (gateState === "OPEN" || gateState === "PENDING") {
-        unmet.push(`${node.stage} is waiting at its gate.`);
-      } else if (gateState === "REJECTED") {
-        unmet.push(`${node.stage} was rejected at its gate.`);
+    /*
+     * The gate is a stage question for the same reason the anchor is.
+     *
+     * A template puts a stage's gate on the node that concludes it, not on
+     * every node in it: REVIEW gates `review` and lets `security_review` run
+     * beside it. Asked per node, `security_review` fails a check for a gate it
+     * was never meant to carry — which made acceptance unreachable for every
+     * shipped lifecycle, silently, because "not met" is also what an
+     * in-progress run looks like.
+     *
+     * So: the stage needs at least one gate, and every gate it does carry has
+     * to have been decided affirmatively.
+     */
+    const gates = nodes.map((node) => node.gate).filter((gate) => gate !== null);
+
+    if (definition.gate !== null && gates.length === 0) {
+      unmet.push(`${stage} has a ${definition.gate.toLowerCase()} gate that was never opened.`);
+    }
+    for (const gate of gates) {
+      if (gate.state === "OPEN" || gate.state === "PENDING") {
+        unmet.push(`${stage} is waiting at its gate.`);
+      } else if (gate.state === "REJECTED") {
+        unmet.push(`${stage} was rejected at its gate.`);
       }
     }
   }

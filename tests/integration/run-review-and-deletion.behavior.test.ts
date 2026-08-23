@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260823000100_command_analysis_graphs.sql";
+const latestMigration = "20260823000200_ten_stage_lifecycle.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000003a1";
 const adminId = "00000000-0000-4000-8000-0000000003a2";

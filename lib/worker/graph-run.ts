@@ -45,7 +45,7 @@ const claimedNodeSchema = z.object({
    */
   node_id: z.string().uuid().nullish(),
   lifecycle_stage: z
-    .enum(["GOAL", "PRD", "ARCHITECTURE", "IMPLEMENTATION", "REVIEW", "TEST", "DEPLOYMENT", "MONITORING"])
+    .enum(["REQUIREMENT", "DISCOVER", "EVALUATE", "DECIDE", "ARCHITECT", "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR"])
     .nullish()
     .catch(null),
   gate_kind: z.enum(["AUTOMATIC", "HUMAN"]).nullish().catch(null),

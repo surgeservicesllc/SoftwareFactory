@@ -107,12 +107,14 @@ describe("the workflow's surgical scopes", () => {
     const known = new Set(await readdir(migrationsRoot));
     const broker = scopeFiles("Apply the broker function migrations surgically \\(scope=broker-functions\\)");
     const lifecycle = scopeFiles("Apply the Agentic SDLC lifecycle surgically \\(scope=lifecycle\\)");
+    const widening = scopeFiles("Widen the lifecycle to ten stages \\(scope=ten-stage-lifecycle\\)");
     expect(broker.length).toBeGreaterThan(30);
     expect(lifecycle).toEqual([
       "20260821000100_agentic_sdlc_activity_types.sql",
       "20260821000200_agentic_sdlc_lifecycle.sql",
     ]);
-    expect([...broker, ...lifecycle].filter((file) => !known.has(file))).toEqual([]);
+    expect(widening).toEqual(["20260823000200_ten_stage_lifecycle.sql"]);
+    expect([...broker, ...lifecycle, ...widening].filter((file) => !known.has(file))).toEqual([]);
   });
 
   it("leaves one claim_planned_graph, knowing about gates, once every migration has run", async () => {
@@ -142,7 +144,7 @@ describe("the workflow's surgical scopes", () => {
     const rows = (await db.query<{ kind: string; object: string; present: boolean }>(
       query![1].replace(/^ {12}/gm, ""),
     )).rows;
-    expect(rows.length).toBe(14);
+    expect(rows.length).toBe(17);
     expect(
       rows.filter((row) => !row.present).map((row) => `${row.kind} ${row.object}`),
       "every migration has been applied, so the probe reporting any of these absent means the "
@@ -202,5 +204,67 @@ describe("the workflow's surgical scopes", () => {
       // The console's launch: authenticated, through RLS and its own checks.
       { name: "create_graph_from_plan", worker: false, member: true },
     ]);
+  });
+
+  it("leaves the stage vocabulary widened, because the lifecycle file guards its own type", async () => {
+    // The replay above re-ran 20260821000200, which creates sdlc_stage only if
+    // it is absent. If that guard were ever dropped, this replay would restore
+    // the eight-stage type underneath columns holding ten-stage values — and
+    // the failure would not surface here but at the next insert.
+    const labels = await db.query<{ enumlabel: string }>(
+      `select label.enumlabel
+         from pg_type kind_type
+         join pg_namespace space on space.oid = kind_type.typnamespace
+         join pg_enum label on label.enumtypid = kind_type.oid
+        where space.nspname = 'public' and kind_type.typname = 'sdlc_stage'
+        order by label.enumsortorder`,
+    );
+    expect(labels.rows.map((row) => row.enumlabel)).toEqual([
+      "REQUIREMENT", "DISCOVER", "EVALUATE", "DECIDE", "ARCHITECT",
+      "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR",
+    ]);
+  });
+
+  it("does revert the widened run projection, which is why the ten-stage scope must follow", async () => {
+    // Another property worth knowing rather than having. 20260821000200 drops
+    // and recreates list_graph_runs with its own narrower return type, so a
+    // lifecycle replay silently takes the stage pages' projection back to the
+    // fourteen-column shape. Every consumer of `depends_on` then reads
+    // undefined and renders a node with no dependencies — wrong, and quiet.
+    const [projection] = await overloadsOf("list_graph_runs");
+    expect(projection.body).not.toContain("depends_on");
+  });
+
+  it("is restored by the ten-stage scope, which replays as a no-op on the type", async () => {
+    await replay(scopeFiles("Widen the lifecycle to ten stages \\(scope=ten-stage-lifecycle\\)"));
+
+    const [projection] = await overloadsOf("list_graph_runs");
+    expect(projection.body).toContain("depends_on");
+    expect(projection.body).toContain("anchor_count");
+    // The grants the drop discarded, restated by the file rather than inherited.
+    const grants = await db.query<{ member: boolean; worker: boolean; anon: boolean }>(
+      `select has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member,
+              has_function_privilege('service_role', routine.oid, 'EXECUTE') as worker,
+              has_function_privilege('anon', routine.oid, 'EXECUTE') as anon
+         from pg_proc routine
+         join pg_namespace space on space.oid = routine.pronamespace
+        where space.nspname = 'public' and routine.proname = 'list_graph_runs'`,
+    );
+    expect(grants.rows).toEqual([{ member: true, worker: false, anon: false }]);
+
+    // And running it a second time against its own output changes nothing —
+    // the guard returns early rather than dropping a type ten stages now
+    // depend on.
+    await replay(scopeFiles("Widen the lifecycle to ten stages \\(scope=ten-stage-lifecycle\\)"));
+    const labels = await db.query<{ enumlabel: string }>(
+      `select label.enumlabel
+         from pg_type kind_type
+         join pg_namespace space on space.oid = kind_type.typnamespace
+         join pg_enum label on label.enumtypid = kind_type.oid
+        where space.nspname = 'public' and kind_type.typname = 'sdlc_stage'
+        order by label.enumsortorder`,
+    );
+    expect(labels.rows).toHaveLength(10);
+    expect(labels.rows[0].enumlabel).toBe("REQUIREMENT");
   });
 });

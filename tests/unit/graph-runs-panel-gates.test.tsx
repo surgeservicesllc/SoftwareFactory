@@ -37,7 +37,7 @@ function runWith(node: Record<string, unknown>) {
             model: "m",
             latency_ms: 1200,
             error_message: null,
-            lifecycle_stage: "GOAL",
+            lifecycle_stage: "REQUIREMENT",
             gate_kind: null,
             gate_id: null,
             gate_state: null,
@@ -63,7 +63,7 @@ const heldNode = {
   model: "m",
   latency_ms: 900,
   error_message: null,
-  lifecycle_stage: "ARCHITECTURE",
+  lifecycle_stage: "ARCHITECT",
   gate_kind: "HUMAN",
   gate_id: "a0000000-0000-4000-8000-000000000009",
   gate_state: "OPEN",
@@ -108,7 +108,7 @@ describe("a lifecycle gate in the runs panel", () => {
 
     // VERIFYING is a state; "awaiting a decision" is what it means for a person.
     expect(await screen.findByText(/awaiting a decision/i)).toBeInTheDocument();
-    expect(screen.getByText("ARCHITECTURE")).toBeInTheDocument();
+    expect(screen.getByText("ARCHITECT")).toBeInTheDocument();
   });
 
   it("sends the decision to the gate the node names", async () => {
@@ -156,7 +156,7 @@ describe("a lifecycle gate in the runs panel", () => {
     );
     render(<GraphRunsPanel />);
 
-    await screen.findByText("ARCHITECTURE");
+    await screen.findByText("ARCHITECT");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText(/awaiting a decision/i)).toBeNull();
   });
