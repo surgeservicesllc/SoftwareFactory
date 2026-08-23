@@ -30,7 +30,9 @@ describe("AppShell navigation", () => {
       "Projects",
       "Pipelines",
       "Bots",
-      "Job Seeker",
+      // Job Seeker was removed by owner instruction (2026-08-23): it is a
+      // different product, not a console destination, and it is still reached
+      // from the top-level product switcher. Its absence here is asserted.
       "Runs",
       "Operations",
       "Reports",
