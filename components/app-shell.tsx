@@ -4,7 +4,6 @@ import {
   Activity,
   Bot,
   Boxes,
-  BriefcaseBusiness,
   ChevronDown,
   CircleGauge,
   ClipboardList,
@@ -118,11 +117,17 @@ const navigationEntries: readonly NavigationEntry[] = [
       { label: "Bot Activity", href: "/solutions/activity", icon: Activity },
     ],
   },
-  // The personal job-search command center. Lives outside /solutions on
-  // purpose: it is the one hard-gated, person-scoped surface (the page
-  // redirects signed-out visitors), and its data is private to the person
-  // even within the organization.
-  { label: "Job Seeker", href: "/job-seeker", icon: BriefcaseBusiness },
+  /*
+   * Job Seeker is deliberately absent from this list (owner instruction,
+   * 2026-08-23).
+   *
+   * It is a different product, not a page of the factory console: it lives
+   * outside /solutions, is hard-gated and person-scoped, and its data is
+   * private to the person even within the organization. Listing it here put
+   * a second product in the middle of the console's own destinations. It is
+   * still reached from the top-level product switcher, which is where a
+   * different product belongs.
+   */
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   /*
    * Operations, promoted out of a group and placed above Reports by owner
