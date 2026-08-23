@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
+import { summariseRunStages } from "@/lib/graph/stage-summary";
 
 /**
  * The graph runs the executor worker has recorded, straight from the
@@ -85,6 +86,58 @@ function runTone(state: string): "safe" | "info" | "warning" | "danger" | "neutr
     default:
       return "neutral";
   }
+}
+
+/**
+ * How far through the lifecycle this run got, read from the nodes themselves.
+ *
+ * The table below lists nodes in dependency order, which says what ran but not
+ * which part of the lifecycle it belonged to. Every node carries a stage now,
+ * so this is a grouping of stored state rather than a second model of it.
+ *
+ * No percentage. A stage with three completed nodes and one failed is not 75%
+ * of anything anybody can act on, and a bar would imply otherwise; the counts
+ * say what happened. A run whose nodes have no recognised stage renders
+ * nothing at all rather than an empty frame.
+ */
+function StageSummary({ nodes }: { nodes: readonly GraphRunNode[] }) {
+  const { stages, unstaged } = summariseRunStages(nodes);
+  if (stages.length === 0) return null;
+
+  return (
+    <div className="mb-3">
+      <p className="label mb-1.5">Lifecycle</p>
+      <ul className="flex flex-wrap gap-1.5">
+        {stages.map((entry) => (
+          <li
+            key={entry.stage}
+            className="flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-xs"
+          >
+            <span className="font-medium text-foreground">{entry.stage}</span>
+            <span className="text-muted">
+              {entry.completed}/{entry.total}
+            </span>
+            {entry.failed > 0 ? (
+              <span className="text-[var(--danger)]">{entry.failed} failed</span>
+            ) : null}
+            {entry.active > 0 ? (
+              <span className="text-[var(--accent-text)]">{entry.active} running</span>
+            ) : null}
+            {entry.skipped > 0 ? (
+              <span className="text-[var(--warning)]">{entry.skipped} skipped</span>
+            ) : null}
+          </li>
+        ))}
+        {unstaged > 0 ? (
+          // Stated rather than dropped: without this the counts above would
+          // silently fail to add up to the table underneath them.
+          <li className="flex items-center rounded-lg border border-line px-2 py-1 text-xs text-muted">
+            {unstaged} with no stage
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
 }
 
 function nodeTone(state: string): "safe" | "info" | "warning" | "danger" | "neutral" {
@@ -331,6 +384,7 @@ export function GraphRunsPanel() {
                       </ul>
                     </div>
                   ) : null}
+                  <StageSummary nodes={run.nodes ?? []} />
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[36rem] text-left text-xs">
                       <thead>
