@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import type { GraphRunStore } from "@/lib/worker/graph-run";
+import { explainEmptyQueue, type QueueGraphRow } from "@/lib/worker/queue-diagnosis";
 
 /**
  * The worker's half of the graph write boundary, over the service-role
@@ -34,6 +35,27 @@ export class SupabaseGraphStore implements GraphRunStore {
     });
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
+  }
+
+  /**
+   * One line per graph saying which claim filter excludes it, for the log a
+   * person reads after "nothing ran". Read-only over the same rows the claim
+   * consults; ids, states, counts and executor names only — never goal text.
+   */
+  async explainEmptyQueue(): Promise<readonly string[]> {
+    const { data, error } = await this.client
+      .from("graphs")
+      .select(
+        "id, requires_owner_approval, is_lifecycle, created_at, "
+        + "graph_nodes(executor), graph_runs(state, completed_at), "
+        + "graph_gates(state, opened_at, decided_at)",
+      )
+      .order("created_at", { ascending: true })
+      .limit(25);
+    if (error) {
+      return [`Queue diagnosis unavailable: ${error.message ?? "the read failed"}.`];
+    }
+    return explainEmptyQueue((data ?? []) as unknown as QueueGraphRow[], WORKER_SUPPORTED_EXECUTORS);
   }
 
   async recordNodeState(
