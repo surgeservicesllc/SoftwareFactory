@@ -1396,3 +1396,33 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Consequence: the rehearsal can produce a clean lint verdict for the first
   time. Workers, autonomy, and automatic actions remain OFF and the global
   kill switch remains ON.
+
+## ADR-127 - The chain is applied; one wrong pinned contract and the unreached postflights get their own scope
+
+- Date: 2026-08-23
+- Status: Accepted
+- Decision: chain run `32607123713` committed the protected six-file
+  transaction - rehearsal green with a clean lint, six ledger rows recorded,
+  fourteen-identity contract unchanged - and then refused at the post-commit
+  RECORD_ONLY_READY check. The detail probe (run 32607361788) showed hosted's
+  post-apply posture matches every measurable expectation: exact wrapper
+  sources and ACLs, RLS-forced tables with owner/authenticated-only grants,
+  and zero record-only agent runs. Replaying the exact gate query on the
+  clean local full chain reproduced the refusal: the pinned contract md5 for
+  `public.list_factory_commands(uuid,integer,uuid)` (`6abaeb0d...`) matches
+  no database; the true post-chain identity is
+  `162d47956f98e7b005c7abe1df680ee9`. The pin is corrected in both workflow
+  sites and the test fixture, and a new read-only
+  `scope=record-only-postflight` re-runs exactly the three post-commit
+  verifications, the health checks, and the PostgREST reload the protected
+  step never reached - refusing unless the ledger already records the six
+  rows, and writing nothing but the NOTIFY.
+- Rationale: the production database is in the intended state; what failed
+  was a verification constant, provably wrong under every state, so
+  correcting it and re-running the verification is the honest completion of
+  the release evidence - not a waiver. The chain scope itself can never
+  re-run (its history gate now refuses), so the unreached postflights need a
+  dedicated scope.
+- Consequence: the record-only routing is live and verified end to end once
+  the postflight scope reads back green. Workers, autonomy, and automatic
+  actions remain OFF and the global kill switch remains ON.

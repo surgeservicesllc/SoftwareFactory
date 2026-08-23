@@ -66,11 +66,17 @@ Last triaged: 2026-08-22
   functions including the three Phase 1C trigger functions. The lint rows now
   carry the relations 01000 pins in trigger_expectations (ADR-125), with the
   mechanics probe-verified inside a rolled-back transaction.
-- [ ] Apply only the protected atomic
+- [x] Apply only the protected atomic
   `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
-  `scope=factory-any-model-record-only`, including rollback rehearsal, exact
-  prerequisite/ledger/catalog/ACL/lint/health checks, and one-transaction ledger
-  recording. Never use the retired standalone CONTRACT scope or a broad push.
+  `scope=factory-any-model-record-only`: run 32607123713 rehearsed the whole
+  chain with a clean lint, committed the single production transaction, and
+  recorded all six ledger rows (ADR-125/126). Its post-commit
+  RECORD_ONLY_READY check refused on a pinned contract md5 that matches no
+  database; the pin is corrected and `scope=record-only-postflight` re-runs
+  the three unreached post-commit verifications (ADR-127).
+- [ ] Dispatch `scope=record-only-postflight` and read back green
+  RECORD_ONLY_READY / RECORD_ONLY_BOUNDARY / FOUNDATION_READY, health, and
+  the PostgREST reload on the applied chain.
 - [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
   executors, and zero runs for all `record_only` commands before and after apply.
 - [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful
