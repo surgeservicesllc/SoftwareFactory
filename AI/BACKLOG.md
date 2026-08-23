@@ -751,6 +751,22 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   `authentication_required` (401), cross-origin gets
   `invalid_request_origin` (403), and an empty selection or short reason
   gets `invalid_delete_request` (400).
+- [x] Selecting a pipeline now **stops** it (owner instruction, ADR-131):
+  the first press hit "0 pipelines deleted. Kept: 2 still running." on two
+  record-only rows that had been `queued` for one and fourteen hours and
+  could never be claimed. `20260823000300` cancels a selected command's
+  runs, tasks and itself before removal, and detaches its analysis graph
+  rather than being refused by that link's restrict foreign key — the graph,
+  its run and its artifacts survive. Applied on hosted; the function's
+  argument list reads back with `stopped_count` and without `kept_running`
+  (probe run 32649207253), and the live endpoint answers in the new shape.
+- [x] The `stop-and-delete-pipelines` scope's first run (32649087847)
+  **applied and recorded the migration, then failed on its own readback**:
+  `'stopped_count' = any(subquery)` is the subquery form, so PostgreSQL
+  coerced the scalar to an array and raised `malformed array literal`.
+  Fixed to array containment, and `scope=probe` now reports the function's
+  argument names so applied state is confirmable without re-running a
+  one-shot scope.
 - [ ] Still unexercised: an actual deletion of a real production row, and
-  the kept-running / kept-with-runs branches against live data. Those need
-  rows the owner is willing to lose.
+  the kept-with-runs / kept-with-evidence branches against live data. Those
+  need rows the owner is willing to lose.
