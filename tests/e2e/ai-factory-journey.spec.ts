@@ -255,6 +255,27 @@ test.describe("AI Factory live journey", () => {
       .toBeVisible();
     await expect(wizard.getByText("1 of 1")).toBeVisible();
     const confirm = wizard.getByRole("button", { name: "Confirm" });
+
+    /*
+     * The elevated-permission acknowledgement, which this walk had never
+     * reached and so had never ticked.
+     *
+     * The Reviewer preset grants permissions `elevatedPermissions()` counts as
+     * elevated, so Review renders a required checkbox and Confirm stays
+     * disabled until a person says they have read what the bot may do on this
+     * project. That is the control working: a bot is not put on a repository
+     * by someone who did not look.
+     *
+     * Asserted in both directions, because the half that matters is the
+     * refusal. A test that only ticks the box and proceeds would pass just as
+     * happily if the guard were deleted.
+     */
+    const acknowledgement = wizard.getByRole("checkbox", {
+      name: /elevated permissions.*I have reviewed/i,
+    });
+    await expect(acknowledgement).toBeVisible({ timeout: 20_000 });
+    await expect(confirm).toBeDisabled();
+    await acknowledgement.check();
     await expect(confirm).toBeEnabled({ timeout: 20_000 });
     await confirm.click();
 
