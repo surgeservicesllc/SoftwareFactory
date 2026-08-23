@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PipelinesConsole, pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
@@ -227,5 +228,71 @@ describe("PipelinesConsole", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 401)));
     render(<PipelinesConsole templates={templates} />);
     expect(await screen.findByText("Sign in to see your pipelines")).toBeInTheDocument();
+  });
+
+  it("deletes only the pipelines ticked, and reports what the database kept", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/commands/delete") {
+        return jsonResponse({
+          deleted: { deletedCount: 1, keptRunning: 1, keptWithRuns: 0, notFound: 0 },
+        });
+      }
+      void init;
+      return jsonResponse({ commands: [
+        command("c1", "succeeded", { completedAt: "2026-08-17T11:00:00.000Z" }),
+        command("c2", "running"),
+      ] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    // Nothing ticked: the control is present but inert, so an accidental
+    // press cannot delete a list nobody chose.
+    const deleteButton = screen.getByRole("button", { name: "Delete selected" });
+    expect(deleteButton).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select pipeline: Goal c1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select pipeline: Goal c2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete selected (2)" }));
+
+    // The first press asks; a reason under ten characters keeps it asking.
+    const confirm = screen.getByRole("button", { name: /yes, delete these pipelines/i });
+    expect(confirm).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/reason/i), "tidying the pipelines list");
+    expect(confirm).toBeEnabled();
+    await userEvent.click(confirm);
+
+    const call = fetchMock.mock.calls.find(([url]) => String(url) === "/api/commands/delete");
+    expect(call).toBeDefined();
+    expect(JSON.parse(String((call?.[1] as RequestInit).body))).toEqual({
+      commandIds: ["c1", "c2"],
+      reason: "tidying the pipelines list",
+      includeCommandsWithRuns: false,
+    });
+    // Two were sent, one came back deleted: the message says so rather than
+    // claiming the selection is gone.
+    expect(await screen.findByText("1 pipeline deleted. Kept: 1 still running.")).toBeInTheDocument();
+  });
+
+  it("ticks and unticks every visible row from the header checkbox", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [
+      command("c1", "succeeded", { completedAt: "2026-08-17T11:00:00.000Z" }),
+      command("c2", "failed", { completedAt: "2026-08-17T11:30:00.000Z" }),
+    ] })));
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select all 2" }));
+    expect(screen.getByRole("button", { name: "Delete selected (2)" })).toBeEnabled();
+    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "2 of 2 selected" }));
+    expect(screen.getByRole("button", { name: "Delete selected" })).toBeDisabled();
   });
 });
