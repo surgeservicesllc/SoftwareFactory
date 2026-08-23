@@ -118,6 +118,12 @@ async function main() {
       headSha: process.env.GITHUB_SHA ?? null,
       gitHubToken: process.env.SOFTWAREFACTORY_CHECKS_TOKEN ?? null,
       productionUrl: process.env.SOFTWAREFACTORY_PRODUCTION_URL ?? null,
+      // The repository's own definition of "CI passed" — the same names the
+      // Phase 1C worker waits for. Same env, same pipe-separated format.
+      requiredCheckNames: (process.env.SOFTWAREFACTORY_REQUIRED_CHECKS ?? "")
+        .split("|")
+        .map((name) => name.trim())
+        .filter(Boolean),
     });
 
     const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt, inputs) => {
