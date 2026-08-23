@@ -2,6 +2,48 @@
 
 Last reviewed: 2026-08-22
 
+## 2026-08-23: step 5 cannot be completed, and the fix needs you
+
+Found by running the nine-step walk in a browser against a real local
+Supabase stack.
+
+**Connect Bots cannot reach Done.** The bot is created, then the panel reports
+"The bot was saved, but readiness could not be verified. Try again", and
+retrying cannot succeed. Because that step is done only when a ready linked
+bot exists, steps 5 through 9 are all unreachable.
+
+**Why.** `record_bot_readiness_preserving_disabled` is granted to
+`service_role` alone — deliberately, and asserted by
+`bot-nullif-functions.behavior.test.ts` ("keeps legacy registration narrow and
+readiness evidence service-only"). But nothing in this application runs as
+service_role: `lib/supabase` reads only `NEXT_PUBLIC_SUPABASE_URL` and the
+anon/publishable key, and both callers of `synchronizeBotReadiness` —
+`/api/bots/connect/provision` and `/api/bots/[botId]/check` — pass the
+caller's own authenticated client. The function's optional
+`rawRecorderClient` parameter is the seam intended for a service-role client
+and is never supplied.
+
+Measured, not inferred:
+
+```
+set role authenticated;
+select public.record_bot_readiness_preserving_disabled(...);
+ERROR:  permission denied for function
+```
+
+**What was tried and reverted.** Granting `authenticated` makes the call
+succeed — verified through PostgREST with a real user's JWT — but it widens a
+boundary this repository narrowed on purpose, and the suite correctly refused
+it. That migration was reverted. Recording the attempt because the next reader
+will have the same idea.
+
+**What is actually needed, and why it is an owner's call.** The application
+needs a server-only service-role client for this one call, wired into
+`rawRecorderClient`. That means introducing a service-role key into the server
+environment — a new secret surface, governed by the credential rules in
+AGENTS.md — which is a decision to take deliberately rather than as a side
+effect of a QA pass.
+
 ## 2026-08-23: `supabase start` fails, and the protected release will too
 
 **Local development is broken on a fresh checkout.** `supabase start` applies
