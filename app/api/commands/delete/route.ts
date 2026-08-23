@@ -14,13 +14,14 @@ import { requireActiveOrganization } from "@/lib/supabase/tenant";
 export const runtime = "nodejs";
 
 /**
- * Delete the pipelines somebody selected, and only those.
+ * Stop and delete the pipelines somebody selected, and only those.
  *
  * The route carries no authority of its own, exactly like `/clear`:
  * `delete_selected_pipelines` re-checks that the caller manages this
- * organization, requires the reason, refuses live work, refuses to take run
- * history by surprise, and scopes every id to the caller's own organization
- * so a foreign id is counted as not found rather than acted on.
+ * organization, requires the reason, cancels live work before removing it,
+ * refuses to take run history by surprise, never deletes a command the
+ * improvement ledger cites, and scopes every id to the caller's own
+ * organization so a foreign id is counted as not found rather than acted on.
  * `databaseErrorResponse` classifies those refusals so the caller reads the
  * sentence this repository wrote.
  */
@@ -61,9 +62,11 @@ export async function POST(request: Request) {
       })
       .single<{
         deleted_count: number;
-        kept_running: number;
+        stopped_count: number;
         kept_with_runs: number;
+        kept_with_evidence: number;
         not_found: number;
+        unlinked_analyses: number;
       }>();
 
     if (error) return databaseErrorResponse(error);
@@ -71,9 +74,11 @@ export async function POST(request: Request) {
     return jsonNoStore({
       deleted: {
         deletedCount: data.deleted_count,
-        keptRunning: data.kept_running,
+        stoppedCount: data.stopped_count,
         keptWithRuns: data.kept_with_runs,
+        keptWithEvidence: data.kept_with_evidence,
         notFound: data.not_found,
+        unlinkedAnalyses: data.unlinked_analyses,
       },
     });
   } catch (error) {

@@ -236,7 +236,14 @@ describe("PipelinesConsole", () => {
       const url = String(input);
       if (url === "/api/commands/delete") {
         return jsonResponse({
-          deleted: { deletedCount: 1, keptRunning: 1, keptWithRuns: 0, notFound: 0 },
+          deleted: {
+            deletedCount: 2,
+            stoppedCount: 1,
+            keptWithRuns: 0,
+            keptWithEvidence: 0,
+            notFound: 0,
+            unlinkedAnalyses: 1,
+          },
         });
       }
       void init;
@@ -273,9 +280,12 @@ describe("PipelinesConsole", () => {
       reason: "tidying the pipelines list",
       includeCommandsWithRuns: false,
     });
-    // Two were sent, one came back deleted: the message says so rather than
-    // claiming the selection is gone.
-    expect(await screen.findByText("1 pipeline deleted. Kept: 1 still running.")).toBeInTheDocument();
+    // Selecting a running pipeline stops it rather than skipping it, and the
+    // analysis findings outlive the request that asked for them — both are
+    // said out loud rather than left for the reader to discover.
+    expect(await screen.findByText(
+      "2 pipelines deleted. Stopped 1 that was still running. 1 analysis run kept under Graph runs.",
+    )).toBeInTheDocument();
   });
 
   it("ticks and unticks every visible row from the header checkbox", async () => {

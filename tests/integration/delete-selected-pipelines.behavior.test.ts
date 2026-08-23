@@ -12,13 +12,16 @@ vi.mock("server-only", () => ({}));
 import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
 
 /**
- * Deleting the pipelines somebody ticked, against real PostgreSQL.
+ * Stopping and deleting the pipelines somebody ticked, against real
+ * PostgreSQL.
  *
- * The interesting behaviour is not that a delete deletes. It is that naming
- * rows explicitly buys no extra authority: the same caller check, the same
- * mandatory reason, the same refusal to touch live work or to take run
- * history by surprise as the whole-list clear, plus one rule the clear never
- * needed — an id belonging to another organization is counted, not acted on.
+ * Selecting a pipeline now stops it: a queued or running command is cancelled
+ * before it is removed, because the earlier rule — inherited from the
+ * whole-list clear — was protecting rows that could never finish. What naming
+ * rows explicitly still does not buy is authority over evidence: run history
+ * needs the explicit flag, a command the improvement ledger cites is never
+ * deleted, an analysis graph outlives its command, and an id from another
+ * organization is counted rather than acted on.
  */
 
 const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
@@ -125,9 +128,11 @@ async function makeCommandChain(): Promise<{ commandId: string; taskId: string }
 
 type DeleteOutcome = {
   deleted_count: number;
-  kept_running: number;
+  stopped_count: number;
   kept_with_runs: number;
+  kept_with_evidence: number;
   not_found: number;
+  unlinked_analyses: number;
 };
 
 async function deleteSelected(
@@ -173,7 +178,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260823000200_delete_selected_pipelines.sql");
+  expect(migrationFiles.at(-1)).toBe("20260823000300_stop_and_delete_selected_pipelines.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
@@ -233,8 +238,9 @@ describe("delete_selected_pipelines", () => {
 
     expect(result.rows[0]).toMatchObject({
       deleted_count: 2,
-      kept_running: 0,
+      stopped_count: 0,
       kept_with_runs: 0,
+      kept_with_evidence: 0,
       not_found: 0,
     });
     await db.exec("reset role");
@@ -252,7 +258,7 @@ describe("delete_selected_pipelines", () => {
     expect((await counts()).commands).toBe(0);
   });
 
-  it("leaves live work alone and says so", async () => {
+  it("stops live work rather than refusing it, then deletes it", async () => {
     const queued = await makeCommand("queued");
     const running = await makeCommand("running");
     const done = await makeCommand("succeeded");
@@ -260,10 +266,34 @@ describe("delete_selected_pipelines", () => {
     await asUser(ownerId);
     const result = await deleteSelected([queued, running, done]);
 
-    expect(result.rows[0]).toMatchObject({ deleted_count: 1, kept_running: 2 });
+    // All three go, and the two live ones are reported as stopped first —
+    // this is the rule the owner's two hours-old queued rows needed.
+    expect(result.rows[0]).toMatchObject({ deleted_count: 3, stopped_count: 2 });
+    expect((await counts()).commands).toBe(0);
+  });
+
+  it("cancels the tasks and runs under a live pipeline before removing it", async () => {
+    const { commandId, taskId } = await makeCommandChain();
     await db.exec("reset role");
-    const remaining = await db.query<{ id: string }>("select id from public.commands order by status");
-    expect(remaining.rows.map((row) => row.id).sort()).toEqual([queued, running].sort());
+    // Put the chain back into flight: a queued command with a running run,
+    // which is the state a worker holds mid-execution.
+    await db.query("update public.commands set status = 'running'::public.command_status where id = $1", [commandId]);
+    await db.query("update public.tasks set status = 'in_progress'::public.task_status where id = $1", [taskId]);
+    await db.query("update public.agent_runs set status = 'running'::public.run_status where task_id = $1", [taskId]);
+
+    await asUser(ownerId);
+    // Without the flag the rows are kept (run history) — but stopping still
+    // happens, because a selected pipeline should not be left running.
+    const kept = await deleteSelected([commandId]);
+    expect(kept.rows[0]).toMatchObject({ deleted_count: 0, stopped_count: 1, kept_with_runs: 1 });
+
+    await db.exec("reset role");
+    const state = await db.query<{ command: string; task: string; run: string }>(`
+      select (select status::text from public.commands where id = $1) as command,
+             (select status::text from public.tasks where id = $2) as task,
+             (select status::text from public.agent_runs where task_id = $2) as run`,
+      [commandId, taskId]);
+    expect(state.rows[0]).toEqual({ command: "cancelled", task: "cancelled", run: "cancelled" });
   });
 
   it("will not take run history by surprise, and does take it when told", async () => {
@@ -343,17 +373,62 @@ describe("delete_selected_pipelines", () => {
           and metadata ->> 'reason' = 'tidying the pipelines list'`,
     );
     expect(events.rows).toHaveLength(1);
-    expect(events.rows[0].description).toContain("1 removed of 2 selected");
+    expect(events.rows[0].description).toContain("2 removed of 2 selected");
+    expect(events.rows[0].description).toContain("1 stopped first");
     expect(events.rows[0].metadata).toMatchObject({
       scope: "selection",
       reason: "tidying the pipelines list",
       selected_count: 2,
-      deleted_count: 1,
-      kept_running: 1,
+      deleted_count: 2,
+      stopped_count: 1,
       kept_with_runs: 0,
+      kept_with_evidence: 0,
       not_found: 0,
+      unlinked_analyses: 0,
       included_commands_with_runs: false,
     });
+  });
+
+  it("removes the analysis link but keeps the graph, its run and its artifacts", async () => {
+    const commandId = await makeCommand("queued");
+    await db.exec("reset role");
+    // The link 20260823000100 creates, and a graph carrying a completed run —
+    // exactly the shape the owner's two stuck pipelines were in.
+    const graph = await db.query<{ id: string }>(
+      `insert into public.graphs (organization_id, project_id, goal, topology, risk_level, created_by)
+       values ($1, $2, 'Fix high-priority bugs', 'DAG'::public.graph_topology,
+               'green'::public.risk_level, $3) returning id`,
+      [organizationId, projectId, ownerId],
+    );
+    const graphId = graph.rows[0].id;
+    const run = await db.query<{ id: string }>(
+      `insert into public.graph_runs (organization_id, graph_id, state, created_by)
+       values ($1, $2, 'COMPLETED'::public.graph_run_state, $3) returning id`,
+      [organizationId, graphId, ownerId],
+    );
+    await db.query(
+      `insert into public.command_analysis_graphs (organization_id, command_id, graph_id, created_by)
+       values ($1, $2, $3, $4)`,
+      [organizationId, commandId, graphId, ownerId],
+    );
+
+    await asUser(ownerId);
+    const result = await deleteSelected([commandId], "removing the request, keeping the findings");
+
+    // The restrict foreign key would have refused the delete outright had the
+    // link not been removed first.
+    expect(result.rows[0]).toMatchObject({
+      deleted_count: 1,
+      stopped_count: 1,
+      unlinked_analyses: 1,
+    });
+    await db.exec("reset role");
+    const survivors = await db.query<{ graphs: number; runs: number; links: number }>(`
+      select (select count(*)::int from public.graphs where id = $1) as graphs,
+             (select count(*)::int from public.graph_runs where id = $2) as runs,
+             (select count(*)::int from public.command_analysis_graphs) as links`,
+      [graphId, run.rows[0].id]);
+    expect(survivors.rows[0]).toEqual({ graphs: 1, runs: 1, links: 0 });
   });
 
   it("is callable by a signed-in member only — never anon or service_role", async () => {
