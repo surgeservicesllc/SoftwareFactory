@@ -32,8 +32,14 @@ describe("authentication entry points", () => {
     expect(getStarted.slice(nearestHref, nearestHref + 40)).toContain("/auth/sign-up");
   });
 
-  it("keeps a separate sign-in entry that returns to the console", () => {
-    expect(header).toContain('href="/auth/sign-in?next=/solutions"');
+  it("keeps a separate sign-in entry, and lets it decide its own destination", () => {
+    // The generic entry carries no `next` (owner request, 2026-08-23): a plain
+    // sign-in lands on the chooser, and pinning /solutions here would override
+    // that from the one place nobody would think to look. A prompt that says
+    // "sign in to see your pipelines" still carries its own `next` — that
+    // person asked for somewhere specific.
+    expect(header).toContain('href="/auth/sign-in"');
+    expect(header).not.toContain('href="/auth/sign-in?next=');
   });
 
   it("routes every account-creation call to action to sign-up", () => {
@@ -60,13 +66,19 @@ describe("authentication entry points", () => {
     }
   });
 
-  it("lands a signed-in caller in the console rather than the marketing home page", () => {
+  it("lands a signed-in caller on the chooser rather than the marketing home page", () => {
+    // One default, in one place. The route decides; the page forwards only a
+    // `next` the caller actually supplied, because a substituted default
+    // reaches the route as an explicit request and silently wins.
     expect(source("app/api/auth/sign-in/route.ts"))
-      .toContain('normalizeReturnPath(parsed.data.returnTo, "/solutions")');
-    expect(source("app/auth/sign-in/page.tsx")).toContain('"/solutions"');
+      .toContain("normalizeReturnPath(parsed.data.returnTo, DECISION_PATH)");
+    expect(source("app/auth/sign-in/page.tsx")).toContain(": undefined");
     expect(source("app/auth/sign-in/page.tsx")).not.toMatch(
       /normalizeReturnPath\(query\.next, "\/"\)/,
     );
+    // And the default itself is the decision page, not a console page chosen
+    // for them.
+    expect(source("lib/auth/decision-gate.ts")).toContain('DECISION_PATH = "/decision"');
   });
 
   it("gives an unconfirmed account a way back in", () => {

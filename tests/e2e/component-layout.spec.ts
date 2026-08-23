@@ -231,6 +231,8 @@ const CASES = [
   "portfolio-controls",
   "project-detail",
   "recent-activity",
+  "decision-overview",
+  "decision-products",
 ] as const;
 
 for (const width of WIDTHS) {
@@ -535,20 +537,25 @@ for (const layoutCase of CASES) {
  * The global header, signed in.
  *
  * The rest of the browser suite browses signed out, so the owner's specified
- * header — AI Factory, Job Seeker, Admin, then the account controls — had no
- * coverage in a real browser at all. This reads the rendered entries rather
- * than the module that supplies them, which is the point: the wiring is the
- * instruction, and a unit test importing the same constant cannot catch a
- * header that stops rendering what it is given.
+ * header — the two products, then the account controls — had no coverage in a
+ * real browser at all. This reads the rendered entries rather than the module
+ * that supplies them, which is the point: the wiring is the instruction, and a
+ * unit test importing the same constant cannot catch a header that stops
+ * rendering what it is given.
+ *
+ * The header this drives belongs to a super administrator, which is what makes
+ * the absence of an Admin entry worth asserting: the owner removed it on
+ * 2026-08-23, and the badge beside it still says who is looking.
  */
-test("the signed-in header names the two products and the admin area", async ({ page }) => {
+test("the signed-in header names the two products and nothing else", async ({ page }) => {
   await open(page, "site-header", 1440);
 
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
 
-  await expect(primary.getByRole("link")).toHaveText(["AI Factory", "Job Seeker", "Admin"]);
-  await expect(primary.getByRole("link", { name: "AI Factory" })).toHaveAttribute(
+  await expect(primary.getByRole("link")).toHaveText(["Software Factory", "Job Seeker"]);
+  await expect(primary.getByRole("link", { name: "Admin" })).toHaveCount(0);
+  await expect(primary.getByRole("link", { name: "Software Factory" })).toHaveAttribute(
     "href",
     "/solutions",
   );

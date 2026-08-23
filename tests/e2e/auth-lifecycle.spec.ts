@@ -47,7 +47,14 @@ test.describe("account lifecycle against a real Supabase", () => {
       const link = await confirmationLinkFor(mail, email);
       expect(link, "no confirmation link reached the mailbox").toBeTruthy();
 
-      // 3. Following it must land on onboarding, not the sign-in error page.
+      /*
+       * 3. Following it must land on onboarding, not the sign-in error page.
+       *
+       * The callback now sends everyone to `/decision`; a brand-new account
+       * has no workspace, so that page forwards to onboarding and asks to be
+       * returned. Following the redirects proves the whole chain, and the
+       * destination it must end on is unchanged.
+       */
       const confirmed = await request.get(link!, { maxRedirects: 5 });
       expect(confirmed.url(), "the confirmation link did not reach onboarding")
         .toContain("/auth/onboarding");
@@ -62,11 +69,12 @@ test.describe("account lifecycle against a real Supabase", () => {
     expect(onboarding.status(), await onboarding.text()).toBeLessThan(300);
     expect(await onboarding.json()).toMatchObject({ organization: { role: "owner" } });
 
-    // 5. A fresh session can sign in and lands in the console.
+    // 5. A fresh session can sign in and lands on the chooser (owner request,
+    //    2026-08-23) rather than a console page picked for them.
     const clean = await playwright.request.newContext({ baseURL: origin });
     const signIn = await clean.post("/api/auth/sign-in", { data: { email, password }, headers });
     expect(signIn.status(), await signIn.text()).toBe(200);
-    expect(await signIn.json()).toMatchObject({ authenticated: true, next: "/solutions" });
+    expect(await signIn.json()).toMatchObject({ authenticated: true, next: "/decision" });
     await clean.dispose();
   });
 });
