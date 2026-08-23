@@ -770,3 +770,33 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Still unexercised: an actual deletion of a real production row, and
   the kept-with-runs / kept-with-evidence branches against live data. Those
   need rows the owner is willing to lose.
+
+## Two blockers behind the delete, and one migration finished (2026-08-23, ADR-132/133)
+
+- [x] `factory command routing evidence is immutable` was the third blocker
+  between the owner and a working delete. `20260823000400` lets the audited
+  delete release a route while an UPDATE stays refused and no client role
+  gains anything; proven by behaviour against the real hosted rows in a
+  rolled-back transaction (`update refused=t delete refused=t`, apply run
+  32652305439).
+- [x] `20260814002500_provider_credential_vault` is finished and recorded
+  (apply run 32653491713). Probe run 32652393423 measured it first: only
+  `resolve_provider_connect_session` was missing. That single gap was
+  answering every correct bot sign-in code with `connect_session_invalid`,
+  and its unrecorded ledger row was what made Supabase's preview branch
+  replay the file into a 42P07 on every commit.
+- [ ] `Supabase Preview` will **stay red**, and the vault repair should not
+  be read as fixing it. The ledger listing in run 32652305439 shows 20
+  unrecorded versions; 20260814002500 was only the first to fail the replay.
+  The next is already identified: `20260821000400_command_factory_routing`
+  is unrecorded and its table demonstrably exists (this session deleted rows
+  from `factory_command_routes` on production), so its replay raises the same
+  42P07. Remaining unrecorded: 20260814002600, 20260815000200/000300/000400/
+  000500/000600/000800/000900/001100/001200/001300/001400/001500/001600,
+  20260816000100/000200/000300/001600, 20260821000400. Each wants the same
+  measure-then-finish discipline the vault got — a probe inventory first,
+  finish only what is missing, record the ledger row only once every declared
+  object is present. Applying them blind is how this class of problem began.
+- [ ] The bot sign-in claim path has not been exercised end to end since the
+  function landed. The database half is verified; the flow itself wants a
+  real connect attempt.

@@ -1,5 +1,67 @@
 # SoftwareFactory — shared working status
 
+## THE VAULT MIGRATION IS FINISHED, AND THE DELETE HAD A THIRD BLOCKER (2026-08-23, latest)
+
+**`20260814002500_provider_credential_vault` is complete and recorded** (apply
+run 32653491713). The section below headed "FOUR MIGRATIONS ARE OUTSTANDING"
+is now one out of date on this file — read it for method, not for status.
+
+It was measured before it was touched. `scope=probe` gained an exact object
+inventory, and run 32652393423 answered: both tables present with every
+column, the index present, RLS and FORCE RLS on with no client grants, and
+five of six functions created. Exactly one was missing —
+`resolve_provider_connect_session`. That single gap was the live cost this
+file has described since 2026-08-20: `POST /api/bots/connect/claim` calls it
+first, so every **correct** sign-in code was answered
+`connect_session_invalid`. `20260823000500` creates it byte-for-byte from the
+original, and the apply scope reads it back and re-checks all nine of the
+original's objects **before** recording `20260814002500` — the ledger can
+never claim "applied" about a database still short a function.
+
+That removes **one** cause of the red `Supabase Preview`, and the honest
+expectation is that the check stays red. The preview branch replays every
+migration the ledger does not record, and the ledger listing in run
+32652305439 shows **20 unrecorded versions**, of which 20260814002500 was
+only the first to fail. The next one is already known:
+**`20260821000400_command_factory_routing` is unrecorded, and its table
+demonstrably exists** — this session deleted rows from
+`factory_command_routes` on production. Its replay will hit
+`create table public.factory_command_routes` and raise the same 42P07.
+
+So do not read the vault repair as "the check is fixed". The remaining
+unrecorded versions, from the same listing, are:
+
+```
+20260814002600  20260815000200  20260815000300  20260815000400
+20260815000500  20260815000600  20260815000800  20260815000900
+20260815001100  20260815001200  20260815001300  20260815001400
+20260815001500  20260815001600  20260816000100  20260816000200
+20260816000300  20260816001600  20260821000400
+```
+
+Each wants the same discipline the vault got: measure its objects with a
+probe inventory first, finish only what is missing, and record the ledger row
+only after every object it declares is present. Applying them blind is how
+this class of problem was created.
+
+**The Pipelines delete needed three separate fixes**, each invisible until the
+one before it was removed:
+
+1. Live work was skipped, not stopped (ADR-131) — two record-only rows queued
+   for hours could never be claimed, so "protect live work" was protecting
+   rows nobody could finish.
+2. `command_analysis_graphs.command_id` is `on delete restrict`, so a command
+   with an analysis graph failed on a foreign key. The link is released; the
+   graph, its run and its artifacts survive.
+3. `factory command routing evidence is immutable` (ADR-132) — a trigger that
+   refuses every delete plus a restrict foreign key did not make routing
+   evidence immutable, it made the **command immortal**. The audited delete
+   now announces itself with a transaction-local setting the guard honours;
+   an UPDATE is still refused, and the table still has no grants for any
+   client role. Proven against the real hosted rows, rolled back:
+   `update refused=t delete refused=t` (run 32652305439).
+
+
 ## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, latest)
 
 Step 9 is resolved above — a real run COMPLETED with 7 artifacts, and the

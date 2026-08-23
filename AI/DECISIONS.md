@@ -1578,3 +1578,68 @@ Use this append-only log for decisions that constrain future implementation. Cha
   "deleted" imply the analysis went too. `factory_command_routes` is
   handled the same way. Both are addressed through `to_regclass`-guarded
   dynamic SQL, because a database may hold either, both or neither.
+
+## ADR-132 - Routing evidence was made immutable in a way that made commands immortal
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner selected two pipelines, pressed delete, and got
+  `factory command routing evidence is immutable`.
+  `factory_command_routes` (20260821000400) carries a BEFORE UPDATE OR DELETE
+  trigger that raises unconditionally, and its foreign key to `commands` is
+  ON DELETE RESTRICT. Those two rules together do not make routing evidence
+  immutable - they make the COMMAND immortal. No surface, function, or role
+  could ever delete a routed command, which is not a rule anybody wrote down.
+- Decision: `20260823000400` keeps the guarantee and drops the accident. An
+  UPDATE is still refused unconditionally, with the same message and errcode.
+  A DELETE is still refused, except inside the audited pipeline delete, which
+  announces itself with a transaction-local setting that only that SECURITY
+  DEFINER function sets and withdraws immediately after the statement.
+- Rationale: `factory_command_routes` has no grants at all - `revoke all ...
+  from public, anon, authenticated, service_role` - so no client role can
+  reach the table with or without the setting. The trigger's real job is
+  discipline between definer functions, and this names the one function
+  allowed to release a route: the one deleting that route's own command,
+  under owner-or-admin, with a recorded reason, in the same transaction. The
+  file's postflight and the apply scope both re-assert that no client role
+  holds DELETE on the table, and the scope proves by behaviour, in a
+  rolled-back transaction against the real hosted rows, that ordinary UPDATE
+  and DELETE are still refused (`update refused=t delete refused=t`,
+  run 32652305439).
+- Consequence: a routed pipeline can be deleted through the audited path and
+  no other path gained anything. The released-route count goes to the audit
+  event rather than the return shape, so the console keeps the columns it
+  reads. This was the third distinct blocker between the owner and a working
+  delete - after the live-work rule (ADR-131) and the analysis link's own
+  restrict foreign key - and each was invisible until the one before it was
+  removed.
+
+## ADR-133 - A migration that died one function short is finished from measurement, not from the file
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: owner-directed. `20260814002500_provider_credential_vault` was
+  applied to hosted but never recorded in the ledger, and it stopped partway.
+  Two costs followed: `POST /api/bots/connect/claim` calls
+  `resolve_provider_connect_session` first, so every CORRECT sign-in code was
+  answered `connect_session_invalid` and each retry minted another code that
+  failed identically; and Supabase's preview branch, which replays every
+  migration the ledger does not record, replayed the file into the table that
+  already existed and died with 42P07 on every commit to main.
+- Decision: measure first. `scope=probe` gained an exact object inventory for
+  that file - both tables with their real column lists, the index, all six
+  functions, the RLS flags and the client grants. Probe run 32652393423
+  answered precisely: everything present and correctly postured except one
+  function. `20260823000500` creates that one function, byte-for-byte as the
+  original declares it, and its preflight refuses if the database is missing
+  more than the probe found.
+- Rationale: the runbook is explicit that NOT VISIBLE is not absent and that
+  re-running the file raises 42P07. Re-applying the whole file was never an
+  option, and guessing which half to apply would have been the same mistake
+  in a new costume. The measurement made the repair a one-function change.
+- Consequence: the apply scope creates the function, reads it back, re-checks
+  that all nine of the original's objects are present, and only THEN records
+  20260814002500 in the ledger - so the ledger can never claim "applied"
+  about a database still short a function. Run 32653491713 did all of that:
+  both rows recorded, posture verified. A correct sign-in code resolves
+  again, and the preview branch has nothing left to replay for this file.
