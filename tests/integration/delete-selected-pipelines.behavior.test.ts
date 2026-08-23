@@ -178,7 +178,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260823000300_stop_and_delete_selected_pipelines.sql");
+  expect(migrationFiles.at(-1)).toBe("20260823000400_pipeline_delete_releases_routing_evidence.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
@@ -216,9 +216,15 @@ beforeAll(async () => {
 // by the reason it passed rather than by being the only row in the table.
 beforeEach(async () => {
   await db.exec("reset role");
+  // Routes are cleared through the same announced permission the audited
+  // delete uses, because they are immutable to everyone else and their
+  // RESTRICT foreign key would otherwise block the command sweep below.
   await db.exec(`
     delete from public.agent_runs;
     delete from public.tasks;
+    select set_config('softwarefactory.pipeline_delete', 'on', false);
+    delete from public.factory_command_routes;
+    select set_config('softwarefactory.pipeline_delete', 'off', false);
     delete from public.commands;
   `);
 });
@@ -429,6 +435,72 @@ describe("delete_selected_pipelines", () => {
              (select count(*)::int from public.command_analysis_graphs) as links`,
       [graphId, run.rows[0].id]);
     expect(survivors.rows[0]).toEqual({ graphs: 1, runs: 1, links: 0 });
+  });
+
+  it("releases immutable routing evidence so a routed pipeline can be deleted at all", async () => {
+    const commandId = await makeCommand("queued");
+    await db.exec("reset role");
+    // The exact shape 20260821000400 records when a command is routed. Its
+    // table carries a BEFORE UPDATE OR DELETE trigger that raises
+    // unconditionally, and its command foreign key is ON DELETE RESTRICT —
+    // together they made a routed command undeletable by anybody, which is
+    // the wall the owner hit on 2026-08-23.
+    await db.query(
+      `insert into public.factory_command_routes (
+         organization_id, project_id, command_id, project_pipeline_id,
+         pipeline_template_key, assignment_id, bot_id, role_id,
+         routing_snapshot, created_by
+       ) values ($1, $2, $3, gen_random_uuid(), 'security_audit',
+                 gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
+                 '{"why":"fixture"}'::jsonb, $4)`,
+      [organizationId, projectId, commandId, ownerId],
+    );
+
+    await asUser(ownerId);
+    const result = await deleteSelected([commandId], "removing a routed pipeline");
+
+    expect(result.rows[0]).toMatchObject({ deleted_count: 1, stopped_count: 1 });
+    expect((await counts()).commands).toBe(0);
+    const routes = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.factory_command_routes",
+    );
+    expect(routes.rows[0].count).toBe(0);
+  });
+
+  it("still refuses to edit routing evidence, and refuses to delete it outside the audited path", async () => {
+    const commandId = await makeCommand("succeeded");
+    await db.exec("reset role");
+    await db.query(
+      `insert into public.factory_command_routes (
+         organization_id, project_id, command_id, project_pipeline_id,
+         pipeline_template_key, assignment_id, bot_id, role_id,
+         routing_snapshot, created_by
+       ) values ($1, $2, $3, gen_random_uuid(), 'security_audit',
+                 gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
+                 '{"why":"fixture"}'::jsonb, $4)`,
+      [organizationId, projectId, commandId, ownerId],
+    );
+
+    // An UPDATE is refused under every caller, permission or not.
+    await expect(db.query(
+      "update public.factory_command_routes set pipeline_template_key = 'other'",
+    )).rejects.toThrow(/routing evidence is immutable/);
+
+    // A bare DELETE is refused too: the permission is transaction-local and
+    // only the audited delete sets it.
+    await expect(db.query(
+      "delete from public.factory_command_routes where command_id = $1",
+      [commandId],
+    )).rejects.toThrow(/routing evidence is immutable/);
+  });
+
+  it("gives no client role a direct path to the routing table", async () => {
+    await db.exec("reset role");
+    const acl = await db.query<{ anon: boolean; auth: boolean; service: boolean }>(`
+      select has_table_privilege('anon', 'public.factory_command_routes', 'DELETE') as anon,
+             has_table_privilege('authenticated', 'public.factory_command_routes', 'DELETE') as auth,
+             has_table_privilege('service_role', 'public.factory_command_routes', 'DELETE') as service`);
+    expect(acl.rows[0]).toEqual({ anon: false, auth: false, service: false });
   });
 
   it("is callable by a signed-in member only — never anon or service_role", async () => {

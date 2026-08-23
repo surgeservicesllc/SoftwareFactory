@@ -84,6 +84,11 @@ on:
           "stop-and-delete-pipelines" applies only 20260823000300, which makes
           that selection stop live work before removing it and detach an
           analysis graph rather than being refused by its foreign key;
+          "release-routing-evidence" applies only 20260823000400, which lets
+          the audited pipeline delete release a command's immutable routing
+          evidence - without it a routed command could never be deleted by
+          anyone, because the guard refuses every delete and the foreign key
+          restricts;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -112,6 +117,7 @@ on:
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
+          - release-routing-evidence
           - probe
 permissions:
   checks: read
@@ -1403,6 +1409,53 @@ jobs:
               join public.commands command on command.id = task.command_id
              where command.parameters ->> 'executionMode' = 'record_only';"
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
+
+          echo ""
+          echo "20260814002500 provider credential vault: the exact object"
+          echo "inventory. The ledger does not record this file, yet its table"
+          echo "exists - which is why the Supabase Preview branch replays it and"
+          echo "dies with 42P07. Finishing it needs to know precisely which"
+          echo "pieces landed, because NOT VISIBLE is not absent."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select object_name, object_kind, present from (
+              values
+                ('provider_credentials', 'table', to_regclass('public.provider_credentials') is not null),
+                ('provider_connect_sessions', 'table', to_regclass('public.provider_connect_sessions') is not null),
+                ('provider_connect_sessions_expiry_idx', 'index', to_regclass('public.provider_connect_sessions_expiry_idx') is not null),
+                ('list_provider_credentials', 'function', to_regprocedure('public.list_provider_credentials(uuid)') is not null),
+                ('open_provider_connect_session', 'function', to_regprocedure('public.open_provider_connect_session(uuid,text,text,integer)') is not null),
+                ('resolve_provider_connect_session', 'function', to_regprocedure('public.resolve_provider_connect_session(text)') is not null),
+                ('claim_provider_connect_session', 'function', to_regprocedure('public.claim_provider_connect_session(text,text)') is not null),
+                ('read_provider_credential', 'function', to_regprocedure('public.read_provider_credential(uuid,text)') is not null),
+                ('forget_provider_credential', 'function', to_regprocedure('public.forget_provider_credential(uuid,text)') is not null)
+            ) as inventory(object_name, object_kind, present)
+            order by object_kind, object_name;"
+
+          echo ""
+          echo "And the columns those two tables actually carry, because a table"
+          echo "that exists is not the same as a table that is complete."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select table_name, column_name, data_type, is_nullable
+              from information_schema.columns
+             where table_schema = 'public'
+               and table_name in ('provider_credentials', 'provider_connect_sessions')
+             order by table_name, ordinal_position;" || true
+
+          echo ""
+          echo "RLS posture and client grants on those tables - the part a"
+          echo "migration that died before its grants would have skipped."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select relation.relname,
+                   relation.relrowsecurity as rls,
+                   relation.relforcerowsecurity as force_rls,
+                   (select count(*) from pg_policy policy where policy.polrelid = relation.oid) as policies,
+                   has_table_privilege('authenticated', relation.oid, 'SELECT') as authenticated_select,
+                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_role_select
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relname in ('provider_credentials', 'provider_connect_sessions')
+             order by relation.relname;" || true
 
           echo ""
           echo "The Pipelines page's selection delete, as the database actually"
@@ -5231,6 +5284,109 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: selecting a pipeline now stops it, then deletes it."
+
+      - name: Release routing evidence on an audited delete (scope=release-routing-evidence)
+        # Exactly one file - 20260823000400 - which relaxes the routing guard
+        # for one named path and rebuilds delete_selected_pipelines to use it.
+        # Without it a routed command is undeletable by ANY caller: the guard
+        # raises on every delete of a route row, and the route's foreign key
+        # to commands is ON DELETE RESTRICT. The relaxation is narrow - an
+        # UPDATE is still refused unconditionally, and the table still carries
+        # no grants for anon, authenticated or service_role, which the file's
+        # own postflight re-checks.
+        if: ${{ inputs.scope == 'release-routing-evidence' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000400_pipeline_delete_releases_routing_evidence.sql
+          EXPECTED_SHA256=e35c93087dd7b111a411b621f92a13ecf2741a199ebbe8f3b71da342752b2a56
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000400';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000400 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000400
+          else
+            npx supabase migration repair --status applied 20260823000400 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          # Proof by behaviour, in a transaction that is rolled back: an
+          # UPDATE must still be refused, and a DELETE must still be refused
+          # without the announced permission. Nothing is kept either way.
+          echo "Rolled-back proof that the guard still refuses what it always refused."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
+          begin;
+          do $guardcheck$
+          declare
+            v_update_refused boolean := false;
+            v_delete_refused boolean := false;
+          begin
+            if to_regclass('public.factory_command_routes') is null then
+              raise notice 'GUARD: routing table absent on this database; nothing to prove';
+              return;
+            end if;
+            begin
+              update public.factory_command_routes set pipeline_template_key = pipeline_template_key;
+            exception when others then
+              v_update_refused := (SQLERRM like '%routing evidence is immutable%');
+            end;
+            begin
+              delete from public.factory_command_routes where false;
+              -- A no-op delete touches no row, so the row trigger never fires;
+              -- force one row through instead when any row exists.
+              delete from public.factory_command_routes
+               where ctid = (select ctid from public.factory_command_routes limit 1);
+            exception when others then
+              v_delete_refused := (SQLERRM like '%routing evidence is immutable%');
+            end;
+            raise notice 'GUARD: update refused=% delete refused=%', v_update_refused, v_delete_refused;
+            if exists (select 1 from public.factory_command_routes)
+              and not (v_update_refused and v_delete_refused) then
+              raise exception using errcode = '55000',
+                message = 'the routing guard no longer refuses ordinary mutation';
+            end if;
+          end
+          $guardcheck$;
+          rollback;
+          GUARD_SQL
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and (to_regclass('public.factory_command_routes') is null
+                 or not (has_table_privilege('anon', 'public.factory_command_routes', 'DELETE')
+                      or has_table_privilege('authenticated', 'public.factory_command_routes', 'DELETE')
+                      or has_table_privilege('service_role', 'public.factory_command_routes', 'DELETE')));")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The routing release did not read back with the intended posture."
+            exit 1
+          fi
+          echo "Applied and verified: a routed pipeline can be deleted through the audited path, and no other path gained anything."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
