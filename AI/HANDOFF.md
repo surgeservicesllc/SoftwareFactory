@@ -15,8 +15,10 @@ query on the clean local full chain reproduced the refusal - the pinned
 contract md5 for list_factory_commands matches no database. The pin is
 corrected (true identity 162d47956f98e7b005c7abe1df680ee9) and read-only
 `scope=record-only-postflight` re-runs the three unreached post-commit
-verifications plus health and the PostgREST reload (ADR-127). Remaining:
-dispatch that scope, then the signed-in production Step 8 record-only
+verifications plus health and the PostgREST reload (ADR-127). Run
+32607902289 read them all back green: "Record-only chain postflights
+verified on the applied production database; PostgREST schema reload
+requested." Remaining: only the signed-in production Step 8 record-only
 acceptance and truthful Step 9. Workers, autonomy, and automatic actions
 stay OFF; the global kill switch stays ON.
 
