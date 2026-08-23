@@ -70,6 +70,10 @@ on:
           "command-analysis-graphs" applies only 20260823000100, which lets a
           record-only Claude command launch its one read-only analysis graph
           and report the run truthfully;
+          "analysis-launch-doorcheck" changes no data at all: it rehearses the
+          Run analysis launch inside a rolled-back transaction and reports
+          whether hosted PostgREST resolves and executes the doorway function,
+          because the button's failure mode is invisible from the repository;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -94,6 +98,7 @@ on:
           - command-carry-forward
           - command-analysis-graphs
           - record-only-postflight
+          - analysis-launch-doorcheck
           - probe
 permissions:
   checks: read
@@ -261,7 +266,7 @@ jobs:
         # do not yet trust the ledger -- but this step sits above the scope
         # branch, so a probe could still rewrite history rows. A read-only
         # question must not be able to edit the thing being questioned.
-        if: ${{ inputs.scope != 'probe' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' }}
+        if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name
@@ -4865,6 +4870,91 @@ jobs:
             exit 1
           fi
           echo "Linked: record-only commands can launch and report their one analysis graph."
+
+      - name: Rehearse the Run analysis doorway (scope=analysis-launch-doorcheck)
+        # The one failure the suites cannot see: whether the HOSTED database
+        # accepts launch_command_analysis_graph, the function behind the Run
+        # analysis button, for the real recorded command. Two moves, neither
+        # of which keeps any data:
+        #   1. psql rehearsal: the newest record-only Claude command's launch
+        #      runs as its own organization owner inside BEGIN…ROLLBACK, so the
+        #      database's verbatim answer (a graph id or an error) lands in the
+        #      log while the database keeps none of it.
+        #   2. NOTIFY pgrst 'reload schema' — the same cache-refresh signal
+        #      every mutating scope already sends. If the button failed only
+        #      because PostgREST's schema cache predated 20260823000100, this
+        #      signal is the entire repair.
+        if: ${{ inputs.scope == 'analysis-launch-doorcheck' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          echo "1) Rolled-back rehearsal of the exact launch, as the command's own organization owner."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'DOORCHECK_SQL'
+          begin;
+          do $doorcheck$
+          declare
+            v_cmd public.commands%rowtype;
+            v_actor uuid;
+            v_graph uuid;
+          begin
+            select command.* into v_cmd
+              from public.commands command
+             where command.parameters ->> 'executionMode' = 'record_only'
+               and command.parameters ->> 'provider' = 'anthropic'
+             order by command.created_at desc
+             limit 1;
+            if not found then
+              raise notice 'DOORCHECK: no record-only Claude command exists to rehearse';
+              return;
+            end if;
+            raise notice 'DOORCHECK: rehearsing command % (type %)', v_cmd.id, v_cmd.command_type;
+
+            select member.user_id into v_actor
+              from public.organization_members member
+             where member.organization_id = v_cmd.organization_id
+               and member.role = 'owner'
+             order by member.created_at
+             limit 1;
+            if v_actor is null then
+              raise notice 'DOORCHECK: the organization has no owner member row';
+              return;
+            end if;
+            perform set_config(
+              'request.jwt.claims',
+              json_build_object('sub', v_actor, 'role', 'authenticated')::text,
+              true
+            );
+
+            begin
+              v_graph := public.launch_command_analysis_graph(
+                v_cmd.organization_id, v_cmd.project_id, v_cmd.id,
+                'DAG'::public.graph_topology, '[]'::jsonb,
+                'green'::public.risk_level, false,
+                '[{"node_key":"doorcheck","job":"Doorcheck rehearsal only","executor":"MODEL","capability":"analysis"}]'::jsonb,
+                '[]'::jsonb, '{}'::jsonb
+              );
+              raise notice 'DOORCHECK: launch returned graph % — the database layer is healthy (rolled back)', v_graph;
+            exception when others then
+              raise notice 'DOORCHECK: launch raised % — %', SQLSTATE, SQLERRM;
+            end;
+          end
+          $doorcheck$;
+          rollback;
+          DOORCHECK_SQL
+
+          echo ""
+          echo "2) Schema-cache reload signal, in case PostgREST's cache predates 20260823000100."
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo "Signal sent. If the rehearsal above returned a graph id, the database layer is healthy; a Run analysis tap after this run answers whether the edge stack agrees."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
