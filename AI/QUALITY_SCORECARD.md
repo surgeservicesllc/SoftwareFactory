@@ -28,10 +28,32 @@ at 352 files / 4266 tests; browser harness **PASS** at 1131 across three
 viewports; accessibility, routing and responsive lanes **PASS** at 185; the
 production build **PASS**.
 
+**Native PostgreSQL 16.13 — independent engine verification.** All 144
+migrations apply cleanly on a real PostgreSQL 16 server, and the walk's claims
+were replayed there through the same definer functions under a real
+`authenticated` role with real row level security: step 4's first press creates
+and its second does not, the selection reads back scoped to its project,
+`authenticated` has no direct path to `project_agents`, and both clear controls
+report definer/member-only with `anon` and `service_role` false. PGlite is a
+WASM build whose divergences have twice hidden a real hosted defect in this
+repository, so a second engine agreeing is worth more than a second run.
+
+`service_role` reading false there is expected and consistent with ADR-120: a
+native server carries no Supabase `ALTER DEFAULT PRIVILEGES`, so the grant that
+migration contains never appears in the first place. It is a hosted-only hole,
+which is precisely why only a hosted readback could find it.
+
 **Not executed, and not claimed:** the full nine-step browser walk against a
-live stack. Docker is unavailable in the session that ran this pass, so no
-local Supabase; against production the same lane skips because step 1 is a
-GitHub App installation no runner can perform. Everything above was executed
+live stack. The blocker was probed rather than assumed, and the
+first statement of it was too broad. PostgreSQL 16 *is* available and was used
+(above). What is missing is the rest of a Supabase-compatible endpoint:
+PostgREST and GoTrue are not installed, and cannot be fetched — the egress
+proxy allows package registries (npm, PyPI, crates, Go) but answers 403 for
+GitHub releases, and neither component is published to npm. The Supabase CLI is
+absent and would need Docker, whose daemon is not running. So the application
+has no `NEXT_PUBLIC_SUPABASE_URL` it can reach, and the browser walk cannot
+start. Against production the same lane skips because step 1 is a GitHub App
+installation no runner can perform. Everything above was executed
 through layers that do run — real route handlers and SECURITY DEFINER
 functions against real PostgreSQL, and the browser harness.
 
