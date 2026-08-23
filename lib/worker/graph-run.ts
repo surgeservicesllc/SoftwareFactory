@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DEFAULT_BACKOFF, realSleep, retryDelayMs, type BackoffPolicy, type Sleep } from "@/lib/graph/backoff";
 import { compileGraph, type CompiledGraph, type CompiledNode } from "@/lib/graph/compiler";
 import type { GraphBudget } from "@/lib/graph/budgets";
 import { defineNode } from "@/lib/graph/contracts";
@@ -7,6 +8,8 @@ import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
 import type { VerificationLens, VerificationVerdict } from "@/lib/graph/verification";
+import { validateStageArtifact } from "@/lib/sdlc/artifacts";
+import { isSdlcStage, stageDefinition } from "@/lib/sdlc/lifecycle";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
@@ -256,6 +259,23 @@ export type GraphRunStore = {
     graphRunId: string,
     anchorCount: number,
   ) => Promise<void>;
+  /**
+   * Record what one stage handed the next, and whether it satisfied the
+   * receiving node's contract at the moment it was handed over.
+   *
+   * Optional for the same reason `openGate` is: a store written before handoffs
+   * existed still satisfies this contract rather than failing a run over a
+   * capability it never had.
+   */
+  readonly recordHandoff?: (input: {
+    readonly graphRunId: string;
+    readonly toNodeId: string;
+    readonly fromNodeRunId: string | null;
+    readonly contractValid: boolean;
+    readonly validationIssues: readonly string[];
+    readonly payload: unknown;
+    readonly nextAction: string | null;
+  }) => Promise<void>;
   readonly completeRun: (
     graphRunId: string,
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
@@ -305,22 +325,49 @@ export type NodeInputs = Readonly<{
  * rules the member path enforces: a run that lost inputs is PARTIAL, never
  * COMPLETED.
  */
+export type RunClaimedGraphOptions = {
+  /**
+   * The wait between a failed attempt and the next one.
+   *
+   * Injected, and injected *here* rather than in `lib/graph/runner.ts`, which is
+   * deliberately free of I/O — and where a wait would sit inside the scheduling
+   * round and make independent work queue behind a retry. At this layer the
+   * delay is inside one node's promise, and `Promise.all` keeps its siblings
+   * running beside it.
+   */
+  readonly sleep?: Sleep;
+  readonly backoff?: BackoffPolicy;
+  /** Returns [0, 1). A parameter so a test can pin the jitter. */
+  readonly random?: () => number;
+};
+
 export async function runClaimedGraph(
   claim: ClaimedGraph,
   compiled: CompiledGraph,
   store: GraphRunStore,
   executeNode: (node: CompiledNode, attempt: number, inputs: NodeInputs) => Promise<NodeExecutionResult>,
+  options: RunClaimedGraphOptions = {},
 ): Promise<GraphRunSummary> {
+  const sleep = options.sleep ?? realSleep;
+  const backoff = options.backoff ?? DEFAULT_BACKOFF;
+  const random = options.random ?? Math.random;
   const nodeRunIds = new Map(claim.nodes.map((node) => [node.node_key, node.node_run_id]));
   const started = Date.now();
 
   // Incoming edges per node: the data each node is owed by its upstreams.
   const incoming = new Map<string, string[]>();
+  // And outgoing, which is what a handoff travels along.
+  const outgoing = new Map<string, string[]>();
   for (const edge of claim.edges) {
     const into = incoming.get(edge.to_node_key) ?? [];
     into.push(edge.from_node_key);
     incoming.set(edge.to_node_key, into);
+
+    const outOf = outgoing.get(edge.from_node_key) ?? [];
+    outOf.push(edge.to_node_key);
+    outgoing.set(edge.from_node_key, outOf);
   }
+  const claimedByKey = new Map(claim.nodes.map((node) => [node.node_key, node]));
   const completedOutputs = new Map<string, unknown>();
 
   // Final-attempt failures, split by kind: a run whose every failure was a
@@ -332,8 +379,31 @@ export async function runClaimedGraph(
   const result = await runGraph(compiled, budgetFromClaim(claim), {
     executeNode: async (node, attempt) => {
       const nodeRunId = nodeRunIds.get(node.nodeKey);
-      if (nodeRunId && attempt === 1) {
-        await store.recordNodeState(nodeRunId, "RUNNING");
+      if (attempt === 1) {
+        if (nodeRunId) await store.recordNodeState(nodeRunId, "RUNNING");
+      } else {
+        /*
+         * A retry waits before it runs.
+         *
+         * The engine bounds how many times a node may attempt its work and
+         * bounded nothing about how fast. Against the two faults that actually
+         * happen — a rate limit and a provider outage — every retry arrived
+         * while the cause was still true and burned an attempt proving it.
+         *
+         * The wait is recorded as its own RUNNING transition rather than being
+         * silent, because a node that is deliberately pausing and a node that
+         * has hung look identical from the outside otherwise, and
+         * `graph_events` is where someone would go to tell them apart.
+         */
+        const delayMs = retryDelayMs(attempt, backoff, random);
+        if (nodeRunId) {
+          await store.recordNodeState(
+            nodeRunId,
+            "RUNNING",
+            `Attempt ${attempt} of ${node.maxAttempts}, after ${delayMs}ms of backoff.`,
+          );
+        }
+        await sleep(delayMs);
       }
       const outputs: Record<string, unknown> = {};
       const missing: string[] = [];
@@ -416,6 +486,51 @@ export async function runClaimedGraph(
             latencyMs: outcome.latencyMs,
           });
           await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
+
+          /*
+           * A handoff is an edge that leaves the stage.
+           *
+           * An edge between two nodes of the same stage is internal plumbing —
+           * DISCOVER's shortlist reducing its three observers — and recording
+           * one as a handoff would bury the boundary that matters under the
+           * ones that do not. A stage handoff is where a *different* stage
+           * starts working from this output, and that is the moment worth
+           * being able to reconstruct after a restart.
+           *
+           * `contract_valid` is decided here and stored, not recomputed later.
+           * The receiving stage's input contract is the sending stage's
+           * package, and checking it later would test today's schema against
+           * yesterday's payload — a different question whose answer changes
+           * every time a contract is edited.
+           *
+           * A run whose provider is not connected produces nothing that
+           * satisfies these schemas, and it is recorded as invalid with the
+           * reasons rather than skipped: "this stage handed the next one
+           * something the next one cannot read" is the finding, not an
+           * omission.
+           */
+          const senderStage = claimedByKey.get(node.nodeKey)?.lifecycle_stage ?? null;
+          if (store.recordHandoff && isSdlcStage(senderStage)) {
+            const validation = validateStageArtifact(senderStage, outcome.output);
+            for (const downstreamKey of outgoing.get(node.nodeKey) ?? []) {
+              const downstream = claimedByKey.get(downstreamKey);
+              const receiverStage = downstream?.lifecycle_stage ?? null;
+              if (!downstream?.node_id) continue;
+              if (receiverStage === senderStage) continue;
+
+              await store.recordHandoff({
+                graphRunId: claim.graph_run_id,
+                toNodeId: downstream.node_id,
+                fromNodeRunId: nodeRunId,
+                contractValid: validation.valid,
+                validationIssues: validation.issues,
+                payload: outcome.output,
+                nextAction: isSdlcStage(receiverStage)
+                  ? `${stageDefinition(receiverStage).title}: ${downstream.job}`
+                  : downstream.job,
+              });
+            }
+          }
 
           // A reviewing node has just judged its inputs. Recording that as a
           // verification — of which subject, under which lens, with the

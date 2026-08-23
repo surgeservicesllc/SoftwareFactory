@@ -56,41 +56,48 @@ the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
    now accepts `goal` and stores it verbatim in `graphs.goal`.
    `tests/integration/graph-launch-plan.test.ts` proves it reaches PostgreSQL.
 
-### In flight, uncommitted at handoff — pick up HERE
+### Wired since, and what is left
 
-`lib/graph/backoff.ts` and `supabase/migrations/20260823000300_structured_stage_handoffs.sql`
-exist and are **not yet wired to anything**. Both are written, commented and
-(for the backoff) tested; neither has a caller.
+`lib/graph/backoff.ts` and `20260823000300_structured_stage_handoffs.sql` are
+now called by something.
 
-1. **Wire the backoff.** `lib/worker/graph-run.ts`, inside the `executeNode`
-   wrapper (~line 335): before `await executeNode(node, attempt, …)`, when
-   `attempt > 1`, `await sleep(retryDelayMs(attempt, policy, random))`. Add
-   `sleep`/`backoff`/`random` as a fifth optional options argument to
-   `runClaimedGraph` so tests inject a no-op clock. Do **not** put the delay in
-   `lib/graph/runner.ts`: that module is deliberately free of I/O, and blocking
-   inside the scheduling round would make independent work wait. Also record a
-   `RUNNING` transition with the attempt number so a retry is visible in
-   `graph_events` — today only attempt 1 is recorded.
-2. **Wire the handoffs.** `record_graph_handoff_as_worker` is defined and
-   granted to `service_role` only. Add it to `GraphRunStore` (optional, like
-   `openGate`/`recordVerification`, so an older store still satisfies the
-   contract) and to `SupabaseGraphStore` in `lib/worker/graph-store.ts`. In the
-   worker, when a completed node has `producesStagePackage`, validate its output
-   with `validateStageArtifact(stage, output)` from `lib/sdlc/artifacts.ts` and
-   write one handoff per downstream node — `contract_valid` decided *then*, at
-   the handoff, because recomputing it later checks today's schema against
-   yesterday's payload.
-3. **Call the orchestrator from the worker.** `lib/sdlc/orchestrator.ts`
+**Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
+behind a fifth optional options argument (`sleep`/`backoff`/`random`) so tests
+pin the schedule instead of sleeping through it. It is deliberately *not* in
+`lib/graph/runner.ts`: that module is free of I/O by design, and a wait inside
+the scheduling round would make independent work queue behind a retry. Each
+retry also records its own `RUNNING` transition naming the delay, because a node
+deliberately pausing and a node that has hung are otherwise indistinguishable
+from outside.
+
+**Stage handoffs** are written for every edge that *leaves* a stage. An edge
+between two nodes of one stage is internal plumbing — DISCOVER's shortlist
+reducing its three observers — and recording those would bury the boundary that
+matters. `contract_valid` is decided at the handoff against the sending stage's
+package schema and stored, never recomputed. A payload that does not satisfy the
+schema is recorded as invalid *with its reasons* rather than skipped: with no
+provider connected, nothing satisfies these schemas yet, and "this stage handed
+the next one something it cannot read" is the finding — an omission would say
+nothing happened.
+
+`tests/unit/graph-run-backoff-handoff.test.ts` covers both (11 cases), including
+that the default clock is a real one, so a caller injecting nothing still waits.
+
+**Still open:**
+
+1. **Call the orchestrator from the worker.** `lib/sdlc/orchestrator.ts`
    `decideNextAction` is still called by nothing. At the end of
    `runClaimedGraph`, build `OrchestratorState` from `result.states` + the
    claim's gates + `anchorsFor`, and use the decision to choose the final run
    state and whether to call `advance_graph_iteration`. Note
-   `OrchestratorNode.anchorCount` is now a top-level field — pass it, do not
-   rely on `gate.anchorCount`.
-4. **Conditional branches are still a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
+   `OrchestratorNode.anchorCount` is a top-level field — pass it, do not rely on
+   `gate.anchorCount`.
+2. **Conditional branches remain a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
+3. **`20260823000300` needs a hosted scope of its own** in
+   `.github/workflows/apply-hosted-migrations.yml`, after the two below.
 
 ### Hosted apply — two scopes, in this order
 
@@ -111,7 +118,9 @@ widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a lab
 that exists in both vocabularies, so the lifecycle rows keep answering the
 question they are actually about.
 
-`20260823000300` (handoffs) will need a scope of its own once it is wired.
+`20260823000300` (handoffs) is wired now and needs a scope of its own. It is
+additive — two guarded indexes and one `create or replace function` with its
+grants restated — so it carries none of the type-drop risk the scope above has.
 
 ### What this repository still will not claim
 

@@ -73,6 +73,36 @@ export class SupabaseGraphStore implements GraphRunStore {
     if (error) throw new Error(`Opening a lifecycle gate failed: ${error.message ?? "unknown error"}`);
   }
 
+  /**
+   * Record the handoff from one stage's terminal node to a node downstream.
+   *
+   * `contract_valid` is decided by the caller at the moment of the handoff and
+   * stored, not recomputed later: a reader recomputing it would be checking
+   * today's schema against yesterday's payload, which is a different question
+   * whose answer changes whenever a contract is edited.
+   */
+  async recordHandoff(input: {
+    graphRunId: string;
+    toNodeId: string;
+    fromNodeRunId: string | null;
+    contractValid: boolean;
+    validationIssues: readonly string[];
+    payload: unknown;
+    nextAction: string | null;
+  }): Promise<void> {
+    const { error } = await this.client.rpc("record_graph_handoff_as_worker", {
+      p_worker_id: this.workerId,
+      p_graph_run_id: input.graphRunId,
+      p_to_node_id: input.toNodeId,
+      p_contract_valid: input.contractValid,
+      p_payload: input.payload ?? {},
+      p_from_node_run_id: input.fromNodeRunId,
+      p_validation_issues: input.validationIssues,
+      p_next_action: input.nextAction,
+    });
+    if (error) throw new Error(`Recording a stage handoff failed: ${error.message ?? "unknown error"}`);
+  }
+
   async recordArtifact(
     graphRunId: string,
     kind: "RAW" | "REDUCED" | "SYNTHESIS" | "ANCHOR",
