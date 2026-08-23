@@ -740,6 +740,17 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [x] The Pipelines page gains a checkbox per row, a select-all with an
   indeterminate partial state, and a Delete selected (N) button that
   confirms, requires the reason, and names what was kept.
-- [ ] Apply on hosted through the one-shot
-  `scope=delete-selected-pipelines` (sha-pinned), then confirm the control
-  works on production against a row the owner is willing to lose.
+- [x] Applied on hosted through the one-shot
+  `scope=delete-selected-pipelines` (sha-pinned, run 32647755059), whose
+  read-back proved SECURITY DEFINER and owner+authenticated-only execute.
+- [x] Proven live on production without destroying anything: signed in as
+  the fake journey account, a selection of one id that does not exist
+  answered `{deletedCount: 0, keptRunning: 0, keptWithRuns: 0, notFound: 1}`
+  — a response only the hosted function can produce, so session, route,
+  PostgREST and function are all on the path. Unauthenticated posts get
+  `authentication_required` (401), cross-origin gets
+  `invalid_request_origin` (403), and an empty selection or short reason
+  gets `invalid_delete_request` (400).
+- [ ] Still unexercised: an actual deletion of a real production row, and
+  the kept-running / kept-with-runs branches against live data. Those need
+  rows the owner is willing to lose.
