@@ -151,7 +151,16 @@ test.describe("AI Factory live journey", () => {
     const accountChoice = connectDialog.getByRole("button", { name: /Fake Claude Account/ });
     await expect(accountChoice).toBeVisible({ timeout: 20_000 });
     await accountChoice.click();
-    await expect(connectDialog.getByText(/Active Bots/)).toBeVisible({ timeout: 20_000 });
+    /*
+     * "Your AI Team", not "Active Bots". The panel was renamed and this
+     * assertion was not, which nothing noticed because the lane could never
+     * reach it: the local workflow never set SUPABASE_SERVICE_ROLE_KEY, so
+     * readiness synchronization failed one step earlier and the walk stopped
+     * before this line every time. A stale locator hidden behind a broken
+     * prerequisite.
+     */
+    await expect(connectDialog.getByRole("heading", { name: /Your AI Team/i }))
+      .toBeVisible({ timeout: 20_000 });
     await page.keyboard.press("Escape");
     await expect(botsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
     await expect(botsStep.getByText(/ready bot.*linked to.*connected account/i)).toBeVisible();

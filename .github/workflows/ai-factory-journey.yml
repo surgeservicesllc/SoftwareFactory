@@ -238,6 +238,15 @@ jobs:
         if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         run: |
           npm run build
+          # Readiness evidence is deliberately service-only: the recorder RPC
+          # is granted to service_role alone, and readiness-sync builds its own
+          # client from this variable. Without it every readiness sync throws,
+          # Connect Bots never reports a ready bot, and steps 5 to 9 cannot be
+          # reached — which is exactly what this lane did, silently, until the
+          # walk was run by hand.
+          SUPABASE_SERVICE_ROLE_KEY=$(npx supabase status -o json \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('SERVICE_ROLE_KEY') or d.get('SECRET_KEY',''))")
+          export SUPABASE_SERVICE_ROLE_KEY
           nohup npx next start > next-start.log 2>&1 &
           for i in $(seq 1 60); do
             curl -sf -o /dev/null http://localhost:3000/ && exit 0
