@@ -1,6 +1,46 @@
 # Current state
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
+
+## 2026-08-23: signing in lands on a chooser, and the header names two products
+
+`/decision` is the destination for every sign-in, on `main` as `56641c13`
+(#365) and live in production. Two product cards - AI Software Factory and AI
+Job Seeker - with Getting started beneath them and a Quick overview plus
+Recent activity rail. Every number on it is counted from the viewer's own
+records; a source that cannot be read says **Unavailable** on its own row
+rather than showing a zero.
+
+Three gates run before it renders: signed out redirects to sign-in, no
+workspace redirects through onboarding and back, and a closed gate redirects
+to `/solutions`. "Only on initial login" is a fifteen-minute HTTP-only marker
+opened by the password route and the auth callback and closed by the act of
+choosing (ADR-135). It grants nothing - the page still resolves the viewer, so
+a forged cookie earns a redirect rather than a page. Verified live: an
+anonymous request to `/decision` is answered with Next.js's streamed redirect
+to `/auth/sign-in?next=/decision` and no page content.
+
+The global navigation now reads **Software Factory** and **Job Seeker** for
+every signed-in viewer, verified in the deployed client bundle. Administration
+is no longer an entry there; `/solutions/admin` is unchanged and the console's
+own column still lists it for super administrators.
+
+## 2026-08-23: the Autonomy page can be cleared, by archiving
+
+`clear_autonomy_projects` (migration `20260823000600`) is hosted, applied and
+verified by run `32657726992`. The Clear control on `/solutions/autonomy`
+archives every project the loop can still act on, through `archive_project`,
+and `list_autonomy_status` now excludes archived projects - which is what
+empties the section. It deletes nothing: every run, task, command and activity
+row keeps its project, and archived projects can be unarchived from the
+Projects page.
+
+Three independent guards refused deletion on the way here, the third by name
+(ADR-134). The apply's own rolled-back proof, run against the real hosted
+rows, reported `GUARD: project deletion still refused`. That proof now accepts
+the `activity_events` RESTRICT as well as the guard trigger's message, because
+hosted has never recorded `20260815000900` and the constraint - not the
+trigger - is what enforces permanence.
 
 ## 2026-08-22: the Backlog and All Pipelines pages can be cleared
 
