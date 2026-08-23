@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { settled, unreachableControls } from "./dialog-reachability";
+
 /**
  * Dialogs, on a phone.
  *
@@ -15,43 +17,6 @@ import { expect, test } from "@playwright/test";
 
 const PHONE = { width: 320, height: 900 };
 
-async function settled(page: import("@playwright/test").Page) {
-  await page.evaluate(
-    () => new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    }),
-  );
-}
-
-/**
- * Controls whose right edge is past their own scrolling container.
- *
- * Measured against the container rather than the viewport: a dialog may sit
- * inside a scroll area, and what matters is whether the button can be reached
- * by scrolling the thing it lives in, not where it lands in the window.
- */
-async function unreachableControls(page: import("@playwright/test").Page, within: string) {
-  await settled(page);
-  return page.evaluate((selector) => {
-    const root = document.querySelector(selector);
-    if (!root) return ["container not found"];
-
-    const bounds = root.getBoundingClientRect();
-    const clipped: string[] = [];
-    for (const control of Array.from(root.querySelectorAll("button, a, input, select"))) {
-      const box = control.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0) continue;
-      // A couple of pixels of rounding is not a defect; a whole button is.
-      if (box.right > bounds.right + 2 || box.left < bounds.left - 2) {
-        clipped.push(
-          `${control.tagName.toLowerCase()} "${(control.textContent ?? "").trim().slice(0, 30)}"`,
-        );
-      }
-    }
-    return clipped.slice(0, 5);
-  }, within);
-}
-
 test.describe("dialogs at 320px", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize(PHONE);
@@ -63,7 +28,19 @@ test.describe("dialogs at 320px", () => {
     await settled(page);
 
     const opener = page.getByRole("button", { name: /configure pipeline|new template|templates/i }).first();
-    test.skip(!(await opener.isVisible().catch(() => false)), "the dialog needs a session");
+    /*
+     * Unconditional in CI, not occasional: the browser shards configure no
+     * Supabase, so /solutions/pipelines gates and this opener is never
+     * visible there. This copy therefore runs only against a configured
+     * environment. The assertion itself executes on every commit in
+     * component-layout.spec.ts, which opens the same dialog from the
+     * harness — a skip here is a lane being unavailable, not a check
+     * going unmade.
+     */
+    test.skip(
+      !(await opener.isVisible().catch(() => false)),
+      "needs a Supabase-backed session; the harness copy in component-layout.spec.ts is the one CI runs",
+    );
 
     await opener.click();
     const dialog = page.getByRole("dialog").first();
@@ -110,7 +87,12 @@ test("using a template without a project explains itself", async ({ page, isMobi
   await settled(page);
 
   const useButton = page.getByRole("button", { name: /^use$/i }).first();
-  test.skip(!(await useButton.isVisible().catch(() => false)), "no template is offered here");
+  // Same lane limitation as above: no Supabase in CI means no template is
+  // offered, so this never runs there. The harness copy carries the check.
+  test.skip(
+    !(await useButton.isVisible().catch(() => false)),
+    "needs a Supabase-backed session; the harness copy in component-layout.spec.ts is the one CI runs",
+  );
 
   await useButton.click();
   const dialog = page.getByRole("dialog").first();
