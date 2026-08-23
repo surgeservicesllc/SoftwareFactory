@@ -817,6 +817,15 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [x] Seven behaviour cases against real PostgreSQL, including two that assert
   the guards this design did not touch still refuse: project deletion and any
   activity-event mutation.
+- [x] The first hosted apply (run 32656024602) **failed and rolled back
+  cleanly**, applying nothing. Its own postflight refused because
+  `projects_guarded_deletion` is absent on hosted — `20260815000900` is one of
+  the unrecorded migrations listed above. The protection is not absent: the
+  `activity_events -> projects` `ON DELETE RESTRICT` is there, and that
+  trigger's own comment says nothing passes it. The postflight now asserts
+  that constraint and only *notices* the trigger's absence, and the scope's
+  rolled-back proof accepts SQLSTATE `23503` as well as the trigger's
+  sentence.
 - [ ] Apply on hosted through `scope=clear-autonomy-projects` and confirm the
   section empties for the owner. Pressing Clear against the owner's own
   projects is theirs to do, not mine.

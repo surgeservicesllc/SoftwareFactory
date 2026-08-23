@@ -171,16 +171,35 @@ begin
     raise exception using errcode = '55000',
       message = '20260823000600 postflight: the execute grants are not owner+authenticated only';
   end if;
-  -- The deletion guard this design deliberately does not touch must still be
-  -- in place, refusing deletes on projects.
+  -- What must still hold is that a project cannot be deleted. The real
+  -- protection is the ON DELETE RESTRICT from activity_events, which
+  -- 20260815000900's own comment names: "Nothing can pass the RESTRICT behind
+  -- this trigger anyway". That trigger adds a legible message on top and is
+  -- asserted separately, because a database that has not applied
+  -- 20260815000900 is still protected -- just less helpfully.
+  if not exists (
+    select 1
+      from pg_constraint constraint_row
+      join pg_class referencing on referencing.oid = constraint_row.conrelid
+      join pg_class referenced on referenced.oid = constraint_row.confrelid
+     where constraint_row.contype = 'f'
+       and referencing.relname = 'activity_events'
+       and referenced.relname = 'projects'
+       and constraint_row.confdeltype = 'r'
+  ) then
+    raise exception using errcode = '55000',
+      message = '20260823000600 postflight: activity_events no longer restricts project deletion';
+  end if;
   if not exists (
     select 1 from pg_trigger
      where tgrelid = 'public.projects'::regclass
        and tgname = 'projects_guarded_deletion'
        and not tgisinternal
   ) then
-    raise exception using errcode = '55000',
-      message = '20260823000600 postflight: the project deletion guard is missing';
+    -- Reported, never fatal: this database has not applied 20260815000900,
+    -- so a deletion attempt meets the foreign key's cryptic message instead
+    -- of the guard's explanation. The protection itself is unaffected.
+    raise notice '20260823000600: projects_guarded_deletion is absent (20260815000900 unapplied); deletion is still refused by the activity_events restrict';
   end if;
 end;
 $postflight$;

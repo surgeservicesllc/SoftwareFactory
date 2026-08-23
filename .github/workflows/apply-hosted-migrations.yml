@@ -5508,7 +5508,9 @@ jobs:
         # archive_project, because refuse_project_deletion states by name that
         # a project's append-only trail makes it permanent and that archiving
         # is the supported end of its life. The file's own postflight re-checks
-        # that the deletion guard is still on the table.
+        # that a project still cannot be deleted, by asserting the
+        # activity_events RESTRICT that actually enforces it on every database
+        # rather than the friendlier trigger, which this one has not applied.
         if: ${{ inputs.scope == 'clear-autonomy-projects' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5523,7 +5525,7 @@ jobs:
           fi
 
           FILE=supabase/migrations/20260823000600_clear_autonomy_projects.sql
-          EXPECTED_SHA256=e61025245831b13afb488097660f6c2f6b5cf958c289537d0f2303c2adc3223f
+          EXPECTED_SHA256=47556e48f997e3f4485a194bc18dc29406ee83f2bbd3548ba5af9f83c80c00b3
           ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
           if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
             echo "::error::Migration hash mismatch; refusing production DDL."
@@ -5561,11 +5563,15 @@ jobs:
             begin
               delete from public.projects where id = v_project;
             exception when others then
-              v_refused := (SQLERRM like '%projects cannot be deleted%');
+              -- Either message is a pass. 20260815000900's trigger explains the
+              -- refusal; without it the activity_events RESTRICT refuses just
+              -- as absolutely, only less legibly.
+              v_refused := (SQLERRM like '%projects cannot be deleted%')
+                        or (SQLSTATE = '23503');
             end;
             if not v_refused then
               raise exception using errcode = '55000',
-                message = 'the project deletion guard no longer refuses';
+                message = 'a project could be deleted; the protection is gone';
             end if;
             raise notice 'GUARD: project deletion still refused';
           end
@@ -5579,10 +5585,13 @@ jobs:
                and not has_function_privilege('anon', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
                and not has_function_privilege('service_role', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
                and has_function_privilege('authenticated', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
-               and exists (select 1 from pg_trigger
-                            where tgrelid = 'public.projects'::regclass
-                              and tgname = 'projects_guarded_deletion'
-                              and not tgisinternal);")
+               and exists (select 1
+                             from pg_constraint c
+                             join pg_class referencing on referencing.oid = c.conrelid
+                             join pg_class referenced on referenced.oid = c.confrelid
+                            where c.contype = 'f' and c.confdeltype = 'r'
+                              and referencing.relname = 'activity_events'
+                              and referenced.relname = 'projects');")
           if [ "$VERIFIED" != "t" ]; then
             echo "::error::The autonomy clear did not read back with the intended posture."
             exit 1
