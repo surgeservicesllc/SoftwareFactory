@@ -329,6 +329,48 @@ for (const width of WIDTHS) {
   });
 }
 
+test("AI Factory reports Select Agents from the selection it was actually given", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "semantic browser check runs once in a resizable project");
+  await open(page, "ai-factory", 1280);
+
+  /*
+   * Step 4 was the one step no lane asserted.
+   *
+   * The harness has always answered /api/project-agents with a real selection,
+   * so this step has been rendering complete in every browser run and nothing
+   * checked it — rendering is not passing. The server-side walk skipped the
+   * step outright until it was added there too. Between them, the step a
+   * person uses to choose what their factory runs had no executed coverage in
+   * any lane that runs on a commit.
+   */
+  const agentsStep = page.getByRole("heading", {
+    name: "Select Agents",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+
+  await expect(agentsStep.getByText("Done")).toBeVisible();
+  await expect(agentsStep.getByText(/1 agent included: Orchestrator/)).toBeVisible();
+  // Never the Not Connected wording while a selection is being reported.
+  await expect(agentsStep.getByText(/Not Connected/)).toHaveCount(0);
+
+  // The chip list, which is the step's promise that a selection survived the
+  // overlay closing rather than living only inside it.
+  const chips = agentsStep.getByRole("list", { name: "Included agents" });
+  await expect(chips).toBeVisible();
+  await expect(chips.getByRole("listitem")).toHaveCount(1);
+  await expect(chips.getByRole("listitem").first()).toHaveText(/Orchestrator/);
+
+  // And the control opens, in the one modal this page owns.
+  await agentsStep.getByRole("button", { name: /change agents|choose agents/i }).click();
+  const dialog = page.getByRole("dialog", { name: "Select Agents" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  // Closing must not undo the step.
+  await expect(agentsStep.getByText("Done")).toBeVisible();
+});
+
 test("AI Factory owns one modal above the whole shell, including pipeline Plan and Clone", async ({ page, isMobile }) => {
   test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
   await open(page, "ai-factory", 1280);
