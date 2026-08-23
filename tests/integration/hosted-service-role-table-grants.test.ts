@@ -53,6 +53,7 @@ const publicTables = [
   "bots",
   "claim_acceptable_anchors",
   "claim_anchors",
+  "command_analysis_graphs",
   "commands",
   "connection_capability_types",
   "connection_routing_decisions",

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createGitHubInstallationToken,
+  dispatchGraphWorker,
   dispatchPhase1CWorker,
   getGitHubAppConfigurationForAppId,
   getGitHubBranchReference,
@@ -9,6 +10,7 @@ const {
   requireActiveOrganization,
 } = vi.hoisted(() => ({
   createGitHubInstallationToken: vi.fn(),
+  dispatchGraphWorker: vi.fn(),
   dispatchPhase1CWorker: vi.fn(),
   getGitHubAppConfigurationForAppId: vi.fn(),
   getGitHubBranchReference: vi.fn(),
@@ -26,7 +28,7 @@ vi.mock("@/lib/github/repository", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/github/repository")>()),
   getGitHubBranchReference,
 }));
-vi.mock("@/lib/orchestration/dispatch", () => ({ dispatchPhase1CWorker }));
+vi.mock("@/lib/orchestration/dispatch", () => ({ dispatchGraphWorker, dispatchPhase1CWorker }));
 vi.mock("@/lib/bots/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/bots/service")>()),
   loadBotFabric,
@@ -51,6 +53,7 @@ const assignmentId = "13131313-1313-4313-8313-131313131313";
 const botId = "14141414-1414-4414-8414-141414141414";
 const roleId = "15151515-1515-4515-8515-151515151515";
 const routeId = "16161616-1616-4616-8616-161616161616";
+const analysisGraphId = "17171717-1717-4717-8717-171717171717";
 
 const target = {
   app_id: 4582606,
@@ -255,6 +258,9 @@ function configuredClient(options: {
         error: options.decisionError ? { code: "42501", message: "denied" } : null,
       });
     }
+    if (name === "launch_command_analysis_graph") {
+      return Promise.resolve({ data: analysisGraphId, error: null });
+    }
     if (name === "list_factory_command_routing_candidates") {
       return Promise.resolve({ data: candidateRows, error: options.candidateError ?? null });
     }
@@ -358,20 +364,39 @@ describe("GET /api/commands", () => {
   });
 
   it("lists canonical record-only disposition without exposing raw parameters", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{
-        id: commandId,
-        project_id: projectId,
-        prompt: "Fix high-priority bugs.",
-        requested_risk: "yellow",
-        status: "queued",
-        submitted_at: "2026-08-22T12:00:00.000Z",
-        completed_at: null,
-        project_name: "SoftwareFactory",
-        execution_mode: "record_only",
-        parameters: { secret: "must-not-escape" },
-      }],
-      error: null,
+    const rpc = vi.fn((name: string) => {
+      if (name === "list_command_analysis_graphs") {
+        return Promise.resolve({
+          data: [{
+            command_id: commandId,
+            graph_id: analysisGraphId,
+            goal: "Fix high-priority bugs.",
+            requires_owner_approval: false,
+            linked_at: "2026-08-22T12:00:01.000Z",
+            latest_run_id: null,
+            latest_run_state: null,
+            latest_run_started_at: null,
+            latest_run_completed_at: null,
+            artifact_count: 0,
+          }],
+          error: null,
+        });
+      }
+      return Promise.resolve({
+        data: [{
+          id: commandId,
+          project_id: projectId,
+          prompt: "Fix high-priority bugs.",
+          requested_risk: "yellow",
+          status: "queued",
+          submitted_at: "2026-08-22T12:00:00.000Z",
+          completed_at: null,
+          project_name: "SoftwareFactory",
+          execution_mode: "record_only",
+          parameters: { secret: "must-not-escape" },
+        }],
+        error: null,
+      });
     });
     requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: organizationId, role: "owner" },
@@ -382,10 +407,13 @@ describe("GET /api/commands", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("list_factory_commands", {
+    expect(rpc).toHaveBeenCalledWith("list_factory_commands", {
       p_limit: 7,
       p_organization_id: organizationId,
       p_project_id: null,
+    });
+    expect(rpc).toHaveBeenCalledWith("list_command_analysis_graphs", {
+      p_organization_id: organizationId,
     });
     expect(body).toEqual({
       activeOrganizationId: organizationId,
@@ -398,6 +426,14 @@ describe("GET /api/commands", () => {
         completedAt: null,
         executionMode: "record_only",
         project: { id: projectId, name: "SoftwareFactory" },
+        analysisGraph: {
+          graphId: analysisGraphId,
+          runState: null,
+          startedAt: null,
+          completedAt: null,
+          artifactCount: 0,
+          requiresOwnerApproval: false,
+        },
       }],
     });
     expect(JSON.stringify(body)).not.toContain("parameters");
@@ -406,32 +442,37 @@ describe("GET /api/commands", () => {
 
   it("passes a validated project scope to the canonical list and filters mismatched rows", async () => {
     const otherProjectId = "33333333-3333-4333-8333-333333333333";
-    const rpc = vi.fn().mockResolvedValue({
-      data: [
-        {
-          id: commandId,
-          project_id: projectId,
-          prompt: "Scoped command",
-          requested_risk: "green",
-          status: "queued",
-          submitted_at: "2026-08-22T12:00:00.000Z",
-          completed_at: null,
-          project_name: "SoftwareFactory",
-          execution_mode: "record_only",
-        },
-        {
-          id: "77777777-7777-4777-8777-777777777777",
-          project_id: otherProjectId,
-          prompt: "Other project command",
-          requested_risk: "green",
-          status: "queued",
-          submitted_at: "2026-08-22T12:01:00.000Z",
-          completed_at: null,
-          project_name: "OtherFactory",
-          execution_mode: "record_only",
-        },
-      ],
-      error: null,
+    const rpc = vi.fn((name: string) => {
+      if (name === "list_command_analysis_graphs") {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({
+        data: [
+          {
+            id: commandId,
+            project_id: projectId,
+            prompt: "Scoped command",
+            requested_risk: "green",
+            status: "queued",
+            submitted_at: "2026-08-22T12:00:00.000Z",
+            completed_at: null,
+            project_name: "SoftwareFactory",
+            execution_mode: "record_only",
+          },
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            project_id: otherProjectId,
+            prompt: "Other project command",
+            requested_risk: "green",
+            status: "queued",
+            submitted_at: "2026-08-22T12:01:00.000Z",
+            completed_at: null,
+            project_name: "OtherFactory",
+            execution_mode: "record_only",
+          },
+        ],
+        error: null,
+      });
     });
     requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: organizationId, role: "owner" },
@@ -444,7 +485,7 @@ describe("GET /api/commands", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("list_factory_commands", {
+    expect(rpc).toHaveBeenCalledWith("list_factory_commands", {
       p_limit: 8,
       p_organization_id: organizationId,
       p_project_id: projectId,
@@ -479,7 +520,8 @@ describe("GET /api/commands", () => {
     };
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: null, error: { code: "PGRST202", message: "missing" } })
-      .mockResolvedValueOnce({ data: [legacyRow], error: null });
+      .mockResolvedValueOnce({ data: [legacyRow], error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST202", message: "missing" } });
     requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: organizationId, role: "owner" },
       client: { rpc },
@@ -491,6 +533,7 @@ describe("GET /api/commands", () => {
     expect(rpc.mock.calls.map(([name]) => name)).toEqual([
       "list_factory_commands",
       "list_commands",
+      "list_command_analysis_graphs",
     ]);
     await expect(response.json()).resolves.toMatchObject({
       commands: [{ id: commandId, executionMode: "unknown" }],
@@ -501,6 +544,7 @@ describe("GET /api/commands", () => {
 describe("POST /api/commands", () => {
   beforeEach(() => {
     createGitHubInstallationToken.mockReset().mockResolvedValue({ token: "installation-token" });
+    dispatchGraphWorker.mockReset().mockResolvedValue(undefined);
     dispatchPhase1CWorker.mockReset().mockResolvedValue(undefined);
     getGitHubAppConfigurationForAppId.mockReset().mockReturnValue({ appId: 4582606 });
     getGitHubBranchReference.mockReset().mockResolvedValue({
@@ -887,7 +931,7 @@ describe("POST /api/commands", () => {
     });
   });
 
-  it("queues a command against the selected ready Claude identity without waking a worker", async () => {
+  it("records a Claude command, launches its analysis graph, and never wakes the Codex worker", async () => {
     const claude = routingCandidate({
       bot_name: "Claude - Daniel",
       provider: "anthropic",
@@ -914,10 +958,28 @@ describe("POST /api/commands", () => {
         provider: "anthropic",
       }),
     }));
+    // The one launch the command is entitled to, and the analysis worker's
+    // wake. The repository-writing Codex worker is never dispatched.
+    expect(rpc).toHaveBeenCalledWith("launch_command_analysis_graph", expect.objectContaining({
+      p_organization_id: organizationId,
+      p_command_id: commandId,
+    }));
+    expect(dispatchGraphWorker).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ repositoryFullName: "surgeservicesllc/SoftwareFactory" }),
+      analysisGraphId,
+    );
     expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
     const body = await response.json();
     expect(body).toMatchObject({
-      execution: { started: false, workerDispatch: "not_applicable" },
+      execution: {
+        started: true,
+        workerDispatch: "not_applicable",
+        analysisGraph: {
+          launched: true,
+          graphId: analysisGraphId,
+          workerWoken: true,
+        },
+      },
       orchestration: {
         executionMode: "record_only",
         model: "claude-opus-5",
@@ -929,7 +991,7 @@ describe("POST /api/commands", () => {
         },
       },
     });
-    expect(body.execution.message).toContain("No execution run was created");
+    expect(body.execution.message).toContain("analysis graph is planned");
   });
 
   it("reports the locked SQL routing snapshot when authoritative risk and effort differ", async () => {
