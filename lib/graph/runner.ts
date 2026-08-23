@@ -33,6 +33,13 @@ export type NodeExecutionResult =
       readonly latencyMs?: number;
       readonly tokensUsed?: number;
       readonly costMicros?: number;
+      /**
+       * The executor's own confidence in the output, in [0, 1], when it
+       * reported one. Absent means none was reported — which is the honest
+       * state for every DETERMINISTIC and ANCHOR node, and for any provider
+       * response with no structured artifact behind it.
+       */
+      readonly confidence?: number;
     }
   | {
       readonly status: "FAILED";

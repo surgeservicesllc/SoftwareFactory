@@ -18,7 +18,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
  * repointed the suite at an unrelated file — which read as "the backfill filled
  * nothing" rather than as "the suite ran the wrong SQL".
  */
-const latestMigration = "20260823001000_structured_stage_handoffs.sql";
+const latestMigration = "20260823001100_node_run_confidence.sql";
 const backfillMigration = "20260823000700_backfill_graph_node_lifecycle_stage.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000009a1";

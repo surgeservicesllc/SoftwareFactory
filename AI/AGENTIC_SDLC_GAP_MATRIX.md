@@ -36,7 +36,7 @@ satisfy.
 | 10 | Shared artifacts between nodes | **Have** | `record_graph_artifact_as_worker`; edges deliver upstream outputs |
 | 11 | Handoffs between agents | **Have** | `record_graph_handoff_as_worker` (`20260823001000`); one row per edge that leaves a stage, with the sending stage's contract checked at the handoff |
 | 12 | Ownership and status per node | **Have** | `node_runs.state` |
-| 13 | Confidence and risk scores | **Partial** | risk per node; `node_runs.confidence` exists and the worker does not yet report one |
+| 13 | Confidence and risk scores | **Have** | risk per node; the worker records `node_runs.confidence` on the transition that carries a node's output (`20260823001100`), and `list_graph_runs` projects it. The provider contract offers three bands, stored as three fixed values (`CONFIDENCE_BAND_VALUE`) and invertible; a node whose executor reports none stores null rather than a default |
 | 14 | Execution history | **Have** | `graph_events`, one row per transition |
 | 15 | Audit trail | **Have** | `activity_events`, append-only |
 | 16 | **Human and automatic gates** | **Have** | `graph_gates`, `open_node_gate_as_worker`, `decide_node_gate` (`20260821000200`) |

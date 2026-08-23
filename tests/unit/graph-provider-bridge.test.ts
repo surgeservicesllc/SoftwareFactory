@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import type { CompiledNode } from "@/lib/graph/compiler";
 import {
   assertNodeMayCallProvider,
+  CONFIDENCE_BAND_VALUE,
+  confidenceBandFor,
   maxOutputTokensForNode,
   routingRequestForNode,
   taskKindForNode,
@@ -200,5 +202,65 @@ describe("provider bridge", () => {
       /model tier NONE/,
     );
     expect(() => assertNodeMayCallProvider(compiledNode())).not.toThrow();
+  });
+
+  /**
+   * `node_runs.confidence` is a number and the provider reports a band, so the
+   * risk here is not a wrong arithmetic result — it is a number appearing in a
+   * column where nothing reported one, or a band that cannot be read back out.
+   * These cases hold both ends.
+   */
+  describe("confidence", () => {
+    it("carries the reported band as its stored value", () => {
+      for (const band of ["low", "medium", "high"] as const) {
+        const result = toNodeExecutionResult(
+          response({
+            outcome: "SUCCEEDED",
+            finalAttempt: attempt({
+              result: { output: { findings: [], confidence: band } },
+            }),
+          }),
+        );
+        expect(result.status).toBe("SUCCEEDED");
+        if (result.status !== "SUCCEEDED") return;
+        expect(result.confidence).toBe(CONFIDENCE_BAND_VALUE[band]);
+      }
+    });
+
+    it("round-trips every band, so a stored value names the band that produced it", () => {
+      for (const band of ["low", "medium", "high"] as const) {
+        expect(confidenceBandFor(CONFIDENCE_BAND_VALUE[band])).toBe(band);
+      }
+    });
+
+    it("never stores 0 or 1", () => {
+      // The two values a reader would take literally as "knows nothing" and
+      // "certain". Nothing here has been calibrated against outcomes, so
+      // neither may be written.
+      for (const value of Object.values(CONFIDENCE_BAND_VALUE)) {
+        expect(value).toBeGreaterThan(0);
+        expect(value).toBeLessThan(1);
+      }
+    });
+
+    it("reports nothing rather than a default when the artifact has no output", () => {
+      const result = toNodeExecutionResult(
+        response({
+          outcome: "SUCCEEDED",
+          finalAttempt: attempt({ result: { output: null } }),
+        }),
+      );
+      expect(result.status).toBe("SUCCEEDED");
+      if (result.status !== "SUCCEEDED") return;
+      expect(result.confidence).toBeUndefined();
+    });
+
+    it("does not read a band out of a value it never wrote", () => {
+      expect(confidenceBandFor(0.9)).toBeNull();
+      expect(confidenceBandFor(0)).toBeNull();
+      expect(confidenceBandFor(1)).toBeNull();
+      expect(confidenceBandFor(null)).toBeNull();
+      expect(confidenceBandFor(undefined)).toBeNull();
+    });
   });
 });

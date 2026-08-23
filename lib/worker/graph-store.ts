@@ -40,7 +40,17 @@ export class SupabaseGraphStore implements GraphRunStore {
     nodeRunId: string,
     state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
-    execution?: { provider?: string; model?: string; latencyMs?: number },
+    execution?: {
+      provider?: string;
+      model?: string;
+      latencyMs?: number;
+      /**
+       * Sent only on the transition that carries the node's output. The
+       * function coalesces, so a later transition passing null — a gate
+       * opening, a verification — leaves what was reported in place.
+       */
+      confidence?: number;
+    },
   ): Promise<void> {
     const { error } = await this.client.rpc("record_node_state_as_worker", {
       p_worker_id: this.workerId,
@@ -50,6 +60,7 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_provider: execution?.provider ?? null,
       p_model: execution?.model ?? null,
       p_latency_ms: execution?.latencyMs ?? null,
+      p_confidence: execution?.confidence ?? null,
     });
     if (error) throw new Error(`Recording a node transition failed: ${error.message ?? "unknown error"}`);
   }

@@ -78,11 +78,47 @@ export function routingRequestForNode(input: {
 }
 
 /**
+ * The three confidence bands a provider may report, as the numbers
+ * `node_runs.confidence` stores.
+ *
+ * The column is `numeric(4, 3)` bounded to [0, 1] and the provider contract
+ * offers exactly three bands, so this is a mapping between two fixed sets
+ * rather than a scale. Only these three values are ever written, and the
+ * mapping is exactly invertible — `confidenceBandFor` is the inverse, and a
+ * test holds the round trip.
+ *
+ * The endpoints are deliberately unused. A model that has never been calibrated
+ * against outcomes should not be recorded as certain or as knowing nothing, and
+ * 0 and 1 are the two values a reader would take literally. 0.5 meaning
+ * "medium" is a band; 0.5 meaning "a measured coin flip" is a claim nothing
+ * here can support.
+ */
+export const CONFIDENCE_BAND_VALUE: Readonly<Record<"low" | "medium" | "high", number>> =
+  Object.freeze({ low: 0.25, medium: 0.5, high: 0.75 });
+
+/** The band a stored value came from, or null if it is not one this wrote. */
+export function confidenceBandFor(
+  value: number | null | undefined,
+): "low" | "medium" | "high" | null {
+  if (value === null || value === undefined) return null;
+  for (const [band, stored] of Object.entries(CONFIDENCE_BAND_VALUE)) {
+    if (stored === value) return band as "low" | "medium" | "high";
+  }
+  return null;
+}
+
+/**
  * Translate a provider execution response into a node result.
  *
  * `retryable` is taken from what the provider layer actually did rather than
  * guessed: if the runtime already exhausted its attempts and any fallback it
  * was allowed, there is nothing left for the node to retry into.
+ *
+ * `confidence` is present only when the provider's structured artifact carried
+ * a band. A node whose executor reports none — every DETERMINISTIC and ANCHOR
+ * node, and any response with no structured output — leaves it absent rather
+ * than defaulting to a middle value, because a default would be a number
+ * nothing produced sitting in a column a reader takes as reported.
  */
 export function toNodeExecutionResult(response: ExecuteTaskResponse): NodeExecutionResult {
   const attempt = response.finalAttempt ?? response.attempts.at(-1) ?? null;
@@ -101,6 +137,16 @@ export function toNodeExecutionResult(response: ExecuteTaskResponse): NodeExecut
           : (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
       // Only when the provider layer computed a real cost. Absent stays absent.
       costMicros: usage?.estimatedCostMicros ?? undefined,
+      // Same rule: reported or absent, never defaulted.
+      //
+      // Read through the band map rather than off the object, so a response
+      // carrying no output at all, or a band this does not know, yields absent
+      // instead of `undefined` typed as a number — or a throw. `output` is
+      // declared as nullable and arrives undefined in practice, which is how a
+      // direct property read here crashed the node it was reporting on.
+      confidence: CONFIDENCE_BAND_VALUE[
+        attempt.result.output?.confidence as keyof typeof CONFIDENCE_BAND_VALUE
+      ],
     };
   }
 

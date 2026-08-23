@@ -64,6 +64,11 @@ on:
           DEFINER writer for graph_handoffs — a table present since
           20260814000100 that nothing has ever written to — plus its two read
           indexes; no schema change to any existing object;
+          "node-confidence" applies only 20260823001100, which drops and
+          recreates record_node_state_as_worker with a trailing p_confidence
+          argument so the worker can record how sure a node was in what it
+          produced; node_runs.confidence already exists and list_graph_runs
+          already projects it;
           "audit-guard-acl-contract" applies only 20260822001300, which
           removes the hosted Supabase default service_role EXECUTE grant from
           the append-only audit guard reject_activity_event_mutation();
@@ -128,6 +133,7 @@ on:
           - lifecycle
           - ten-stage-lifecycle
           - stage-handoffs
+          - node-confidence
           - job-seeker-resume
           - job-seeker-grant-contract
           - clear-controls
@@ -4647,6 +4653,95 @@ jobs:
               from pg_class where oid = 'public.graph_handoffs'::regclass;"
           echo "Both must stay t. This scope does not change them; it reads them back"
           echo "because a new writer on a table is the moment to prove they are still on."
+
+      - name: Let a node record how sure it was (scope=node-confidence)
+        # Exactly one file — 20260823001100 — and no others.
+        #
+        # This scope changes one function's signature. `node_runs.confidence`
+        # was added by 20260821000200 and `list_graph_runs` has projected it
+        # since 20260823000900, so the column and the read are already there;
+        # what is missing is a writer. That means this scope requires
+        # scope=lifecycle to have run first, and the preflight checks that
+        # against the live catalogue rather than assuming it.
+        #
+        # The function is DROPPED and recreated rather than replaced.
+        # `create or replace` cannot change a signature — it would leave the
+        # seven-argument function beside the new eight-argument one, and
+        # PostgREST choosing between two overloads that differ only by a
+        # trailing default is the ambiguity 20260819001000 dropped
+        # `claim_planned_graph(text)` to avoid. The postflight counts the
+        # overloads for exactly that reason.
+        #
+        # A drop takes the grants with it, so the file restates them. The
+        # postflight reads them back: a `service_role` that is false here means
+        # the worker can no longer record a node transition at all, which would
+        # stop every graph rather than just this feature.
+        if: ${{ inputs.scope == 'node-confidence' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          echo "Preflight: the column this writes to must already exist, and so must the"
+          echo "function being replaced."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select exists (
+                     select 1 from information_schema.columns
+                      where table_schema = 'public'
+                        and table_name = 'node_runs'
+                        and column_name = 'confidence'
+                   ) as confidence_column_present,
+                   (
+                     select count(*) from pg_proc routine
+                     join pg_namespace space on space.oid = routine.pronamespace
+                     where space.nspname = 'public'
+                       and routine.proname = 'record_node_state_as_worker'
+                   ) as overloads_before,
+                   (select count(*) from public.node_runs where confidence is not null)
+                     as rows_with_confidence_before;"
+          echo "confidence_column_present f stops here — apply scope=lifecycle first."
+          echo "overloads_before is expected to be 1. A 0 means the function is missing"
+          echo "and this would create it rather than replace it; a 2 means an overload"
+          echo "already exists and wants explaining before a third shape is introduced."
+          echo "rows_with_confidence_before is expected to be 0: nothing has ever written it."
+          FILE=supabase/migrations/20260823001100_node_run_confidence.sql
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823001100
+          else
+            npx supabase migration repair --status applied 20260823001100 --db-url "$DB_URL"
+          fi
+          # The signature changed, so a client holding the old shape must not
+          # keep resolving against it.
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          echo ""
+          echo "What the run actually produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select count(*) as overloads_after
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname = 'record_node_state_as_worker';"
+          echo "Expected exactly 1. A 2 means the drop did not match the live signature and"
+          echo "the old overload is still there — the worker would keep writing through it"
+          echo "and confidence would stay null with nothing appearing to be wrong."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select pg_get_function_identity_arguments(routine.oid) as arguments,
+                   routine.prosecdef as is_security_definer,
+                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_role_may_execute,
+                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute,
+                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute
+              from pg_proc routine
+              join pg_namespace space on space.oid = routine.pronamespace
+             where space.nspname = 'public'
+               and routine.proname = 'record_node_state_as_worker';"
+          echo "Expected: arguments ending in ', numeric'; is_security_definer t;"
+          echo "service_role t; authenticated f; anon f. A false service_role here stops"
+          echo "every graph, not just this feature — the worker records every node"
+          echo "transition through this function."
 
       - name: Apply the job-seeker resume extraction migration (scope=job-seeker-resume)
         # Exactly one file — 20260822000400 — and no others. Every other

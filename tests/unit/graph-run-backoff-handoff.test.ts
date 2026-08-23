@@ -112,16 +112,31 @@ function compiledFor(nodes: { key: string; dependsOn?: string[]; maxAttempts?: n
 }
 
 function storeSpy(): GraphRunStore & {
-  states: { nodeRunId: string; state: string; detail: string | null }[];
+  states: {
+    nodeRunId: string;
+    state: string;
+    detail: string | null;
+    confidence: number | null;
+  }[];
   handoffs: Parameters<NonNullable<GraphRunStore["recordHandoff"]>>[0][];
 } {
-  const states: { nodeRunId: string; state: string; detail: string | null }[] = [];
+  const states: {
+    nodeRunId: string;
+    state: string;
+    detail: string | null;
+    confidence: number | null;
+  }[] = [];
   const handoffs: Parameters<NonNullable<GraphRunStore["recordHandoff"]>>[0][] = [];
   return {
     states,
     handoffs,
-    recordNodeState: async (nodeRunId, state, detail) => {
-      states.push({ nodeRunId, state, detail: detail ?? null });
+    recordNodeState: async (nodeRunId, state, detail, execution) => {
+      states.push({
+        nodeRunId,
+        state,
+        detail: detail ?? null,
+        confidence: execution?.confidence ?? null,
+      });
     },
     recordArtifact: async () => {},
     recordHandoff: async (input) => {
@@ -417,5 +432,56 @@ describe("the default clock", () => {
     );
     expect(timeout).toHaveBeenCalled();
     timeout.mockRestore();
+  });
+});
+
+describe("the confidence a node reports", () => {
+  it("reaches the transition that carries the node's output", async () => {
+    const store = storeSpy();
+    await runClaimedGraph(
+      claimFor([{ key: "solo", stage: null }]),
+      compiledFor([{ key: "solo" }]),
+      store,
+      async () => ({ status: "SUCCEEDED", output: {}, confidence: 0.75 }),
+    );
+
+    const completed = store.states.filter((entry) => entry.state === "COMPLETED");
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.confidence).toBe(0.75);
+  });
+
+  it("is absent when the executor reported none", async () => {
+    /*
+     * Every DETERMINISTIC and ANCHOR node is in this case, and so is every node
+     * of every run until a provider is connected. Sending a default here would
+     * put a number nothing produced into a column a reader takes as reported —
+     * which is worse than the null it replaces, because null is legible as
+     * "none" and 0.5 is not.
+     */
+    const store = storeSpy();
+    await runClaimedGraph(
+      claimFor([{ key: "solo", stage: null }]),
+      compiledFor([{ key: "solo" }]),
+      store,
+      async () => ({ status: "SUCCEEDED", output: {} }),
+    );
+
+    const completed = store.states.filter((entry) => entry.state === "COMPLETED");
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.confidence).toBeNull();
+  });
+
+  it("is not sent on a RUNNING transition, which has no output behind it", async () => {
+    const store = storeSpy();
+    await runClaimedGraph(
+      claimFor([{ key: "solo", stage: null }]),
+      compiledFor([{ key: "solo" }]),
+      store,
+      async () => ({ status: "SUCCEEDED", output: {}, confidence: 0.25 }),
+    );
+
+    for (const entry of store.states.filter((state) => state.state === "RUNNING")) {
+      expect(entry.confidence).toBeNull();
+    }
   });
 });

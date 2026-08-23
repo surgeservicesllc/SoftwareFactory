@@ -242,7 +242,12 @@ export type GraphRunStore = {
     nodeRunId: string,
     state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
-    execution?: { provider?: string; model?: string; latencyMs?: number },
+    execution?: {
+      provider?: string;
+      model?: string;
+      latencyMs?: number;
+      confidence?: number;
+    },
   ) => Promise<void>;
   readonly recordArtifact: (
     graphRunId: string,
@@ -495,6 +500,10 @@ export async function runClaimedGraph(
               provider: outcome.provider,
               model: outcome.model,
               latencyMs: outcome.latencyMs,
+              // The node did its work; only the decision is outstanding. Its
+              // confidence belongs to the work, so it is recorded here rather
+              // than held back until someone answers the gate.
+              confidence: outcome.confidence,
             });
             if (claimed?.node_id && store.openGate) {
               await store.openGate(
@@ -517,6 +526,7 @@ export async function runClaimedGraph(
             provider: outcome.provider,
             model: outcome.model,
             latencyMs: outcome.latencyMs,
+            confidence: outcome.confidence,
           });
           await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
 
