@@ -1,8 +1,26 @@
 # Handoff
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
-## Newest (2026-08-22 ~23:45Z): the lint ran, found one real warning, and both are fixed and machine-verified
+## Newest (2026-08-23 ~00:30Z): the protected chain is applied on production
+
+Chain run 32607123713 committed the six-file transaction: the rehearsal
+passed with a clean lint for the first time, all six ledger rows
+(00300/00850/00900/01000/01100/01200) recorded once each, and the
+fourteen-identity contract read back unchanged. The record-only routing is
+live in the hosted database. The step then refused at the post-commit
+RECORD_ONLY_READY check; the detail probe (32607361788) showed hosted's
+posture matches every measurable expectation, and replaying the exact gate
+query on the clean local full chain reproduced the refusal - the pinned
+contract md5 for list_factory_commands matches no database. The pin is
+corrected (true identity 162d47956f98e7b005c7abe1df680ee9) and read-only
+`scope=record-only-postflight` re-runs the three unreached post-commit
+verifications plus health and the PostgREST reload (ADR-127). Remaining:
+dispatch that scope, then the signed-in production Step 8 record-only
+acceptance and truthful Step 9. Workers, autonomy, and automatic actions
+stay OFF; the global kill switch stays ON.
+
+## Earlier (2026-08-22 ~23:45Z): the lint ran, found one real warning, and both are fixed and machine-verified
 
 With ADR-125's trigger relations in place, chain run 32604992678 completed
 the rehearsal lint for the first time and the gate refused honestly on one

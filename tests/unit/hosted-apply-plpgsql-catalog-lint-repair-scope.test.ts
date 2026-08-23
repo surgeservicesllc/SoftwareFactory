@@ -69,7 +69,7 @@ const lintedSignatures = [
 const listFactoryCommandsCatalog = {
   signature: "public.list_factory_commands(uuid,integer,uuid)",
   source: "ba62f4f5357cec647d3ff582107710a7",
-  contract: "6abaeb0d885d1335a6c4bb0029497051",
+  contract: "162d47956f98e7b005c7abe1df680ee9",
 } as const;
 
 interface WorkflowStep {
@@ -448,5 +448,27 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command.search(/\bsupabase\s+db\s+push\b/)).toBeGreaterThan(
       clearAclLedgerGate,
     );
+  });
+
+  it("re-verifies the applied chain's post-commit postflights without writing DDL", () => {
+    expect(workflow.on.workflow_dispatch.inputs.scope.options)
+      .toContain("record-only-postflight");
+    const step = steps.find((candidate) =>
+      candidate.name === "Verify the applied record-only chain postflights (scope=record-only-postflight)"
+    );
+    expect(step?.if).toContain("inputs.scope == 'record-only-postflight'");
+    const command = step?.run ?? "";
+    // Only verifies a chain the ledger already records, and re-runs exactly
+    // the three post-commit checks the protected step never reached.
+    expect(command).toContain('if [ "$RECORDED" != "1|1|1|1|1|1" ]');
+    expect(command).toContain("RECORD_ONLY_READY=");
+    expect(command).toContain("RECORD_ONLY_BOUNDARY=");
+    expect(command).toContain("FOUNDATION_READY=");
+    expect(command).toContain(listFactoryCommandsCatalog.contract);
+    expect(command).toContain("DATABASE_HEALTH=");
+    expect(command).toContain("NOTIFY pgrst, 'reload schema';");
+    // Read-only apart from the NOTIFY: no file applications, pushes, or
+    // ledger writes.
+    expect(command).not.toMatch(/-f\s+"?\$|supabase\s+db\s+push|insert into supabase_migrations/);
   });
 });

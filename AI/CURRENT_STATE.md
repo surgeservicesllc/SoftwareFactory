@@ -54,16 +54,17 @@ path remains distinct and unchanged.
 Hosted `20260822000600_route_bots_onto_the_executable_model.sql` is already
 applied. The protected `20260822000300` -> `20260822000850` ->
 `20260822000900` -> `20260822001000` -> `20260822001100` -> `20260822001200`
-chain is still pending and may be applied only atomically through
-`scope=factory-any-model-record-only` after exact-head CI, exact READY Vercel
-identity, the owner's direct release request in this active task, and all
-ledger/catalog/safety preflights. ADR-116 removes the repository's magic RED
-release phrase, predeclared-SHA, expiry, and repeat-approval ceremony; it does
-not remove any technical gate or any product/runtime RED approval boundary.
-Workers, autonomy, and automatic actions remain OFF and the global kill switch
-remains ON. This candidate has no final commit, production deployment, hosted
-chain apply, or signed-in production Step 8 -> Step 9 evidence yet; make no
-deployed or production-ready claim.
+chain **is applied on production**: run 32607123713 rehearsed the whole
+chain with a clean lint, committed the single production transaction, and
+recorded all six ledger rows once each (detail probe 32607361788 read the
+exact intended posture back). The record-only routing is live in the hosted
+database. ADR-116 removes the repository's magic RED release phrase,
+predeclared-SHA, expiry, and repeat-approval ceremony; it does not remove
+any technical gate or any product/runtime RED approval boundary. Workers,
+autonomy, and automatic actions remain OFF and the global kill switch
+remains ON. Outstanding evidence: a green `scope=record-only-postflight`
+readback (ADR-127) and the signed-in production Step 8 -> Step 9
+acceptance; until those land, make no fully-verified claim.
 
 The containment gate walked to its last clause on 2026-08-22 evening
 (ADR-122). The owner engaged the global kill switch and turned Autonomous
