@@ -1,6 +1,67 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9 — PICK UP HERE)
+## GRAPH — THE NODE EXPLAINS ITSELF (2026-08-23, round 11 — PICK UP HERE)
+
+**Round 7's item 2 is done**, after rounds 8 and 9 each left it standing:
+"clicking a node still reveals nothing." The goal document asks a node for its
+job, inputs, dependencies, attempts, artifacts, timing and output;
+`list_graph_runs` projected eight fields answering none of them.
+
+**Nothing was missing but the read.** `node_runs` has stored `queued_at`,
+`started_at`, `completed_at` and `blocked_reason` since 20260814000100 and
+`record_node_state_as_worker` writes all four; `graph_nodes` has stored `job`
+and `max_attempts`; `graph_artifacts` has carried `node_run_id`; `graph_edges`
+has always known which node feeds which. `20260823001000` adds **no table, no
+column, no backfill, and touches no writer** — it widens the `nodes` jsonb, so
+`create or replace` sufficed and **the route needed no change at all** (it
+already passes `row.nodes` through verbatim). ADR-140.
+
+Node keys in the runs panel are now buttons; opening one shows job, what it
+waited for, wall time, queue time, attempt ceiling, capability, artifacts by
+kind, and why it stopped.
+
+**Two traps this round, both worth knowing before you extend this:**
+
+1. **`node_runs.attempt` is a column nothing writes.** The claim inserts it at
+   its default 0 and no code path ever updates it — the runner counts attempts
+   in memory. It is deliberately NOT projected: a permanent 0 under a heading
+   like "attempt" reads as measured fact. `max_attempts` (the configured
+   ceiling) is real and is shown. Two tests pin this — one asserts the key is
+   absent from the projection, one asserts every stored `attempt` is still 0.
+   **If you add a writer, project it and delete those.**
+2. **`latency_ms` is not wall time.** It is the executor's own call time and is
+   legitimately much shorter than the node's occupancy — 800ms of model call
+   inside 90s of node. The table shows latency, the detail shows "Ran for", and
+   neither is labelled as the other. Do not "fix" one by pointing it at the
+   other.
+
+Durations are derived in TS, not SQL, and return **null** in the three cases
+where a duration is not knowable (never started, not yet finished, clocks out
+of order). The panel omits the row rather than rendering an em dash — a detail
+panel of eight dashes teaches the reader that opening a node is not worth doing.
+
+**Next, highest value first:**
+
+1. **The stage pages still show no nodes.** `/solutions/lifecycle/[stage]`
+   lists counts; the projection now carries everything a per-stage node list
+   needs, and `describeNode` is the model. This is the cheapest next thing and
+   collides with nothing.
+2. **Artifact *payloads* are still unreachable.** The detail reports counts by
+   kind, deliberately — a payload can be large. A reader who wants the report
+   itself has nowhere to go; that needs a per-artifact read path.
+3. **Round 9's live drain is still the open evidence** — dispatch
+   `graph-worker.yml`, watch the owner's `full_lifecycle` reach the
+   ARCHITECTURE HUMAN gate. Another bot has PR #376 open on exactly that (the
+   launch wake plus ANCHOR support); it was unmerged when this branch was cut,
+   so its round-10 section is not in this file yet and **this section will need
+   renumbering if #376 lands first**. Coordinate before taking it.
+4. Still open from round 6: owner-gated WebSearch for live-verifiable
+   ecosystem candidates.
+
+**Migration tail pins moved again** (20 files, 000900 → 001000). If you add a
+migration, repin them in the same commit.
+
+## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9)
 
 The owner's /goal: build all ten phases per the boards, from existing code.
 The audit found every phase had engine + population + page (rounds 5-8), and

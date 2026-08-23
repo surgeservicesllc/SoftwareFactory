@@ -2,6 +2,29 @@
 
 Last reviewed: 2026-08-23
 
+## 2026-08-23: a node explains itself, from columns already stored
+
+Round 7's "clicking a node reveals nothing" is closed (ADR-140).
+`list_graph_runs` now projects, per node, the job it was given, the nodes it
+waited for (`depends_on`), its queue/start/finish clocks, `blocked_reason`,
+`max_attempts` and its own artifact counts. Migration `20260823001000` adds no
+table, no column and no backfill, and touches no writer: every value was
+already stored and only the read was missing. Because the fields go inside the
+`nodes` jsonb rather than into new return columns, `create or replace` sufficed
+and `app/api/graphs/runs/route.ts` needed no change — it already passes
+`row.nodes` through verbatim.
+
+Node keys in the graph-runs panel are buttons; opening one shows the detail.
+Durations are derived in TypeScript (`lib/graph/node-detail.ts`) and are null
+whenever a duration is not knowable — never started, not yet finished, or
+clocks out of order — with the row omitted rather than dashed.
+
+Two things stated so they are not later mistaken for defects:
+`node_runs.attempt` is a stored column **nothing writes**, so it is
+deliberately not projected (a permanent 0 under an "attempt" heading would read
+as measured fact); and `latency_ms` is the executor's call time, not the node's
+wall time, so the table and the detail show different figures on purpose.
+
 ## 2026-08-23: the lifecycle stages have pages, and the browser suite got its workers back
 
 `/solutions/lifecycle` is the stage index and `/solutions/lifecycle/[stage]`
