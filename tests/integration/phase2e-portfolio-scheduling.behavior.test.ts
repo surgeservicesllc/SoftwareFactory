@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260823000500_finish_provider_credential_vault.sql";
+const latestMigration = "20260823000600_clear_autonomy_projects.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";

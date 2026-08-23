@@ -805,3 +805,18 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] The bot sign-in claim path has not been exercised end to end since the
   function landed. The database half is verified; the flow itself wants a
   real connect attempt.
+
+## Autonomy Clear control (2026-08-23, owner goal, ADR-134)
+
+- [x] `20260823000600` adds `clear_autonomy_projects` (owner-or-admin, reason
+  required, archives through `archive_project` so nothing is deleted) and
+  narrows `list_autonomy_status` to exclude archived projects, which is what
+  empties the section.
+- [x] `POST /api/autonomy/clear` carries no authority of its own; the Clear
+  control sits beside Refresh, confirms first, and says "Nothing was deleted".
+- [x] Seven behaviour cases against real PostgreSQL, including two that assert
+  the guards this design did not touch still refuse: project deletion and any
+  activity-event mutation.
+- [ ] Apply on hosted through `scope=clear-autonomy-projects` and confirm the
+  section empties for the owner. Pressing Clear against the owner's own
+  projects is theirs to do, not mine.

@@ -1643,3 +1643,42 @@ Use this append-only log for decisions that constrain future implementation. Cha
   about a database still short a function. Run 32653491713 did all of that:
   both rows recorded, posture verified. A correct sign-in code resolves
   again, and the preview branch has nothing left to replay for this file.
+
+## ADR-134 - The Autonomy page's Clear archives, because three guards say projects are permanent
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner asked for a Clear control that empties the Autonomy
+  page's "What the loop may do" section. That list is `from public.projects`
+  with the resolved autonomy envelope per row, so emptying it appeared to
+  mean deleting projects. The owner was told exactly what that destroys and
+  chose it; then, when the append-only audit trail turned out to block it,
+  was told that too and chose to preserve every event and release only its
+  project pointer.
+- Decision: neither, because a third guard settles it.
+  `refuse_project_deletion` (20260815000900) states that a project's
+  append-only activity trail makes it undeletable "from its first recorded
+  moment, forever", that this is deliberate, that there is **no escape
+  hatch**, and that "the supported end of a project's life is
+  archive_project". Releasing the audit pointer would have destroyed the very
+  property that guard exists to guarantee. So `20260823000600` adds
+  `clear_autonomy_projects`, which archives every project through
+  `archive_project`, and narrows `list_autonomy_status` to exclude archived
+  projects.
+- Rationale: archiving reaches the identical visible outcome - the section is
+  empty - while deleting nothing. `archive_project` is already owner-only,
+  already requires a reason, already writes an immutable event per
+  transition, and deliberately keeps every run, task, command and activity
+  row. And the list change is a truthfulness gain rather than a concession:
+  the claim path filters on `project.status = 'active'`, so an archived
+  project is precisely one the loop may do nothing with, and listing it under
+  "what the loop may do" was already misleading.
+- Consequence: Clear sits beside Refresh in the section it clears, confirms
+  before firing, requires the ten-character reason the database requires, and
+  reports what it archived alongside the sentence "Nothing was deleted".
+  Projects remain on the Projects page and can be unarchived. The apply scope
+  proves, in a rolled-back transaction against the real hosted rows, that a
+  project still cannot be deleted. Three guards were met on the way here and
+  all three are intact; the finding worth carrying forward is that when a
+  system refuses the same operation in three independent places, the refusal
+  is the design speaking.
