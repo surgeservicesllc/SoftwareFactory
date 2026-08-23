@@ -34,6 +34,8 @@ import {
 } from "@/lib/github/client";
 import { getGitHubAppConfigurationForAppId } from "@/lib/github/config";
 import { getGitHubBranchReference } from "@/lib/github/repository";
+import { launchCommandAnalysisGraph } from "@/lib/orchestration/analysis-launch";
+import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import { SupabaseConfigurationError } from "@/lib/supabase/env";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -737,6 +739,51 @@ export async function POST(request: Request) {
       );
     }
     const workerDispatch = "not_applicable" as const;
+
+    // A record-only Claude command additionally launches its one analysis
+    // graph: real subscription-authenticated execution with read-only tools,
+    // which is exactly the boundary Phase 2A allows. The command record is
+    // already durable, so a launch failure is reported, never thrown, and
+    // never undoes the record. The repository-writing lane stays Codex-only.
+    let analysisGraph:
+      | { launched: true; graphId: string; templateKey: string; workerWoken: boolean }
+      | { launched: false; reason: string }
+      | null = null;
+    if (
+      commandExecution.executionMode === "record_only"
+      && snapshot.assignment.provider === "anthropic"
+      && !result.requires_owner_approval
+    ) {
+      const outcome = await launchCommandAnalysisGraph(supabase, {
+        organizationId: activeOrganization.id,
+        projectId: parsed.data.projectId,
+        commandId: result.command_id,
+        commandType: parsed.data.commandType,
+      });
+      if (outcome.launched) {
+        let workerWoken = false;
+        try {
+          await dispatchGraphWorker(
+            {
+              appId: target.app_id,
+              externalInstallationId: target.external_installation_id,
+              externalRepositoryId: target.external_repository_id,
+              repositoryFullName: target.repository_full_name,
+            },
+            outcome.graphId,
+          );
+          workerWoken = true;
+        } catch {
+          // The graph stays planned; a manual or scheduled worker dispatch
+          // still drains it. Reported as false rather than hidden.
+          workerWoken = false;
+        }
+        analysisGraph = { launched: true, graphId: outcome.graphId, templateKey: outcome.templateKey, workerWoken };
+      } else {
+        analysisGraph = outcome;
+      }
+    }
+
     return jsonNoStore(
       {
         command: {
@@ -748,13 +795,16 @@ export async function POST(request: Request) {
           status: result.task_state,
         },
         execution: {
-          started: false,
+          started: analysisGraph?.launched === true,
           message: result.requires_owner_approval
             ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
-            : commandExecution.executionMode === "record_only"
-              ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
-            : "Persisted only. This request did not dispatch a worker or change autonomy.",
+            : analysisGraph?.launched
+              ? "Recorded, and its analysis graph is planned. The subscription worker executes read-only analysis; no repository write, merge, or deploy can result."
+              : commandExecution.executionMode === "record_only"
+                ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
+                : "Persisted only. This request did not dispatch a worker or change autonomy.",
           workerDispatch,
+          analysisGraph,
         },
         orchestration: {
           acceptanceCriteria,
@@ -835,6 +885,19 @@ type CommandRow = {
   execution_mode?: unknown;
 };
 
+type AnalysisGraphRow = {
+  command_id: string;
+  graph_id: string;
+  goal: string;
+  requires_owner_approval: boolean | null;
+  linked_at: string;
+  latest_run_id: string | null;
+  latest_run_state: string | null;
+  latest_run_started_at: string | null;
+  latest_run_completed_at: string | null;
+  artifact_count: number | null;
+};
+
 type CommandExecutionMode = "manual" | "record_only" | "unknown";
 
 const commandListQuerySchema = z.object({
@@ -882,20 +945,47 @@ export async function GET(request: Request) {
     const rows = ((result.data ?? []) as CommandRow[]).filter((row) => (
       parsed.data.projectId === undefined || row.project_id === parsed.data.projectId
     ));
+
+    // The analysis-graph links, keyed by command. A database that predates
+    // the linking migration answers with a missing-function code, which reads
+    // as "no links" rather than an error — the command list stays available.
+    const analysisByCommand = new Map<string, AnalysisGraphRow>();
+    const analysisResult = await context.client.rpc("list_command_analysis_graphs", {
+      p_organization_id: context.activeOrganization.id,
+    });
+    if (!analysisResult.error && Array.isArray(analysisResult.data)) {
+      for (const link of analysisResult.data as AnalysisGraphRow[]) {
+        analysisByCommand.set(link.command_id, link);
+      }
+    }
+
     return jsonNoStore({
       activeOrganizationId: context.activeOrganization.id,
-      commands: rows.map((row) => ({
-        id: row.id,
-        prompt: row.prompt,
-        risk: row.requested_risk,
-        status: row.status,
-        executionMode: commandExecutionMode(row.execution_mode),
-        submittedAt: row.submitted_at,
-        completedAt: row.completed_at,
-        project: row.project_id
-          ? { id: row.project_id, name: row.project_name ?? "Project" }
-          : null,
-      })),
+      commands: rows.map((row) => {
+        const analysis = analysisByCommand.get(row.id) ?? null;
+        return {
+          id: row.id,
+          prompt: row.prompt,
+          risk: row.requested_risk,
+          status: row.status,
+          executionMode: commandExecutionMode(row.execution_mode),
+          submittedAt: row.submitted_at,
+          completedAt: row.completed_at,
+          project: row.project_id
+            ? { id: row.project_id, name: row.project_name ?? "Project" }
+            : null,
+          analysisGraph: analysis
+            ? {
+                graphId: analysis.graph_id,
+                runState: analysis.latest_run_state,
+                startedAt: analysis.latest_run_started_at,
+                completedAt: analysis.latest_run_completed_at,
+                artifactCount: analysis.artifact_count ?? 0,
+                requiresOwnerApproval: analysis.requires_owner_approval === true,
+              }
+            : null,
+        };
+      }),
     });
   } catch (error) {
     const boundaryResponse = supabaseBoundaryErrorResponse(error);

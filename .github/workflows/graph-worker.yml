@@ -8,10 +8,16 @@ name: Graph executor worker
 #
 # Manual by default: it consumes real subscription turns and no per-token
 # API credit. The schedule stays off until the repository variable
-# SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED is set to "true".
+# SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED is set to "true". A
+# repository_dispatch fires when the application plans a graph for an
+# owner-issued command, so explicitly requested analysis starts without
+# the schedule — the same wake contract the Phase 1C worker uses.
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types:
+      - softwarefactory_graph_planned
   schedule:
     - cron: "17 */2 * * *"
 
@@ -25,7 +31,7 @@ concurrency:
 jobs:
   drain:
     name: Drain planned graphs
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true' }}
     runs-on: ubuntu-latest
     # Must exceed the graph duration budget, or the workflow kills a run the
     # budget still considers live — leaving it RUNNING until the two-hour

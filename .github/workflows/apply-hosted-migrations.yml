@@ -67,6 +67,9 @@ on:
           verifications, the health checks, and the PostgREST reload that the
           applied protected chain's run never reached, writing nothing except
           the NOTIFY;
+          "command-analysis-graphs" applies only 20260823000100, which lets a
+          record-only Claude command launch its one read-only analysis graph
+          and report the run truthfully;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -89,6 +92,7 @@ on:
           - audit-guard-acl-contract
           - agentos-foundation-cleanup
           - command-carry-forward
+          - command-analysis-graphs
           - record-only-postflight
           - probe
 permissions:
@@ -4773,6 +4777,66 @@ jobs:
             exit 1
           fi
           echo "Carried: submit_command is at the 20260815001000 source with the exact ACL the protected chain expects."
+
+      - name: Link record-only commands to analysis graphs (scope=command-analysis-graphs)
+        # Exactly one file — 20260823000100 — which adds the durable
+        # command-to-analysis-graph link table, the launch doorway that reads
+        # the command's own prompt as the goal, and its list read. It replaces
+        # no existing function and adds no enum label; the file's own pre- and
+        # postflight DO blocks refuse unknown state and prove the exact
+        # owner/authenticated posture the hosted default privileges would
+        # otherwise widen.
+        if: ${{ inputs.scope == 'command-analysis-graphs' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000100_command_analysis_graphs.sql
+          EXPECTED_SHA256=5fa2cffaeff7a46e22871c58ac3704e962a9001652bd7cf10668a96631ec04d2
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000100';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000100 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000100
+          else
+            npx supabase migration repair --status applied 20260823000100 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regclass('public.command_analysis_graphs') is not null
+               and (select relrowsecurity and relforcerowsecurity
+                      from pg_class where oid = 'public.command_analysis_graphs'::regclass)
+               and to_regprocedure('public.launch_command_analysis_graph(uuid,uuid,uuid,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)') is not null
+               and to_regprocedure('public.list_command_analysis_graphs(uuid)') is not null
+               and not has_function_privilege('service_role', to_regprocedure('public.launch_command_analysis_graph(uuid,uuid,uuid,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)'), 'EXECUTE')
+               and not has_function_privilege('anon', to_regprocedure('public.launch_command_analysis_graph(uuid,uuid,uuid,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.launch_command_analysis_graph(uuid,uuid,uuid,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)'), 'EXECUTE');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The command-analysis link did not read back with the exact intended posture."
+            exit 1
+          fi
+          echo "Linked: record-only commands can launch and report their one analysis graph."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
