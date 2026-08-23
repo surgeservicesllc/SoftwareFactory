@@ -121,6 +121,60 @@ function fullRun(row: RunRow) {
   };
 }
 
+type AnalysisLinkRow = {
+  command_id: string;
+  graph_id: string;
+  goal: string;
+  requires_owner_approval: boolean | null;
+  linked_at: string;
+  latest_run_id: string | null;
+  latest_run_state: string | null;
+  latest_run_started_at: string | null;
+  latest_run_completed_at: string | null;
+  artifact_count: number | null;
+};
+
+/**
+ * An analysis run rendered in the run list's own vocabulary — each mapping is
+ * a true statement about the graph run: a graph nobody claimed yet is queued
+ * work, a completed one succeeded. The `analysis:` id prefix is what tells
+ * the console this row has no agent-run detail, cancel, or delete.
+ */
+function analysisRun(row: AnalysisLinkRow) {
+  const state = row.latest_run_state;
+  const status = state === "COMPLETED"
+    ? "succeeded"
+    : state === "FAILED"
+      ? "failed"
+      : state === null || state === "PLANNED"
+        ? "queued"
+        : "running";
+  return {
+    id: `analysis:${row.graph_id}`,
+    status,
+    startedAt: row.latest_run_started_at,
+    completedAt: row.latest_run_completed_at,
+    createdAt: row.linked_at,
+    durationMs: row.latest_run_started_at && row.latest_run_completed_at
+      ? Math.max(0, Date.parse(row.latest_run_completed_at) - Date.parse(row.latest_run_started_at))
+      : null,
+    risk: null,
+    provider: "anthropic",
+    model: null,
+    branch: null,
+    reviewStatus: "unreviewed",
+    archivedAt: null,
+    project: null,
+    task: { id: row.graph_id, title: row.goal },
+    agent: { id: row.graph_id, name: "Claude — analysis" },
+    analysis: {
+      graphId: row.graph_id,
+      commandId: row.command_id,
+      artifactCount: row.artifact_count ?? 0,
+    },
+  };
+}
+
 export async function GET(request: Request) {
   const briefing = new URL(request.url).searchParams.get("view") === "briefing";
 
@@ -132,6 +186,22 @@ export async function GET(request: Request) {
     shape: (rows) => ({
       runs: rows.map((row) => briefing ? briefingRun(row) : fullRun(row)),
     }),
+    // Analysis graph runs are runs — one piece of work a bot carried out,
+    // with durable evidence — so the list that calls itself Runs must show
+    // them. A database that predates the linking migration answers with a
+    // missing-function code, which reads as "no analysis runs" rather than
+    // an error, keeping the provider run list available.
+    augment: briefing
+      ? undefined
+      : async (client, organizationId) => {
+          const linked = await client.rpc("list_command_analysis_graphs", {
+            p_organization_id: organizationId,
+          });
+          if (linked.error || !Array.isArray(linked.data)) return {};
+          return {
+            analysisRuns: (linked.data as AnalysisLinkRow[]).map(analysisRun),
+          };
+        },
   });
 }
 

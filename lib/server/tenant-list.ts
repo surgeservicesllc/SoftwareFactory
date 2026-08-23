@@ -34,6 +34,16 @@ type TenantRpcListConfig<Row> = {
   unavailableCode: string;
   unavailableMessage: string;
   shape: (rows: Row[]) => Record<string, unknown>;
+  /**
+   * Optional second read through the same caller-scoped client, merged into
+   * the response after `shape`. The augmenter owns its own tolerance: a
+   * companion list that cannot load must come back as {} (absent keys), so a
+   * failure there never takes down the primary list this route exists for.
+   */
+  augment?: (
+    client: Awaited<ReturnType<typeof requireActiveOrganization>>["client"],
+    organizationId: string,
+  ) => Promise<Record<string, unknown>>;
 };
 
 export async function tenantRpcListResponse<Row>({
@@ -43,6 +53,7 @@ export async function tenantRpcListResponse<Row>({
   unavailableCode,
   unavailableMessage,
   shape,
+  augment,
 }: TenantRpcListConfig<Row>): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -70,6 +81,7 @@ export async function tenantRpcListResponse<Row>({
     return jsonNoStore({
       activeOrganizationId: context.activeOrganization.id,
       ...shape((result.data ?? []) as Row[]),
+      ...(augment ? await augment(context.client, context.activeOrganization.id) : {}),
     });
   } catch (error) {
     const boundaryResponse = supabaseBoundaryErrorResponse(error);

@@ -95,4 +95,57 @@ describe("runs route", () => {
     });
     expect(JSON.stringify(body)).not.toContain("PRIVATE COMMAND PROMPT");
   });
+
+  it("augments the default list with analysis graph runs in the list's own vocabulary", async () => {
+    await GET(new Request("https://factory.example/api/runs?limit=10"));
+    const config = harness.tenantListResponse.mock.calls[0]![0] as {
+      augment?: (client: unknown, organizationId: string) => Promise<Record<string, unknown>>;
+    };
+    expect(config.augment).toBeTypeOf("function");
+
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{
+        command_id: "command-1",
+        graph_id: "graph-1",
+        goal: "Fix high-priority bugs",
+        requires_owner_approval: false,
+        linked_at: "2026-08-23T01:30:00.000Z",
+        latest_run_id: null,
+        latest_run_state: null,
+        latest_run_started_at: null,
+        latest_run_completed_at: null,
+        artifact_count: 0,
+      }],
+      error: null,
+    });
+    const augmented = await config.augment!({ rpc }, "organization-1");
+    expect(rpc).toHaveBeenCalledWith("list_command_analysis_graphs", {
+      p_organization_id: "organization-1",
+    });
+    expect(augmented).toEqual({
+      analysisRuns: [expect.objectContaining({
+        id: "analysis:graph-1",
+        // Unclaimed is queued work — true in this list's vocabulary.
+        status: "queued",
+        createdAt: "2026-08-23T01:30:00.000Z",
+        task: { id: "graph-1", title: "Fix high-priority bugs" },
+        agent: { id: "graph-1", name: "Claude — analysis" },
+        analysis: { graphId: "graph-1", commandId: "command-1", artifactCount: 0 },
+      })],
+    });
+
+    // A database that predates the linking migration reads as "no analysis
+    // runs", never as a failed run list.
+    const missing = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "missing" },
+    });
+    await expect(config.augment!({ rpc: missing }, "organization-1")).resolves.toEqual({});
+  });
+
+  it("does not augment the briefing view", async () => {
+    await GET(new Request("https://factory.example/api/runs?view=briefing"));
+    const config = harness.tenantListResponse.mock.calls[0]![0] as { augment?: unknown };
+    expect(config.augment).toBeUndefined();
+  });
 });
