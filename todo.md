@@ -92,7 +92,19 @@ Two loose ends for whoever picks this up:
   Vercel runtime logs or the verbatim alert text from under the request card.
 - **`Supabase Preview` has been red on every recent main commit**, including
   ones this session did not touch. It is not one of the four required
-  checks, so it blocks nothing, but nobody has looked at why.
+  checks, so it blocks nothing — and it is **not a mystery**: it is the
+  partially-applied `20260814002500_provider_credential_vault` described in
+  the section below, showing up in a second place. The check is Supabase's
+  own GitHub App branching production and replaying every migration the
+  hosted ledger does not record. `20260814002500` is not recorded (the
+  ledger's remote column is blank) but its table *does* exist on hosted
+  (probe run 32646908822: `20260814002500 | table | provider_credentials |
+  t`), so the replay hits that file's unguarded `create table` and dies
+  with `ERROR: relation "provider_credentials" already exists (SQLSTATE
+  42P07)`. Exactly the failure mode the runbook warns about — "NOT VISIBLE
+  is not absent". Fixing it means finishing that migration on hosted, which
+  is an owner-approved action nobody has taken; the red check is the
+  symptom, not a separate bug.
 
 Also shipped 2026-08-23: **multi-select delete on the Pipelines page**
 (ADR-130). `20260823000200` is applied on hosted (run 32647755059);

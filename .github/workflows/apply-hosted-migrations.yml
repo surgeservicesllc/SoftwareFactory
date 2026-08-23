@@ -81,6 +81,9 @@ on:
           "delete-selected-pipelines" applies only 20260823000200, which lets
           the Pipelines page delete exactly the rows somebody ticked under the
           same refusals as the whole-list clear;
+          "stop-and-delete-pipelines" applies only 20260823000300, which makes
+          that selection stop live work before removing it and detach an
+          analysis graph rather than being refused by its foreign key;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -108,6 +111,7 @@ on:
           - analysis-launch-doorcheck
           - analysis-launch-commit
           - delete-selected-pipelines
+          - stop-and-delete-pipelines
           - probe
 permissions:
   checks: read
@@ -5142,6 +5146,74 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: the Pipelines page can delete a selection under the clear's own rules."
+
+      - name: Stop live work before deleting a selection (scope=stop-and-delete-pipelines)
+        # Exactly one file — 20260823000300 — which drops and recreates
+        # delete_selected_pipelines so a selected pipeline is cancelled before
+        # it is removed, and so an analysis graph link is detached rather than
+        # blocking the delete through its restrict foreign key. The return
+        # shape changes, which is why the old body is dropped rather than
+        # replaced; the file's preflight refuses unless 20260823000200 is
+        # already there, so the two can only be applied in order.
+        if: ${{ inputs.scope == 'stop-and-delete-pipelines' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000300_stop_and_delete_selected_pipelines.sql
+          EXPECTED_SHA256=4f7ff03f361082f5355eb515742ae4f98ebf41931382616a5e9d748a2aa823c3
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000300';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000300 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000300
+          else
+            npx supabase migration repair --status applied 20260823000300 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          # The new shape is the evidence: six output columns, stopped_count
+          # among them, is what tells the console a selection stops its rows.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and (select count(*) = 6 from unnest(
+                      (select proallargtypes from pg_proc
+                        where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+                    ) with ordinality as arg(oid, ord)
+                    where ord > 4)
+               and 'stopped_count' = any(
+                      (select proargnames from pg_proc
+                        where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')))
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The stop-and-delete function did not read back with the intended shape and posture."
+            exit 1
+          fi
+          echo "Applied and verified: selecting a pipeline now stops it, then deletes it."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

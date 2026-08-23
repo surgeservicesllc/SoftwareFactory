@@ -41,7 +41,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   rpc.mockReturnValue({
     single: async () => ({
-      data: { deleted_count: 2, kept_running: 1, kept_with_runs: 0, not_found: 0 },
+      data: {
+        deleted_count: 2,
+        stopped_count: 1,
+        kept_with_runs: 0,
+        kept_with_evidence: 0,
+        not_found: 0,
+        unlinked_analyses: 1,
+      },
       error: null,
     }),
   });
@@ -61,7 +68,14 @@ describe("POST /api/commands/delete", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      deleted: { deletedCount: 2, keptRunning: 1, keptWithRuns: 0, notFound: 0 },
+      deleted: {
+        deletedCount: 2,
+        stoppedCount: 1,
+        keptWithRuns: 0,
+        keptWithEvidence: 0,
+        notFound: 0,
+        unlinkedAnalyses: 1,
+      },
     });
     expect(rpc).toHaveBeenCalledWith("delete_selected_pipelines", {
       p_organization_id: organizationId,

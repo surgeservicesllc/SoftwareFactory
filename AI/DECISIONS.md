@@ -1535,3 +1535,46 @@ Use this append-only log for decisions that constrain future implementation. Cha
   Pipelines: picking one row out of a live list is ordinary, and the
   function's own refusal keeps live work safe. Hosted apply goes through
   the one-shot `scope=delete-selected-pipelines` with the file sha pinned.
+
+## ADR-131 - Selecting a pipeline stops it, because the rule protecting live work was protecting rows that could never finish
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: ADR-130 gave the selection delete the whole-list clear's rule that
+  queued and running commands are never touched. The owner immediately hit
+  it: two record-only pipelines that had sat `queued` for one and fourteen
+  hours - waiting for a Codex worker that, by design, will never claim a
+  record-only command - answered "0 pipelines deleted. Kept: 2 still
+  running." The rule was written to protect work in flight. Applied to an
+  explicit selection it protected rows nobody could ever finish, and gave
+  the owner no way at all to remove them.
+- Decision: `20260823000300` drops and recreates
+  `delete_selected_pipelines` so a selection means stop, then delete. A
+  selected command in `queued` or `running` has its agent runs, its
+  non-terminal tasks and itself moved to `cancelled` before removal, and the
+  stop happens even in the cases where the row is then kept. Three things
+  the change deliberately does not do: it does not race a worker (the agent
+  runs are locked `FOR UPDATE` first, and `claim_phase1c_run` selects `FOR
+  UPDATE ... SKIP LOCKED`, so a claim in flight skips a run this
+  transaction is cancelling); it does not delete run history without the
+  explicit flag; and it never deletes a command the improvement ledger
+  cites, with or without the flag. The return gains `stopped_count`,
+  `kept_with_evidence` and `unlinked_analyses` and loses `kept_running`,
+  which is why the old body is dropped rather than replaced - one name, one
+  selection-delete path.
+- Rationale: cancelling is safe against this schema's own guards, and that
+  is checked rather than assumed: the two RED-block triggers rewrite a
+  status only on a move *into* queued/running/succeeded, and the Phase 1C
+  planners fire on INSERT, so a move to `cancelled` passes through both
+  untouched.
+- Consequence: a second defect surfaced while writing this and would
+  otherwise have bitten on the first real press -
+  `command_analysis_graphs.command_id` is `on delete restrict`, so both of
+  the owner's rows (each carrying an analysis graph since ADR-129) would
+  have failed on a foreign key rather than deleting. The link row is now
+  removed first and **the graph, its run and its artifacts survive**: the
+  bot's findings outlive the request that asked for them, stay readable
+  under Graph runs, and the result line says so rather than letting
+  "deleted" imply the analysis went too. `factory_command_routes` is
+  handled the same way. Both are addressed through `to_regclass`-guarded
+  dynamic SQL, because a database may hold either, both or neither.

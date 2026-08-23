@@ -20,9 +20,14 @@ import { useState } from "react";
 
 export type SelectionDeleteOutcome = Readonly<{
   deletedCount: number;
-  keptRunning: number;
+  /** Live pipelines cancelled before removal — selecting one stops it. */
+  stoppedCount: number;
   keptWithRuns: number;
+  /** Cited by the improvement ledger, so never deleted. */
+  keptWithEvidence: number;
   notFound: number;
+  /** Analysis graphs detached; the graphs and their artifacts survive. */
+  unlinkedAnalyses: number;
 }>;
 
 type Phase = "idle" | "confirming" | "pending";
@@ -88,13 +93,21 @@ export function SelectionDeleteButton({
         return;
       }
 
-      const { deletedCount, keptRunning, keptWithRuns, notFound } = body.deleted;
+      const {
+        deletedCount, stoppedCount, keptWithRuns, keptWithEvidence, notFound, unlinkedAnalyses,
+      } = body.deleted;
       const kept: string[] = [];
-      if (keptRunning > 0) kept.push(`${keptRunning} still running`);
       if (keptWithRuns > 0) kept.push(`${keptWithRuns} with run history`);
+      if (keptWithEvidence > 0) kept.push(`${keptWithEvidence} cited as evidence`);
       if (notFound > 0) kept.push(`${notFound} no longer here`);
       setMessage(
         `${deletedCount} ${noun}${deletedCount === 1 ? "" : "s"} deleted.`
+        + (stoppedCount > 0 ? ` Stopped ${stoppedCount} that ${stoppedCount === 1 ? "was" : "were"} still running.` : "")
+        // The graph outlives the request: saying so stops "deleted" reading
+        // as though the bot's findings went with it.
+        + (unlinkedAnalyses > 0
+          ? ` ${unlinkedAnalyses} analysis run${unlinkedAnalyses === 1 ? "" : "s"} kept under Graph runs.`
+          : "")
         + (kept.length > 0 ? ` Kept: ${kept.join(", ")}.` : ""),
       );
       reset();
@@ -133,9 +146,10 @@ export function SelectionDeleteButton({
         Delete {count} selected {noun}{count === 1 ? "" : "s"}?
       </p>
       <p className="mt-1 text-xs text-[var(--text-muted)]">
-        This cannot be undone. Anything currently running is left alone, and so is
-        anything whose deletion would take run history with it — unless you say
-        otherwise below.
+        This cannot be undone. Anything still running is stopped first, then
+        removed. Analysis runs and their artifacts are kept and stay readable
+        under Graph runs. Anything whose deletion would take run history with
+        it is left alone unless you say otherwise below.
       </p>
 
       <label className="mt-3 block text-xs text-[var(--text-muted)]" htmlFor="selection-delete-reason">
