@@ -2,7 +2,25 @@
 
 Last updated: 2026-08-23
 
-## Newest (2026-08-23 ~00:50Z): Step 8/9 record-only accepted; the real-run path is measured and owner-gated
+## Newest (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
+
+The owner directed that Step 9 must actually run the bot. The delivered
+answer keeps every boundary: a record-only Claude command now launches its
+one analysis graph (goal = the command's stored prompt), the application
+wakes the graph worker by repository_dispatch, the subscription transport
+executes MODEL nodes read-only, and Step 9 plus the Bots request card
+report the run state exactly as the database holds it - "Waiting for a
+worker to pick it up" no longer appears for work no worker could ever pick
+up. Migration `20260823000100_command_analysis_graphs.sql` (link table +
+launch + list, all fail-closed, hosted-default-privilege postflight
+in-file) ships behind one-shot `scope=command-analysis-graphs`. Repo-write
+execution stays exactly where it was: the manual Codex lane
+(openai/gpt-5.3-codex), currently disabled by the
+`SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` repo variable. Remaining for the
+live acceptance: deploy, hosted apply, the owner re-issues a command with
+the Claude bot, the analysis run completes, Step 9 shows it.
+
+## Earlier (2026-08-23 ~00:50Z): Step 8/9 record-only accepted; the real-run path is measured and owner-gated
 
 The owner confirmed Step 8 passes and Step 9 shows the truthful record-only
 view (screenshots, 2026-08-23 ~00:27Z), then set the next goal: Step 9 must

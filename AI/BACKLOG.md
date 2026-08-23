@@ -81,15 +81,22 @@ Last triaged: 2026-08-22
 - [x] Owner-confirmed acceptance (screenshots 2026-08-23 ~00:27Z): Step 8
   "Issue a Command" Done — 1 command recorded only; Step 9 "Watch It Ship"
   shows the truthful record-only view with the command record modal.
-- [ ] Step 9 real run (owner goal, owner-gated enablement): connect the
+- [ ] Step 9 real run with the Claude bot (owner goal, ADR-128): deploy the
+  analysis-launch slice, apply 20260823000100 via
+  `scope=command-analysis-graphs`, have the owner issue a command with the
+  Claude bot, watch the launched analysis graph get claimed and completed by
+  the graph worker (manual dispatch works today; repository_dispatch wakes
+  it for new commands), and verify Step 9 reports the run with its
+  artifacts. The existing recorded command predates the link and stays a
+  plain record.
+- [ ] Codex write-path enablement (owner-gated, unchanged): connect the
   ChatGPT/Codex account in Bot Manager, create an `openai`/`gpt-5.3-codex`
-  bot on it, assign + configure it on SoftwareFactory_08.21.2026, set GitHub
-  repo variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`, then issue a
-  Step 8 command with that bot. Execution-path readiness measured by probe
+  bot, assign + configure it, set repo variable
+  `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`, then a manual command runs
+  to an isolated branch and draft PR with CI. Readiness measured by probe
   32608500364; worker auth last green 2026-08-21 21:54Z; the 2026-08-13
-  stdin-era run failure is structurally gone (SDK adapter; claim takes only
-  queued runs). Then verify the queued run -> claim -> branch -> draft PR ->
-  CI -> Step 9 execution view, and record the evidence.
+  stdin-era failure is structurally gone (SDK adapter; claim takes only
+  queued runs).
 - [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
   executors, and zero runs for all `record_only` commands before and after apply.
 - [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful

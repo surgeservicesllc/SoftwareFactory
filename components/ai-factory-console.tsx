@@ -112,6 +112,16 @@ type FactoryData = {
     status: string;
     executionMode: "manual" | "record_only" | "unknown";
     project: { id: string; name: string } | null;
+    /** The one analysis graph a record-only Claude command launched, with its
+     * latest run state exactly as the database reports it. */
+    analysisGraph?: {
+      graphId: string;
+      runState: string | null;
+      startedAt: string | null;
+      completedAt: string | null;
+      artifactCount: number;
+      requiresOwnerApproval: boolean;
+    } | null;
   }>;
   pipelines: Array<{ projectId: string; templateKey: string; name: string }>;
   /** Which logical agents each project's factory includes, and whether the
@@ -752,6 +762,10 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   const latestExecutionMode = latestCommand?.executionMode ?? null;
   const latestIsRecordOnly = latestExecutionMode === "record_only";
   const latestModeIsUnknown = latestExecutionMode === "unknown";
+  const latestAnalysis = latestIsRecordOnly ? latestCommand?.analysisGraph ?? null : null;
+  const latestAnalysisState = latestAnalysis?.runState ?? (latestAnalysis ? "PLANNED" : null);
+  const latestAnalysisDone = latestAnalysisState === "COMPLETED";
+  const latestAnalysisFailed = latestAnalysisState === "FAILED";
   const recordOnlyCount = scopedCommands.filter(
     (command) => command.executionMode === "record_only",
   ).length;
@@ -1015,15 +1029,27 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       id: "watch",
       title: "Watch It Ship",
       description: latestIsRecordOnly
-        ? "This command is recorded only. By design it creates no worker dispatch, execution run, branch, or pull request."
+        ? latestAnalysis
+          ? "This command runs as a read-only analysis on your subscription: the bot reads the repository and records artifacts and verifications. Repository-writing runs stay with the Codex lane."
+          : "This command is recorded only. By design it creates no worker dispatch, execution run, branch, or pull request."
         : latestModeIsUnknown
           ? "The command is recorded, but this database does not report its execution mode yet. Nothing is claimed to be running."
           : data.executor.connected
             ? "Every run lands as a draft pull request with CI evidence; you review and merge."
             : "When an executor is connected, a manual command can run toward a draft pull request with CI evidence for you to review and merge.",
-      done: !latestIsRecordOnly && !latestModeIsUnknown && hasSucceededCommand,
+      done: latestIsRecordOnly
+        ? latestAnalysisDone
+        : !latestModeIsUnknown && hasSucceededCommand,
       evidence: latestIsRecordOnly
-        ? `${recordOnlyCount} command${recordOnlyCount === 1 ? "" : "s"} recorded only · no execution is queued`
+        ? latestAnalysis
+          ? latestAnalysisDone
+            ? `Analysis completed · ${latestAnalysis.artifactCount} artifact${latestAnalysis.artifactCount === 1 ? "" : "s"} recorded`
+            : latestAnalysisFailed
+              ? "Analysis run failed — its node errors say why"
+              : latestAnalysisState === "PLANNED"
+                ? "Analysis planned · waiting for the analysis worker to claim it"
+                : `Analysis ${latestAnalysisState?.toLowerCase() ?? "in flight"} — the bot is working now`
+          : `${recordOnlyCount} command${recordOnlyCount === 1 ? "" : "s"} recorded only · no execution is queued`
         : latestModeIsUnknown
           ? "Command recorded · execution mode unavailable"
           : hasSucceededCommand
@@ -1033,17 +1059,45 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                 ? "Work is in flight — watch it on Pipelines"
                 : `${scopedCommands.length} command${scopedCommands.length === 1 ? "" : "s"} queued; ${data.executor.label}`
               : "Nothing has run yet",
-      action: latestIsRecordOnly ? "Review command record" : "Watch execution",
+      action: latestIsRecordOnly
+        ? latestAnalysis
+          ? "Watch the analysis run"
+          : "Review command record"
+        : "Watch execution",
       icon: Workflow,
       body: (
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-base font-semibold text-foreground">
-              {latestIsRecordOnly ? "Command record" : "Command execution"}
-            </h4>
-            <StatusBadge tone={!latestIsRecordOnly && !latestModeIsUnknown && data.executor.connected ? "safe" : "neutral"}>
               {latestIsRecordOnly
-                ? "Recorded only"
+                ? latestAnalysis
+                  ? "Command analysis run"
+                  : "Command record"
+                : "Command execution"}
+            </h4>
+            <StatusBadge
+              tone={
+                latestIsRecordOnly
+                  ? latestAnalysisDone
+                    ? "safe"
+                    : latestAnalysisFailed
+                      ? "danger"
+                      : "neutral"
+                  : !latestModeIsUnknown && data.executor.connected
+                    ? "safe"
+                    : "neutral"
+              }
+            >
+              {latestIsRecordOnly
+                ? latestAnalysis
+                  ? latestAnalysisDone
+                    ? "Analysis completed"
+                    : latestAnalysisFailed
+                      ? "Analysis failed"
+                      : latestAnalysisState === "PLANNED"
+                        ? "Analysis planned"
+                        : "Analysis running"
+                  : "Recorded only"
                 : latestModeIsUnknown
                   ? "Execution mode unavailable"
                   : data.executor.label}
@@ -1051,7 +1105,13 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
           </div>
           <p className="mt-1 text-sm text-muted">
             {latestIsRecordOnly
-              ? "The selected bot's verified route was saved as durable command evidence. Record-only mode creates no worker dispatch, execution run, branch, or pull request by design."
+              ? latestAnalysis
+                ? latestAnalysisDone
+                  ? `The bot executed this command as a read-only analysis on your subscription and recorded ${latestAnalysis.artifactCount} artifact${latestAnalysis.artifactCount === 1 ? "" : "s"} with verifications. Nothing wrote to the repository — that lane stays with Codex.`
+                  : latestAnalysisFailed
+                    ? "The analysis run stopped before finishing. Its node errors are recorded on the run; issuing the command again launches nothing new — the durable link already exists."
+                    : "The bot executes this command as a read-only analysis on your subscription: it reads the repository, records artifacts, and verifies its own findings. No repository write, branch, or pull request can result."
+                : "The selected bot's verified route was saved as durable command evidence. Record-only mode creates no worker dispatch, execution run, branch, or pull request by design."
               : latestModeIsUnknown
                 ? "This command predates execution-mode reporting or the database rollout is incomplete. Its durable record is visible, but no execution, branch, or pull request is inferred."
                 : "A manual command runs the same lifecycle: verified intake → queue → a worker claims it → isolated branch → draft pull request with CI. Merging stays yours, and production deploys from the merge."}
@@ -1075,7 +1135,15 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
                     </p>
                     <StatusBadge tone={stage.tone} dot={false}>
                       {command.executionMode === "record_only"
-                        ? "Recorded only"
+                        ? command.analysisGraph
+                          ? command.analysisGraph.runState === "COMPLETED"
+                            ? "Analysis completed"
+                            : command.analysisGraph.runState === "FAILED"
+                              ? "Analysis failed"
+                              : command.analysisGraph.runState
+                                ? "Analysis running"
+                                : "Analysis planned"
+                          : "Recorded only"
                         : command.executionMode === "unknown"
                           ? "Mode unavailable"
                           : stage.label}

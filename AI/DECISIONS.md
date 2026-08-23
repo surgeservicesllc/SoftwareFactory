@@ -1426,3 +1426,40 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Consequence: the record-only routing is live and verified end to end once
   the postflight scope reads back green. Workers, autonomy, and automatic
   actions remain OFF and the global kill switch remains ON.
+
+## ADR-128 - A record-only Claude command launches one real analysis graph
+
+- Date: 2026-08-23
+- Status: Accepted
+- Decision: the owner accepted the record-only Step 8/9 and then directed
+  that Step 9 must actually run the bot. The Claude bot's honest execution
+  surface already exists and is production-proven: the graph engine, the
+  subscription CLI transport, and the graph worker that drains MODEL and
+  DETERMINISTIC nodes with read-only tools. New migration
+  `20260823000100_command_analysis_graphs.sql` adds a one-to-one
+  command-to-graph link table, `launch_command_analysis_graph` (delegates to
+  `create_graph_from_plan` with the command's own stored prompt as the goal,
+  idempotent through the unique link, refuses everything that is not a
+  record-only Claude command), and `list_command_analysis_graphs` (latest
+  run state and artifact count, fail-closed to empty for non-members). The
+  command submit route launches the graph for record-only Claude commands
+  and wakes the graph worker by repository_dispatch
+  (`softwarefactory_graph_planned`, added to graph-worker.yml alongside its
+  existing manual dispatch and gated schedule); the command type maps to an
+  analysis template proven claude-drainable
+  (`ANALYSIS_TEMPLATE_BY_COMMAND_TYPE`, invariant-tested against
+  `WORKER_SUPPORTED_EXECUTORS`). Step 9 and the Bots request card report the
+  analysis state exactly as the database holds it, replacing the untruthful
+  "Waiting for a worker to pick it up" hint on record-only commands.
+- Rationale: this is real execution inside the boundary Phase 2A draws -
+  analysis artifacts only, never a repository write, merge, or deploy; those
+  stay with the manual Codex lane and its isolation discipline. The
+  subscription transport spends no per-token API credit. The kill switch and
+  autonomy are untouched: an analysis run happens only as the direct
+  mechanical consequence of an owner-issued command, the same wake contract
+  the Phase 1C dispatch always had.
+- Consequence: the Claude bot genuinely runs when the owner issues a
+  command: planned graph, claimed run, node transitions, artifacts, and
+  verifications - all durable, all visible in Step 9. Hosted apply goes
+  through the new one-shot `scope=command-analysis-graphs` with the file
+  sha pinned.

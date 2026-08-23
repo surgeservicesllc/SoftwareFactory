@@ -63,10 +63,17 @@ predeclared-SHA, expiry, and repeat-approval ceremony; it does not remove
 any technical gate or any product/runtime RED approval boundary. Workers,
 autonomy, and automatic actions remain OFF and the global kill switch
 remains ON. `scope=record-only-postflight` run 32607902289 read every
-post-commit verification back green on the applied database (ADR-127).
-Outstanding evidence: only the signed-in production Step 8 -> Step 9
-acceptance; until that lands, make no fully-verified claim about the
-user-facing journey.
+post-commit verification back green on the applied database (ADR-127). The
+owner then confirmed Step 8 passing and the truthful record-only Step 9
+(screenshots ~00:27Z) and directed that Step 9 actually run the bot:
+ADR-128 gives a record-only Claude command one real analysis graph run
+(subscription transport, read-only tools, artifacts and verifications),
+launched at submit and reported truthfully in Step 9 and the request card.
+Migration 20260823000100 ships behind `scope=command-analysis-graphs`; the
+manual Codex write lane is unchanged and still owner-gated. Outstanding
+evidence: deploy + hosted apply + a live analysis run completing for an
+owner-issued command; until that lands, make no fully-verified claim about
+the bot running.
 
 The containment gate walked to its last clause on 2026-08-22 evening
 (ADR-122). The owner engaged the global kill switch and turned Autonomous
