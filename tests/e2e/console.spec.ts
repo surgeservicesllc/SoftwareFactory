@@ -1,40 +1,54 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// The owner's 2026-08-17 structure: top-level destinations with subpage
-// groups that open expanded, then the quick actions. Every entry must stay a
-// real page — this list is the reachability contract for the whole console.
+// The console's reachability contract: every label a person can click, in a
+// live browser, after opening every group. This is the strongest statement the
+// repository makes that a destination is not merely declared but reachable —
+// a jsdom test asserts the shell renders a link, and this asserts the page
+// actually serves one.
+//
+// Restructured 2026-08-23 around the lifecycle: five primary destinations, the
+// ten stages under AI Factory, and the surfaces that had no lifecycle home
+// grouped under Operations and System rather than dropped.
 const consoleNavigation = [
   "Overview",
-  "AI Factory",
   "Projects",
   "All Projects",
   "My Projects",
-  "Archived",
-  "Pipelines",
-  "Active",
-  "All Pipelines",
-  "Templates",
+  "Portfolio",
   "Backlog",
-  "Bots",
-  "Connect Bot",
-  "My Bots",
-  "Bot Usage",
-  "Bot Activity",
-  "Runs",
-  // Promoted out of the removed "Watch" group and placed above Reports
-  // (2026-08-19, owner instruction). Activity left the column with that group
-  // and is still reachable as "Bot Activity" under Bots, which is the same
-  // page — so this contract loses an entry without losing a destination.
+  "Archived",
+  "AI Factory",
+  // The ten stages, numbered. Listed literally rather than derived from
+  // SDLC_LIFECYCLE on purpose: this file is the outside view, and importing
+  // the same table the navigation is built from would let a rename pass on
+  // both sides at once.
+  "1 Requirement",
+  "2 Discover",
+  "3 Evaluate",
+  "4 Decide",
+  "5 Architect",
+  "6 Build",
+  "7 Review",
+  "8 Test",
+  "9 Deploy",
+  "10 Monitor",
   "Operations",
-  "Reports",
-  "Integrations",
-  "Settings",
-  "General",
-  "Bots & Integrations",
-  "Advanced",
-  "Files",
+  "Runs",
   "Agents",
+  "Pipelines",
+  "Artifacts",
+  "Reports",
+  "Bots",
+  "Bot Usage",
+  "Templates",
+  "Activity",
+  "Health",
+  "System",
+  "Integrations",
+  "Secrets",
+  "Settings",
+  "Files",
   "Resources",
   "AgentOS",
   "Autonomy",

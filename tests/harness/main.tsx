@@ -5,6 +5,9 @@ import "@/app/globals.css";
 
 import { ActivityConsole } from "@/components/activity-console";
 import { AiFactoryConsole } from "@/components/ai-factory-console";
+import { ArtifactsConsole } from "@/components/artifacts-console";
+import { FactoryIntake } from "@/components/factory-intake";
+import { StageConsole } from "@/components/stage-console";
 import { BotManagerWorkspace } from "@/components/bot-manager-workspace";
 import { CommandComposer } from "@/components/command-composer";
 import { FactoryBriefing } from "@/components/factory-briefing";
@@ -262,6 +265,19 @@ const CASES: Record<string, () => React.ReactElement> = {
   agentos: () => <InShell><AgentOsConsole /></InShell>,
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
+  artifacts: () => <InShell><ArtifactsConsole /></InShell>,
+  "factory-intake": () => <InShell><FactoryIntake /></InShell>,
+  /*
+   * One stage stands for all ten — they are one component with a different
+   * stage — and Build is the widest of them: three nodes fanning out into an
+   * integrate step gives the execution graph its longest row, and its
+   * dependency table carries the most edges.
+   *
+   * Rendered inside the shell like every other console case, so the stage
+   * page's own tables are measured against the same column the navigation
+   * leaves them.
+   */
+  "stage-build": () => <InShell><StageConsole stage="BUILD" /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker

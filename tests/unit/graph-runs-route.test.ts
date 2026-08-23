@@ -29,6 +29,14 @@ const graphRunRow = {
   started_at: "2026-08-21T12:00:00.000Z",
   completed_at: "2026-08-21T12:05:00.000Z",
   nodes: [{ id: "node-1", error: "Internal node detail" }],
+  // 20260823000200 widened list_graph_runs with the graph's shape. The stage
+  // pages read it, and every graph table revokes SELECT from `authenticated`,
+  // so this projection is the only way a browser can see which node waits on
+  // which.
+  edges: [
+    { from_node_key: "review", to_node_key: "test", reason: "VERIFICATION",
+      detail: "Tests run against a reviewed change.", is_feedback: false },
+  ],
   artifact_counts: { patch: 1 },
   verifications: [
     { verdict: "PASS", summary: "Internal verification detail" },
@@ -70,6 +78,10 @@ describe("graph runs route", () => {
         startedAt: "2026-08-21T12:00:00.000Z",
         completedAt: "2026-08-21T12:05:00.000Z",
         nodes: [{ id: "node-1", error: "Internal node detail" }],
+        edges: [
+          { from_node_key: "review", to_node_key: "test", reason: "VERIFICATION",
+            detail: "Tests run against a reviewed change.", is_feedback: false },
+        ],
         artifactCounts: { patch: 1 },
         verifications: [
           { verdict: "PASS", summary: "Internal verification detail" },
@@ -112,6 +124,31 @@ describe("graph runs route", () => {
       p_limit: 100,
     });
     expectNoStore(response);
+  });
+
+  it("keeps the graph's shape out of the briefing projection", async () => {
+    /*
+     * The briefing is a deliberately minimised view — it exists so the
+     * dashboard can read eight sources without pulling every run's full
+     * detail. `edges` is exactly the kind of field that gets added to the
+     * default response and then leaks into the minimised one by being spread
+     * rather than named, so this asserts the boundary rather than trusting it.
+     *
+     * The default row's verifications are deliberately malformed — that is the
+     * subject of the test below — and the briefing fails closed on those, so
+     * this one supplies a well-formed set to reach the projection at all.
+     */
+    harness.rpc.mockResolvedValue({
+      data: [{ ...graphRunRow, verifications: [{ verdict: "PASS" }] }],
+      error: null,
+    });
+    const response = await GET(new Request(
+      "https://factory.example/api/graphs/runs?limit=100&view=briefing",
+    ));
+
+    const body = (await response.json()) as { runs: Record<string, unknown>[] };
+    expect(body.runs[0]).not.toHaveProperty("edges");
+    expect(body.runs[0]).not.toHaveProperty("nodes");
   });
 
   it.each([

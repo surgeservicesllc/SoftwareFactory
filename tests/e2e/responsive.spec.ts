@@ -31,11 +31,17 @@ const ROUTES = [
   // The factory embeds the console's densest controls step by step, plus a
   // horizontal step band that must compress rather than push the edge.
   "/solutions/ai-factory",
+  "/solutions/artifacts",
   "/solutions/autonomy",
   "/solutions/backlog",
   "/solutions/bot-manager",
   "/solutions/bot-usage",
   "/solutions/connections",
+  // One stage page stands for all ten: they are one component with a
+  // different stage, so a width that breaks one breaks every one. Build is
+  // the widest — its execution graph fans out three ways and its dependency
+  // table is the longest.
+  "/solutions/factory/build",
   "/solutions/files",
   "/solutions/myprojects",
   "/solutions/operations",

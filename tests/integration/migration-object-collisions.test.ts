@@ -36,6 +36,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  *    be released — a defect with no error, no failing test, and no symptom until
  *    something wedged in production.
  *
+ * One thing it deliberately does not flag: a later migration that *rebuilds* an
+ * object it drops first. That is one author acting in full knowledge of the
+ * other, which is the opposite of the accident above, and the allowances below
+ * name the exact file pairs rather than the object — so a third file creating
+ * the same name is still the accident this test is for.
+ *
  * So this file checks the two things separately, because they need different
  * instruments. Tables and types are caught statically from the files, which is
  * fast and can name the exact pair. The silent function case cannot be caught
@@ -85,15 +91,43 @@ async function creationsByName(keyword: "table" | "type"): Promise<Map<string, s
   return byName;
 }
 
+/**
+ * Types a later migration deliberately rebuilds, and the exact pair allowed to.
+ *
+ * The failure this file exists to catch is two authors independently creating
+ * the same name, where the second apply dies with `already exists` and takes
+ * the chain with it. A *rebuild* is the opposite: one file, written in full
+ * knowledge of the other, that drops the type before creating it.
+ *
+ * `sdlc_stage` is rebuilt rather than altered because renaming could not carry
+ * the change — `PRD` had to merge into `REQUIREMENT`, and a merge is not a
+ * rename. The rebuild sits inside a DO block that returns early when the type
+ * already holds `REQUIREMENT`, so a replay is a no-op rather than a second
+ * drop, and `hosted-scope-replay.behavior.test.ts` runs that replay against
+ * real PostgreSQL to prove it.
+ *
+ * Named as an exact pair, not as a name: a third migration creating
+ * `sdlc_stage` would be the accident this test is for, and would still fail.
+ */
+const FORWARD_REBUILT_TYPES: ReadonlyMap<string, string> = new Map([
+  ["sdlc_stage", [
+    "20260821000200_agentic_sdlc_lifecycle.sql",
+    "20260823000200_ten_stage_lifecycle.sql",
+  ].join("|")],
+]);
+
 function collisionsIn(byName: Map<string, string[]>): string[] {
   return [...byName.entries()]
     .filter(([name, files]) => {
       if (files.length <= 1) return false;
-      return !(FORWARD_REPAIR_TABLES.has(name)
+      if (FORWARD_REPAIR_TABLES.has(name)
         && files.join("|") === [
           "20260814000300_agentos_isolation_model.sql",
           "20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql",
-        ].join("|"));
+        ].join("|")) {
+        return false;
+      }
+      return FORWARD_REBUILT_TYPES.get(name) !== files.join("|");
     })
     .map(([name, files]) => `${name}: ${files.join(" and ")}`);
 }

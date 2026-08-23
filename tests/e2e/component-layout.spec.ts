@@ -207,6 +207,12 @@ const CASES = [
   "agentos",
   "autonomy",
   "bot-usage",
+  // The lifecycle surfaces. One stage case stands for all ten — they are one
+  // component with a different stage — and Build is the widest: its execution
+  // graph fans out three ways and its dependency table carries the most rows.
+  "artifacts",
+  "factory-intake",
+  "stage-build",
   "job-seeker",
   "resume-review",
   "bot-fabric",

@@ -14,6 +14,28 @@ const routes = [
   // The console home moved to /solutions when / became the marketing landing.
   { path: "/solutions", heading: "Dashboard" },
   { path: "/solutions/ai-factory", heading: "AI Factory" },
+  { path: "/solutions/artifacts", heading: "Artifacts" },
+  /*
+   * All ten stage pages, not a representative one.
+   *
+   * They are one component with a different stage, so a layout regression
+   * would hit all ten at once — but the *content* differs per stage, and it is
+   * the content that this sweep checks: the heading is built from the stage's
+   * number and title, and a stage missing from the lifecycle table would 404
+   * here rather than render an empty page. Ten cheap checks are worth the one
+   * defect they catch, which is a stage that exists in the navigation and not
+   * in the router.
+   */
+  { path: "/solutions/factory/requirement", heading: "1 Requirement" },
+  { path: "/solutions/factory/discover", heading: "2 Discover" },
+  { path: "/solutions/factory/evaluate", heading: "3 Evaluate" },
+  { path: "/solutions/factory/decide", heading: "4 Decide" },
+  { path: "/solutions/factory/architect", heading: "5 Architect" },
+  { path: "/solutions/factory/build", heading: "6 Build" },
+  { path: "/solutions/factory/review", heading: "7 Review" },
+  { path: "/solutions/factory/test", heading: "8 Test" },
+  { path: "/solutions/factory/deploy", heading: "9 Deploy" },
+  { path: "/solutions/factory/monitor", heading: "10 Monitor" },
   { path: "/solutions/operations", heading: "Operations" },
   { path: "/solutions/projects", heading: "All Projects" },
   { path: "/solutions/myprojects", heading: "My Projects" },

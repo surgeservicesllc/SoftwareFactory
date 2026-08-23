@@ -121,17 +121,32 @@ intake says so in the route's own words, and
 `tests/unit/factory-intake.test.tsx` asserts that wording stays — do not
 "improve" it into "your run has started".
 
-### Gate status at handoff
+### Gate status
 
-Lint clean, typecheck clean on every file touched. Targeted suites green:
-`sdlc-lifecycle` (17), `sdlc-orchestrator` (22), `sdlc-artifacts` (14),
-`sdlc-stage-view` (21), `stage-console` (17), `artifacts-console` (8),
-`factory-intake` (10), `graph-backoff` (7), `app-shell` (27),
-`agentic-sdlc-lifecycle` (13), `hosted-scope-replay` (9),
-`graph-launch-plan` (9). **A full-suite run and a production build had not
-finished at handoff** — run both before claiming the branch is green, and
-expect the migration-name pins in `tests/integration/*` to need moving again
-the moment another migration lands.
+Lint and typecheck clean. CI run 32646092842 on `267856f` found **seven files
+failing**, all of them contracts that new surfaces have to be registered with
+rather than defects in the surfaces, and all seven are fixed:
+
+| What failed | Why | Fix |
+|---|---|---|
+| `console-routing.contract` | `/solutions/artifacts` and `/solutions/factory` had no old-path redirect; `factory/` had no `page.tsx` | added both to `next.config.ts`; `factory/page.tsx` redirects to the overview so a trimmed URL is not a 404 |
+| `responsive-coverage.contract` | two routes in no width sweep, three components in no harness case | added to `responsive.spec.ts`, `harness/main.tsx` and `component-layout.spec.ts` |
+| `hosted-runbook-counts` | the runbook's migration total was 149 | 151 |
+| `graph-runs-route` | the mocked row predates the `edges` column | row and expectation updated; a new case pins that `edges` stays out of the briefing projection |
+| `schema-security-invariants` | `record_graph_handoff_as_worker` is a new service_role RPC | added to the reviewed allowlist with its justification |
+| `migration-object-collisions` | two migrations create `sdlc_stage` | the rebuild is deliberate and guarded, so the test gained a `FORWARD_REBUILT_TYPES` allowance naming the exact file pair |
+| `console.spec` (browser 3/3) | the reachability contract still listed the thirteen-entry column | rewritten to the five groups, the ten numbered stages, and every regrouped surface |
+
+`pages.spec.ts` also gained all ten stage pages plus `/solutions/artifacts`, so
+each is checked for its heading, viewport width and axe violations.
+
+**Still not run to completion at this point: a clean full `vitest` pass and a
+production build.** One earlier local full-suite run reported 33 failures across
+9 files; that run is not trustworthy — files were edited while it was
+collecting, which is a mistake made three times in this work now. Run the suite
+in a pinned `git worktree` if you need to keep editing, and treat the tree as
+frozen otherwise. Expect the migration-name pins in `tests/integration/*` to
+need moving the moment another migration lands.
 
 
 ## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)

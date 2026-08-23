@@ -322,6 +322,20 @@ describe("SECURITY DEFINER functions", () => {
       // Browser-authenticated managers cannot execute this RPC directly.
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
+      /*
+       * The stage handoff: what one stage passed the next, and whether the
+       * payload satisfied the receiving node's contract at the moment it was
+       * handed over.
+       *
+       * Worker-only for the same reason every other write here is. A handoff
+       * is a provenance record — it says the architecture package BUILD
+       * received was the one ARCHITECT sent — and a provenance record anything
+       * holding the service key could fabricate through a table grant would be
+       * worth nothing. The function proves the worker's identity, resolves the
+       * organization from the run rather than trusting a parameter, and
+       * refuses a receiving node in another tenant.
+       */
+      "record_graph_handoff_as_worker",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
