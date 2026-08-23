@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import { launchCommandAnalysisGraph } from "@/lib/orchestration/analysis-launch";
 import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
-import { jsonNoStore, readBoundedJson } from "@/lib/server/http";
+import {
+  ApiRequestError,
+  jsonNoStore,
+  readBoundedJson,
+  requestErrorResponse,
+} from "@/lib/server/http";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -113,6 +118,10 @@ export async function POST(
       { status: 202 },
     );
   } catch (error) {
+    // A request-shape refusal (origin, body size) carries its own status and
+    // message; collapsing it into a generic 500 hid the one clue a failed
+    // tap leaves behind.
+    if (error instanceof ApiRequestError) return requestErrorResponse(error);
     const boundaryResponse = supabaseBoundaryErrorResponse(error);
     if (boundaryResponse) return boundaryResponse;
     return jsonNoStore(
