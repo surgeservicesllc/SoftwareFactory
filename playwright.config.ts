@@ -36,7 +36,21 @@ export default defineConfig({
   // A cold Next.js development compiler can be overwhelmed by one worker per
   // test on high-core machines. Three workers preserve viewport parallelism
   // without turning startup into a false timeout.
-  workers: process.env.CI ? 1 : 3,
+  //
+  // CI ran this at one worker on a four-core runner until 2026-08-23, which
+  // cost run 32665994906: shards 1 and 2 were killed at the 20-minute job
+  // ceiling, shard 1 at test 691 of 697. Measured on a four-core box, one
+  // shard-slice of 77 tests took 86s at one worker, 53s at two, and 52s at
+  // three — the dev server, not the CPU, is the bottleneck past two, so the
+  // third worker buys about one percent and spends the headroom a shared
+  // runner needs. Two is the whole gain, and it puts the slowest shard near
+  // twelve minutes.
+  //
+  // Raise the shard count, not this number, when the suite grows again:
+  // `--shard` splits by test *count*, and the durations are not even — the
+  // same run finished one 697-test shard in four minutes and could not finish
+  // another in nineteen.
+  workers: process.env.CI ? 2 : 3,
   reporter: process.env.CI
     ? [["line"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],

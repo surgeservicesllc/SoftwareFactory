@@ -2,6 +2,45 @@
 
 Last reviewed: 2026-08-23
 
+## 2026-08-23: the lifecycle stages have pages, and the browser suite got its workers back
+
+`/solutions/lifecycle` is the stage index and `/solutions/lifecycle/[stage]`
+is one page per stage, added to the console navigation as **Lifecycle**. Both
+iterate `SDLC_LIFECYCLE`, so the eleven-stage vocabulary is picked up without
+a stage list written out in the UI; an unknown slug is `notFound()`, not an
+empty page. `lib/sdlc/portfolio.ts` groups every run by stage — touched,
+failed, active, complete, and a failure rate — and is built on
+`lib/graph/stage-summary.ts` rather than beside it, so the per-run and
+across-run views cannot disagree. Every figure comes from `/api/graphs/runs`,
+the same read the runs panel uses. `/solutions/ai-factory` is unchanged and is
+still the setup journey, not the lifecycle.
+
+Within one run an empty stage is omitted, because "DEPLOYMENT 0/0" on an audit
+graph invents a stage that graph was never going to enter. Across the
+portfolio every stage is listed, because "no run has ever reached DEPLOYMENT"
+is itself the finding. The difference is intended, not an inconsistency.
+
+**CI: Playwright had been running at one worker on a four-core runner.** Run
+32665994906 killed browser shards 1 and 2 at the 20-minute job ceiling —
+shard 1 at test 691 of 697 — while shard 3 finished its identical 697 in four
+minutes. `--shard` splits by test count, so the three shards were exactly
+equal by count and fivefold apart in duration. `workers` in CI is now 2:
+measured on a four-core box, a 77-test slice ran 86s at one worker, 53s at
+two and 52s at three, so two is the whole available gain and the slowest shard
+lands near twelve minutes. A fourth shard was tried and reverted — the shard
+count is a string contract in `codex-worker.yml`'s
+`SOFTWAREFACTORY_REQUIRED_CHECKS`, the exact-head gate in
+`apply-hosted-migrations.yml`, and two tests, so it must move in all four
+places at once. No check was renamed.
+
+One regression was caught locally that CI could not have reported, because the
+shards it would have failed on never finished: pointing the layout harness's
+`/api/graphs/runs` at a new fixture broke the unrelated `factory-briefing`
+case. `FactoryBriefing` validates that projection before trusting it, the
+fixture omitted `startedAt`, `completedAt` and `verifications`, and the
+briefing correctly reported itself incomplete. The fixture now matches the
+route's projection.
+
 ## 2026-08-23: the lifecycle has DISCOVERY, EVALUATION and DECISION, and a template that populates them
 
 ADR-136's precondition is met and its prescribed growth executed (ADR-137).

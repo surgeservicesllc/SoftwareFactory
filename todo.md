@@ -1,6 +1,90 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — ROUND 6'S OPEN ITEM 1 IS ALREADY CLOSED, AND ADR-136 IS SUPERSEDED (2026-08-23, round 7 — PICK UP HERE)
+## GRAPH — THE STAGES HAVE PAGES, AND THE BROWSER SUITE OUTGREW ITS CEILING (2026-08-23, round 8 — PICK UP HERE)
+
+**Round 7's item 1 is done.** `/solutions/lifecycle` is the stage index and
+`/solutions/lifecycle/[stage]` is one page per stage, both driven by
+`SDLC_LIFECYCLE` — so the eleven arrived without a stage list written out
+anywhere, and the next one will too. `lib/sdlc/portfolio.ts` is built *on*
+round 5's `summariseRunStages` rather than beside it: a second grouping of the
+same rows would be a second answer to the same question, and the two would
+eventually disagree. Every figure comes from `/api/graphs/runs`, the read the
+runs panel already uses, so a stage page cannot contradict the run it links to.
+`/solutions/ai-factory` was left as the setup journey, as round 7 said.
+
+Where the portfolio *does* differ from `summariseRunStages` is deliberate:
+within one run, omitting an empty stage is right, because "DEPLOYMENT 0/0" on
+an audit graph invents a stage that graph was never going to enter. Across the
+portfolio every stage is listed, because "no run has ever reached DEPLOYMENT"
+is itself the finding.
+
+**Two collisions this round, both resolved in favour of the other bot.** I had
+written `lib/sdlc/run-summary.ts` and `components/graph/stage-rail.tsx`; round
+5's `summariseRunStages` did the same job, so **mine were deleted** and the
+portfolio rebuilt on theirs. Round 6 then grew the vocabulary to eleven, which
+this code absorbed with no change but which made several of my comments
+("eight, not ten") false — rewritten to describe the rule rather than the
+count. **Fetch main and read the newest Graph section before starting in this
+lane;** two rounds landed underneath this one while it was in flight.
+
+### Two traps this round hit that will catch the next bot
+
+**1. The browser suite outgrew its job ceiling, and the ceiling is not the
+lever.** Run 32665994906 killed shards 1 and 2 at twenty minutes — shard 1 at
+test **691 of 697**, six from the end — while shard 3 finished its identical
+697 in four minutes. `--shard` splits by test *count*, so all three shards were
+exactly equal and still differed fivefold in duration: shard 3 drew the cheap
+`mobile-chromium` sweeps, shards 1 and 2 the desktop `component-layout` and axe
+passes. **An even split of the count is not an even split of the work — read
+the slowest shard, never the average.**
+
+The fix was `playwright.config.ts`: CI ran Playwright at **one worker on a
+four-core runner**. Measured on a four-core box, a 77-test slice took 86s at
+one worker, 53s at two, 52s at three — the dev server is the bottleneck past
+two, so two is the whole gain and the third worker only spends headroom. That
+puts the slowest shard near twelve minutes.
+
+Adding a fourth shard was tried first and **reverted**, and the reason matters
+if you reach for it next: the shard count is a cross-file string contract in
+four places — `SOFTWAREFACTORY_REQUIRED_CHECKS` in `codex-worker.yml`, the
+exact-head gate in `apply-hosted-migrations.yml`, its scope test, and
+`required-checks-wiring.test.ts` (which guards exactly this drift, correctly).
+Renaming the checks means editing a protected release-gate workflow, and
+branch protection is not readable from an agent token, so a stale required
+name would leave a PR waiting forever on a check that never reports. When the
+suite does outgrow two workers, **raise the shard count and update all four
+places in the same commit.**
+
+**2. A harness fixture stands in for the whole endpoint, not for your case.**
+Pointing the harness's `/api/graphs/runs` at a new fixture broke the unrelated
+`factory-briefing` case: `FactoryBriefing` reads the same endpoint and
+validates the projection before trusting it, and the fixture omitted
+`startedAt`, `completedAt` and `verifications`. The read failed validation, the
+source counted as unavailable, and the briefing correctly reported itself
+incomplete. Nothing was wrong with the briefing. **Match the route's
+projection, not the fields your newest case happens to read** — and note this
+was only caught locally, because the CI timeout meant those shards never
+reported at all. A red suite that cannot finish hides real failures.
+
+**Next, highest value first:**
+
+1. **Stages still have no elapsed-time truth.** The portfolio deliberately
+   shows no durations: `graph_nodes` has latency per node, which is time
+   *executing*, not wall-clock time in a stage. Showing the sum as a duration
+   would be a plausible-looking lie. It needs `started_at`/`finished_at` per
+   stage, which do not exist — a migration, so check the tail pins first.
+2. **No stage page shows artifacts or dependencies.** `graph_artifacts` and
+   `graph_edges` both exist and neither is projected by `list_graph_runs`.
+   This is round 7's item 2 and still the largest unclaimed read path.
+3. **Round 7's item 3 stands unchanged**: graph-to-graph chaining,
+   scout→agentic_sdlc. The handoff contract exists; the chaining does not.
+4. Owner-gated, unchanged: the silent Run analysis taps, and live source
+   lookups for discovery.
+
+Verified this round: lint, typecheck, full unit suite, production build, and
+the browser cases for every surface this touched.
+
+## GRAPH — ROUND 6'S OPEN ITEM 1 IS ALREADY CLOSED, AND ADR-136 IS SUPERSEDED (2026-08-23, round 7)
 
 A verification round, not a build round. Three bots are on this repository and
 round 6 landed in the Graph lane while this session was mid-round, so this

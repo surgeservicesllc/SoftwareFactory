@@ -128,6 +128,15 @@ const navigationEntries: readonly NavigationEntry[] = [
    * still reached from the top-level product switcher, which is where a
    * different product belongs.
    */
+  /*
+   * The lifecycle, distinct from AI Factory above it.
+   *
+   * AI Factory is the setup journey — connect a repository, assign bots,
+   * issue a command. This is where the work *stands*: the eight stages a
+   * graph moves through, across every run. Naming either one the other would
+   * be an untruth in the navigation.
+   */
+  { label: "Lifecycle", href: "/solutions/lifecycle", icon: Workflow },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   /*
    * Operations, promoted out of a group and placed above Reports by owner
