@@ -41,6 +41,28 @@ fixture omitted `startedAt`, `completedAt` and `verifications`, and the
 briefing correctly reported itself incomplete. The fixture now matches the
 route's projection.
 
+## 2026-08-23: the Workflows launch wakes a worker that can run anchors
+
+The owner's first live `full_lifecycle` launch sat PLANNED and exposed two
+gaps (ADR-139). `POST /api/graphs` now dispatches the graph worker
+best-effort after `create_graph_from_plan` — the wake can never fail a
+launch that already succeeded, and the response reports `workerWoken`
+truthfully. The worker now declares ANCHOR alongside DETERMINISTIC and
+MODEL: `lib/worker/anchor-node-executor.ts` executes anchors as
+observations — the TEST anchor reads CI's recorded check-run verdict for
+the worker's checked-out commit (new `checks: read` permission +
+`SOFTWAREFACTORY_CHECKS_TOKEN`), the MONITOR anchor probes
+`SOFTWAREFACTORY_PRODUCTION_URL` (defaults to https://www.theagoras.com),
+and the DEPLOY anchor is refused by policy on the record because Phase 1
+keeps deployment owner-approved. Absent instruments read as Not Connected
+in the node's own record. Lifecycle graphs are therefore claimable;
+the live drain to the ARCHITECTURE HUMAN gate is the remaining evidence.
+The same round wired the gate-decision route to wake the worker on
+approvals (a recorded approval used to strand the run until a manual
+dispatch), retired the "no executor is connected" wording the Workflows
+page and launch control still carried, and added the owner's step-by-step
+`docs/FULL_LIFECYCLE_GUIDE.md`.
+
 ## 2026-08-23: one request can traverse all ten phases in one graph
 
 `full_lifecycle` (ADR-138) stitches the scout's look-before-you-build chain

@@ -1,6 +1,75 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9 — PICK UP HERE)
+## GRAPH — THE LAUNCH BUTTON WAKES A WORKER THAT CAN RUN ANCHORS (2026-08-23, round 10 — PICK UP HERE)
+
+The owner pressed Launch on `full_lifecycle` and the graph sat PLANNED
+forever. Two independent gaps, both fixed this round:
+
+**1. The Workflows launch never woke a worker.** `POST /api/graphs` recorded
+the graph and stopped; the schedule is off by default (correct), and only the
+*command* routes fired `dispatchGraphWorker`. The route now resolves the
+project's GitHub binding (`resolve_phase1c_command_target`) and dispatches the
+graph worker best-effort after `create_graph_from_plan` — the wake can never
+fail a launch that already succeeded, and the response says truthfully which
+world you're in (`workerWoken` + note). Pinned by
+`tests/unit/graphs-launch-route.test.ts`.
+
+**2. The worker declared no ANCHOR support, so claim_planned_graph refused
+every lifecycle.** `claim_planned_graph` (correctly) only hands a graph to a
+worker that declares every executor in it; the worker declared
+DETERMINISTIC+MODEL. Run 32671104441: "No planned graph was claimable". Now
+`WORKER_SUPPORTED_EXECUTORS` includes ANCHOR, executed by
+`lib/worker/anchor-node-executor.ts` — **observations by instruments that
+cannot be persuaded**, each fast (the budget estimator applies the slowest
+node to every level, so a slow anchor would inflate every budget):
+
+- **TEST anchor (`qa`)**: reads the CI check-run verdict for `GITHUB_SHA` via
+  the workflow's own read-scoped token (`SOFTWAREFACTORY_CHECKS_TOKEN`, new
+  `checks: read` permission). Green ⇒ SUCCEEDED with the observation as
+  evidence; red ⇒ FAILED naming the failing checks; skipped/in-progress runs
+  are not verdicts either way; no token/sha ⇒ Not Connected, stated.
+- **MONITOR anchor (`synthesis`)**: probes `SOFTWAREFACTORY_PRODUCTION_URL`
+  (var, default https://www.theagoras.com — same URL the apply workflow
+  verifies against) and records status/latency; unreachable IS the
+  observation. No URL ⇒ Not Connected.
+- **DEPLOY anchor (default)**: refused by policy, on the record — Phase 1
+  keeps deployment owner-approved; the refusal text says "policy holding, not
+  a fault". Nothing auto-deploys.
+
+Tests: `tests/unit/anchor-node-executor.test.ts` (12 cases);
+`graph-worker-execution.behavior.test.ts`'s executor-matching case now uses an
+explicit narrow worker (the shipped default includes ANCHOR — the *rule* is
+what that test pins); `analysis-launch.ts`'s doc comment updated (lifecycles
+stay out of the command→template table because a record-only command entitles
+analysis, not a build lifecycle — no longer because of ANCHOR).
+
+**The guide walk (owner asked for a step-by-step guide, then an e2e test of
+it) found and fixed three more truth gaps in the same lane:**
+1. `docs/FULL_LIFECYCLE_GUIDE.md` now exists — the owner's step-by-step from
+   sign-in to the MONITOR loop, every claim naming the page or test that
+   proves it.
+2. The Workflows page Notice and the launch control still said "no executor
+   is connected to the graph runner" — true when written, false since the
+   worker shipped. Both now describe the record+wake reality; the control's
+   button says **Launch**, and the server's `note` sentence stays the
+   authority (`graph-launch-control.test.tsx` pins the new wording).
+3. **A gate approval stranded the run**: `decide_node_gate` records the
+   decision but nothing woke the worker, so an approved ARCHITECTURE gate
+   waited for a manual Actions dispatch. The decide route now wakes the
+   worker best-effort on approvals (gate → graph → project → binding →
+   dispatch, all inside one try; `workerWoken` + truthful note in the
+   response; rejections wake nothing — the stage staying blocked IS the
+   outcome). `graph-gate-decision-route.test.ts` covers woken/unwakeable/
+   rejection.
+
+**Open in this lane:** the owner's live full_lifecycle drain is the remaining
+evidence for "all ten phases working" — dispatch `graph-worker.yml` after this
+merges, watch the MODEL stages run to the ARCHITECTURE HUMAN gate (the gate
+appearing IS the design), then the owner decides. Round 9's stage pages will
+show the run. Still open from round 6: owner-gated WebSearch for candidates.
+
+
+## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9)
 
 The owner's /goal: build all ten phases per the boards, from existing code.
 The audit found every phase had engine + population + page (rounds 5-8), and

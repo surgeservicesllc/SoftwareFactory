@@ -2,7 +2,29 @@
 
 Last updated: 2026-08-23
 
-## Newest (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
+## Newest (2026-08-23 ~23:00Z): the launch button wakes a worker that can run anchors (ADR-139)
+
+The owner launched `full_lifecycle` from the Workflows page and it sat
+PLANNED. Two fixes, both tested: `POST /api/graphs` now wakes the graph
+worker best-effort after creating the graph (`workerWoken` in the
+response, wake failure can never fail the launch), and the worker declares
+ANCHOR — `lib/worker/anchor-node-executor.ts` executes anchors as
+observations (TEST = CI's recorded check-run verdict for the checked-out
+commit; MONITOR = production HTTP probe of
+`SOFTWAREFACTORY_PRODUCTION_URL`; DEPLOY = policy refusal on the record,
+Phase 1 keeps deployment owner-approved). Workflow gains `checks: read`
+and the two instrument env vars. Next live step after merge: dispatch
+`graph-worker.yml`, watch the owner's planned lifecycle drain to the
+ARCHITECTURE HUMAN gate, and hand the decision to the owner — the gate
+appearing is the design succeeding. The owner then asked for a
+step-by-step guide plus an end-to-end test of it: `docs/
+FULL_LIFECYCLE_GUIDE.md` is the guide, and walking it surfaced three more
+gaps, all fixed — stale "no executor is connected" wording on the
+Workflows page and launch control, and gate approvals stranding the run
+(the decide route now wakes the worker best-effort on approvals, with
+`workerWoken` reported truthfully).
+
+## Earlier (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
 
 The owner directed that Step 9 must actually run the bot. The delivered
 answer keeps every boundary: a record-only Claude command now launches its

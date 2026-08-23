@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import { databaseErrorResponse, jsonNoStore, readBoundedJson } from "@/lib/server/http";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -68,7 +69,7 @@ export async function POST(
       );
     }
 
-    const { client } = await requireActiveOrganization();
+    const { activeOrganization, client } = await requireActiveOrganization();
 
     const { data, error } = await client.rpc("decide_node_gate", {
       p_gate_id: gateId,
@@ -81,6 +82,61 @@ export async function POST(
       | { id: string; state: string; stage: string; kind: string; reason: string | null }
       | null;
 
+    /*
+     * Best effort, approvals only: wake the worker so the approved stage's
+     * dependents actually continue. Without this an approval strands the run
+     * until the next scheduled or manual dispatch — the same "recorded, then
+     * silence" gap the launch route had. The wake sits in its own try, binding
+     * lookup included, so a wake that cannot happen never fails a decision the
+     * database already recorded; the note reports which world the caller is
+     * in. A rejection wakes nothing: the stage staying blocked IS the outcome.
+     */
+    let workerWoken = false;
+    if (parsed.data.approved) {
+      try {
+        const gateRead = await client
+          .from("graph_gates")
+          .select("graph_id")
+          .eq("id", gateId)
+          .single();
+        const graphId = (gateRead.data as { graph_id?: string } | null)?.graph_id;
+        const graphRead = graphId
+          ? await client.from("graphs").select("project_id").eq("id", graphId).single()
+          : null;
+        const projectId = (graphRead?.data as { project_id?: string } | null)?.project_id;
+        if (graphId && projectId) {
+          const target = await client
+            .rpc("resolve_phase1c_command_target", {
+              p_organization_id: activeOrganization.id,
+              p_project_id: projectId,
+            })
+            .single();
+          const targetRow = target.error
+            ? null
+            : (target.data as {
+                app_id: number;
+                external_installation_id: number;
+                external_repository_id: number;
+                repository_full_name: string;
+              } | null);
+          if (targetRow?.repository_full_name) {
+            await dispatchGraphWorker(
+              {
+                appId: targetRow.app_id,
+                externalInstallationId: targetRow.external_installation_id,
+                externalRepositoryId: targetRow.external_repository_id,
+                repositoryFullName: targetRow.repository_full_name,
+              },
+              graphId,
+            );
+            workerWoken = true;
+          }
+        }
+      } catch {
+        workerWoken = false;
+      }
+    }
+
     return jsonNoStore({
       gate: gate
         ? {
@@ -91,10 +147,13 @@ export async function POST(
             reason: gate.reason,
           }
         : null,
+      workerWoken,
       // Said plainly, because "approved" reads like "and now it is running".
       note: parsed.data.approved
-        ? "The gate is approved. The worker picks the graph up again on its next claim; "
-          + "nothing runs at the moment of approval."
+        ? workerWoken
+          ? "The gate is approved and the executor worker has been woken to continue the graph."
+          : "The gate is approved. Nothing runs at this moment; the worker continues the "
+            + "graph on its next scheduled or manual dispatch."
         : "The gate is rejected. The stage stays blocked and its dependents stay skipped.",
     });
   } catch (error) {

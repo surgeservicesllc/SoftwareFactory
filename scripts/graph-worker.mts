@@ -4,7 +4,7 @@ import { describeDrainOutcome } from "@/lib/graph/drain-report";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
-import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
+import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
 import { compileClaimedGraph, parseClaimedGraph, repositoryMismatch, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
@@ -101,32 +101,33 @@ async function main() {
       + `max parallelism ${compiled.graph.maxParallelism}): ${parsed.graph.goal}\n`,
     );
 
+    const repositoryFullName = process.env.GITHUB_REPOSITORY ?? "surgeservicesllc/SoftwareFactory";
     const executor = buildClaudeNodeExecutor(auth.resolution, {
       goal: parsed.graph.goal,
       projectName: "SoftwareFactory",
-      repositoryFullName: process.env.GITHUB_REPOSITORY ?? "surgeservicesllc/SoftwareFactory",
+      repositoryFullName,
       defaultBranch: "main",
       workingDirectory: process.cwd(),
+    });
+    // Observations, not actions: CI's verdict for this checked-out commit, a
+    // production health probe, and a policy refusal for deployment. The
+    // instruments come from the workflow environment; an absent one reads as
+    // Not Connected in the node's own record rather than as a guess.
+    const anchorExecutor = buildAnchorNodeExecutor({
+      repositoryFullName,
+      headSha: process.env.GITHUB_SHA ?? null,
+      gitHubToken: process.env.SOFTWAREFACTORY_CHECKS_TOKEN ?? null,
+      productionUrl: process.env.SOFTWAREFACTORY_PRODUCTION_URL ?? null,
     });
 
     const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt, inputs) => {
       // Dispatch by declared executor. A NONE-tier node never touches the
-      // model, and work this worker cannot honestly perform fails with the
-      // reason instead of being quietly routed to the CLI.
+      // model, and every executor this worker declares is one it honestly
+      // provides — WORKER_SUPPORTED_EXECUTORS is what the claim matched.
       const outcome = node.executor === "DETERMINISTIC"
         ? executeDeterministicNode(node, inputs)
         : node.executor === "ANCHOR"
-          ? {
-              status: "FAILED" as const,
-              retryable: false,
-              error:
-                `Anchor node ${node.nodeKey} needs real command execution (tests, probes), `
-                + "which the read-only analysis worker does not wire. Anchor evidence belongs "
-                + "to the Phase 1C workspace path. Reaching this means the claim was served "
-                + `by a database that predates executor matching (this worker declares `
-                + `${WORKER_SUPPORTED_EXECUTORS.join(", ")}); apply 20260819001000 and the `
-                + "graph will wait for a worker that can run it instead of spending a run.",
-            }
+          ? await anchorExecutor(node)
           : await executor(node, attempt, inputs);
       if (outcome.status === "FAILED") {
         // The database keeps the error on the node_run; the log keeps it
