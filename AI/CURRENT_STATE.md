@@ -57,6 +57,11 @@ and the DEPLOY anchor is refused by policy on the record because Phase 1
 keeps deployment owner-approved. Absent instruments read as Not Connected
 in the node's own record. Lifecycle graphs are therefore claimable;
 the live drain to the ARCHITECTURE HUMAN gate is the remaining evidence.
+The same round wired the gate-decision route to wake the worker on
+approvals (a recorded approval used to strand the run until a manual
+dispatch), retired the "no executor is connected" wording the Workflows
+page and launch control still carried, and added the owner's step-by-step
+`docs/FULL_LIFECYCLE_GUIDE.md`.
 
 ## 2026-08-23: one request can traverse all ten phases in one graph
 

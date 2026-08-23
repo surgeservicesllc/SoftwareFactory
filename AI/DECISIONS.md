@@ -1896,3 +1896,11 @@ Use this append-only log for decisions that constrain future implementation. Cha
   now uses an explicitly narrow worker, because the rule it pins - a
   worker never receives a graph it cannot finish - protects the queue
   from any future executor kind, not from ANCHOR specifically.
+- Amendment (same day): the guide-driven end-to-end walk found the same
+  "recorded, then silence" gap at gate decisions - an approved gate
+  stranded the run until the next manual dispatch. The decide route now
+  applies the identical best-effort wake on approvals only (a rejection
+  wakes nothing: the stage staying blocked is the outcome), reporting
+  `workerWoken` truthfully. The stale "no executor is connected" wording
+  on the Workflows page and launch control was retired at the same time,
+  and the owner's step-by-step guide lives at docs/FULL_LIFECYCLE_GUIDE.md.

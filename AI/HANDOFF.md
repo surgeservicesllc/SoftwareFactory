@@ -16,7 +16,13 @@ Phase 1 keeps deployment owner-approved). Workflow gains `checks: read`
 and the two instrument env vars. Next live step after merge: dispatch
 `graph-worker.yml`, watch the owner's planned lifecycle drain to the
 ARCHITECTURE HUMAN gate, and hand the decision to the owner — the gate
-appearing is the design succeeding.
+appearing is the design succeeding. The owner then asked for a
+step-by-step guide plus an end-to-end test of it: `docs/
+FULL_LIFECYCLE_GUIDE.md` is the guide, and walking it surfaced three more
+gaps, all fixed — stale "no executor is connected" wording on the
+Workflows page and launch control, and gate approvals stranding the run
+(the decide route now wakes the worker best-effort on approvals, with
+`workerWoken` reported truthfully).
 
 ## Earlier (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
 

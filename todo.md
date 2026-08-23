@@ -43,6 +43,25 @@ what that test pins); `analysis-launch.ts`'s doc comment updated (lifecycles
 stay out of the command→template table because a record-only command entitles
 analysis, not a build lifecycle — no longer because of ANCHOR).
 
+**The guide walk (owner asked for a step-by-step guide, then an e2e test of
+it) found and fixed three more truth gaps in the same lane:**
+1. `docs/FULL_LIFECYCLE_GUIDE.md` now exists — the owner's step-by-step from
+   sign-in to the MONITOR loop, every claim naming the page or test that
+   proves it.
+2. The Workflows page Notice and the launch control still said "no executor
+   is connected to the graph runner" — true when written, false since the
+   worker shipped. Both now describe the record+wake reality; the control's
+   button says **Launch**, and the server's `note` sentence stays the
+   authority (`graph-launch-control.test.tsx` pins the new wording).
+3. **A gate approval stranded the run**: `decide_node_gate` records the
+   decision but nothing woke the worker, so an approved ARCHITECTURE gate
+   waited for a manual Actions dispatch. The decide route now wakes the
+   worker best-effort on approvals (gate → graph → project → binding →
+   dispatch, all inside one try; `workerWoken` + truthful note in the
+   response; rejections wake nothing — the stage staying blocked IS the
+   outcome). `graph-gate-decision-route.test.ts` covers woken/unwakeable/
+   rejection.
+
 **Open in this lane:** the owner's live full_lifecycle drain is the remaining
 evidence for "all ten phases working" — dispatch `graph-worker.yml` after this
 merges, watch the MODEL stages run to the ARCHITECTURE HUMAN gate (the gate
