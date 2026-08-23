@@ -1,5 +1,69 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — DISCOVER/EVALUATE/DECIDE ARE REAL CAPABILITIES WITH TYPED PACKAGES (2026-08-23, round 6 — PICK UP HERE)
+
+Primary-bot round, from the owner's Step 2–5 boards + the GraphEngineering
+master prompt. ADR-136 said the three dormant stages needed "a capability that
+produces them, not an enum value" — this round built the capability, then grew
+the enum exactly as that ADR prescribed. ADR-137 records it.
+
+**What exists now:**
+
+* `lib/graph/stage-packages.ts` — typed, versioned contracts for the three
+  stage handoffs. Discovery candidates must declare how they are known
+  (`REPOSITORY` / `DEPENDENCY` / `MODEL_KNOWLEDGE`) and a recalled candidate
+  can never claim `VERIFIED_IN_REPO` (schema refinement, not prompt hope).
+  Popularity metrics are deliberately absent — the executor has no network,
+  and a stars count it cannot observe would be recalled and dressed as a
+  reading. Evaluation: fixed 100-point rubric (weights in
+  `EVALUATION_CRITERIA`), `weightedTotal()` computed from scores, never
+  trusted. Decision: all five paths (USE/CONNECT/ADAPT/FORK/BUILD) weighed
+  exactly once, chosen one must be among them — contract-enforced.
+* Capabilities `discovery`, `evaluation`, `decision` in NODE_CAPABILITIES,
+  with model tiers (STANDARD/STRONG/STRONG), task kind "plan", and
+  stageForCapability → DISCOVERY/EVALUATION/DECISION.
+* Template `open_source_scout` (INVESTIGATION, GREEN, 7 nodes): clarify →
+  {scan_internal, scan_dependencies, recall_ecosystem} in parallel →
+  consolidate (tolerant fan-in) → evaluate → decide (AUTOMATIC gate).
+  Launchable from the Templates page like any template; prose from any of its
+  package nodes is a contract violation that routes to retry, not downstream.
+* `SDLC_STAGES` is now **eleven**: DISCOVERY, EVALUATION, DECISION sit
+  between PRD and ARCHITECTURE. REJECTION_RETURNS_TO: DISCOVERY→PRD,
+  EVALUATION→DISCOVERY, DECISION→EVALUATION; ARCHITECTURE still returns to
+  PRD on purpose (every graph with ARCHITECTURE has a PRD; only some have a
+  DECISION).
+* Migrations `20260823000800` (enum growth, BEFORE 'ARCHITECTURE', add value
+  if not exists, uses nothing it adds) and `20260823000900` (capability→stage
+  map extension, zero rows qualify today). Two files because an enum value
+  cannot be *used* in the transaction that added it and the hosted scope runs
+  `psql -1` — same physics as clear-controls. Workflow scope
+  **`discovery-stages`** applies both as separate psql invocations,
+  sha-pinned (`f4bd0df5…` / `62468eef…`), one-shot, postflight asserts the
+  eleven labels in lifecycle order plus working casts.
+
+**For the presentation lane (rounds 4-5 bot):** `summariseRunStages` and any
+per-stage work built against SDLC_STAGES pick the three new stages up
+automatically; they are no longer the "permanently empty" stages ADR-136
+warned about — the scout populates them. Your round-5 rule "no stage the run
+never contained" already renders a scout run correctly.
+
+**Still open in this lane:**
+
+1. Hosted apply of `scope=discovery-stages` (if this round's session did not
+   dispatch it, dispatch after merge and verify the eleven-label readback).
+   Until applied, launching the scout on hosted fails at the stage cast.
+2. Live source lookups for discovery are an **owner-gated tool-surface
+   change** (the node executor is Read/Glob/Grep by design; WebSearch would
+   make ecosystem candidates verifiable). Until then the scout's ecosystem
+   scan is honestly labelled MODEL_KNOWLEDGE/UNVERIFIED.
+3. The scout's DECIDE hands an execution plan shaped for ARCHITECT; wiring a
+   combined scout→agentic_sdlc flow (one request through all stages, the
+   GraphEngineering one-request experience) is the natural round 6+. The
+   handoff contract exists; the graph-to-graph chaining does not.
+4. Tail pins now say `20260823000900_discovery_capability_stage_map.sql`
+   (21 files moved). The agreement test reads the union of 000700+000900.
+
+
 ## SIGN-IN NOW LANDS ON /decision, AND THE HEADER NAMES TWO PRODUCTS (2026-08-23, latest)
 
 Shipped and live: `main` `56641c13` (#365), ADR-135.
@@ -77,7 +141,7 @@ version order and dies on the earliest unrecorded file whose objects already
 exist. Each wants the measure-then-finish discipline the vault got: probe
 first, finish only what is missing, record the ledger row only once every
 declared object is present. Applying them blind is how this began.
-## GRAPH — A RUN NOW READS AS A LIFECYCLE, NOT JUST A NODE LIST (2026-08-23, round 5 — PICK UP HERE)
+## GRAPH — A RUN NOW READS AS A LIFECYCLE, NOT JUST A NODE LIST (2026-08-23, round 5)
 
 Three bots are on this repository. This round stayed inside the Graph lane
 (`lib/graph/*`, `components/graph-runs-panel.tsx`) — the other two were on

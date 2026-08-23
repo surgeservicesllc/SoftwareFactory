@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { defineNode, type NodeCapability, type NodeContract } from "@/lib/graph/contracts";
+import {
+  decisionPackageSchema,
+  discoveryPackageSchema,
+  evaluationPackageSchema,
+} from "@/lib/graph/stage-packages";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { DEFAULT_GRAPH_BUDGET, type GraphBudget } from "@/lib/graph/budgets";
 import type { GateKind, SdlcStage } from "@/lib/sdlc/lifecycle";
@@ -141,6 +146,17 @@ function schemaFor(node: TemplateNode): z.ZodTypeAny {
     case "synthesis":
     case "reporting":
       return reportSchema;
+    // The look-before-you-build stages hand typed packages forward, and the
+    // contract layer is what makes prose from them a violation rather than a
+    // style. A scan node and the consolidating fan-in share the discovery
+    // schema on purpose: the fan-in parses its inputs with the same contract
+    // that governs its own output.
+    case "discovery":
+      return discoveryPackageSchema;
+    case "evaluation":
+      return evaluationPackageSchema;
+    case "decision":
+      return decisionPackageSchema;
     default:
       return findingsSchema;
   }
@@ -240,6 +256,12 @@ export function stageForCapability(capability: NodeCapability): SdlcStage {
       return "ARCHITECTURE";
     case "planning":
       return "PRD";
+    case "discovery":
+      return "DISCOVERY";
+    case "evaluation":
+      return "EVALUATION";
+    case "decision":
+      return "DECISION";
     default:
       // review, security_review, extraction, synthesis, reporting.
       return "REVIEW";
@@ -679,6 +701,87 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       { from: "implement_tests", to: "integrate", reason: "DATA", detail: "Integration consumes the branch." },
       { from: "integrate", to: "verify", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Tests run against the integrated tree." },
       { from: "verify", to: "review", reason: "VERIFICATION", detail: "Review reads the verified result." },
+    ],
+  },
+  {
+    key: "open_source_scout",
+    name: "Open Source Scout",
+    summary:
+      "Look before you build: clarify the requirement into search areas, scan this repository, its installed dependencies and known ecosystem candidates in parallel, consolidate one shortlist, score it on a fixed rubric, then weigh USE, CONNECT, ADAPT, FORK and BUILD and choose. The first template whose nodes live in the DISCOVERY, EVALUATION and DECISION stages.",
+    category: "INVESTIGATION",
+    version: 1,
+    risk: "GREEN",
+    /*
+     * What a candidate can honestly be, given this executor: the node runs
+     * with Read/Glob/Grep and no network. So every candidate is labelled by
+     * how it is actually known — a repository path, a manifest entry, or the
+     * model's own knowledge — and popularity metrics are absent by contract
+     * rather than recalled and dressed up as readings. Live source lookups
+     * are an owner-gated tool-surface change, not a template edit.
+     */
+    nodes: [
+      {
+        nodeId: "clarify",
+        job: "Break the requirement into concrete search areas: what capability is wanted, what would satisfy it, and what constraints bound the answer. List the areas a scout should search.",
+        capability: "planning",
+        executor: "MODEL",
+        // Requirement work, in the goal document's own word for GOAL + PRD.
+        lifecycleStage: "PRD",
+      },
+      {
+        nodeId: "scan_internal",
+        job: "Search this repository for existing code that already serves the requirement: components, routes, library modules, database functions. Every candidate must cite the path you actually read as its evidence, with source REPOSITORY and verification VERIFIED_IN_REPO.",
+        capability: "discovery",
+        executor: "MODEL",
+        dependsOn: ["clarify"],
+      },
+      {
+        nodeId: "scan_dependencies",
+        job: "Read the dependency manifests (package.json and lockfile) for packages already installed that could serve the requirement. Every candidate must cite its manifest entry as evidence, with source DEPENDENCY and verification VERIFIED_IN_REPO.",
+        capability: "discovery",
+        executor: "MODEL",
+        dependsOn: ["clarify"],
+      },
+      {
+        nodeId: "recall_ecosystem",
+        job: "From your own knowledge, list open-source projects and packages that serve the requirement. You have no network access: mark every candidate source MODEL_KNOWLEDGE and verification UNVERIFIED, state no popularity numbers, and name what a live check must confirm before anything is built on the candidate.",
+        capability: "discovery",
+        executor: "MODEL",
+        dependsOn: ["clarify"],
+      },
+      {
+        nodeId: "consolidate",
+        job: "Merge the three scans into one shortlist: deduplicate, normalize names, keep at most ten candidates ranked by match score, and carry each candidate's source and verification labels through unchanged. State key findings and recommended next steps.",
+        capability: "discovery",
+        executor: "MODEL",
+        dependsOn: ["scan_internal", "scan_dependencies", "recall_ecosystem"],
+        toleratesPartialInputs: true,
+      },
+      {
+        nodeId: "evaluate",
+        job: "Score every shortlisted candidate 0-10 on each rubric category (license, security, maintenance, features, performance, documentation, community, integration, reliability, code quality), name red flags, rank them, and examine the top candidate's strengths and limitations. Where a candidate is UNVERIFIED, say which scores rest on recollection.",
+        capability: "evaluation",
+        executor: "MODEL",
+        dependsOn: ["consolidate"],
+      },
+      {
+        nodeId: "decide",
+        job: "Weigh all five paths - USE, CONNECT, ADAPT, FORK, BUILD - against the evaluation and the constraints. Choose one, record the rationale, the integration boundaries, the risks with mitigations, and an execution plan the architecture stage can start from.",
+        capability: "decision",
+        executor: "MODEL",
+        dependsOn: ["evaluate"],
+        gate: "AUTOMATIC",
+      },
+    ],
+    proposedEdges: [
+      { from: "clarify", to: "scan_internal", reason: "DATA", detail: "The search areas bound the repository scan." },
+      { from: "clarify", to: "scan_dependencies", reason: "DATA", detail: "The search areas bound the manifest scan." },
+      { from: "clarify", to: "recall_ecosystem", reason: "DATA", detail: "The search areas bound the recall." },
+      { from: "scan_internal", to: "consolidate", reason: "DATA", detail: "Consolidation merges the internal candidates." },
+      { from: "scan_dependencies", to: "consolidate", reason: "DATA", detail: "Consolidation merges the dependency candidates." },
+      { from: "recall_ecosystem", to: "consolidate", reason: "DATA", detail: "Consolidation merges the recalled candidates." },
+      { from: "consolidate", to: "evaluate", reason: "DATA", detail: "The rubric scores the consolidated shortlist." },
+      { from: "evaluate", to: "decide", reason: "DATA", detail: "The decision weighs the scored comparison." },
     ],
   },
   {

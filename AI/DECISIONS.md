@@ -1771,3 +1771,45 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: the three unmapped stages are the reason to decide rather than drift. Nothing in the system produces a node in them today: no template declares a discovery, evaluation or decision capability, and `NODE_CAPABILITIES` has no member that would resolve to one. Adding three enum values would create a vocabulary the database can express and nothing can populate — a stage filter that is permanently empty, and the "do not stop after creating scaffolding" rule broken in the same commit that claimed to satisfy the goal. The eight stages are not a smaller idea than the ten; they are the ones a node can actually be in. Discovery does exist in the engine (`lib/graph/discovery.ts`, the DISCOVERY_GRAPH the canary proved), and when a stored graph can add rounds mid-run — the limitation recorded on 2026-08-19 — a DISCOVERY stage will have something real to hold. That is when the enum should grow, and the migration is additive (`add value if not exists`) so waiting costs nothing.
 - Also: this settles what a per-stage page may claim. A page per stage is buildable against the eight; a page per goal-document stage is not, because three of them would read live-looking and always be empty. `/solutions/ai-factory` today is the setup journey — connect a repository, assign bots, issue a command — and is not the lifecycle; naming it as the lifecycle surface would be the same untruth in the navigation.
 - Consequence: the mapping is recorded here rather than in code, because code that nothing calls is the scaffolding this rejects. A future session building stage pages reads this ADR, builds the eight, and presents REQUIREMENT as GOAL and PRD together if the goal document's wording is wanted in the UI. If DISCOVER/EVALUATE/DECIDE are later wanted as first-class stages, the prerequisite is a capability that produces them, not an enum value.
+
+## ADR-137 - The lifecycle grows DISCOVERY, EVALUATION and DECISION, because capabilities now produce them
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: ADR-136 mapped the goal document's ten stages onto the database's
+  eight and refused to grow the enum, naming the precondition: "the
+  prerequisite is a capability that produces them, not an enum value." The
+  owner then supplied the design for exactly those stages - the Step 2-4
+  boards: an open-source scout that searches, dedupes and shortlists; an
+  evaluator that scores a fixed 100-point rubric; a decider that weighs
+  USE/CONNECT/ADAPT/FORK/BUILD - and asked for the graph to be built out.
+- Decision: meet the precondition, then grow. Three new node capabilities
+  (`discovery`, `evaluation`, `decision`) with typed, versioned output
+  contracts in `lib/graph/stage-packages.ts`; one template
+  (`open_source_scout`) whose seven nodes fan three parallel scans out of a
+  clarified requirement, consolidate a shortlist, score it, and decide; and
+  only then the additive migrations - 20260823000800 grows `sdlc_stage` by
+  the three values between PRD and ARCHITECTURE, 20260823000900 extends the
+  capability-to-stage derivation. Two files because PostgreSQL refuses to use
+  an enum value in the transaction that added it, and the hosted apply runs
+  each file under `psql -1` (the clear-controls precedent).
+- The honesty constraint that shaped the contracts: the node executor reads
+  with Read/Glob/Grep and has **no network**. So a discovery candidate must
+  declare how it is known - REPOSITORY, DEPENDENCY, or MODEL_KNOWLEDGE - a
+  recalled candidate can never claim VERIFIED_IN_REPO (schema refinement, not
+  prompt hope), and popularity metrics are absent from the schema entirely: a
+  stars count the executor cannot observe would be an invitation to recall
+  one and present it as a reading. Live source lookups are an owner-gated
+  tool-surface change, recorded in the backlog, not a template edit.
+- Consequences: SDLC_STAGES is eleven; the owner's ten-stage presentation
+  maps on with REQUIREMENT still covering GOAL+PRD and the other nine now one
+  to one. REJECTION_RETURNS_TO sends DISCOVERY back to PRD, EVALUATION to
+  DISCOVERY, DECISION to EVALUATION; ARCHITECTURE deliberately still returns
+  to PRD, because every graph with an ARCHITECTURE stage has a PRD and only
+  some have a DECISION. The evaluation rubric's weights are fixed in code
+  (100 points, ten categories) so runs stay comparable; the weighted total is
+  computed from the scores rather than trusted from the model. A decision
+  package must weigh all five paths exactly once and choose one of them -
+  enforced by the contract layer, so prose or a skipped path routes into a
+  retry instead of downstream. The per-stage pages the other session's lane
+  is building against SDLC_STAGES will pick the three up automatically.

@@ -869,3 +869,22 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] The sidebar keeps its own `AI Factory` entry, which points at the guided
   journey (`/solutions/ai-factory`) rather than the console root. If the owner
   wants that renamed too, it is a one-line change plus its nav contract test.
+
+## Graph round 5: DISCOVER/EVALUATE/DECIDE capabilities (2026-08-23, owner goal, ADR-137)
+
+- [x] Typed stage packages (`lib/graph/stage-packages.ts`): discovery
+  candidates labelled by how they are known, a recalled candidate can never
+  claim repository verification, popularity metrics absent by schema; fixed
+  100-point evaluation rubric with the weighted total computed, not trusted;
+  decisions must weigh all five paths exactly once.
+- [x] Capabilities `discovery`/`evaluation`/`decision` + template
+  `open_source_scout` (clarify → three parallel scans → consolidate →
+  evaluate → decide), every package node contract-enforced.
+- [x] `SDLC_STAGES` grown to eleven; migrations 20260823000800/000900 replay
+  green in PGlite; workflow scope `discovery-stages` sha-pinned and one-shot.
+- [ ] Apply `scope=discovery-stages` on hosted and verify the eleven-label
+  readback. Until then a hosted scout launch fails at the stage cast.
+- [ ] Owner-gated: WebSearch/WebFetch on discovery nodes would make ecosystem
+  candidates live-verifiable; today they are honestly MODEL_KNOWLEDGE.
+- [ ] Round 6+: scout→agentic_sdlc chaining (the one-request experience);
+  the DECIDE package is shaped for the ARCHITECT handoff already.
