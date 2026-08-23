@@ -13,15 +13,15 @@ import { summariseRunStages } from "@/lib/graph/stage-summary";
  * The lifecycle, across every run.
  *
  * `/solutions/ai-factory` is the *setup journey* — connect a repository,
- * assign bots, issue a command. This is the different question: of the eight
- * stages a graph moves through, where does the work actually stand, and which
- * stage do runs keep dying at?
+ * assign bots, issue a command. This is the different question: of the stages
+ * a graph moves through, where does the work actually stand, and which stage
+ * do runs keep dying at?
  *
- * Eight stages, not the ten in the goal document. Three of those ten —
- * DISCOVER, EVALUATE, DECIDE — have nothing that produces them: no capability
- * resolves to one, so a page for each would read live and be permanently
- * empty (ADR-136). Presenting eight that hold work beats ten where three are
- * scaffolding.
+ * The stage list comes from `SDLC_LIFECYCLE` rather than being written out
+ * here, so it cannot fall behind the vocabulary. It held eight until DISCOVERY,
+ * EVALUATION and DECISION became real capabilities with producers — the exact
+ * condition ADR-136 named before the enum was allowed to grow — and these
+ * pages picked all three up without a line changing.
  *
  * Every figure comes from `/api/graphs/runs`, the same read the runs panel
  * uses, so this page cannot disagree with the run it links to.
@@ -86,7 +86,7 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
     <div className="space-y-6">
       <PageHeader
         title="Lifecycle"
-        description="The eight stages a graph moves through, across every run in this workspace."
+        description="Every stage a graph moves through, across every run in this workspace."
       />
 
       {portfolio.runsConsidered === 0 ? (

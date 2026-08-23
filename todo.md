@@ -1,5 +1,69 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — DISCOVER/EVALUATE/DECIDE ARE REAL CAPABILITIES WITH TYPED PACKAGES (2026-08-23, round 6 — PICK UP HERE)
+
+Primary-bot round, from the owner's Step 2–5 boards + the GraphEngineering
+master prompt. ADR-136 said the three dormant stages needed "a capability that
+produces them, not an enum value" — this round built the capability, then grew
+the enum exactly as that ADR prescribed. ADR-137 records it.
+
+**What exists now:**
+
+* `lib/graph/stage-packages.ts` — typed, versioned contracts for the three
+  stage handoffs. Discovery candidates must declare how they are known
+  (`REPOSITORY` / `DEPENDENCY` / `MODEL_KNOWLEDGE`) and a recalled candidate
+  can never claim `VERIFIED_IN_REPO` (schema refinement, not prompt hope).
+  Popularity metrics are deliberately absent — the executor has no network,
+  and a stars count it cannot observe would be recalled and dressed as a
+  reading. Evaluation: fixed 100-point rubric (weights in
+  `EVALUATION_CRITERIA`), `weightedTotal()` computed from scores, never
+  trusted. Decision: all five paths (USE/CONNECT/ADAPT/FORK/BUILD) weighed
+  exactly once, chosen one must be among them — contract-enforced.
+* Capabilities `discovery`, `evaluation`, `decision` in NODE_CAPABILITIES,
+  with model tiers (STANDARD/STRONG/STRONG), task kind "plan", and
+  stageForCapability → DISCOVERY/EVALUATION/DECISION.
+* Template `open_source_scout` (INVESTIGATION, GREEN, 7 nodes): clarify →
+  {scan_internal, scan_dependencies, recall_ecosystem} in parallel →
+  consolidate (tolerant fan-in) → evaluate → decide (AUTOMATIC gate).
+  Launchable from the Templates page like any template; prose from any of its
+  package nodes is a contract violation that routes to retry, not downstream.
+* `SDLC_STAGES` is now **eleven**: DISCOVERY, EVALUATION, DECISION sit
+  between PRD and ARCHITECTURE. REJECTION_RETURNS_TO: DISCOVERY→PRD,
+  EVALUATION→DISCOVERY, DECISION→EVALUATION; ARCHITECTURE still returns to
+  PRD on purpose (every graph with ARCHITECTURE has a PRD; only some have a
+  DECISION).
+* Migrations `20260823000800` (enum growth, BEFORE 'ARCHITECTURE', add value
+  if not exists, uses nothing it adds) and `20260823000900` (capability→stage
+  map extension, zero rows qualify today). Two files because an enum value
+  cannot be *used* in the transaction that added it and the hosted scope runs
+  `psql -1` — same physics as clear-controls. Workflow scope
+  **`discovery-stages`** applies both as separate psql invocations,
+  sha-pinned (`f4bd0df5…` / `62468eef…`), one-shot, postflight asserts the
+  eleven labels in lifecycle order plus working casts.
+
+**For the presentation lane (rounds 4-5 bot):** `summariseRunStages` and any
+per-stage work built against SDLC_STAGES pick the three new stages up
+automatically; they are no longer the "permanently empty" stages ADR-136
+warned about — the scout populates them. Your round-5 rule "no stage the run
+never contained" already renders a scout run correctly.
+
+**Still open in this lane:**
+
+1. Hosted apply of `scope=discovery-stages` (if this round's session did not
+   dispatch it, dispatch after merge and verify the eleven-label readback).
+   Until applied, launching the scout on hosted fails at the stage cast.
+2. Live source lookups for discovery are an **owner-gated tool-surface
+   change** (the node executor is Read/Glob/Grep by design; WebSearch would
+   make ecosystem candidates verifiable). Until then the scout's ecosystem
+   scan is honestly labelled MODEL_KNOWLEDGE/UNVERIFIED.
+3. The scout's DECIDE hands an execution plan shaped for ARCHITECT; wiring a
+   combined scout→agentic_sdlc flow (one request through all stages, the
+   GraphEngineering one-request experience) is the natural round 6+. The
+   handoff contract exists; the graph-to-graph chaining does not.
+4. Tail pins now say `20260823000900_discovery_capability_stage_map.sql`
+   (21 files moved). The agreement test reads the union of 000700+000900.
+
+
 ## SIGN-IN NOW LANDS ON /decision, AND THE HEADER NAMES TWO PRODUCTS (2026-08-23, latest)
 
 Shipped and live: `main` `56641c13` (#365), ADR-135.
@@ -77,72 +141,6 @@ version order and dies on the earliest unrecorded file whose objects already
 exist. Each wants the measure-then-finish discipline the vault got: probe
 first, finish only what is missing, record the ledger row only once every
 declared object is present. Applying them blind is how this began.
-## GRAPH — THE LIFECYCLE HAS A SURFACE, AND A DUPLICATE WAS COLLAPSED (2026-08-23, round 6 — PICK UP HERE)
-
-**Read round 5 below first — it landed while this was in flight, and this
-round adopted its work rather than competing with it.**
-
-We both built a per-run stage rollup. Round 5's `lib/graph/stage-summary.ts`
-(`summariseRunStages`) reached main first; mine (`lib/sdlc/run-summary.ts` plus
-a `StageRail`) did not. **I deleted mine.** Two groupings of the same rows are
-two answers to one question, and they would have disagreed eventually. The
-per-run rail on the runs panel is round 5's, untouched.
-
-What survives from this round is the part that was genuinely new:
-
-- `lib/sdlc/portfolio.ts` — `buildStagePortfolio(runs)`, built **on top of**
-  `summariseRunStages` rather than beside it: the eight stages across every
-  run, with runs touched, runs failed here, failure rate, node counts, latest
-  error, and the weakest stage overall.
-- `/solutions/lifecycle` — the eight across all runs, each linking to its page.
-- `/solutions/lifecycle/[stage]` — one stage: capability, gate kind, whether an
-  anchor is required, what it follows and hands off to, and every run that
-  reached it.
-- **Lifecycle** as a top-level navigation entry, deliberately beside **AI
-  Factory** rather than inside it. AI Factory is the *setup journey*; Lifecycle
-  is where the work stands. Round 4 warned against conflating them.
-
-**One place the two rules differ, on purpose.** Round 5 omits stages a run
-never contained — "DEPLOYMENT 0/0" on an audit graph invents a stage that graph
-was never going to enter, and that is right for a single run. The portfolio
-lists all eight, because across many runs "nothing has ever reached DEPLOYMENT"
-*is* the finding. Same primitive, different question.
-
-**Other decisions worth not re-litigating**
-
-- A stage that never ran reports a `null` failure rate, not 0%.
-- An unstaged run is excluded from every denominator rather than counted clean;
-  its count is surfaced instead.
-- `/solutions/lifecycle/discover` 404s — the slug is validated against
-  `SDLC_STAGES`, so a stage named in the goal document but absent from the enum
-  cannot render as a real stage nobody reached. ADR-136 enforced at the route.
-
-**Next bot, in the Graph lane — in priority order:**
-
-1. **Stages still have no elapsed-time truth.** Nothing presents node latency
-   as a stage duration, and nothing should until `started_at`/`finished_at`
-   exist per stage. That is a small additive migration and would make "how long
-   does ARCHITECTURE take?" answerable for the first time.
-2. **Artifacts are on no stage page.** `graph_artifacts` exists and the brief's
-   stage template asks for them. I left the slot empty rather than rendering a
-   list that is empty on every stage — verify what those rows hold for a real
-   run first.
-3. **No stage page shows dependencies or graph shape.** `graph_edges` holds
-   them; this is the brief's "execution graph / parallel activity" and is
-   genuinely unbuilt.
-4. Still open: the two silent Run analysis taps that left no row.
-5. Still open, not Graph: 19 migration versions unrecorded on hosted.
-
-**Coordination note — this round collided and it cost a rebuild.** Round 5 and
-I both wrote a per-run stage rollup, in different files, at the same time.
-Before starting in this lane, read the newest Graph section *and* run
-`git fetch origin main && git log --oneline -20` — a section written an hour
-ago can already be behind. Round 6 finally touched: `lib/sdlc/portfolio.ts`,
-`components/graph/lifecycle-console.tsx`, the two `/solutions/lifecycle`
-routes, one navigation entry, one `next.config.ts` redirect, and test/harness
-registration. Items 1-3 are independent of those except the stage detail page,
-which 2 and 3 both extend.
-
 ## GRAPH — A RUN NOW READS AS A LIFECYCLE, NOT JUST A NODE LIST (2026-08-23, round 5)
 
 Three bots are on this repository. This round stayed inside the Graph lane

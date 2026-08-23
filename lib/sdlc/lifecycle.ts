@@ -6,8 +6,19 @@ import type { NodeCapability } from "@/lib/graph/contracts";
  * A graph could always be run. What it could not do is say *where in a software
  * lifecycle* a node sits, and so it could not hold one stage until the next was
  * allowed to begin. This module is that missing vocabulary, and it is
- * deliberately small: eight stages, the order they run in, the capability each
+ * deliberately small: the stages, the order they run in, the capability each
  * one needs, and the gate that guards it.
+ *
+ * Eleven stages, not eight, since 2026-08-23. DISCOVERY, EVALUATION and
+ * DECISION sit between the requirement and the architecture — look before you
+ * build — and they were deliberately withheld until something could produce
+ * them (ADR-136: "the prerequisite is a capability that produces them, not an
+ * enum value"). The `discovery`, `evaluation` and `decision` capabilities and
+ * the `open_source_scout` template are that something, so the enum grows
+ * exactly as that ADR said it should: additively, with the database migration
+ * using `add value if not exists`. The owner's ten-stage presentation maps on
+ * unchanged — REQUIREMENT is still GOAL + PRD, and the other nine are now one
+ * to one.
  *
  * Everything here is data. No stage calls a provider, opens a connection, or
  * reads a clock — which is what lets the whole lifecycle be tested without a
@@ -17,6 +28,9 @@ import type { NodeCapability } from "@/lib/graph/contracts";
 export const SDLC_STAGES = [
   "GOAL",
   "PRD",
+  "DISCOVERY",
+  "EVALUATION",
+  "DECISION",
   "ARCHITECTURE",
   "IMPLEMENTATION",
   "REVIEW",
@@ -68,6 +82,27 @@ export const SDLC_LIFECYCLE: readonly StageDefinition[] = Object.freeze([
     stage: "PRD",
     produces: "A product requirements document: scope, non-goals, and the behaviour each criterion implies.",
     capability: "planning",
+    gate: "AUTOMATIC",
+    requiresAnchor: false,
+  },
+  {
+    stage: "DISCOVERY",
+    produces: "What already exists that could serve: internal code, installed dependencies, and known ecosystem candidates — each labelled with how it is actually known.",
+    capability: "discovery",
+    gate: null,
+    requiresAnchor: false,
+  },
+  {
+    stage: "EVALUATION",
+    produces: "Every surviving candidate scored on one fixed rubric, ranked, with the top candidate examined and the red flags named.",
+    capability: "evaluation",
+    gate: null,
+    requiresAnchor: false,
+  },
+  {
+    stage: "DECISION",
+    produces: "USE, CONNECT, ADAPT, FORK or BUILD — all five weighed, one chosen, with the rationale, boundaries and execution plan recorded.",
+    capability: "decision",
     gate: "AUTOMATIC",
     requiresAnchor: false,
   },
@@ -155,6 +190,16 @@ export function isFeedbackTransition(from: SdlcStage, to: SdlcStage): boolean {
 export const REJECTION_RETURNS_TO: Readonly<Record<SdlcStage, SdlcStage>> = Object.freeze({
   GOAL: "GOAL",
   PRD: "GOAL",
+  // A rejected discovery means the requirement did not say what to look for;
+  // a rejected evaluation means the candidates were wrong, not the scores;
+  // a rejected decision means the comparison it rests on was not trusted.
+  DISCOVERY: "PRD",
+  EVALUATION: "DISCOVERY",
+  DECISION: "EVALUATION",
+  // Deliberately still PRD, not DECISION: every graph with an ARCHITECTURE
+  // stage has a PRD upstream of it, and only some have a DECISION. A return
+  // target that exists in every graph beats a truer-sounding one that may
+  // not.
   ARCHITECTURE: "PRD",
   IMPLEMENTATION: "ARCHITECTURE",
   REVIEW: "IMPLEMENTATION",

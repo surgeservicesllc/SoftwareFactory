@@ -22,9 +22,12 @@ function run(id: string, nodes: Array<Record<string, unknown>>): SummarisableRun
 }
 
 describe("buildStagePortfolio", () => {
-  it("names all eight stages even with no runs at all", () => {
+  it("names every defined stage even with no runs at all", () => {
     const portfolio = buildStagePortfolio([]);
+    // Derived from the vocabulary, so a stage added to it — as DISCOVERY,
+    // EVALUATION and DECISION were — appears here without editing this test.
     expect(portfolio.entries.map((entry) => entry.stage)).toEqual([...SDLC_STAGES]);
+    expect(portfolio.entries.length).toBe(SDLC_STAGES.length);
     expect(portfolio.runsConsidered).toBe(0);
     expect(portfolio.weakestStage).toBeNull();
   });

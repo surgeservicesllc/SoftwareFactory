@@ -34,6 +34,11 @@ export const CAPABILITY_TASK_KIND: Readonly<Record<NodeCapability, ProviderTaskK
     qa: "qa_assessment",
     synthesis: "status_report",
     reporting: "status_report",
+    // All three are analysis with structured output — the same provider
+    // demands "plan" already makes. Nothing about them proposes or writes.
+    discovery: "plan",
+    evaluation: "plan",
+    decision: "plan",
   });
 
 export function taskKindForNode(node: CompiledNode): ProviderTaskKind {

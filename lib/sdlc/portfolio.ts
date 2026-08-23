@@ -2,7 +2,7 @@ import { SDLC_LIFECYCLE, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
 
 /**
- * The eight stages across every run, rather than within one.
+ * Every lifecycle stage across every run, rather than within one.
  *
  * `summariseRunStages` answers "how far through the lifecycle did *this* run
  * get?" — and deliberately omits stages a run never contained, because
@@ -10,9 +10,11 @@ import { summariseRunStages } from "@/lib/graph/stage-summary";
  * going to enter. This answers the different question a person asks after the
  * third failure: "which stage do runs keep dying at?"
  *
- * Here the full eight *are* listed, and that is not a contradiction of the
- * rule above. Across a portfolio, "no run has ever reached DEPLOYMENT" is
- * itself the finding; within one run it would have been noise.
+ * Here every stage *is* listed, and that is not a contradiction of the rule
+ * above. Across a portfolio, "no run has ever reached DEPLOYMENT" is itself
+ * the finding; within one run it would have been noise. The set comes from
+ * `SDLC_LIFECYCLE`, so a stage added to the vocabulary — as DISCOVERY,
+ * EVALUATION and DECISION were — appears here with no change.
  *
  * Built on `summariseRunStages` rather than beside it. A second grouping of
  * the same rows would be a second answer to the same question, and the two

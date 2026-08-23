@@ -9,7 +9,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260823000700_backfill_graph_node_lifecycle_stage.sql";
+const latestMigration = "20260823000900_discovery_capability_stage_map.sql";
+/*
+ * Two different files on purpose. `latestMigration` pins the replay chain's
+ * tail; `backfillMigration` is the one this suite re-runs against seeded
+ * rows. They were one constant until the chain grew past the backfill —
+ * at which point the suite silently re-ran the wrong file, whose postflight
+ * (rightly) refused the stage-less rows the suite had just seeded.
+ */
+const backfillMigration = "20260823000700_backfill_graph_node_lifecycle_stage.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000009a1";
 const organizationId = "10000000-0000-4000-8000-0000000009a1";
@@ -56,7 +64,7 @@ describe("graph node lifecycle backfill", () => {
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }
-    backfill = await readFile(resolve(migrationsDirectory, latestMigration), "utf8");
+    backfill = await readFile(resolve(migrationsDirectory, backfillMigration), "utf8");
 
     await db.exec(`
       insert into auth.users (id) values ('${ownerId}');
