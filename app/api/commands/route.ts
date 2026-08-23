@@ -86,6 +86,18 @@ const replayCommandParametersSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
+/**
+ * The stored binding fields a replay needs to wake the graph worker. Parsed
+ * separately and tolerantly: a binding that predates these fields skips the
+ * wake (the scheduled or manual worker still drains the graph) rather than
+ * failing the replay.
+ */
+const replayDispatchBindingSchema = z.object({
+  appId: z.number().int().positive(),
+  externalInstallationId: z.number().int().positive(),
+  externalRepositoryId: z.number().int().positive(),
+}).passthrough();
+
 const replayRoutingSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   command: z.object({
@@ -343,18 +355,73 @@ export async function POST(request: Request) {
           );
         }
 
+        // A replayed record-only Claude command is entitled to the same one
+        // analysis graph a fresh submit launches; the database function is
+        // idempotent, so replaying a command whose graph already exists
+        // returns that graph instead of a second launch. This is also how a
+        // command recorded before the launch feature existed gains its run:
+        // the owner replays it once.
+        let replayAnalysisGraph:
+          | { launched: true; graphId: string; templateKey: string; workerWoken: boolean }
+          | { launched: false; reason: string }
+          | null = null;
+        if (
+          replayExecutionMode === "record_only"
+          && snapshot.assignment.provider === "anthropic"
+          && !replay.requires_owner_approval
+        ) {
+          const outcome = await launchCommandAnalysisGraph(supabase, {
+            organizationId: activeOrganization.id,
+            projectId: parsed.data.projectId,
+            commandId: replay.command_id,
+            commandType: parsed.data.commandType,
+          });
+          if (outcome.launched) {
+            let workerWoken = false;
+            const dispatchBinding = replayDispatchBindingSchema.safeParse(parameters.repositoryBinding);
+            if (dispatchBinding.success && replay.repository_full_name) {
+              try {
+                await dispatchGraphWorker(
+                  {
+                    appId: dispatchBinding.data.appId,
+                    externalInstallationId: dispatchBinding.data.externalInstallationId,
+                    externalRepositoryId: dispatchBinding.data.externalRepositoryId,
+                    repositoryFullName: replay.repository_full_name,
+                  },
+                  outcome.graphId,
+                );
+                workerWoken = true;
+              } catch {
+                // The graph stays planned for the scheduled or manual worker.
+                workerWoken = false;
+              }
+            }
+            replayAnalysisGraph = {
+              launched: true,
+              graphId: outcome.graphId,
+              templateKey: outcome.templateKey,
+              workerWoken,
+            };
+          } else {
+            replayAnalysisGraph = outcome;
+          }
+        }
+
         return jsonNoStore(
           {
             command: { id: replay.command_id, status: replay.command_state },
             task: { id: replay.task_id, status: replay.task_state },
             execution: {
-              started: false,
+              started: replayAnalysisGraph?.launched === true,
               message: replay.requires_owner_approval
                 ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
-                : replayExecutionMode === "record_only"
-                  ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
-                : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
+                : replayAnalysisGraph?.launched
+                  ? "Recorded, and its analysis graph is planned. The subscription worker executes read-only analysis; no repository write, merge, or deploy can result."
+                  : replayExecutionMode === "record_only"
+                    ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
+                    : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
               workerDispatch: "not_applicable",
+              analysisGraph: replayAnalysisGraph,
             },
             orchestration: {
               acceptanceCriteria,
