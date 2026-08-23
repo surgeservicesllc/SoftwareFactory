@@ -50,6 +50,10 @@ const ROUTES = [
   "/solutions/runs",
   "/solutions/settings",
   "/solutions/workflows",
+  // The lifecycle index and one stage: the detail page is dynamic, and the
+  // contract matches a dynamic route by its static prefix.
+  "/solutions/lifecycle",
+  "/solutions/lifecycle/implementation",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",

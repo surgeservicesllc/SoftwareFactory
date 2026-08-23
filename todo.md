@@ -47,7 +47,67 @@ structure rather than pixel-matched. The console *sidebar* still says
 `AI Factory` — that is a different destination (`/solutions/ai-factory`, the
 guided journey) from the header entry that was renamed.
 
-## GRAPH — THE STAGE DATA HAS ITS FIRST READER (2026-08-23, round 5 — PICK UP HERE)
+## GRAPH — THE LIFECYCLE HAS A SURFACE, AND STAGES HAVE PAGES (2026-08-23, round 6 — PICK UP HERE)
+
+Round 5's item 1 (per-stage pages) and item 2 (cross-run view) are both done.
+They turned out to be one piece of work: a stage page and a "which stage do
+runs die at" view are the same aggregate read two ways.
+
+**What exists now**
+
+- `lib/sdlc/portfolio.ts` — `buildStagePortfolio(runs)` folds every run's
+  `summariseRunByStage` into the eight stages: runs touched, runs failed here,
+  failure rate, node counts, latest error, and the weakest stage overall.
+- `/solutions/lifecycle` — the eight, across every run, each linking to its own
+  page.
+- `/solutions/lifecycle/[stage]` — one stage: its definition (capability, gate
+  kind, whether an anchor is required), its figures, what it follows and hands
+  off to, and every run that reached it.
+- **Lifecycle** is now a top-level navigation entry, deliberately separate from
+  **AI Factory**. AI Factory is the *setup journey*; Lifecycle is where the work
+  stands. Round 4 warned against conflating them and that warning is honoured.
+
+**Decisions worth not re-litigating**
+
+- **A stage that never ran reports `null` failure rate, not 0%.** "Never ran"
+  and "never failed" are different facts; showing both as zero hides one.
+- **An unstaged run is excluded from every denominator**, not counted as a
+  clean run. A pre-stage-rule run would otherwise drag every rate down while
+  contributing nothing actionable. The count is surfaced instead.
+- **`/solutions/lifecycle/discover` 404s.** The slug is validated against
+  `SDLC_STAGES`, so a stage named in the goal document but absent from the enum
+  does not render as a real stage nobody has reached. This is ADR-136 enforced
+  at the route.
+- Still eight, not ten. Unchanged.
+
+**Next bot, in the Graph lane — in priority order:**
+
+1. **Stages still have no elapsed-time truth.** Carried over from round 5 and
+   still the most misleading gap: the rail sums node *execution* latency, which
+   is not wall-clock time in a stage. Nothing presents it as a duration, and
+   nothing should until `started_at`/`finished_at` exist per stage. Adding
+   those two columns is a small additive migration and would make "how long
+   does ARCHITECTURE take?" answerable for the first time.
+2. **Artifacts are not on any stage page.** `graph_artifacts` exists and the
+   brief's stage template asks for "artifacts generated". The stage detail page
+   has the obvious slot for it; I did not add it because I have not verified
+   what the artifact rows actually contain for a real run, and a section that
+   renders an empty list on every stage would be scaffolding.
+3. **No stage page shows dependencies or the graph shape.** `graph_edges` holds
+   them. This is the brief's "execution graph / dependencies / parallel
+   activity" and it is genuinely unbuilt.
+4. Still open, unchanged: the two silent Run analysis taps that left no row.
+5. Still open, not Graph: 19 migration versions unrecorded on hosted.
+
+**Coordination note.** Rounds 5 and 6 touched: `lib/sdlc/run-summary.ts`,
+`lib/sdlc/portfolio.ts`, `components/graph/` (stage-rail, lifecycle-console),
+three lines of `components/graph-runs-panel.tsx`, one navigation entry in
+`components/app-shell.tsx`, the two new routes, and test/harness registration.
+Items 1-3 above are each independent of those files except the stage detail
+page, which items 2 and 3 both extend — if two bots take those, agree who owns
+that file first.
+
+## GRAPH — THE STAGE DATA HAS ITS FIRST READER (2026-08-23, round 5)
 
 **Round 4's item 2 is done.** Its own words were "nothing yet reads the stage
 except one table column… the cheapest next thing that consumes the data rather

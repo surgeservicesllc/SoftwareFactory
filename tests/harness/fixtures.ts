@@ -600,6 +600,69 @@ export const JOB_SEEKER_OUTREACH = [
   },
 ];
 
+/**
+ * Graph runs with staged nodes, in the states the lifecycle distinguishes:
+ * complete, failed with a message, and one waiting on a person. A fixture
+ * where every run looked the same would measure one card repeated.
+ */
+export const GRAPH_RUNS_STAGED = [
+  {
+    graphRunId: "run-1",
+    graphId: "graph-1",
+    goal: "Add per-account usage evidence to the Bot Manager",
+    topology: "DIAMOND",
+    riskLevel: "GREEN",
+    state: "RUNNING",
+    nodes: [
+      { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
+        provider: "anthropic", model: "claude-opus-5", latency_ms: 4200,
+        error_message: null, lifecycle_stage: "GOAL" },
+      { node_key: "prd", executor: "claude", capability: "planning", state: "SUCCEEDED",
+        provider: "anthropic", model: "claude-opus-5", latency_ms: 9100,
+        error_message: null, lifecycle_stage: "PRD" },
+      { node_key: "arch", executor: "claude", capability: "architecture", state: "VERIFYING",
+        provider: "anthropic", model: "claude-opus-5", latency_ms: 15200,
+        error_message: null, lifecycle_stage: "ARCHITECTURE",
+        gate_kind: "HUMAN", gate_id: "gate-1", gate_state: "OPEN", gate_anchor_count: 0 },
+    ],
+  },
+  {
+    graphRunId: "run-2",
+    graphId: "graph-2",
+    goal: "Repair the flaky deployment smoke test",
+    topology: "DAG",
+    riskLevel: "YELLOW",
+    state: "FAILED",
+    nodes: [
+      { node_key: "goal", executor: "codex", capability: "planning", state: "SUCCEEDED",
+        provider: "openai", model: "gpt-5.3-codex", latency_ms: 3100,
+        error_message: null, lifecycle_stage: "GOAL" },
+      { node_key: "impl", executor: "codex", capability: "implementation", state: "SUCCEEDED",
+        provider: "openai", model: "gpt-5.3-codex", latency_ms: 42800,
+        error_message: null, lifecycle_stage: "IMPLEMENTATION" },
+      { node_key: "test", executor: "codex", capability: "qa", state: "FAILED",
+        provider: "openai", model: "gpt-5.3-codex", latency_ms: 18400,
+        error_message: "smoke test timed out after 120s", lifecycle_stage: "TEST" },
+    ],
+  },
+  {
+    graphRunId: "run-3",
+    graphId: "graph-3",
+    goal: "Document the connection registry",
+    topology: "SEQUENTIAL",
+    riskLevel: "GREEN",
+    state: "COMPLETED",
+    nodes: [
+      { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
+        provider: "anthropic", model: "claude-sonnet-5", latency_ms: 2600,
+        error_message: null, lifecycle_stage: "GOAL" },
+      { node_key: "review", executor: "claude", capability: "review", state: "SUCCEEDED",
+        provider: "anthropic", model: "claude-sonnet-5", latency_ms: 7300,
+        error_message: null, lifecycle_stage: "REVIEW" },
+    ],
+  },
+];
+
 export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   key: template.key,
   name: template.name,

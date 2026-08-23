@@ -1,3 +1,4 @@
+import { LifecycleConsole } from "@/components/graph/lifecycle-console";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -68,6 +69,7 @@ import {
   COMMANDS,
   CONNECTIONS,
   CUSTOM_PIPELINE_TEMPLATES,
+  GRAPH_RUNS_STAGED,
   JOB_SEEKER_CONTACTS,
   JOB_SEEKER_DOCUMENTS,
   JOB_SEEKER_JOBS,
@@ -178,7 +180,7 @@ function serveFixtures() {
     if (url.includes("/api/pipeline-templates")) {
       return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
     }
-    if (url.includes("/api/graphs/runs")) return json({ runs: [] });
+    if (url.includes("/api/graphs/runs")) return json({ runs: GRAPH_RUNS_STAGED });
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
     if (url.includes("/api/job-seeker/jobs")) return json({ jobs: JOB_SEEKER_JOBS });
     if (url.includes("/api/job-seeker/documents")) return json({ documents: JOB_SEEKER_DOCUMENTS });
@@ -389,6 +391,12 @@ const CASES: Record<string, () => React.ReactElement> = {
   ),
   "job-seeker-contacts": () => <InShell><JobSeekerContactsPanel /></InShell>,
   "job-seeker-interviews": () => <InShell><JobSeekerInterviewsPanel /></InShell>,
+  /*
+   * The lifecycle across runs, and one stage of it. Both render tables and an
+   * eight-card grid that has to survive a phone.
+   */
+  lifecycle: () => <InShell><LifecycleConsole /></InShell>,
+  "lifecycle-stage": () => <InShell><LifecycleConsole stage="IMPLEMENTATION" /></InShell>,
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

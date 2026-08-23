@@ -33,6 +33,13 @@ describe("AppShell navigation", () => {
       // Job Seeker was removed by owner instruction (2026-08-23): it is a
       // different product, not a console destination, and it is still reached
       // from the top-level product switcher. Its absence here is asserted.
+      //
+      // Lifecycle is the Agentic SDLC across every run — deliberately its own
+      // destination rather than a subpage of AI Factory. AI Factory is the
+      // *setup journey* (connect a repository, assign bots, issue a command);
+      // Lifecycle is where the work stands. Naming either one the other would
+      // be an untruth in the navigation, so they sit side by side.
+      "Lifecycle",
       "Runs",
       "Operations",
       "Reports",

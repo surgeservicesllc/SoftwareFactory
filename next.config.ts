@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
       "bot-usage",
       "connections",
       "files",
+      "lifecycle",
       "myprojects",
       "operations",
       "pipelines",
