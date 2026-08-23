@@ -288,6 +288,40 @@ describe("PipelinesConsole", () => {
     )).toBeInTheDocument();
   });
 
+  it("never tells a record-only pipeline it is waiting for a worker", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [
+      // What the owner actually saw on 2026-08-23: a record-only command
+      // queued for hours, told it was waiting for a worker that by design
+      // never comes. The Bots page stopped saying this in ADR-128; this page
+      // kept saying it because it dropped executionMode.
+      command("c1", "queued", { executionMode: "record_only", analysisGraph: null }),
+      command("c2", "queued", {
+        executionMode: "record_only",
+        analysisGraph: {
+          graphId: "g2",
+          runState: "COMPLETED",
+          startedAt: "2026-08-23T13:42:37.000Z",
+          completedAt: "2026-08-23T13:48:30.000Z",
+          artifactCount: 7,
+          requiresOwnerApproval: false,
+        },
+      }),
+    ] })));
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    expect(screen.queryByText(/waiting for a worker/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no repository-writing worker is dispatched by design/i)).toBeInTheDocument();
+    expect(screen.getByText(/finished its analysis — 7 artifacts recorded/i)).toBeInTheDocument();
+    // Its evidence is a graph run, so the link goes to Graph runs, not Runs.
+    expect(screen.getByRole("link", { name: "Watch it on Graph runs" })).toHaveAttribute(
+      "href",
+      "/solutions/pipelines?view=graphs",
+    );
+  });
+
   it("ticks and unticks every visible row from the header checkbox", async () => {
     searchParams.mockReturnValue(new URLSearchParams("view=all"));
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [
