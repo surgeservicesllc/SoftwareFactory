@@ -619,9 +619,18 @@ test("retracting the sidebar gives its width back to the content", async ({ page
     "the column narrowed but the content kept its old left padding",
   ).toBeGreaterThan(wideContent + 100);
 
-  // Every destination survives the narrowing, by accessible name.
+  /*
+   * Every destination survives the narrowing, by accessible name.
+   *
+   * The retracted rail carries the five *primary* destinations and nothing
+   * else: a group's subpages sit behind a chevron the rail deliberately does
+   * not render, because a submenu there would have nowhere to open but over the
+   * content. So this list is the five, not a sample of the whole column — and
+   * the labels go to `sr-only` rather than being dropped, which is why an
+   * accessible-name query is what proves they survived.
+   */
   const rail = page.getByRole("navigation", { name: /console/i });
-  for (const label of ["Overview", "Projects", "Pipelines", "Bots", "Settings"]) {
+  for (const label of ["Overview", "Projects", "AI Factory", "Operations", "System"]) {
     await expect(rail.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
 

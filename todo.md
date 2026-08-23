@@ -139,6 +139,124 @@ intake says so in the route's own words, and
 
 ### Gate status
 
+Run [32647149027](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32647149027)
+on `0cade7e`, uninterrupted:
+
+| Job | Result |
+|---|---|
+| Lint, typecheck, test, and build | **success** — the full vitest suite and the production build |
+| Browser and accessibility 3/3 (mobile) | **success** |
+| Browser and accessibility 1/3 (desktop) | failure — one test |
+| Browser and accessibility 2/3 (tablet) | failure — the same one test |
+
+685–686 browser tests passed per shard; the single failure in both was
+`component-layout.spec.ts › retracting the sidebar gives its width back to the
+content`, whose list of destinations surviving the narrowing still named
+`Pipelines` and `Bots`. The retracted rail carries the five *primary*
+destinations and nothing else — a group's subpages sit behind a chevron the
+rail deliberately does not render — so the list was stale, not the rail.
+
+That is the same class as the `console.spec.ts` reachability list, and it is
+worth naming: **the navigation is restated in three places** and each has to
+move together. `tests/unit/app-shell.test.tsx` (jsdom, the whole column),
+`tests/e2e/console.spec.ts` (browser, every label after opening every group)
+and `tests/e2e/component-layout.spec.ts` (browser, the retracted rail's five).
+Restating them is deliberate — deriving from `SDLC_LIFECYCLE` would let a
+rename pass on both sides at once — so the cost is remembering all three.
+
+An earlier local run reported 33 failures across 9 files. That run is not
+trustworthy: files were edited while it was collecting, which is a mistake made
+three times in this work. The clean count is the CI one above. Run the suite in
+a pinned `git worktree` if you need to keep editing; treat the tree as frozen
+otherwise.
+
+Two prior CI runs (32646092842, 32646947385) were **cancelled by the next push
+rather than failing**. Pushing three times in a row left the branch with no
+completed run for a while; let a run finish before pushing again.
+
+### Wired since, and what is left
+
+`lib/graph/backoff.ts` and `20260823000300_structured_stage_handoffs.sql` are
+now called by something.
+
+**Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
+behind a fifth optional options argument (`sleep`/`backoff`/`random`) so tests
+pin the schedule instead of sleeping through it. It is deliberately *not* in
+`lib/graph/runner.ts`: that module is free of I/O by design, and a wait inside
+the scheduling round would make independent work queue behind a retry. Each
+retry also records its own `RUNNING` transition naming the delay, because a node
+deliberately pausing and a node that has hung are otherwise indistinguishable
+from outside.
+
+**Stage handoffs** are written for every edge that *leaves* a stage. An edge
+between two nodes of one stage is internal plumbing — DISCOVER's shortlist
+reducing its three observers — and recording those would bury the boundary that
+matters. `contract_valid` is decided at the handoff against the sending stage's
+package schema and stored, never recomputed. A payload that does not satisfy the
+schema is recorded as invalid *with its reasons* rather than skipped: with no
+provider connected, nothing satisfies these schemas yet, and "this stage handed
+the next one something it cannot read" is the finding — an omission would say
+nothing happened.
+
+`tests/unit/graph-run-backoff-handoff.test.ts` covers both (11 cases), including
+that the default clock is a real one, so a caller injecting nothing still waits.
+
+**The orchestrator is consulted now.** `decideNextAction` runs when a claimed
+run closes; its verdict goes into the run's closing sentence and onto
+`GraphRunSummary.orchestration`. Anchors are counted per node as outputs arrive,
+because `anchorsFor` needs the output and it is gone by the end.
+
+It deliberately does not *act*. `advance_graph_iteration` is granted to
+`authenticated` and to nobody else — the worker holds `service_role` — so an
+ITERATE decision is reported and a member performs it. Letting a background job
+iterate a graph on its own authority is a widening of what a worker may do, and
+belongs in a reviewed change rather than beside this one.
+
+**Still open:**
+
+1. **Conditional branches remain a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
+   row 6). `graph_edges` carries a reason, never a condition, and nothing
+   evaluates one at run time. This needs a schema column plus compiler and
+   scheduler work; it is the largest remaining item and was not started.
+2. **`20260823000300` needs a hosted scope of its own** in
+   `.github/workflows/apply-hosted-migrations.yml`, after the two below.
+3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
+   still reports none.
+4. **No project view links to a run** (row 24).
+
+### Hosted apply — two scopes, in this order
+
+`.github/workflows/apply-hosted-migrations.yml`:
+
+1. `scope=lifecycle` (20260821000100 + 20260821000200) — **still unhosted**.
+2. `scope=ten-stage-lifecycle` (20260823000200) — new, and it must run *after*
+   the above. It is the only scope in that workflow that DROPS a type in
+   production; the file guards itself and returns early if the enum already
+   holds `REQUIREMENT`.
+
+**The order is load-bearing and now tested.** `20260821000200` drops and
+recreates `list_graph_runs` with its own narrower return type, so replaying
+`scope=lifecycle` silently reverts the widened projection and every consumer of
+`depends_on` reads undefined. `tests/integration/hosted-scope-replay.behavior.test.ts`
+records this as a property, not a hope. `scope=probe` gained three rows for the
+widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a label
+that exists in both vocabularies, so the lifecycle rows keep answering the
+question they are actually about.
+
+`20260823000300` (handoffs) is wired now and needs a scope of its own. It is
+additive — two guarded indexes and one `create or replace function` with its
+grants restated — so it carries none of the type-drop risk the scope above has.
+
+### What this repository still will not claim
+
+**No node has executed against a provider.** Outbound execution is off and no
+credential is configured. Launching plans a graph; it does not run one. The
+intake says so in the route's own words, and
+`tests/unit/factory-intake.test.tsx` asserts that wording stays — do not
+"improve" it into "your run has started".
+
+### Gate status
+
 Lint and typecheck clean. CI run 32646092842 on `267856f` found **seven files
 failing**, all of them contracts that new surfaces have to be registered with
 rather than defects in the surfaces, and all seven are fixed:
@@ -156,13 +274,8 @@ rather than defects in the surfaces, and all seven are fixed:
 `pages.spec.ts` also gained all ten stage pages plus `/solutions/artifacts`, so
 each is checked for its heading, viewport width and axe violations.
 
-**Still not run to completion at this point: a clean full `vitest` pass and a
-production build.** One earlier local full-suite run reported 33 failures across
-9 files; that run is not trustworthy — files were edited while it was
-collecting, which is a mistake made three times in this work now. Run the suite
-in a pinned `git worktree` if you need to keep editing, and treat the tree as
-frozen otherwise. Expect the migration-name pins in `tests/integration/*` to
-need moving the moment another migration lands.
+Expect the migration-name pins in `tests/integration/*` to need moving the
+moment another migration lands.
 
 
 ## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)
