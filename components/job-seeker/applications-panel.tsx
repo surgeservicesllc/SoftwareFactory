@@ -34,13 +34,128 @@ function nextStages(stage: string, approved: boolean): string[] {
   return forward.slice(0, 2);
 }
 
+type KeywordFinding = {
+  term: string;
+  status: "covered" | "synonym_only" | "missing_have_it" | "missing_gap";
+  origin: "profile" | "posting";
+};
+
+type DocumentVerification = {
+  parseability: { id: string; label: string; passed: boolean; detail: string }[];
+  keywords: KeywordFinding[];
+  grounding: { claim: string; detail: string }[];
+  clean: boolean;
+};
+
 type DocumentView = {
   id: string;
   kind: string;
   version: number;
   content: string;
   createdAt: string;
+  /** Null when the profile or job could not be read — not a pass. */
+  verification: DocumentVerification | null;
 };
+
+const KEYWORD_LABEL: Record<KeywordFinding["status"], string> = {
+  covered: "Covered",
+  synonym_only: "Synonym only",
+  // The two that a person acts on, worded so the difference is the action:
+  // one belongs in the resume, the other belongs in the cover letter.
+  missing_have_it: "You have it — the document does not say so",
+  missing_gap: "Not recorded on your profile",
+};
+
+/**
+ * One document version's verification, rendered so the actionable findings
+ * lead. A gap is shown as a gap and never as a to-do for the resume: the
+ * whole point of the check is that nothing gets added to a document to make
+ * a table look better.
+ */
+function VerificationReport({ verification }: { verification: DocumentVerification | null }) {
+  if (!verification) {
+    return (
+      <p className="mt-2 text-xs text-[var(--text-faint)]">
+        This version could not be verified: your profile or the posting could not be read.
+      </p>
+    );
+  }
+
+  const failed = verification.parseability.filter((check) => !check.passed);
+  const actionable = verification.keywords.filter((finding) => finding.status === "missing_have_it");
+  const gaps = verification.keywords.filter((finding) => finding.status === "missing_gap");
+  const covered = verification.keywords.filter((finding) => finding.status === "covered");
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-[var(--border)] pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase text-[var(--text-faint)]">Verification</span>
+        {verification.clean ? (
+          <StatusBadge tone="safe">Checks passed</StatusBadge>
+        ) : (
+          <StatusBadge tone="warning">Needs attention</StatusBadge>
+        )}
+      </div>
+
+      {verification.grounding.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">Claims with no recorded source</p>
+          <ul className="mt-1 space-y-1">
+            {verification.grounding.map((finding) => (
+              <li key={finding.claim} className="text-xs text-[var(--text-muted)]">
+                <span className="font-mono">{finding.claim}</span> — {finding.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {failed.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">What a parser cannot read</p>
+          <ul className="mt-1 space-y-1">
+            {failed.map((check) => (
+              <li key={check.id} className="text-xs text-[var(--text-muted)]">
+                {check.label}: {check.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {actionable.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">
+            {KEYWORD_LABEL.missing_have_it}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {actionable.map((finding) => finding.term).join(", ")}
+          </p>
+        </div>
+      ) : null}
+
+      {gaps.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">Asked for, not recorded</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {gaps.map((finding) => finding.term).join(", ")}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">
+            These stay out of the document. Acknowledge them honestly in the cover letter
+            instead — adding a term you have not recorded is the one thing this check exists
+            to prevent.
+          </p>
+        </div>
+      ) : null}
+
+      {covered.length > 0 ? (
+        <p className="text-xs text-[var(--text-faint)]">
+          Covered: {covered.map((finding) => finding.term).join(", ")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 const DETAIL_FIELD_CLASS =
   "w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]";
@@ -358,13 +473,16 @@ export function JobSeekerApplicationsPanel() {
                               <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-[var(--text)]">
                                 {document.content}
                               </pre>
+                              <VerificationReport verification={document.verification} />
                             </div>
                           ))
                         )}
                         <p className="text-xs text-[var(--text-faint)]">
                           Generated from your recorded career profile only — a term you have
                           not recorded never appears, whatever the posting asks for. Every
-                          version is stored immutably.
+                          version is stored immutably, and each one is verified against the
+                          profile and the posting every time it is read, so what you see
+                          describes the version in front of you.
                         </p>
                       </div>
                     </details>

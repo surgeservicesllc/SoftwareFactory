@@ -282,8 +282,30 @@ describe("JobSeekerApplicationsPanel", () => {
         stage = "READY_FOR_REVIEW";
         return jsonResponse({
           documents: [
-            { id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z" },
-            { id: "d2", kind: "cover_letter", version: 1, content: "Dear Acme hiring team,", createdAt: "2026-08-20T01:00:00.000Z" },
+            {
+              id: "d1", kind: "resume", version: 1,
+              content: "SUMMARY\nPlatform engineer.",
+              createdAt: "2026-08-20T01:00:00.000Z",
+              verification: {
+                parseability: [
+                  { id: "email_literal", label: "Email address is literal text", passed: false, detail: "No email is recorded on your profile, so a parser has no way to contact you." },
+                  { id: "text_present", label: "The document has text", passed: true, detail: "26 characters." },
+                ],
+                keywords: [
+                  { term: "Postgres", status: "missing_have_it", origin: "profile" },
+                  { term: "CRM", status: "missing_gap", origin: "posting" },
+                  { term: "TypeScript", status: "covered", origin: "profile" },
+                ],
+                grounding: [{ claim: "94%", detail: "This figure appears in the document but is not recorded on your profile." }],
+                clean: false,
+              },
+            },
+            {
+              id: "d2", kind: "cover_letter", version: 1,
+              content: "Dear Acme hiring team,",
+              createdAt: "2026-08-20T01:00:00.000Z",
+              verification: { parseability: [], keywords: [], grounding: [], clean: true },
+            },
           ],
         }, 201);
       }
@@ -304,5 +326,83 @@ describe("JobSeekerApplicationsPanel", () => {
     expect(await screen.findByText(/resume · v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Dear Acme hiring team/)).toBeInTheDocument();
     expect(screen.getByText(/a term you have\s+not recorded never appears/i)).toBeInTheDocument();
+  });
+
+  it("shows each version's verification, with the actionable findings named", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents") {
+        return jsonResponse({
+          documents: [{
+            id: "d1", kind: "resume", version: 2,
+            content: "SUMMARY\nPlatform engineer.",
+            createdAt: "2026-08-20T01:00:00.000Z",
+            verification: {
+              parseability: [
+                { id: "email_literal", label: "Email address is literal text", passed: false, detail: "No email is recorded on your profile." },
+              ],
+              keywords: [
+                { term: "Postgres", status: "missing_have_it", origin: "profile" },
+                { term: "CRM", status: "missing_gap", origin: "posting" },
+                { term: "TypeScript", status: "covered", origin: "profile" },
+              ],
+              grounding: [{ claim: "94%", detail: "This figure appears in the document but is not recorded on your profile." }],
+              clean: false,
+            },
+          }],
+        });
+      }
+      if (url === "/api/job-seeker/jobs") {
+        return jsonResponse({ jobs: [{
+          ...SCORED_JOB,
+          application: { id: "a2", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review", applicationUrl: null, notes: null, followUpAt: null },
+        }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+
+    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+    // An ungrounded figure is the most serious finding and is named outright.
+    expect(screen.getByText(/Claims with no recorded source/)).toBeInTheDocument();
+    expect(screen.getByText("94%")).toBeInTheDocument();
+    // A recorded skill the document omits is the one thing to go fix.
+    expect(screen.getByText(/You have it — the document does not say so/)).toBeInTheDocument();
+    expect(screen.getByText("Postgres")).toBeInTheDocument();
+    // A gap is shown as a gap, with the instruction NOT to add it.
+    expect(screen.getByText(/Asked for, not recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/Acknowledge them honestly in the cover letter/)).toBeInTheDocument();
+    expect(screen.getByText(/What a parser cannot read/)).toBeInTheDocument();
+  });
+
+  it("says a version could not be verified rather than showing it as passing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents") {
+        // The route answers null when the profile or job could not be read.
+        return jsonResponse({
+          documents: [{
+            id: "d1", kind: "resume", version: 1,
+            content: "SUMMARY", createdAt: "2026-08-20T01:00:00.000Z",
+            verification: null,
+          }],
+        });
+      }
+      if (url === "/api/job-seeker/jobs") {
+        return jsonResponse({ jobs: [{
+          ...SCORED_JOB,
+          application: { id: "a2", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review", applicationUrl: null, notes: null, followUpAt: null },
+        }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+
+    expect(await screen.findByText(/could not be verified/i)).toBeInTheDocument();
+    expect(screen.queryByText("Checks passed")).not.toBeInTheDocument();
   });
 });
