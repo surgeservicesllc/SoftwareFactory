@@ -1814,3 +1814,103 @@ Use this append-only log for decisions that constrain future implementation. Cha
   enforced by the contract layer, so prose or a skipped path routes into a
   retry instead of downstream. The per-stage pages the other session's lane
   is building against SDLC_STAGES will pick the three up automatically.
+
+## ADR-138 - The job-seeker portal donor is a capability donor, not a dependency
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: The owner directed that `MadsLorentzen/ai-job-search` (MIT) be built
+  into the Job Seeker product end to end. That repository is a Claude Code
+  framework — skills, slash commands, Bun CLIs, LaTeX templates — that runs a
+  job search from one person's machine against local files. This product is a
+  hosted, multi-tenant web application with Supabase as its system of record.
+  Nothing in it can be vendored and run as-is.
+- Decision: treat it as a reference implementation and capability donor.
+  Capabilities are ported into this stack's own shapes; the MIT licence and an
+  itemised record of what was adapted live in `THIRD_PARTY_NOTICES.md`. Where
+  this repository already had the stronger implementation — deterministic
+  scoring with the weights enforced by a database CHECK, RLS-scoped ownership,
+  immutable document versions — that implementation was kept and the upstream
+  design merged into it rather than over it.
+- The one capability deliberately NOT ported: the `linkedin-search` skill,
+  which reads LinkedIn's guest endpoints with no credential. Its own SKILL.md
+  scopes that to personal use under LinkedIn's terms. That is a defensible
+  posture for a tool on one person's machine and not one to take on users'
+  behalf from a hosted product, so the LinkedIn entry in the import registry
+  stays credential-gated with no fetch implementation — which is what makes it
+  incapable of reading anything until a real API credential exists.
+- Consequences: no upstream file is vendored, so upstream changes do not
+  arrive automatically. `THIRD_PARTY_NOTICES.md` names each adapted piece so a
+  later reader can find what it came from.
+
+## ADR-139 - Search and board reads are different questions, so they are different adapters
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: `listImportAdapters` answered "what is this company hiring for" —
+  Greenhouse and Lever, keyed by a company identifier. A job search starts from
+  the other question, "who is hiring for this", and that takes a query, not an
+  identifier.
+- Decision: a second registry, `listSearchAdapters`, with a `searchPostings`
+  signature that takes a `JobSearchQuery`. Both return the same
+  `FetchedPostings`, so everything downstream — scoring, dedupe, recording,
+  attribution, the credential scan — is one code path and a searched posting
+  is the same kind of record as an imported one. `/api/job-seeker/search` is a
+  separate route from `/api/job-seeker/import` for the same reason: folding a
+  query into a field named `identifier` would make the schema lie about what it
+  accepts. The registry route answers with two lists rather than one filtered
+  by `mode`, so a page cannot render a search adapter with an identifier box by
+  forgetting a filter.
+- The location fields are two — a city and an ISO alpha-2 country — rather than
+  one free-text box, because the provider filters on each separately. One box
+  would mean guessing which a person meant, and a wrong guess returns real
+  postings from the wrong place: an answer that looks right and is not. A
+  country that is not an alpha-2 code is dropped rather than sent.
+- `lib/job-seeker/portals/contract.ts` holds the shared shapes so the adapters
+  and the registry do not import each other; the cycle would otherwise put a
+  module-level constant in its own temporal dead zone.
+- Consequences: adding a portal is a file in `portals/` and a registry entry.
+  freehire is first because its API is public, keyless, documented, and global.
+
+## ADR-140 - Deterministic verification is computed, a model's critique is stored
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: The donor's `/apply` runs a drafter, then an independent reviewer
+  with fresh context, then a revision, then an ATS and keyword verification
+  pass. Bringing that here raised one question twice: what gets persisted.
+- Decision: split by whether the answer can be recomputed.
+  - **Verification** (keyword coverage, parseability, factual grounding) is a
+    pure function of a document and a profile that are both already stored, so
+    it is computed on every read and stored nowhere. A stored copy would go
+    stale the moment either changed, and a stale "verified" badge is worse than
+    no badge. Null is returned when the profile or job cannot be read: "we
+    could not check this" and "this checks out" are different answers.
+  - **A model's critique** cannot be recomputed, so `job_seeker_document_reviews`
+    keeps it. `status` is `reviewed` or `unavailable` and a CHECK ties
+    `reviewed` to a non-null model — a deployment with no provider configured
+    cannot store a row claiming an independent review happened.
+- A revision writes a NEW document version, never an edit of the reviewed one.
+  `job_seeker_documents` is already append-only by trigger, so "which version
+  did they actually send" stays answerable.
+- The safety property that makes a model revision acceptable at all: the
+  reviewer's instruction not to fabricate is a prompt, and prompts are
+  advisory. `applyReviewEdits` re-auditing every proposed edit against the
+  recorded profile is the enforcement. An edit that raises the grounding-audit
+  count is refused and counted, whatever reason the reviewer gave.
+- Two judgments the deterministic pass refuses rather than guesses:
+  - **Synonymy.** Deciding that "orchestration" covers a posting's "Kubernetes"
+    is semantic. The status exists in the type for the model reviewer; the
+    mechanical pass never emits it.
+  - **The posting as a source.** A posting grounds a cover letter's quoted
+    figures and nothing else. The live posting captured as a fixture states
+    "300% net revenue retention"; without that split, a resume claiming the
+    candidate grew revenue 300% would audit as grounded on the strength of a
+    number about someone else.
+- A gap stays a gap. The UI names an unmet requirement and says not to add it,
+  because keyword stuffing is the exact failure the audit exists to prevent.
+- Consequences: the keyword extractor is a heuristic and is labelled as one. It
+  is measured against a real posting rather than a tidy fixture, because noise
+  is its only real risk — prose capitalisation, roman numerals in a
+  certification, and a YC batch code all extract as plausible requirements and
+  none of them is one.

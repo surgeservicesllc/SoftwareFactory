@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
+import { Card, EmptyState, NotConnectedBadge, SectionTitle, StatusBadge } from "@/components/ui";
 import type { JobView } from "@/components/job-seeker/jobs-panel";
 
 /**
@@ -55,6 +55,102 @@ type DocumentView = {
   createdAt: string;
   /** Null when the profile or job could not be read — not a pass. */
   verification: DocumentVerification | null;
+};
+
+/**
+ * What an independent reviewer said, and what happened to it.
+ *
+ * The rejected list is shown, not hidden. A reviewer that proposed a claim
+ * the profile does not support is worth seeing: it is the audit doing its
+ * job, and burying it would leave a person believing every suggestion was
+ * taken.
+ */
+function ReviewReport({ review }: { review: ReviewResult }) {
+  if (review.status === "unavailable") {
+    return (
+      <div className="mt-2 space-y-1 border-t border-[var(--border)] pt-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase text-[var(--text-faint)]">
+            Independent review
+          </span>
+          <NotConnectedBadge />
+        </div>
+        <p className="text-xs text-[var(--text-muted)]">{review.detail}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-[var(--border)] pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase text-[var(--text-faint)]">
+          Independent review
+        </span>
+        <StatusBadge tone="info">{review.detail}</StatusBadge>
+      </div>
+
+      {review.newVersion !== null ? (
+        <p className="text-xs text-[var(--text-muted)]">
+          {review.applied.length} edit{review.applied.length === 1 ? "" : "s"} applied as
+          version {review.newVersion}. The version reviewed is unchanged.
+        </p>
+      ) : null}
+
+      {review.rejected.length > 0 ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">
+            Refused ({review.rejected.length})
+          </p>
+          <ul className="mt-1 space-y-1">
+            {review.rejected.map((entry) => (
+              <li key={entry.edit.find} className="text-xs text-[var(--text-muted)]">
+                <span className="font-mono">{entry.edit.replace || "(deletion)"}</span> — {entry.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {review.edits.length > 0 && review.newVersion === null ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--text)]">
+            Proposed ({review.edits.length})
+          </p>
+          <ul className="mt-1 space-y-1">
+            {review.edits.map((edit) => (
+              <li key={edit.find} className="text-xs text-[var(--text-muted)]">
+                {edit.reason}: <span className="font-mono">{edit.replace || "(deletion)"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {review.narrative.length > 0 ? (
+        <ul className="space-y-1">
+          {review.narrative.map((note) => (
+            <li key={note.category} className="text-xs text-[var(--text-muted)]">
+              <span className="font-medium text-[var(--text)]">{note.category}:</span> {note.note}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+type ReviewEdit = { find: string; replace: string; reason: string };
+
+type ReviewResult = {
+  id: string;
+  status: "reviewed" | "unavailable";
+  model: string | null;
+  detail: string;
+  edits: ReviewEdit[];
+  narrative: { category: string; note: string }[];
+  applied: ReviewEdit[];
+  rejected: { edit: ReviewEdit; reason: string }[];
+  newVersion: number | null;
 };
 
 const KEYWORD_LABEL: Record<KeywordFinding["status"], string> = {
@@ -242,6 +338,8 @@ export function JobSeekerApplicationsPanel() {
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [documentsByApplication, setDocumentsByApplication] = useState<Record<string, DocumentView[]>>({});
+  const [reviewsByDocument, setReviewsByDocument] = useState<Record<string, ReviewResult>>({});
+  const [reviewBusy, setReviewBusy] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -270,6 +368,40 @@ export function JobSeekerApplicationsPanel() {
       setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? [] }));
     } catch {
       /* The viewer simply stays closed; the next click retries. */
+    }
+  }
+
+  /**
+   * Ask for an independent review, and optionally take it.
+   *
+   * `apply` is a deliberate second click, not an automatic step. A revision
+   * writes a new document version, and a person deciding to accept a critique
+   * is a different act from asking what a critique would say.
+   */
+  async function review(applicationId: string, documentId: string, apply: boolean) {
+    setReviewBusy(documentId);
+    setProblem("");
+    try {
+      const response = await fetch(
+        `/api/job-seeker/applications/${applicationId}/documents/${documentId}/review`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apply }),
+        },
+      );
+      const body = (await response.json()) as { review?: ReviewResult; error?: { message?: string } };
+      if (!response.ok || !body.review) {
+        setProblem(body.error?.message ?? "The review could not be completed.");
+        return;
+      }
+      setReviewsByDocument((current) => ({ ...current, [documentId]: body.review as ReviewResult }));
+      // A revision is a new version, so the list is stale the moment one lands.
+      if (body.review.newVersion !== null) await loadDocuments(applicationId);
+    } catch {
+      setProblem("The review could not be completed.");
+    } finally {
+      setReviewBusy("");
     }
   }
 
@@ -474,6 +606,31 @@ export function JobSeekerApplicationsPanel() {
                                 {document.content}
                               </pre>
                               <VerificationReport verification={document.verification} />
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={reviewBusy !== ""}
+                                  onClick={() => void review(application.id, document.id, false)}
+                                >
+                                  {reviewBusy === document.id ? "Reviewing…" : "Get an independent review"}
+                                </button>
+                                {reviewsByDocument[document.id]?.status === "reviewed"
+                                  && reviewsByDocument[document.id].edits.length > 0
+                                  && reviewsByDocument[document.id].newVersion === null ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-primary"
+                                      disabled={reviewBusy !== ""}
+                                      onClick={() => void review(application.id, document.id, true)}
+                                    >
+                                      Apply as a new version
+                                    </button>
+                                  ) : null}
+                              </div>
+                              {reviewsByDocument[document.id] ? (
+                                <ReviewReport review={reviewsByDocument[document.id]} />
+                              ) : null}
                             </div>
                           ))
                         )}

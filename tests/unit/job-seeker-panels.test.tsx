@@ -328,6 +328,21 @@ describe("JobSeekerApplicationsPanel", () => {
     expect(screen.getByText(/a term you have\s+not recorded never appears/i)).toBeInTheDocument();
   });
 
+  const DOCUMENT = {
+    id: "d1", kind: "resume", version: 1,
+    content: "SUMMARY\nPlatform engineer.",
+    createdAt: "2026-08-20T01:00:00.000Z",
+    verification: { parseability: [], keywords: [], grounding: [], clean: true },
+  };
+
+  const READY_JOB = {
+    ...SCORED_JOB,
+    application: {
+      id: "a2", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review",
+      applicationUrl: null, notes: null, followUpAt: null,
+    },
+  };
+
   it("shows each version's verification, with the actionable findings named", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -375,6 +390,106 @@ describe("JobSeekerApplicationsPanel", () => {
     expect(screen.getByText(/Asked for, not recorded/)).toBeInTheDocument();
     expect(screen.getByText(/Acknowledge them honestly in the cover letter/)).toBeInTheDocument();
     expect(screen.getByText(/What a parser cannot read/)).toBeInTheDocument();
+  });
+
+  it("reports an unavailable review as unavailable, never as nothing to improve", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents/d1/review" && init?.method === "POST") {
+        return jsonResponse({
+          review: {
+            id: "r1", status: "unavailable", model: null,
+            detail: "No model provider is configured on this server, so no independent review ran.",
+            edits: [], narrative: [], applied: [], rejected: [], newVersion: null,
+          },
+        }, 201);
+      }
+      if (url === "/api/job-seeker/applications/a2/documents") {
+        return jsonResponse({ documents: [DOCUMENT] });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [READY_JOB] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    fireEvent.click(await screen.findByRole("button", { name: /get an independent review/i }));
+
+    expect(await screen.findByText(/no independent review ran/i)).toBeInTheDocument();
+    // There is nothing to apply, so the control must not be offered.
+    expect(screen.queryByRole("button", { name: /apply as a new version/i })).not.toBeInTheDocument();
+  });
+
+  it("offers to apply a review only once a model has actually proposed something", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents/d1/review" && init?.method === "POST") {
+        return jsonResponse({
+          review: {
+            id: "r1", status: "reviewed", model: "claude-test-model",
+            detail: "Reviewed by claude-test-model.",
+            edits: [{ find: "Platform engineer.", replace: "Platform engineer who owns public APIs.", reason: "the posting's own words" }],
+            narrative: [{ category: "tone", note: "The opening hedges." }],
+            applied: [], rejected: [], newVersion: null,
+          },
+        }, 201);
+      }
+      if (url === "/api/job-seeker/applications/a2/documents") {
+        return jsonResponse({ documents: [DOCUMENT] });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [READY_JOB] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    fireEvent.click(await screen.findByRole("button", { name: /get an independent review/i }));
+
+    expect(await screen.findByText(/Reviewed by claude-test-model/)).toBeInTheDocument();
+    expect(screen.getByText(/The opening hedges/)).toBeInTheDocument();
+    // Applying is a separate, deliberate click — a review is not a revision.
+    expect(screen.getByRole("button", { name: /apply as a new version/i })).toBeInTheDocument();
+  });
+
+  it("shows what the grounding audit refused, rather than only what was applied", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/applications/a2/documents/d1/review" && init?.method === "POST") {
+        return jsonResponse({
+          review: {
+            id: "r1", status: "reviewed", model: "claude-test-model",
+            detail: "Reviewed by claude-test-model.",
+            edits: [
+              { find: "Platform engineer.", replace: "Platform engineer who owns public APIs.", reason: "keywords" },
+              { find: "SUMMARY", replace: "SUMMARY — cut failures 94%", reason: "metrics are stronger" },
+            ],
+            narrative: [],
+            applied: [{ find: "Platform engineer.", replace: "Platform engineer who owns public APIs.", reason: "keywords" }],
+            rejected: [{
+              edit: { find: "SUMMARY", replace: "SUMMARY — cut failures 94%", reason: "metrics are stronger" },
+              reason: "This edit would add a claim your recorded profile does not support.",
+            }],
+            newVersion: 2,
+          },
+        }, 201);
+      }
+      if (url === "/api/job-seeker/applications/a2/documents") {
+        return jsonResponse({ documents: [DOCUMENT] });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [READY_JOB] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    fireEvent.click(await screen.findByRole("button", { name: /get an independent review/i }));
+
+    expect(await screen.findByText(/1 edit applied as\s+version 2/)).toBeInTheDocument();
+    // The audit doing its job is a finding, not something to bury.
+    expect(screen.getByText(/Refused \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/does not support/)).toBeInTheDocument();
+    // The reviewed version is immutable, and the copy has to say so.
+    expect(screen.getByText(/The version reviewed is unchanged/)).toBeInTheDocument();
   });
 
   it("says a version could not be verified rather than showing it as passing", async () => {
