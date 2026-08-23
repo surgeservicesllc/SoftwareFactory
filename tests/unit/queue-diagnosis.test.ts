@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+
+import { explainEmptyQueue, type QueueGraphRow } from "@/lib/worker/queue-diagnosis";
+
+/**
+ * The empty queue explains itself.
+ *
+ * These cases mirror `claim_planned_graph`'s filters one for one, because the
+ * diagnosis is only useful while it agrees with the function it explains. The
+ * one line it must never print wrongly is "looks claimable": that sentence
+ * accuses the claim of a contradiction, so every excluded case above it has to
+ * catch its own graphs first.
+ */
+
+const SUPPORTED = ["DETERMINISTIC", "MODEL", "ANCHOR"];
+
+function graph(overrides: Partial<QueueGraphRow>): QueueGraphRow {
+  return {
+    id: "g-1",
+    requires_owner_approval: false,
+    is_lifecycle: false,
+    created_at: "2026-08-23T20:00:00Z",
+    graph_nodes: [{ executor: "MODEL" }],
+    graph_runs: [],
+    graph_gates: [],
+    ...overrides,
+  };
+}
+
+function reasonOf(lines: readonly string[]): string {
+  expect(lines.length).toBe(2);
+  return lines[1];
+}
+
+describe("the empty-queue diagnosis", () => {
+  it("says plainly when nothing has ever been launched", () => {
+    expect(explainEmptyQueue([], SUPPORTED)[0]).toContain("no graphs exist at all");
+  });
+
+  it("names owner approval first, because no worker can ever get past it", () => {
+    const lines = explainEmptyQueue([graph({ requires_owner_approval: true })], SUPPORTED);
+    expect(reasonOf(lines)).toContain("owner approval");
+  });
+
+  it("names the executors the worker does not declare", () => {
+    const lines = explainEmptyQueue(
+      [graph({ graph_nodes: [{ executor: "MODEL" }, { executor: "TELEPORT" }] })],
+      SUPPORTED,
+    );
+    expect(reasonOf(lines)).toContain("TELEPORT");
+    expect(reasonOf(lines)).not.toContain("MODEL,");
+  });
+
+  it("reports retirement by failures and by total runs", () => {
+    const failed = { state: "FAILED", completed_at: "2026-08-23T20:10:00Z" };
+    expect(
+      reasonOf(explainEmptyQueue([graph({ graph_runs: [failed, failed, failed] })], SUPPORTED)),
+    ).toContain("3 failed runs");
+
+    const cancelled = { state: "CANCELLED", completed_at: "2026-08-23T20:10:00Z" };
+    expect(
+      reasonOf(explainEmptyQueue([graph({ graph_runs: Array(10).fill(cancelled) })], SUPPORTED)),
+    ).toContain("10 runs");
+  });
+
+  it("treats a finished non-lifecycle run as the answer it is", () => {
+    const lines = explainEmptyQueue(
+      [graph({ graph_runs: [{ state: "PARTIAL", completed_at: "2026-08-23T21:00:00Z" }] })],
+      SUPPORTED,
+    );
+    expect(reasonOf(lines)).toContain("already answered");
+    expect(reasonOf(lines)).toContain("PARTIAL");
+  });
+
+  it("distinguishes a lifecycle waiting at an open gate from one waiting for a worker", () => {
+    const halted = graph({
+      is_lifecycle: true,
+      graph_runs: [{ state: "PARTIAL", completed_at: "2026-08-23T21:00:00Z" }],
+      graph_gates: [{ state: "OPEN", opened_at: "2026-08-23T20:59:00Z", decided_at: null }],
+    });
+    expect(reasonOf(explainEmptyQueue([halted], SUPPORTED))).toContain("waiting for a decision");
+  });
+
+  it("calls out the contradiction when a fresh gate approval should have reopened a lifecycle", () => {
+    const reopened = graph({
+      is_lifecycle: true,
+      graph_runs: [{ state: "PARTIAL", completed_at: "2026-08-23T21:00:00Z" }],
+      graph_gates: [
+        { state: "APPROVED", opened_at: "2026-08-23T20:59:00Z", decided_at: "2026-08-23T21:30:00Z" },
+      ],
+    });
+    expect(reasonOf(explainEmptyQueue([reopened], SUPPORTED))).toContain("contradicts");
+  });
+
+  it("calls out the contradiction for a graph nothing excludes", () => {
+    expect(reasonOf(explainEmptyQueue([graph({})], SUPPORTED))).toContain("contradicts");
+  });
+
+  it("never prints goal text, only ids and states", () => {
+    const lines = explainEmptyQueue(
+      [graph({ id: "aaaa-bbbb", requires_owner_approval: true })],
+      SUPPORTED,
+    );
+    // The row type carries no goal field at all; the line is id + reason.
+    expect(lines[1]).toContain("aaaa-bbbb");
+  });
+});

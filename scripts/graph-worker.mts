@@ -157,6 +157,13 @@ async function main() {
   } while (!stopping);
 
   process.stdout.write(`${describeDrainOutcome(graphsRun)}\n`);
+  if (graphsRun === 0) {
+    // "Nothing ran" alone costs a dispatch to learn nothing. Say which claim
+    // filter excludes each graph — ids and states only, never goal text.
+    for (const line of await store.explainEmptyQueue()) {
+      process.stdout.write(`${line}\n`);
+    }
+  }
   process.stdout.write("SoftwareFactory graph worker is done.\n");
 }
 
