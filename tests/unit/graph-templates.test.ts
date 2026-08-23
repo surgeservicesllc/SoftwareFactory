@@ -44,7 +44,7 @@ describe("the template catalogue", () => {
   it("finds templates by key and by category", () => {
     expect(findTemplate("rls_audit")?.name).toBe("RLS Audit");
     expect(findTemplate("nope")).toBeNull();
-    expect(templatesByCategory("BUILD").map((t) => t.key)).toEqual(["agentic_sdlc", "feature_build"]);
+    expect(templatesByCategory("BUILD").map((t) => t.key)).toEqual(["full_lifecycle", "agentic_sdlc", "feature_build"]);
   });
 });
 

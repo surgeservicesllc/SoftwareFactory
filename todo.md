@@ -1,6 +1,55 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — THE STAGES HAVE PAGES, AND THE BROWSER SUITE OUTGREW ITS CEILING (2026-08-23, round 8 — PICK UP HERE)
+## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9 — PICK UP HERE)
+
+The owner's /goal: build all ten phases per the boards, from existing code.
+The audit found every phase had engine + population + page (rounds 5-8), and
+the one missing thing was the headline itself — no single graph walked
+REQUIREMENT through MONITOR. Now one does. ADR-138.
+
+**`full_lifecycle`** (BUILD, YELLOW, `isLifecycle: true`, 14 nodes): goal →
+requirements (GOAL+PRD = the boards' REQUIREMENT) → three parallel scans →
+consolidate (DISCOVER) → evaluate (EVALUATE) → decide (DECIDE, AUTOMATIC) →
+architecture (ARCHITECT, **HUMAN**) → implement (BUILD) → review (REVIEW,
+AUTOMATIC) → test (TEST, ANCHOR+AUTOMATIC) → deploy (DEPLOY, ANCHOR+**HUMAN**)
+→ monitor (MONITOR, ANCHOR), with feedback edges monitor→goal (the boards'
+continuous loop), test→implement, review→implement, architecture→decide,
+decide→evaluate. **Zero new machinery** — every node is an existing
+capability under existing contracts; the stage packages from round 6 are the
+DISCOVER/EVALUATE/DECIDE handoffs.
+
+Plumbing that had to move: template budget 220min (13 sequential levels ×
+8min × 2 attempts = 208 worst case), so `graph-worker.yml` timeout-minutes
+180→240; budget-fit pins the chain. Pins updated: iterating lifecycles =
+["full_lifecycle", "agentic_sdlc"]; BUILD category gains it.
+
+**Proof** (`tests/integration/full-lifecycle.behavior.test.ts`, real
+PostgreSQL through `create_graph_from_plan`): a node stored in every one of
+the eleven stages; no forward edge runs backwards through the stage order;
+HUMAN gates at exactly ARCHITECTURE+DEPLOYMENT, AUTOMATIC at
+PRD/DECISION/REVIEW/TEST; monitor→goal feedback recorded. The Workflows page
+and the launch API pick the template up with no changes (both read
+GRAPH_TEMPLATES).
+
+**What "all ten working" means under this repo's policies, stated plainly:**
+MODEL nodes execute through the proven record-only worker; the test node is
+an ANCHOR that demands evidence; a run that reaches the deploy gate and
+waits for the owner is the design succeeding — Phase 1 keeps externally
+visible acts owner-approved and the kill switch ON. Nothing here pretends to
+auto-deploy.
+
+**Open in this lane:**
+1. A hosted launch of full_lifecycle end-to-end (owner presses launch on the
+   Workflows page; the worker drains it; ARCHITECTURE gate appears on the
+   graph-runs panel for the owner to decide). The engine path is proven in
+   PGlite; the live drain is the remaining evidence.
+2. The stage pages (round 8) will show a full_lifecycle run across all
+   eleven stages — worth one look once a live run exists.
+3. Still open from round 6: owner-gated WebSearch for live-verifiable
+   ecosystem candidates.
+
+
+## GRAPH — THE STAGES HAVE PAGES, AND THE BROWSER SUITE OUTGREW ITS CEILING (2026-08-23, round 8)
 
 **Round 7's item 1 is done.** `/solutions/lifecycle` is the stage index and
 `/solutions/lifecycle/[stage]` is one page per stage, both driven by
