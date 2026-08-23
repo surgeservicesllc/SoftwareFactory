@@ -344,3 +344,194 @@ $function$;
 
 revoke all on function public.list_graph_runs(uuid, integer) from public, anon, service_role;
 grant execute on function public.list_graph_runs(uuid, integer) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- A graph is a lifecycle because its plan says so, not because it has stages
+--
+-- `create_graph_from_plan` decided `is_lifecycle` by asking whether any node
+-- carried a `lifecycle_stage`. That was a sound inference while the Agentic
+-- SDLC template was the only one that staged anything.
+--
+-- It stopped being sound when `stageForCapability` gave every node of every
+-- template a stage — deliberately, so the graph-runs Stage column reads as
+-- something for an audit instead of an em dash. The application separated the
+-- two ideas at that point: a stage is a label, and `GraphTemplate.isLifecycle`
+-- is a separate declaration that only `agentic_sdlc` makes. The database was
+-- not told, and the database is the authority — so every graph created since
+-- has been recorded `is_lifecycle = true`.
+--
+-- What that costs is not cosmetic. `lib/sdlc/orchestrator.ts` iterates a
+-- lifecycle whose acceptance criteria are unmet, and an audit's never are in
+-- the sense the orchestrator means. Every read-only analysis became a graph
+-- that re-runs itself.
+--
+-- `create or replace` with the identical signature, so no grant is disturbed
+-- and no overload is created.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_graph_from_plan(
+  p_organization_id uuid,
+  p_project_id uuid,
+  p_goal text,
+  p_topology public.graph_topology,
+  p_topology_reasons jsonb,
+  p_risk_level public.risk_level,
+  p_requires_owner_approval boolean,
+  p_nodes jsonb,
+  p_edges jsonb,
+  p_budget jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_graph_id uuid;
+  v_node jsonb;
+  v_edge jsonb;
+  v_node_id uuid;
+  v_from_id uuid;
+  v_to_id uuid;
+  v_keys jsonb := '{}'::jsonb;
+  v_is_lifecycle boolean := false;
+  v_max_iterations integer;
+begin
+  if not public.is_organization_member(p_organization_id) then
+    raise exception 'not_a_member' using errcode = '42501';
+  end if;
+
+  if jsonb_typeof(p_nodes) <> 'array' or jsonb_array_length(p_nodes) = 0 then
+    raise exception 'empty_graph' using errcode = '22023';
+  end if;
+
+  -- Whether a graph may ITERATE, taken from the plan when the plan says, and
+  -- inferred only when it does not.
+  --
+  -- The inference alone used to be safe because only the Agentic SDLC template
+  -- staged its nodes. That stopped being true when every template began
+  -- labelling every node so the Stage column could show something for an audit
+  -- as well as a lifecycle. The application decoupled the two — a stage became
+  -- a label, and `GraphTemplate.isLifecycle` became a declaration — but this
+  -- function is the authority, and it still inferred. The result was that every
+  -- read-only analysis was recorded as a lifecycle, and the orchestrator
+  -- iterates a lifecycle whose acceptance is unmet: audits re-running
+  -- themselves, spending subscription turns on passes nobody asked for.
+  --
+  -- The flag rides in `p_budget` rather than a new parameter because that is
+  -- already this function's options bag — `max_iterations` is read from it
+  -- three lines below, and whether a graph may loop belongs beside how many
+  -- times it may. A caller that sends nothing keeps the old behaviour, so no
+  -- existing caller changes meaning.
+  if (p_budget ? 'is_lifecycle') then
+    v_is_lifecycle := coalesce((p_budget ->> 'is_lifecycle')::boolean, false);
+  else
+    select coalesce(bool_or((n ->> 'lifecycle_stage') is not null), false)
+      into v_is_lifecycle
+      from jsonb_array_elements(p_nodes) as n;
+  end if;
+
+  v_max_iterations := greatest(1, least(20, coalesce((p_budget ->> 'max_iterations')::integer, 3)));
+
+  insert into public.graphs (
+    organization_id, project_id, goal, topology, topology_reasons,
+    risk_level, requires_owner_approval, created_by, is_lifecycle, max_iterations
+  )
+  values (
+    p_organization_id, p_project_id, p_goal, p_topology,
+    coalesce(p_topology_reasons, '[]'::jsonb),
+    p_risk_level, coalesce(p_requires_owner_approval, false), auth.uid(),
+    v_is_lifecycle, v_max_iterations
+  )
+  returning id into v_graph_id;
+
+  insert into public.graph_budgets (
+    organization_id, graph_id, max_nodes, max_concurrent_nodes,
+    max_duration_ms, max_retries, max_discovery_rounds, max_tokens, max_cost_micros
+  )
+  values (
+    p_organization_id, v_graph_id,
+    coalesce((p_budget ->> 'max_nodes')::integer, 50),
+    coalesce((p_budget ->> 'max_concurrent_nodes')::integer, 8),
+    coalesce((p_budget ->> 'max_duration_ms')::bigint, 1800000),
+    coalesce((p_budget ->> 'max_retries')::integer, 10),
+    coalesce((p_budget ->> 'max_discovery_rounds')::integer, 5),
+    (p_budget ->> 'max_tokens')::bigint,
+    (p_budget ->> 'max_cost_micros')::bigint
+  );
+
+  for v_node in select * from jsonb_array_elements(p_nodes)
+  loop
+    insert into public.graph_nodes (
+      organization_id, graph_id, node_key, job, executor, capability,
+      model_tier, risk_level, timeout_ms, max_attempts, allow_provider_fallback,
+      tolerates_partial_inputs, lifecycle_stage, gate_kind
+    )
+    values (
+      p_organization_id, v_graph_id,
+      v_node ->> 'node_key',
+      v_node ->> 'job',
+      (v_node ->> 'executor')::public.graph_node_executor,
+      v_node ->> 'capability',
+      coalesce(v_node ->> 'model_tier', 'STANDARD'),
+      coalesce((v_node ->> 'risk_level')::public.risk_level, 'green'),
+      coalesce((v_node ->> 'timeout_ms')::integer, 180000),
+      coalesce((v_node ->> 'max_attempts')::integer, 2),
+      coalesce((v_node ->> 'allow_provider_fallback')::boolean, true),
+      coalesce((v_node ->> 'tolerates_partial_inputs')::boolean, false),
+      (v_node ->> 'lifecycle_stage')::public.sdlc_stage,
+      (v_node ->> 'gate_kind')::public.gate_kind
+    )
+    returning id into v_node_id;
+
+    v_keys := v_keys || jsonb_build_object(v_node ->> 'node_key', v_node_id::text);
+
+    insert into public.node_contracts (
+      organization_id, node_id, input_schema, output_schema, reads, writes, acceptance_criteria
+    )
+    values (
+      p_organization_id, v_node_id,
+      coalesce(v_node -> 'input_schema', '{}'::jsonb),
+      coalesce(v_node -> 'output_schema', '{}'::jsonb),
+      coalesce(v_node -> 'reads', '[]'::jsonb),
+      coalesce(v_node -> 'writes', '[]'::jsonb),
+      coalesce(v_node -> 'acceptance_criteria', '[]'::jsonb)
+    );
+  end loop;
+
+  for v_edge in select * from jsonb_array_elements(coalesce(p_edges, '[]'::jsonb))
+  loop
+    v_from_id := (v_keys ->> (v_edge ->> 'from_node_key'))::uuid;
+    v_to_id := (v_keys ->> (v_edge ->> 'to_node_key'))::uuid;
+
+    if v_from_id is null or v_to_id is null then
+      raise exception 'unknown_edge_node' using errcode = '22023';
+    end if;
+
+    insert into public.graph_edges (
+      organization_id, graph_id, from_node_id, to_node_id, reason, detail, is_feedback
+    )
+    values (
+      p_organization_id, v_graph_id, v_from_id, v_to_id,
+      (v_edge ->> 'reason')::public.graph_edge_reason,
+      v_edge ->> 'detail',
+      coalesce((v_edge ->> 'is_feedback')::boolean, false)
+    );
+  end loop;
+
+  if v_is_lifecycle then
+    insert into public.activity_events (
+      organization_id, project_id, actor_user_id, event_type,
+      entity_type, entity_id, description, metadata
+    )
+    values (
+      p_organization_id, p_project_id, auth.uid(), 'lifecycle.graph_created',
+      'graph', v_graph_id,
+      'Agentic SDLC graph planned',
+      jsonb_build_object('max_iterations', v_max_iterations)
+    );
+  end if;
+
+  return v_graph_id;
+end;
+$$;

@@ -166,6 +166,39 @@ the goal's ten map onto these eight"* — is answered here: **the enum grows.**
 new. Their backfill note still stands: graphs already in the database have
 `lifecycle_stage = null` and would need mapping through `stageForCapability`.
 
+### A live defect the merge surfaced: every graph was a lifecycle
+
+`create_graph_from_plan` decided `is_lifecycle` by asking whether any node
+carried a `lifecycle_stage`. Sound while `agentic_sdlc` was the only template
+that staged anything — and untrue the moment `#363` gave every node of every
+template a stage so the Stage column would read as something for an audit.
+
+That session separated the two ideas correctly in TypeScript: a stage became a
+label, `GraphTemplate.isLifecycle` became a declaration only `agentic_sdlc`
+makes. **The database was not told, and the database is the authority.** Every
+graph created since has been recorded `is_lifecycle = true`.
+
+It is not cosmetic. `lib/sdlc/orchestrator.ts` iterates a lifecycle whose
+acceptance is unmet, and an audit's never is in the sense the orchestrator
+means — so every read-only analysis became a graph that re-runs itself, which is
+precisely the failure `#363` set out to prevent.
+
+Fixed in `20260823000900`: the flag comes from the plan when the plan says, and
+the old inference stands only when it does not, so no existing caller changes
+meaning. It rides in `p_budget` rather than a new parameter — that is already
+the function's options bag, `max_iterations` is read from it, and whether a
+graph may loop belongs beside how many times it may. `create or replace` with
+the identical signature, so no grant is disturbed and no overload created.
+
+Caught because a test of mine asserted the old "audits have no stages" and had
+to be rewritten; the replacement asserts the separation itself — every template
+stages every node, and only the lifecycle carries `is_lifecycle`.
+
+**Any graph already in the hosted database still has the wrong flag.** Nothing
+here corrects stored rows; a sweep would need to set `is_lifecycle = false`
+wherever the graph's template is not `agentic_sdlc`, and it writes production
+rows, so measure with `scope=probe` first.
+
 ### Hosted apply — two scopes, in this order
 
 `.github/workflows/apply-hosted-migrations.yml`:

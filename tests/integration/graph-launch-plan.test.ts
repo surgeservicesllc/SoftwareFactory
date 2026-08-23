@@ -188,7 +188,21 @@ describe("the graph launch payload", () => {
     expect(stored.rows[0].goal).toBe(findTemplate("security_audit")!.summary);
   }, 120_000);
 
-  it("stages every node of the lifecycle template, and no node of the others", async () => {
+  it("stages every node of every template, and iterates only the lifecycle", async () => {
+    /*
+     * Two facts that used to be one, and separating them was the point of
+     * `stageForCapability`.
+     *
+     * A stage is now a *label*: every template's nodes carry one, so the
+     * graph-runs Stage column reads as something for an audit as well as for a
+     * lifecycle. Whether a graph may ITERATE is a *different* question,
+     * answered by `graphs.is_lifecycle`. Conflating them meant labelling an
+     * audit node turned every read-only analysis into a graph that re-runs
+     * itself, spending subscription turns on passes nobody asked for.
+     *
+     * This asserted "no node of the others is staged" before that separation
+     * landed. That is now false and would have been the wrong thing to protect.
+     */
     await asMember(db);
     const lifecycle = await launch("agentic_sdlc", "Ship the thing.");
     const audit = await launch("security_audit");
@@ -205,12 +219,24 @@ describe("the graph launch payload", () => {
       "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR",
     ]));
 
-    const unstaged = await db.query<{ count: number }>(
-      `select count(*)::int as count from public.graph_nodes
-        where graph_id = $1 and lifecycle_stage is not null`,
+    // The audit's nodes are staged too, by the work they do rather than by a
+    // per-template opinion. A security audit reads something that already
+    // exists and reports on it, which is REVIEW.
+    const auditStages = await db.query<{ stage: string | null; count: number }>(
+      `select lifecycle_stage::text as stage, count(*)::int as count
+         from public.graph_nodes where graph_id = $1 group by 1 order by 1`,
       [audit],
     );
-    expect(unstaged.rows[0].count).toBe(0);
+    expect(auditStages.rows.every((row) => row.stage !== null)).toBe(true);
+    expect(new Set(auditStages.rows.map((row) => row.stage))).toEqual(new Set(["REVIEW"]));
+
+    // And the separation itself: labelled, but never a lifecycle, so nothing
+    // iterates it.
+    const flags = await db.query<{ id: string; is_lifecycle: boolean }>(
+      `select id::text, is_lifecycle from public.graphs where id in ($1, $2) order by is_lifecycle`,
+      [lifecycle, audit],
+    );
+    expect(flags.rows.map((row) => row.is_lifecycle)).toEqual([false, true]);
   }, 120_000);
 
   it("records the compiler's topology and risk rather than a default", async () => {

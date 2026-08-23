@@ -64,7 +64,14 @@ export type LaunchPlan = {
   readonly topologyReasons: readonly { code: string; detail: string }[];
   readonly nodes: readonly PlanNodePayload[];
   readonly edges: readonly PlanEdgePayload[];
-  readonly budget: Record<string, number>;
+  /**
+   * The budget the function reads, plus the one boolean that rides with it.
+   *
+   * `is_lifecycle` is not a number and not really a budget, but it is read from
+   * the same jsonb and governs the same thing `max_iterations` does — whether,
+   * and how often, this graph may loop.
+   */
+  readonly budget: Record<string, number | boolean>;
   /** True when the template staged its nodes, which is what makes it a lifecycle. */
   readonly isLifecycle: boolean;
   /** Kept so a caller can report what the compiler decided without recompiling. */
@@ -219,6 +226,18 @@ export function buildLaunchPlan(
         max_duration_ms: budget.maxDurationMs,
         max_retries: budget.maxRetries,
         max_discovery_rounds: budget.maxDiscoveryRounds,
+        /*
+         * Whether this graph may ITERATE, stated rather than left to be
+         * inferred.
+         *
+         * `create_graph_from_plan` used to decide it by asking whether any node
+         * carried a stage. Every template stages every node now — a stage is a
+         * label — so that inference marks an audit as a lifecycle and the
+         * orchestrator re-runs it. The flag rides in the budget because that is
+         * where `max_iterations` already lives, and whether a graph may loop
+         * belongs beside how many times it may.
+         */
+        is_lifecycle: isLifecycle,
       },
       isLifecycle,
       compiled: graph,

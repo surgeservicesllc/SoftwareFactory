@@ -9,7 +9,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
+/**
+ * Two different facts, which used to be one string.
+ *
+ * `latestMigration` pins the newest file in the directory; `backfillMigration`
+ * names the file this suite actually exercises. They were the same value while
+ * the backfill *was* the newest migration, and a later pin bump silently
+ * repointed the suite at an unrelated file — which read as "the backfill filled
+ * nothing" rather than as "the suite ran the wrong SQL".
+ */
 const latestMigration = "20260823001000_structured_stage_handoffs.sql";
+const backfillMigration = "20260823000700_backfill_graph_node_lifecycle_stage.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000009a1";
 const organizationId = "10000000-0000-4000-8000-0000000009a1";
@@ -27,6 +37,8 @@ const graphId = "30000000-0000-4000-8000-0000000009a1";
 describe("graph node lifecycle backfill", () => {
   let db: PGlite;
   let backfill: string;
+  /** The migrations after the backfill, applied by the last case. */
+  let afterBackfill: string[] = [];
 
   beforeAll(async () => {
     db = new PGlite({ extensions: { pgcrypto } });
@@ -53,10 +65,31 @@ describe("graph node lifecycle backfill", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
     expect(migrationFiles.at(-1)).toBe(latestMigration);
-    for (const migrationFile of migrationFiles) {
+
+    /*
+     * Applied only as far as the backfill, on purpose.
+     *
+     * The backfill writes the eight-stage vocabulary — `'IMPLEMENTATION'`,
+     * `'ARCHITECTURE'`, `'PRD'` — because it runs before the ten-stage widening
+     * rebuilds the enum. On a fully migrated database those labels no longer
+     * exist and every statement below would die on `invalid input value for
+     * enum sdlc_stage`.
+     *
+     * That is not a defect in either migration: the chain runs them in order
+     * and the widening maps every row the backfill wrote. It does mean this
+     * suite has to stand where the backfill actually stands, so the cases keep
+     * asserting what the backfill really produces. The last case then applies
+     * the rest of the chain and proves the two compose.
+     */
+    const upToBackfill = migrationFiles.slice(0, migrationFiles.indexOf(backfillMigration) + 1);
+    afterBackfill = migrationFiles.slice(upToBackfill.length);
+    expect(upToBackfill.at(-1), "the backfill migration is missing").toBe(backfillMigration);
+    expect(afterBackfill.length, "the widening must run after the backfill").toBeGreaterThan(0);
+
+    for (const migrationFile of upToBackfill) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }
-    backfill = await readFile(resolve(migrationsDirectory, latestMigration), "utf8");
+    backfill = await readFile(resolve(migrationsDirectory, backfillMigration), "utf8");
 
     await db.exec(`
       insert into auth.users (id) values ('${ownerId}');
@@ -154,4 +187,51 @@ describe("graph node lifecycle backfill", () => {
     );
     expect(after.rows[0].count).toBe(before.rows[0].count);
   });
+
+  it("hands every backfilled row to the ten-stage widening intact", async () => {
+    /*
+     * The composition, run in the order production runs it.
+     *
+     * Everything above proved the backfill derives the right eight-stage label.
+     * This applies the rest of the chain — including the widening that rebuilds
+     * the enum — and proves each of those rows arrives at its ten-stage
+     * equivalent rather than being stranded or dropped.
+     *
+     * The three that matter are the three the widening renames. REVIEW and TEST
+     * are asserted too: a map that silently passes some values through is a map
+     * nobody can check by reading.
+     */
+    for (const migrationFile of afterBackfill) {
+      await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
+    }
+
+    const { rows } = await db.query<{ node_key: string; lifecycle_stage: string | null }>(
+      `select node_key, lifecycle_stage::text from public.graph_nodes
+        where graph_id = $1::uuid order by node_key`,
+      [graphId],
+    );
+    const stages = new Map(rows.map((row) => [row.node_key, row.lifecycle_stage]));
+
+    expect(stages.get("f_build"), "IMPLEMENTATION should widen to BUILD").toBe("BUILD");
+    expect(stages.get("g_design"), "ARCHITECTURE should widen to ARCHITECT").toBe("ARCHITECT");
+    expect(stages.get("h_plan"), "PRD should widen to REQUIREMENT").toBe("REQUIREMENT");
+    expect(stages.get("y_declared"), "DEPLOYMENT should widen to DEPLOY").toBe("DEPLOY");
+    expect(stages.get("a_inspect")).toBe("REVIEW");
+    expect(stages.get("e_tests")).toBe("TEST");
+    // The unrecognised capability stayed null through the backfill, and the
+    // widening renames values rather than inventing them.
+    expect(stages.get("z_unknown")).toBeNull();
+
+    const labels = await db.query<{ enumlabel: string }>(
+      `select label.enumlabel from pg_type kind
+         join pg_namespace space on space.oid = kind.typnamespace
+         join pg_enum label on label.enumtypid = kind.oid
+        where space.nspname = 'public' and kind.typname = 'sdlc_stage'
+        order by label.enumsortorder`,
+    );
+    expect(labels.rows.map((row) => row.enumlabel)).toEqual([
+      "REQUIREMENT", "DISCOVER", "EVALUATE", "DECIDE", "ARCHITECT",
+      "BUILD", "REVIEW", "TEST", "DEPLOY", "MONITOR",
+    ]);
+  }, 240_000);
 });

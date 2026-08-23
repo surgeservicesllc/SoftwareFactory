@@ -16,11 +16,34 @@ import { stageForCapability } from "@/lib/graph/templates";
  * This reads the migration and holds it to the function, for every capability
  * the application defines. A capability added to `NODE_CAPABILITIES` without a
  * branch in the migration fails here rather than silently backfilling null.
+ *
+ * ## Why the comparison goes through a second migration
+ *
+ * The two copies stopped speaking the same vocabulary when the lifecycle
+ * widened to ten stages. The backfill writes the eight-stage labels —
+ * `IMPLEMENTATION`, `ARCHITECTURE`, `PRD` — because it runs *before* the
+ * widening rebuilds the enum, and running it after would kill the chain on
+ * `invalid input value for enum sdlc_stage`. The widening then maps every one
+ * of its rows forward.
+ *
+ * So the rule is still written twice and still must not drift; it is simply
+ * composed now. `widen(stageInMigration(c))` is what the database ends up
+ * holding, and it has to equal what `stageForCapability(c)` writes for a new
+ * graph. Both halves are parsed from the real files rather than restated here,
+ * so a change to either is caught rather than described.
  */
 const migration = readFileSync(
   resolve(
     import.meta.dirname,
     "../../supabase/migrations/20260823000700_backfill_graph_node_lifecycle_stage.sql",
+  ),
+  "utf8",
+);
+
+const widening = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "../../supabase/migrations/20260823000900_ten_stage_lifecycle.sql",
   ),
   "utf8",
 );
@@ -32,12 +55,47 @@ function stageInMigration(capability: string): string | null {
   return match?.[1] ?? null;
 }
 
+/**
+ * The eight-to-ten map, read from the widening's own `case` rather than
+ * restated. A label the widening does not rename passes through, which is what
+ * `else lifecycle_stage` does in the file.
+ */
+function widen(stage: string | null): string | null {
+  if (stage === null) return null;
+  const match = widening.match(new RegExp(`when '${stage}' then '([A-Z_]+)'`));
+  return match?.[1] ?? stage;
+}
+
 describe("the backfill agrees with the application", () => {
-  it("maps every capability the same way the code does", () => {
+  it("maps every capability the same way the code does, once the widening lands", () => {
     for (const capability of NODE_CAPABILITIES) {
       expect(stageInMigration(capability), `${capability} has no branch in the migration`)
-        .toBe(stageForCapability(capability));
+        .not.toBeNull();
+      expect(
+        widen(stageInMigration(capability)),
+        `${capability}: the backfill and the application disagree about its stage`,
+      ).toBe(stageForCapability(capability));
     }
+  });
+
+  it("writes the pre-widening vocabulary, because it runs before the rebuild", () => {
+    /*
+     * The ordering this depends on, asserted rather than assumed. If the
+     * backfill were ever rewritten to emit ten-stage labels it would have to
+     * move after the widening, and this case is what says so — the three
+     * labels below do not exist in the enum by the time the widening finishes.
+     */
+    expect(stageInMigration("implementation")).toBe("IMPLEMENTATION");
+    expect(stageInMigration("architecture")).toBe("ARCHITECTURE");
+    expect(stageInMigration("planning")).toBe("PRD");
+
+    expect(widen("IMPLEMENTATION")).toBe("BUILD");
+    expect(widen("ARCHITECTURE")).toBe("ARCHITECT");
+    expect(widen("PRD")).toBe("REQUIREMENT");
+    // Unchanged by the widening, and the map says so explicitly rather than
+    // relying on the `else` branch.
+    expect(widen("REVIEW")).toBe("REVIEW");
+    expect(widen("TEST")).toBe("TEST");
   });
 
   it("touches only rows with no stage, so a replay changes nothing", () => {

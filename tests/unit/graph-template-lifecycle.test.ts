@@ -49,10 +49,14 @@ describe("template lifecycle stages", () => {
   it("places a node's stage by the work it does, not by its template", () => {
     // One rule, so a lifecycle template and an audit describe the same
     // capability the same way.
+    //
+    // Three of these answers moved when the lifecycle widened to ten stages —
+    // IMPLEMENTATION became BUILD, ARCHITECTURE became ARCHITECT, and PRD
+    // merged into REQUIREMENT. The rule is unchanged; only the vocabulary did.
     expect(stageForCapability("qa")).toBe("TEST");
-    expect(stageForCapability("implementation")).toBe("IMPLEMENTATION");
-    expect(stageForCapability("architecture")).toBe("ARCHITECTURE");
-    expect(stageForCapability("planning")).toBe("PRD");
+    expect(stageForCapability("implementation")).toBe("BUILD");
+    expect(stageForCapability("architecture")).toBe("ARCHITECT");
+    expect(stageForCapability("planning")).toBe("REQUIREMENT");
     for (const capability of ["review", "security_review", "extraction", "synthesis", "reporting"] as const) {
       expect(stageForCapability(capability), capability).toBe("REVIEW");
     }
