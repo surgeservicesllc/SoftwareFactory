@@ -1387,6 +1387,34 @@ jobs:
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
 
           echo ""
+          echo "Analysis graphs and their command links - the record-only execution"
+          echo "surface. Tolerant of a database that predates the link migration."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select graph.id, left(graph.goal, 60) as goal, graph.risk_level,
+                   graph.requires_owner_approval, graph.created_at,
+                   (select count(*) from public.graph_nodes node where node.graph_id = graph.id) as nodes,
+                   (select count(*) from public.graph_runs run where run.graph_id = graph.id) as runs
+              from public.graphs graph
+             order by graph.created_at desc
+             limit 5;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select case when to_regclass('public.command_analysis_graphs') is null
+                        then 'link table absent (pre-20260823000100 database)'
+                        else 'link rows: ' || (select count(*)::text from public.command_analysis_graphs)
+                   end as command_analysis_links;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select link.command_id, link.graph_id, link.created_at
+              from public.command_analysis_graphs link
+             order by link.created_at desc
+             limit 5;" || true
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select run.id, run.graph_id, run.state, run.started_at, run.completed_at,
+                   (select count(*) from public.graph_artifacts artifact where artifact.graph_run_id = run.id) as artifacts
+              from public.graph_runs run
+             order by run.created_at desc
+             limit 5;"
+
+          echo ""
           echo "Execution-path readiness for a real manual Codex run: which bots carry"
           echo "the one executable identity, whether their accounts read connected,"
           echo "how their project assignments are configured, and what the recent"
