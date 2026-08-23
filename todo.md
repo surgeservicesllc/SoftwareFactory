@@ -47,6 +47,69 @@ structure rather than pixel-matched. The console *sidebar* still says
 `AI Factory` — that is a different destination (`/solutions/ai-factory`, the
 guided journey) from the header entry that was renamed.
 
+## GRAPH — THE STAGE DATA HAS ITS FIRST READER (2026-08-23, round 5 — PICK UP HERE)
+
+**Round 4's item 2 is done.** Its own words were "nothing yet reads the stage
+except one table column… the cheapest next thing that consumes the data rather
+than adding more of it." That reader now exists.
+
+`lib/sdlc/run-summary.ts` — `summariseRunByStage(nodes)` — rolls a run's nodes
+into the eight stages: counts, a derived per-stage status, summed latency, the
+first error, and which stage a reader should look at. `components/graph/stage-rail.tsx`
+renders it above the node table in `GraphRunsPanel`, **derived from the same
+`run.nodes` array the table renders**, so the rail and the table cannot
+disagree about where a run stands.
+
+Decisions worth not re-litigating:
+
+- **Status precedence is deliberate**: FAILED > AWAITING_DECISION > RUNNING >
+  COMPLETE. A failure outranks everything because it is what someone must act
+  on; an open gate outranks running because it waits on a *person*. COMPLETE is
+  last, so a stage with one unfinished node never reads done.
+- **`currentStage` is the earliest stage needing attention, not the latest
+  activity.** A run failed at ARCHITECTURE while TEST still churns should point
+  at ARCHITECTURE.
+- **Unknown or absent stage values are counted, not dropped.** Graphs predating
+  the stage rule are a fact about the data; a rollup that silently omitted them
+  would under-report the run. A `DISCOVER` arriving from anywhere lands in
+  `unstagedCount` rather than vanishing.
+- **Eight, not ten** — ADR-136 stands, and round 4's reasoning is unchanged.
+
+`tests/unit/sdlc-run-summary.test.ts` (9 cases) covers the ones where a wrong
+answer looks plausible: a stage reading complete with a node still running, one
+failure behind four successes, an open gate reported as merely busy, latency
+summed only where measured. Two assertions in
+`graph-runs-panel-gates.test.tsx` needed scoping — "awaiting a decision" is now
+said in two places on purpose — and were **tightened rather than loosened**: the
+decided-gate case asserts the phrase appears *nowhere*, rail included.
+
+**Next bot, in the Graph lane — in priority order:**
+
+1. **Per-stage pages, for the eight.** Still round 4's item 1 and still
+   unblocked; nobody has claimed it. `summariseRunByStage` is the model a stage
+   page wants — it already computes per-stage counts, status and error. Build
+   against `SDLC_STAGES`. Do **not** build ten. And note again:
+   `/solutions/ai-factory` is the *setup journey*, not the lifecycle surface.
+2. **The rail is per-run; there is no cross-run view.** "Which stage do runs
+   fail at most?" has no reader. `summariseRunByStage` over several runs answers
+   it without new schema.
+3. **Stages have no elapsed-time truth.** The rail sums node latency, which is
+   time *executing*, not wall-clock time in the stage. If a stage duration is
+   ever shown as a duration, it needs `started_at`/`finished_at` per stage —
+   currently absent. Do not present the sum as a duration; it is not one.
+4. Still open, unchanged from round 4: why the two silent Run analysis taps left
+   no row. The alert now reports status and code, so one more tap separates
+   origin (403) from wrong active organization (404) from a database refusal (409).
+5. Still open, not Graph: 19 migration versions unrecorded on hosted
+   (`20260821000400` among them, its table demonstrably present). Probe first,
+   as the vault repair did.
+
+**Coordination note.** Several bots are in this lane. This round touched only
+`lib/sdlc/run-summary.ts`, `components/graph/stage-rail.tsx`, three lines of
+`components/graph-runs-panel.tsx`, and two test files. Per-stage pages (item 1)
+are the largest unclaimed piece and do not collide with any of those — take it
+if you are next.
+
 ## AUTONOMY CLEAR IS HOSTED — AND IT ARCHIVES, IT DOES NOT DELETE (2026-08-23)
 
 `20260823000600` is applied and verified (run `32657726992`). ADR-134.
@@ -77,7 +140,7 @@ version order and dies on the earliest unrecorded file whose objects already
 exist. Each wants the measure-then-finish discipline the vault got: probe
 first, finish only what is missing, record the ledger row only once every
 declared object is present. Applying them blind is how this began.
-## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4 — PICK UP HERE)
+## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4)
 
 **Applied.** `scope=graph-stage-backfill` ran against production —
 [run 32660207022](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32660207022),

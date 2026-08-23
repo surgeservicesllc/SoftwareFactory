@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
+import { StageRail } from "@/components/graph/stage-rail";
+import { summariseRunByStage } from "@/lib/sdlc/run-summary";
 
 /**
  * The graph runs the executor worker has recorded, straight from the
@@ -331,6 +333,14 @@ export function GraphRunsPanel() {
                       </ul>
                     </div>
                   ) : null}
+                  {/*
+                    The run rolled up by lifecycle stage, above the nodes it is
+                    derived from. Same array, so the rail and the table cannot
+                    disagree about where the run is.
+                  */}
+                  <div className="mb-3">
+                    <StageRail summary={summariseRunByStage(run.nodes ?? [])} />
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[36rem] text-left text-xs">
                       <thead>
