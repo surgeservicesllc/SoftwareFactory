@@ -2,7 +2,45 @@
 
 Last updated: 2026-08-23
 
-## Newest (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
+## Newest (2026-08-23 ~20:15Z): the lifecycle is ten stages, ADR-136 is superseded, PR #347 is open and unmerged
+
+Two sessions decided the stage vocabulary opposite ways. **ADR-137 supersedes
+ADR-136**: `sdlc_stage` becomes the ten the goal document names, because the
+rewritten `agentic_sdlc` template now puts eight real nodes in the three stages
+ADR-136 correctly called unpopulatable at the time — four in DISCOVER, three in
+EVALUATE, one in DECIDE. Its reasoning against empty scaffolding is upheld, not
+overturned, which is why the enum and its producer land in one change.
+
+**Where to pick up.** PR #347, branch `claude/ui-simplification-cbyx5t`. Lint,
+typecheck, the full suite (4531 tests, 383 files) and a production build all
+pass locally. The `todo.md` Graph round-5 section is written for whoever
+continues.
+
+**Three things a next session must not get wrong.**
+
+1. `20260823000900` (the enum rebuild) **must stay numbered above**
+   `20260823000700` (the backfill), which is already applied on hosted and
+   writes three labels the rebuild removes. A test asserts it; renumbering
+   below it would orphan live rows.
+2. **Graphs already on hosted carry a wrong `is_lifecycle`.**
+   `create_graph_from_plan` inferred it from "any node has a stage" and every
+   node now has one, so every graph was recorded as a lifecycle. The plan now
+   states it explicitly, but the existing rows are unfixed. Correcting them
+   writes production rows — run `scope=probe` first.
+3. **`todo.md` conflicts on every concurrent change** because its newest
+   section goes on top, and a conflicted PR gets **no `pull_request` workflow
+   runs at all** — no run object, no error, just silence. Three pushes landed
+   before I checked. `git merge-tree --write-tree --name-only HEAD origin/main`
+   or the PR's `mergeable_state` catches it in one command.
+
+**The last open engine gap** is conditional branches (gap matrix row 6):
+`graph_edges` carries a reason, never a condition, and nothing evaluates one at
+run time. It needs a schema column plus compiler and scheduler work and deserves
+its own PR.
+
+**Not Connected, unchanged.** No node has executed against a provider.
+
+## Earlier (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
 
 The owner directed that Step 9 must actually run the bot. The delivered
 answer keeps every boundary: a record-only Claude command now launches its

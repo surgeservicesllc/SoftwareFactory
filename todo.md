@@ -51,6 +51,46 @@ contain.
 **Next bot, in the Graph lane:** build against `SDLC_STAGES` (ten), not the
 eight. See the section below this one for what shipped and where the seams are.
 
+**What landed after this section was first written.**
+
+- `20260823001000` (the `graph_handoffs` writer) got its hosted scope,
+  `scope=stage-handoffs`. Additive — no enum, no ordering constraint, either
+  side of the others. `tests/unit/hosted-apply-stage-handoffs-scope.test.ts`
+  holds the scope narrow: one file, one ledger repair, preflight reads the
+  premise off the live database, postflight reads the grants back.
+- **Gap matrix row 13 is closed.** `node_runs.confidence` and its
+  `list_graph_runs` projection both predated any writer, so the console read
+  null for every node of every run. `20260823001100` drops and recreates
+  `record_node_state_as_worker` with a trailing `p_confidence` — dropped, not
+  replaced, because `create or replace` cannot change a signature and would
+  leave two overloads for PostgREST to choose between. `scope=node-confidence`
+  applies it. The provider's three bands map to three fixed invertible values
+  (0.25 / 0.5 / 0.75); 0 and 1 are unused because nothing here is calibrated.
+  **A node whose executor reports none stores null**, which is every
+  DETERMINISTIC and ANCHOR node and every node of every run while no provider
+  is connected — a default would be a number nothing produced in a column a
+  reader takes as reported.
+- Writing that test found a live crash: `attempt.result.output` is declared
+  nullable and arrives `undefined`, so reading `.confidence` off it threw on any
+  response with no structured artifact.
+- The analysis launch fixture now carries `is_lifecycle: false`, so the hosted
+  `scope=analysis-launch-commit` stops planting analysis graphs as lifecycles.
+  Regenerating it needs `npx tsx --conditions react-server ...` — without the
+  flag the script dies on `server-only`.
+
+**Still open in this lane, in the order I would take them:**
+
+1. **Conditional branches** (gap matrix row 6) — the last engine gap, and the
+   largest. `graph_edges` carries a reason and never a condition; nothing
+   evaluates one at run time. Schema column plus compiler plus scheduler. Its
+   own PR, not a rider on this one.
+2. **Graphs already on hosted carry the wrong `is_lifecycle`.** The plan states
+   it now, but existing rows were written under the old inference. Fixing them
+   writes production rows — `scope=probe` first.
+3. **Four graph scopes are unapplied**, in order: `lifecycle`,
+   `ten-stage-lifecycle`, `stage-handoffs`, `node-confidence`.
+4. No project view links to a run (row 24).
+
 **A cost this file's own convention imposes, worth knowing before you push.**
 `todo.md` puts the newest section at the top, so *every* concurrent change to
 it conflicts — and a conflicted pull request gets **no `pull_request` workflow

@@ -964,6 +964,69 @@ Each of these was true and unguarded — provable only by a manual run, which do
 - `tests/integration/schema-security-invariants.test.ts` — RLS and FORCE RLS on every public table across the whole chain; `service_role` table privileges limited to exactly `github_change_requests`, `github_installations`, `github_repositories`, `github_webhook_deliveries`; `anon` holds no write privilege anywhere. `newsletter_subscribers` is an allowlisted policyless table, locked shut on purpose behind the SECURITY DEFINER `subscribe_to_newsletter`.
 - `tests/integration/required-checks-wiring.test.ts` — the worker's `SOFTWAREFACTORY_REQUIRED_CHECKS` matches the `name:` of every job in `ci.yml`, in both directions. A renamed CI job would otherwise leave a live run waiting for a check that never reports.
 
+## The lifecycle is ten stages, and the enum grows with its producer, 2026-08-23
+
+Branch `claude/ui-simplification-cbyx5t`, PR #347, **not merged**. Two sessions
+recorded opposite decisions on the stage vocabulary and this is the one that
+stands: **ADR-137 supersedes ADR-136**.
+
+ADR-136 refused to widen `sdlc_stage` past eight because nothing could produce a
+node in DISCOVER, EVALUATE or DECIDE — three enum values the database could
+express and nothing could fill. That was true when it was written. The rewritten
+`agentic_sdlc` template makes it false: four nodes in DISCOVER
+(`discover_internal`, `discover_packages`, `discover_services`,
+`discover_shortlist`), three in EVALUATE (`evaluate_fit`, `evaluate_risk`,
+`evaluate_matrix`), one in DECIDE. ADR-136's reasoning against empty scaffolding
+is upheld rather than overturned, which is why the vocabulary and its producer
+ship in one change.
+
+The three DISCOVER search nodes are `ANCHOR` executors and that is load-bearing:
+`anchorsFor` counts only what an anchor observed, so a DISCOVER assembled from
+`MODEL` nodes could never satisfy the stage's own evidence requirement. The
+stage would read as researched while nothing had been read.
+
+**Migration order is load-bearing and already constrained by production.**
+`20260823000700` backfills `graph_nodes.lifecycle_stage` and **is applied on
+hosted** (workflow run 32660207022). It writes `IMPLEMENTATION`, `ARCHITECTURE`
+and `PRD` — three labels the ten-stage rebuild removes — so
+`20260823000900` must stay numbered above it. Asserted by
+`tests/unit/graph-stage-mapping-agreement.test.ts`.
+
+**A live defect on `main`, found by a test written on the branch.**
+`create_graph_from_plan` inferred `is_lifecycle` from "any node declares a
+stage". Since every node of every template now has one, every graph was being
+recorded as a lifecycle, so the orchestrator iterates an audit — the exact
+failure that staging change set out to prevent. The plan now says so explicitly
+(`p_budget ->> 'is_lifecycle'`), and the checked-in hosted-apply fixture carries
+`is_lifecycle: false`. **Graphs already stored on hosted still carry the
+inferred value**; correcting them writes production rows and wants `scope=probe`
+first.
+
+**Node confidence is no longer write-only.** `node_runs.confidence` and its
+`list_graph_runs` projection both predated any writer. `20260823001100` drops
+and recreates `record_node_state_as_worker` with a trailing `p_confidence`, and
+the worker sends it on the transition that carries a node's output. The provider
+contract offers three bands, stored as three fixed invertible values
+(`CONFIDENCE_BAND_VALUE`: 0.25 / 0.5 / 0.75). 0 and 1 are deliberately unused —
+nothing here is calibrated against outcomes. A node whose executor reports no
+confidence stores **null**, which is every DETERMINISTIC and ANCHOR node and, so
+long as no provider is connected, every node of every run.
+
+**Three hosted scopes, none of them applied.** `scope=lifecycle`
+(`20260821000100`/`000200`, still unhosted), `scope=ten-stage-lifecycle`
+(`20260823000900`, the only scope in that workflow that drops a type),
+`scope=stage-handoffs` (`20260823001000`, additive), `scope=node-confidence`
+(`20260823001100`, changes one function's signature; requires
+`scope=lifecycle`).
+
+**Still a genuine gap:** conditional branches (gap matrix row 6). `graph_edges`
+carries a reason, never a condition, and nothing evaluates one at run time. It
+needs a schema column plus compiler and scheduler work and belongs in its own
+change.
+
+**Not Connected, unchanged.** No node has executed against a provider. No
+lifecycle has met its acceptance criteria and none is claimed to have.
+
 ## Agentic SDLC lifecycle on the graph worker, 2026-08-21
 
 `main` shipped a background graph worker while a parallel branch was building a
@@ -974,7 +1037,7 @@ against the tree.
 
 **What exists.**
 
-- Eight stages (`lib/sdlc/lifecycle.ts`), recorded on a node rather than implied, each with the gate that guards it and whether its claim must be anchored.
+- Eight stages (`lib/sdlc/lifecycle.ts`), recorded on a node rather than implied, each with the gate that guards it and whether its claim must be anchored. **Ten as of ADR-137** — see the section above; the rest of this list still describes the mechanism.
 - `graph_gates` under RLS and FORCE RLS with `select` to `authenticated` and no write privilege anywhere, keyed on `node_id` so an approval outlives the run that asked for it.
 - `claim_planned_graph` projects `lifecycle_stage`, `gate_kind` and any existing decision; excludes feedback edges; and re-offers a lifecycle that halted at a gate once that gate is decided.
 - `runClaimedGraph` records a gated node's artifact, moves it to VERIFYING, opens the gate and reports it as not-completed so nothing downstream starts on an undecided result.

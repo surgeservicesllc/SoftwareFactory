@@ -1,6 +1,27 @@
 # Backlog
 
-Last triaged: 2026-08-22
+Last triaged: 2026-08-23
+
+## Graph lifecycle (2026-08-23, ADR-137; PR #347 open and unmerged)
+
+- [x] Widen `sdlc_stage` to the ten stages, with the template that populates
+  them in the same change (`20260823000900`).
+- [x] Give each stage a typed, versioned artifact package
+  (`lib/sdlc/artifacts.ts`).
+- [x] Give `graph_handoffs` its first writer (`20260823001000`) and a hosted
+  scope (`scope=stage-handoffs`).
+- [x] Let the worker record `node_runs.confidence` (`20260823001100`,
+  `scope=node-confidence`), null when the executor reported none.
+- [x] Stop `create_graph_from_plan` recording every graph as a lifecycle.
+- [ ] **Conditional branches** (gap matrix row 6) — the last open engine gap.
+  `graph_edges` carries a reason and never a condition, and nothing evaluates
+  one at run time. Needs a schema column plus compiler and scheduler work; its
+  own PR.
+- [ ] Correct `is_lifecycle` on graphs already stored on hosted. Writes
+  production rows — measure with `scope=probe` first.
+- [ ] Link a project view to its runs (gap matrix row 24).
+- [ ] Apply the four graph scopes to hosted, in order: `lifecycle`,
+  `ten-stage-lifecycle`, `stage-handoffs`, `node-confidence`.
 
 ## Clearing the Backlog and All Pipelines pages (2026-08-22, ADR-119)
 

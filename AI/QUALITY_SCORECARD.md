@@ -1,6 +1,43 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
+
+**Addendum, 2026-08-23 ~20:15Z — the ten-stage lifecycle (ADR-137, PR #347,
+open and unmerged):** local verification is **PASS** — 383 test files, 4531
+tests passed, 0 failed, 2 skipped, with lint, typecheck and a production build
+green. Hosted application of all four graph scopes (`lifecycle`,
+`ten-stage-lifecycle`, `stage-handoffs`, `node-confidence`) remains **PENDING**;
+none has run.
+
+What the new suites actually prove, rather than what they are named:
+
+- `tests/unit/sdlc-orchestrator.test.ts` — **PASS** at 22 cases, three of them
+  regressions for bugs the ten-stage template exposed. All three had the same
+  shape, a rule written per node when the thing it describes belongs to a
+  stage, and all three made acceptance **unreachable** — the worst way for
+  `acceptanceReport` to be wrong, since "not met" is also what an in-progress
+  run looks like and nothing would have appeared broken.
+- `tests/integration/node-run-confidence.behavior.test.ts` — **PASS** at 8
+  cases against real PostgreSQL, including that exactly one overload of
+  `record_node_state_as_worker` exists after the drop-and-recreate, that a later
+  transition does not erase a reported confidence, and that an out-of-range
+  value is refused rather than clamped.
+- `tests/unit/graph-provider-bridge.test.ts` — the confidence cases found a
+  live crash: `result.output` is declared nullable and arrives `undefined`, so
+  reading `.confidence` off it threw on any response with no structured
+  artifact.
+- `tests/unit/graph-stage-mapping-agreement.test.ts` — pins the migration
+  ordering that production already constrains: `20260823000900` must stay
+  numbered above the applied `20260823000700`.
+
+**A live defect on `main` was found and fixed here.**
+`create_graph_from_plan` inferred `is_lifecycle` from "any node declares a
+stage", and every node of every template now declares one, so every graph was
+recorded as a lifecycle. Graphs **already stored on hosted still carry the wrong
+value**; that correction is unmade and writes production rows.
+
+**Not Connected, unchanged.** No node has executed against a provider. No
+lifecycle has met its acceptance criteria and none is claimed to have.
 
 **Addendum, 2026-08-22 ~21:30Z — containment gate honesty and the audit
 guard's hosted ACL (ADR-122):** four probe-guided rounds isolated why the
