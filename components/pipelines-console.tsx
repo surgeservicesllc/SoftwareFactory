@@ -40,6 +40,23 @@ type CommandView = {
   submittedAt: string;
   completedAt: string | null;
   project: { id: string; name: string } | null;
+  /*
+   * Both of these come from `/api/commands` and were simply not read here,
+   * which is why this page told the owner a record-only pipeline was
+   * "waiting for a worker to pick it up" — for fourteen hours, about a
+   * command no repository-writing worker will ever claim. The Bots page
+   * stopped saying that in ADR-128; this page kept saying it because it
+   * dropped the two fields that make the difference.
+   */
+  executionMode?: "manual" | "record_only" | "unknown";
+  analysisGraph?: {
+    graphId: string;
+    runState: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    artifactCount: number;
+    requiresOwnerApproval: boolean;
+  } | null;
 };
 
 export type PipelineTemplateSummary = {
@@ -351,7 +368,17 @@ function PipelineList({
       <ul className="divide-y divide-[var(--border)]">
         {commands.map((command) => {
           const stage = pipelineStage(command.status);
-          const progress = commandProgress(command.status);
+          const progress = commandProgress(
+            command.status,
+            command.executionMode,
+            command.analysisGraph ?? null,
+          );
+          // An analysis run's evidence is on the graph, which this page's own
+          // Graph runs view renders; only a repository-writing run lands on
+          // Runs. The link goes where the evidence actually is.
+          const evidenceHref = command.executionMode === "record_only" && command.analysisGraph
+            ? "/solutions/pipelines?view=graphs"
+            : "/solutions/runs";
           const StageIcon = stage.tone === "safe"
             ? CheckCircle2
             : stage.tone === "danger"
@@ -403,7 +430,9 @@ function PipelineList({
                 {progress.trackable ? (
                   <>
                     {" "}
-                    <Link href="/solutions/runs" className="font-medium text-accent">Watch it on Runs</Link>
+                    <Link href={evidenceHref} className="font-medium text-accent">
+                      {evidenceHref === "/solutions/runs" ? "Watch it on Runs" : "Watch it on Graph runs"}
+                    </Link>
                   </>
                 ) : null}
               </p>
