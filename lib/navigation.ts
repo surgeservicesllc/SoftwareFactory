@@ -40,7 +40,8 @@ export const PUBLIC_NAV: readonly NavItem[] = [
 ];
 
 /**
- * Added once there is a verified session (owner design, 2026-08-19).
+ * Added once there is a verified session (owner design, 2026-08-19; renamed
+ * 2026-08-23).
  *
  * Two destinations, because the global header names the two products a signed-in
  * person moves between — the factory and the job search — and not the pages
@@ -49,34 +50,41 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  * everything else it holds, and repeating three of them here made the header a
  * short, arbitrary excerpt of that column.
  *
- * `AI Factory` points at `/solutions`, the console entry point, which is the
- * same route the public `Solutions` entry uses — signed in this is the more
+ * `Software Factory` points at `/solutions`, the console entry point, which is
+ * the same route the public `Solutions` entry uses — signed in this is the more
  * useful name, so `globalNavigation` keeps this one and drops the public
- * duplicate rather than rendering two links to one destination.
+ * duplicate rather than rendering two links to one destination. The label
+ * matches the product's own name on the decision page and in the page title,
+ * so one thing has one name everywhere.
  *
  * `Job Seeker` points outside `/solutions` on purpose: it is the one
  * person-scoped surface, gated on its own and private to the person even inside
  * their organization.
  */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
-  { label: "AI Factory", href: "/solutions" },
+  { label: "Software Factory", href: "/solutions" },
   { label: "Job Seeker", href: "/job-seeker" },
 ];
-
-/** Added only for a confirmed super administrator. */
-export const SUPER_ADMIN_NAV: readonly NavItem[] = [{ label: "Admin", href: "/solutions/admin" }];
 
 /**
  * The global navigation for a viewer.
  *
  * Signed out: the public pages, and nothing else.
- * Signed in: the console destinations, and nothing else.
+ * Signed in: the two products, and nothing else.
  *
  * The signed-in set is deliberately not "console entries plus whatever public
  * pages are left over". That produced a header carrying two unrelated
  * vocabularies at once — Dashboard, Projects, Runs, Activity, Admin, then
  * Platform, Features, Pricing, Resources, About — where the second half sells
  * the product to someone already using it.
+ *
+ * Administration is deliberately absent (owner request, 2026-08-23). It is not
+ * a third product a person moves between; it is a page inside the console, and
+ * the console's own column lists it under Administration for exactly the
+ * viewers who have it. `isSuperAdmin` is still accepted so every caller keeps
+ * working, and is still what the header uses to show the Super admin badge —
+ * it simply no longer adds an entry. Removing a link is not removing access:
+ * `/solutions/admin` enforces its own authorization and is unchanged.
  */
 export function globalNavigation(options: {
   signedIn: boolean;
@@ -84,5 +92,5 @@ export function globalNavigation(options: {
 }): readonly NavItem[] {
   if (!options.signedIn) return PUBLIC_NAV;
 
-  return [...SIGNED_IN_NAV, ...(options.isSuperAdmin ? SUPER_ADMIN_NAV : [])];
+  return SIGNED_IN_NAV;
 }

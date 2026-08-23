@@ -54,12 +54,24 @@ describe("globalNavigation", () => {
     }
   });
 
-  it("adds Admin only for a super administrator", () => {
-    const hrefs = globalNavigation({ signedIn: true, isSuperAdmin: true }).map((i) => i.href);
-    expect(hrefs).toContain("/solutions/admin");
+  it("never puts Administration in the global navigation, for anyone", () => {
+    // Owner request, 2026-08-23. Admin is a page inside the console, not a
+    // third product, and the console column already lists it for the viewers
+    // who have it. A super administrator now sees exactly what everyone else
+    // sees up here.
+    expect(globalNavigation({ signedIn: true, isSuperAdmin: true })).toEqual(
+      globalNavigation({ signedIn: true }),
+    );
+    expect(globalNavigation({ signedIn: true, isSuperAdmin: true }).map((i) => i.href))
+      .not.toContain("/solutions/admin");
 
     // The role is meaningless without a session.
     expect(globalNavigation({ signedIn: false, isSuperAdmin: true })).toEqual(PUBLIC_NAV);
+  });
+
+  it("names the factory the way the product names itself", () => {
+    // Owner request, 2026-08-23: the header entry reads "Software Factory".
+    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual(["Software Factory", "Job Seeker"]);
   });
 });
 
@@ -69,7 +81,7 @@ describe("SiteHeader", () => {
 
     expect(screen.getByRole("link", { name: "Sign In" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get Started Free" })).toBeInTheDocument();
-    expect(primaryNav().queryByRole("link", { name: "AI Factory" })).not.toBeInTheDocument();
+    expect(primaryNav().queryByRole("link", { name: "Software Factory" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
   });
 
@@ -78,7 +90,7 @@ describe("SiteHeader", () => {
       <SiteHeader viewer={{ signedIn: true, email: "person@example.org", displayName: "A Person" }} />,
     );
 
-    expect(primaryNav().getByRole("link", { name: "AI Factory" })).toBeInTheDocument();
+    expect(primaryNav().getByRole("link", { name: "Software Factory" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Console" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Sign out" }).length).toBeGreaterThan(0);
     expect(screen.getByText("A Person")).toBeInTheDocument();
@@ -88,7 +100,7 @@ describe("SiteHeader", () => {
     expect(screen.queryByRole("link", { name: "Get Started Free" })).not.toBeInTheDocument();
   });
 
-  it("shows the Admin destination and badge only for a super administrator", () => {
+  it("shows the super admin badge without an Admin destination beside it", () => {
     const { unmount } = render(
       <SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />,
     );
@@ -99,8 +111,10 @@ describe("SiteHeader", () => {
     render(
       <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
     );
-    expect(primaryNav().getByRole("link", { name: "Admin" })).toBeInTheDocument();
+    // The badge still says who is looking; the link is gone from the header.
+    // Losing a link is not losing access — /solutions/admin enforces its own.
     expect(screen.getByText("Super admin")).toBeInTheDocument();
+    expect(primaryNav().queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });
 
   it("falls back to the email when no display name is set", () => {
@@ -109,17 +123,17 @@ describe("SiteHeader", () => {
   });
 
   it("orders the signed-in navigation the way the owner's design does", () => {
-    // Console destinations, then Admin, and nothing else. The marketing pages
-    // used to trail this list; they sold the product to someone already inside
-    // it and pushed the console links away from the account area.
+    // The two products, and nothing else — not the marketing pages that used
+    // to trail this list, and not Admin, which the owner removed on
+    // 2026-08-23. A super administrator is rendered here precisely because
+    // their header must now look the same as everyone else's.
     render(
       <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
     );
 
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "AI Factory",
+      "Software Factory",
       "Job Seeker",
-      "Admin",
     ]);
   });
 
@@ -128,7 +142,7 @@ describe("SiteHeader", () => {
      * The hrefs are the instruction, not an implementation detail, so they are
      * asserted literally rather than through the module that supplies them.
      *
-     * `AI Factory` is `/solutions` — the console entry point — and not
+     * `Software Factory` is `/solutions` — the console entry point — and not
      * `/solutions/ai-factory`, which is a page inside the console that happens
      * to share the name.
      */
@@ -136,7 +150,7 @@ describe("SiteHeader", () => {
       <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
     );
 
-    expect(primaryNav().getByRole("link", { name: "AI Factory" }))
+    expect(primaryNav().getByRole("link", { name: "Software Factory" }))
       .toHaveAttribute("href", "/solutions");
     expect(primaryNav().getByRole("link", { name: "Job Seeker" }))
       .toHaveAttribute("href", "/job-seeker");
@@ -157,12 +171,13 @@ describe("SiteHeader", () => {
     route.pathname = "/";
   });
 
-  it("marks one destination current where the entries nest", () => {
+  it("marks exactly one destination current on a nested console page", () => {
     /*
-     * `AI Factory` is `/solutions` and `Admin` is `/solutions/admin`, so a
-     * plain prefix test marks both current on the admin page — two links
-     * claiming `aria-current="page"`, and two underlines drawn at once. The
-     * most specific match is the one a person is actually on.
+     * The admin page used to have its own header entry nested under
+     * `/solutions`, and a plain prefix test marked both current — two links
+     * claiming `aria-current="page"`, two underlines drawn at once. The entry
+     * is gone; what must still hold is that standing deep inside the console
+     * lights exactly one product, and it is the product you are in.
      */
     route.pathname = "/solutions/admin";
     render(
@@ -173,10 +188,10 @@ describe("SiteHeader", () => {
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "page");
 
-    expect(current.map((link) => link.textContent)).toEqual(["Admin"]);
+    expect(current.map((link) => link.textContent)).toEqual(["Software Factory"]);
   });
 
-  it("keeps AI Factory current inside the console", () => {
+  it("keeps Software Factory current inside the console", () => {
     // The console's own pages sit under /solutions, and the header should go
     // on saying which product you are in while you move around inside it.
     route.pathname = "/solutions/ai-factory";
@@ -186,7 +201,7 @@ describe("SiteHeader", () => {
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "page");
 
-    expect(current.map((link) => link.textContent)).toEqual(["AI Factory"]);
+    expect(current.map((link) => link.textContent)).toEqual(["Software Factory"]);
   });
 
   it("marks the current destination and underlines only that one", () => {

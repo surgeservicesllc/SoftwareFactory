@@ -1,5 +1,56 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — ADR-136 IS SUPERSEDED: THE ENUM DOES GROW, BECAUSE SOMETHING NOW POPULATES IT (2026-08-23, round 5 — PICK UP HERE)
+
+Two sessions reached opposite conclusions on the same question and both wrote
+them down. This section records which one stands and why, so a third session
+does not re-litigate it.
+
+**ADR-136 (round 4, on `main`) decided the enum stays at eight.** Its rationale
+was not that ten stages are wrong — it was that three of them were empty:
+
+> "Nothing in the system produces a node in them today: no template declares a
+> discovery, evaluation or decision capability … Adding three enum values would
+> create a vocabulary the database can express and nothing can populate — a
+> stage filter that is permanently empty."
+
+That was **true when it was written and is false now.** This branch's rewritten
+`agentic_sdlc` template puts **eight real nodes** in exactly those three stages:
+
+| Stage | Nodes | Executors |
+| --- | --- | --- |
+| `DISCOVER` | `discover_internal`, `discover_packages`, `discover_services`, `discover_shortlist` | 3 × `ANCHOR`, 1 × `DETERMINISTIC` |
+| `EVALUATE` | `evaluate_fit`, `evaluate_risk`, `evaluate_matrix` | 3 × `MODEL` |
+| `DECIDE` | `decide` | `MODEL` |
+
+None of the three filters is empty, so the specific harm ADR-136 named — a
+stage page that reads live and is always blank — does not occur. ADR-136 also
+wrote its own exit condition, and this satisfies it: *"If DISCOVER/EVALUATE/
+DECIDE are later wanted as first-class stages, the prerequisite is a capability
+that produces them, not an enum value."* The three DISCOVER anchors are that
+producer. They are `ANCHOR`-executor deliberately: `anchorsFor` counts only what
+an anchor observed, so a DISCOVER stage built from `MODEL` nodes could never
+satisfy the stage's own evidence requirement — the stage would look researched
+while nothing had been read.
+
+**What ADR-136 got right, and this keeps.** Its rejection of empty scaffolding
+is the reason the three stages had to ship *with* their nodes in one change
+rather than as an enum widening followed by a template later. The enum, the
+template, the artifact contracts and the pages land together or not at all.
+
+**The cost this accepts, stated plainly.** Round 4 applied `20260823000700` to
+production, so `graph_nodes.lifecycle_stage` is now **fully populated** on live
+rows in the eight-value vocabulary. `20260823000900` rebuilds that enum over
+those freshly-filled rows. The ordering is load-bearing and is recorded in the
+migration's own header: the backfill writes `IMPLEMENTATION`, `ARCHITECTURE`
+and `PRD`, and three of those labels do not survive the rebuild. **The rebuild
+must stay numbered above `20260823000700`.** Renumbering it below silently
+orphans the mapping and leaves live rows holding labels the new type does not
+contain.
+
+**Next bot, in the Graph lane:** build against `SDLC_STAGES` (ten), not the
+eight. See the section below this one for what shipped and where the seams are.
+
 ## GRAPH: THE TEN-STAGE LIFECYCLE — WHAT SHIPPED, AND EXACTLY WHERE TO RESUME (2026-08-23)
 
 Branch `claude/ui-simplification-cbyx5t`, three commits on top of a clean merge
@@ -371,8 +422,70 @@ Expect the migration-name pins in `tests/integration/*` to need moving the
 moment another migration lands.
 
 
-## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)
-## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, latest)
+
+## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY WAS SETTLED AT EIGHT (2026-08-23, round 4 — vocabulary part superseded by round 5 above)
+
+**Applied.** `scope=graph-stage-backfill` ran against production —
+[run 32660207022](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32660207022),
+step 33, success — and `20260823000700` is now recorded on **both** sides of
+the ledger. The step's last statement is a hard gate: it exits non-zero if any
+node whose capability the application defines still has no stage, so its
+success is the verification, not a claim beside it. Every graph in this
+workspace, including the first real Step 9 run, now carries a lifecycle stage
+and the graph-runs **Stage** column reads for the whole history.
+
+One honesty note: I did not capture the before/after distribution the step
+prints — the log tail is dominated by the 130-line ledger listing that follows
+it. The counts are in the run log if anyone wants them; what is proven here is
+the gate, not a number I could quote.
+
+**The vocabulary question is decided (ADR-136), and it was blocking per-stage
+pages.** The goal document names ten stages; the database holds eight. They are
+not two designs — the ten are a presentation of the eight:
+
+```
+REQUIREMENT -> GOAL + PRD          REVIEW  -> REVIEW
+DISCOVER    -> (none)              TEST    -> TEST
+EVALUATE    -> (none)              DEPLOY  -> DEPLOYMENT
+DECIDE      -> (none)              MONITOR -> MONITORING
+ARCHITECT   -> ARCHITECTURE
+BUILD       -> IMPLEMENTATION
+```
+
+The enum does **not** grow. DISCOVER, EVALUATE and DECIDE have nothing that
+produces them: no template declares such a capability and `NODE_CAPABILITIES`
+has no member that resolves to one. Three enum values nothing can populate is a
+stage filter that is permanently empty — scaffolding, in the same commit that
+would claim to satisfy the goal. Discovery does exist engine-side
+(`lib/graph/discovery.ts`, canary-proven); when a **stored** graph can add
+rounds mid-run — the limitation recorded 2026-08-19 — a DISCOVERY stage will
+have something real to hold, and the migration is additive so waiting costs
+nothing.
+
+**Next bot, in the Graph lane:**
+
+> Item 1 below is superseded by round 5: build the ten, not the eight. Items
+> 2–4 still stand.
+
+1. **Per-stage pages are now unblocked, for the eight.** Build against
+   `SDLC_STAGES`, presenting REQUIREMENT as GOAL+PRD if the goal document's
+   wording is wanted. Do not build ten — three would read live and always be
+   empty. Note `/solutions/ai-factory` is the *setup journey* (connect a
+   repository, assign bots, issue a command), not the lifecycle; naming it the
+   lifecycle surface would be the same untruth in the navigation.
+2. **Nothing yet reads the stage except one table column.** The graph-runs
+   panel shows it per node; no surface groups or summarises a run by stage.
+   That is the cheapest next thing that consumes the data rather than adding
+   more of it.
+3. Still open, unchanged: why the two silent Run analysis taps left no row. The
+   alert now reports status and code, so one more tap separates origin (403)
+   from wrong active organization (404) from a database refusal (409).
+4. Still open, not Graph: 19 migration versions remain unrecorded on hosted
+   (`20260821000400` among them, its table demonstrably present). Each wants
+   the probe-first discipline the vault repair used.
+
+
+## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, round 3)
 
 Follows the round below, which made new graphs carry a stage. Existing rows
 still stored null, so the graph-runs **Stage** column read as an em dash for the
@@ -428,7 +541,8 @@ test. Typecheck, lint, full suite, production build all green.
 3. Still open: why the two silent Run analysis taps left no row. The alert now
    reports status and code, so one more tap separates origin (403) from wrong
    active organization (404) from a database refusal (409).
-## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
+
+## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, round 2)
 
 The graph-runs panel has had a **Stage** column since the Agentic SDLC
 migration (`20260821000200`, `sdlc_stage` enum, `graph_nodes.lifecycle_stage`).
@@ -574,7 +688,7 @@ one before it was removed:
    `update refused=t delete refused=t` (run 32652305439).
 
 
-## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, latest)
+## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, round 1)
 
 Step 9 is resolved above — a real run COMPLETED with 7 artifacts, and the
 application's own launch path is working again. What that section leaves open
@@ -681,12 +795,13 @@ Two loose ends for whoever picks this up:
   symptom, not a separate bug.
 
 Also shipped 2026-08-23: **multi-select delete on the Pipelines page**
-(ADR-130). `20260823000900` is applied on hosted (run 32647755059);
+(ADR-130). `20260823000200` is applied on hosted (run 32647755059);
 `delete_selected_pipelines` keeps every refusal `clear_all_pipelines` makes
 and adds organization scoping plus a 200-row cap. Not yet exercised against
 a real production row — the backlog item says so.
 
 ## HOW THE STEP 9 DIAGNOSIS WENT (2026-08-23, kept for the method)
+
 The goal in flight: the AI Factory's Step 9 runs the owner's recorded Claude
 command as a real read-only analysis (graph → subscription graph worker →
 artifacts), and Runs + Step 9 show it. The full lane shipped through PR #344

@@ -826,6 +826,39 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   that constraint and only *notices* the trigger's absence, and the scope's
   rolled-back proof accepts SQLSTATE `23503` as well as the trigger's
   sentence.
-- [ ] Apply on hosted through `scope=clear-autonomy-projects` and confirm the
-  section empties for the owner. Pressing Clear against the owner's own
-  projects is theirs to do, not mine.
+- [x] Applied on hosted (run 32657726992). The ledger records
+  `20260823000600`; the postflight raised its expected notice about the absent
+  trigger; the rolled-back proof against real rows reported `GUARD: project
+  deletion still refused`; the readback confirmed owner+authenticated-only
+  execute and the surviving RESTRICT.
+- [ ] Pressing Clear against the owner's own projects is theirs to do, not
+  mine. The control is live on the Autonomy page and will archive every
+  project the loop can still act on.
+
+## The decision page and the renamed navigation (2026-08-23, owner goal, ADR-135)
+
+- [x] `/decision` renders the two products as chooser cards, with Getting
+  started beneath them and a Quick overview + Recent activity rail. Every
+  number is counted from the viewer's own records; a source that cannot be
+  read says "Unavailable" on its own row rather than showing a confident zero.
+- [x] Three gates before it renders: signed out to sign-in, no workspace
+  through onboarding and back, closed gate to `/solutions`.
+- [x] "Only on initial login" is a 15-minute HTTP-only marker opened by the
+  password route and the auth callback and closed by choosing. Choosing is a
+  Server Action, not a link, so a prefetch cannot dismiss the page.
+- [x] One default destination, in one place: the sign-in page forwards only a
+  `next` the caller supplied, and the generic Sign In entries in the header
+  and footer no longer pin `/solutions`.
+- [x] Global navigation: `Software Factory` and `Job Seeker`, and no
+  Administration entry for anyone. The console column still lists Admin for
+  super administrators, and `/solutions/admin` is unchanged.
+- [x] Covered by unit tests for the gate, the page's three redirects, the
+  overview's failure behaviour, and the renamed header; by the entry-point
+  contract; and in a real browser at every width through the harness case
+  `decision-overview` and the signed-in header assertion.
+- [ ] The owner should confirm the page matches their image. It was built from
+  the described structure — two product cards (BUILD / GROW), Getting started,
+  Quick overview and Recent activity — and the wording is mine, not theirs.
+- [ ] The sidebar keeps its own `AI Factory` entry, which points at the guided
+  journey (`/solutions/ai-factory`) rather than the console root. If the owner
+  wants that renamed too, it is a one-line change plus its nav contract test.

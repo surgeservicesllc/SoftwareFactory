@@ -1695,3 +1695,64 @@ Use this append-only log for decisions that constrain future implementation. Cha
   accepts SQLSTATE `23503` as well as the trigger's sentence. The lesson is to
   assert the enforcing object rather than the explaining one - the explanation
   is a courtesy, the constraint is the guarantee.
+
+## ADR-135 - Signing in lands on a chooser, and the header names two products rather than three
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner asked for two things at once. First, that every signed-in
+  person land on `/decision`, a screen offering the two products side by side,
+  and that the page be reachable "only on initial login". Second, that the
+  global navigation drop Administration and rename `AI Factory` to
+  `Software Factory`.
+- Decision:
+  - `/decision` is a top-level route carrying the global header and no console
+    sidebar, because the whole point of the screen is that the person has not
+    yet said which console they want. Three gates run before it renders, in
+    the order that makes each meaningful: signed out redirects to sign-in with
+    a `next` back here; no workspace redirects through onboarding and back;
+    and a closed gate redirects to `/solutions`.
+  - "Only on initial login" is a marker cookie (`sf-decision`, HTTP-only,
+    host-only, `SameSite=Lax`, 15 minutes) opened at the two places a session
+    actually comes into existence - the password route and the auth callback -
+    and closed by the act of choosing.
+  - Choosing is a Server Action form submission, not a link. A link would be
+    prefetched, and a prefetch that closed the gate would dismiss the chooser
+    before the person had read it.
+  - The default destination now lives in exactly one place. The sign-in *page*
+    used to substitute `/solutions` when no `next` was supplied, which reached
+    the route as an explicit request and silently overrode the route's own
+    default; it now forwards only a `next` the caller actually asked for. The
+    generic "Sign In" entries in the header and footer dropped their pinned
+    `?next=/solutions` for the same reason. A prompt that says "sign in to see
+    your pipelines" still carries its own `next`.
+  - `globalNavigation` returns the two products for every signed-in viewer.
+    `isSuperAdmin` is still accepted - the header uses it for the Super admin
+    badge - but no longer adds an entry.
+- Rationale: the gate grants nothing. It decides whether one chooser screen is
+  shown; `/decision` still resolves the viewer through `readViewer()`, so a
+  forged cookie earns a redirect rather than a page. Removing the Admin link
+  removes a link, not access: `/solutions/admin` enforces its own
+  authorization and the console column still lists it under Administration for
+  the viewers who have it. The rename makes one thing have one name - the
+  header entry, the decision card and the page title all now say Software
+  Factory. The sidebar's separate `AI Factory` entry is a different
+  destination (the guided journey at `/solutions/ai-factory`) and is
+  unchanged.
+- Consequence: the callback's default moved from `/auth/onboarding` to
+  `/decision`, which also fixes an old wart - a returning person signing in by
+  magic link was being shown "Name your workspace" for a workspace they
+  already had. The honest limit of the gate is recorded in its own module:
+  someone who lands on the chooser and navigates away without choosing can
+  return to it until the cookie expires. Closing it on any other navigation
+  would need middleware on every route, which is a much larger mechanism than
+  a chooser screen warrants.
+
+## ADR-136 - The lifecycle vocabulary is the eight stages the database holds, and the goal's ten map onto them
+
+- Date: 2026-08-23
+- Status: Accepted
+- Decision: `sdlc_stage` stays the eight values it has — GOAL, PRD, ARCHITECTURE, IMPLEMENTATION, REVIEW, TEST, DEPLOYMENT, MONITORING. The graph-engineering goal document's ten (REQUIREMENT, DISCOVER, EVALUATE, DECIDE, ARCHITECT, BUILD, REVIEW, TEST, DEPLOY, MONITOR) are a presentation of those eight, not a second vocabulary to add. Six map one to one — ARCHITECT/ARCHITECTURE, BUILD/IMPLEMENTATION, REVIEW, TEST, DEPLOY/DEPLOYMENT, MONITOR/MONITORING. REQUIREMENT covers GOAL and PRD, which is the request and the structured requirement it becomes. DISCOVER, EVALUATE and DECIDE have no stage of their own.
+- Rationale: the three unmapped stages are the reason to decide rather than drift. Nothing in the system produces a node in them today: no template declares a discovery, evaluation or decision capability, and `NODE_CAPABILITIES` has no member that would resolve to one. Adding three enum values would create a vocabulary the database can express and nothing can populate — a stage filter that is permanently empty, and the "do not stop after creating scaffolding" rule broken in the same commit that claimed to satisfy the goal. The eight stages are not a smaller idea than the ten; they are the ones a node can actually be in. Discovery does exist in the engine (`lib/graph/discovery.ts`, the DISCOVERY_GRAPH the canary proved), and when a stored graph can add rounds mid-run — the limitation recorded on 2026-08-19 — a DISCOVERY stage will have something real to hold. That is when the enum should grow, and the migration is additive (`add value if not exists`) so waiting costs nothing.
+- Also: this settles what a per-stage page may claim. A page per stage is buildable against the eight; a page per goal-document stage is not, because three of them would read live-looking and always be empty. `/solutions/ai-factory` today is the setup journey — connect a repository, assign bots, issue a command — and is not the lifecycle; naming it as the lifecycle surface would be the same untruth in the navigation.
+- Consequence: the mapping is recorded here rather than in code, because code that nothing calls is the scaffolding this rejects. A future session building stage pages reads this ADR, builds the eight, and presents REQUIREMENT as GOAL and PRD together if the goal document's wording is wanted in the UI. If DISCOVER/EVALUATE/DECIDE are later wanted as first-class stages, the prerequisite is a capability that produces them, not an enum value.

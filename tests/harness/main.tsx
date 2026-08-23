@@ -39,6 +39,8 @@ import { SafetyControls } from "@/components/safety-controls";
 import { AgentsConsole } from "@/components/agents-console";
 import { AiAccountsPanel } from "@/components/ai-accounts-panel";
 import { AppShell } from "@/components/app-shell";
+import { DecisionOverview } from "@/components/decision-overview";
+import { DecisionProductCards } from "@/components/decision-products";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { BacklogConsole } from "@/components/backlog-console";
 import { ConnectionsConsole } from "@/components/connections-console";
@@ -427,6 +429,22 @@ const CASES: Record<string, () => React.ReactElement> = {
   "portfolio-controls": () => <InShell><PortfolioControls /></InShell>,
   "project-detail": () => <InShell><ProjectDetailConsole projectId={PROJECT_ID} /></InShell>,
   "recent-activity": () => <InShell><RecentActivityCard authenticated /></InShell>,
+  "decision-overview": () => <InShell><DecisionOverview authenticated /></InShell>,
+  /*
+   * The chooser's two product cards. `/decision` is hard-gated — signed out it
+   * redirects — so the width sweep cannot navigate to it without destroying
+   * its own execution context. The cards are presentational, so they are
+   * measured here instead, with the two Server Actions stood in for by
+   * no-ops.
+   */
+  "decision-products": () => (
+    <InShell>
+      <DecisionProductCards
+        onChooseSoftwareFactory={() => undefined}
+        onChooseJobSeeker={() => undefined}
+      />
+    </InShell>
+  ),
   "project-bots": () => (
     <div className="bg-background p-4">
       <ProjectBots projectId={PROJECT_ID} projectName="E-Commerce Platform" />
