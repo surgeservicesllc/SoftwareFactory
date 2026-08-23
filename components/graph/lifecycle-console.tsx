@@ -8,6 +8,7 @@ import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { SDLC_LIFECYCLE, stageDefinition, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import { buildStagePortfolio, type SummarisableRun } from "@/lib/sdlc/portfolio";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
+import { FACTORY_STAGES } from "@/lib/graph/factory-stages";
 
 /**
  * The lifecycle, across every run.
@@ -32,7 +33,22 @@ type State =
   | { kind: "error" }
   | { kind: "ready"; runs: SummarisableRun[] };
 
-export function LifecycleConsole({ stage }: { stage?: SdlcStage } = {}) {
+/**
+ * `stages` is the board-stage case, and it is additive.
+ *
+ * The owner's boards number ten steps where the database holds eleven stages,
+ * and exactly one of them — REQUIREMENT — is two: the request, and the
+ * structured requirement it becomes. A page for that step has to read both, so
+ * it passes `stages`; every other caller passes the single `stage` it always
+ * did and renders exactly as before.
+ */
+export function LifecycleConsole(
+  { stage, stages, heading }: {
+    stage?: SdlcStage;
+    stages?: readonly SdlcStage[];
+    heading?: { title: string; description: string };
+  } = {},
+) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -54,15 +70,57 @@ export function LifecycleConsole({ stage }: { stage?: SdlcStage } = {}) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const detail = stages && stages.length > 0 ? stages : stage ? [stage] : [];
+
+  /*
+   * On the index, the ten steps are shown before the data loads and whether or
+   * not it can be.
+   *
+   * They are the product's vocabulary, not tenant records: what the ten stages
+   * are does not depend on having a session, and hiding the map behind one
+   * meant a signed-out visitor met an error card where the explanation should
+   * be. The figures underneath still need the read, and still say so.
+   */
+  const indexFrame = (inner: React.ReactNode) => (
+    <div className="space-y-6">
+      <PageHeader
+        title="Lifecycle"
+        description="Every stage a graph moves through, across every run in this workspace."
+      />
+      <FactorySteps />
+      {inner}
+    </div>
+  );
+
+  /*
+   * A board step keeps its own name and purpose in every state.
+   *
+   * Same rule as the map above: "6. Build — implement the work" is what the
+   * step *is*, and it does not become unknown because the run figures could
+   * not be read. Without this a signed-out visitor met a bare error card and
+   * could not tell which step they had opened.
+   */
+  const framed = (inner: React.ReactNode) => (
+    heading
+      ? (
+          <div className="space-y-6">
+            <PageHeader title={heading.title} description={heading.description} />
+            {inner}
+          </div>
+        )
+      : inner
+  );
+
   if (state.kind === "loading") {
-    return (
+    const spinner = (
       <Card className="grid min-h-64 place-items-center">
         <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the lifecycle" />
       </Card>
     );
+    return detail.length === 0 ? indexFrame(spinner) : framed(spinner);
   }
   if (state.kind === "error") {
-    return (
+    const failure = (
       <Card className="p-6">
         <h2 className="text-lg font-semibold text-foreground">The lifecycle could not be read</h2>
         <p className="mt-2 text-sm text-muted">
@@ -73,12 +131,70 @@ export function LifecycleConsole({ stage }: { stage?: SdlcStage } = {}) {
         </button>
       </Card>
     );
+    // The map still stands; only the figures are missing, and the card says so.
+    return detail.length === 0 ? indexFrame(failure) : framed(failure);
   }
 
   const portfolio = buildStagePortfolio(state.runs);
-  return stage
-    ? <StageDetail stage={stage} runs={state.runs} portfolio={portfolio} />
-    : <StageIndex portfolio={portfolio} />;
+  if (detail.length === 0) return <StageIndex portfolio={portfolio} />;
+
+  /*
+   * One heading, then each stored stage this step covers.
+   *
+   * Rendering `StageDetail` per stage rather than merging their rows keeps the
+   * per-stage truth intact: a run that reached GOAL and never reached PRD says
+   * so, which a combined count would hide behind one number.
+   */
+  return (
+    <div className="space-y-6">
+      {heading ? <PageHeader title={heading.title} description={heading.description} /> : null}
+      {detail.map((entry) => (
+        <StageDetail key={entry} stage={entry} runs={state.runs} portfolio={portfolio} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The ten steps, as the owner's boards number them.
+ *
+ * The stored vocabulary has eleven stages and this has ten, which is not a
+ * disagreement: REQUIREMENT is GOAL and PRD together — the request, and the
+ * structured requirement it becomes — and the other nine are the same stages
+ * under the names the boards use. `FACTORY_STAGES` holds that mapping, so the
+ * list below cannot drift from the pages it links to.
+ *
+ * No counts here on purpose. This is the map; the per-stage figures are in the
+ * portfolio underneath, read from real runs, and repeating them in two shapes
+ * is how two answers to one question start disagreeing.
+ */
+function FactorySteps() {
+  return (
+    <Card className="p-5">
+      <h2 className="text-base font-semibold text-foreground">The ten steps</h2>
+      <p className="mt-1 text-sm text-muted">
+        One request moves through these in order. Open a step to see where the work stands.
+      </p>
+      <ol className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {FACTORY_STAGES.map((step) => (
+          <li key={step.slug}>
+            <Link
+              href={`/solutions/lifecycle/${step.slug}`}
+              className="flex h-full flex-col gap-1 rounded-lg border border-line p-3 transition-colors hover:border-[var(--accent-border)] hover:bg-surface-raised"
+            >
+              <span className="flex items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-md bg-surface-raised text-[11px] font-bold tabular text-muted">
+                  {step.number}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{step.name}</span>
+              </span>
+              <span className="text-xs leading-5 text-muted">{step.purpose}</span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
 }
 
 function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePortfolio> }) {
@@ -88,6 +204,8 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
         title="Lifecycle"
         description="Every stage a graph moves through, across every run in this workspace."
       />
+
+      <FactorySteps />
 
       {portfolio.runsConsidered === 0 ? (
         <Card className="p-6">
