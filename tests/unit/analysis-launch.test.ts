@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -42,5 +45,34 @@ describe("the analysis template map", () => {
         ).toBe(true);
       }
     }
+  });
+
+  /**
+   * The hosted-apply scope `analysis-launch-commit` feeds this checked-in
+   * fixture to launch_command_analysis_graph when the browser doorway cannot
+   * be observed. The fixture must therefore be byte-for-byte what the code
+   * would send today; regenerate with
+   * `npx tsx scripts/emit-analysis-plan.mts other supabase/fixtures/production_readiness.launch-plan.json`
+   * whenever the template or compiler changes.
+   */
+  it("keeps the checked-in production_readiness launch fixture identical to a fresh compile", () => {
+    const fixture = JSON.parse(readFileSync(
+      resolve(import.meta.dirname, "../../supabase/fixtures/production_readiness.launch-plan.json"),
+      "utf8",
+    )) as Record<string, unknown>;
+    const template = findTemplate("production_readiness");
+    expect(template).not.toBeNull();
+    const built = buildLaunchPlan(template!, budgetForTemplate(template!));
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(fixture).toEqual({
+      topology: built.plan.topology,
+      topologyReasons: built.plan.topologyReasons,
+      riskLevel: built.plan.riskLevel,
+      requiresOwnerApproval: built.plan.requiresOwnerApproval,
+      nodes: built.plan.nodes,
+      edges: built.plan.edges,
+      budget: built.plan.budget,
+    });
   });
 });

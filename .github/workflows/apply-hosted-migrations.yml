@@ -74,6 +74,10 @@ on:
           Run analysis launch inside a rolled-back transaction and reports
           whether hosted PostgREST resolves and executes the doorway function,
           because the button's failure mode is invisible from the repository;
+          "analysis-launch-commit" commits the one launch the owner's Run
+          analysis tap asked for, through the same database doorway with the
+          hash-pinned fixture plan, refusing if the command already has its
+          graph; the graph lands PLANNED and only the graph worker runs it;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -99,6 +103,7 @@ on:
           - command-analysis-graphs
           - record-only-postflight
           - analysis-launch-doorcheck
+          - analysis-launch-commit
           - probe
 permissions:
   checks: read
@@ -4955,6 +4960,126 @@ jobs:
           echo "2) Schema-cache reload signal, in case PostgREST's cache predates 20260823000100."
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Signal sent. If the rehearsal above returned a graph id, the database layer is healthy; a Run analysis tap after this run answers whether the edge stack agrees."
+
+      - name: Commit the Run analysis launch (scope=analysis-launch-commit)
+        # The owner tapped Run analysis and the browser path left no trace;
+        # the doorcheck rehearsal then proved the hosted database performs the
+        # exact launch and rolled it back. This scope commits that same launch
+        # once, through the same database doorway the button calls, with the
+        # same plan the button would send — the checked-in fixture is pinned
+        # here by hash and pinned in tests against a fresh compile of the
+        # production_readiness template.
+        #
+        # Idempotent by construction: launch_command_analysis_graph returns
+        # the existing graph when the link already exists, and this scope
+        # additionally refuses up front so a re-dispatch cannot even try.
+        # Nothing here executes analysis work — the graph lands PLANNED and
+        # only the graph worker turns it into a run.
+        if: ${{ inputs.scope == 'analysis-launch-commit' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          PLAN=supabase/fixtures/production_readiness.launch-plan.json
+          EXPECTED_SHA256=7de9f7a14c30e4b2bdcb91f18098cdf41fb358e374333194ae5031d0b4c8aa19
+          ACTUAL_SHA256=$(sha256sum "$PLAN" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Launch plan fixture hash mismatch; refusing to launch."
+            exit 1
+          fi
+
+          TOPOLOGY=$(jq -r '.topology' "$PLAN")
+          REASONS=$(jq -c '.topologyReasons' "$PLAN")
+          RISK=$(jq -r '.riskLevel' "$PLAN")
+          APPROVAL=$(jq -r '.requiresOwnerApproval' "$PLAN")
+          NODES=$(jq -c '.nodes' "$PLAN")
+          EDGES=$(jq -c '.edges' "$PLAN")
+          BUDGET=$(jq -c '.budget' "$PLAN")
+          if [ "$RISK" != "green" ] || [ "$APPROVAL" != "false" ]; then
+            echo "::error::The fixture is not the green, no-approval analysis plan this scope commits."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X \
+            -v topology="$TOPOLOGY" -v reasons="$REASONS" -v risk="$RISK" \
+            -v nodes="$NODES" -v edges="$EDGES" -v budget="$BUDGET" <<'LAUNCH_SQL'
+          begin;
+          -- psql interpolation cannot reach inside the DO body, so the plan
+          -- crosses over as transaction-local settings.
+          select set_config('launch.topology', :'topology', true),
+                 set_config('launch.reasons', :'reasons', true),
+                 set_config('launch.risk', :'risk', true),
+                 set_config('launch.nodes', :'nodes', true),
+                 set_config('launch.edges', :'edges', true),
+                 set_config('launch.budget', :'budget', true);
+          do $launch$
+          declare
+            v_cmd public.commands%rowtype;
+            v_actor uuid;
+            v_graph uuid;
+          begin
+            select command.* into v_cmd
+              from public.commands command
+             where command.parameters ->> 'executionMode' = 'record_only'
+               and command.parameters ->> 'provider' = 'anthropic'
+             order by command.created_at desc
+             limit 1;
+            if not found then
+              raise exception 'no record-only Claude command exists to launch';
+            end if;
+            if exists (select 1 from public.command_analysis_graphs link
+                        where link.command_id = v_cmd.id) then
+              raise exception 'command % already has its analysis graph; nothing to do', v_cmd.id;
+            end if;
+
+            select member.user_id into v_actor
+              from public.organization_members member
+             where member.organization_id = v_cmd.organization_id
+               and member.role = 'owner'
+             order by member.created_at
+             limit 1;
+            if v_actor is null then
+              raise exception 'the organization has no owner member row';
+            end if;
+            perform set_config(
+              'request.jwt.claims',
+              json_build_object('sub', v_actor, 'role', 'authenticated')::text,
+              true
+            );
+
+            v_graph := public.launch_command_analysis_graph(
+              v_cmd.organization_id, v_cmd.project_id, v_cmd.id,
+              current_setting('launch.topology')::public.graph_topology,
+              current_setting('launch.reasons')::jsonb,
+              current_setting('launch.risk')::public.risk_level,
+              false,
+              current_setting('launch.nodes')::jsonb,
+              current_setting('launch.edges')::jsonb,
+              current_setting('launch.budget')::jsonb
+            );
+            raise notice 'LAUNCH: command % now has analysis graph %', v_cmd.id, v_graph;
+          end
+          $launch$;
+          commit;
+          LAUNCH_SQL
+
+          echo ""
+          echo "What the launch produced, read back rather than assumed."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select link.command_id, link.graph_id, link.created_at,
+                   (select count(*) from public.graph_nodes node where node.graph_id = link.graph_id) as nodes,
+                   (select count(*) from public.graph_runs run where run.graph_id = link.graph_id) as runs
+              from public.command_analysis_graphs link
+             order by link.created_at desc
+             limit 3;"
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
