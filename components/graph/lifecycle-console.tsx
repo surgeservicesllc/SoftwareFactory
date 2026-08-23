@@ -7,7 +7,7 @@ import { AlertTriangle, Loader2, ShieldCheck, UserCheck } from "lucide-react";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { SDLC_LIFECYCLE, stageDefinition, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import { buildStagePortfolio, type SummarisableRun } from "@/lib/sdlc/portfolio";
-import { summariseRunByStage } from "@/lib/sdlc/run-summary";
+import { summariseRunStages } from "@/lib/graph/stage-summary";
 
 /**
  * The lifecycle, across every run.
@@ -195,13 +195,17 @@ function StageDetail({
   const previous = index > 0 ? SDLC_LIFECYCLE[index - 1].stage : null;
   const next = index < SDLC_LIFECYCLE.length - 1 ? SDLC_LIFECYCLE[index + 1].stage : null;
 
-  // Runs that reached this stage, with just this stage's slice of each.
-  const appearances = runs
-    .map((run) => ({
-      run,
-      slice: summariseRunByStage(run.nodes ?? []).stages.find((s) => s.stage === stage)!,
-    }))
-    .filter((appearance) => appearance.slice.total > 0);
+  /*
+   * Runs that reached this stage, with just this stage's slice of each.
+   * `summariseRunStages` omits stages a run never contained, so an absent
+   * slice *is* the filter — no separate emptiness check to fall out of step
+   * with it.
+   */
+  const appearances = runs.flatMap((run) => {
+    const slice = summariseRunStages(run.nodes ?? []).stages
+      .find((candidate) => candidate.stage === stage);
+    return slice ? [{ run, slice }] : [];
+  });
 
   return (
     <div className="space-y-6">
@@ -255,23 +259,24 @@ function StageDetail({
               <li key={run.graphRunId} className="flex flex-wrap items-center gap-2 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">{run.goal ?? run.graphRunId}</p>
-                  {slice.firstError ? (
-                    <p className="truncate text-xs text-[var(--danger)]">{slice.firstError}</p>
-                  ) : (
-                    <p className="text-xs text-faint">
-                      {slice.succeeded} of {slice.total} node{slice.total === 1 ? "" : "s"} succeeded
-                    </p>
-                  )}
+                  <p className="text-xs text-faint">
+                    {slice.completed} of {slice.total} node{slice.total === 1 ? "" : "s"} completed
+                    {slice.failed > 0 ? ` · ${slice.failed} failed` : ""}
+                    {slice.active > 0 ? ` · ${slice.active} in flight` : ""}
+                  </p>
                 </div>
                 <StatusBadge
                   tone={
-                    slice.status === "FAILED" ? "danger"
-                      : slice.status === "COMPLETE" ? "safe"
-                        : "info"
+                    slice.failed > 0 ? "danger"
+                      : slice.active > 0 ? "info"
+                        : slice.completed === slice.total ? "safe"
+                          : "neutral"
                   }
                   dot={false}
                 >
-                  {slice.status.replace(/_/g, " ").toLowerCase()}
+                  {slice.failed > 0 ? "failed"
+                    : slice.active > 0 ? "in flight"
+                      : slice.completed === slice.total ? "complete" : "mixed"}
                 </StatusBadge>
               </li>
             ))}

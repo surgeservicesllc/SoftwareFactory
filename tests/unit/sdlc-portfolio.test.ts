@@ -15,7 +15,7 @@ function run(id: string, nodes: Array<Record<string, unknown>>): SummarisableRun
     graphRunId: id,
     nodes: nodes.map((node, index) => ({
       node_key: `${id}-${index}`,
-      state: "SUCCEEDED",
+      state: "COMPLETED",
       ...node,
     })) as SummarisableRun["nodes"],
   };
@@ -78,14 +78,14 @@ describe("buildStagePortfolio", () => {
     expect(portfolio.entries.find((entry) => entry.stage === "TEST")?.failureRatePercent).toBe(100);
   });
 
-  it("counts a stage awaiting a person separately from one that failed", () => {
+  it("counts a stage still working separately from one that failed", () => {
     const portfolio = buildStagePortfolio([
-      run("r1", [{ lifecycle_stage: "ARCHITECTURE", state: "VERIFYING", gate_state: "OPEN" }]),
+      run("r1", [{ lifecycle_stage: "ARCHITECTURE", state: "VERIFYING" }]),
     ]);
     const architecture = portfolio.entries.find((entry) => entry.stage === "ARCHITECTURE");
-    expect(architecture?.runsAwaitingDecision).toBe(1);
+    expect(architecture?.runsActive).toBe(1);
     expect(architecture?.runsFailed).toBe(0);
-    expect(architecture?.runsCurrent).toBe(1);
+    expect(architecture?.runsComplete).toBe(0);
   });
 
   it("reports the latest error, taking runs in the order given", () => {
