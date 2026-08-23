@@ -604,6 +604,14 @@ export const JOB_SEEKER_OUTREACH = [
  * Graph runs with staged nodes, in the states the lifecycle distinguishes:
  * complete, failed with a message, and one waiting on a person. A fixture
  * where every run looked the same would measure one card repeated.
+ *
+ * `startedAt`, `completedAt` and `verifications` are here because this stands
+ * in for `/api/graphs/runs`, which every reader of that endpoint sees — not
+ * only the lifecycle pages. `FactoryBriefing` validates the projection before
+ * it trusts it, and an earlier version of this fixture omitted the three
+ * fields: the read failed validation, the source counted as unavailable, and
+ * the briefing correctly reported itself incomplete. Keep this matching the
+ * route's projection, not merely the fields the newest case happens to read.
  */
 export const GRAPH_RUNS_STAGED = [
   {
@@ -613,6 +621,9 @@ export const GRAPH_RUNS_STAGED = [
     topology: "DIAMOND",
     riskLevel: "GREEN",
     state: "RUNNING",
+    startedAt: "2026-08-23T18:04:11.000Z",
+    completedAt: null,
+    verifications: [],
     nodes: [
       { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
         provider: "anthropic", model: "claude-opus-5", latency_ms: 4200,
@@ -633,6 +644,9 @@ export const GRAPH_RUNS_STAGED = [
     topology: "DAG",
     riskLevel: "YELLOW",
     state: "FAILED",
+    startedAt: "2026-08-23T16:41:02.000Z",
+    completedAt: "2026-08-23T16:52:24.000Z",
+    verifications: [],
     nodes: [
       { node_key: "goal", executor: "codex", capability: "planning", state: "SUCCEEDED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 3100,
@@ -652,6 +666,9 @@ export const GRAPH_RUNS_STAGED = [
     topology: "SEQUENTIAL",
     riskLevel: "GREEN",
     state: "COMPLETED",
+    startedAt: "2026-08-23T14:12:35.000Z",
+    completedAt: "2026-08-23T14:19:58.000Z",
+    verifications: [],
     nodes: [
       { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
         provider: "anthropic", model: "claude-sonnet-5", latency_ms: 2600,
