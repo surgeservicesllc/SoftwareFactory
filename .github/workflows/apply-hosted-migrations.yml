@@ -1382,6 +1382,63 @@ jobs:
              where command.parameters ->> 'executionMode' = 'record_only';"
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
 
+          echo ""
+          echo "Execution-path readiness for a real manual Codex run: which bots carry"
+          echo "the one executable identity, whether their accounts read connected,"
+          echo "how their project assignments are configured, and what the recent"
+          echo "commands, tasks, and runs actually did. Metadata only - never secrets."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select bot.id, bot.name, bot.provider, bot.model, bot.readiness,
+                   left(coalesce(bot.readiness_detail, ''), 60) as readiness_detail,
+                   bot.ai_account_id is not null as has_account,
+                   account.provider as account_provider, account.auth_method,
+                   account.status as account_status, account.last_verified_at
+              from public.bots bot
+              left join public.ai_accounts account on account.id = bot.ai_account_id
+             order by bot.created_at;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select assignment.id, project.name as project, bot.name as bot,
+                   assignment.model as assignment_model, assignment.repository_access,
+                   assignment.can_open_pull_request, assignment.pipeline_access,
+                   assignment.requires_human_approval, assignment.max_concurrent_tasks,
+                   assignment.work_effort
+              from public.bot_assignments assignment
+              join public.bots bot on bot.id = assignment.bot_id
+              join public.projects project on project.id = assignment.project_id
+             order by project.name, bot.name;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select command.id, command.status, command.requested_risk, command.command_type,
+                   command.parameters ->> 'executionMode' as execution_mode,
+                   command.parameters ->> 'provider' as provider,
+                   command.parameters ->> 'model' as model,
+                   command.created_at
+              from public.commands command
+             order by command.created_at desc
+             limit 5;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select task.id, task.command_id, task.status, task.assigned_agent_id is not null as has_agent,
+                   task.created_at
+              from public.tasks task
+             order by task.created_at desc
+             limit 5;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select run.id, run.status, run.provider, run.model, run.attempt_number,
+                   run.lease_worker_id, run.error_code, left(coalesce(run.error_message,''), 80) as error_message,
+                   run.head_branch, run.created_at
+              from public.agent_runs run
+             order by run.created_at desc
+             limit 5;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select project.name, project.github_repository, project.default_branch,
+                   connection.status as connection_status, installation.status as installation_status,
+                   repository.selected, repository.default_branch as repo_default_branch
+              from public.projects project
+              left join public.project_connections link on link.project_id = project.id and link.is_primary
+              left join public.connections connection on connection.id = link.connection_id
+              left join public.github_installations installation on installation.connection_id = connection.id
+              left join public.github_repositories repository on repository.id = link.github_repository_id
+             order by project.name;"
+
       - name: Apply the project control migrations surgically (scope=project-controls)
         # The 20260815 range plus the two run-review files: everything the
         # project detail page's priority, focus, stop and cancel controls need,
