@@ -2,18 +2,30 @@
 
 import { Bot } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { TenantListShell, formatDateTime, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
+
+type AnalysisGraphSummary = {
+  graphId: string;
+  runState: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  artifactCount: number;
+  requiresOwnerApproval: boolean;
+};
 
 type Command = {
   id: string;
   prompt: string;
   risk: string;
   status: string;
+  executionMode?: "manual" | "record_only" | "unknown";
   submittedAt: string;
   completedAt: string | null;
   project: { id: string; name: string } | null;
+  analysisGraph?: AnalysisGraphSummary | null;
 };
 
 function statusTone(status: string) {
@@ -32,7 +44,37 @@ function statusTone(status: string) {
  * where is the readout?" on 2026-08-16. The status word is accurate; it was
  * never the answer to that question.
  */
-export function commandProgress(status: string): { hint: string; trackable: boolean } {
+export function commandProgress(
+  status: string,
+  executionMode?: Command["executionMode"],
+  analysisGraph?: AnalysisGraphSummary | null,
+): { hint: string; trackable: boolean } {
+  // A record-only command never gets a repository-writing worker — saying
+  // "waiting for a worker" here would promise one that can never arrive.
+  // What it can have is its one analysis graph, and that state is reported
+  // exactly as the database holds it.
+  if (executionMode === "record_only") {
+    if (analysisGraph) {
+      const state = analysisGraph.runState;
+      if (state === "COMPLETED") {
+        return {
+          hint: `The bot finished its analysis — ${analysisGraph.artifactCount} artifact${analysisGraph.artifactCount === 1 ? "" : "s"} recorded.`,
+          trackable: true,
+        };
+      }
+      if (state === "FAILED") {
+        return { hint: "The analysis run stopped before finishing. Its node errors say why.", trackable: true };
+      }
+      if (state !== null) {
+        return { hint: "The bot is running its analysis now.", trackable: true };
+      }
+      return { hint: "Analysis planned — waiting for the analysis worker to claim it.", trackable: true };
+    }
+    return {
+      hint: "Recorded only. This bot records durable evidence; no repository-writing worker is dispatched by design.",
+      trackable: false,
+    };
+  }
   switch (status) {
     case "submitted":
       return { hint: "Saved. It is being checked before it can be queued.", trackable: false };
@@ -61,6 +103,34 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
     (body) => (body.commands as Command[]) ?? [],
     "Saved requests could not be loaded.",
   );
+  const [launchBusy, setLaunchBusy] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string>("");
+
+  // The explicit doorway for a recorded Claude command that has no analysis
+  // run yet — a command saved before the launch feature, or whose submit
+  // raced a deploy, gains its run here instead of waiting for a lucky replay.
+  const runAnalysis = async (command: Command) => {
+    if (!command.project) return;
+    setLaunchBusy(command.id);
+    setLaunchError("");
+    try {
+      const response = await fetch(`/api/commands/${encodeURIComponent(command.id)}/analysis`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: command.project.id }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        setLaunchError(body?.error?.message ?? "The analysis could not be launched.");
+        return;
+      }
+      reload();
+    } catch {
+      setLaunchError("The analysis could not be launched.");
+    } finally {
+      setLaunchBusy(null);
+    }
+  };
 
   return (
     <TenantListShell
@@ -85,29 +155,56 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
                 <p className="mt-0.5 text-sm text-faint">
                   {command.project?.name ?? "No project"} · saved {formatDateTime(command.submittedAt)}
                 </p>
-                {commandProgress(command.status).hint ? (
-                  <p className="mt-1 text-sm text-muted">
-                    {commandProgress(command.status).hint}
-                    {commandProgress(command.status).trackable ? (
-                      <>
-                        {" "}
-                        <Link
-                          href="/solutions/runs"
-                          className="font-medium text-accent-text underline underline-offset-4"
-                        >
-                          Watch it on Runs
-                        </Link>
-                      </>
-                    ) : null}
-                  </p>
-                ) : null}
+                {(() => {
+                  const progress = commandProgress(
+                    command.status,
+                    command.executionMode,
+                    command.analysisGraph ?? null,
+                  );
+                  if (!progress.hint) return null;
+                  // Analysis evidence lives on the graph run, which the
+                  // Pipelines surface renders; repository-writing runs live
+                  // on Runs. The link goes where the evidence actually is.
+                  const evidenceHref = command.executionMode === "record_only" && command.analysisGraph
+                    ? "/solutions/pipelines"
+                    : "/solutions/runs";
+                  return (
+                    <p className="mt-1 text-sm text-muted">
+                      {progress.hint}
+                      {progress.trackable ? (
+                        <>
+                          {" "}
+                          <Link
+                            href={evidenceHref}
+                            className="font-medium text-accent-text underline underline-offset-4"
+                          >
+                            {evidenceHref === "/solutions/pipelines" ? "Watch it on Pipelines" : "Watch it on Runs"}
+                          </Link>
+                        </>
+                      ) : null}
+                    </p>
+                  );
+                })()}
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <StatusBadge tone={riskTone(command.risk)}>{command.risk.toUpperCase()}</StatusBadge>
                 <StatusBadge tone={statusTone(command.status)} dot={false}>
                   {command.status.replace(/_/g, " ")}
                 </StatusBadge>
+                {command.executionMode === "record_only" && !command.analysisGraph && command.project ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={launchBusy === command.id}
+                    onClick={() => void runAnalysis(command)}
+                  >
+                    {launchBusy === command.id ? "Launching…" : "Run analysis"}
+                  </button>
+                ) : null}
               </div>
+              {launchError && launchBusy === null ? (
+                <p className="w-full text-sm text-danger" role="alert">{launchError}</p>
+              ) : null}
             </li>
           ))}
         </ul>

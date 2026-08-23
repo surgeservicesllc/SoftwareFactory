@@ -1,8 +1,553 @@
 # Handoff
 
-Last updated: 2026-08-21
+Last updated: 2026-08-23
 
-## Newest (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
+## Newest (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
+
+The owner directed that Step 9 must actually run the bot. The delivered
+answer keeps every boundary: a record-only Claude command now launches its
+one analysis graph (goal = the command's stored prompt), the application
+wakes the graph worker by repository_dispatch, the subscription transport
+executes MODEL nodes read-only, and Step 9 plus the Bots request card
+report the run state exactly as the database holds it - "Waiting for a
+worker to pick it up" no longer appears for work no worker could ever pick
+up. Migration `20260823000100_command_analysis_graphs.sql` (link table +
+launch + list, all fail-closed, hosted-default-privilege postflight
+in-file) ships behind one-shot `scope=command-analysis-graphs`. Repo-write
+execution stays exactly where it was: the manual Codex lane
+(openai/gpt-5.3-codex), currently disabled by the
+`SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` repo variable. Remaining for the
+live acceptance: deploy, hosted apply, the owner re-issues a command with
+the Claude bot, the analysis run completes, Step 9 shows it.
+
+## Earlier (2026-08-23 ~00:50Z): Step 8/9 record-only accepted; the real-run path is measured and owner-gated
+
+The owner confirmed Step 8 passes and Step 9 shows the truthful record-only
+view (screenshots, 2026-08-23 ~00:27Z), then set the next goal: Step 9 must
+actually run the bot. Probe 32608500364 measured the whole execution path:
+the only bot is `Claude - Daniel` (anthropic/claude-opus-5, ready, connected
+subscription) which records-only by design; no Codex bot or OpenAI account
+exists; every project's GitHub binding is healthy; the sole manual run ever
+(2026-08-13, run f4594556) failed in the CLI-stdin era
+(`Codex Exec exited with code 1: Reading prompt from stdin`) - the current
+adapter is SDK-based (`thread.runStreamed`), and `claim_phase1c_run` claims
+only `queued` runs, so that failure cannot repeat or resurrect. The
+subscription-authenticated GitHub Actions Codex worker last ran green on
+2026-08-21 21:54Z (auth valid, idle) and is currently disabled by repo
+variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED`. Only RED commands await
+approval; GREEN/YELLOW queue tasks and runs immediately, and the Step 9 UI
+already renders the manual execution path. Remaining enablement is entirely
+owner-side: connect the ChatGPT/Codex account, create/assign/configure a
+`openai`/`gpt-5.3-codex` bot, re-enable the worker variable, and issue the
+command with that bot. Autonomy stays OFF; manual owner-issued execution is
+by design not gated by the kill switch.
+
+## Earlier (2026-08-23 ~00:30Z): the protected chain is applied on production
+
+Chain run 32607123713 committed the six-file transaction: the rehearsal
+passed with a clean lint for the first time, all six ledger rows
+(00300/00850/00900/01000/01100/01200) recorded once each, and the
+fourteen-identity contract read back unchanged. The record-only routing is
+live in the hosted database. The step then refused at the post-commit
+RECORD_ONLY_READY check; the detail probe (32607361788) showed hosted's
+posture matches every measurable expectation, and replaying the exact gate
+query on the clean local full chain reproduced the refusal - the pinned
+contract md5 for list_factory_commands matches no database. The pin is
+corrected (true identity 162d47956f98e7b005c7abe1df680ee9) and read-only
+`scope=record-only-postflight` re-runs the three unreached post-commit
+verifications plus health and the PostgREST reload (ADR-127). Run
+32607902289 read them all back green: "Record-only chain postflights
+verified on the applied production database; PostgREST schema reload
+requested." Remaining: only the signed-in production Step 8 record-only
+acceptance and truthful Step 9. Workers, autonomy, and automatic actions
+stay OFF; the global kill switch stays ON.
+
+## Earlier (2026-08-22 ~23:45Z): the lint ran, found one real warning, and both are fixed and machine-verified
+
+With ADR-125's trigger relations in place, chain run 32604992678 completed
+the rehearsal lint for the first time and the gate refused honestly on one
+genuine finding: `agentos_resolved_agent_grants` initialized its
+`agentos_network_mode` variable from a bare text literal (plpgsql_check
+42804). The initializer now carries the explicit enum cast in both creator
+copies (20260814000300 and the restore copy in 20260822000900), 00900's
+source pin moved to `a1231a4a5329b1dab132b6e774d97bb3`, and the frozen
+REPAIR sha to `512869badb...f694`. The same run proved the gate's plain
+non-emptiness test could never pass - rehearsal stdout legitimately carries
+blank lines from void-returning SELECTs - so findings are now
+sentinel-prefixed `LINTROW|` rows with every field coalesced, and the gate
+greps for the sentinel (ADR-126). Everything was verified in the supabase
+postgres 17.6 image before pushing: all 148 migrations apply, both creator
+paths produce the pinned md5, and the whole 27-function roster lints with
+zero findings. Full vitest suite: 4274 passing.
+
+## Earlier (2026-08-22 ~23:00Z): every input gate passes; the rehearsal lint itself was the last defect
+
+After the audit-guard contract (run 32599987697), the AgentOS partial-
+foundation cleanup (run 32601173685, ADR-123), and the submit_command
+carry-forward (run 32602669547, ADR-124), chain run 32603384774 passed every
+prerequisite, history, catalog, containment, and input gate for the first
+time - and then aborted inside the rehearsal transaction on
+`missing trigger relation`. That error is plpgsql_check refusing to lint a
+trigger function without the relation that types NEW/OLD; the lint passed
+`0::regclass` for all 27 roster functions, three of which are trigger
+functions, so the clause could never complete against any database and had
+simply never been reached before. The rehearsal's `begin;` aborted with it,
+so nothing committed. The lint rows now carry the relations
+`20260822001000` pins in its own trigger_expectations
+(`normalize_phase1c_command()` -> `public.commands`;
+`plan_phase1c_task_and_run()` and `queue_phase1c_run_for_task()` ->
+`public.tasks`), and `scope=probe` gained a rolled-back
+create-extension/lint/rollback block that proves the mechanics on hosted
+plus a residue readback (ADR-125).
+
+Operator order: dispatch `scope=probe` for the lint-mechanics evidence, then
+under exact-main CI green and READY Vercel identity on the new tip dispatch
+`scope=factory-any-model-record-only`, then capture the signed-in production
+Step 8 record-only acceptance and truthful Step 9. Workers, autonomy, and
+automatic actions stay OFF; the global kill switch stays ON.
+
+## Earlier (2026-08-22 ~21:30Z): the containment gate is honest and its last hosted input is contracted
+
+The protected `factory-any-model-record-only` release walked through four
+fail-closed refusals today, each isolated by extending `scope=probe` with a
+clause-by-clause report (ADR-122). In order: the sixteen-function pre-repair
+gate (resolved by `20260822000850` inside the chain); the containment gate's
+two audit-evidence clauses, which demanded change events the platform forbids
+from ever being written (now trail-agreement: the newest relevant event, if
+any, must agree with the contained state); the owner's runtime posture in the
+active workspace — the owner engaged the global kill switch and turned
+Autonomous Mode OFF through the Safety page at ~21:11Z, writing the real
+events the gate reads; and finally `reject_mutation_function_posture f`,
+which had two causes at once: the gate compared the guard function's source
+with space-only `btrim` against a body that begins and ends with newlines
+(false on every database, fixed to trim `' \n'`), and hosted Supabase default
+privileges left `service_role EXECUTE` on the guard that 20260812000300 never
+revoked. `20260822001300_contract_audit_guard_function_acl` behind
+`scope=audit-guard-acl-contract` removes that grant, fail-closed on any
+unknown state, no-op on the clean replay.
+
+Operator order: dispatch `scope=audit-guard-acl-contract`, then under
+exact-main CI green and READY Vercel identity re-dispatch
+`scope=factory-any-model-record-only`, then capture the signed-in production
+Step 8 record-only acceptance. Workers, autonomy, and automatic actions stay
+OFF; the global kill switch stays ON.
+
+## Newest (2026-08-22): the Backlog and All Pipelines pages can be cleared
+
+`/solutions/backlog` and `/solutions/pipelines?view=all` each carry a clear
+control (ADR-119), landed on `main` as `9761055` (#317). One component,
+`components/clear-surface-button.tsx`, serves both: press, confirm, give a
+reason of at least ten characters, optionally tick the checkbox that also
+deletes rows carrying run history.
+
+The authority is entirely in the database. `clear_backlog_tasks` and
+`clear_all_pipelines` (migration `20260822000800`) are SECURITY DEFINER, refuse
+a caller who is not an owner or admin, refuse a short reason, skip live work,
+and skip anything whose deletion would cascade into `agent_runs` unless the
+caller opts in. Every call writes an audit row, including one that deleted
+nothing. The two labels those rows use — `task.backlog_cleared` and
+`command.pipelines_cleared` — are added in `20260822000700`, a separate file
+because PostgreSQL refuses to use an enum value in the transaction that added
+it.
+
+**Hosted: applied.** Run `32582241930`, `scope=clear-controls`, both versions
+absent from the ledger beforehand. The post-apply readback measured:
+
+```
+       proname       | security_definer | member_may_execute | anon_may_execute
+ --------------------+------------------+--------------------+------------------
+  clear_all_pipelines| t                | t                  | f
+  clear_backlog_tasks| t                | t                  | f
+```
+
+Both enum labels present. That readback came from the step that ran the DDL, so
+`scope=probe` now carries the same read independently, plus `service_role`
+EXECUTE and the two labels asked of `pg_enum` directly. An apply grading its own
+work cannot tell a wrong assertion apart from a wrong migration.
+
+## Newest (2026-08-22): any model records safely; only exact Codex executes
+
+The current release candidate resolves the Step 8 provider/model dead end
+without pretending that every provider has an executor (ADR-115). Exact
+`openai` / `gpt-5.3-codex` is still the only executable Factory identity. Every
+other valid bounded pair, including Claude and alternate OpenAI models, is
+`record_only`: command, task, immutable route, and disposition persist, while
+the database and application both guarantee zero `agent_runs`, no worker
+dispatch, and no branch, commit, pull request, merge, or deployment. Invalid
+identities still fail closed. A nondefault `SOFTWAREFACTORY_CODEX_MODEL` also
+fails before planning; do not use environment configuration to claim a second
+executable model.
+
+Step 8 now completes on durable recording. Step 9 consumes project-scoped safe
+command history and explicitly reports that a `record_only` command has no run,
+worker, branch, or PR by design. Reload must preserve the same project-only row,
+and the projection must not reveal raw parameters.
+
+Hosted migration `20260822000600_route_bots_onto_the_executable_model.sql` is
+already applied. The protected database tail is not: `00300`, ACL normalizer
+`00850`, `00900`, and `01000`, plus forward ACL containment `01100` and
+`01200`, remain pending as one atomic forward-only chain. Apply them only through
+`scope=factory-any-model-record-only`, after exact-main/READY-Vercel identity
+and all immutable prerequisite, catalog, lint, health, and containment checks.
+The owner directly requested this release in the active task; ADR-116 removes
+the old magic RED phrase, predeclared-SHA, expiry, and repeat-approval ceremony
+without weakening any technical or product/runtime gate. The workflow rehearses
+the same six files under rollback
+before the one transaction that records all six ledger rows. `00850` first
+converges the exact four-function hosted ACL input: it restores required
+`service_role` execution on `claim_provider_connect_session` and removes the
+unintended service-role grants from normalize-configuration, claim-anchoring,
+and pipeline-area validation. It preserves every function identity and keeps
+the claim function's hosted `organization_id`/`purpose` OUT contract and OID.
+`01100` removes
+the exact hosted `service_role EXECUTE` overgrant on
+`apply_resume_extraction(uuid,text[])` that the immutable `00500` left behind;
+`01200` does the same for both clear-control functions left by immutable `00800`.
+The retired standalone `00300` path must not mutate, and `scope=all` must not
+introduce any member of the chain.
+
+This is not a deployment handoff yet. No final candidate SHA, green exact-head
+CI set, matching Vercel deployment, hosted atomic apply, or signed-in production
+Step 8 -> Step 9/reload proof exists. Keep workers, autonomy, and automatic
+actions OFF and the global kill switch ON. The next operator must freeze exact
+identities, publish and verify the application, run the protected atomic scope,
+then capture Claude/alternate-model project-scoped acceptance before using
+"deployed" or "production ready."
+
+## Prior (2026-08-22): every command was being refused, and why
+
+`Issue a Command` refused every submission in every workspace with
+`PROVIDER_MODEL_MISMATCH` — at the last step of the journey, after a project, a
+pipeline and a bot had all been chosen. Nothing was misconfigured. The plan
+fixed `gpt-5.3-codex`; `ensureProviderBot` named new bots `gpt-5.1-codex` from
+the catalog's list; routing and `submit_factory_command` both compare the pair
+exactly. One fact in two files, with nothing tying them.
+
+`executionModel()` is now that tie (ADR-114), provisioning asks it, the roster's
+picker marks each model **runs** or **cannot run**, and the refusal names the
+bot, both models, and where to change one.
+
+At this historical checkpoint, migration
+`20260822000600_route_bots_onto_the_executable_model` was still outstanding.
+It is now hosted; do not rerun it. The current pending database action is the
+atomic ADR-115/ADR-118/ADR-120/ADR-121
+`00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` scope described above.
+
+
+## Prior (2026-08-22): application deployed; repaired database sequence local
+
+Exact commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is current
+`main`, with `surgeservicesllc <surgeservicesllc@gmail.com>` as author and
+committer. Vercel production deployment
+`dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY at
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and owns
+the stable aliases. GitHub deployment `6036292508` and status `17160408639`
+bind that production deployment to the exact commit.
+
+Exact-head CI run `32570540183` is red. Browser/accessibility shards 1/3, 2/3,
+and 3/3 passed; quality job `97025270055` failed during tests and skipped build.
+The LF Linux/PostgreSQL chain reached `20260822000150`, where all seven legacy
+routine hashes failed because `pg_proc.prosrc` line endings were not
+canonicalized. Supabase Preview check `97025325852` failed separately at the
+older provider-credential migration because `provider_credentials` already
+exists, the same pre-existing preview drift seen on earlier heads.
+
+The local repair canonicalizes CRLF and lone CR to LF before every
+`md5(prosrc)` comparison and pins these exact repository files:
+
+- 00150 —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- 00200 —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- 00300 —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Native PostgreSQL 17.10 and 18.4 full chains pass. Before hosted action, record
+the exact forward-commit identity and require green CI plus fresh RED authorization. No hosted
+database mutation has occurred: 00150/00200/00300 remain absent, CONTRACT was
+not dispatched, and no apply, ledger insert, repair, reset, or down-migration
+followed `30d7e824`.
+
+Historical containment evidence remains valid: exact predecessor commit
+`4fc18d3e5ecba6f362f14a7459e588a74a84b84b` reached READY deployment
+`dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU`; EXPAND run `32568221857` then stopped at
+`LEGACY_CATALOG_READY` before its apply notice, DDL transaction, ledger insert,
+or PostgREST reload. Never rerun that old EXPAND path.
+
+## Newest (2026-08-22): Claude bot identity and Role assignment
+
+The application portion is deployed at `30d7e824`; its protected database
+sequence is not. AI Factory owns the one application
+modal/backdrop/focus/close boundary. `ProjectBots`, its assign/configure/edit
+states, and zero-role onboarding render inline inside that overlay instead of
+opening nested dialogs. A zero-role organization sees the reviewed Backend
+engineer starter selected by default; the complete template is submitted to
+the existing same-origin manager-only `/api/bot-roles` boundary, and its exact
+returned UUID is applied only to selected drafts with no role. Do not conflate
+that role with the Developer permission preset used for a new posting. Existing
+postings retain their authored role and configuration; with existing roles, a
+new posting prefers the preset-matching slug before the first available role.
+
+The owner screenshot exposed a UI-only identity shortcut: `ProjectBots` used
+`credentialRef` similarity to hide the exact-link repair control. An unbound
+Ready legacy bot could then be assigned while AI Factory correctly kept steps
+5-7 incomplete. The local fix removes that inference, exposes the existing
+exact `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the
+parent refresh, and provides an accessible **Return to AI Factory** action. The
+affected completion predicate remains: connected account + exact
+`aiAccountId` + current Ready + project assignment.
+
+The containment is frozen in the current unpublished candidate. Focused UI
+passes 75/75; focused ESLint, full typecheck, and lint/typecheck/build are green. The root
+full suite passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. Its
+first contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+full rerun.
+
+Migration `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+`658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+`ensure_ai_account_bot` derives provider and credential slot from the exact
+tenant account and returns a bot UUID bound to it. A default/non-additional
+request reuses the account's bound bot or adopts at most one unambiguous legacy
+bot in place; an explicit additional request creates another distinct bot with
+the same account binding. Incoherent future writes are refused. Bot and
+assignment revisions initialize at 1 and advance on every update. Checked assignment,
+configuration, status, and model/work-effort writes lock and compare exact
+assignment id, project id, and revision, and released postings reject further
+checked edits. Existing grants are patched rather than rebuilt; the client
+still requires the exact RPC result and committed readback.
+
+`record_bot_readiness_preserving_disabled` is service-role-only and carries the
+initiating owner/admin actor. Under row lock it compares exact bot revision,
+account UUID, provider, model, credential reference, and base URL; stale
+evidence fails, a check cannot author Disabled, and an existing Disabled value
+survives unchanged. `bot.registered` and adoption-path `bot.updated` immutable
+events include the exact `ai_account_id`. This is an EXPAND migration: legacy
+registration/assignment/readiness definitions, signatures, `SECURITY DEFINER`,
+pinned search paths, and exact ACLs remain unchanged. All six legacy mutation
+RPCs temporarily retain authenticated-only execution so the deployed old app
+survives migration-first cutover; checked wrappers and the service-only recorder
+are additive. That is a bounded compatibility bypass, not the final contract.
+Revoke those grants only in a separately approved forward CONTRACT migration
+after the exact replacement app is deployed and accepted.
+
+The read side filters released history in SQL and keyset-pages open assignments
+by UUID until an empty terminal page. It does not treat a short page as final,
+and invalid cursor progress or the 100-data-page guard fails the entire roster,
+so incomplete data cannot mark the assignment-derived Assign/Configure steps
+complete. Connect separately proves connected account -> exact account-bound
+Ready bot; overall Factory evidence continues through the exact selected
+project and revision-checked active configured posting across reload.
+
+Broker start/retry/close/unmount cleanup is serialized. Exact session UUID and
+generation fence every poll/callback; late superseded results are ignored.
+Retry cancels before starting anew. Close blocks a racing retry, waits for an
+in-flight start's exact session id, and refuses to dismiss/resumes polling when
+cancellation cannot be confirmed.
+
+Prepublication local gates and the three exact-head browser shards remain useful
+evidence, but the failed quality job is the controlling release result. The
+application was pushed and deployed; the protected database sequence was not.
+The workflow verifies separate exact files and ledger/catalog boundaries for
+00150, 00200, and 00300, and `scope=all` refuses to introduce them. Runtime
+behavior, linked-database lint, application health, and kill-switch/autonomy/
+worker containment remain separate mandatory post-apply release gates.
+
+Freeze the repaired commit, request fresh exact RED approval, publish it, and
+require green exact-head CI before any hosted DDL. Keep kill switch ON, raw
+autonomy and all automatic actions OFF, and worker/executor disconnected.
+
+## Newest (2026-08-22 ~01:30Z): agents are selectable into the AI Factory (ADR-107)
+
+The owner's goal for /solutions/agents, shipped as the mirror of pipeline
+selection: migration `20260822000100_project_agent_selection.sql`
+(project_agents + three definer functions, RLS + FORCE RLS, no direct
+table path), `/api/project-agents` (GET/POST/DELETE, unapplied migration
+reported as Not Connected), and one shared `ProjectAgentSelector`
+component rendering "Include in AI Factory" toggles on the Agents page
+(standalone project picker) and inside the factory's new **Select
+Agents** step (journey-scoped, done when at least one agent is included,
+included names as evidence). Selection is routing intent — audit-evented,
+advisory-locked, refused for archived projects, cross-project agents,
+and non-managers. Local certification: 16 behavior cases against the
+full migration chain, 10 route cases, 5 component cases, factory suite
+updated to the nine-step journey; lint, tsc, and the production build
+green. Hosted apply: `scope=agent-selection` added to the apply workflow;
+runbook total is now 131 and the 13 tail pins moved to the new file.
+
+## Newest (2026-08-21): AI Factory production pass is 4/8; bot fix pending
+
+Exact candidate head `a020e8192d8512a1bb65112e01017047087f0528` is green in
+CI run `32543409160`: quality and browser shards 1/3, 2/3, and 3/3 all passed.
+That proves the candidate head only; it is not evidence that production serves
+the candidate.
+
+Authenticated production-browser evidence is now **4/8**. **Agentic SDLC** was
+selected for the existing project, survived reload, and produced an immutable
+`pipeline.selected` event visible in Activity. The owner reconnected Claude,
+and production reports that account Connected. Refresh queued background
+re-verification but remains pending because no worker sweep completed; do not
+present the spinner as fresh worker or end-to-end health evidence.
+
+Create Bot currently fails and leaves zero bots. Root cause is isolated outside
+the owner-frozen connection path: Bot Manager forwards raw broker purposes
+`claude`/`claude_N` or `codex`/`codex_N`, while
+`/api/bots/connect/provision` accepts provider-neutral
+`subscription`/`subscription_N` choices. The branch candidate now normalizes
+all account-backed paths and fails closed on missing or mismatched metadata;
+PR #309 exact head `db1958f8b501e865a9e741a21298683e0f88f969` has 99 focused
+tests, lint, typecheck, production build, and secret/protected-path audit green.
+It did not pass its merge gate: browser shards 1/3 through 3/3 in run `32545138211` failed
+because the loading state omitted the page's H1. The forward candidate keeps
+the `AI Factory` H1 in loading and every fail-closed state and adds a direct
+regression test, so the prior exact-head merge approval is stale.
+
+Do not merge after only repairing that shard. The protected credential
+normalizer currently rejects the catalog-declared Claude/Codex subscription
+references that provisioning writes, so a created subscription bot would read
+Not Connected despite a stored vault credential. The manager-only manual
+readiness endpoint also checks and serializes environment presence only, so it
+persists the same false negative for vault-backed accounts. Those protected
+paths remain unchanged pending exact owner approval. Provisioning also leaves
+`bots.ai_account_id` null; full account-identity binding needs a separately
+reviewed forward schema/RPC change. The fix is not deployed, so do not claim
+the Claude account is yet usable or sticky as a bot; after an authorized
+release, repeat create, assign, configure, and reload acceptance.
+real broker-purpose fixtures, the focused 100-test run, lint, typecheck, and a
+production build pass. The fix is not deployed, so do not claim the Claude
+account is yet usable or sticky as a bot; after an authorized release, repeat
+create, assign, configure, and reload acceptance.
+
+Do not promote production while the known blockers remain: five linked lint
+errors/ten findings, raw autonomy enabled for one organization, raw kill switch
+off for one organization, two projects with effective kill off, no
+connected/fresh worker, and hosted `20260821000300`/candidate
+`20260821000400` drift. Worker/autonomy stays off and production is not fully
+live.
+
+## Newest (2026-08-22 ~00:45Z): the journey has now run against PRODUCTION itself — green
+
+The owner's goal ("connect to the site remotely, fill every field with
+fake data, prove every capability, everything wired to Supabase")
+completed against https://www.theagoras.com directly. Sequence: the
+owner approved the one-shot `journey-prod-user.yml` (#305, dispatched)
+which marked the fake account jordan.seeker.prod1@example.org
+email-confirmed in hosted GoTrue and swept the unconfirmed probe
+residues — no auth configuration changed, confirmation stays ON for real
+users. The journey lane gained a remote-target mode (#306:
+`base_url`/`email`/`password` dispatch inputs skip the local-stack
+steps). Dispatch run 32540879299: remote step green (one first attempt
+timed out just after sign-in on a production cold start; the CI retry
+ran the complete spec to the end — Playwright reports it flaky, the job
+succeeded). Independently verified by signing in to production as the
+fake user and reading back through the production API: 42 jobs in the
+fake workspace (2 manual + 40 `via greenhouse` — real Stripe postings
+imported live in production), all 42 scored, analytics computed from the
+walked rows (applications 1, response rate 100%, interviews 1, offers
+1). Sandbox note: this session's egress proxy accepts curl and raw
+CONNECT but resets every Chromium TLS hello, so remote browser runs ride
+the CI runner (the lane's remote mode) — playwright.config.ts now
+forwards HTTPS_PROXY for remote HTTPS targets for environments where the
+proxy accepts browsers. Cleanup when desired: delete the fake user in
+Supabase Auth → Users; the cascade removes its workspace rows.
+
+## Newest (2026-08-21): immutable Factory command routing (ADR-106)
+
+The rebased release candidate adds
+`20260821000400_command_factory_routing.sql` (34,999 bytes; SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`).
+Only an authenticated organization owner may submit or replay. The database
+uses the existing command/task/run transaction, rechecks the stored effective
+risk, and freezes the selected pipeline/template, assignment, bot, role,
+provider, resolved model, work effort, and configuration/risk snapshot in an
+immutable route. Exact replay resolves that route before any mutable project,
+pipeline, roster, readiness, or capacity state is read. This release creates
+no worker dispatch or autonomy change; no connected/fresh worker was observed,
+and approve, merge, deploy, and rollback remain unavailable. If the RPC is
+absent, the API fails closed as Not Connected/503.
+
+Two first-use UI failures are also closed in this candidate. The embedded
+template-plan dialog derives its locked project synchronously, never flashes a
+false empty-workspace state, and does not issue the wider `/api/projects`
+request. The assignment wizard names the missing-role prerequisite, links to
+the real Bot Manager route, and cannot advance from Configure until every
+selected bot has a role.
+
+Do not describe this candidate as live. Hosted production includes
+`20260821000300` and still serves the old copy; `20260821000400` is unhosted.
+The current release blockers are measured adverse state, not assumptions:
+five linked-database lint errors across ten findings; one raw organization
+with `autonomous_mode = true`; one raw organization with
+`autonomy_kill_switch_active = false`; two projects whose effective kill switch is off;
+and no connected/fresh worker. These measurements supersede older claims below
+that linked lint is clean or that hosted controls are universally all-OFF and
+kill-ON. Contain and remeasure them before any hosted apply or production
+promotion.
+
+Candidate lint, typecheck, and build pass. The default unbounded Windows run's
+Supabase-wiring and pipeline failures were contention-only and both cleared on
+isolated retry; the wiring contract passed 2/2 in 0.603s with `maxWorkers=1`.
+The bounded current-head non-frozen command
+`vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+passes 317 files / 3,730 tests with 7 skipped in 183.78s. The excluded
+owner-frozen auth-broker file contains 19 tests and is excluded locally solely
+because Windows lacks Unix `script`. Linux CI must run it as part of the full
+suite. The independent hosted-runbook/repository-memory guards remain 21/21.
+
+## Newest (2026-08-21): FirstMate review → read-only Factory Briefing (ADR-104)
+
+FirstMate was reviewed at exact commit
+`738460d401b1115dab617c3859077973977615cb` (MIT, Copyright 2026 Kun Chen).
+It is a single-user local Bash agent distribution, not a compatible web
+dependency, so this change reimplements only its strongest information-
+architecture invariant: one four-lane bearings view. The Dashboard's former
+fragmented attention block is replaced by Factory Briefing, which classifies
+live task/run/graph/inbox/incident/connection evidence into exactly one of
+Needs owner now, Underway, Recently finished, or Up next; reports the logical
+Orchestrator role and worker heartbeat separately; caps lists with totals; and
+names every missing, malformed, or saturated source. Linked runs are folded
+into their task. Eight parallel reads have timeouts, batch cancellation, and
+stale-response protection; briefing-specific server responses omit prompt-
+derived task titles, command prompts, inbox bodies/choices, graph node/
+artifact/verification details beyond fail-visible verdicts, repository
+details, and unrelated operations data. Malformed graph verification evidence
+fails the source read closed. All actions navigate to authoritative screens
+rather than mutating from the summary. No migration, auth/RLS boundary, worker, provider,
+autonomy setting, workflow, merge, deployment, or production resource changed.
+
+Local evidence: full ESLint and TypeScript clean; production Next build green;
+57/57 focused classifier/component/minimized-route/operations-contract tests
+green; the component browser matrix has 30 passes and 15 intentional skips in
+the non-resizable mobile project across 320–1440 px, including populated
+layout/control/axe checks and an unbroken
+maximum-length coordinator at 320 px. On the rebased combined tree, the local
+unit suite passes 2,506/2,506 after excluding two pre-existing Windows-only
+process/permission files. Database behavior suites need their configured
+stack; Linux draft-PR CI remains authoritative.
+Publish only a draft PR; do not merge or deploy from this handoff.
+
+## Newest (2026-08-21 ~23:45Z): Job Discovery is operational — real public-board imports (ADR-105)
+
+The owner's goal "make /job-seeker?section=discovery 100% operational"
+shipped as identifier-driven public imports: Greenhouse and Lever read
+their providers' public keyless APIs, driven by a board token / site name
+the user types on the card — the env-var "credentials" those two adapters
+demanded were a misclassification, dropped. `POST /api/job-seeker/import`
+fetches up to 40 postings per request (the reply states the board's true
+total), records each through the same evaluate → job → match →
+application chain as manual entry (shared `lib/job-seeker/record.ts`),
+counts duplicates via the existing unique index, and skips-and-counts
+anything the credential scanner refuses. Job rows carry `via {source}`
+attribution. LinkedIn stays honestly Not Connected (real OAuth needed).
+Proven live end to end: the journey's new discovery phase drives the real
+Greenhouse API — a missing board's verbatim refusal, then the "stripe"
+board imported and scored (local stack: 40/40 imported rows scored and in
+the pipeline) — journey green in 32.7s. Also measured this session:
+production sign-up still answers 202 confirmationRequired even after the
+owner reported disabling confirmation — the dashboard toggle did not take
+(wrong switch or unsaved); sign-in probes stayed 403 email_not_confirmed
+through a 10-minute poll.
+
+## Prior (2026-08-21 ~21:15Z): Job Seeker — full browser journey green against a real Supabase stack; three live defects found and fixed
 
 The owner's verification goal ("go through /job-seeker, fill every field
 with fake data, prove every capability, everything wired to Supabase") was
@@ -36,6 +581,48 @@ re-running the journey live in the spec header; the sandbox needs
 the wipe between runs must TRUNCATE because generated documents refuse row
 deletes by design. Gates on the merged state: lint clean, tsc clean, 3,465
 vitest green, production build, journey green.
+
+**Round 2 (same day, ~22:30Z): the whole capability surface, and two more
+wiring gaps closed.** The journey now also walks: CRM details (notes, the
+submitted application URL, a follow-up date — a per-card "Notes &
+follow-up" editor was ADDED, because the PATCH actions existed with no UI
+reaching them, and the jobs embed now carries those fields), every
+remaining pipeline stage (Applied → Follow Up → Recruiter Response →
+Interview → Final Interview → Offer, each proven by its group heading),
+the reject side of the gate on a second recorded job (reject → no forward
+moves anywhere → close), the stored resume made visible from load (the
+profile view now embeds resume metadata via the `resume_upload_id`
+pointer, which previously went unread — the link used to vanish on
+reload) with the BYTEA download round-tripped and its content asserted,
+history-entry removal persisted through reload, and analytics re-checked
+after the walk (2 jobs, 1 application, 100% measured response rate, 1
+interview-stage count, 1 offer). Extended journey green in 30.8s.
+
+**Round 3 (same day, ~22:45Z): the journey has a CI lane.** ADR-097's one
+open item is closed: `.github/workflows/job-seeker-journey.yml`
+(workflow_dispatch + daily 07:41 UTC) provisions the lean local Supabase
+stack on the runner, mints the pre-confirmed journey user through
+GoTrue's admin API, builds and serves the production app, and runs the
+JOB_SEEKER_E2E journey — so live-wiring regressions surface within a day
+instead of at the next manual run. Actions pinned to reviewed SHAs
+(pin-guard test green); no deployment, no production credentials, no
+provider usage in the lane. **The lane is proven live**: first dispatch
+on main, run 32533731639, green in 3m40s — the runner provisioned the
+stack, minted the user, built and served the production app, and the
+whole journey passed.
+
+**The production sign-in boundary is now measured, not assumed**: a probe
+of production's own `/api/auth/sign-up` answers 202 with
+`confirmationRequired: true`, so a signed-in production journey needs a
+real inbox — only the owner has one. (Two probe residues exist in hosted
+auth: `jordan.journey.b@example.org` — unconfirmed, org-less, cannot sign
+in — and possibly `jordan.journey.2026@example.com` from a first attempt
+that 503'd; the owner can delete both from Supabase Auth → Users, and
+nothing references them.) If the owner ever wants the journey run against
+production itself, either sign in and use the page, or temporarily
+disable email confirmation in hosted Auth settings and say so — the spec
+takes `JOB_SEEKER_E2E_EMAIL`/`_PASSWORD` overrides and would run as-is
+with `PLAYWRIGHT_BASE_URL=https://www.theagoras.com`.
 
 ## Prior (2026-08-20 ~02:20Z): Job Seeker — all seven increments live; the goal's own E2E journey passes
 
@@ -180,6 +767,34 @@ The worker's schedule stays off until the repo variable
 deliberately with the Phase 1C path. The owner's standing merge cadence for
 this goal: merge immediately, verify on production, keep looping.
 
+## Newest (2026-08-18): Use records a project's pipeline — one owner action outstanding
+
+`Configure Pipeline` on `/solutions/ai-factory` now has something to configure.
+Pressing **Use** on a template card selects it for the project the journey is
+scoped to, writes that to `project_pipelines`, and the step reads it back: done
+only when at least one pipeline is selected, with the chosen names rendered on
+the page. Many can be selected; pressing a selected card again removes it. The
+graph-planning dialog Use used to open is now its own **Plan graph** button.
+
+**Applied on production**, 2026-08-21 23:27Z, run `32536895799`
+(`scope=pipeline-selection`, `confirm=apply`). The run's own after-ledger
+listing prints `20260821000300 | 20260821000300` — local and remote — so the
+`project_pipelines` table and its three definer functions exist on the hosted
+project and the ledger records them. The PostgREST schema cache was reloaded in
+the same step, so a browser that had been seeing PGRST202 stops.
+
+The Not Connected path stays in the code and is not dead: it is what any
+database without this migration — a fresh preview branch, a restored snapshot —
+will report, and it is the reason a missing migration cannot present as an empty
+selection set. `/api/project-pipelines` returns
+`pipeline_selection_not_connected` there and the Use button is disabled naming
+that reason.
+
+What this run does **not** establish is behaviour observed in production: a
+ledger row proves the DDL ran, not that someone has pressed Use on the live
+site and seen the selection survive a refresh. That observation is still
+outstanding.
+
 ## Newest (2026-08-18 05:40Z): the hosted ledger, measured — read this before any "unhosted" claim below
 
 Probe run `32103778884` (`.github/workflows/apply-hosted-migrations.yml`,
@@ -310,7 +925,7 @@ sign into this app; the session travels in a fragment the app ignores).
 Two environment blockers were hit and are not code defects: Vercel's free-tier `api-deployments-free-per-day` limit, and GitHub Actions failing to assign a runner at all (`runner_id: 0`, no logs, two attempts). The second matters for Phase 1D, whose goal item 12 requires gates to rest on real CI evidence.
 
 
-Finish the Phase 1C routing projection and live acceptance without overstating status. Provider-credit recovery is no longer the task: Phase 1C was re-architected to zero-token subscription-authenticated Codex execution, so there is nothing to fund. The protected Supabase ledger reconciliation and forward-only chain through `130014` are complete on exact project `qpuofpmagrmyamahqwxw`; linked lint and focused runtime/catalog/ACL checks pass. Migration `20260813001500_expose_bounded_run_routing.sql` is local and unhosted; no earlier approval authorizes applying it. The prior verified production baseline before this update was `0c662a24393f682073e6002c5aff9339292226d8`; CI run `31749352644` passed both required jobs and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY. Distinct no-claim diagnostic Actions run `31748582858` passed the exact-model GET, then the bounded non-stored Responses probe returned the safe code `credit_balance_exhausted`; Docker preload and durable claim were skipped. Durable run `f4594556-6f72-4763-a480-6993939e3651` remains failed after attempt 1 of 2, but its immutable base predates the verified production baseline; do not retry it. Activation is absent/OFF. The user-pasted OpenAI key is treated as compromised and `SOFTWAREFACTORY_OPENAI_API_KEY` has been removed from repository Actions secrets; it stays absent permanently, because Phase 1C has no paid-API path to restore it to. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected**. All automatic actions remain OFF and the global kill switch remains ON.
+Finish Phase 1C live acceptance without overstating status. Historical reconciliation and verification below remain useful, but the current hosted release gate is adverse: five linked lint errors/ten findings, raw autonomy/kill-switch drift, and no connected/fresh worker. Production is on `20260821000300`; factory command routing in `20260821000400` is local and fails closed until hosted. No successful Phase 1C run or draft PR exists, so Phase 1C remains **Not Connected** and no command routing may dispatch work.
 
 ## Phase 1D state for the next agent
 
@@ -338,7 +953,7 @@ Rules that must survive any future change:
 5. **The Phase 1D control migration relaxes nothing.** Enabling any automatic action is a RED action
    requiring an owner-approved migration. Do not do it as a side effect of anything else.
 
-Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` is applied to hosted Supabase as part of the owner-approved, ledger-reconciled forward chain through `130014`. Hosted resolution confirms all nine actions OFF and the global kill switch ON. Applying that execution-inert decision schema did not authorize or execute an automatic action.
+Phase 1D migration `20260813000600_phase1d_autonomy_controls.sql` remains part of the historical hosted chain, but its old all-OFF/kill-ON observation is no longer current evidence. Raw hosted data now includes one organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects with effective kill off. No connected/fresh worker or executor was observed, so nothing is dispatched; contain the drift before any routing migration or promotion.
 
 Manual Phase 1C execution may handle only authenticated owner-submitted GREEN/YELLOW commands. RED remains non-executable. Autonomous Mode is OFF, the global kill switch is ON, and auto approve/merge/deploy/rollback are OFF. The worker ends at an open draft PR plus observed CI; it never writes the default branch or performs delivery.
 
@@ -423,7 +1038,7 @@ Next Phase 1E steps: configure an owner-authorized monitor target and record the
 
 ### Published Phase 2A/Phase 1C and provider-startup recovery
 
-- Command route/composer: connected-project selection, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, opaque dispatch, dispatch evidence, truthful RED/delayed states.
+- Command route/composer: connected-project and exact selected-pipeline admission, command type, acceptance criteria, stable idempotency, deterministic risk, exact base SHA, fixed plan, immutable bot-route evidence, database-authoritative response snapshot, and truthful persisted-only/no-dispatch states.
 - Orchestration: provider `openai`, model `gpt-5.3-codex`, role mapping, 45-minute/four-turn/token/one-repair/15-minute-CI budgets, and fixed inspect-to-report draft-PR workflow.
 - Provider layer already on `main`: official Anthropic/OpenAI adapters, health/model discovery, routing, bounded fallback, independent review, owner execution controls, advisory run persistence, and provider settings/run surfaces; `130001` schema and its reconciled ledger row are hosted, while advisory execution remains OFF/**Not Connected**.
 - Schema: `130006` Phase 1D decision-only interlocks; `130007` provider compatibility; `130008` enum-only commit; `130009` core command/task/run/worker/evidence/RLS/RPC schema; `130010` provider-neutral roster, owner/risk/ACL/recovery/report hardening; and `130011` canonical dependencies, derived criteria, idempotent replay, and cumulative retry budgets. All are hosted; `130012`-`130014` are forward-only containment/lint/emergency-stop corrections. Only `130007`-`130013` contain Phase 1C changes.
@@ -456,7 +1071,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 ## Verification state
 
 - The prior verified production baseline before this update passed supported Node `24.19.0` lint/typecheck, 117 files/1,282 tests, a production build with 74 page/route entries, prior coverage 75.06/69.97/72.60/76.66, Playwright/axe 117/117, focused migration/security suites, production dependency audit 0, and safe disabled-worker smoke. Baseline commit `0c662a24393f682073e6002c5aff9339292226d8` passed both required jobs in CI run `31749352644`, and matching Vercel deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7` was READY.
-- Hosted history is reconciled through `130014`, and linked lint is clean. The frozen current candidate passes local final gates on Node `24.19.0`: lint/typecheck, 118 files/1,311 tests, coverage 76.70/71.47/74.04/78.11, 74/74 routes, Playwright/axe 117/117, audit 0, and clean diff-check. Publication/CI/Vercel and hosted `130015` evidence remain pending.
+- Current routing candidate: lint/typecheck/build pass. Default unbounded-run wiring/pipeline contention failures both clear in isolation. The bounded current-head non-frozen Windows suite passes 317 files / 3,730 tests, 7 skipped, in 183.78s with `maxWorkers=4`; it excludes only the owner-frozen 19-test auth-broker file because Windows lacks Unix `script`. Linux CI must run the complete suite. Hosted production has `20260821000300`, not `20260821000400`; linked lint currently has 5 errors/10 findings. Publication, Linux full-suite evidence, hosted apply, matching deployment, and owner acceptance remain pending.
 - First acceptance evidence: command `0c4d0ca8-1867-4d00-80cf-476401491a17`, durable run `f4594556-6f72-4763-a480-6993939e3651`, and worker Actions run `31746057998`. A real heartbeat and provider thread identifier were recorded, then Codex startup failed. No changed file, factory branch, commit, PR, validation, or exact-head CI evidence was created. Its planned base is now stale against current `main`, so the failed row must not be retried. Activation is OFF.
 - Published provider-only diagnostic `31748582858` skipped Docker preload and durable claim. The exact-model GET passed; the bounded non-stored Responses call returned only the safe machine-readable code `credit_balance_exhausted`. The stale failed run was not touched and activation is OFF.
 - The exact blocker is no longer funding. The paid dependency was removed from the execution path; the blocker is the owner-supplied `SOFTWAREFACTORY_CODEX_AUTH_JSON`. Configure it, rerun the no-claim diagnostic, then submit a new current-base command. Never retry the stale failed run. No production-monitor journey or successful live Phase 1C provider result exists.
@@ -484,7 +1099,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 
 ## Completion checklist
 
-- [x] Hosted migration history is reconciled/current through `130014`; linked lint, focused RLS/catalog/ACL/runtime checks, and live `027` owner approval/execution/rebind behavior pass.
+- [ ] Re-establish a current hosted release baseline: resolve 5 linked lint errors/10 findings and the measured autonomy/kill-switch drift, then verify raw/effective controls and worker freshness before applying `20260821000400`.
 - [x] Migration `026` is hosted; exact ACL mismatch count is zero, with four intended `service_role` ingress tables and no table privileges on the other 19.
 - [x] Historical candidate lint/typecheck, 56 files/436 tests, 38-route build, and 48/48 E2E evidence is retained only as historical Phase 1B evidence.
 - [ ] Run and record the complete final gate set for the current routing/UI update; no prior count is current-update evidence.
@@ -500,7 +1115,7 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - [x] Owner handoff, project/history continuity, candidate-backed reads, draft-only PR `#8`, and cleanup pass.
 - [ ] Reverse observation and disconnect/loss journey pass before primary retirement.
 - [ ] Failure/revocation/rate-limit/stale-SHA/protected approval/expiry/lease/idempotency/recovery/out-of-order/terminal states pass.
-- [x] Documentation and scorecard distinguish hosted `130014`, local/unhosted `130015`, the prior verified production baseline, proven owner/anonymous reads, and remaining unrelated-authenticated/mutation/provider acceptance without claiming Phase 1C Connected.
+- [x] Documentation and scorecard distinguish hosted `20260821000300`, unhosted `20260821000400`, the old production copy, and the current linked-lint/control/worker blockers without claiming Phase 1C Connected.
 - [x] Phase 1E control plane passes lint, typecheck, 143 files/1621 tests, a clean build, and Playwright 117/117 including axe, with the end-to-end journey and failed-rollback escalation proven against the migrated schema.
 - [x] Migration `028` is hosted in the reconciled ledger. No real production target has been observed, so every Phase 1E monitoring surface remains **Not Connected** or **Unknown**.
 - [x] The control plane is served under `/solutions` and verified live: twelve pages serve both navigation landmarks, every former path returns `308`, and the console stays `noindex` and out of the sitemap. See ADR-041.

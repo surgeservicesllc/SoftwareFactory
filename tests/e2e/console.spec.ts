@@ -22,14 +22,16 @@ const consoleNavigation = [
   "Bot Usage",
   "Bot Activity",
   "Runs",
+  // Promoted out of the removed "Watch" group and placed above Reports
+  // (2026-08-19, owner instruction). Activity left the column with that group
+  // and is still reachable as "Bot Activity" under Bots, which is the same
+  // page — so this contract loses an entry without losing a destination.
+  "Operations",
   "Reports",
   "Integrations",
   "Settings",
   "General",
   "Bots & Integrations",
-  "Watch",
-  "Operations",
-  "Activity",
   "Advanced",
   "Files",
   "Agents",
@@ -75,7 +77,7 @@ test("loads the control plane without browser errors", async ({
   // chip were both removed as the same duplication. This asserts the brand
   // affordance that actually survives — on every breakpoint, signed in or out.
   await expect(
-    page.getByRole("link", { name: /ai software factory home/i }).first(),
+    page.getByRole("link", { name: /ai factory home/i }).first(),
   ).toBeVisible();
   // Every surface now reads live tenant records, so there is no seeded
   // content left to label. The truthfulness contract is stronger this way:

@@ -40,13 +40,23 @@ Protected resources are assets whose modification, disclosure, deletion, or loss
 ## Phase 1 handling rules
 
 - Secret material is never returned to the browser or stored as plaintext in control-plane tables, logs, reports, fixtures, or activity metadata.
-- RED contact requires explicit owner approval as defined in `RISK_CLASSIFICATION.md`.
+- RED contact requires explicit owner authorization as defined in `RISK_CLASSIFICATION.md`. Runtime/product actions use their specific approval records; an owner-directed repository release uses the active-task authorization rule below.
 - Read operations use least privilege and are audited when sensitive.
 - Writes identify the exact resource and environment; wildcard or organization-wide scope is not assumed.
 - Backups and restore paths are verified before destructive data work.
 - Automated systems cannot weaken, remove, or approve changes to their own guardrails.
 - A project toggle cannot override this policy.
 - Unknown resources are treated as protected until classified.
+
+## Owner-directed repository release authorization
+
+A direct owner request in the active task to push, deploy, or apply the task's reviewed repository changes authorizes the bounded repository release even when protected paths make the diff RED. This is human direction, not autonomous approval.
+
+- No magic phrase, separate confirmation form, predeclared commit/artifact hash, approval expiration, or repeated confirmation is required for the same requested release.
+- Release machinery must discover and verify the actual final commit, artifact, destination, and migration identities. Exact technical release gates, required checks, branch protection, least privilege, audit, containment, rollback planning, and post-deploy validation remain in force.
+- The request does not authorize a materially different repository, branch, environment, migration set, or protected-resource operation. It never implicitly authorizes destructive production data work, secrets, authentication/authorization, billing, DNS, ownership transfer, or weakened protections.
+- Product/runtime RED approvals remain separate. In particular, a release request cannot approve a RED command, provider execution, protected-change product flow, rollback, freeze removal, or kill-switch change inside SoftwareFactory.
+- Automated systems still cannot approve or weaken their own guardrails, and this rule does not enable auto-merge, auto-deploy, or auto-rollback.
 
 ## Repository paths requiring elevated review
 
@@ -116,7 +126,7 @@ Documentation-only clarification may be GREEN/YELLOW, but any semantic reduction
 | The autonomy control model (`lib/autonomy/controls.ts`) | RED | `privileged-access` |
 | Unrecognised paths | YELLOW | `classifyRisk` defaults an empty factor set to YELLOW |
 
-"Automated systems cannot weaken, remove, or approve changes to their own guardrails" is enforced in three places: the authority-widening content rules classify any enabling of autonomous authority as RED; `lib/autonomy/approval.ts` refuses self-approval absolutely, so an author can never approve their own change; and `AI/DECISIONS.md` is raised above documentation-only so a guardrail decision cannot be deleted inside an otherwise-GREEN diff.
+"Automated systems cannot weaken, remove, or approve changes to their own guardrails" is enforced in three places: the authority-widening content rules classify any enabling of autonomous authority as RED; `lib/autonomy/approval.ts` refuses self-approval absolutely, so an autonomous author can never approve its own product action; and `AI/DECISIONS.md` is raised above documentation-only so a guardrail decision cannot be deleted inside an otherwise-GREEN diff. An owner's direct release instruction is external human authorization and does not change any of those runtime checks.
 
 Not enforced in code, and not claimed to be:
 
@@ -128,8 +138,8 @@ Not enforced in code, and not claimed to be:
 
 For each approved protected-resource action, record:
 
-- requester, approver, executor, organization, project, and correlation ID;
+- requester, authorization source, executor, organization, project, and correlation ID; for runtime/product approvals, also record the approver and decision;
 - precise resource identifiers without secret values;
 - reason, risk classification, planned change, validation, and rollback/containment plan;
-- time-bounded approval and execution timestamps; and
+- for runtime/product actions, the approval timing and expiration required by that control; for an owner-directed repository release, the active task/request and execution timestamps without inventing a separate expiry; and
 - outcome, post-change validation, and any incident reference.

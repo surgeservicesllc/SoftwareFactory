@@ -732,7 +732,15 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Decision: the owner's "prove every capability works, wired to Supabase" goal is answered by `tests/e2e/job-seeker-journey.spec.ts` — one serial Playwright test, guarded by `JOB_SEEKER_E2E=1`, that runs only against a real stack: `supabase start` (the full production migration chain on real Postgres, PostgREST, and GoTrue), the production `next build` served by `next start`, and a pre-confirmed fake user minted through GoTrue's admin API. It signs in, onboards a workspace, fills every field of every section with fake data, uploads a resume, records and scores a job, exercises the duplicate refusal, walks prepare → review → approve → applied, saves a contact, drafts outreach, reads analytics, and proves persistence by reloading. Alongside it, `toView` in the jobs route reads embedded relations through `firstEmbed()`, which accepts a single object or an array.
 - Rationale: the mocked suites all passed while the live surface was broken in three ways, and one of them was a wiring bug of exactly the kind mocks canonize: `job_seeker_matches` and `job_seeker_applications` both carry `unique (job_id)`, so live PostgREST returns those embeds as objects, while the code — and every mock written from the code — assumed arrays. Only a browser driving the real stack could catch that, the no-workspace dead end, and the empty-history-entry 422. The journey is env-guarded because it needs infrastructure CI does not provision today; it is committed rather than kept as a scratch script because it is the reproducible definition of "everything works".
 - Consequence: the no-workspace path is now a first-class flow (server redirect to onboarding with `?next=`, client 409 call-to-action pinned by a unit test), untouched added history entries are pruned before save (unit-pinned), and the embed shapes are tolerated in both forms. Re-running the journey requires wiping the `job_seeker_*` tables with TRUNCATE — generated documents refuse row deletes by design — and, in sandboxes that forbid rlimit syscalls, excluding the nonessential Supabase services from `supabase start`. Open work: a CI lane that provisions the stack and runs the journey on a schedule instead of on demand.
-## ADR-098 - A lifecycle gate belongs to the graph node, not the node run
+## ADR-098 - Use records a project's pipeline, and planning a graph keeps its own button
+
+- Date: 2026-08-18
+- Status: Accepted
+- Decision: `project_pipelines` records which templates a project runs — many per project, built-in or custom — with RLS and FORCE RLS, every table privilege revoked from `anon`, `authenticated` and `service_role`, and three definer functions as the only path: `select_project_pipeline` and `deselect_project_pipeline` (owner/administrator, audit-evented, advisory-locked per project-and-key) and `list_project_pipelines` (member). **Use** on a template card toggles that record — grey and `aria-pressed` when selected, accent when not — and the AI Factory's Configure Pipeline step reads it: done only when at least one pipeline is selected, with the chosen names on the page rather than only inside the overlay. The heavier act Use used to perform, planning a real graph, moves to its own **Plan graph** button and its own dialog. A built-in carries no `template_id`, because it lives in source; a custom one carries its row id, so deleting the template takes its selections with it.
+- Rationale: the owner reported that Use did nothing that lasted. It did do something — it opened a dialog that planned a graph — but that is scheduling work, not choosing a pipeline, and neither act left a mark the journey could read. So Configure Pipeline was `done: activeProject !== null`: it went green the moment step 2 finished, which made it the one step on the page nobody could work on, and the one whose green tick asserted something no record supported. Names are resolved at read time from `GRAPH_TEMPLATES` for a built-in and from `graph_templates` for a custom one rather than denormalized onto the selection, so a template renamed in code or in the editor cannot leave a stale label behind. Selecting is idempotent because a person pressing a toggle twice has expressed one intention; a repeat returns the existing row and writes no activity event, since an audit trail of unchanged state is noise rather than evidence.
+- Consequence: `tests/integration/project-pipeline-selection.behavior.test.ts` runs the real migration chain — many selections, the idempotent repeat, per-project scoping, custom-template cascade, the archived-project refusal, a mismatched organization id, and owner-allowed / member-denied / outsider-denied / anonymous-denied in both directions plus the absence of any direct browser write path. `tests/unit/project-pipelines-routes.test.ts` and the two component suites cover the boundary and the toggle. The migration is **unhosted** as of this change, so `/api/project-pipelines` reports PGRST202 as **Not Connected** and the console disables Use naming that reason, rather than rendering an empty selection set that would make a working button look broken; `.github/workflows/apply-hosted-migrations.yml` carries the file in its `broker-functions` scope, and `AI/HOSTED_APPLY_RUNBOOK.md` states it is outstanding.
+
+## ADR-099 - A lifecycle gate belongs to the graph node, not the node run
 
 - Date: 2026-08-21
 - Status: Accepted
@@ -740,7 +748,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: `claim_planned_graph` inserts a fresh set of `node_runs` at PENDING on every claim — the worker re-runs a graph from the beginning. A gate keyed to a node *run* would therefore be a new, undecided gate each time, and a lifecycle could never pass its first human decision however many times someone approved it. Keyed to the node, an approval is a fact about the work rather than about one attempt at it, which is what makes progress monotonic under a re-running worker. The request-driven executor this branch originally built never had to solve this, because it advanced one persistent run; the move to main's worker is what surfaced it.
 - Consequence: re-running a lifecycle after each approval re-executes the stages before the gate. With no provider connected that costs nothing today, and it is exactly what main's worker already does for every other graph — if it becomes expensive the answer is resumable claims, not run-keyed gates. `open_node_gate_as_worker` is idempotent on the key and returns an existing decision untouched, so a re-claim cannot manufacture a second gate or reopen a decided one. Asserted by "carries that approval into the next run" and mutation-checked by scoping the claim's gate join to the current run, which reproduces the bug as `expected null to be 'APPROVED'`.
 
-## ADR-099 - A gate-held node reports as failed to the engine and as held to everyone else
+## ADR-100 - A gate-held node reports as failed to the engine and as held to everyone else
 
 - Date: 2026-08-21
 - Status: Accepted
@@ -748,7 +756,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: the scheduler's only mechanism for stopping dependents is a dependency that did not complete, and a node awaiting a decision genuinely has not completed. But it did not fail, and counting it as one would spend the graph's three chances on a lifecycle that is merely waiting for a person. `capacityWithheld` already carries exactly this shape — "this did not fail, it did not happen" — so the new flag follows a pattern the codebase had already argued through rather than inventing a second vocabulary for the same idea.
 - Consequence: `nodesFailed` had to stop counting held nodes as well; it is computed from the engine's state map, where the node is FAILED, and the count is what a reader sees. A test drove the real worker to a held gate and caught it reporting one failure where none had occurred. Anything reading `finalState` sees PARTIAL, which is accurate: work stopped short of the goal and a decision is owed.
 
-## ADR-100 - A rejected gate answers 200, and an approval says the work has not resumed
+## ADR-101 - A rejected gate answers 200, and an approval says the work has not resumed
 
 - Date: 2026-08-21
 - Status: Accepted
@@ -756,7 +764,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: rejecting is a decision, not a failed request. The stage stays blocked and its dependents stay skipped — that is the intended outcome — and a 4xx would tell the caller their request was malformed when it was granted exactly as sent. Separately, "approved" reads like "and now it is running": the worker is a polling claimant, so approval changes what the *next* claim will do and nothing at the moment of the click. A console that let someone infer otherwise would be the same class of error as reporting a queued run as work in progress.
 - Consequence: the route keeps no authority check of its own — `decide_node_gate` refuses a human gate without manager authority and an automatic approval without anchors, and `databaseErrorResponse` already classifies both codes as client-safe, so the caller receives the sentence this repository wrote. A second check here could drift from the one that actually holds. The panel shows that sentence verbatim rather than a friendlier substitute, because it is the only text that says why.
 
-## ADR-101 - The hosted lifecycle gets its own scope, and scope order is a documented property
+## ADR-102 - The hosted lifecycle gets its own scope, and scope order is a documented property
 
 - Date: 2026-08-21
 - Status: Accepted
@@ -764,10 +772,694 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Rationale: the hosted ledger is not a contiguous prefix of the repository — probe run `32531787440` shows nineteen versions absent in the middle while every row above them is present — so `scope=all` would sweep nineteen unrelated migrations onto production as a side effect of shipping two. Each of those nineteen is a separate decision with a separate blast radius, and bundling them removes the owner's ability to make any of them. A narrow scope keeps them outstanding and separately decidable. The prerequisite for the narrow scope was measured, not assumed: `20260821000200` rebuilds `claim_planned_graph` and `list_graph_runs` verbatim from `20260819001000` and `20260819000800`, and the same probe shows the whole `20260819` range recorded on both sides of the ledger.
 - Consequence: the surgical scopes replay whole files, so the last one dispatched wins any function both define. Running `scope=broker-functions` after `scope=lifecycle` reinstates a `create_graph_from_plan` that ignores `lifecycle_stage`, `gate_kind` and `is_feedback`, and lifecycle graphs are then planted with no gates — a failure with no symptom, since the graph runs to completion looking successful. Nothing is corrupted, because the lifecycle body is a strict superset and re-running the scope restores it, so the remedy is ordering rather than repair. `AI/HOSTED_APPLY_RUNBOOK.md` states it where an owner will read it, and `tests/integration/hosted-scope-replay.behavior.test.ts` proves against real PostgreSQL that the replay survives, that no dropped `claim_planned_graph` overload is resurrected by it, and that replaying the lifecycle scope afterwards restores both bodies and the grants the drop discarded.
 
-## ADR-102 - A replayed migration drops a function it shares before creating it
+## ADR-103 - A replayed migration drops a function it shares before creating it
 
 - Date: 2026-08-21
 - Status: Accepted
 - Decision: any migration in a replayed scope that defines a function another replayed migration also defines must `drop function if exists` it first, with its full argument list. Applied here to `create_graph_from_plan` in `20260819000300` and `20260821000200`, and to `claim_planned_graph` in `20260819000100` and `20260821000200`.
 - Rationale: `create or replace` cannot change an existing function's return type. The day any version of a shared function widens its signature, every replay of an older one dies on that statement — and because the workflow applies files in a loop with `ON_ERROR_STOP`, it dies *halfway through the list*, leaving the migrations behind it unapplied. That is not hypothetical: apply run `32272188607` failed exactly there and left a security migration unapplied behind it. Dropping first makes a replay structurally safe regardless of which version ran last.
 - Consequence: `tests/unit/migration-versions.test.ts` enforces it across every file the workflow names, so a new migration that redefines a shared function cannot merge without the guard. The drop discards grants, so each file re-grants after creating — `20260819000100` and `20260821000200` both already did, and the replay test asserts `service_role` can execute and `authenticated` cannot once the dust settles. The drop does *not* prevent an older file's replay from recreating an overload a newer one removed; only list order does that, which is why `20260819001000` runs after `20260819000100` in `scope=broker-functions` and drops both overloads before creating the two-argument one.
+
+## ADR-104 - FirstMate contributes a briefing invariant, not a runtime dependency
+
+- Date: 2026-08-21
+- Status: Accepted
+- Decision: adapt the Bearings information architecture reviewed at FirstMate commit `738460d401b1115dab617c3859077973977615cb` as a SoftwareFactory-native, read-only Factory Briefing. Every represented work record belongs to exactly one lane—Needs owner now, Underway, Recently finished, or Up next—under deterministic precedence. A task owns its linked run; cancelled records are omitted with disclosure; unknown states demand inspection; bounded display caps retain total counts. The browser reads eight existing caller-scoped safe projections with `no-store`, in parallel, using source timeouts, batch cancellation, and stale-response protection. Any missing, malformed, or saturated source is named and prevents an empty lane from being called clear. Briefing-specific response modes minimize fields at the server boundary. The summary exposes no prompt-derived task title, command prompt, inbox body or choices, provider output, graph node/artifact/verification detail beyond the verdict needed for fail-visible classification, secret, raw database row, or mutating control; malformed graph verification evidence fails the source read closed. Actions navigate to authoritative screens that re-read and re-authorize state.
+- Rationale: FirstMate's strongest reusable idea is one quiet, complete bearings view, while its implementation is a single-user Bash/session distribution built around local state, ambient provider sessions, and terminal backends. SoftwareFactory already has stronger multi-tenant persistence, RLS, audit, worker leases, graph execution, and draft-PR boundaries. Importing FirstMate's runtime would duplicate those systems and weaken their trust model; reimplementing the information invariant makes the fragmented state legible without widening authority.
+- Consequence: the Dashboard replaces its standalone attention block with `FactoryBriefing`; the existing detailed consoles remain authoritative. The recorded logical Orchestrator may be labelled as coordinator but must not be described as a live mission supervisor. A future single server-side briefing projection, durable keyed decisions, explicit analysis-versus-code contracts, restart checkpoints, or graph-to-Phase-1C child runs are separate reviewed increments. FirstMate's Relay/public intake, shell/tmux workers, flat-file state, raw launch escape hatches, credentials, merge scripts, and autonomous modes are not adopted. No copied FirstMate code or assets are included, so no third-party source file was introduced; the reviewed project remains credited here with its pinned commit and MIT license.
+
+## ADR-105 - Public job boards are identifier-driven, not credential-gated
+
+- Date: 2026-08-21
+- Status: Accepted
+- Decision: the Greenhouse and Lever import adapters are reclassified as PUBLIC adapters and given real `fetchPostings` implementations against the providers' public, keyless APIs (`boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true`, `api.lever.co/v0/postings/{site}?mode=json`). What each needs is not a credential but an *identifier* — which company's board to read — and that is user input on the page, not an environment secret; their former `SOFTWAREFACTORY_GREENHOUSE_BOARDS`/`_LEVER_SITES` requirements are dropped as an artifact of misclassification. `POST /api/job-seeker/import` takes `{source, identifier}`, fetches at most 40 postings per request (the response always states the board's true total), and records each through the same evaluate → job → match → application chain as manual entry via the shared `lib/job-seeker/record.ts`; a posting that trips the credential scanner is skipped and counted, a unique-index conflict is a counted duplicate, and every count in the response is a count of something that happened. LinkedIn remains a CREDENTIALED adapter: detection-gated on its named variables, no fetch implementation, Not Connected on the page.
+- Rationale: the owner's goal — the discovery page 100% operational — was blocked on "credentials" two of the three sources never actually needed. Probed live before writing code: Greenhouse answers a 575-posting board and a clean 404 for a missing token; Lever answers postings ({text, categories.location, workplaceType, descriptionPlain, lists, hostedUrl, id}), 404 `Document not found` for a missing site, and `[]` for an empty one. Greenhouse ships its content entity-escaped with entities inside, so HTML-to-text decodes twice around the tag strip. Lever's public payload names no company, so the site identifier the person typed is the attribution stored.
+- Consequence: the discovery page has two real ways in — manual recording and public-board import — and job rows carry `via {source}` attribution. The journey's discovery phase now exercises the live provider round-trip (a missing board's verbatim refusal, then a real board imported and scored; locally proven: 40/40 imported rows scored and in the pipeline). The accepted trade: the journey carries one external dependency, taken deliberately because live import is the capability under proof; and one import request reads at most 40 postings, bounded work stated in the reply rather than hidden pagination.
+
+## ADR-106 - A Factory command binds one immutable route before mutable state can change
+
+- Date: 2026-08-21
+- Status: Accepted for the release candidate; not yet hosted
+- Decision: an authenticated organization owner may submit or exactly replay a Factory command through the database-owned routing transaction. The transaction delegates command/task/run creation to the established submission boundary, rechecks the stored effective risk, deterministically selects an eligible project pipeline and configured bot assignment, and writes an immutable route containing pipeline/template, assignment, bot, role, provider, resolved model, work effort, and risk/configuration snapshots. The API returns that locked database snapshot rather than its pre-transaction estimate. An idempotent replay resolves this durable route before reading mutable project, pipeline, roster, readiness, or capacity state. Missing hosted routing functions fail closed as Not Connected/503. Selection creates no worker dispatch or autonomous authority.
+- Rationale: a TypeScript selection can explain candidates, but it cannot make history durable or prevent a retry from being silently rerouted after an owner edits pipeline selection, assignments, bot configuration, risk, readiness, or capacity. Replaying before mutable reads makes the original accepted route the authority; the database's owner check, locks, effective-risk recheck, immutable table, and audit boundary prevent a caller or later configuration from rewriting it.
+- Consequence: `20260821000400_command_factory_routing.sql` is frozen at 34,999 bytes with SHA-256 `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`. It remains unhosted while production has `20260821000300` and the old application copy. Submission introduces no dispatch or autonomy change; no connected/fresh worker was observed, and merge/deploy/rollback remain Not Connected. Hosting requires separate authorization after containing and remeasuring the current blockers: five linked lint errors/ten findings, one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, two projects effective-kill-off, and no connected/fresh worker; then exact ledger, ACL/RLS, immutability, risk, replay, and live owner-acceptance evidence.
+
+## ADR-107 - Logical agents are selectable into a project's AI Factory
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: the owner's goal "make the agents on /solutions/agents selectable into the AI Factory" ships as the exact mirror of pipeline selection (the hosted-proven 20260821000300 pattern): migration `20260822000100_project_agent_selection.sql` adds `project_agents` (RLS + FORCE RLS, every table privilege revoked from anon/authenticated/service_role) with three definer functions — owner/administrator `select_project_agent`/`deselect_project_agent` and member `list_project_agents` — each audit-evented ('agent.selected'/'agent.deselected') and advisory-locked per project-and-agent. An agent is selectable into a project when it belongs to the same organization and is either organization-wide (the standard roster) or already bound to that project; an agent bound to another project is refused in the database. `/api/project-agents` exposes GET/POST/DELETE, reporting the unapplied-migration state as itself (Not Connected, 503 on writes) rather than as an empty list. One shared component, `ProjectAgentSelector`, renders the toggles on /solutions/agents (standalone, with its own project picker) and inside the AI Factory's new "Select Agents" step (the journey hands in its project), so the two surfaces read and write the same records and cannot disagree. The step is done when at least one agent is included, with the included names as its on-page evidence.
+- Rationale: the Agents page defined the eleven standard roles and their per-agent provider/model assignment, but nothing connected the roster to the factory: there was no record saying "this factory uses these agents" for the journey to read. The pipeline-selection precedent already answers every design question this raises — where authority lives (definer functions under the caller's identity), what selection means (routing intent, never execution), how absence is reported (Not Connected, never a vacuous empty), and how the factory consumes it (scoped to the journey's project, evidence on the page).
+- Consequence: `project-agent-selection.behavior.test.ts` proves the contract against the real migration chain (16 cases: stickiness, idempotency, per-project scoping, audit events, cross-project and cross-tenant refusals, member read-only, outsider/anonymous denial, no direct table path, archive semantics); `project-agents-routes.test.ts` pins the route boundary (10 cases) and `project-agent-selection.test.tsx` the component (5 cases). The factory journey grows to nine steps and its suite pins the new step's done/evidence semantics. The apply workflow gains `scope=agent-selection` (one file, replay-safe) for the hosted database; until it runs there, the page says Not Connected and the step's evidence names the missing migration.
+
+## ADR-108 - A subscription bot is the exact AI account it runs as
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; protected publication and hosted migration pending
+- Decision: provisioning from an AI account carries that exact tenant
+  `ai_accounts.id` into `ensure_ai_account_bot`. PostgreSQL derives provider and
+  credential slot, returns the exact bot UUID, and enforces tenant/account/
+  provider/reference coherence on later bot writes. A default/non-additional
+  request reuses that account's bot or may adopt one unambiguous matching
+  legacy bot in place and never guesses among several; an explicit additional
+  request creates another distinct bot with the same exact account binding.
+  `bots.revision` and `bot_assignments.revision` initialize at 1, increment on
+  every update, and refuse overflow. An existing posting may be assigned,
+  moved, configured, paused/released, or have model/work effort changed only
+  when its expected assignment UUID, project UUID, and revision still match
+  under the same row lock and transaction; checked edits refuse released
+  history. Existing role/configuration is preserved unless explicitly changed,
+  and the client verifies both the write result and committed read model.
+
+  Readiness is persisted only by the service-role-only
+  `record_bot_readiness_preserving_disabled`, which carries an owner/admin actor
+  and compares exact bot revision, account UUID, provider, model, credential
+  reference, and base URL under lock. A stale check fails, a check cannot author
+  Disabled, and an already Disabled bot is returned unchanged. Legacy
+  registration/assignment/readiness mutation definitions, signatures,
+  `SECURITY DEFINER` attributes, and pinned search paths remain unchanged;
+  `register_bot` also retains its ACL. Legacy assignment/readiness mutation
+  execute ACLs are intentionally revoked and replaced with authenticated
+  checked wrappers plus the service-only readiness recorder.
+
+  The roster filters released history before keyset-paging open assignments by
+  UUID until an empty terminal page. Short pages are not terminal; invalid
+  progress or the page bound fails the entire read. AI Factory uses one modal
+  and embeds its roster/editor/starter flow. With no roles, Backend engineer is
+  the starter default saved through the audited role API, and the returned UUID
+  fills blank selected drafts; Developer is the separate new-posting permission
+  preset, while an existing posting retains its role/configuration. Broker
+  start/retry/close/unmount cleanup is serialized and every async result is
+  fenced by exact session UUID plus generation.
+- Rationale: provider plus credential-variable name is not an execution
+  identity. Two accounts may share a provider, credential slots are numbered,
+  and a legacy bot may already carry assignments that must not move to a newly
+  generated id. Likewise, checking a posting before the RPC is a time-of-check/
+  time-of-use race: another manager can move or tighten it between the read and
+  the row lock, after which a stale wizard silently restores old permissions.
+  Readiness calculated only from environment variables reports a valid sealed
+  subscription credential missing, while readiness calculated without
+  respecting Disabled grants an implicit re-enable. All four are identity
+  failures, not presentation defects.
+- Consequence: migration
+  `20260822000200_register_bot_for_ai_account.sql` is frozen at SHA-256
+  `39c8a4ae633e2e45dc71a754225ca54c9ef9dd27036f7b68dca6371e1c394981`.
+  Its protected `scope=bot-account-binding` verifies predecessor/absence state
+  and the exact hash, applies only that file, performs catalog/runtime checks,
+  and records one ledger row; broad apply refuses to introduce it. Until a
+  final rebased head passes all gates, receives fresh exact RED approval, is
+  published, hosted, deployed, and accepted in an authenticated owner session,
+  this remains a candidate and production retains the old behavior. None of
+  it executes a bot or changes provider-login protocol, worker, autonomy,
+  approval, merge, deploy, or rollback authority.
+
+## ADR-109 - Bot-account binding ships EXPAND before legacy mutation grants CONTRACT
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; supersedes ADR-108 only for migration promotion order and legacy assignment/readiness ACL handling
+- Decision: `20260822000200_register_bot_for_ai_account.sql` is the EXPAND half
+  of a rolling database/application cutover. It adds exact AI-account binding,
+  revisions, triggers, checked assignment boundaries, and the service-only
+  readiness recorder without changing the definitions, signatures,
+  `SECURITY DEFINER` attributes, pinned search paths, or exact ACLs of the six
+  legacy RPCs used by the currently deployed application: `assign_bot`,
+  `assign_bots_to_project`, `update_bot_assignment_configuration`,
+  `update_bot_assignment`, `set_bot_assignment_execution`, and
+  `record_bot_readiness`. Each retains authenticated execution and the existing
+  public/anon/service-role denials. Revocation is deferred to a separately
+  reviewed, owner-approved forward CONTRACT migration after the exact
+  replacement application SHA is deployed and its signed-in create, bind,
+  assign, configure, readiness, audit, and reload behavior is accepted.
+
+  The immutable `bot.registered` event for a newly bound bot and the
+  `bot.updated` event for an adopted legacy bot both carry the exact
+  `ai_account_id`. Before applying, the migration and protected workflow refuse
+  any pre-existing new helper/checked function, revision trigger, revision
+  column, or revision constraint rather than replacing or normalizing unknown
+  catalog state. Before any DDL they also pin exact definition hashes, owner,
+  language, kind, volatility, security, search path, overload set, and ACL for
+  `register_bot` plus all six delegated legacy mutators; a missing, cross-tenant,
+  non-subscription, or otherwise incoherent historical binding is refused.
+  After DDL, the migration itself proves the exact ten-function catalog and
+  exact revision/default/constraint/trigger catalog, including rejection of an
+  unexpected grantee inherited from custom default privileges. The protected scope proves migration identity, predecessor/
+  target ledger state, clean pre-apply catalog, exact legacy definition/
+  security/search-path/ACL preservation, new catalog/ACL state, and one ledger
+  row. The DDL and direct version-only ledger insert share one protected psql
+  transaction; a later history repair is forbidden, closing the commit-to-ledger
+  crash window. Runtime behavior, linked-database lint, application health, and global
+  kill-switch/autonomy/worker containment are explicit post-apply release gates,
+  not claims made by that scope.
+- Rationale: the migration is intentionally applied before the matching Vercel
+  application during this release procedure, and `origin/main` calls all six
+  legacy RPCs. Revoking their authenticated grants in the database migration
+  would make the live old application fail immediately during the cutover
+  window. Additive checked boundaries allow the new application to adopt the
+  stronger contracts while the old copy continues to function. Refusing dirty
+  pre-existing catalog state keeps `CREATE OR REPLACE` and trigger replacement
+  from laundering an unexpected partial apply or manual change into the
+  approved migration identity.
+- Consequence: between EXPAND apply and the later CONTRACT migration, an
+  authenticated manager can still use the legacy assignment functions without
+  an expected revision, and legacy readiness remains authenticated rather than
+  service-only. This is a real, bounded compatibility risk, contained by keeping
+  worker/executor disconnected, raw autonomy and automatic actions OFF, and the
+  global kill switch ON. It must not become permanent through omission: the
+  follow-up revocation remains open release work, requires its own exact source
+  identity and approval, and may proceed only after the deployed application no
+  longer depends on the legacy execute grants.
+
+## ADR-110 - CONTRACT is an independently pinned, exact-app-gated ACL migration
+
+- Date: 2026-08-22
+- Status: Accepted for the local release candidate; protected publication and hosted execution pending
+- Decision: the CONTRACT half is the new forward migration
+  `20260822000300_contract_bot_mutator_acls.sql`, frozen at SHA-256
+  `e3bad45af18ed07d3ab7adcfc9a326103fc09fd2b398f664c733de73fac7c1e2`.
+  It contains one atomic `DO` statement and changes only `EXECUTE` ACLs for the
+  six legacy direct mutators named in ADR-109. Before the first revoke it
+  requires the complete frozen `20260822000200` catalog: exact definitions,
+  signatures, owners, `SECURITY DEFINER`, search paths, and ACLs for all helper,
+  checked, readiness, and legacy functions; exact revision columns and positive
+  constraints; and exact enabled triggers. The six legacy functions must still
+  have authenticated-only execution, with PUBLIC, anon, and service-role denied.
+  Unexpected overloads, missing objects, definition drift, ACL drift, history
+  mismatch, or replay stop the transaction. After revocation, the same six
+  definitions and security metadata must be unchanged and authenticated,
+  PUBLIC, anon, and service-role execution must all be denied; the function
+  owner remains able to execute so checked `SECURITY DEFINER` wrappers can
+  delegate internally.
+
+  `assign_bots_to_project_checked` also refuses an exact current `paused`
+  posting while holding its row lock. Moving or bulk-assigning cannot implicitly
+  reactivate it through the legacy delegate; a manager must first use the
+  explicit revision-checked status transition to resume it.
+
+  The independently hash-pinned
+  `scope=bot-account-binding-contract` requires predecessor `20260822000200`
+  exactly once, target `20260822000300` absent, one-file application, and one
+  target ledger row inserted in the same transaction as the revokes (never by a
+  later `migration repair`). Because the workflow cannot prove an authenticated browser
+  journey by itself, it also requires the exact checked-out 40-character
+  application SHA and the manual attestation
+  `exact-app-vercel-accepted` before any database access. The pre-connection
+  machine gate also requires `refs/heads/main` and the latest GitHub `Production`
+  deployment created by `vercel[bot]` to have exact matching SHA/ref, task
+  `deploy`, and a latest successful Vercel-bot status with a Vercel URL. The
+  operator separately verifies exact Vercel project
+  `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, which GitHub deployment metadata does not
+  expose; no `VERCEL_TOKEN` Actions secret is added. Broad `scope=all` refuses
+  both protected versions until EXPAND and CONTRACT have each been separately
+  recorded by their dedicated scopes, then re-proves the full live contracted
+  function/ACL/revision/default/constraint/trigger catalog before `db push`.
+- Rationale: a predecessor ledger row proves history, not live catalog identity,
+  and revoking the compatibility grants before the replacement server is the
+  exact accepted Vercel deployment would break the migration-first release.
+  Conversely, leaving the grants indefinitely preserves revision-free writes
+  and browser-owned readiness. The only safe sequence is **EXPAND -> exact
+  application/Vercel acceptance -> CONTRACT**, with a clean catalog stop at
+  both database boundaries.
+- Consequence: cached old-shaped requests remain supported by the candidate
+  server only by deriving the missing identity/revision tuple server-side and
+  calling checked RPCs. Legacy fallbacks are limited to exact missing-function
+  evidence from a genuinely pre-EXPAND database; once checked functions exist,
+  a revoked legacy RPC is never retried. Applying CONTRACT still requires a new
+  exact RED authorization and post-apply ledger/catalog/ACL/lint/health/
+  containment verification. It enables no worker, autonomous action, provider
+  execution, merge, deployment, rollback, or secret path.
+
+## ADR-111 - Contain the failed bot catalog gate with a forward ACL normalizer and stable identities
+
+- Date: 2026-08-22
+- Status: Accepted; application publication is complete, while the
+  cross-platform repair and hosted execution require a new exact owner approval
+- Decision: EXPAND run `32568221857` stopped before DDL because hosted Supabase
+  gives all seven legacy routines an additional direct `service_role` EXECUTE
+  ACL through its default function privileges. A second independent defect was
+  the use of raw `md5(pg_get_functiondef(...))`: PostgreSQL 17 and 18 can
+  deparse an identical routine differently. Add protected forward migration
+  `20260822000150_normalize_legacy_bot_function_acls.sql`; it accepts only the
+  exact coherent vanilla 0/7 or hosted 7/7 service-role posture, rejects mixed
+  states, revokes only the seven direct overgrants, and verifies the exact
+  owner-plus-authenticated ACL inside one atomic statement. EXPAND/CONTRACT and
+  their hosted guards use line-ending-canonical `md5(prosrc)` (CRLF and lone CR
+  become LF) plus explicit full catalog fields and structural trigger checks
+  instead of deparser hashes.
+- Frozen exact repository file identities: 00150 SHA-256
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+  corrected 00200 SHA-256
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+  corrected 00300 SHA-256
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+- Release evidence: exact commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on `main`, authored and
+  committed by `surgeservicesllc <surgeservicesllc@gmail.com>`. Vercel
+  production deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY; GitHub
+  deployment `6036292508` and status `17160408639` bind it to the exact SHA and
+  production URL. Exact-head CI run `32570540183` is red: all three browser
+  shards passed, while quality job `97025270055` failed before build because
+  the LF migration chain rejected all seven non-canonical `prosrc` hashes.
+  Native PostgreSQL 17.10 and 18.4 full chains pass after canonicalizing CRLF
+  and lone CR to LF. This repair remains local, and no hosted database mutation
+  has occurred.
+- Rationale: a retry cannot repair a deterministic catalog mismatch, and
+  weakening the guard would hide unknown drift. A separately hashed forward
+  normalizer makes the one proven environmental delta explicit and fail-closed.
+  Line-ending-canonical source hashes plus transparent catalog fields preserve
+  identity across PostgreSQL majors and client newline conventions without
+  trusting a version-dependent pretty-printer.
+- Consequence: 00150 must land exactly once before corrected 00200, and 00300
+  remains gated on exact production application acceptance after EXPAND. The
+  read-only audit reports server version, ledger, source hashes, and named ACL
+  posture. No old workflow may be rerun and no reset, down-migration, history
+  repair, broad push, worker, or autonomous execution is authorized. The
+  repaired commit requires green exact-head CI and fresh RED authorization
+  before any hosted execution.
+
+## ADR-112 - The signed-in header names the products, not the pages
+
+- Date: 2026-08-19
+- Status: Accepted
+- Decision: `SIGNED_IN_NAV` becomes two entries — `AI Factory` at `/solutions` and `Job Seeker` at `/job-seeker` — with `Admin` still appended for a confirmed super administrator. Projects, Runs and Activity are removed from the global header. `SiteHeader` resolves the current destination by the longest matching href rather than by any prefix match.
+- Rationale: the owner's reference shows exactly these three entries, and named both addresses explicitly. `AI Factory` is wired to `/solutions`, the console entry point, and deliberately not to `/solutions/ai-factory` — a page inside the console that happens to share the name. The three removed entries were a short, arbitrary excerpt of the console's own column, which lists them beside everything else it holds, so the header was repeating a fraction of the menu one row above it. `Job Seeker` sits outside `/solutions` because it is the one person-scoped surface: the page hard-gates on the server and every row is RLS-scoped to organization membership *and* row ownership.
+- Also: the entries now nest, which the old active test could not express. `/solutions` is a prefix of `/solutions/admin`, so on the admin page both entries matched and the header rendered two links with `aria-current="page"` and two underlines at once. The longest match is the entry a person is actually on; a set without nesting — the public navigation — behaves exactly as before.
+- Consequence: the signed-in header had no browser coverage at all, because the whole e2e suite browses signed out. A `site-header` harness case renders it as a signed-in super administrator and one test reads the rendered entries, their two hrefs, and the account controls beside them. That case is deliberately absent from the layout sweep's `CASES`: the sweep clicks every control it finds, and this one contains sign-out. The nesting fix is mutation-checked — restoring the prefix test fails the admin case.
+
+## ADR-113 - Operations is a destination, not a category
+
+- Date: 2026-08-19
+- Status: Accepted
+- Decision: the console sidebar's `Watch` group is removed, and `Operations` becomes a top-level destination placed directly above `Reports`. The group's other child, `Activity`, is removed from the column with it.
+- Rationale: the owner marked the group header and its `Activity` child on the live page and asked for both gone, with Operations promoted. The structure agrees with the instruction: `Watch` named a category rather than a place, and put a disclosure and a click in front of the one destination inside it people actually want. Removing a group is only safe when its destinations survive it, and both did — Operations by promotion, and Activity because `Bots → Bot Activity` already pointed at `/solutions/activity` under a name that says whose activity it is. The duplicate is what was removed, not the page.
+- Consequence: the column drops from six disclosure groups to five (Projects, Pipelines, Bots, Settings, Advanced) and reads Overview, AI Factory, Projects, Pipelines, Bots, Job Seeker, Runs, Operations, Reports, Integrations, Secrets, Settings, Advanced. `tests/unit/app-shell.test.tsx` asserts the group's absence, that Operations resolves to `/solutions/operations`, and the adjacency itself — `Reports` at exactly one index after `Operations` — which is mutation-checked by swapping the two. The e2e reachability contract in `console.spec.ts` loses the `Watch` and `Activity` entries but no destination; `pages.spec.ts` still renders and axe-checks `/solutions/activity`, which remains a real page.
+
+## ADR-114 - The model a bot is given is the model the executor accepts
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: `executionModel()` and `EXECUTION_PROVIDER` are exported from `lib/orchestration/plan.ts` and are the single source of the pair a Phase 1C command can run on. `ensureProviderBot` asks that function for the executing provider instead of taking `suggestedModels[0]`, so an operator's `SOFTWAREFACTORY_CODEX_MODEL` pin moves the plan and every newly provisioned bot together. The catalog's openai list leads with the same value, `GET /api/projects/:id/bots` and `GET /api/bots/providers` publish it, and the roster's model picker marks each option **runs** or **cannot run**. Migration `20260822000600` moves already-provisioned bots off the models the catalog itself produced and clears posting overrides naming one, each repair written as an activity event. A model the console never offered is left alone.
+- Rationale: the plan fixed `gpt-5.3-codex` while `ensureProviderBot` named new bots `gpt-5.1-codex`. `selectFactoryCommandRoute` and `submit_factory_command` both compare the pair exactly, so **every command in every workspace was refused** — at the last step of the journey, after a project, a pipeline and a bot had all been chosen, with `PROVIDER_MODEL_MISMATCH`. Nothing was misconfigured; the console had shipped a bot its own executor could never match. The defect was possible because one fact lived in two files with nothing tying them, and it was invisible because the refusal named two internal concepts ("the command's fixed execution provider and model") that appear on no screen. Repairing rows is not optional cleanup: fixing the constants alone would leave every existing workspace blocked, since the bad model is already written. Overrides are cleared rather than rewritten because null means "use the bot's model", which is now correct, while setting the executable model would assert an intention nobody expressed.
+- Consequence: `tests/unit/execution-model-agreement.test.ts` ties the catalog to the plan, and `tests/integration/executable-model-migration.contract.test.ts` ties the migration's literal to `DEFAULT_CODEX_MODEL` — SQL cannot import the constant, so the third copy is checked by reading the file. `tests/integration/executable-model-repair.behavior.test.ts` seeds rows *before* the repair migration and applies it, which is the upgrade a live workspace experiences rather than a fresh install that never had the defect; it proves the repaired bot is routable, that a hand-typed model and another provider are untouched, that the repair is replayable, and that each change is audit-evented. The refusal now names the bot, both models, and where to change one, pinned by `tests/unit/factory-command-routing.test.ts`. `STANDARD_MODEL_CATALOGUE` grew by one entry, and `provider-surfaces` now derives its count from the catalogue rather than repeating a literal, and asserts every entry has a display name — an unnamed model silently renders its raw identifier.
+
+## ADR-115 - Admit every valid Factory model, but execute only the identity the worker implements
+
+- Date: 2026-08-22
+- Status: Accepted as an unpublished release candidate; protected hosted apply
+  and production acceptance are pending
+- Supersedes: ADR-114 only where ADR-114 allowed an environment pin to move the
+  executable model. Its exact worker/posting agreement and hosted `00600` repair
+  remain in force.
+- Decision: classify the selected posting's provider/model at command admission.
+  Exact `openai` / `gpt-5.3-codex` is the sole executable identity and retains
+  the existing manual Phase 1C plan. Every other syntactically valid, bounded
+  provider/model pair is `record_only`: persist the command, task, immutable
+  route, and execution disposition, but create no `agent_runs` and expose no
+  route to a worker, repository branch, commit, pull request, merge, or
+  deployment. Reject invalid identities. Reject every nondefault
+  `SOFTWAREFACTORY_CODEX_MODEL` value before planning rather than treating an
+  environment variable as execution authorization.
+- Decision: Step 8 is complete when the command is durably recorded. Step 9
+  reads a caller-authorized, project-scoped safe projection and renders the
+  recorded-only disposition truthfully, including the deliberate absence of
+  execution artifacts. Reload must preserve that project-only history, and the
+  projection must not expose raw command parameters. Record-only history is
+  excluded from executable capacity calculations and provider-run APIs refuse
+  it even if called directly.
+- Decision: hosted `20260822000600_route_bots_onto_the_executable_model.sql` is
+  already applied and continues to align legacy Codex rows with the one
+  executable identity. The new database contract must land only as the atomic,
+  forward-only `20260822000300` -> `20260822000900` -> `20260822001000` ->
+  `20260822001100` -> `20260822001200` chain.
+  The retired standalone CONTRACT scope is non-mutating; only
+  `scope=factory-any-model-record-only` may rehearse and apply the chain after
+  exact-main, exact READY Vercel, owner-acceptance, ledger, catalog, ACL, lint,
+  health, and containment gates.
+- Rationale: a connected Claude or alternate OpenAI account is valid routing
+  intent even when this factory has no executor for it. Rejecting that intent
+  made Step 8 unusable; pretending it was executable would be worse, because it
+  would fabricate runs and make Step 9 promise artifacts no worker can create.
+  A durable record-only mode preserves user intent and project history while
+  keeping the execution boundary honest and closed.
+- Consequence: adding another executable provider/model requires a new decision
+  plus synchronized worker, claim, database, policy, and acceptance changes; a
+  catalog entry, connected account, UI selection, or environment variable is
+  insufficient. Until the candidate has a frozen commit, green exact-head CI,
+  matching Vercel deployment, atomic hosted apply, zero-run postflight, and
+  signed-in Step 8 -> Step 9/reload evidence, it must not be described as
+  deployed or production ready. Workers, autonomy, and automatic actions remain
+  OFF and the global kill switch remains ON.
+
+## ADR-116 - Owner-directed releases use technical gates, not a magic RED approval ceremony
+
+- Date: 2026-08-22
+- Status: Accepted by direct owner instruction
+- Decision: an owner's direct request in the active task to push, deploy, or
+  apply the named release is sufficient repository release authority. Agents
+  must not demand a second magic phrase, a commit/hash declared before it
+  exists, an artificial expiry window, or repeated approval after routine
+  rebases and validation. The exact artifact is frozen and reported by the
+  executor as evidence rather than used as a conversational password.
+- Decision: this changes release authorization only. Exact repository/main/head
+  identity, green required CI, exact READY production deployment, immutable
+  migration hashes and prerequisites, rollback rehearsal, forward-only apply,
+  ledger/catalog/ACL/lint/health verification, audit evidence, stop-on-drift,
+  workers/autonomy/actions OFF, and the kill switch remain mandatory. Product
+  RED commands, protected draft changes generated by the product, secrets,
+  destructive data work, auth/RLS, billing, DNS, and autonomous authority keep
+  their existing approval and safety boundaries unless the owner separately
+  changes those policies.
+- Rationale: binding release authority to a specially formatted sentence and a
+  not-yet-created commit delayed a release without adding technical assurance.
+  Artifact identity, tests, provider identity, database preflights, atomicity,
+  containment, and postflight evidence are the controls that prevent the
+  failure modes. The owner's plain-language instruction already establishes
+  intent and scope.
+- Consequence: release tooling may request identifiers needed to verify the
+  artifact being executed, but it may not require a magic acceptance value or
+  conversational re-approval. Any target or scope beyond the owner's direct
+  request still requires new authority; uncertainty or a failed technical gate
+  still stops the release.
+
+## ADR-117 - Job Seeker is a product with its own navigation, not a page of the console
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: `lib/job-seeker/navigation.ts` holds the section's own left navigation — Overview with its five sections, then Job Search, Applications, Resume Library, Cover Letters, Contacts & Outreach, Interview Tracker, Notes & Documents, Analytics, Settings — and `AppShell` swaps its whole navigation set while the path is under `/job-seeker`. `/job-seeker` lands on an Overview dashboard rather than on the Career Profile form. The six existing panels gain real routes (`/job-seeker/profile` and siblings) instead of `?section=` query state, and the in-page tab strip is hidden when a route names its section, because the left navigation is now the wayfinding. The auth gate moves from `page.tsx` to a section `layout.tsx`. Resume Library, Cover Letters and Notes & Documents are one component over `job_seeker_documents` filtered by `kind`; Contacts & Outreach reads the contacts and outreach tables together; Interview Tracker is derived from applications at an interview stage rather than from a second table; Settings is the preferences surface that already governs matching.
+- Rationale: a person in Job Seeker is managing a job search, and the console's destinations — Projects, Bots, Runs, Secrets — are noise against that task. The owner's design shows a different navigation, which is the correct reading: this is a second product sharing a shell, not a page of the first. Landing on Career Profile meant a returning person's first sight was data entry rather than where their search stood. Interviews are derived rather than stored because an interview *is* an application at a stage, and keeping a second copy is how two screens start disagreeing about how many you have. `isActiveHref` gained an exact-match set because `/job-seeker` is both Overview's href and the prefix of every sibling, so prefix-matching would light Overview up while someone stood in Resume Library; the group still highlights from its children, which is what the design shows.
+- Consequence: `tests/unit/job-seeker-navigation.test.ts` checks every href against the file that would serve it, so an entry cannot promise a destination that does not exist. `tests/unit/job-seeker-overview-model.test.ts` pins the arithmetic on the cases where a wrong answer would look plausible — an unscored job counted as a low score, an application counted as submitted before it was, a percentage taken over every recorded job rather than over the applications. The thirteen new routes are registered in the width sweep, which the responsive-coverage contract required before it would pass. Documents are listed with a 280-character preview rather than their full 60k, and the list carries versions because the table keeps every one: a tailored resume is evidence of what was actually sent.
+
+## ADR-118 - Contract the hosted resume function ACL in a new forward version
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: preserve immutable hosted migrations `20260822000400` and
+  `20260822000500`. Add `20260822001100` to freeze the exact
+  `apply_resume_extraction(uuid,text[])` signature, source, owner, language,
+  SECURITY DEFINER/search-path contract, overload count, and known hosted ACL
+  input; revoke function access from PUBLIC, anon, authenticated, and
+  service_role; then grant EXECUTE only to authenticated and require exactly
+  owner plus authenticated in postflight. Rehearse and apply the complete
+  `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain in the same protected
+  transaction.
+- Rationale: hosted probe `32587973532` proved that every Job Seeker table,
+  column, index, policy, constraint, RLS, source, and catalog fingerprint was
+  exact. The only mismatch was direct `service_role EXECUTE` left by Supabase
+  function default privileges. `00500` contracted table grants but revoked the
+  function only from PUBLIC and anon; its earlier verifier omitted
+  service_role, so the residual grant was real and invisible locally until the
+  hosted default was reproduced.
+- Consequence: no applied migration is edited or replayed, no final-state gate
+  is weakened, and service_role loses the unintended person-facing function
+  path before the atomic transaction becomes visible. The regression suite
+  reproduces the three-entry hosted input and proves `00500` leaves it while
+  `01100` closes it. Workers, autonomy, and automatic actions remain OFF and
+  the global kill switch remains ON.
+
+## ADR-119 - A clear control refuses rather than destroys what it cannot safely delete
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: `clear_backlog_tasks(uuid, text, boolean)` and `clear_all_pipelines(uuid, text, boolean)` (migration `20260822000800`, with the two `activity_event_type` labels `task.backlog_cleared` and `command.pipelines_cleared` added separately in `20260822000700`) are the only way the Backlog and All Pipelines pages clear. Both are SECURITY DEFINER, refuse a caller who is not an owner or admin, refuse a reason under ten characters, skip anything currently running, and skip anything whose deletion would cascade into run history unless the caller explicitly opts in. Every call writes an audit row, including one that deleted nothing. `components/clear-surface-button.tsx` is one component for both surfaces; `app/api/tasks/clear/route.ts` and `app/api/commands/clear/route.ts` carry no authority of their own and only classify the function's refusals.
+- Rationale: the destructive decision is identical on both pages, and the moment it is two implementations they start to disagree — one grows a confirmation step the other lacks, one reports counts the other swallows. The refusals matter more than the deletions: `commands -> tasks -> agent_runs` is `ON DELETE CASCADE` the whole way, so an unguarded "clear all" on either page silently destroys run history that `delete_agent_run` protects individually. Skipping is the default and opting in is a labelled checkbox, because a person pressing "clear the page" is asking about the page, not about the evidence behind it. The reason floor is enforced in the browser as well as the database, since discovering a ten-character rule after a confirmation dialog is a worse experience than the field simply being required.
+- Consequence: the control reports what it kept and why — `"3 pipelines cleared. Kept: 1 still running, 2 with run history."` — because "cleared" over a list that still has rows in it is the kind of small lie that costs someone their trust in the surface. `tests/integration/clear-backlog-and-pipelines.behavior.test.ts` covers 15 cases against real PostgreSQL, including the manager check, the reason floor, the live-work skip, the cascade skip and its opt-in, replay, and the audit row on an empty clear. Building the fixtures required suspending `tasks_phase1c_plan` and `tasks_phase1c_queue` for construction only: the planner triggers refuse the completed-task shape these tests need to delete.
+- Hosted: applied by run `32582241930`, `scope=clear-controls`, both versions absent from the ledger beforehand. The post-apply readback measured `security_definer t`, `member_may_execute t`, `anon_may_execute f` for both functions, and both enum labels present. That readback was produced by the step that ran the DDL, so `scope=probe` gained the same read plus `service_role` EXECUTE — an apply grading its own work cannot distinguish a wrong assertion from a wrong migration.
+
+## ADR-120 - Contract hosted clear-control function ACLs in a forward migration
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: preserve immutable hosted migration `20260822000800`. Add
+  `20260822001200` to freeze the exact signatures, sources, owners, languages,
+  SECURITY DEFINER/search-path contracts, overload counts, and known hosted ACL
+  inputs of `clear_backlog_tasks(uuid,text,boolean)` and
+  `clear_all_pipelines(uuid,text,boolean)`; revoke function access from PUBLIC,
+  anon, authenticated, and service_role; then grant EXECUTE only to
+  authenticated and require exactly owner plus authenticated in postflight.
+  Rehearse and apply the complete `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200`
+  chain in the same protected transaction.
+- Rationale: read-only hosted probe `32590061431` proved both clear-control
+  functions retained direct `service_role EXECUTE` from Supabase function
+  default privileges. Migration `00800` revoked PUBLIC and anon but omitted
+  service_role, and its original postflight did not measure service-role
+  privilege, so the unintended direct grant survived and must be removed before
+  the protected release can pass.
+- Consequence: no applied migration is edited or replayed and no final-state
+  gate is weakened. The new version accepts only the frozen clean or exact
+  hosted overgrant input and converges both functions to the same
+  owner-plus-authenticated ACL before the atomic transaction becomes visible.
+  Workers, autonomy, and automatic actions remain OFF and the global kill
+  switch remains ON.
+
+## ADR-121 - Normalize the measured hosted pre-repair function ACLs without replacing identities
+
+- Date: 2026-08-22
+- Status: Accepted for the protected atomic release
+- Decision: add forward migration
+  `20260822000850_normalize_hosted_pre_repair_function_acls.sql` immediately
+  before pending `00900` in the protected chain. Freeze the exact catalog and
+  ACL state measured by read-only run `32591774367`: twelve guarded routines are
+  already exact; `normalize_bot_assignment_configuration`,
+  `record_claim_anchoring`, and `validate_pipeline_template_areas` have the
+  Supabase-default `service_role EXECUTE` overgrant; and
+  `claim_provider_connect_session` is owner-only although its server boundary
+  requires service-role execution. Revoke and rebuild only those four ACLs.
+  Preserve every routine OID, source, signature, owner, language, volatility,
+  SECURITY DEFINER setting, search path, argument/result contract, and comment.
+- Rationale: the earlier sixteen-function gate described the intended ACLs as
+  though they were already hosted, so the protected run stopped safely before
+  DDL. The claim function also retains the hosted legacy OUT names
+  `organization_id` and `purpose`. Recreating it merely to adopt newer local OUT
+  labels would change its OID and external row contract without fixing the ACL
+  defect. Pending, unapplied `00900` therefore freezes the measured claim result
+  hash `3b2b93799687f2d2de6b154376542759` and catalog hash
+  `a7ca5a02b1faa50ebba452c4a4f46195`.
+- Consequence: the one protected transaction is now
+  `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200`. Its exact hosted-input
+  gate, rollback rehearsal, migration postflight, 00900 preflight, ledger,
+  catalog, lint, health, and containment checks stop on any mixed or unexpected
+  state. No applied migration is edited or replayed, and workers, autonomy, and
+  automatic actions remain OFF with the global kill switch ON.
+
+## ADR-122 - The containment gate measures what can exist, and the audit guard loses its hosted default grant
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: two repairs to the protected release's containment gate and its
+  inputs, with no state requirement weakened. First, the gate's two audit
+  evidence clauses become trail-agreement: the newest
+  `autonomy.kill_switch_changed` event per org (if any) must show the switch
+  engaged, and the newest autonomy-affecting event per pinned project (if
+  any) must not show autonomy on. The old clauses demanded change events the
+  platform forbids from ever being written - `update_project_controls`
+  refuses turning project autonomy ON, so the OFF-flip event cannot exist,
+  and a tenant whose kill switch has been ON since creation has no change to
+  record. Second, the gate's source comparison for
+  `reject_activity_event_mutation()` used `btrim(...)` with the default
+  space-only character set against a body that begins and ends with
+  newlines, so it read false on every database including a pristine one; it
+  now trims `' \n'`. Third, `20260822001300_contract_audit_guard_function_acl`
+  behind `scope=audit-guard-acl-contract` removes the hosted Supabase default
+  `service_role EXECUTE` grant the 20260812000300 revoke never covered,
+  accepting only the clean or exact known-overgrant input.
+- Rationale: probe evidence, clause by clause. Runs 32591774367, 32594887321,
+  32599024205, and 32599284961 walked the refusals from the sixteen-function
+  gate to containment, and the last one isolated
+  `reject_mutation_function_posture f` as the only red clause while every
+  state, census, worker, and event clause read green. A local reproduction
+  then showed the btrim comparison false even on the clean chain, which means
+  that clause alone could refuse the chain forever regardless of any owner
+  action.
+- Consequence: the containment gate still requires every autonomy mode OFF,
+  GREEN ceilings, no auto action, the kill switch ON with an agreeing audit
+  trail, the exact four-project census, the append-only audit posture, and a
+  disconnected worker table. The owner engaged the kill switch and turned
+  Autonomous Mode OFF in the active workspace through the Safety page, which
+  wrote the real events the trail-agreement clauses read. Workers, autonomy,
+  and automatic actions remain OFF and the global kill switch remains ON.
+
+## ADR-123 - A partial mixed-era AgentOS foundation is cleared, never completed in place
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: add `20260822001400_clear_partial_agentos_foundation.sql` behind
+  `scope=agentos-foundation-cleanup`. Hosted records `20260814000300` as
+  applied while only 4 of its 32 named objects exist; protected-chain run
+  `32600709789` stopped at `20260822000900`'s first in-file guard ("expected
+  0 or 32 named objects; found 4") - the first failure inside the chain
+  itself after every workflow gate passed. The cleanup returns the roster to
+  the proven-absent state: it no-ops on 0 and on a complete foundation,
+  refuses any remnant table that holds rows, drops children before parents
+  with RESTRICT semantics only, and verifies zero named objects afterward,
+  all in one transaction.
+- Rationale: 00900 restores the foundation only from proven absence because
+  a fragment's fingerprint is ambiguous, and completing a fragment in place
+  would duplicate the protected restore outside its rehearsed transaction.
+  The remnants are the leading objects of a partial autocommit apply whose
+  history row was recorded anyway - the same mixed-era pattern the runbook
+  documents - and they can hold no meaningful data, which the row-count
+  guard enforces rather than assumes.
+- Consequence: hosted's roster goes to zero, the protected chain's first
+  guard takes its 'absent' branch, and the restore creates all 32 objects
+  inside the atomic transaction. A full local replay reaches 001400 with a
+  complete foundation and does nothing. Workers, autonomy, and automatic
+  actions remain OFF and the global kill switch remains ON.
+
+## ADR-124 - submit_command is carried to its pre-chain version before the chain freezes it
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: add `scope=command-carry-forward`, which applies the genuinely
+  unapplied `20260815001000_cross_project_dependencies.sql` and then new
+  `20260822001500_contract_command_submission_acls.sql`. Protected-chain run
+  `32601908933` passed the AgentOS restore for the first time and stopped at
+  `20260822001000`'s input guard on exactly
+  `public.submit_command(uuid,text,public.risk_level,jsonb,text)`: hosted
+  still runs the 20260813001100-era body because 20260815001000 never ran
+  there (probe: `declare_cross_project_dependency` absent), while the guard
+  freezes the carried source `adb50eb74e1721274f23d0d69b79e2e8` and an
+  owner-plus-authenticated ACL. The ACL contraction is source-agnostic - the
+  function legitimately has a pre-chain and a post-chain body - and accepts
+  only owner-granted, non-grantable EXECUTE entries for known roles before
+  converging all three command-submission functions.
+- Rationale: the guard's expectation derives from the local chain, and the
+  local chain includes 20260815001000; the only honest convergence is to
+  apply the missing file, not to relax the guard to hosted's stale body. The
+  ACL half preempts the hosted default-privilege grant class that recurred
+  five times today.
+- Consequence: hosted's submit_command reaches the exact identity the atomic
+  chain rehearses against, the cross-project dependency doorway ships with
+  its documented owner-only controls, and the ledger records both versions
+  truthfully. Workers, autonomy, and automatic actions remain OFF and the
+  global kill switch remains ON.
+
+## ADR-125 - The rehearsal lint names each trigger function's relation instead of never running
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: the protected chain's pre-commit lint called
+  `extensions.plpgsql_check_function_tb(signature::regprocedure, 0::regclass,
+  ...)` for all 27 roster functions, three of which are the Phase 1C trigger
+  functions. plpgsql_check categorically raises `missing trigger relation` /
+  `Trigger relation oid must be valid` when asked to lint a trigger function
+  without the relation that types NEW and OLD, so that clause could not
+  complete against any database state; it had simply never been reached
+  before, because every earlier chain run refused at an earlier gate. Chain
+  run `32603384774` - the first to pass the carry-forward-unblocked input
+  guard - aborted inside the rehearsal transaction on exactly that error,
+  committing nothing. The lint's VALUES rows now carry a `trigger_relation`
+  column: `public.commands` for `normalize_phase1c_command()`, `public.tasks`
+  for `plan_phase1c_task_and_run()` and `queue_phase1c_run_for_task()` -
+  copied from `20260822001000`'s own `trigger_expectations` - and
+  `coalesce(trigger_relation::regclass, 0::regclass)` for everything else.
+- Rationale: correcting a provably unsatisfiable clause is not weakening a
+  gate. As written the lint rejected every possible database, including a
+  perfect one; as corrected it actually lints the three trigger bodies for
+  the first time, which is strictly more verification, with the same roster,
+  levels, and fail-closed handling. `scope=probe` gained a rolled-back
+  begin/create-extension/lint/rollback block proving the mechanics against
+  the current hosted bodies plus a residue readback, so the fix is measured,
+  not assumed.
+- Consequence: the rehearsal can reach its rollback for the first time. The
+  frozen six-file chain is untouched; only the workflow's lint invocation and
+  its pinning test changed. Workers, autonomy, and automatic actions remain
+  OFF and the global kill switch remains ON.
+
+## ADR-126 - The lint's first real finding is fixed at its source, and findings become sentinel rows
+
+- Date: 2026-08-22
+- Status: Accepted
+- Decision: with ADR-125's relations in place, chain run `32604992678`
+  completed the rehearsal lint for the first time and the gate refused on one
+  genuine warning: `public.agentos_resolved_agent_grants(uuid)` initialized
+  `environment_networking public.agentos_network_mode := 'limited'`, and
+  plpgsql_check warns (42804) that the text literal has no assignment cast to
+  the enum. The initializer now carries the explicit
+  `::public.agentos_network_mode` cast in both creator copies - the original
+  `20260814000300_agentos_isolation_model.sql` (the full local path) and the
+  restore copy in `20260822000900` (the hosted path) - keeping the two bodies
+  byte-identical; 00900's own source pin moves to
+  `a1231a4a5329b1dab132b6e774d97bb3` and the workflow's frozen REPAIR sha to
+  `512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694`. The
+  same run also proved the gate's evaluation could never pass: the captured
+  rehearsal stdout legitimately contains blank lines (void-returning SELECTs
+  under -Atq), so plain non-emptiness refused even a finding-free rehearsal.
+  Finding rows are now sentinel-prefixed (`LINTROW|`, every field coalesced
+  so a NULL cannot erase its row's sentinel) and the gate greps for the
+  sentinel.
+- Rationale: the lint gate worked exactly as designed the first time it
+  could run, and the honest response to a real finding is to repair the
+  linted body, not to waive the warning level. Editing a frozen chain file
+  re-freezes identity through the workflow constant, the pinning tests, and
+  exact-head CI. Verified empirically in the supabase postgres 17.6 image:
+  all 148 migrations apply with the fix, both creator paths produce the
+  pinned md5, and the full 27-function roster lints with zero findings.
+- Consequence: the rehearsal can produce a clean lint verdict for the first
+  time. Workers, autonomy, and automatic actions remain OFF and the global
+  kill switch remains ON.
+
+## ADR-127 - The chain is applied; one wrong pinned contract and the unreached postflights get their own scope
+
+- Date: 2026-08-23
+- Status: Accepted
+- Decision: chain run `32607123713` committed the protected six-file
+  transaction - rehearsal green with a clean lint, six ledger rows recorded,
+  fourteen-identity contract unchanged - and then refused at the post-commit
+  RECORD_ONLY_READY check. The detail probe (run 32607361788) showed hosted's
+  post-apply posture matches every measurable expectation: exact wrapper
+  sources and ACLs, RLS-forced tables with owner/authenticated-only grants,
+  and zero record-only agent runs. Replaying the exact gate query on the
+  clean local full chain reproduced the refusal: the pinned contract md5 for
+  `public.list_factory_commands(uuid,integer,uuid)` (`6abaeb0d...`) matches
+  no database; the true post-chain identity is
+  `162d47956f98e7b005c7abe1df680ee9`. The pin is corrected in both workflow
+  sites and the test fixture, and a new read-only
+  `scope=record-only-postflight` re-runs exactly the three post-commit
+  verifications, the health checks, and the PostgREST reload the protected
+  step never reached - refusing unless the ledger already records the six
+  rows, and writing nothing but the NOTIFY.
+- Rationale: the production database is in the intended state; what failed
+  was a verification constant, provably wrong under every state, so
+  correcting it and re-running the verification is the honest completion of
+  the release evidence - not a waiver. The chain scope itself can never
+  re-run (its history gate now refuses), so the unreached postflights need a
+  dedicated scope.
+- Consequence: the record-only routing is live and verified end to end once
+  the postflight scope reads back green. Workers, autonomy, and automatic
+  actions remain OFF and the global kill switch remains ON.
+
+## ADR-128 - A record-only Claude command launches one real analysis graph
+
+- Date: 2026-08-23
+- Status: Accepted
+- Decision: the owner accepted the record-only Step 8/9 and then directed
+  that Step 9 must actually run the bot. The Claude bot's honest execution
+  surface already exists and is production-proven: the graph engine, the
+  subscription CLI transport, and the graph worker that drains MODEL and
+  DETERMINISTIC nodes with read-only tools. New migration
+  `20260823000100_command_analysis_graphs.sql` adds a one-to-one
+  command-to-graph link table, `launch_command_analysis_graph` (delegates to
+  `create_graph_from_plan` with the command's own stored prompt as the goal,
+  idempotent through the unique link, refuses everything that is not a
+  record-only Claude command), and `list_command_analysis_graphs` (latest
+  run state and artifact count, fail-closed to empty for non-members). The
+  command submit route launches the graph for record-only Claude commands
+  and wakes the graph worker by repository_dispatch
+  (`softwarefactory_graph_planned`, added to graph-worker.yml alongside its
+  existing manual dispatch and gated schedule); the command type maps to an
+  analysis template proven claude-drainable
+  (`ANALYSIS_TEMPLATE_BY_COMMAND_TYPE`, invariant-tested against
+  `WORKER_SUPPORTED_EXECUTORS`). Step 9 and the Bots request card report the
+  analysis state exactly as the database holds it, replacing the untruthful
+  "Waiting for a worker to pick it up" hint on record-only commands.
+- Rationale: this is real execution inside the boundary Phase 2A draws -
+  analysis artifacts only, never a repository write, merge, or deploy; those
+  stay with the manual Codex lane and its isolation discipline. The
+  subscription transport spends no per-token API credit. The kill switch and
+  autonomy are untouched: an analysis run happens only as the direct
+  mechanical consequence of an owner-issued command, the same wake contract
+  the Phase 1C dispatch always had.
+- Consequence: the Claude bot genuinely runs when the owner issues a
+  command: planned graph, claimed run, node transitions, artifacts, and
+  verifications - all durable, all visible in Step 9. Hosted apply goes
+  through the new one-shot `scope=command-analysis-graphs` with the file
+  sha pinned.

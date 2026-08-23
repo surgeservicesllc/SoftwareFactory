@@ -116,6 +116,11 @@ export type AuthBrokerDependencies = Readonly<{
   now?: () => number;
 }>;
 
+type AuthLoginDrivers = Readonly<{
+  anthropic: (session: ClaimedAuthSession) => Promise<LoginCli>;
+  openai: (session: ClaimedAuthSession) => Promise<LoginCli>;
+}>;
+
 export type AuthBrokerTimeouts = Readonly<{
   loginUrlMs: number;
   relayCodeMs: number;
@@ -688,7 +693,16 @@ export async function startClaudeSetupToken(
     dispose: async () => {
       child.stdout.removeListener("data", onChunk);
       child.stderr.removeListener("data", onChunk);
-      if (!exited) child.kill("SIGTERM");
+      if (!exited) {
+        try {
+          // The default termination signal is portable; explicitly naming
+          // SIGTERM throws EINVAL for some Windows-spawned CLI shims.
+          child.kill();
+        } catch {
+          // Disposal is best-effort and the temporary credential directory
+          // still has to be removed when the child exited between checks.
+        }
+      }
       await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };
@@ -874,7 +888,14 @@ export async function startCodexLogin(
     dispose: async () => {
       child.stdout.removeListener("data", onChunk);
       child.stderr.removeListener("data", onChunk);
-      if (!exited) child.kill("SIGTERM");
+      if (!exited) {
+        try {
+          child.kill();
+        } catch {
+          // Windows CLI shims can reject termination after their child exits;
+          // cleanup of the temporary credential directory must still finish.
+        }
+      }
       await rm(configDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };
@@ -883,14 +904,18 @@ export async function startCodexLogin(
 /** The production dependency wiring, shared by the script entry point. */
 export function productionAuthBrokerDependencies(
   store: AuthBrokerStore,
+  loginDrivers: AuthLoginDrivers = {
+    anthropic: startClaudeSetupToken,
+    openai: startCodexLogin,
+  },
 ): AuthBrokerDependencies {
   return {
     store,
     startLogin: async (session) => {
       if (session.provider === "openai") {
-        return startCodexLogin(session);
+        return loginDrivers.openai(session);
       }
-      return startClaudeSetupToken(session);
+      return loginDrivers.anthropic(session);
     },
     openRelayCode: (session, sealed) => openSecret(sealed, {
       organizationId: session.organizationId,

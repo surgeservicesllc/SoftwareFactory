@@ -1,6 +1,8 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { HARNESS_URL } from "../../playwright.config";
+import { MAX_LENGTH_COORDINATOR_NAME } from "../harness/fixtures";
 
 /**
  * The layouts that only exist once there are rows.
@@ -30,6 +32,15 @@ async function settled(page: import("@playwright/test").Page) {
   );
 }
 
+async function waitForFactoryBriefingReady(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("heading", { name: "Factory briefing" })).toBeVisible();
+  for (const lane of ["Needs owner now", "Underway", "Recently finished", "Up next"]) {
+    await expect(page.getByRole("region", { name: lane })).toBeVisible();
+  }
+  await expect(page.getByText(/Briefing incomplete/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+}
+
 async function open(page: import("@playwright/test").Page, layoutCase: string, width: number) {
   /*
    * A throw during mount is a failure with a name, not an empty page.
@@ -50,6 +61,12 @@ async function open(page: import("@playwright/test").Page, layoutCase: string, w
   // The components fetch their fixtures on mount; wait for real content.
   try {
     await expect(page.locator("#root")).not.toBeEmpty({ timeout: 15_000 });
+    if (layoutCase === "factory-briefing") {
+      // Its loading card also makes #root non-empty. The four lanes and
+      // enabled Refresh control are the stable ready-state contract that the
+      // width, reachability, interaction, and axe assertions must measure.
+      await waitForFactoryBriefingReady(page);
+    }
   } catch (failure) {
     if (errors.length) {
       throw new Error(
@@ -182,10 +199,16 @@ const CASES = [
   "my-projects",
   "portfolio",
   "pipelines",
+  "pipeline-templates-selected",
+  "job-seeker-overview",
+  "job-seeker-documents",
+  "job-seeker-contacts",
+  "job-seeker-interviews",
   "agentos",
   "autonomy",
   "bot-usage",
   "job-seeker",
+  "resume-review",
   "bot-fabric",
   "bot-manager",
   "bot-manager-in-journey",
@@ -203,6 +226,7 @@ const CASES = [
   "graph-summary",
   "graph-launch",
   "dashboard-metrics",
+  "factory-briefing",
   "attention",
   "portfolio-controls",
   "project-detail",
@@ -223,6 +247,31 @@ for (const width of WIDTHS) {
     });
   }
 }
+
+for (const width of [320, 1440]) {
+  test(`factory-briefing passes axe at ${width}px`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, "factory-briefing", width);
+
+    // The component harness intentionally mounts below no page heading; the
+    // real Dashboard supplies its h1. Keep the component's h2 hierarchy and
+    // exclude only that harness-level page rule.
+    const results = await new AxeBuilder({ page })
+      .disableRules(["page-has-heading-one"])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+}
+
+test("factory-briefing keeps a max-length coordinator inside 320px", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "factory-briefing", 320);
+
+  await expect(
+    page.getByLabel("Crew status").getByText(MAX_LENGTH_COORDINATOR_NAME, { exact: false }),
+  ).toBeVisible();
+  expect(await overflowing(page), "the maximum accepted coordinator name overflowed").toEqual([]);
+});
 
 test("every recovery action on a stuck account is reachable on a phone", async ({ page, isMobile }) => {
   // The defect this pins: Refresh, Reconnect and Disconnect sat in a row that
@@ -279,6 +328,144 @@ for (const width of WIDTHS) {
     }
   });
 }
+
+test("AI Factory owns one modal above the whole shell, including pipeline Plan and Clone", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "ai-factory", 1280);
+
+  const pipelineStep = page.getByRole("heading", {
+    name: "Configure Pipeline",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  const opener = pipelineStep.getByRole("button", { name: /choose a pipeline|change pipelines/i });
+  const skipLink = page.locator('a[href="#main-content"]');
+  await expect(opener).toBeVisible();
+
+  // A pre-existing boolean/string value on an unrelated body child catches a
+  // cleanup that blindly removes attributes instead of restoring exact state.
+  await page.evaluate(() => {
+    const preserved = document.createElement("div");
+    preserved.id = "pre-existing-modal-sibling";
+    preserved.setAttribute("inert", "legacy");
+    preserved.setAttribute("aria-hidden", "false");
+    document.body.append(preserved);
+  });
+
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Configure Pipeline" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+
+  const isolation = await page.evaluate(() => {
+    const current = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+    return {
+      directBodyChild: current?.parentElement === document.body,
+      backgrounds: Array.from(document.body.children)
+        .filter((element) => element !== current)
+        .map((element) => ({
+          id: element.id,
+          inert: element.getAttribute("inert"),
+          ariaHidden: element.getAttribute("aria-hidden"),
+        })),
+    };
+  });
+  expect(isolation.directBodyChild).toBe(true);
+  expect(isolation.backgrounds.length).toBeGreaterThan(0);
+  expect(isolation.backgrounds.every((entry) => (
+    entry.inert === "" && entry.ariaHidden === "true"
+  ))).toBe(true);
+
+  // Even an adversarial programmatic focus attempt cannot escape to the
+  // shell's z-100 skip link; the z-110 dialog remains the active boundary.
+  await skipLink.evaluate((element) => (element as HTMLElement).focus());
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+  await dialog.getByRole("button", { name: /^Plan a graph from / }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(dialog.getByRole("region", { name: /^Plan a graph from / })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Back to templates" }).click();
+
+  await dialog.getByRole("button", { name: /^Clone / }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(dialog.getByRole("region", { name: "New template" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "Back to templates" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+  expect(await page.locator("#root").getAttribute("inert")).toBeNull();
+  expect(await page.locator("#root").getAttribute("aria-hidden")).toBeNull();
+  await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("inert", "legacy");
+  await expect(page.locator("#pre-existing-modal-sibling")).toHaveAttribute("aria-hidden", "false");
+});
+
+test("AI Factory advances a persisted record-only command to a truthful non-execution Step 9", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "semantic browser check runs once in a resizable project");
+  await open(page, "ai-factory", 1280);
+
+  const commandStep = page.getByRole("heading", {
+    name: "Issue a Command",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  await expect(commandStep.getByText("Done")).toBeVisible();
+  await expect(commandStep.getByText(/1 recorded only/i)).toBeVisible();
+
+  const watchStep = page.getByRole("heading", {
+    name: "Watch It Ship",
+    exact: true,
+  }).locator("xpath=ancestor::li[1]");
+  await expect(watchStep.getByText(/no execution is queued/i)).toBeVisible();
+  await expect(watchStep.getByText(/no worker dispatch, execution run, branch, or pull request/i))
+    .toBeVisible();
+  await expect(watchStep.getByText(/when an executor is connected/i)).toHaveCount(0);
+
+  await watchStep.getByRole("button", { name: "Review command record" }).click();
+  const dialog = page.getByRole("dialog", { name: "Watch It Ship" });
+  await expect(dialog.getByText("Command record")).toBeVisible();
+  await expect(dialog.getByText(/creates no worker dispatch, execution run, branch, or pull request by design/i))
+    .toBeVisible();
+  await expect(dialog.getByText(/will not start until an executor is connected/i)).toHaveCount(0);
+});
+
+test("standalone Bot Manager and Project Bots modals contain focus and share one close path", async ({ page, isMobile }) => {
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+
+  await open(page, "bot-manager", 1280);
+  let opener = page.getByRole("button", { name: "Create Bot" });
+  await opener.click();
+  let dialog = page.getByRole("dialog", { name: "Create Bot" });
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.locator("#root")).toHaveAttribute("inert", "");
+  await page.locator('a[href="#main-content"]').evaluate((element) => (
+    element as HTMLElement
+  ).focus());
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  dialog = page.getByRole("dialog", { name: "Create Bot" });
+  await expect(dialog).toBeVisible();
+  await dialog.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  await open(page, "project-bots", 1280);
+  opener = page.getByRole("button", { name: /assign more|assign bots/i }).first();
+  await opener.click();
+  dialog = page.getByRole("dialog", { name: /assign bots/i });
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(page.locator("#root")).toHaveAttribute("inert", "");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+});
 
 /**
  * The harness measures populated layouts, or it measures nothing.
@@ -343,6 +530,46 @@ for (const layoutCase of CASES) {
     ).toEqual([]);
   });
 }
+
+/*
+ * The global header, signed in.
+ *
+ * The rest of the browser suite browses signed out, so the owner's specified
+ * header — AI Factory, Job Seeker, Admin, then the account controls — had no
+ * coverage in a real browser at all. This reads the rendered entries rather
+ * than the module that supplies them, which is the point: the wiring is the
+ * instruction, and a unit test importing the same constant cannot catch a
+ * header that stops rendering what it is given.
+ */
+test("the signed-in header names the two products and the admin area", async ({ page }) => {
+  await open(page, "site-header", 1440);
+
+  const primary = page.getByRole("navigation", { name: "Primary" });
+  await expect(primary).toBeVisible();
+
+  await expect(primary.getByRole("link")).toHaveText(["AI Factory", "Job Seeker", "Admin"]);
+  await expect(primary.getByRole("link", { name: "AI Factory" })).toHaveAttribute(
+    "href",
+    "/solutions",
+  );
+  await expect(primary.getByRole("link", { name: "Job Seeker" })).toHaveAttribute(
+    "href",
+    "/job-seeker",
+  );
+
+  // The account side of the same row, which the owner's image also shows.
+  await expect(page.getByText("Super admin")).toBeVisible();
+  await expect(page.getByText("owner@example.org")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Console" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
+
+  // A signed-in header must not still be selling the product.
+  for (const gone of ["Platform", "Features", "Pricing", "About", "Get Started Free"]) {
+    await expect(page.getByRole("link", { name: gone, exact: true })).toHaveCount(0);
+  }
+
+  expect(await overflowing(page), "the signed-in header pushed content out").toEqual([]);
+});
 
 /*
  * The desktop rail: narrower column, wider content, and the choice remembered.
@@ -749,3 +976,37 @@ for (const layoutCase of CASES) {
     });
   }
 }
+
+test("a selected pipeline says so without colour, and stays reachable on a phone", async ({ page, isMobile }) => {
+  /*
+   * The defect this pins is the whole point of the control: pressing Use has
+   * to leave a mark a person can find again. Grey alone would not be enough —
+   * someone who cannot see the difference between the accent and the border
+   * needs the same fact — so the pressed state is asserted on the element, not
+   * on its class.
+   */
+  test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+  await open(page, "pipeline-templates-selected", 320);
+
+  const selected = page.getByRole("button", { name: "Stop using Production Readiness" });
+  await expect(selected).toBeVisible();
+  await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await expect(selected).toHaveText(/Selected/);
+
+  // A template nobody chose still offers itself.
+  const unselected = page.getByRole("button", { name: "Use Security Audit" });
+  await expect(unselected).toHaveAttribute("aria-pressed", "false");
+
+  // Both selections are counted where a person looks for them, and planning a
+  // graph is its own action rather than something Use does behind their back.
+  await expect(page.getByText(/2 pipelines selected for E-Commerce Platform/)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Plan a graph from Production Readiness" }),
+  ).toBeVisible();
+
+  expect(await overflowing(page), "the selected pipeline grid overflowed at 320px").toEqual([]);
+  expect(
+    await unreachable(page, "body"),
+    "a selected pipeline's controls went out of reach at 320px",
+  ).toEqual([]);
+});

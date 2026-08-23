@@ -85,8 +85,22 @@ describe("verify before store", () => {
     requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
+        // One `eq` (organization), deterministic ordering, then `limit`:
+        // `ensureProviderBot` reads every
+        // bot name in the organization, because names are unique per
+        // organization and the old per-provider filter numbered around
+        // collisions it could not see.
         from: () => ({
-          select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+          select: () => ({
+            eq: () => {
+              const builder = {
+                order: vi.fn(),
+                limit: async () => ({ data: [], error: null }),
+              };
+              builder.order.mockReturnValue(builder);
+              return builder;
+            },
+          }),
         }),
         rpc: register,
       },

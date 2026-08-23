@@ -7,9 +7,33 @@ import { Card, EmptyState, NotConnectedBadge, SectionTitle, StatusBadge } from "
 
 /**
  * Job discovery: record postings and see their match against your recorded
- * facts. Recording is manual today and the panel says so — an import
- * adapter appears here only when its integration actually exists.
+ * facts. Two real ways in: manual recording, and importing from a public
+ * board (Greenhouse or Lever) by its identifier — both flow through the
+ * same evaluate-and-score chain. A credentialed adapter with no
+ * integration (LinkedIn) still renders Not Connected with its exact needs
+ * named, never a working-looking control.
  */
+
+type SourceView = {
+  key: string;
+  name: string;
+  summary: string;
+  mode: "public" | "credentialed";
+  identifierLabel: string | null;
+  identifierHint: string | null;
+  configured: boolean;
+  requiredConfiguration: string[];
+};
+
+type ImportResult = {
+  company?: string;
+  totalAvailable?: number;
+  considered?: number;
+  imported?: number;
+  duplicates?: number;
+  skippedSensitive?: number;
+  error?: { message?: string };
+};
 
 export type JobView = {
   id: string;
@@ -31,7 +55,14 @@ export type JobView = {
     threshold: number;
     qualified: boolean;
   } | null;
-  application: { id: string; stage: string; approvalStatus: string } | null;
+  application: {
+    id: string;
+    stage: string;
+    approvalStatus: string;
+    applicationUrl: string | null;
+    notes: string | null;
+    followUpAt: string | null;
+  } | null;
 };
 
 const FIELD_CLASS =
@@ -43,6 +74,46 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block font-medium text-[var(--text)]">{label}</span>
       {children}
     </label>
+  );
+}
+
+/** Identifier + import button for a public-API source card. */
+function SourceImportForm({
+  source,
+  importing,
+  disabled,
+  onImport,
+}: {
+  source: SourceView;
+  importing: boolean;
+  disabled: boolean;
+  onImport: (identifier: string) => Promise<void>;
+}) {
+  const [identifier, setIdentifier] = useState("");
+  return (
+    <div className="mt-2">
+      <label className="block text-sm">
+        <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+          {source.identifierLabel ?? "Identifier"}
+        </span>
+        <input
+          className={FIELD_CLASS}
+          value={identifier}
+          onChange={(event) => setIdentifier(event.target.value)}
+        />
+      </label>
+      {source.identifierHint ? (
+        <p className="mt-1 text-xs text-[var(--text-faint)]">{source.identifierHint}</p>
+      ) : null}
+      <button
+        type="button"
+        className="btn btn-sm mt-2"
+        disabled={disabled || !identifier.trim()}
+        onClick={() => void onImport(identifier.trim())}
+      >
+        {importing ? "Importing…" : "Import postings"}
+      </button>
+    </div>
   );
 }
 
@@ -60,9 +131,7 @@ export function JobSeekerJobsPanel() {
   const [location, setLocation] = useState("");
   const [workModel, setWorkModel] = useState("");
   const [description, setDescription] = useState("");
-  const [sources, setSources] = useState<Array<{
-    key: string; name: string; summary: string; configured: boolean; requiredConfiguration: string[];
-  }>>([]);
+  const [sources, setSources] = useState<SourceView[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +158,42 @@ export function JobSeekerJobsPanel() {
     const kickoff = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(kickoff);
   }, [load]);
+
+  const [importBusy, setImportBusy] = useState("");
+
+  async function importFrom(sourceKey: string, identifier: string) {
+    setImportBusy(sourceKey);
+    setProblem("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/job-seeker/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceKey, identifier }),
+      });
+      const body = (await response.json()) as ImportResult;
+      if (!response.ok) {
+        setProblem(body.error?.message ?? "The import could not be completed.");
+        return;
+      }
+      const extras: string[] = [];
+      if (body.duplicates) extras.push(`${body.duplicates} already recorded`);
+      if (body.skippedSensitive) extras.push(`${body.skippedSensitive} skipped by the credential scanner`);
+      const beyondCap = (body.totalAvailable ?? 0) - (body.considered ?? 0);
+      if (beyondCap > 0) {
+        extras.push(`the board lists ${body.totalAvailable} in total; this import reads the first ${body.considered}`);
+      }
+      setNotice(
+        `Imported ${body.imported ?? 0} of ${body.considered ?? 0} postings from ${body.company ?? identifier}`
+        + `${extras.length ? ` — ${extras.join("; ")}` : ""}.`,
+      );
+      await load();
+    } catch {
+      setProblem("The import could not be completed.");
+    } finally {
+      setImportBusy("");
+    }
+  }
 
   async function record() {
     setBusy(true);
@@ -152,20 +257,34 @@ export function JobSeekerJobsPanel() {
         </div>
         <p className="mt-2 text-xs text-[var(--text-faint)]">{EVALUATION_METHOD_LABEL}</p>
         <p className="mt-1 text-xs text-[var(--text-faint)]">
-          Recording is manual today. The import sources below activate only when their named
-          configuration actually exists — never before.
+          Record a posting yourself, or import from a company&apos;s public Greenhouse or Lever
+          board by its identifier. A source that needs credentials activates only when its
+          named configuration actually exists — never before.
         </p>
 
         {sources.length > 0 ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid items-start gap-2 sm:grid-cols-3">
             {sources.map((adapter) => (
               <div key={adapter.key} className="rounded-md border border-[var(--border)] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-[var(--text)]">{adapter.name}</p>
-                  {adapter.configured ? null : <NotConnectedBadge />}
+                  {adapter.mode === "public" ? (
+                    <StatusBadge tone="safe">Public API</StatusBadge>
+                  ) : adapter.configured ? (
+                    <StatusBadge tone="safe">Connected</StatusBadge>
+                  ) : (
+                    <NotConnectedBadge />
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">{adapter.summary}</p>
-                {!adapter.configured ? (
+                {adapter.mode === "public" ? (
+                  <SourceImportForm
+                    source={adapter}
+                    importing={importBusy === adapter.key}
+                    disabled={importBusy !== "" || busy}
+                    onImport={(identifier) => importFrom(adapter.key, identifier)}
+                  />
+                ) : !adapter.configured ? (
                   <p className="mt-1 text-xs text-[var(--text-faint)]">
                     Needs: {adapter.requiredConfiguration.join(", ")}
                   </p>
@@ -242,6 +361,7 @@ export function JobSeekerJobsPanel() {
                 {job.location ? ` · ${job.location}` : ""}
                 {job.workModel ? ` · ${job.workModel}` : ""}
                 {job.salaryText ? ` · ${job.salaryText}` : ""}
+                {job.source !== "manual" ? ` · via ${job.source}` : ""}
               </p>
               {job.url ? (
                 <a href={job.url} target="_blank" rel="noreferrer" className="text-xs text-[var(--accent)] underline">

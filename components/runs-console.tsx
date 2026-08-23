@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Archive, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { Children, useState } from "react";
 
 import {
@@ -28,6 +29,9 @@ type Run = {
   agent: { id: string; name: string } | null;
   reviewStatus?: ReviewStatus;
   archivedAt?: string | null;
+  /** Present on read-only analysis graph runs, which have no agent-run
+   * detail, lease, cancel, or delete — their evidence lives on Pipelines. */
+  analysis?: { graphId: string; commandId: string; artifactCount: number } | null;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -143,10 +147,10 @@ type ProjectGroup = { id: string; name: string; runs: Run[] };
 function groupRunsByProject(runs: Run[]): ProjectGroup[] {
   const groups = new Map<string, ProjectGroup>();
   for (const run of runs) {
-    const id = run.project?.id ?? "unattributed";
+    const id = run.project?.id ?? (run.analysis ? "analysis" : "unattributed");
     const group = groups.get(id) ?? {
       id,
-      name: run.project?.name ?? "Project unavailable",
+      name: run.project?.name ?? (run.analysis ? "Analysis runs" : "Project unavailable"),
       runs: [],
     };
     group.runs.push(run);
@@ -158,7 +162,13 @@ function groupRunsByProject(runs: Run[]): ProjectGroup[] {
 export function RunsConsole() {
   const { state, reload } = useTenantList<Run>(
     "/api/runs",
-    (body) => (body.runs as Run[]) ?? [],
+    // Provider execution runs and read-only analysis runs are one list —
+    // both are work a bot carried out — ordered newest first so a command
+    // issued a moment ago is the first row a reload shows.
+    (body) => [
+      ...((body.runs as Run[]) ?? []),
+      ...((body.analysisRuns as Run[]) ?? []),
+    ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     "Runs could not be loaded.",
   );
   const detail = useControlPlaneDetail<RunDetail>("runs", "run");
@@ -612,9 +622,11 @@ export function RunsConsole() {
                           {run.agent?.name ?? "Unassigned"} · {formatDateTime(run.startedAt ?? run.createdAt)}
                         </p>
                         <p className="mt-1 break-words text-xs text-muted">
-                          {run.provider
-                            ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
-                            : "No provider/model routing target is recorded for this run."}
+                          {run.analysis
+                            ? `Read-only analysis on your Claude subscription · ${run.analysis.artifactCount} artifact${run.analysis.artifactCount === 1 ? "" : "s"} recorded · no branch or pull request by design`
+                            : run.provider
+                              ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
+                              : "No provider/model routing target is recorded for this run."}
                         </p>
                         <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
                       </div>
@@ -628,41 +640,53 @@ export function RunsConsole() {
                           <StatusBadge tone="neutral">{REVIEW_LABELS[run.reviewStatus]}</StatusBadge>
                         ) : null}
                         <span className="text-sm text-muted">{formatDuration(run.durationMs)}</span>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
-                          View run
-                        </button>
-                        {/* Archiving is offered only once a run has finished:
-                            hiding work still in flight would hide the thing
-                            most worth watching, and the database refuses it. */}
-                        {["succeeded", "failed", "cancelled"].includes(run.status) ? (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            disabled={rowBusy === run.id}
-                            aria-label={run.archivedAt ? `Restore run ${run.id}` : `Archive run ${run.id}`}
-                            onClick={() => void archiveRun(run, !run.archivedAt)}
-                          >
-                            {rowBusy === run.id
-                              ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                              : <Archive className="size-4" aria-hidden="true" />}
-                            {run.archivedAt ? "Restore" : "Archive"}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          disabled={rowBusy === run.id}
-                          aria-label={`Delete run ${run.id}`}
-                          onClick={() => {
-                            setDeletingRow(run);
-                            setRowDeleteReason("");
-                            setRowDetach(false);
-                            setRowMessage("");
-                          }}
-                        >
-                          <Trash2 className="size-4" aria-hidden="true" />
-                          Delete
-                        </button>
+                        {run.analysis ? (
+                          /* An analysis run's evidence — nodes, artifacts,
+                             verifications — lives on the graph surfaces, and
+                             it has no lease to cancel or agent-run row to
+                             archive or delete. One honest action. */
+                          <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm">
+                            View analysis
+                          </Link>
+                        ) : (
+                          <>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openRun(run.id)}>
+                              View run
+                            </button>
+                            {/* Archiving is offered only once a run has finished:
+                                hiding work still in flight would hide the thing
+                                most worth watching, and the database refuses it. */}
+                            {["succeeded", "failed", "cancelled"].includes(run.status) ? (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                disabled={rowBusy === run.id}
+                                aria-label={run.archivedAt ? `Restore run ${run.id}` : `Archive run ${run.id}`}
+                                onClick={() => void archiveRun(run, !run.archivedAt)}
+                              >
+                                {rowBusy === run.id
+                                  ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                                  : <Archive className="size-4" aria-hidden="true" />}
+                                {run.archivedAt ? "Restore" : "Archive"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              disabled={rowBusy === run.id}
+                              aria-label={`Delete run ${run.id}`}
+                              onClick={() => {
+                                setDeletingRow(run);
+                                setRowDeleteReason("");
+                                setRowDetach(false);
+                                setRowMessage("");
+                              }}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     </li>
                   ))}

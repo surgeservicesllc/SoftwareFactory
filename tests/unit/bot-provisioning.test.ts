@@ -12,22 +12,37 @@ const organizationId = "11111111-2222-4333-8444-555555555555";
 function fakeClient(options: {
   existing?: unknown[];
   existingError?: unknown;
+  missingAiAccountColumn?: boolean;
   registered?: { data: unknown; error: { message?: string; code?: string } | null };
+  rpcResults?: Record<string, { data: unknown; error: { message?: string; code?: string } | null }>;
 }) {
-  const rpc = vi.fn((..._args: unknown[]) => ({
-    single: async () => options.registered ?? { data: { id: "new-bot" }, error: null },
+  const rpc = vi.fn((name: string, _args: Record<string, unknown>) => ({
+    single: async () => options.rpcResults?.[name]
+      ?? options.registered
+      ?? { data: { id: "new-bot" }, error: null },
+  }));
+  const select = vi.fn((columns: string) => ({
+    eq: () => {
+      const builder = {
+        order: vi.fn(),
+        limit: async () => options.missingAiAccountColumn && columns.includes("ai_account_id")
+        ? {
+            data: null,
+            error: { code: "PGRST204", message: "Could not find the 'ai_account_id' column" },
+          }
+        : { data: options.existing ?? [], error: options.existingError ?? null },
+      };
+      builder.order.mockReturnValue(builder);
+      return builder;
+    },
   }));
   const client = {
     from: () => ({
-      select: () => ({
-        eq: () => ({
-          limit: async () => ({ data: options.existing ?? [], error: options.existingError ?? null }),
-        }),
-      }),
+      select,
     }),
     rpc,
   };
-  return { client, rpc };
+  return { client, rpc, select };
 }
 
 describe("ensureProviderBot", () => {
@@ -55,7 +70,7 @@ describe("ensureProviderBot", () => {
 
     const result = await ensureProviderBot(client, organizationId, "anthropic");
 
-    expect(result).toEqual({ outcome: "exists" });
+    expect(result).toEqual({ outcome: "exists", botId: "bot-1" });
     expect(rpc).not.toHaveBeenCalled();
   });
 
@@ -69,6 +84,195 @@ describe("ensureProviderBot", () => {
     expect(rpc.mock.calls[0]![1] as unknown as Record<string, unknown>).toMatchObject({
       p_credential_ref: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
     });
+  });
+
+  it("provisions against the exact AI account and returns its exact bot id", async () => {
+    const { client, rpc } = fakeClient({
+      existing: [{ id: "legacy-bot", provider: "anthropic", name: "Claude" }],
+      registered: {
+        data: { bot_id: "bound-bot", provision_outcome: "bound" },
+        error: null,
+      },
+    });
+    const aiAccountId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+    const result = await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    });
+
+    expect(result).toEqual({ outcome: "bound", botId: "bound-bot" });
+    expect(rpc).toHaveBeenCalledWith("ensure_ai_account_bot", {
+      p_organization_id: organizationId,
+      p_ai_account_id: aiAccountId,
+      p_provider: "anthropic",
+      p_name: "Claude 2",
+      p_model: "claude-opus-5",
+      p_additional: false,
+      p_base_url: null,
+      p_notes: "Created automatically when this provider was connected.",
+    });
+  });
+
+  it("returns an existing exact account bot id without guessing from the roster", async () => {
+    const { client } = fakeClient({
+      existing: [{ id: "some-provider-bot", provider: "anthropic", name: "Claude" }],
+      registered: {
+        data: { bot_id: "exact-account-bot", provision_outcome: "exists" },
+        error: null,
+      },
+    });
+
+    expect(await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    })).toEqual({ outcome: "exists", botId: "exact-account-bot" });
+  });
+
+  it("never guesses that an unbound credential-slot bot belongs to an account id", async () => {
+    const aiAccountId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const { client, rpc } = fakeClient({
+      existing: [{
+        id: "legacy-bot",
+        provider: "anthropic",
+        name: "Claude",
+        credential_ref: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+        ai_account_id: null,
+      }],
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "PGRST202", message: "ensure_ai_account_bot is missing" },
+        },
+      },
+    });
+
+    expect(await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    })).toMatchObject({ outcome: "skipped", reason: expect.stringMatching(/account-binding/i) });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith("register_bot", expect.any(Object));
+  });
+
+  it("never registers an unbound bot for an account id when the binding schema is absent", async () => {
+    const { client, rpc, select } = fakeClient({
+      existing: [],
+      missingAiAccountColumn: true,
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "PGRST202", message: "ensure_ai_account_bot is missing" },
+        },
+        register_bot: { data: { id: "legacy-created" }, error: null },
+      },
+    });
+
+    expect(await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+    })).toMatchObject({ outcome: "skipped", reason: expect.stringMatching(/account-binding/i) });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith("register_bot", expect.any(Object));
+    expect(select).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create or reuse for a random or cross-tenant account id", async () => {
+    const { client, rpc } = fakeClient({
+      existing: [{
+        id: "other-account-bot",
+        provider: "anthropic",
+        name: "Claude",
+        credential_ref: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+        ai_account_id: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+      }],
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "PGRST202", message: "ensure_ai_account_bot is missing" },
+        },
+      },
+    });
+
+    expect(await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    })).toMatchObject({ outcome: "skipped", reason: expect.stringMatching(/account-binding/i) });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith("register_bot", expect.any(Object));
+  });
+
+  it("deterministically reuses the oldest exact-bound row without registering a stray bot", async () => {
+    const aiAccountId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const { client, rpc } = fakeClient({
+      existing: [
+        {
+          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          provider: "anthropic",
+          name: "Claude 3",
+          ai_account_id: aiAccountId,
+          created_at: "2026-08-22T02:00:00.000Z",
+        },
+        {
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          provider: "anthropic",
+          name: "Claude 2",
+          ai_account_id: aiAccountId,
+          created_at: "2026-08-22T01:00:00.000Z",
+        },
+      ],
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "PGRST202", message: "ensure_ai_account_bot is missing" },
+        },
+      },
+    });
+
+    expect(await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId,
+    })).toEqual({
+      outcome: "exists",
+      botId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith("register_bot", expect.any(Object));
+  });
+
+  it("does not create ambiguous additional unbound account bots during rollout", async () => {
+    const { client, rpc } = fakeClient({
+      existing: [],
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "PGRST202", message: "ensure_ai_account_bot is missing" },
+        },
+      },
+    });
+
+    const result = await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+      additional: true,
+    });
+
+    expect(result).toMatchObject({ outcome: "skipped" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("never falls back when the account-binding RPC exists but refuses", async () => {
+    const { client, rpc } = fakeClient({
+      existing: [],
+      rpcResults: {
+        ensure_ai_account_bot: {
+          data: null,
+          error: { code: "42501", message: "permission denied" },
+        },
+      },
+    });
+
+    expect((await ensureProviderBot(client, organizationId, "anthropic", {
+      aiAccountId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    })).outcome).toBe("skipped");
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it("adds a numbered further bot when asked, so many can be connected at once", async () => {

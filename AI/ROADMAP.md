@@ -2,6 +2,112 @@
 
 Roadmap order follows safety dependencies. A later phase never inherits authority implicitly.
 
+## Current release increment — Claude bot identity and Role assignment
+
+Status: **Application commit published and deployed; exact-head CI failed, the
+cross-platform database repair is local, and no hosted database apply has
+occurred.**
+
+- Preserve exact `main` commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` and READY Vercel production
+  deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` as application evidence.
+  GitHub deployment `6036292508` and status `17160408639` bind that commit to
+  `https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and its
+  stable aliases.
+- Treat CI run `32570540183` as a failed release gate. Browser shards 1/3, 2/3,
+  and 3/3 passed; quality job `97025270055` failed before build because the LF
+  migration chain rejected seven non-canonical function-source hashes.
+- Keep the current protected repository file identities exact: 00150
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`,
+  00200
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`,
+  and 00300
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+- Preserve the line-ending-independent repair: canonicalize CRLF and lone CR
+  to LF before every `md5(prosrc)` comparison. Native PostgreSQL 17.10 and
+  18.4 full migration chains pass; the forward release must preserve this
+  repair and still needs green exact-head CI after publication.
+
+- Keep one full-application modal/focus boundary in AI Factory. Embedded roster,
+  assignment, configuration, and role onboarding replace content inside it;
+  no nested dialog is opened.
+- Preserve the owner-screenshot containment: `ProjectBots` must never infer an
+  exact AI-account link from `credentialRef` similarity or hide its repair
+  control. An unbound Ready legacy bot may be assigned while AI Factory
+  correctly keeps steps 5-7 incomplete. Expose the existing exact
+  `/api/bots/connect/provision` Link-or-repair/adoption path, await the parent
+  refresh, and provide an accessible **Return to AI Factory** action.
+- Keep the affected completion predicate exact: connected account + exact
+  `aiAccountId` + current Ready + project assignment. The current unpublished
+  UI fix passes focused UI 75/75, focused ESLint, full typecheck, and
+  lint/typecheck/build. The root full suite passes 337 files / 4,054 tests with
+  3 files / 7 tests skipped; its first contention-only `supabase-wiring`
+  timeout cleared isolated 2/2 and on the full rerun.
+- Keep role and permission defaults explicit: a new posting starts from the
+  Developer permission preset and preserves any existing posting role/config;
+  a zero-role organization is offered the reviewed Backend engineer starter by
+  default, saved through `/api/bot-roles`, and the exact returned UUID fills
+  only blank selected drafts.
+- Bind each subscription bot to its exact tenant AI account through
+  `20260822000200_register_bot_for_ai_account.sql` (SHA-256
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`),
+  preserving one unambiguous legacy bot UUID and enforcing the exact
+  account/provider/credential-slot identity.
+- Add monotonic bot and assignment revisions. Lock and compare exact posting
+  id/project/revision for assign, move, configuration, lifecycle, and execution
+  edits; refuse released-history edits; retain exact response plus committed
+  readback verification.
+- Record readiness only through a service-role RPC that carries the owner/admin
+  actor and compares exact bot revision/account/provider/model/credential
+  reference/base URL. Keep a management-authored Disabled state durable.
+- Ship `20260822000200` as the EXPAND half of a rolling cutover: preserve exact
+  legacy definitions/signatures/security/search paths and authenticated-only
+  execute ACLs while adding authenticated checked wrappers plus the
+  service-only readiness recorder. Revoke the legacy grants only in a
+  separately approved forward CONTRACT migration after the exact replacement
+  application is deployed and accepted.
+- Read every open assignment via terminal-proven keyset pagination and fail the
+  entire roster plus assignment-derived Assign/Configure progress closed on
+  invalid or bounded-out pagination.
+- Serialize broker start/retry/close/unmount cleanup and fence async results by
+  exact session plus generation so superseded polls cannot change UI state.
+- Derive Factory progress from the coherent connected-account, Ready linked
+  bot, active project assignment, and configured-posting chain; persist the
+  selected factory per organization across reload.
+- Freeze the repaired commit, obtain exact RED approval, push it directly to
+  `main`, and require green exact-head CI before any hosted DDL. Apply only
+  00150 and then 00200 through their dedicated hash-checked scopes. Complete
+  signed-in create/assign/Role/configure/readiness/audit/reload acceptance,
+  linked-database lint, health, and containment before separately authorizing
+  00300. Keep kill switch ON, autonomy/actions OFF, and worker/executor
+  disconnected throughout.
+
+## Current release increment — Factory command routing (ADR-106)
+
+Status: **Implemented and locally gated; not hosted or deployed.**
+
+- `20260821000400_command_factory_routing.sql` is frozen at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- Owner-only submit/replay durably selects one pipeline and configured bot,
+  model, and work effort; the database rechecks stored effective risk and
+  stores immutable routing/configuration evidence.
+- Exact replay resolves before mutable state. Missing hosted schema fails
+  closed. No worker dispatch, autonomous action, merge, deploy, or rollback is
+  introduced.
+- Lint, typecheck, and build pass. Default unbounded-run Supabase-wiring and
+  pipeline contention failures both clear in isolation. The bounded
+  current-head non-frozen Windows suite passes 317 files / 3,729 tests with 7
+  skipped in 140.74s under `maxWorkers=4`; only the owner-frozen 19-test
+  auth-broker file is excluded because Windows lacks Unix `script`. Linux CI
+  must run the complete suite before release.
+- Production remains on hosted `20260821000300` and the old copy. Before
+  hosting `20260821000400`, contain and remeasure five linked lint errors/ten
+  findings, one raw organization with `autonomous_mode = true`, one with
+  `autonomy_kill_switch_active = false`, two
+  projects with effective kill off, and the absence of a connected/fresh
+  worker. Do not infer a healthy/all-off hosted control plane.
+
 ## Phase 1A - trustworthy control-plane foundation
 
 Status: **Complete baseline; deployed evidence retained.**
@@ -53,7 +159,7 @@ Phase 1C ends at a human-reviewable draft PR. RED remains non-executable; no mer
 
 ## Phase 1D - autonomous-loop controls
 
-Status: **Decision layer published and hosted; every automatic action remains constrained OFF and no executor exists.**
+Status: **Decision layer published and hosted; no executor is connected, but hosted raw/effective controls have drift and must not be described as universally OFF.**
 
 Implemented in source and proven against the migrated schema:
 
@@ -69,9 +175,9 @@ Not implemented, and blocked rather than simulated:
 
 - **Enabling any automatic action.** Both scopes are held by validated CHECK constraints and a trigger. Relaxing them is a RED action requiring an owner-approved migration.
 - **Merge, deploy, and Codex execution.** Each is reached, evaluated, and blocked by name (`MERGE_EXECUTOR_NOT_CONNECTED`, `DEPLOY_EXECUTOR_NOT_CONNECTED`, `CODEX_WORKER_NOT_CONNECTED`). Tests assert the blockers, so connecting an executor fails them deliberately rather than silently granting authority.
-- No Phase 1D executor is connected. Hosted control migration `130006` and forward resolver correction `130014` retain all nine actions OFF and the global kill switch ON.
+- No Phase 1D executor is connected. The intended migration policy is all actions OFF/kill ON, but current evidence finds one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, and two projects effective-kill-off; containment and remeasurement are release blockers.
 
-This is an execution-inert decision layer, not authorization to begin autonomous operation. The global kill switch remains ON, Autonomous Mode remains OFF, the maximum hypothetical autonomous risk remains GREEN, and every automatic action remains OFF. The published manual Phase 1C path does not change these interlocks.
+This remains execution-inert because no worker/executor is connected, not because the current hosted rows are clean. It is not authorization to begin autonomous operation. Restore and verify the intended kill-ON/autonomy-OFF/action-OFF policy before any hosted routing apply or production promotion.
 
 ## Phase 1E - production operations
 

@@ -86,6 +86,55 @@ export const LEAST_PRIVILEGE_CONFIG: AssignmentConfig = Object.freeze({
   priority: 2,
 });
 
+/**
+ * Whether somebody has actually configured this posting.
+ *
+ * The comparison is against {@link LEAST_PRIVILEGE_CONFIG} rather than against
+ * any single field, because that is what "configured" means here: an
+ * assignment created with no configuration at all *is* the least-privilege
+ * posting, and every departure from it is something a person chose.
+ *
+ * The AI Factory journey's "Configure Bot Settings" step used to derive this
+ * from `roleId || responsibilities.length`. Both halves were wrong: the API
+ * nests `responsibilities` under `config`, so that half read `undefined`, and
+ * `bot_assignments.role_id` is NOT NULL, so the other half was true of every
+ * assignment that could exist. The step was marked done the instant a bot was
+ * assigned, and its evidence line could only ever read "N of N configured".
+ */
+export function assignmentIsConfigured(config: AssignmentConfig): boolean {
+  const baseline = LEAST_PRIVILEGE_CONFIG;
+  return (
+    config.preset !== baseline.preset
+    || config.responsibilities.length > 0
+    || (config.instructions ?? "").trim().length > 0
+    || config.tools.length > 0
+    || config.repositoryAccess !== baseline.repositoryAccess
+    || config.branchStrategy !== baseline.branchStrategy
+    || config.canOpenPullRequest !== baseline.canOpenPullRequest
+    || config.canMergePullRequest !== baseline.canMergePullRequest
+    || config.pipelineAccess !== baseline.pipelineAccess
+    || config.environmentAccess !== baseline.environmentAccess
+    || config.requiresHumanApproval !== baseline.requiresHumanApproval
+    || config.maxConcurrentTasks !== baseline.maxConcurrentTasks
+    || config.priority !== baseline.priority
+  );
+}
+
+/**
+ * Whether an assignment posting differs from every execution default.
+ * Model and work effort live beside `config` in the API/database shape, so
+ * callers that summarize a whole posting must include them as well.
+ */
+export function assignmentPostingIsConfigured(input: {
+  readonly config: AssignmentConfig;
+  readonly model?: string | null;
+  readonly workEffort?: string | null;
+}): boolean {
+  return assignmentIsConfigured(input.config)
+    || (input.model ?? "").trim().length > 0
+    || (input.workEffort ?? "medium") !== "medium";
+}
+
 export const assignmentConfigSchema = z
   .object({
     preset: z

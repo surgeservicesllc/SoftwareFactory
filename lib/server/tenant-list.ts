@@ -23,18 +23,37 @@ const listQuerySchema = z.object({
 type TenantRpcListConfig<Row> = {
   request: Request;
   rpc: string;
+  /**
+   * Temporary rollout compatibility for an additive list RPC. The fallback
+   * is attempted only when PostgREST reports that the primary function does
+   * not exist; authorization, validation, and every other database failure
+   * remain failures rather than silently switching read contracts.
+   */
+  fallbackRpc?: string;
   /** Stable machine-readable code for the failure envelope. */
   unavailableCode: string;
   unavailableMessage: string;
   shape: (rows: Row[]) => Record<string, unknown>;
+  /**
+   * Optional second read through the same caller-scoped client, merged into
+   * the response after `shape`. The augmenter owns its own tolerance: a
+   * companion list that cannot load must come back as {} (absent keys), so a
+   * failure there never takes down the primary list this route exists for.
+   */
+  augment?: (
+    client: Awaited<ReturnType<typeof requireActiveOrganization>>["client"],
+    organizationId: string,
+  ) => Promise<Record<string, unknown>>;
 };
 
 export async function tenantRpcListResponse<Row>({
   request,
   rpc,
+  fallbackRpc,
   unavailableCode,
   unavailableMessage,
   shape,
+  augment,
 }: TenantRpcListConfig<Row>): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -49,15 +68,20 @@ export async function tenantRpcListResponse<Row>({
     }
 
     const context = await requireActiveOrganization();
-    const { data, error } = await context.client.rpc(rpc, {
+    const parameters = {
       p_limit: parsed.data.limit,
       p_organization_id: context.activeOrganization.id,
-    });
-    if (error) return databaseErrorResponse(error);
+    };
+    let result = await context.client.rpc(rpc, parameters);
+    if (result.error?.code === "PGRST202" && fallbackRpc) {
+      result = await context.client.rpc(fallbackRpc, parameters);
+    }
+    if (result.error) return databaseErrorResponse(result.error);
 
     return jsonNoStore({
       activeOrganizationId: context.activeOrganization.id,
-      ...shape((data ?? []) as Row[]),
+      ...shape((result.data ?? []) as Row[]),
+      ...(augment ? await augment(context.client, context.activeOrganization.id) : {}),
     });
   } catch (error) {
     const boundaryResponse = supabaseBoundaryErrorResponse(error);

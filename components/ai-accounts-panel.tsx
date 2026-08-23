@@ -40,6 +40,7 @@ type AccountView = {
   provider: string;
   providerLabel: string;
   authMethod: string;
+  credentialPurpose: string;
   displayName: string;
   providerIdentity: string | null;
   status: string;
@@ -81,7 +82,11 @@ export function AiAccountsPanel({
 }: {
   canManage: boolean;
   onChanged: () => Promise<void> | void;
-  onCreateBots?: (accounts: readonly { id: string; provider: string }[]) => Promise<void> | void;
+  onCreateBots?: (accounts: readonly {
+    id: string;
+    provider: string;
+    credentialPurpose: string;
+  }[]) => Promise<void> | void;
   selectedIds?: readonly string[];
   onSelectedChange?: (ids: readonly string[]) => void;
 }) {
@@ -308,8 +313,14 @@ export function AiAccountsPanel({
       await onCreateBots(connectableSelection.map((account) => ({
         id: account.id,
         provider: account.provider,
+        credentialPurpose: account.credentialPurpose,
       })));
       setSelected([]);
+    } catch {
+      // A bulk provision can stop after one account. Keep every selected row
+      // visible so the caller can safely read back the exact successes and
+      // retry the remainder instead of losing the retry targets.
+      setNotice("Some bots could not be created. Your selection was kept so you can try again.");
     } finally {
       setCreatingBots(false);
     }
@@ -365,8 +376,8 @@ export function AiAccountsPanel({
             {staleSelection > 0 ? (
               <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                 {staleSelection === 1
-                  ? "One needs signing in again: its bot is created and assigned, but will not run until you reconnect."
-                  : `${staleSelection} need signing in again: their bots are created and assigned, but will not run until you reconnect.`}
+                  ? "One needs signing in again: a bot can be created for it, but will not run until you reconnect."
+                  : `${staleSelection} need signing in again: bots can be created for them, but will not run until you reconnect.`}
               </p>
             ) : null}
           </div>

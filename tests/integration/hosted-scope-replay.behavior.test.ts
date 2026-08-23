@@ -135,7 +135,7 @@ describe("the workflow's surgical scopes", () => {
      * against a database where every migration has just been applied: every
      * row must come back present.
      */
-    const query = /psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -c "\n(\s*with lifecycle\(kind[\s\S]*?);"/
+    const query = /psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -c "\r?\n(\s*with lifecycle\(kind[\s\S]*?);"/
       .exec(workflow);
     expect(query, "the scope=probe step no longer carries the lifecycle query").not.toBeNull();
 

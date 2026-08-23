@@ -3,16 +3,83 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
-**The current total is 19**, named in the list below — as measured. Three further migrations —
-`20260816001600_phase2c_resource_reservations`,
-`20260821000100_agentic_sdlc_activity_types` and
-`20260821000200_agentic_sdlc_lifecycle` — were added locally *after* that probe run
-and are also unhosted, so the true unhosted count is twenty-two. They are deliberately not appended to the
-list below: that list is a measurement, and adding an unmeasured version to it would turn
-evidence into assertion. The two `20260821` files are instead asked about by a **separate**
-query in the same `scope=probe` step, which reports the objects they introduce rather than a
-ledger row. The repository total is 129 migration
-files. Those two numbers no longer stand in the old relationship, and the reason matters: the
+## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
+
+This section is the current release procedure and supersedes older command-model
+instructions below. The implementation is a local release candidate only. It has
+not been frozen as a final commit, pushed to `main`, deployed by Vercel, or applied
+through the protected database scope. Do not describe the behavior in this section
+as production behavior until all evidence steps below are complete.
+
+The execution contract is deliberately asymmetric:
+
+- `openai` / `gpt-5.3-codex` is the only executable Factory identity. It retains
+  the existing manual Phase 1C path.
+- Every other syntactically valid, bounded provider/model pair, including Claude
+  and alternate OpenAI models, is admitted as `record_only`. Submission persists
+  the command, task, immutable route, and disposition, but creates no
+  `agent_runs`, worker dispatch, branch, commit, pull request, or deployment.
+- Invalid or out-of-bounds provider/model values still fail closed. Setting
+  `SOFTWAREFACTORY_CODEX_MODEL` to any nondefault value also fails closed; an
+  environment variable cannot widen the worker/database execution contract.
+- Step 8 advances after the selected posting's command is durably recorded. Step
+  9 reads project-scoped command history and, for `record_only`, explicitly says
+  that no execution artifacts exist by design. History must never bleed between
+  projects, and its safe projection must not expose raw command parameters.
+
+Hosted migration `20260822000600_route_bots_onto_the_executable_model.sql` is
+already applied. That repair aligns legacy Codex rows with the sole executable
+identity; it does not make any other provider or model executable.
+
+The protected database tail remains pending and must land only as one atomic,
+forward-only chain:
+
+1. `20260822000300_contract_bot_mutator_acls.sql`;
+2. `20260822000850_normalize_hosted_pre_repair_function_acls.sql`;
+3. `20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql`;
+4. `20260822001000_factory_any_model_record_only.sql`;
+5. `20260822001100_contract_resume_extraction_function_acl.sql`;
+6. `20260822001200_contract_clear_function_acls.sql`.
+
+Do not apply `00300` through its retired standalone scope, do not run a broad
+push to introduce any member of this chain, and never reset, down-migrate, replay
+history, or use `migration repair` as a substitute for the transaction. Use only
+`scope=factory-any-model-record-only`. The scope must first verify the exact
+`main` checkout and matching successful Vercel Production deployment, immutable
+prerequisite ledger/catalog state, exact final file hashes, safety containment,
+and the active task's direct owner release instruction. No magic RED phrase,
+predeclared-SHA approval, expiry, or repeat approval is required (ADR-116). It
+then rehearses all six files under rollback
+and applies all six plus their ledger rows in one transaction. `00850` is the
+exact hosted pre-repair ACL normalizer: it grants the required service-role
+execution on `claim_provider_connect_session` and removes the three unintended
+service-role grants found by read-only probe `32591774367`, without replacing a
+function or changing its OID or non-ACL contract. Pending `00900` preserves the
+claim function's measured legacy `organization_id`/`purpose` OUT names. The last
+two files are forward-only containment for direct `service_role` function EXECUTE
+grants that hosted Supabase default privileges left behind on the resume and
+clear-control functions.
+
+After the transaction, require exact ledger/catalog/ACL/lint/health evidence,
+autonomy and automatic actions OFF, the global kill switch ON, workers/executors
+disconnected, and zero runs for every `record_only` command. Finally, perform a
+signed-in production Step 8 submission with Claude or another non-Codex model,
+verify truthful Step 9, reload, and prove the same project-scoped history remains.
+Only that complete evidence permits a deployed/production-ready claim.
+
+**The current total is 26** within the dated, test-guarded probe list below. That phrase describes
+the measured list, not today's total outstanding migration count. Later exact evidence proves
+`20260821000300_project_pipeline_selection` and
+`20260822000100_project_agent_selection` are hosted, while
+`20260821000400_command_factory_routing` remains separately gated and
+`20260822000150_normalize_legacy_bot_function_acls`,
+`20260822000200_register_bot_for_ai_account`, and the separately gated
+`20260822000300_contract_bot_mutator_acls` follow-up are the current exact
+forward candidates.
+Do not add any of them to the 19-row measurement or
+infer a new overall missing count without another complete ledger probe. As of this release,
+the repository total is 149 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
 false, and every apply decision made from one has been wrong.
@@ -20,6 +87,134 @@ false, and every apply decision made from one has been wrong.
 version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
+
+## Historical release tail before ADR-115 — 2026-08-22 (superseded)
+
+The evidence in this section records an earlier checkpoint. It is not the
+current apply procedure; use the ADR-115 atomic-chain instructions above.
+
+Exact application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is
+current `main`. Vercel deployment `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2` is READY
+at `https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and
+owns the stable production aliases. GitHub deployment `6036292508` and status
+`17160408639` bind that deployment to the exact SHA.
+
+This is not database-apply evidence. Exact-head CI run `32570540183` failed:
+all three browser/accessibility shards passed, while quality job `97025270055`
+failed before build because the LF migration chain rejected all seven
+non-canonical legacy function-source hashes at the 00150 preflight. The local
+repair canonicalizes CRLF and lone CR to LF before every `md5(prosrc)`
+comparison. Native PostgreSQL 17.10 and 18.4 full chains pass, but the repair is
+not committed, pushed, deployed, or approved for hosted execution. No hosted
+database mutation followed `30d7e824`; 00150, 00200, and 00300 remain unhosted.
+
+Supabase Preview check `97025325852` failed independently in the older
+`20260814002500_provider_credential_vault.sql` migration with SQLSTATE `42P07`
+because `provider_credentials` already exists. Identical failures on prior
+heads classify that check as preview schema/ledger drift, not authorization to
+repair history or weaken this release gate.
+
+- `20260821000300_project_pipeline_selection` is **hosted**. Apply run
+  `32536895799` and its after-ledger listing are recorded below.
+- `20260822000100_project_agent_selection` is **hosted**. Apply run
+  `32548916762` (2026-08-22 03:25Z, `scope=agent-selection`) recorded the
+  ledger row and reloaded the schema cache; the live authenticated functions
+  were then observed failing closed for a non-manager.
+- `20260821000400_command_factory_routing.sql` is **unhosted**. Its reviewed
+  repository blob is exactly 34,999 bytes with SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+  Production still serves the pre-routing application copy. Until the function
+  is hosted, the application intentionally fails closed with Not Connected/503.
+- `20260822000150_normalize_legacy_bot_function_acls.sql` is **unhosted**,
+  protected, forward-only, and frozen at exact repository file SHA-256
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`.
+  Apply it only through `scope=bot-legacy-acl-normalization`, with 00100 once
+  and 00150/00200/00300 absent. It accepts only an exact coherent all-seven
+  Supabase `service_role` overgrant (or the exact already-normalized vanilla
+  state), refuses any mixed count or other catalog/ACL drift, revokes only the
+  seven direct service-role grants, and records 00150 in the same protected
+  transaction. It creates no function, trigger, policy, worker, or autonomy
+  path and performs no history repair.
+- `20260822000200_register_bot_for_ai_account.sql` is **unhosted** and protected.
+  Its frozen SHA-256 is
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+  Apply it only through `scope=bot-account-binding`, after confirming 00100 and
+  00150 are each present once and 00200/00300 are absent. This is the EXPAND
+  half of a rolling cutover. The scope checks the hash and a clean pre-apply
+  catalog. Before the first DDL, both the migration and workflow pin
+  line-ending-canonical `md5(prosrc)` values (CRLF and lone CR become LF) plus
+  return/argument/default/cost/rows/support/transform,
+  owner, language, kind, volatility, `SECURITY DEFINER`, search path, overload,
+  and authenticated-only ACLs of
+  `register_bot` plus all six legacy mutators. Historical bindings must resolve
+  to an existing same-tenant subscription account with the exact provider,
+  purpose, and credential reference. The migration-local postflight rejects
+  custom default-privilege grantees and proves exact definitions/ACLs for all ten
+  new functions plus the exact revision columns/defaults/constraints/triggers;
+  its exception rolls the protected single transaction back. The exact DDL file
+  and direct version-only `schema_migrations` insert execute in that same psql
+  transaction; protected scopes never use a later `migration repair`, so a
+  runner crash cannot leave committed DDL without its ledger row. The scope also
+  preserves all seven legacy definitions and ACLs, verifies the added revision columns/triggers,
+  checked-mutation RPCs, service-only readiness recorder, and records exactly
+  one ledger row. It intentionally does not revoke legacy execution before the
+  old production app is replaced; those paths temporarily bypass revision
+  tokens and service-only readiness. Revoke them only through a separately
+  approved forward CONTRACT migration after exact-app deployment and signed-in
+  acceptance.
+  The workflow defaults to read-only `scope=probe`; `scope=all` refuses to push unless
+  00150, 00200, and 00300 are already recorded exactly once by their dedicated scopes.
+  This workflow does not prove runtime create/bind/assign/configure/readiness/
+  audit behavior, linked-database lint, application health, or containment;
+  each is a mandatory post-apply release gate.
+- `20260822000300_contract_bot_mutator_acls.sql` is **unhosted**, protected,
+  forward-only, and frozen at SHA-256
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+  It may be applied only through `scope=bot-account-binding-contract`, with
+  00150 and 00200 recorded exactly once and 00300 absent. Before
+  any database access the dispatch must run from `refs/heads/main`, name the
+  exact checked-out 40-character application SHA in `contract_app_sha`, and
+  provide `contract_acceptance=exact-app-vercel-accepted`. With only
+  `deployments: read`, the workflow queries GitHub's Deployments API and fails
+  closed unless the latest `Production` deployment created by `vercel[bot]` has
+  exact matching SHA/ref, task `deploy`, and a latest Vercel-bot `success`
+  status with a `*.vercel.app` environment URL. GitHub's deployment object does
+  not expose the Vercel project ID, so before dispatch the operator must also
+  verify through the Vercel dashboard/API that the deployment belongs to exact
+  project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`; no `VERCEL_TOKEN` Actions secret
+  exists or is introduced. The manual attestation also confirms the signed-in
+  owner create/bind/assign/configure/readiness/audit/reload journey. The scope
+  then proves the complete frozen EXPAND catalog: all helper/checked definitions
+  and ACLs, revision columns/constraints, triggers, and all six legacy
+  definitions/signatures/owners/`SECURITY DEFINER`/search paths/authenticated-
+  only ACLs. It changes only those six legacy `EXECUTE` ACLs, re-reads the
+  line-ending-canonical sources and every catalog contract field unchanged,
+  verifies authenticated/PUBLIC/anon/service-role denial, and inserts exactly
+  one ledger row in the same transaction as the six
+  revokes; target absence plus the ledger primary key makes a race/retry roll back.
+
+  The mandatory order is **ACL normalizer (`20260822000150`) -> EXPAND
+  (`20260822000200`) -> deploy and accept the exact application SHA in Vercel
+  production -> CONTRACT (`20260822000300`)**.
+  The candidate server must translate cached pre-EXPAND request shapes into the
+  checked RPC contracts; missing-function fallback exists only for a truly
+  pre-EXPAND database and must not attempt a revoked legacy RPC after CONTRACT.
+  `scope=all` refuses to push until all three protected versions are separately
+  recorded exactly once by their dedicated scopes and the full live contracted
+  function/ACL/revision/default/constraint/trigger catalog is still exact.
+- Production safety was contained and remeasured at 2026-08-22 03:22Z: the
+  global kill switch is ON, raw autonomous mode and all nine automatic actions
+  are OFF, and the worker/executor remains disconnected across the three named
+  SoftwareFactory projects. This clears the previously recorded state drift;
+  it does not authorize a worker, autonomous action, or an unrelated migration.
+- A separately authorized release must remeasure any remaining linked-lint
+  findings, preserve that all-off baseline before and after the exact apply,
+  apply only the exact reviewed migration, and verify its
+  ledger row, immutable-table protections, owner/outsider/anonymous ACL and RLS
+  behavior, stored effective-risk recheck, exact replay-before-mutable-state
+  behavior, and the continued absence of worker dispatch/autonomous authority.
+  Only a matching deployed application and live owner acceptance can change
+  the production claim.
 
 ## Version collision, and one ledger row that lies — 2026-08-19 15:2xZ
 
@@ -87,8 +282,7 @@ resurrected by a replay, and the live claim is the one that reports no gates.
 This supersedes every count and every high-water mark stated below it. The run mutated nothing:
 the three apply steps were skipped by their `if:` conditions, and the log shows it.
 
-**Absent from the hosted ledger — 19 versions:**
-
+**Absent from the hosted ledger — 26 probed marker objects:**
 | Version | Migration | Marker object the probe asks about |
 |---|---|---|
 | `20260814002500` | provider_credential_vault | table `provider_credentials` |
@@ -110,6 +304,20 @@ the three apply steps were skipped by their `if:` conditions, and the log shows 
 | `20260816000100` | ai_accounts_auth_broker | table `ai_accounts` |
 | `20260816000200` | ai_account_verification | function `list_ai_accounts_for_verification` |
 | `20260816000300` | resume_ai_auth_session | function `find_open_ai_auth_session` |
+| `20260816001600` | phase2c_resource_reservations | table `resource_reservations` |
+| `20260821000200` | agentic_sdlc_lifecycle | table `graph_gates` |
+| `20260821000400` | command_factory_routing | table `factory_command_routes` |
+| `20260821000400` | command_factory_routing | function `list_factory_command_routing_candidates` |
+| `20260821000400` | command_factory_routing | function `submit_factory_command` |
+| `20260822000600` | route_bots_onto_the_executable_model | body of `normalize_phase1c_command` |
+| `20260822001300` | contract_audit_guard_function_acl | function `reject_activity_event_mutation` |
+
+The last six were added on 2026-08-22. Issue a Command runs through
+`list_factory_command_routing_candidates` and `submit_factory_command`, and their
+migration has no history row on the remote — so the one surface an owner actually
+uses was the only thing this report could not answer for. A blank ledger row means
+nothing on its own: every Phase 2E version above reads blank in the ledger and `t`
+in the probe.
 
 **Present in the hosted ledger:** every other local version, including the whole
 `20260817` range — `000100` through `001100`. So the run-review controls, the owner-operated
@@ -157,9 +365,16 @@ failure was the worker's old 8-turn ceiling — fixed in code (24 turns) —
 which is why `20260819000500_replant_with_room_to_work` re-plants one final
 fixed-id copy whose MODEL nodes carry the measured eight-minute timeout.
 All of these re-apply through the same replay-safe `scope=broker-functions`
-path. Earlier revisions of this
-document and of `todo.md` said the opposite; that claim was drawn from the ledger's old
-high-water mark and is withdrawn.
+path. `20260821000300_project_pipeline_selection` (the `project_pipelines` table and
+its `select_project_pipeline` / `deselect_project_pipeline` / `list_project_pipelines`
+functions, which is what makes the AI Factory's Use button record anything) was newer than
+that measurement and is now **applied**: run `32536895799`, 2026-08-21 23:27Z,
+`scope=pipeline-selection`. Its one-file scope is what let it reach production without
+re-running unrelated migrations; it is still in the `broker-functions` batch scope as well.
+The run's after-ledger listing prints the version local and remote, and the step reloaded the
+PostgREST schema cache, so the Configure Pipeline step no longer reads **Not Connected** on
+this database. Earlier revisions of this document and of `todo.md` said the opposite; that
+claim was drawn from the ledger's old high-water mark and is withdrawn.
 
 **And the ledger still understates the schema.** The same run's object probe returned 19 of 19
 present, among them `scheduling_decisions`, `provider_capacity_limits`,

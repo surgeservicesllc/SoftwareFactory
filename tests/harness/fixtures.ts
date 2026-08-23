@@ -237,6 +237,47 @@ export const RUNS = [
   },
 ];
 
+/**
+ * Exact `GET /api/runs?limit=100&view=briefing` projection consumed by Factory Briefing.
+ *
+ * The general Runs console fixture above predates the safe list projection
+ * and intentionally carries its richer console fields. Keeping this endpoint-
+ * exact fixture separate prevents the briefing harness from silently testing
+ * `task`, `project`, and `agent` as missing when production always nests them.
+ */
+export const FACTORY_BRIEFING_RUNS = [
+  {
+    id: "aaaaaaaa-3111-4111-8111-111111111111",
+    status: "failed",
+    startedAt: "2026-08-20T09:00:00.000Z",
+    completedAt: "2026-08-20T09:04:00.000Z",
+    createdAt: "2026-08-20T09:00:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    task: {
+      id: "aaaaaaaa-4111-4111-8111-111111111111",
+    },
+    agent: {
+      id: "cccccccc-1111-4111-8111-111111111111",
+      name: "Orchestrator",
+    },
+  },
+  {
+    id: "aaaaaaaa-3222-4222-8222-222222222222",
+    status: "queued",
+    startedAt: null,
+    completedAt: null,
+    createdAt: "2026-08-21T09:00:00.000Z",
+    project: { id: PROJECT_ID, name: "E-Commerce Platform" },
+    task: {
+      id: "aaaaaaaa-4222-4222-8222-222222222222",
+    },
+    agent: {
+      id: "cccccccc-2222-4222-8222-222222222222",
+      name: "Security",
+    },
+  },
+];
+
 /*
  * Shaped like `GET /api/reports` actually answers, key for key.
  *
@@ -284,9 +325,12 @@ export const PROVIDER_STATUS = {
 
 /** `GET /api/worker/status`, read by the guided journey. */
 export const WORKER_STATUS = {
-  connectionStatus: "disconnected",
-  label: "Not Connected",
-  detail: "No worker has registered in this environment.",
+  connectionStatus: "not_connected",
+  statusLabel: "Worker Not Connected",
+  lastHeartbeatAt: null,
+  activeWorkers: 0,
+  availableWorkers: 0,
+  staleAfterSeconds: 90,
 };
 
 /** `GET /api/commands`, read by the guided journey and the pipelines console. */
@@ -295,9 +339,10 @@ export const COMMANDS = [
     id: "dddddddd-1111-4111-8111-111111111111",
     prompt: LONG_TITLE,
     risk: "GREEN",
-    status: "succeeded",
+    status: "queued",
+    executionMode: "record_only",
     submittedAt: "2026-08-16T09:00:00.000Z",
-    completedAt: "2026-08-16T09:42:00.000Z",
+    completedAt: null,
     project: { id: PROJECT_ID, name: "E-Commerce Platform" },
   },
 ];
@@ -320,6 +365,25 @@ export const AGENTS = [
     description: "Reviews changes for unsafe patterns.",
     capabilities: ["security"],
     createdAt: "2026-08-01T10:00:00.000Z",
+  },
+];
+
+/** Maximum accepted project-config agent name, deliberately unbroken. */
+export const MAX_LENGTH_COORDINATOR_NAME = "C".repeat(160);
+
+/** Exact `GET /api/agents?limit=100&view=briefing` projection consumed by Factory Briefing. */
+export const FACTORY_BRIEFING_AGENTS = [
+  {
+    id: "cccccccc-3111-4111-8111-111111111111",
+    name: MAX_LENGTH_COORDINATOR_NAME,
+    role: "orchestrator",
+    status: "busy",
+  },
+  {
+    id: "cccccccc-3222-4222-8222-222222222222",
+    name: "Security",
+    role: "security",
+    status: "idle",
   },
 ];
 
@@ -360,6 +424,16 @@ export const CONNECTIONS = [
   },
 ];
 
+/** Exact `GET /api/github/connections?view=briefing` projection consumed by Factory Briefing. */
+export const FACTORY_BRIEFING_CONNECTIONS = [
+  {
+    id: "eeeeeeee-2111-4111-8111-111111111111",
+    name: "GitHub · surgeservicesllc",
+    status: "connected",
+    statusReason: null,
+  },
+];
+
 /** Built-in pipeline templates, in the shape the pipelines console takes. */
 export const TEMPLATES = [
   {
@@ -396,6 +470,136 @@ export const TEMPLATES = [
  * `compileErrors.map`, which is the fixture being wrong rather than the
  * component being fragile.
  */
+/**
+ * A project with pipelines already selected, so the *selected* card — grey
+ * Use, check icon, the summary counting them — is a layout the sweep can
+ * measure. Unselected is what every other case already shows.
+ */
+export const PROJECT_PIPELINES = [
+  {
+    id: "aaaaaaaa-1111-4111-8111-111111111111",
+    projectId: PROJECT_ID,
+    templateKey: "production-readiness",
+    templateId: null,
+    kind: "built_in" as const,
+    name: "Production Readiness",
+    summary: "Checks the things that break on the first real day.",
+    selectedAt: "2026-08-18T09:00:00.000Z",
+  },
+  {
+    id: "aaaaaaaa-2222-4222-8222-222222222222",
+    projectId: PROJECT_ID,
+    templateKey: "checkout_audit",
+    templateId: "bbbbbbbb-3333-4333-8333-333333333333",
+    kind: "custom" as const,
+    name: "Checkout Audit",
+    summary: null,
+    selectedAt: "2026-08-18T09:05:00.000Z",
+  },
+];
+
+/** One custom template, so the custom half of the manager renders rows too. */
+export const CUSTOM_PIPELINE_TEMPLATES = [
+  {
+    id: "bbbbbbbb-3333-4333-8333-333333333333",
+    slug: "checkout_audit",
+    name: "Checkout Audit",
+    summary: "Audit the checkout flow end to end, from cart to receipt email.",
+    category: "AUDIT",
+    capability: "review",
+    areas: [{ id: "payments", job: "Check the payment flow." }],
+    version: 2,
+    editable: true,
+    compiles: true,
+    topology: "DIAMOND",
+    nodeCount: 3,
+    maxParallelism: 1,
+    errors: [] as string[],
+  },
+];
+
+/**
+ * A job search with rows in every state the Overview distinguishes: scored and
+ * unscored, applied and not, an interview, an offer. A fixture where every job
+ * looks the same would measure one row repeated, not the layout.
+ */
+export const JOB_SEEKER_JOBS = [
+  {
+    id: "js-1", title: "VP of Marketing", company: "Acme Corporation",
+    discoveredAt: "2026-05-19T10:00:00.000Z",
+    match: { score: 94, qualified: true },
+    application: { id: "ja-1", stage: "APPLIED", appliedAt: "2026-05-19T10:30:00.000Z" },
+  },
+  {
+    id: "js-2", title: "Head of Growth Marketing", company: "TechNova",
+    discoveredAt: "2026-05-18T10:00:00.000Z",
+    match: { score: 91, qualified: true },
+    application: { id: "ja-2", stage: "INTERVIEW", appliedAt: "2026-05-16T10:30:00.000Z" },
+  },
+  {
+    id: "js-3", title: "VP of Digital Marketing", company: "NextWave Solutions",
+    discoveredAt: "2026-05-17T10:00:00.000Z",
+    match: { score: 88, qualified: true },
+    application: { id: "ja-3", stage: "FINAL_INTERVIEW", appliedAt: "2026-05-12T10:30:00.000Z" },
+  },
+  {
+    id: "js-4", title: "Senior Director of Marketing", company: "BrightPath",
+    discoveredAt: "2026-05-16T10:00:00.000Z",
+    match: { score: 85, qualified: true },
+    application: { id: "ja-4", stage: "OFFER", appliedAt: "2026-05-05T10:30:00.000Z" },
+  },
+  {
+    id: "js-5", title: "VP of Marketing", company: "InnovateX",
+    discoveredAt: "2026-05-15T10:00:00.000Z",
+    match: { score: 62, qualified: false },
+    application: null,
+  },
+  // Unscored on purpose: the Overview must not count it as a low score.
+  { id: "js-6", title: "Chief Marketing Officer", company: "Northwind", match: null, application: null },
+];
+
+export const JOB_SEEKER_DOCUMENTS = [
+  {
+    id: "jd-1", applicationId: "ja-1", kind: "resume", version: 3,
+    createdAt: "2026-05-19T10:05:00.000Z", stage: "APPLIED",
+    title: "VP of Marketing", company: "Acme Corporation",
+    preview: "Marketing leader with fifteen years building demand engines across B2B SaaS.",
+    characters: 4820,
+  },
+  {
+    id: "jd-2", applicationId: "ja-2", kind: "cover_letter", version: 1,
+    createdAt: "2026-05-18T10:05:00.000Z", stage: "INTERVIEW",
+    title: "Head of Growth Marketing", company: "TechNova",
+    preview: "TechNova's move into product-led growth is exactly the transition I ran at scale.",
+    characters: 2140,
+  },
+];
+
+export const JOB_SEEKER_CONTACTS = [
+  {
+    id: "jc-1", name: "Priya Raman", role: "Talent Partner", source: "linkedin",
+    linkedinUrl: "linkedin.com/in/priyaraman", email: "priya@acme.example",
+    notes: "Owns the VP of Marketing req; asked for a portfolio link.",
+  },
+  {
+    id: "jc-2", name: "Marcus Webb", role: "Hiring Manager", source: "referral",
+    linkedinUrl: null, email: null, notes: null,
+  },
+];
+
+export const JOB_SEEKER_OUTREACH = [
+  {
+    id: "jo-1", contactId: "jc-1", subject: "VP of Marketing — following up",
+    body: "Thanks for the call on Tuesday. Sending the portfolio you asked about.",
+    status: "sent", sentAt: "2026-05-19T12:00:00.000Z",
+  },
+  {
+    id: "jo-2", contactId: "jc-2", subject: "Introduction via Dana",
+    body: "Dana suggested I reach out about the growth marketing role.",
+    status: "draft", sentAt: null,
+  },
+];
+
 export const WORKFLOW_TEMPLATES = TEMPLATES.map((template) => ({
   key: template.key,
   name: template.name,

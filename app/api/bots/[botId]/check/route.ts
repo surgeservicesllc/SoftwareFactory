@@ -1,13 +1,15 @@
 import { z } from "zod";
 
-import { isCredentialPresent } from "@/lib/bots/credentials";
-import { evaluateBotReadiness } from "@/lib/bots/readiness";
 import {
   botFabricErrorResponse,
   botMutationErrorResponse,
   requireBotFabricManager,
 } from "@/lib/bots/route";
-import { serializeBot } from "@/lib/bots/service";
+import {
+  BOT_READINESS_MIGRATION_PENDING_CODE,
+  BotReadinessSyncError,
+  synchronizeBotReadiness,
+} from "@/lib/bots/readiness-sync";
 import { databaseErrorResponse, jsonNoStore } from "@/lib/server/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 
@@ -20,8 +22,9 @@ const botIdSchema = z.string().uuid();
  * persist the verdict with audit evidence.
  *
  * This check is entirely local: it resolves the referenced environment variable
- * to a presence boolean and validates the catalog entry, model, and endpoint. It
- * performs no provider request, so a `ready` result never claims a live session.
+ * or organization-vault credential to a presence boolean and validates the
+ * catalog entry, model, and endpoint. It performs no provider request, so a
+ * `ready` result never claims a live session.
  */
 export async function POST(
   request: Request,
@@ -37,50 +40,44 @@ export async function POST(
       );
     }
 
-    const { activeOrganization, client } = await requireBotFabricManager();
+    const { activeOrganization, client, user } = await requireBotFabricManager();
 
-    const { data: existing, error: readError } = await client
-      .from("bots")
-      .select("id,provider,model,credential_ref,base_url")
-      .eq("organization_id", activeOrganization.id)
-      .eq("id", botId)
-      .maybeSingle();
-
-    if (readError) return databaseErrorResponse(readError);
-    if (!existing) {
+    let bot;
+    try {
+      bot = await synchronizeBotReadiness(
+        client,
+        activeOrganization.id,
+        botId,
+        user.id,
+      );
+    } catch (error) {
+      if (error instanceof BotReadinessSyncError) {
+        if (error.databaseError.code === BOT_READINESS_MIGRATION_PENDING_CODE) {
+          return jsonNoStore(
+            {
+              error: {
+                code: BOT_READINESS_MIGRATION_PENDING_CODE,
+                message: "Readiness verification is temporarily waiting for a database upgrade. Try again shortly.",
+              },
+            },
+            { status: 503 },
+          );
+        }
+        return error.stage === "read"
+          ? databaseErrorResponse(error.databaseError)
+          : botMutationErrorResponse(error.databaseError);
+      }
+      throw error;
+    }
+    if (!bot) {
       return jsonNoStore(
         { error: { code: "bot_not_found", message: "That bot is not registered in this organization." } },
         { status: 404 },
       );
     }
 
-    const row = existing as {
-      provider: string;
-      model: string;
-      credential_ref: string | null;
-      base_url: string | null;
-    };
-    const verdict = evaluateBotReadiness({
-      provider: row.provider,
-      model: row.model,
-      credentialRef: row.credential_ref,
-      baseUrl: row.base_url,
-      credentialPresent: isCredentialPresent(row.credential_ref),
-    });
-
-    const { data, error } = await client
-      .rpc("record_bot_readiness", {
-        p_organization_id: activeOrganization.id,
-        p_bot_id: botId,
-        p_readiness: verdict.readiness,
-        p_detail: verdict.detail,
-      })
-      .single();
-
-    if (error) return botMutationErrorResponse(error);
-
     return jsonNoStore({
-      bot: serializeBot(data as Parameters<typeof serializeBot>[0]),
+      bot,
       executorConnected: false,
     });
   } catch (error) {

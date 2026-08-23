@@ -60,7 +60,15 @@ type MatchEmbed = {
   qualified: boolean;
 };
 
-type ApplicationEmbed = { id: string; stage: string; approval_status: string };
+type ApplicationEmbed = {
+  id: string;
+  stage: string;
+  approval_status: string;
+  application_url: string | null;
+  notes: string | null;
+  follow_up_at: string | null;
+  applied_at: string | null;
+};
 
 /*
  * Both embeds are one-to-one — job_seeker_matches and job_seeker_applications
@@ -79,7 +87,7 @@ const JOB_COLUMNS =
   "id, source, external_id, url, title, company, salary_text, location, work_model, "
   + "description, discovered_at, "
   + "job_seeker_matches ( score, breakdown, reasons, gaps, threshold_used, qualified ), "
-  + "job_seeker_applications ( id, stage, approval_status )";
+  + "job_seeker_applications ( id, stage, approval_status, application_url, notes, follow_up_at, applied_at )";
 
 function toView(row: JobRow) {
   const match = firstEmbed(row.job_seeker_matches);
@@ -107,7 +115,21 @@ function toView(row: JobRow) {
       }
       : null,
     application: application
-      ? { id: application.id, stage: application.stage, approvalStatus: application.approval_status }
+      ? {
+        id: application.id,
+        stage: application.stage,
+        /*
+         * When it was actually submitted, which is a different question from
+         * when the job was discovered. The Overview plots submissions over
+         * time, and plotting discovery instead would be a chart that answers
+         * a question nobody asked while carrying the label of one they did.
+         */
+        appliedAt: application.applied_at,
+        approvalStatus: application.approval_status,
+        applicationUrl: application.application_url,
+        notes: application.notes,
+        followUpAt: application.follow_up_at,
+      }
       : null,
   };
 }

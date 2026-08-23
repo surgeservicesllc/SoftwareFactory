@@ -354,8 +354,12 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
 
     // A legacy bot with no account attached is untouched and valid.
     await db.query(`
-      insert into public.bots (organization_id, name, provider, model, created_by)
-      values ($1, 'Legacy bot', 'anthropic', 'claude-opus-5', $2)
+      insert into public.bots
+        (organization_id, name, provider, model, credential_ref, created_by)
+      values (
+        $1, 'Legacy bot', 'anthropic', 'claude-opus-5',
+        'SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_6', $2
+      )
     `, [organizationId, ownerId]);
 
     // Attaching an account from the same organization works.
@@ -374,7 +378,7 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
     await expect(db.query(
       "update public.bots set ai_account_id = $1 where organization_id = $2 and name = 'Legacy bot'",
       [foreign.rows[0].create_ai_account, organizationId],
-    )).rejects.toThrow(/foreign key/i);
+    )).rejects.toThrow(/does not belong to this organization/i);
   });
 
   it("describes recent sessions for the worker's log without the sealed code", async () => {
@@ -575,8 +579,12 @@ describe("ai accounts and the auth broker", { timeout: 180_000 }, () => {
       [organizationId, envelope, ownerId],
     );
     await db.query(`
-      insert into public.bots (organization_id, name, provider, model, created_by, ai_account_id)
-      values ($1, 'Remove-test bot', 'anthropic', 'claude-opus-5', $2, $3)
+      insert into public.bots
+        (organization_id, name, provider, model, credential_ref, created_by, ai_account_id)
+      values (
+        $1, 'Remove-test bot', 'anthropic', 'claude-opus-5',
+        'SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_10', $2, $3
+      )
     `, [organizationId, ownerId, accountId]);
     /*
      * And recorded usage evidence — the state every real account reaches

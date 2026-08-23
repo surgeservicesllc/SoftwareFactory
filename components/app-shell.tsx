@@ -35,6 +35,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
+import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
+import { JobSeekerSidebarProfile } from "@/components/job-seeker/sidebar-profile";
 
 /**
  * The console shell renders for signed-out visitors too — individual pages
@@ -122,6 +124,17 @@ const navigationEntries: readonly NavigationEntry[] = [
   // even within the organization.
   { label: "Job Seeker", href: "/job-seeker", icon: BriefcaseBusiness },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
+  /*
+   * Operations, promoted out of a group and placed above Reports by owner
+   * instruction (2026-08-19).
+   *
+   * It was the first subpage of a "Watch" group whose only other child was
+   * Activity. A group holding one destination anybody wants costs a click and
+   * a disclosure to reach it, and names a category rather than a place. The
+   * group is gone; Activity went with it, and is still reached from Bots as
+   * "Bot Activity", which points at the same page.
+   */
+  { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
   { label: "Reports", href: "/solutions/reports", icon: ScrollText },
   { label: "Integrations", href: "/solutions/connections", icon: PlugZap },
   /*
@@ -143,15 +156,6 @@ const navigationEntries: readonly NavigationEntry[] = [
       // there. Members/Teams/Permissions/Billing from the design have no
       // backing surfaces yet and are deliberately absent.
       { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
-    ],
-  },
-  {
-    label: "Watch",
-    href: "/solutions/operations",
-    icon: HeartPulse,
-    subpages: [
-      { label: "Operations", href: "/solutions/operations", icon: HeartPulse },
-      { label: "Activity", href: "/solutions/activity", icon: Activity },
     ],
   },
   {
@@ -185,9 +189,20 @@ const navigationEntries: readonly NavigationEntry[] = [
  * filter it is showing — so the plain view's link stays the single current
  * marker for that path.
  */
+/*
+ * A section root matches exactly; everything else matches by prefix.
+ *
+ * `/job-seeker` is the Overview group's own href *and* the prefix of every
+ * other Job Seeker destination, so prefix-matching it would light Overview up
+ * while someone stood in Resume Library. The group still highlights from its
+ * children — `entryActive` ors the subpages in — which is the behaviour the
+ * design shows and the reason this exactness costs nothing.
+ */
+const SECTION_ROOTS = new Set(["/solutions", "/job-seeker"]);
+
 function isActiveHref(pathname: string, href: string) {
   if (href.includes("?") || href.includes("#")) return false;
-  return href === "/solutions" ? pathname === href : pathname.startsWith(href);
+  return SECTION_ROOTS.has(href) ? pathname === href : pathname.startsWith(href);
 }
 
 function NavigationLink({
@@ -255,6 +270,19 @@ function Navigation({
 }) {
   const pathname = usePathname();
   /*
+   * Job Seeker is a different product, not a page of the console.
+   *
+   * A person here is managing a job search; Projects, Bots, Runs and Secrets
+   * are noise against that task, and the owner's design shows a navigation of
+   * its own. So the shell swaps the whole set while the path is under
+   * `/job-seeker` rather than appending a group to the console's list.
+   */
+  const jobSeeker = isJobSeekerPath(pathname);
+  const entries: readonly NavigationEntry[] = jobSeeker
+    ? JOB_SEEKER_NAVIGATION
+    : navigationEntries;
+  const navigationLabel = jobSeeker ? "Job Seeker" : "Console";
+  /*
    * Closed by default, with one exception that keeps the two requirements from
    * contradicting each other: the group containing the current page opens
    * itself. "Start collapsed" is about not dumping every destination on
@@ -273,9 +301,9 @@ function Navigation({
   // navigation is also on the page, and two landmarks sharing an accessible
   // name give screen-reader users no way to tell them apart.
   return (
-    <nav aria-label="Console" className="flex-1 space-y-6">
+    <nav aria-label={navigationLabel} className="flex-1 space-y-6">
       <ul className="space-y-0.5">
-        {navigationEntries.map((entry) => {
+        {entries.map((entry) => {
           const subpages = entry.subpages ?? [];
           const entryActive = isActiveHref(pathname, entry.href)
             || subpages.some((subpage) => isActiveHref(pathname, subpage.href));
@@ -440,6 +468,10 @@ function Sidebar({
   onToggleCompact?: () => void;
   siteLinks?: readonly { readonly label: string; readonly href: string }[];
 }) {
+  // The same check `Navigation` makes: the career-profile card belongs to
+  // the Job Seeker section, and nowhere else.
+  const sidebarPathname = usePathname();
+  const jobSeeker = isJobSeekerPath(sidebarPathname);
   /*
    * The navigation starts at the top of the column, and the retract control
    * ends it.
@@ -477,6 +509,16 @@ function Sidebar({
           </ul>
         </div>
       ) : null}
+      {/*
+        Whose search this is.
+
+        The Job Seeker section is scoped to one person, so naming them is part
+        of saying what you are looking at. Absent on the rail for the same
+        reason the account panel is: a 4rem column cannot show a name, a role
+        and four contact lines without truncating each into something
+        misleading.
+      */}
+      {jobSeeker && !compact ? <JobSeekerSidebarProfile /> : null}
       {/*
         The account panel, and the single glyph it becomes on the rail.
 

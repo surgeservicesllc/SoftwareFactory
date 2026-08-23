@@ -43,6 +43,17 @@ const INVALID = {
   },
 } as const;
 
+/**
+ * Reserved for a failure that has nothing to do with the code presented, so it
+ * cannot be used to tell one code from another.
+ */
+const UNAVAILABLE = {
+  error: {
+    code: "connect_unavailable",
+    message: "Bot connection is temporarily unavailable. Try the same link again shortly.",
+  },
+} as const;
+
 export async function POST(request: Request) {
   let parsed: z.infer<typeof requestSchema>;
 
@@ -71,7 +82,20 @@ export async function POST(request: Request) {
     const { data: peek, error: peekError } = await client
       .rpc("resolve_provider_connect_session", { p_code_digest: digest });
 
-    if (peekError || !peek || !Array.isArray(peek) || peek.length === 0) {
+    if (peekError) {
+      // A failed lookup is not a bad code, and saying so cost an operator the
+      // whole flow: `resolve_provider_connect_session` is absent from hosted
+      // (audit run 32316446825), so every correct code has been answered "that
+      // sign-in link is not valid" and every retry mints another code that
+      // fails the same way.
+      //
+      // This does not reopen the oracle the uniform failures close. Unknown,
+      // expired, spent and malformed codes still answer identically; this
+      // branch cannot be reached by choosing a code, because the lookup either
+      // works for every code or fails for every code.
+      return jsonNoStore(UNAVAILABLE, { status: 503 });
+    }
+    if (!peek || !Array.isArray(peek) || peek.length === 0) {
       return jsonNoStore(INVALID, { status: 400 });
     }
 

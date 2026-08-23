@@ -1,8 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Hoisted so the factory can close over it: most tests want the site root, and
+// the current-destination cases need to stand somewhere specific.
+const route = vi.hoisted(() => ({ pathname: "/" }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => route.pathname,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
@@ -65,7 +69,7 @@ describe("SiteHeader", () => {
 
     expect(screen.getByRole("link", { name: "Sign In" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get Started Free" })).toBeInTheDocument();
-    expect(primaryNav().queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(primaryNav().queryByRole("link", { name: "AI Factory" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
   });
 
@@ -74,7 +78,7 @@ describe("SiteHeader", () => {
       <SiteHeader viewer={{ signedIn: true, email: "person@example.org", displayName: "A Person" }} />,
     );
 
-    expect(primaryNav().getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(primaryNav().getByRole("link", { name: "AI Factory" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Console" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Sign out" }).length).toBeGreaterThan(0);
     expect(screen.getByText("A Person")).toBeInTheDocument();
@@ -113,12 +117,76 @@ describe("SiteHeader", () => {
     );
 
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Dashboard",
-      "Projects",
-      "Runs",
-      "Activity",
+      "AI Factory",
+      "Job Seeker",
       "Admin",
     ]);
+  });
+
+  it("wires the two products at the exact addresses the owner named", () => {
+    /*
+     * The hrefs are the instruction, not an implementation detail, so they are
+     * asserted literally rather than through the module that supplies them.
+     *
+     * `AI Factory` is `/solutions` — the console entry point — and not
+     * `/solutions/ai-factory`, which is a page inside the console that happens
+     * to share the name.
+     */
+    render(
+      <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
+    );
+
+    expect(primaryNav().getByRole("link", { name: "AI Factory" }))
+      .toHaveAttribute("href", "/solutions");
+    expect(primaryNav().getByRole("link", { name: "Job Seeker" }))
+      .toHaveAttribute("href", "/job-seeker");
+  });
+
+  it("drops the console's inner pages from the header", () => {
+    // Projects, Runs and Activity were a short, arbitrary excerpt of the
+    // console's own column. The column still lists them; the header names the
+    // products instead.
+    render(<SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />);
+
+    for (const label of ["Projects", "Runs", "Activity", "Dashboard"]) {
+      expect(primaryNav().queryByRole("link", { name: label })).not.toBeInTheDocument();
+    }
+  });
+
+  afterEach(() => {
+    route.pathname = "/";
+  });
+
+  it("marks one destination current where the entries nest", () => {
+    /*
+     * `AI Factory` is `/solutions` and `Admin` is `/solutions/admin`, so a
+     * plain prefix test marks both current on the admin page — two links
+     * claiming `aria-current="page"`, and two underlines drawn at once. The
+     * most specific match is the one a person is actually on.
+     */
+    route.pathname = "/solutions/admin";
+    render(
+      <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
+    );
+
+    const current = primaryNav()
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+
+    expect(current.map((link) => link.textContent)).toEqual(["Admin"]);
+  });
+
+  it("keeps AI Factory current inside the console", () => {
+    // The console's own pages sit under /solutions, and the header should go
+    // on saying which product you are in while you move around inside it.
+    route.pathname = "/solutions/ai-factory";
+    render(<SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />);
+
+    const current = primaryNav()
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+
+    expect(current.map((link) => link.textContent)).toEqual(["AI Factory"]);
   });
 
   it("marks the current destination and underlines only that one", () => {
@@ -138,7 +206,7 @@ describe("the brand mark", () => {
   it("is one labelled link, so the lockup is not spelled out line by line", () => {
     render(<SiteHeader />);
 
-    const brand = screen.getAllByRole("link", { name: /ai software factory home/i });
+    const brand = screen.getAllByRole("link", { name: /ai factory home/i });
     expect(brand.length).toBeGreaterThan(0);
     expect(brand[0]).toHaveAttribute("href", "/");
   });

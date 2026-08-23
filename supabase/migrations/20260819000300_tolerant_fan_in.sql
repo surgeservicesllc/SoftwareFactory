@@ -176,4 +176,3 @@ revoke all on function public.create_graph_from_plan(
 grant execute on function public.create_graph_from_plan(
   uuid, uuid, text, public.graph_topology, jsonb, public.risk_level, boolean, jsonb, jsonb, jsonb
 ) to authenticated;
-

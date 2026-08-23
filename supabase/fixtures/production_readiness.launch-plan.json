@@ -1,0 +1,176 @@
+{
+  "topology": "DIAMOND",
+  "topologyReasons": [
+    {
+      "code": "FAN_OUT_WITH_REDUCE",
+      "detail": "5 independent nodes converge on a reduce or synthesis step."
+    }
+  ],
+  "riskLevel": "green",
+  "requiresOwnerApproval": false,
+  "nodes": [
+    {
+      "node_key": "config",
+      "job": "Check configuration and environment handling for missing or unsafe defaults.",
+      "executor": "MODEL",
+      "capability": "review",
+      "model_tier": "STRONG",
+      "tolerates_partial_inputs": false,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "migrations",
+      "job": "Check migrations apply cleanly, in order, and are recorded.",
+      "executor": "MODEL",
+      "capability": "review",
+      "model_tier": "STRONG",
+      "tolerates_partial_inputs": false,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "errors",
+      "job": "Check error handling, timeouts and retries on every external call.",
+      "executor": "MODEL",
+      "capability": "review",
+      "model_tier": "STRONG",
+      "tolerates_partial_inputs": false,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "observability",
+      "job": "Check that a failure would be visible: logs, metrics, alerts.",
+      "executor": "MODEL",
+      "capability": "review",
+      "model_tier": "STRONG",
+      "tolerates_partial_inputs": false,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "rollback",
+      "job": "Check the rollback path exists and has been exercised.",
+      "executor": "MODEL",
+      "capability": "review",
+      "model_tier": "STRONG",
+      "tolerates_partial_inputs": false,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "reduce",
+      "job": "Deduplicate and rank the findings from every inspector.",
+      "executor": "DETERMINISTIC",
+      "capability": "extraction",
+      "model_tier": "NONE",
+      "tolerates_partial_inputs": true,
+      "timeout_ms": 180000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    },
+    {
+      "node_key": "report",
+      "job": "Write the production readiness report from the reduced findings.",
+      "executor": "MODEL",
+      "capability": "reporting",
+      "model_tier": "STANDARD",
+      "tolerates_partial_inputs": true,
+      "timeout_ms": 480000,
+      "max_attempts": 2,
+      "input_schema": {},
+      "output_schema": {},
+      "reads": [],
+      "writes": [],
+      "lifecycle_stage": null,
+      "gate_kind": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node_key": "config",
+      "to_node_key": "reduce",
+      "reason": "DATA",
+      "detail": "reduce declares config in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    },
+    {
+      "from_node_key": "migrations",
+      "to_node_key": "reduce",
+      "reason": "DATA",
+      "detail": "reduce declares migrations in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    },
+    {
+      "from_node_key": "errors",
+      "to_node_key": "reduce",
+      "reason": "DATA",
+      "detail": "reduce declares errors in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    },
+    {
+      "from_node_key": "observability",
+      "to_node_key": "reduce",
+      "reason": "DATA",
+      "detail": "reduce declares observability in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    },
+    {
+      "from_node_key": "rollback",
+      "to_node_key": "reduce",
+      "reason": "DATA",
+      "detail": "reduce declares rollback in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    },
+    {
+      "from_node_key": "reduce",
+      "to_node_key": "report",
+      "reason": "DATA",
+      "detail": "report declares reduce in dependsOn, so its input is populated from that output.",
+      "is_feedback": false
+    }
+  ],
+  "budget": {
+    "max_nodes": 50,
+    "max_concurrent_nodes": 8,
+    "max_duration_ms": 5400000,
+    "max_retries": 10,
+    "max_discovery_rounds": 5
+  }
+}

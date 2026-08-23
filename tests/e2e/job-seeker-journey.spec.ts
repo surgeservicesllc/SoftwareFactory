@@ -98,13 +98,61 @@ test.describe("job seeker live journey", () => {
     await page.getByLabel(/^Certifications/).fill("AWS Solutions Architect");
     await page.getByLabel(/^Industries/).fill("Software");
 
-    // Resume upload: a real file through the real endpoint.
+    // Resume upload: a real file through the real endpoint. Uploading now also
+    // reads it, so the assertions below cover the whole path — store, extract,
+    // propose, apply — against the real database rather than a mocked one.
     await page.getByLabel(/Resume file/).setInputFiles({
       name: "jordan-resume.txt",
       mimeType: "text/plain",
-      buffer: Buffer.from("Jordan Seeker — Staff Engineer.\nTypeScript, PostgreSQL, Next.js."),
+      buffer: Buffer.from(
+        [
+          "Avery Lin",
+          "avery.lin@example.com | +1 (206) 555-0177 | Seattle, WA",
+          "https://www.linkedin.com/in/averylin",
+          "SUMMARY",
+          "Staff engineer focused on developer platforms.",
+          "EXPERIENCE",
+          "Staff Engineer — Contoso Cloud (2019 - Present)",
+          "Halved deploy times across sixty services.",
+          "SKILLS",
+          "Rust, Kubernetes",
+        ].join("\n"),
+      ),
     });
     await expect(page.getByText(/Uploaded jordan-resume\.txt/)).toBeVisible({ timeout: 20_000 });
+
+    // ── The reading of that resume ─────────────────────────────────────────
+    // The local stack has no provider credential, so this must report pattern
+    // extraction and must NOT claim a model read the document.
+    await expect(page.getByText(/Found \d+ fields? in your resume/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Pattern extraction only — Not Connected/)).toBeVisible();
+    await expect(page.getByText("avery.lin@example.com")).toBeVisible();
+    await expect(page.getByText(/Staff Engineer — Contoso Cloud/)).toBeVisible();
+
+    // Untick one field to prove the selection is honoured rather than ignored:
+    // the summary written by hand above must survive an apply that excludes it.
+    await page.locator("#resume-field-summary").uncheck();
+    await page.getByRole("button", { name: /Apply \d+ selected/ }).click();
+    await expect(page.getByRole("status")).toContainText(/Filled in \d+ fields? from your resume/, {
+      timeout: 30_000,
+    });
+
+    // Applied fields are in the editor; the unticked one kept what was typed.
+    await expect(page.getByLabel("Email")).toHaveValue("avery.lin@example.com");
+    await expect(page.getByLabel("Full name")).toHaveValue("Avery Lin");
+    await expect(page.getByLabel(/^Skills/)).toHaveValue(/Rust/);
+    await expect(page.getByLabel("Professional summary")).toHaveValue(
+      "Platform engineer who ships end to end.",
+    );
+
+    // Re-applying the same reading is refused by the database, not by the UI.
+    await expect(page.getByRole("button", { name: /Apply \d+ selected/ })).toHaveCount(0);
+
+    // Put the hand-written identity back before the rest of the journey, which
+    // asserts against Jordan Seeker throughout.
+    await page.getByLabel("Full name").fill("Jordan Seeker");
+    await page.getByLabel("Email").fill("jordan.seeker@example.com");
+    await page.getByLabel(/^Skills/).fill("TypeScript\nPostgreSQL");
 
     await page.getByRole("button", { name: /save profile/i }).click();
     await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
@@ -139,9 +187,12 @@ test.describe("job seeker live journey", () => {
     // ── Discovery: record, score, duplicate-protect ────────────────────────
     await page.getByRole("link", { name: "Job Discovery" }).click();
     await expect(page.getByText(/import sources|No source|Greenhouse/i).first()).toBeVisible({ timeout: 20_000 });
-    // The registry is honest: adapters are Not Connected with needs named.
-    await expect(page.getByText("Not Connected").first()).toBeVisible();
-    await expect(page.getByText(/Needs: SOFTWAREFACTORY_GREENHOUSE_BOARDS/)).toBeVisible();
+    // The registry is honest in both directions: public-API adapters carry
+    // real import controls, and the credentialed one stays Not Connected
+    // with its needs named.
+    await expect(page.getByText("Public API").first()).toBeVisible();
+    await expect(page.getByText("Not Connected")).toBeVisible();
+    await expect(page.getByText(/Needs: SOFTWAREFACTORY_LINKEDIN_CLIENT_ID/)).toBeVisible();
 
     await page.getByRole("button", { name: /record a job/i }).click();
     await page.getByLabel("Job title").fill("Staff Engineer");
@@ -221,5 +272,119 @@ test.describe("job seeker live journey", () => {
     // "—" no-data case (zero applications) is pinned by the unit suite.
     await expect(stat("Response rate")).toContainText("0%");
     await expect(page.getByText(/never an\s+estimate/)).toBeVisible();
+
+    // ── CRM details persist: notes, submitted URL, follow-up date ──────────
+    await page.getByRole("link", { name: "Applications" }).click();
+    await expect(page.getByRole("heading", { name: "Applied · 1" })).toBeVisible({ timeout: 20_000 });
+    await page.getByText("Notes & follow-up").click();
+    await page.getByLabel("Notes").fill("Recruiter screen booked; send thank-you after.");
+    await page.getByLabel("Application URL").fill("https://jobs.meridian.example/apply/42");
+    await page.getByLabel("Follow-up date").fill("2026-09-01T09:00");
+    await page.getByRole("button", { name: "Save details" }).click();
+    // The saved answer must come back from Supabase, not component memory.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Applied · 1" })).toBeVisible({ timeout: 20_000 });
+    await page.getByText("Notes & follow-up").click();
+    await expect(page.getByLabel("Notes")).toHaveValue(/Recruiter screen booked/, { timeout: 20_000 });
+    await expect(page.getByLabel("Application URL")).toHaveValue("https://jobs.meridian.example/apply/42");
+
+    // ── The rest of the pipeline: every remaining stage, walked ────────────
+    for (const stage of ["Follow Up", "Recruiter Response", "Interview", "Final Interview", "Offer"]) {
+      await page.getByRole("button", { name: `Move to ${stage}` }).click();
+      await expect(page.getByRole("heading", { name: `${stage} · 1` })).toBeVisible({ timeout: 20_000 });
+    }
+
+    // ── A second job walks the other side of the gate: reject, then close ──
+    await page.getByRole("link", { name: "Job Discovery" }).click();
+    await page.getByRole("button", { name: /record a job/i }).click();
+    await page.getByLabel("Job title").fill("Platform Lead");
+    await page.getByLabel("Company").fill("Northwind Data");
+    await page.getByLabel("Job ID").fill("nw-7");
+    await page.getByLabel("Full description").fill(
+      "Remote platform leadership. TypeScript and PostgreSQL every day.",
+    );
+    await page.getByRole("button", { name: /record and score/i }).click();
+    await expect(page.getByRole("status")).toHaveText(/Recorded and scored \d+\/100/, { timeout: 20_000 });
+
+    await page.getByRole("link", { name: "Applications" }).click();
+    // Meridian sits at Offer, so the only Prepare button is Northwind's.
+    await page.getByRole("button", { name: /prepare application/i }).click();
+    await expect(page.getByRole("heading", { name: "Ready For Review · 1" })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByText("rejected", { exact: true })).toBeVisible({ timeout: 20_000 });
+    // A rejected application has no forward moves anywhere — the gate holds
+    // (and Meridian at Offer has none left either).
+    await expect(page.getByRole("button", { name: /move to/i })).toHaveCount(0);
+    await page
+      .locator('section[aria-label="Ready For Review"]')
+      .getByRole("button", { name: "Close" })
+      .click();
+    await expect(page.getByRole("heading", { name: "Closed · 1" })).toBeVisible({ timeout: 20_000 });
+
+    // ── Back on the profile: the stored resume is visible from load ────────
+    await page.getByRole("link", { name: "Career Profile" }).click();
+    const resumeLink = page.getByRole("link", { name: "jordan-resume.txt" });
+    await expect(resumeLink).toBeVisible({ timeout: 20_000 });
+    const resumeHref = await resumeLink.getAttribute("href");
+    const download = await page.request.get(resumeHref!);
+    expect(download.status()).toBe(200);
+    expect(await download.text()).toContain("Jordan Seeker — Staff Engineer.");
+
+    // ── Remove entry: add a throwaway entry, persist it, remove it ─────────
+    await page.getByRole("button", { name: /add employment history entry/i }).click();
+    const temp = page.locator("div.rounded-md.border").nth(1);
+    await temp.getByLabel("Organization").fill("Temp Co");
+    await temp.getByLabel("Title").fill("Temp Role");
+    await page.getByRole("button", { name: /save profile/i }).click();
+    await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
+    await page.reload();
+    // Entries render employment-first: [Surge, Temp], then education [State].
+    const tempAfterReload = page.locator("div.rounded-md.border").nth(1);
+    await expect(tempAfterReload.getByLabel("Organization")).toHaveValue("Temp Co", { timeout: 20_000 });
+    await tempAfterReload.getByRole("button", { name: /remove entry/i }).click();
+    await page.getByRole("button", { name: /save profile/i }).click();
+    await expect(page.getByRole("status")).toHaveText("Profile saved.", { timeout: 20_000 });
+    await page.reload();
+    await expect(page.getByLabel("Full name")).toHaveValue("Jordan Seeker", { timeout: 20_000 });
+    // The removal persisted: what follows Surge Services is education again.
+    await expect(page.locator("div.rounded-md.border").nth(0).getByLabel("Organization"))
+      .toHaveValue("Surge Services");
+    await expect(page.locator("div.rounded-md.border").nth(1).getByLabel("Organization"))
+      .toHaveValue("State University");
+
+    // ── Analytics again: the walked pipeline shows up as counted rows ──────
+    await page.getByRole("link", { name: "Analytics" }).click();
+    await expect(stat("Jobs found")).toContainText("2", { timeout: 20_000 });
+    await expect(stat("Applications")).toContainText("1");
+    await expect(stat("Response rate")).toContainText("100%");
+    await expect(stat("Interviews")).toContainText("1");
+    await expect(stat("Offers")).toContainText("1");
+
+    // ── Discovery imports from a real public board ─────────────────────────
+    // These two checks call the live Greenhouse boards API through the real
+    // import route — the one external dependency in this journey, accepted
+    // because live import is exactly the capability under proof.
+    await page.getByRole("link", { name: "Job Discovery" }).click();
+    const greenhouseCard = page
+      .locator("div.rounded-md.border")
+      .filter({ hasText: "Greenhouse job boards" });
+    await expect(greenhouseCard).toBeVisible({ timeout: 20_000 });
+
+    // A missing board is the provider's refusal, surfaced verbatim.
+    await greenhouseCard.getByLabel("Board token").fill("this-board-does-not-exist-2026");
+    await greenhouseCard.getByRole("button", { name: /import postings/i }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: /No public Greenhouse board/ }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // A real board imports, scores, and lands in the recorded list.
+    await greenhouseCard.getByLabel("Board token").fill("stripe");
+    await greenhouseCard.getByRole("button", { name: /import postings/i }).click();
+    await expect(page.getByRole("status")).toHaveText(/Imported \d+ of \d+ postings from /, {
+      timeout: 60_000,
+    });
+    // The list now carries provider-attributed rows scored by the same
+    // engine as manual entries.
+    await expect(page.getByText(/via greenhouse/).first()).toBeVisible();
   });
 });

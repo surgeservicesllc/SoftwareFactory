@@ -9,8 +9,23 @@ const externalServer = Boolean(process.env.PLAYWRIGHT_BASE_URL) &&
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 /** Where the component layout harness is served. */
 export const HARNESS_URL = process.env.PLAYWRIGHT_HARNESS_URL ?? "http://localhost:4321";
+const externalHarnessServer = Boolean(process.env.PLAYWRIGHT_HARNESS_URL) &&
+  !process.env.PLAYWRIGHT_HARNESS_WEB_SERVER_COMMAND;
 const launchOptions = chromiumExecutable
   ? { executablePath: chromiumExecutable }
+  : undefined;
+/*
+ * Sandboxes that mandate an egress proxy export HTTPS_PROXY and trust its
+ * CA in the browser's NSS store — but Chromium only routes through it when
+ * told. Engage the proxy only for a remote HTTPS target: local runs
+ * (localhost app + harness) stay direct, and environments without a
+ * mandated proxy see no change.
+ */
+const proxyServer = baseURL.startsWith("https://")
+  ? process.env.HTTPS_PROXY ?? process.env.https_proxy
+  : undefined;
+const proxy = proxyServer
+  ? { server: proxyServer, bypass: "localhost,127.0.0.1" }
   : undefined;
 
 export default defineConfig({
@@ -31,6 +46,7 @@ export default defineConfig({
   timeout: 45_000,
   use: {
     baseURL,
+    ...(proxy ? { proxy } : {}),
     /*
      * No locator action waits forever.
      *
@@ -94,7 +110,7 @@ export default defineConfig({
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
       }]),
-    {
+    ...(externalHarnessServer ? [] : [{
       /*
        * Rebuilt every run, never reused.
        *
@@ -111,10 +127,11 @@ export default defineConfig({
        * every module on request took this suite from ten minutes to over
        * twenty-five. One build per run is the cheap half of that trade.
        */
-      command: "npm run harness:build && npm run harness:serve",
+      command: process.env.PLAYWRIGHT_HARNESS_WEB_SERVER_COMMAND ??
+        "npm run harness:build && npm run harness:serve",
       url: HARNESS_URL,
       reuseExistingServer: false,
       timeout: 180_000,
-    },
+    }]),
   ],
 });

@@ -196,6 +196,9 @@ describe("seeding the per-run CODEX_HOME", () => {
     await seedCodexHome(codexHome, subscriptionJson);
     const mode = (await stat(path.join(codexHome, "auth.json"))).mode & 0o777;
 
+    // Windows reports synthetic POSIX mode bits; the mode passed to writeFile
+    // is enforced on the Linux worker where this credential is consumed.
+    if (process.platform === "win32") return;
     expect(mode).toBe(0o600);
   });
 

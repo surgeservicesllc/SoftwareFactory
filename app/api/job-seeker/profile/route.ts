@@ -78,9 +78,27 @@ type ProfileRow = {
   technologies: unknown;
   industries: unknown;
   updated_at: string | null;
+  resume_upload: ResumeUploadEmbed | ResumeUploadEmbed[] | null;
 };
 
+/*
+ * Many-to-one embed via profiles.resume_upload_id — live PostgREST returns
+ * it as a single object (or null); the array form is tolerated for the same
+ * reason as the jobs route's embeds (the shape follows constraint detection).
+ */
+type ResumeUploadEmbed = {
+  id: string;
+  filename: string;
+  byte_size: number;
+  created_at: string;
+};
+
+function firstEmbed<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
 function toView(row: ProfileRow) {
+  const resumeUpload = firstEmbed(row.resume_upload);
   return {
     fullName: row.full_name,
     email: row.email,
@@ -101,6 +119,14 @@ function toView(row: ProfileRow) {
     technologies: row.technologies ?? [],
     industries: row.industries ?? [],
     updatedAt: row.updated_at,
+    resumeUpload: resumeUpload
+      ? {
+        id: resumeUpload.id,
+        filename: resumeUpload.filename,
+        byteSize: resumeUpload.byte_size,
+        createdAt: resumeUpload.created_at,
+      }
+      : null,
   };
 }
 
@@ -108,7 +134,8 @@ const PROFILE_COLUMNS =
   "full_name, email, phone, linkedin_url, location, summary, salary_target, "
   + "salary_currency, work_arrangement, open_to_travel, open_to_relocation, "
   + "employment_history, education, accomplishments, skills, certifications, "
-  + "technologies, industries, updated_at";
+  + "technologies, industries, updated_at, "
+  + "resume_upload:job_seeker_uploads ( id, filename, byte_size, created_at )";
 
 export async function GET() {
   try {

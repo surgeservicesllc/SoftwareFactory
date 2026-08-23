@@ -40,6 +40,19 @@ const APPLICATION_ROLES = ["anon", "authenticated", "service_role"] as const;
  */
 const RPC_CALL_PATTERN = /\.rpc\(\s*"([a-z][a-z0-9_]*)"/g;
 
+/**
+ * Rolling deploy compatibility calls remain in the candidate application so
+ * it can run before EXPAND reaches hosted Postgres. CONTRACT deliberately
+ * revokes their grants; each fallback is reachable only when its checked
+ * replacement is absent, and must disappear in a later cleanup release.
+ */
+const CONTRACT_REVOKED_ROLLING_FALLBACKS = {
+  assign_bots_to_project: "assign_bots_to_project_checked",
+  set_bot_assignment_execution: "set_bot_assignment_execution_checked",
+  update_bot_assignment: "update_bot_assignment_checked",
+  update_bot_assignment_configuration: "update_bot_assignment_configuration_checked",
+} as const;
+
 async function collectSourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(
@@ -132,6 +145,10 @@ describe("application-to-schema RPC wiring", () => {
     expect(calledRpcNames).toContain("sync_github_installation");
     expect(calledRpcNames).toContain("disconnect_github_connection");
     expect(calledRpcNames).toContain("process_github_webhook_delivery");
+    expect(calledRpcNames).toEqual(expect.arrayContaining([
+      ...Object.keys(CONTRACT_REVOKED_ROLLING_FALLBACKS),
+      ...Object.values(CONTRACT_REVOKED_ROLLING_FALLBACKS),
+    ]));
   });
 
   it("defines every database function the application calls", () => {
@@ -141,13 +158,27 @@ describe("application-to-schema RPC wiring", () => {
     expect(missing).toEqual([]);
   });
 
-  it("lets some application role execute every function the application calls", () => {
+  it("revokes only the exact rolling fallbacks and exposes every checked replacement", () => {
     const unreachable = calledRpcNames.filter(
       (name) => definedFunctions.has(name) && !executableFunctions.has(name),
     );
+    const intentionallyRevoked = Object.keys(CONTRACT_REVOKED_ROLLING_FALLBACKS).sort();
+    const checkedReplacements = Object.values(CONTRACT_REVOKED_ROLLING_FALLBACKS);
 
-    // A function reachable by no application role is dead on arrival: the route
-    // that calls it returns a permission error for every caller, always.
-    expect(unreachable).toEqual([]);
+    // No ordinary RPC may be dead on arrival. These four legacy calls are the
+    // exact exception: the candidate retains them only to bridge a pre-EXPAND
+    // database, while the post-CONTRACT catalogue intentionally denies them.
+    expect(unreachable.sort()).toEqual(intentionallyRevoked);
+    expect(unreachable.filter((name) => !(name in CONTRACT_REVOKED_ROLLING_FALLBACKS)))
+      .toEqual([]);
+
+    // Every denied legacy path has a literal, called, defined, executable
+    // checked replacement. This prevents the exception list from masking a
+    // typo or a CONTRACT migration that revoked the new boundary as well.
+    for (const checked of checkedReplacements) {
+      expect(calledRpcNames).toContain(checked);
+      expect(definedFunctions).toContain(checked);
+      expect(executableFunctions).toContain(checked);
+    }
   });
 });

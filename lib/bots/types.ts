@@ -52,6 +52,8 @@ export type SerializedBotRole = {
 
 export type SerializedAssignment = {
   id: string;
+  /** Monotonic token required by every posting mutation. */
+  revision: number;
   botId: string;
   projectId: string;
   roleId: string;
@@ -82,6 +84,13 @@ export type BotFabricSnapshot = {
   bots: SerializedBot[];
   roles: SerializedBotRole[];
   assignments: SerializedAssignment[];
+  /**
+   * Positive proof that the rolling open-assignment query reached its terminal
+   * page (not a transaction-snapshot claim). Optional for deployment
+   * compatibility; a missing value must never be treated as complete by a
+   * progress surface.
+   */
+  assignmentsComplete?: boolean;
   projects: SerializedProject[];
 };
 

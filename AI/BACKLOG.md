@@ -1,6 +1,359 @@
 # Backlog
 
-Last triaged: 2026-08-13
+Last triaged: 2026-08-22
+
+## Clearing the Backlog and All Pipelines pages (2026-08-22, ADR-119)
+
+- [x] Add `clear_backlog_tasks` and `clear_all_pipelines` as SECURITY DEFINER
+  functions that check owner/admin, require a reason of at least ten
+  characters, skip live work, and skip rows whose deletion would cascade into
+  `agent_runs` unless the caller opts in.
+- [x] Add the two `activity_event_type` labels those audit rows use, in their
+  own migration, because an enum value cannot be used in the transaction that
+  added it.
+- [x] Give both pages one shared confirm-reason-clear control that reports what
+  was kept and why.
+- [x] Apply to hosted with a dedicated narrow scope, hash-pinned, with a ledger
+  preflight and a post-apply readback that fails the run on a mismatch.
+- [ ] Dispatch `scope=probe` for the independent second read of the two
+  functions' privileges. The apply's own gate passed; a step that grades its
+  own work is the weaker evidence, and the probe read exists but has not been
+  run.
+
+## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
+
+- [x] Keep exact `openai` / `gpt-5.3-codex` as the sole executable Factory
+  identity and classify every other valid bounded provider/model pair as
+  `record_only`.
+- [x] Make `record_only` persist command/task/route disposition with zero
+  `agent_runs`, no worker dispatch, and no branch/commit/PR/deployment path.
+- [x] Fail closed when `SOFTWAREFACTORY_CODEX_MODEL` names any nondefault model;
+  changing an environment pin cannot grant execution support.
+- [x] Advance Step 8 after durable recording and make Step 9 distinguish
+  `record_only` from execution, using project-scoped safe history that does not
+  expose raw parameters and survives reload.
+- [x] Record the hosted prerequisite truth:
+  `20260822000600_route_bots_onto_the_executable_model.sql` is applied, but it
+  makes only the exact Codex identity executable.
+- [x] Remove the repository-only magic RED release approval/expiry ceremony
+  (ADR-116). The owner's direct instruction in the active task authorizes the
+  release; exact technical identity, CI, deployment, migration, containment,
+  and audit gates remain mandatory.
+- [ ] Freeze the final application commit and all migration hashes, push only
+  that exact head, and require all exact-head quality plus browser/accessibility
+  jobs green and an exact READY Vercel Production identity. No such release
+  evidence exists yet.
+- [x] Contain the factory posture the gate requires: the owner engaged the
+  global kill switch and turned Autonomous Mode OFF via the Safety page
+  (~21:11Z), and probe run 32599024205 read every state, census, worker, and
+  event clause green afterwards.
+- [x] Dispatch `scope=audit-guard-acl-contract`: run 32599987697 measured the
+  hosted `{postgres, service_role}` ACL, contracted it to owner-only, and read
+  it back (ADR-122; the gate's space-only btrim source comparison fixed in the
+  same change).
+- [x] Dispatch `scope=agentos-foundation-cleanup`: run 32601173685 measured
+  the 4-object remnant (three enums plus one helper), dropped it, and read
+  back a zero roster (ADR-123).
+- [x] Dispatch `scope=command-carry-forward`: run 32602669547 applied
+  20260815001000 then 20260822001500, carrying hosted submit_command from
+  source 2772f6554cf16c98aa72c7d94f525f63 to the frozen
+  adb50eb74e1721274f23d0d69b79e2e8 with the owner-plus-authenticated ACL, and
+  read both back (ADR-124).
+- [x] Fix the rehearsal lint so it can execute at all: chain run 32603384774
+  passed every input gate the carry-forward unblocked and then died on
+  `missing trigger relation` — plpgsql_check refuses a trigger function
+  without its relation, and the lint passed `0::regclass` for all 27 roster
+  functions including the three Phase 1C trigger functions. The lint rows now
+  carry the relations 01000 pins in trigger_expectations (ADR-125), with the
+  mechanics probe-verified inside a rolled-back transaction.
+- [x] Apply only the protected atomic
+  `00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` chain through
+  `scope=factory-any-model-record-only`: run 32607123713 rehearsed the whole
+  chain with a clean lint, committed the single production transaction, and
+  recorded all six ledger rows (ADR-125/126). Its post-commit
+  RECORD_ONLY_READY check refused on a pinned contract md5 that matches no
+  database; the pin is corrected and `scope=record-only-postflight` re-runs
+  the three unreached post-commit verifications (ADR-127).
+- [x] Dispatch `scope=record-only-postflight`: run 32607902289 read back
+  green RECORD_ONLY_READY / RECORD_ONLY_BOUNDARY / FOUNDATION_READY, healthy
+  database, reachable site, and requested the PostgREST reload — "Record-only
+  chain postflights verified on the applied production database."
+- [x] Owner-confirmed acceptance (screenshots 2026-08-23 ~00:27Z): Step 8
+  "Issue a Command" Done — 1 command recorded only; Step 9 "Watch It Ship"
+  shows the truthful record-only view with the command record modal.
+- [ ] Step 9 real run with the Claude bot (owner goal, ADR-128): deploy the
+  analysis-launch slice, apply 20260823000100 via
+  `scope=command-analysis-graphs`, have the owner issue a command with the
+  Claude bot, watch the launched analysis graph get claimed and completed by
+  the graph worker (manual dispatch works today; repository_dispatch wakes
+  it for new commands), and verify Step 9 reports the run with its
+  artifacts. The existing recorded command predates the link and stays a
+  plain record.
+- [ ] Codex write-path enablement (owner-gated, unchanged): connect the
+  ChatGPT/Codex account in Bot Manager, create an `openai`/`gpt-5.3-codex`
+  bot, assign + configure it, set repo variable
+  `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED=true`, then a manual command runs
+  to an isolated branch and draft PR with CI. Readiness measured by probe
+  32608500364; worker auth last green 2026-08-21 21:54Z; the 2026-08-13
+  stdin-era failure is structurally gone (SDK adapter; claim takes only
+  queued runs).
+- [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
+  executors, and zero runs for all `record_only` commands before and after apply.
+- [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful
+  Step 9 -> reload acceptance, prove project isolation, and only then update
+  continuity documents with exact deployment, apply-run, ledger, and runtime
+  evidence.
+
+## Historical bot-account binding containment (2026-08-22, ADR-111; superseded)
+
+This preserves the earlier release checklist as evidence. Do not execute its
+separate release sequence; the current pending database action is the atomic
+ADR-115/ADR-118/ADR-120/ADR-121
+`00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200` scope above.
+
+- [x] Push exact approved commit
+  `4fc18d3e5ecba6f362f14a7459e588a74a84b84b` to `main` and verify exact
+  READY Vercel deployment `dpl_8yngqtjJkNbexxWAMfAhZtEf1RWU` plus public
+  HTTP 200 / signed-out API 401 boundaries.
+- [x] Publish successor application commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` with the sole owner identity as
+  author and committer. Verify READY Vercel production deployment
+  `dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2`, GitHub deployment `6036292508`, status
+  `17160408639`, exact production URL, and stable aliases.
+- [x] Preserve the fail-closed database result: EXPAND run `32568221857`
+  stopped at `LEGACY_CATALOG_READY` before its apply notice, DDL transaction,
+  or ledger insert. Predecessor `20260822000100` remains present and both
+  protected target versions remain absent. CONTRACT was not dispatched.
+- [x] Reproduce both independent failures locally: Supabase function default
+  privileges add direct `service_role` EXECUTE to all seven frozen legacy bot
+  routines, while raw `pg_get_functiondef` MD5s vary across PostgreSQL major
+  versions even when the catalog contract is identical.
+- [x] Add forward-only migration `20260822000150` to atomically normalize only
+  the coherent all-seven hosted overgrant. It refuses mixed 1-6/7 states,
+  identity/body/catalog/owner/ACL drift, and performs no history write itself.
+- [x] Replace deparser-byte gates with line-ending-canonical `md5(prosrc)`
+  (CRLF and lone CR become LF) plus explicit return,
+  argument/default, security, volatility, cost/rows, support, transform,
+  trigger, and ACL catalog invariants in EXPAND, CONTRACT, and hosted guards.
+- [x] Record exact-head CI run `32570540183` as red: all three browser shards
+  passed, but quality job `97025270055` failed before build because the LF
+  migration chain rejected all seven non-canonical source hashes. Classify
+  Supabase Preview check `97025325852` separately as pre-existing
+  `provider_credentials` preview ledger/schema drift.
+- [x] Freeze the repaired repository file identities: 00150
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`,
+  00200
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`,
+  and 00300
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+  Native PostgreSQL 17.10 and 18.4 full chains pass.
+- [x] Confirm that publication of `30d7e824` caused no hosted database
+  mutation. No protected apply was dispatched afterward; 00150/00200/00300
+  remain unhosted and CONTRACT remains undispatched.
+- [ ] Freeze the repaired commit, obtain new exact RED authorization, push it,
+  and require green exact-head CI before any hosted DDL.
+- [ ] Apply only 00150 then 00200; complete signed-in Role/Claude stickiness,
+  runtime, audit, lint, health, autonomy-off/kill-switch-on acceptance; only
+  then apply 00300. Never reset, down-migrate, repair history, or rerun the old
+  failed workflow.
+
+## Claude bot identity and Role assignment release (2026-08-22, ADR-108/ADR-109)
+
+- [x] Remove the zero-role assignment dead end inside the Assign Bots wizard.
+  The inline starter selector defaults to the reviewed Backend engineer
+  template, creates it through the existing manager-only audited role API, and
+  places the exact returned UUID into only blank selected drafts. The Role
+  field then has a real selectable value and Configure can advance. Developer
+  remains a separate permission preset; existing posting role/configuration is
+  preserved.
+- [x] Keep AI Factory on one full-app modal/focus/close boundary, complete the
+  open-assignment roster through terminal-proven UUID keyset pagination, and
+  serialize/fence broker start, retry, close, and cleanup races.
+- [x] Contain the owner-screenshot identity shortcut. `ProjectBots` no longer
+  treats `credentialRef` similarity as an exact AI-account link or hides the
+  repair control. An unbound Ready legacy bot may be assigned while AI Factory
+  correctly keeps steps 5-7 incomplete. The UI exposes the existing exact
+  `/api/bots/connect/provision` Link-or-repair/adoption path, awaits the parent
+  refresh, and offers an accessible **Return to AI Factory** action. Completion
+  remains connected account + exact `aiAccountId` + current Ready + project
+  assignment.
+- [x] Validate the current unpublished UI containment: focused UI 75/75,
+  focused ESLint, full typecheck, and lint/typecheck/build pass. The root full
+  suite passes 337 files / 4,054 tests with 3 files / 7 tests skipped. Its first
+  contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the
+  full rerun.
+- [x] Freeze forward migration
+  `20260822000200_register_bot_for_ai_account.sql` at SHA-256
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`.
+  It binds a subscription bot to the exact tenant AI account, introduces
+  monotonic bot/assignment revisions, rejects stale or released-posting
+  writes, and records exact-config readiness through a service-role-only
+  boundary while preserving a management-authored Disabled state.
+- [x] Make `20260822000200` an EXPAND migration: preserve exact legacy function
+  definitions/signatures/security/search paths and authenticated-only execute
+  ACLs while adding authenticated revision-checked wrappers plus the
+  service-only readiness recorder. The temporary bypass is explicit; revoke
+  legacy execution only in a separately approved forward CONTRACT migration
+  after the exact replacement app is deployed and accepted.
+- [x] Preserve the prepublication working-tree gates: lint, typecheck,
+  production build, 331
+  Vitest files / 3,934 tests (7 skipped), and 1,207 serialized browser passes
+  with 545 intentional viewport skips. The one unknown-resource status defect
+  repeated across three viewports was fixed forward; its exact 404 and
+  generated-social-image regression passes 6/6 across desktop/tablet/mobile.
+  The all-fields audit additionally proves every assignment field and reload
+  readback, preserves spaces while Instructions are typed, and refuses a
+  required custom/self-hosted endpoint in both UI and API. Independent security,
+  broker, UI, and proxy reviews report no unresolved P0/P1/P2. Exact-head CI
+  `32570540183` supersedes this as the release verdict and is red for the
+  cross-platform migration-hash defect.
+- [x] Publish and deploy the application candidate at exact commit
+  `30d7e824691bdd4f8fa72481b21c91d3da6e3a31`. This proves application identity
+  only; its failed CI gate and absence of hosted database mutation prevent a
+  release-accepted claim.
+- [ ] After the repaired commit is approved and green, verify exact
+  main/CI/Vercel identities and hosted predecessor `20260822000100`. Apply 00150
+  and then 00200 only through their dedicated scopes, verify one ledger row
+  each and exact catalog/ACL invariants, then run runtime create/bind/assign/
+  configure/readiness/audit, linked-database lint, health, and signed-in Claude
+  Role/reload stickiness. Stop on any mismatch and contain only with a new
+  forward change.
+- [ ] After exact-app production acceptance, separately review and authorize a
+  forward CONTRACT migration that revokes the six legacy authenticated execute
+  grants. Do not fold revocation into the EXPAND apply or infer approval for it.
+  Keep the global kill switch ON, raw autonomy and all automatic actions OFF,
+  and the worker/executor disconnected.
+
+## Agents selectable into the AI Factory (2026-08-22, ADR-107, owner goal)
+
+- [x] Migration `20260822000100_project_agent_selection.sql`: project_agents
+  with RLS + FORCE RLS, no direct table path, owner/admin select/deselect and
+  member list definer functions, audit events, advisory locks; 16 behavior
+  cases against the real chain.
+- [x] `/api/project-agents` (GET/POST/DELETE) reporting the unapplied
+  migration as Not Connected; 10 route cases.
+- [x] `ProjectAgentSelector` on /solutions/agents (standalone project picker)
+  and in the AI Factory's new Select Agents step (nine-step journey; done =
+  at least one agent included, names as evidence); 5 component cases plus the
+  updated factory suite.
+- [x] Applied to hosted Supabase: run 32548916762 (2026-08-22 03:25Z,
+  scope=agent-selection), ledger repaired, schema cache reloaded. Verified on
+  production: /api/project-agents answers 401 signed out; signed in,
+  available:true from the live list function, and a write probe surfaced the
+  database's own owner/administrator refusal - both definer functions execute
+  on hosted and fail closed.
+
+## AI Factory production acceptance (2026-08-21)
+
+- [x] Verify exact candidate head
+  `a020e8192d8512a1bb65112e01017047087f0528`: CI run `32543409160` passed
+  quality and all three browser shards.
+- [x] Advance and reload production at 4/8: **Agentic SDLC** remains selected,
+  its immutable `pipeline.selected` Activity event is visible, and the owner's
+  reconnected Claude account reports Connected.
+- [ ] Complete the account Refresh with a real worker sweep. It remains pending
+  and is not connected/fresh-worker evidence.
+- [x] Implement and locally verify the downstream bot-purpose normalization:
+  translate
+  broker `claude`/`claude_N` and `codex`/`codex_N` purposes into provision
+  choices `subscription`/`subscription_N`, reject mismatches, and pin the real
+  broker-purpose fixtures in regression tests. PR #309 at exact head
+  `db1958f8b501e865a9e741a21298683e0f88f969` passes 99 focused tests,
+  lint, typecheck, a production build, and the secret/protected-path audit. It
+  is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [x] Diagnose PR #309 CI run `32545138211` browser shards 1/3 through 3/3: the async
+  loading state omitted the page H1. Keep `AI Factory` visible in loading and
+  every fail-closed state and pin the initial-loading state in a component
+  regression test. This is a forward candidate; it invalidates the prior exact-
+  head merge approval.
+- [ ] Obtain exact owner approval before changing the protected
+  `lib/bots/credentials.ts` boundary. It must admit only catalog-declared
+  subscription reference bases and valid `_2` through `_9999` slots, while
+  continuing to reject arbitrary, malformed, browser-public, and privileged
+  references. Until this lands, a subscription bot can be created but cannot
+  read ready from its vault credential.
+- [ ] Make the manager-only manual readiness check use the same boolean-only
+  environment-or-vault presence predicate as the bot-fabric read. It currently
+  checks and serializes with environment presence only, so a vault-backed bot
+  can be persisted and returned as Not Connected. This protected readiness
+  change also requires exact owner approval.
+- [ ] Bind a provisioned bot to its exact `ai_accounts.id` through a separately
+  reviewed forward schema/RPC design. `bots.ai_account_id` currently remains
+  null, so credential-slot stickiness is not full identity stickiness.
+  broker-purpose fixtures in regression tests. The branch candidate passes 100
+  focused tests, lint, typecheck, and a production build. It is not deployed;
+  production Create Bot still fails and the roster remains empty.
+- [ ] After an authorized release, repeat Create Bot, assignment, settings, and
+  reload checks before claiming that a connected bot is usable and sticky.
+- [ ] Keep production promotion stopped until the five linked-lint errors/ten
+  findings, raw autonomy/kill-switch drift, two effective-kill-off projects,
+  absent fresh worker, and hosted `20260821000300`/candidate `20260821000400`
+  drift are contained and remeasured.
+
+
+## Factory command routing release (2026-08-21, ADR-106)
+
+- [x] Persist one immutable route for every owner-submitted factory command,
+  including selected pipeline/template, bot assignment, bot, provider/model,
+  work effort, effective risk, and the routing/configuration snapshot.
+- [x] Resolve exact idempotent replay before any mutable pipeline, roster,
+  readiness, or capacity read; recheck stored effective risk in the database.
+- [x] Keep submission and replay owner-only, fail closed when the routing RPC
+  is absent, and leave worker dispatch, autonomy, merge, deploy, and rollback
+  unavailable.
+- [x] Freeze `20260821000400_command_factory_routing.sql` at 34,999 bytes,
+  SHA-256
+  `e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`.
+- [ ] Remediate and remeasure the hosted release blockers: five linked lint
+  errors/ten findings; one raw organization with `autonomous_mode = true`; one
+  raw organization with `autonomy_kill_switch_active = false`; two projects with effective
+  kill off; and no connected/fresh worker.
+- [ ] Apply `20260821000400` only through a separately authorized hosted
+  release, verify its exact ledger/object/ACL/RLS/replay behavior, then publish
+  and prove the matching production copy. Production remains on hosted
+  `20260821000300` and the old application until then.
+- [x] Classify the default unbounded-run Supabase-wiring and pipeline failures
+  as contention-only by clearing both on isolated retry; the wiring contract
+  passes 2/2 in 0.603s with `maxWorkers=1`.
+- [x] Run the bounded current-head non-frozen Windows suite:
+  `vitest run --exclude tests/unit/auth-broker-runner.test.ts --maxWorkers=4`
+  passes 317 files / 3,730 tests, 7 skipped, in 183.78s. Lint, typecheck, and
+  build are green.
+- [x] Remove the embedded template-plan first-render race: derive the caller's
+  project synchronously, perform no workspace project read, and pin the
+  immediate render and project-scoped graph submission in regression tests.
+- [x] Remove the no-role assignment dead end: explain the required role, link
+  to `/solutions/bot-manager`, and keep Configure from advancing until every
+  selected bot has one.
+- [ ] Require Linux CI to run the complete suite, including the owner-frozen
+  19-test `tests/unit/auth-broker-runner.test.ts`. Its local exclusion is only
+  because Windows lacks the Unix `script` executable; it is not a test waiver.
+
+## FirstMate review / Factory Briefing (2026-08-21, ADR-104)
+
+- [x] Review FirstMate at pinned commit `738460d401b1115dab617c3859077973977615cb`
+  and adapt its strongest safe product pattern: one bounded member briefing
+  with Needs owner now, Underway, Recently finished, and Up next lanes.
+- [x] Keep the integration read-only and tenant-scoped; use existing bounded
+  APIs, fold linked runs into tasks, disclose saturated source windows and
+  cancelled omissions, treat unknown states as inspectable, and mark partial
+  reads as incomplete rather than clear.
+- [x] Add pure classification tests, component tests, populated responsive
+  harness coverage at 320–1440 px, and populated axe coverage at phone and
+  desktop widths.
+- [ ] Consolidate the eight bounded reads behind one server-side safe
+  projection if dashboard request volume becomes material. Preserve the same
+  per-source integrity signal; a consolidation must not turn one failed
+  sub-read into an empty success.
+- [ ] Design durable keyed owner decisions and explicit analysis-versus-code
+  output contracts as separate increments before changing mission execution.
+  A true liaison, restart checkpoints, or graph-to-Phase-1C child runs require
+  their own schema, RLS, audit, lease, and authority review; none is implied by
+  the briefing.
+- [ ] Do not import FirstMate's Bash/tmux runtime, Relay/public intake,
+  ambient CLI credentials, `+yolo`/raw launch escape hatches, merge scripts,
+  or flat-file state into this multi-tenant control plane.
 
 ## Job Seeker increments (2026-08-20, ADR-096, owner goal)
 
@@ -35,15 +388,36 @@ Last triaged: 2026-08-13
   three live defects it surfaced (no-workspace dead end → onboarding flow
   with `?next=`, PostgREST one-to-one embed shape in the jobs route,
   empty-history-entry 422 → client-side prune).
-- [ ] Open (needs external credentials/decisions): activate an import
-  adapter (SOFTWAREFACTORY_GREENHOUSE_BOARDS / _LEVER_SITES /
-  _LINKEDIN_CLIENT_ID+SECRET) with a reviewed fetch implementation;
-  model-polished document variants through the job_search_pipeline graph
-  template (live and launchable from Pipelines → Templates), QA-lens-checked
-  against the deterministic baseline.
-- [ ] Open (infrastructure): a CI lane that provisions the local Supabase
-  stack and runs the JOB_SEEKER_E2E journey on a cadence instead of on
-  demand.
+- [x] Live verification round 2 (same day): the journey covers the whole
+  capability surface — all eleven stages, reject+close, entry removal,
+  resume download round-trip, analytics re-check — and two more wiring
+  gaps closed: the CRM details editor (notes / application URL /
+  follow-up date had PATCH support but no UI) and the persistent
+  current-resume link (the `resume_upload_id` pointer went unread).
+- [x] Greenhouse + Lever imports (2026-08-21, ADR-105): the two public
+  adapters turned out to need identifiers, not credentials — real
+  `fetchPostings` against the providers' keyless APIs, identifier-driven
+  from the page, recorded and scored through the shared chain, journey-
+  proven live (40/40 imported rows scored and in the pipeline).
+- [ ] Open (needs external credentials/decisions): LinkedIn import
+  (SOFTWAREFACTORY_LINKEDIN_CLIENT_ID+SECRET — real OAuth app, reviewed
+  integration); model-polished document variants through the
+  job_search_pipeline graph template (live and launchable from
+  Pipelines → Templates), QA-lens-checked against the deterministic
+  baseline.
+- [x] CI lane (2026-08-21): `.github/workflows/job-seeker-journey.yml` —
+  workflow_dispatch + daily schedule; provisions `supabase start` (lean
+  exclusion set) on the runner, mints the pre-confirmed journey user
+  through GoTrue's admin API, builds and serves the production app, and
+  runs the JOB_SEEKER_E2E journey. No deployment, no production
+  credentials, no provider usage.
+- [x] Production run (2026-08-22, owner goal): the lane's remote mode
+  (`base_url` dispatch input) drove the whole journey against
+  https://www.theagoras.com as the owner-approved fake account — run
+  32540879299 green (flaky first attempt on a cold start, full pass on
+  the CI retry), verified by reading production's API back as that user
+  (42 jobs, 40 imported live via Greenhouse, all scored, analytics
+  correct). Fake-account cleanup is one dashboard delete.
 
 ## Real usage numbers need a fuller-scoped sign-in (2026-08-19, ADR-095)
 
@@ -56,6 +430,30 @@ Last triaged: 2026-08-13
 - [ ] Until then the Bot Manager states the truth per ADR-095: Connected,
   fully operational for running bots, usage not measurable for this
   connection type. Do not weaken that wording to imply a transient failure.
+
+## A project's selected pipelines (2026-08-18, ADR-098)
+
+- [x] Add `project_pipelines` (migration `20260821000300`) with RLS + FORCE RLS, every
+  table privilege revoked from `anon`, `authenticated` and `service_role`, and
+  owner/administrator `select_project_pipeline` / `deselect_project_pipeline` plus
+  member `list_project_pipelines` as the only paths, each audit-evented and
+  advisory-locked per project-and-key.
+- [x] Expose them at `GET`/`POST`/`DELETE /api/project-pipelines`, resolving names from
+  `GRAPH_TEMPLATES` for a built-in and `graph_templates` for a custom template so no
+  label can go stale, and refusing a key that names neither before anything is written.
+- [x] Make **Use** a persisted toggle — grey with `aria-pressed` when selected, many per
+  project — and move the graph-planning dialog to its own **Plan graph** button.
+- [x] Make the AI Factory's Configure Pipeline step read the selections: done only when
+  one is chosen, with the chosen names on the page rather than only in the overlay.
+- [x] Cover the migration against the real chain (owner allowed, member read-only,
+  outsider denied, anonymous denied, no direct browser write path), the route boundary,
+  the toggle, and the selected-state layout at every swept width.
+- [x] Apply `20260821000300` to hosted Supabase — run `32536895799`, 2026-08-21
+  23:27Z, `confirm=apply` `scope=pipeline-selection`; the after-ledger listing shows
+  the version local and remote, and the step reloaded the PostgREST schema cache.
+- [ ] Observe the behaviour on production: press Use on `/solutions/ai-factory`,
+  refresh, and confirm the selection is still there. The ledger row proves the DDL
+  ran; it does not prove the journey reads it back on the live site.
 
 ## Project repository picker (2026-08-16)
 

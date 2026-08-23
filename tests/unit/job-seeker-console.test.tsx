@@ -35,6 +35,7 @@ const PROFILE = {
   technologies: ["Next.js"],
   industries: ["Software"],
   updatedAt: "2026-08-20T00:00:00.000Z",
+  resumeUpload: { id: "11111111-2222-4333-8444-555555555555", filename: "daniel-cv.txt", byteSize: 2048 },
 };
 
 const PREFERENCES = {
@@ -109,6 +110,18 @@ describe("JobSeekerConsole", () => {
     expect(screen.getByText(/nothing is ever invented to fill a gap/i)).toBeInTheDocument();
   });
 
+  it("shows the stored current resume as a link on load, not only after uploading", async () => {
+    stubFetch();
+    render(<JobSeekerConsole />);
+    await screen.findByDisplayValue("Daniel H");
+
+    const link = screen.getByRole("link", { name: "daniel-cv.txt" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/job-seeker/uploads/11111111-2222-4333-8444-555555555555",
+    );
+  });
+
   it("renders an empty profile as an editable blank form, not an error", async () => {
     stubFetch({ profile: null, preferences: null });
     render(<JobSeekerConsole />);
@@ -157,15 +170,15 @@ describe("JobSeekerConsole", () => {
     expect(screen.getByText(/Default 80/)).toBeInTheDocument();
   });
 
-  it("shows discovery with the honest method label and manual-only sourcing", async () => {
+  it("shows discovery with the honest method label and both real ways in", async () => {
     searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
     stubFetch();
     render(<JobSeekerConsole />);
 
     expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
     expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
-    expect(screen.getByText(/Recording is manual today/)).toBeInTheDocument();
-    expect(screen.getByText(/activate only when their named/)).toBeInTheDocument();
+    expect(screen.getByText(/Record a posting yourself, or import from a company/)).toBeInTheDocument();
+    expect(screen.getByText(/activates only when its\s+named configuration actually exists/)).toBeInTheDocument();
   });
 
   it("shows the applications pipeline with the gate stated", async () => {

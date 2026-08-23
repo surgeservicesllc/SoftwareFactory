@@ -1,5 +1,144 @@
 # Architecture
 
+## Current release boundary — exact bot identity and database containment
+
+Application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on
+`main` and is served by READY Vercel production deployment
+`dpl_FrvCToHvFhkzfwnkmEeeTyfuE3v2`. GitHub deployment `6036292508` and status
+`17160408639` bind the exact commit to
+`https://softwarefactory-116001qbk-surgeservices-projects.vercel.app` and its
+stable aliases. The database half remains unhosted. Exact-head CI run
+`32570540183` is red because its LF migration chain exposed non-canonical
+`pg_proc.prosrc` hashes; all three browser/accessibility shards passed.
+
+The application and protected forward migrations make subscription identity a
+database fact. Authenticated managers call `ensure_ai_account_bot` with the exact tenant
+AI-account UUID; PostgreSQL derives the provider and credential slot, returns
+the exact bot UUID, and enforces organization/account/provider/reference
+coherence. A default/non-additional request reuses that account's bound bot or
+may adopt one and only one unambiguous matching legacy bot in place, preserving
+its UUID, assignments, and history. An explicit additional request creates a
+distinct bot with the same exact account binding. Similar provider names or
+credential references never substitute for the account identity.
+
+Both `bots` and `bot_assignments` carry positive revisions initialized at 1;
+BEFORE UPDATE triggers increment them monotonically and refuse overflow. The
+checked assignment boundaries lock the current open posting and compare its
+assignment UUID, project UUID, and revision before delegating inside the same
+transaction to the established audited mutation. Configuration, lifecycle,
+and execution-preference edits use the same comparison, and all checked edit
+paths refuse released rows. Client-callable history is therefore immutable and
+stale managers fail instead of restoring an obsolete role, grant, status,
+model, or work effort.
+
+Readiness is computed from environment-or-vault credential presence on the
+server and persisted only by
+`record_bot_readiness_preserving_disabled`. That RPC is executable only by
+`service_role`, carries the initiating owner/admin user for authorization and
+audit, locks the bot, and compares the exact revision, account UUID, provider,
+model, credential reference, and base URL that were evaluated. A stale check
+fails; a check cannot author `Disabled`; an already Disabled bot is returned
+unchanged. No opened credential value enters a bot/readiness response,
+readiness detail, bot row, or activity row. Ready remains configuration
+evidence, not a live provider call or executor.
+
+This is deliberately an EXPAND compatibility change. Legacy registration,
+assignment, and readiness mutation definitions, signatures, security mode,
+pinned search paths, and exact ACLs stay unchanged. In particular, all six
+legacy assignment/readiness RPCs retain their authenticated-only execute grant
+and their public/anon/service-role denials while checked wrappers and the
+service-only readiness recorder are added. This keeps the currently deployed
+application working across a migration-first cutover, at the bounded cost that
+old callers can still bypass revision tokens and service-only readiness. A
+separately approved forward CONTRACT migration may revoke those grants only
+after the exact replacement application is deployed and accepted.
+
+The read side obtains the complete open-assignment roster: released history is
+filtered in PostgreSQL, results are keyset-paged by assignment UUID until an
+empty terminal page even when an intermediate response is short, and invalid
+cursor progress or the bounded 100-data-page guard fails the whole read. Only
+then does the snapshot assert `assignmentsComplete`. The assignment-derived
+Assign and Configure steps therefore fail closed without that proof; Connect
+separately requires a connected account and its exact bound Ready bot. Overall
+Factory completion requires that identity to continue through the exact
+selected project and an active configured assignment.
+
+The role and modal flows preserve that identity. A new posting starts from the
+Developer permission preset and prefers an organization role with the matching
+slug; existing postings retain their authored role/configuration. With zero
+roles, the inline starter control defaults to the reviewed Backend engineer
+template, saves its complete definition through `/api/bot-roles`, and assigns
+the returned UUID only to blank selected drafts. AI Factory owns the sole
+full-app modal/focus boundary; embedded roster, assignment, configuration, and
+starter-role surfaces replace content inside it and never nest another dialog.
+
+The owner-screenshot defect was a presentation-layer identity shortcut:
+`ProjectBots` treated a similar `credentialRef` as an exact AI-account link and
+hid the repair control. An unbound Ready legacy bot could be assigned while AI
+Factory correctly kept steps 5-7 incomplete. The local fix removes that
+inference and exposes the existing exact `/api/bots/connect/provision`
+Link-or-repair/adoption path. It awaits the parent refresh and provides an
+accessible **Return to AI Factory** action. The affected completion predicate
+remains connected account + exact `aiAccountId` + current Ready + project
+assignment.
+
+This containment is frozen in the current unpublished candidate. Focused UI passes 75/75; focused
+ESLint, full typecheck, and lint/typecheck/build are green. The root full suite
+passes 337 files / 4,054 tests, with 3 files / 7 tests skipped. A first
+contention-only `supabase-wiring` timeout cleared isolated 2/2 and on the full
+rerun.
+
+The account-connect component serializes start, retry, close, and unmount
+cleanup. Every async read is fenced by exact session UUID and generation, so a
+late superseded poll cannot mutate state or report Connected. Close blocks a
+racing retry and waits for an in-flight start before cancelling its exact
+session; a failed cancellation keeps the overlay open and resumes polling.
+
+The protected forward files are local and unapplied at these exact repository
+SHA-256 identities:
+
+- ACL normalizer `20260822000150` —
+  `6b24b6ebb57e59b9c4398c3e439221c27c300663a7b6932ff192996ffe6bcd93`;
+- EXPAND `20260822000200` —
+  `658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf`;
+- CONTRACT `20260822000300` —
+  `79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7`.
+
+Every migration and hosted guard hashes a CRLF/CR-to-LF canonicalized
+`pg_proc.prosrc`, then verifies the transparent function and trigger catalog.
+Native PostgreSQL 17.10 and 18.4 full chains pass. The exact order is 00150,
+00200, exact-app signed-in acceptance, then 00300. Broad apply refuses to
+introduce any protected file. The repaired forward candidate is not yet pushed
+or deployed, and no hosted database mutation has occurred. Its exact identity,
+green CI, and fresh RED authorization are required. Runtime behavior,
+linked-database lint, application health, and containment remain separate
+mandatory post-apply gates. No worker, graph executor, provider-login protocol,
+autonomy control, approval, merge, deployment, or rollback authority changes.
+
+## Current release boundary — immutable Factory command routing (ADR-106)
+
+`POST /api/commands/route` is an authenticated, same-origin, organization-
+owner-only boundary. Migration `20260821000400_command_factory_routing.sql`
+(34,999 bytes; SHA-256
+`e45149db3ca7c66a27934b0b49ac160e1b5ef597fc8f34ad8547de4759086598`)
+delegates command/task/run creation to the established transaction, rechecks
+the persisted effective risk, and stores an immutable route. That route binds
+the selected project pipeline/template, configured bot assignment and bot,
+role, provider, resolved model, work effort, and risk/configuration snapshot.
+Exact idempotent replay reads the immutable route before consulting mutable
+project, pipeline, roster, readiness, or capacity state, so later configuration
+changes cannot rewrite or reroute history.
+
+This boundary chooses and records; it does not dispatch or change an autonomy
+control. No connected/fresh worker was observed, and approve, merge, deploy,
+and rollback remain Not Connected. Missing hosted routing functions produce a
+fail-closed Not Connected/503 response. Production currently hosts
+`20260821000300` and the old application copy; `20260821000400` is unhosted.
+The hosted release gate is not healthy: five linked lint errors/ten findings,
+one raw organization with `autonomous_mode = true`, one raw organization with
+`autonomy_kill_switch_active = false`, and two projects with effective kill off. These facts
+supersede the older clean-lint/all-OFF/kill-ON global summary below.
+
 ## System context
 
 ```text
@@ -24,7 +163,7 @@ GitHub Actions one-shot worker (trusted server process; not a Vercel request)
   -> durable bounded result, artifacts, validation, report, and activity evidence
 ```
 
-The Phase 1E operations and synthetic journeys, Phase 2A provider layer, universal bot-fabric registry, public marketing site, separated route groups, Phase 1D decision layer, and Phase 1C worker/recovery path are published on the default branch. Hosted Supabase history is reconciled and forward migrations through `130014` are applied. Linked lint and focused hosted runtime/catalog checks pass. Six non-OpenAI worker secrets remain configured, the exposed OpenAI secret is absent, and the activation variable is absent. A real worker claim/heartbeat/provider-thread transition was recorded before provider startup failed without repository mutation; the later no-claim diagnostic classified `credit_balance_exhausted`. All execution switches/actions remain OFF and the global kill switch remains ON. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
+The historical Phase 1E/2A/1D/1C source remains published, but the current production boundary is narrower than older evidence implied. Hosted production includes `20260821000300` and still serves the old copy; factory routing migration `20260821000400` is unhosted. Linked lint currently reports five errors/ten findings, and raw/effective control data contains the drift named above. No connected/fresh worker is present and no dispatch occurs. Phase 1E execution, outbound provider execution, Phase 1D execution, bot-provider execution, and OpenAI/Codex worker execution remain **Not Connected**.
 
 ## Phase 2A advisory provider boundary
 
@@ -84,7 +223,7 @@ There is no default-branch commit, approval, merge, release, deployment, rollbac
 ## Persistence
 
 - Hosted history is canonical through `130014`. Catalog-proven `028`/`130001`-`130005` were reconciled ledger-only; their DDL was not rerun.
-- Hosted `130006` preserves the global kill switch plus all nine actions OFF. Hosted `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets.
+- Hosted `130006` defines the intended global-kill/all-actions-OFF policy, while `130007`-`130011` provide Phase 1C compatibility, enums, orchestration, roster/recovery/reporting, dependencies, and cumulative budgets. Current raw/effective hosted rows have drifted from that intended control state; absence of a connected/fresh worker prevents dispatch but does not make the drift acceptable.
 - Hosted `130012` repairs bot `NULLIF` qualification without changing function identity/security/ACLs; `130013` resolves Phase 1C function lint; `130014` adds the resolver's explicit emergency-stop result. Corrections remain forward-only.
 - Local `130015` restores the original 128-character provider catalogue/API model bound by changing `provider_agent_assignments_model_check` and `agent_runs_model_check` from 120 to 128 while retaining the assignment regex and other constraint semantics. It adds four named no-secret constraints covering catalogue model/display-name, assignment model, and routing policy-version/selected-model text so credential-shaped scalars cannot enter browser-readable rows. It also replaces `get_agent_run_detail(uuid, uuid)` with a rolling-compatible bounded `routing` object: Phase 2A evidence is allowlisted/capped, Phase 1C command runs receive fixed-policy reasons without fabricated scores, and absent durable evidence returns null. To prevent bypass of that projection, it revokes authenticated raw SELECT on `provider_routing_decisions` and `provider_run_events`, retains tenant-scoped SELECT on `provider_model_configurations`, and leaves assignment reads behind their bounded function. The application accepts a missing field against hosted `130014`; `130015` remains unhosted pending its own exact RED approval and exact six-constraint-definition/128-character/no-secret regressions plus identity/signature/table-and-function-ACL/RLS/direct-denial/runtime/lint/health verification.
 
@@ -94,7 +233,7 @@ The Phase 1B candidate App path remains independently live for installation `153
 
 ## Autonomous-mode boundary
 
-Manual Phase 1C execution is not Autonomous Mode. Migration `010` still locks the global kill switch ON and Autonomous Mode, auto approve, auto merge, auto deploy, and auto rollback OFF. The worker refuses RED and cannot merge or deploy. Phase 1D authority can change only through a separate owner-approved policy, migration, implementation, and rollout.
+Manual Phase 1C execution is not Autonomous Mode. The schema's intended policy locks the kill switch ON and Autonomous Mode, auto approve, auto merge, auto deploy, and auto rollback OFF, but current hosted raw/effective rows do not uniformly satisfy that policy. No worker/executor is connected, so the drift grants no dispatch, merge, or deploy path; it must nevertheless be contained before release. Phase 1D authority can change only through a separate owner-approved policy, migration, implementation, and rollout.
 
 ## Secret topology
 

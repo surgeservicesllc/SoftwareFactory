@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260821000200_agentic_sdlc_lifecycle.sql";
+const latestMigration = "20260823000100_command_analysis_graphs.sql";
 
 const ownerId = "00000000-0000-4000-8000-000000000701";
 const organizationId = "10000000-0000-4000-8000-000000000701";
@@ -122,7 +122,7 @@ describe("bot NULLIF function repair", () => {
     }
   });
 
-  it("preserves the authenticated-only execute ACL", async () => {
+  it("keeps legacy registration narrow and readiness evidence service-only", async () => {
     const privileges = await db.query<{
       anon_execute: boolean;
       authenticated_execute: boolean;
@@ -138,7 +138,8 @@ describe("bot NULLIF function repair", () => {
       where procedure.oid in (
         'public.register_bot(uuid,text,public.bot_provider,text,text,text,text)'::regprocedure,
         'public.update_bot(uuid,uuid,text,text,text,text,text)'::regprocedure,
-        'public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)'::regprocedure
+        'public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)'::regprocedure,
+        'public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)'::regprocedure
       )
       order by procedure.proname
     `);
@@ -146,9 +147,15 @@ describe("bot NULLIF function repair", () => {
     expect(privileges.rows).toEqual([
       {
         anon_execute: false,
-        authenticated_execute: true,
+        authenticated_execute: false,
         proname: "record_bot_readiness",
         service_role_execute: false,
+      },
+      {
+        anon_execute: false,
+        authenticated_execute: false,
+        proname: "record_bot_readiness_preserving_disabled",
+        service_role_execute: true,
       },
       {
         anon_execute: false,
@@ -223,6 +230,8 @@ describe("bot NULLIF function repair", () => {
         }),
       ]);
 
+      await resetRole(db);
+      await db.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
       const blankReadiness = await db.query<BotRow>(`
         select id, readiness, readiness_detail, last_checked_at
         from public.record_bot_readiness(
